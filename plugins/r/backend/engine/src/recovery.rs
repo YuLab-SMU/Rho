@@ -56,8 +56,17 @@ pub struct RecoveryCapture {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum RecoveryControl {
-    Pin { pinned: bool },
+    Pin {
+        pinned: bool,
+    },
     Delete,
+    Resolved {
+        source: OperationId,
+        previous_attempt: Option<OperationId>,
+        apply: bool,
+        pinned: bool,
+        deleted: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -419,7 +428,9 @@ impl RecoveryLease {
             Err(e) => return Err(error(e)),
             Ok(_) => {}
         }
-        if checked_file(&path, false)?.metadata().map_err(error)?.len() != capture.artifact.byte_size {
+        if checked_file(&path, false)?.metadata().map_err(error)?.len()
+            != capture.artifact.byte_size
+        {
             return Err("Recovery payload length differs".into());
         }
         self.check()?;
@@ -503,7 +514,16 @@ impl RecoveryLease {
     /// journal. Native control evidence alone never authorizes this method.
     /// Failure is returned and all metadata remains; an absent payload is idempotent.
     pub fn remove_payload_after_commit(&self, deletion: &OperationId) -> Result<(), String> {
-        if self.control(deletion)?.control != RecoveryControl::Delete {
+        if !matches!(
+            self.control(deletion)?.control,
+            RecoveryControl::Delete
+                | RecoveryControl::Resolved {
+                    apply: true,
+                    pinned: false,
+                    deleted: true,
+                    ..
+                }
+        ) {
             return Err("The original control is not a recovery deletion".into());
         }
         let path = self.directory.join("payload.rds");

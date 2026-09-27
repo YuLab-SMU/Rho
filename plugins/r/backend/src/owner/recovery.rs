@@ -19,8 +19,11 @@ pub const DELETE: &str = "r.delete_checkpoint";
 pub const PURGE: &str = "r.purge_checkpoint";
 pub const PREPARE: &str = "r.prepare_checkpoint";
 pub const OBSERVE: &str = "r.checkpoint";
+pub const CONTROL: &str = "r.checkpoint_control";
 pub const READ: &str = "r.read_checkpoint";
 pub const LIST: &str = "r.checkpoints";
+mod controls;
+
 const MAX_MANIFEST: u64 = 1024 * 1024;
 const PAGE: u32 = 32;
 const PAGES: usize = 128;
@@ -29,7 +32,7 @@ pub fn is_operation(id: &str) -> bool {
     matches!(id, CAPTURE | RESTORE | RECONCILE | PIN | DELETE | PURGE)
 }
 pub fn is_query(id: &str) -> bool {
-    matches!(id, PREPARE | OBSERVE | READ | LIST)
+    matches!(id, PREPARE | OBSERVE | READ | LIST | CONTROL)
 }
 fn key(id: &str) -> CapabilityKey {
     environment_binding::key(id, 1)
@@ -180,11 +183,11 @@ impl Owner {
     }
 
     pub(super) fn admit_recovery(&self, call: &PluginCall) -> Result<(), String> {
-        if call.binding.capability.version != 1 {
+        if !supported_version(&call.binding.capability) {
             return Err("Unsupported recovery version".into());
         }
         let id = call.binding.capability.id.as_str();
-        let normalized = normalize(id, call.arguments.clone())?;
+        let normalized = normalize_version(&call.binding.capability, call.arguments.clone())?;
         let qualification: Qualification = decode(call.owner_context.clone())?;
         // JSON peers may encode 10.0 as 10. Freeze semantic arguments in the
         // admission rather than depending on a transport's number spelling.
@@ -281,111 +284,15 @@ impl Owner {
         source: &Source,
         lease: &RecoveryLease,
     ) -> Result<ControlState, String> {
-        if !self.recovery_grants.coverage || !call.scopes.contains("project.references.read") {
-            return Err(
-                "Recovery control state requires an explicit project journal coverage grant".into(),
-            );
-        }
-        let coverage: ProjectReadCoverage = decode(
-            self.recovery_read(call, "operation.project_coverage", json!({}))
-                .await?,
-        )?;
-        if !coverage.all_visible {
-            return Err(
-                "Some project recovery controls are outside this caller's visibility".into(),
-            );
-        }
-        let scan = async {
-            let mut cursor = None;
-            let mut controls = Vec::new();
-            for _ in 0..PAGES {
-                let page = self.recovery_page(call, cursor, PAGE).await?;
-                for item in page.operations {
-                    if item.operation_id == source.reference.operation_id {
-                        // Native exclusion fences effects while this bounded
-                        // journal scan qualifies every later committed control.
-                        let mut state = ControlState::default();
-                        for (operation, expected, action, output) in controls.into_iter().rev() {
-                            apply_control(
-                                &mut state,
-                                &source.reference,
-                                &operation,
-                                expected,
-                                action,
-                                output,
-                            )?;
-                        }
-                        return Ok(state);
-                    }
-                    if !matches!(item.capability.id.as_str(), PIN | DELETE)
-                        || call.operation_id.as_deref() == Some(item.operation_id.as_str())
-                    {
-                        continue;
-                    }
-                    if item.capability.version != 1 {
-                        return Err(
-                            "Recovery history contains an unsupported control version".into()
-                        );
-                    }
-                    let record = self.recovery_record(call, &item.operation_id).await?;
-                    let arguments = &record["operation"]["normalized_arguments"]["arguments"];
-                    if arguments["reference"]["operation_id"]
-                        != json!(source.reference.operation_id)
-                    {
-                        continue;
-                    }
-                    let (binding, qualification) = self.original_qualification(call, &record)?;
-                    if binding.capability != item.capability
-                        || arguments["reference"] != json!(source.reference)
-                        || qualification.source.as_ref().is_none_or(|original| {
-                            original.reference != source.reference
-                                || json!(original.storage) != json!(source.storage)
-                        })
-                    {
-                        return Err("Original recovery control changed its admitted source".into());
-                    }
-                    match record["status"].as_str() {
-                        Some("failed" | "cancelled") => continue,
-                        Some("succeeded") => (),
-                        _ => return Err("Original recovery control is pending or uncertain; reconcile its original operation before changing this copy".into()),
-                    }
-                    let expected: Option<OperationId> =
-                        decode(arguments["expected_control"].clone())?;
-                    let action = if binding.capability.id.as_str() == PIN {
-                        RecoveryControl::Pin {
-                            pinned: decode(arguments["pinned"].clone())?,
-                        }
-                    } else {
-                        RecoveryControl::Delete
-                    };
-                    if lease.control(&item.operation_id)?.control != action {
-                        return Err(
-                            "Committed recovery control differs from native evidence".into()
-                        );
-                    }
-                    controls.push((
-                        item.operation_id,
-                        expected,
-                        action,
-                        decode::<RCheckpointControlResult>(record["output"].clone())?,
-                    ));
-                }
-                cursor = page.next_cursor;
-                if cursor.is_none() {
-                    break;
-                }
-            }
-            Err("Recovery control history did not reach the original capture within its bounded scan".into())
-        };
-        tokio::time::timeout(Duration::from_secs(30), scan)
-            .await
-            .map_err(|_| "Recovery control scan exceeded its bounded deadline")?
+        self.control_history(call, source, lease)
+            .await?
+            .confirmed_state()
     }
 
     async fn prepare_recovery(&self, call: &PluginCall) -> Result<Value, String> {
         let request: PluginPreflightRequest = decode(call.arguments.clone())?;
         let target = self.target();
-        if request.capability.version != 1
+        if !supported_version(&request.capability)
             || !is_operation(request.capability.id.as_str())
             || request
                 .target
@@ -403,7 +310,7 @@ impl Owner {
             return Err("Recovery preflight changed its target, version or preconditions".into());
         }
         let id = request.capability.id.as_str();
-        let arguments = normalize(id, request.arguments)?;
+        let arguments = normalize_version(&request.capability, request.arguments)?;
         self.recovery_native_ready(id, &arguments)?;
         if id == CAPTURE && arguments["automatic"] == true && !self.queue.is_empty() {
             return Err("Automatic capture requires an idle, settled native queue".into());
@@ -428,8 +335,14 @@ impl Owner {
             let lease = source.storage.open()?.acquire(&operation)?;
             self.checkpoint_manifest(call, &source, &lease).await?;
             if id != RECONCILE {
-                let state = self.checkpoint_controls(call, &source, &lease).await?;
-                check_action(id, &arguments, &state)?;
+                if request.capability.version == 2 {
+                    self.control_history(call, &source, &lease)
+                        .await?
+                        .prepare_resolution(id, &decode(arguments.clone())?, &source.reference)?;
+                } else {
+                    let state = self.checkpoint_controls(call, &source, &lease).await?;
+                    check_action(id, &arguments, &state)?;
+                }
             }
             Some(source)
         };
@@ -504,6 +417,27 @@ impl Owner {
                 checkpoints,
                 next_cursor: page.next_cursor
             }));
+        }
+        if call.binding.capability.id.as_str() == CONTROL {
+            let args: RCheckpointControlArguments = decode(call.arguments.clone())?;
+            let source = self
+                .checkpoint_source(call, &args.reference.operation_id, false)
+                .await?;
+            if args.reference != source.reference {
+                return Err(
+                    "Control observation differs from its original recovery reference".into(),
+                );
+            }
+            let lease = source
+                .storage
+                .open()?
+                .acquire(&args.reference.operation_id)?;
+            self.checkpoint_manifest(call, &source, &lease).await?;
+            return Ok(json!(
+                self.control_history(call, &source, &lease)
+                    .await?
+                    .observation(&args.operation_id, &args.reference)?
+            ));
         }
         let (reference, reading) = match call.binding.capability.id.as_str() {
             OBSERVE => (
@@ -707,6 +641,27 @@ impl Owner {
             .checkpoint_manifest(call, &source, &lease)
             .await
             .map_err(before)?;
+        if call.binding.capability.version == 2 {
+            let args: ResolveRCheckpointControl = decode(call.arguments.clone()).map_err(before)?;
+            let resolution = self
+                .control_history(call, &source, &lease)
+                .await
+                .map_err(before)?
+                .prepare_resolution(id, &args, &source.reference)
+                .map_err(before)?;
+            if *cancellation.borrow() {
+                return Err(cancelled_before_start());
+            }
+            let output = controls::resolution_result(&operation, &args, &resolution);
+            self.hold_recovery(call, &operation, vec![lease.clone()], None);
+            lease
+                .record_control(&operation, controls::resolution_evidence(&output))
+                .map_err(|e| NativeError::after_possible_effect(e, None))?;
+            if output.decision == RCheckpointControlDecision::Apply && output.deleted {
+                self.hold_recovery(call, &operation, vec![lease], Some(operation.clone()));
+            }
+            return Ok(plan(PluginOutcome::Succeeded, json!(output), vec![]));
+        }
         if id != RECONCILE {
             let state = self
                 .checkpoint_controls(call, &source, &lease)
@@ -1005,7 +960,7 @@ impl Owner {
             decode(operation["normalized_arguments"]["binding"].clone())?;
         let admission = &operation["admission"]["owner_context"];
         if binding.project != call.binding.project
-            || binding.capability.version != 1
+            || !supported_version(&binding.capability)
             || operation["capability"] != json!(binding.capability)
             || admission["binding"] != json!(binding)
             || operation["idempotency_scope"] != self.environment.project_root
@@ -1019,8 +974,8 @@ impl Owner {
         if binding.target.as_deref() != Some(&qualification.session_target) {
             return Err("Original recovery operation changed its native target".into());
         }
-        let normalized = normalize(
-            binding.capability.id.as_str(),
+        let normalized = normalize_version(
+            &binding.capability,
             operation["normalized_arguments"]["arguments"].clone(),
         )?;
         if arguments_digest(&normalized)? != qualification.arguments_digest
@@ -1228,6 +1183,26 @@ fn validate_manifest(
         }
     }
     Ok(())
+}
+
+pub fn supported_version(capability: &CapabilityKey) -> bool {
+    capability.version == 1
+        || capability.version == 2 && matches!(capability.id.as_str(), PIN | DELETE)
+}
+
+fn normalize_version(capability: &CapabilityKey, value: Value) -> Result<Value, String> {
+    if !supported_version(capability) {
+        return Err("Unsupported recovery version".into());
+    }
+    if capability.version == 2 {
+        let args: ResolveRCheckpointControl = decode(value)?;
+        args.reference.validate()?;
+        if args.source_operation_id == args.reference.operation_id {
+            return Err("Resolve an original control, not its capture".into());
+        }
+        return Ok(json!(args));
+    }
+    normalize(capability.id.as_str(), value)
 }
 
 fn normalize(id: &str, value: Value) -> Result<Value, String> {

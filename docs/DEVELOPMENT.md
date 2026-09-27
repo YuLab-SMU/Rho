@@ -64,7 +64,9 @@ Use `--checkpoint-references` with those variables and
 `RHO_CHECKPOINT_HELPER=/absolute/verified/rho_checkpoint.so` to add recovery capture,
 protection after namespace unloading and session release, an unstarted replacement
 reader, ambiguous-reader refusal, explicit reader configuration and
-pin/unpin/delete/purge before Environment material cleanup.
+pin/unpin, uncertain deletion and resolution retry, explicit completion and purge
+before Environment material cleanup. Both original uncertain records must remain
+byte-for-byte unchanged, and the control providers must remain unstarted.
 The native absence check can be unavailable when the OS hides a contemporaneous
 process's environment or lifetime. Keep this acceptance run separate from
 additional shell commands; preserve such a refusal as unavailable evidence and
@@ -414,10 +416,15 @@ as `RHO_R_PLUGIN_PACKAGE`, run `node scripts/test-r-recovery.mjs` using the same
 three native prerequisites and an already built Host. The test verifies unchanged
 Host bytes, optional read grants, pure observations, partial Unicode graph capture,
 replacement-provider reads, bounded bytes, payload damage, empty-candidate restore,
-pin/delete preconditions, post-commit cleanup, retained metadata and explicit
-reconciliation of a capture whose public output was rejected by the core. It uses
+pin/delete preconditions, explicit application/discard of uncertain controls,
+an uncertain resolution retry, unchanged original outcomes, post-commit cleanup,
+retained metadata and explicit reconciliation of a capture whose public output
+was rejected by the core. Set `RHO_OLD_R_PLUGIN_PACKAGE` to an existing prior
+version-1 recovery package to also verify it refuses version-2 control history.
+The test-owned fault proxy preserves registered contracts and native evidence;
+it changes only returned plans. The test uses
 disposable projects and native sessions and preserves failed evidence. It does not
-establish complete Environment checkpoint-reference protection or Studio recovery UI.
+establish uncertain capture disposal or Studio recovery UI.
 
 Skipped or unavailable real-R, browser, external-provider, and environment checks
 are not passes. Run them only with their documented prerequisites; preserve the

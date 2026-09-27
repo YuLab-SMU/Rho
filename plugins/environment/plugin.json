@@ -57,6 +57,18 @@
     },
     {
       "capability": {
+        "id": "r.checkpoint_control",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read",
+        "resources.read",
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
         "id": "operation.project_coverage",
         "version": 1
       },

@@ -86,6 +86,19 @@ resources, qualifies their original records and control history, and serves pure
 reads even after the original provider releases. Logical retirement and physical
 payload cleanup are separate outcomes.
 
+A terminal failed/cancelled/uncertain version-1 pin or deletion request may be
+explicitly resolved through that same control's version-2 contract. The request
+freezes its original Operation, copy and latest resolution attempt. Applying checks
+the original control precondition against the current logical head; discarding
+closes only that request and preserves the current head, pin and deletion state.
+A resolution that loses acknowledgement requires another explicit attempt naming
+the latest one. Only a Core-successful resolution closes uncertainty, and only an
+applied deletion authorizes post-commit payload cleanup. Original outcomes are
+never rewritten. `r.checkpoint_control@1` reports original status and qualified
+resolution without starting R. Existing readers reject version-2 pin/delete
+history rather than silently ignoring a separately named resolution. Uncertain
+capture disposal remains a separate owner capability.
+
 Environment data, native pak/renv execution, staged materials and recovery now
 live in `plugins/environment/api` and `backend/owner`, including the R helpers.
 The native library returns possible effects, confirmed cancellation and recovery
@@ -132,7 +145,11 @@ library, namespace and selected Environment paths from the digest-verified publi
 manifest. Logical deletion removes graph dependencies even if physical cleanup is
 pending; missing bytes alone do not. Unknown dependencies and uncertain captures
 remain protected. Failed or cancelled captures are excluded only when the owner
-explicitly confirmed no capture started.
+explicitly confirmed no capture started. Uncertain pin/delete requests and
+resolution attempts retain material until the optional `r.checkpoint_control@1`
+read confirms a committed resolution for the exact original request. Successful
+captures are still checked independently for live graph dependencies. Environment
+uses only public R observations for both decisions.
 
 An exact configured `checkpoint_reader` takes precedence; otherwise the original
 active reader is preferred, followed by a unique active replacement. Ambiguity or

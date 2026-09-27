@@ -358,6 +358,9 @@ private R archive or control files. Logical deletion removes graph dependencies,
 including pending physical cleanup; missing payload bytes alone do not. Incomplete
 dependencies, unsupported versions and uncertain captures remain retained. Failed
 or cancelled captures are excluded only when R confirmed the capture never started.
+Uncertain pin/delete requests and resolution attempts use an additional optional
+`r.checkpoint_control@1` read. Only an exact committed resolution closes their
+uncertainty; the original successful capture is still checked for live dependencies.
 
 `checkpoint_reader` selects an exact active supported instance. Without an explicit
 choice, the original active reader is preferred, then a unique active replacement.
@@ -370,18 +373,20 @@ protected after quarantine; an unconfirmed quarantine remains inspectable withou
 promoting its outcome. Original records and reports survive material removal.
 The scan is not a reference lease or an atomic cross-owner snapshot.
 
-`cargo test -p rho-environment-backend --offline` passes all 18 backend cases,
-including 16 checkpoint-evidence scenarios, exact reader selection and the existing
-22 reference-scan scenarios. Public SDK/manifest checks, independent TypeScript
-consumption, client generation/build/check and architecture/plugin-boundary checks
+`cargo test -p rho-environment-backend --lib --locked --offline` passes all 19
+backend cases, including 16 checkpoint-evidence scenarios, nine uncertain-control
+resolution scenarios, exact reader selection and the existing 22 reference-scan
+scenarios. Public SDK/manifest checks, independent TypeScript consumption, client
+generation/build/check and architecture/plugin-boundary checks
 pass. The nine-package standalone build and its wire tests pass. Full native
 `node scripts/test-environment-plugin.mjs --checkpoint-references` acceptance passes:
 two live R sessions, paginated original records, library/namespace protection,
 checkpoint capture, protection after namespace unload and provider release,
 unavailable-reader retention, unstarted replacement reads, ambiguous-reader refusal,
-exact configured selection, pin/unpin/delete/purge, stale fingerprints, material
-quarantine/restore/purge, idempotency and retained records/reports. The Host remains
-byte-identical, SHA-256
+exact configured selection, pin/unpin, uncertain deletion and resolution retry,
+retention before explicit completion, purge, stale fingerprints, material
+quarantine/restore/purge, idempotency and unchanged original records/reports. The
+Host remains byte-identical, SHA-256
 `3a9db963f49aeaa313e7db75f25f345a8c84fb7d20877eb1a5754be849bfe24a`.
 
 The first native run returned unavailable because a same-user process lacked
@@ -389,9 +394,9 @@ observable environment or lifetime evidence. That failure remains retained; a ne
 complete isolated run passed without changing guards or deadlines. Unfiltered
 workspace metadata was unavailable because `combine 4.6.8` was not cached; the
 affected offline build and independent package's host-filtered metadata passed.
-Existing user Hosts and R sessions were not restarted. Explicit continuation/disposal
-for uncertain recovery attempts and controls, Studio integration and removal of
-fixed composition remain active.
+Existing user Hosts and R sessions were not restarted. Disposal of uncertain or
+partial capture material, Studio integration and removal of fixed composition
+remain active.
 
 The ordinary R owner now exposes capture, bounded listing/reads, restore,
 pin/unpin, logical deletion, physical cleanup and explicit capture reconciliation.
@@ -403,9 +408,9 @@ Project journal coverage is required before interpreting control absence. Native
 control files establish no scientific truth; artifact leases remain held through
 matching core settlement. Deletion commits logical retirement before physical
 cleanup, whose failure remains observable and explicitly retryable. Unknown,
-missing or uncertain control history remains unavailable. Queries, controls and
-reconciliation never start R. Restore requires the exact existing empty candidate
-and verifies the full payload and native prerequisites. The existing verified
+missing or unresolved uncertain control history remains unavailable. Queries,
+controls and reconciliation never start R. Restore requires the exact existing
+empty candidate and verifies the full payload and native prerequisites. The existing verified
 helper is selected explicitly before session creation, without installation.
 
 Reconciliation copies complete native evidence from a terminal failed/cancelled/
@@ -414,10 +419,23 @@ Missing capture context preserves unknown namespace dependencies. Partial bytes
 without complete native evidence cannot be adopted. Automatic capture requires an
 idle settled queue; pending cancellation retains `started:false`. Argument digests
 freeze normalized semantics, including equivalent JSON numbers across languages.
-The current four API, eighteen backend and twenty-six engine library cases pass.
-`cargo test -p rho-r-api -p rho-r-backend --locked --offline` covers the final owner;
+
+Terminal failed/cancelled/uncertain pin/delete requests now have explicit resolution
+through version 2 of the same capability. `r.checkpoint_control@1` exposes the
+original outcome, committed resolution and latest attempt. Apply checks the
+original precondition and creates a new control head; discard closes only the
+request, preserving the current state and head. A failed/cancelled/uncertain resolution
+requires the exact latest attempt before continuing. Original outcomes remain
+unchanged, and only Core-successful applied deletion authorizes payload cleanup.
+Old readers reject the new control version. Uncertain capture disposal remains
+separate work.
+
+The current four API, 23 backend and 27 engine library cases pass.
+`cargo test -p rho-r-api --lib --locked --offline` covers the public API;
 `cargo test -p rho-r-backend -p rho-r-engine --lib --bin rho-r-backend --locked
---offline` covered the archive and routing changes. Independent public types,
+--offline` covers the owner, archive and routing changes. A final
+`cargo test -p rho-r-backend routing_tests --locked --offline` passes against the
+generated version-2 manifest. Independent public types,
 generated SDK/schema consistency, client generation/build/check, architecture,
 plugin boundaries and documentation checks pass.
 
@@ -425,17 +443,22 @@ plugin boundaries and documentation checks pass.
 and unchanged Host: explicit grants, pure observations, partial Unicode graph and
 alias preservation, original replay, pending cancellation, replacement reads,
 bounded bytes, digest damage, empty-candidate restore, pin/delete preconditions,
-cleanup, retained history and reconciliation after a rejected result. Missing
-context is also tested. Initial checks found an unsupported cancellation enum and
-a stale generated index; both were corrected. A fault fixture first changed a
+explicit apply/discard, repeated uncertainty for pin and deletion resolution,
+unchanged original outcomes, payload retention until confirmed deletion, cleanup,
+retained history and reconciliation after a rejected result. An explicitly supplied
+older package refuses version-2 controls without starting R; version-1 deletion
+remains covered. Missing capture context is also tested. Initial checks found an
+unsupported cancellation enum and a stale generated index; both were corrected. A fault fixture first changed a
 registered contract and was correctly refused; it now faults only the returned
 plan. This exposed and fixed strict `10.0`/`10` comparison. A later fixture backend
 initialization timed out; that run remains failed evidence. A separate test process
 was sampled at the system loader, and the complete native rerun passed after
-other checks finished, without changing deadlines or guards. Environment now consumes
-the successful recovery references as described above. Uncertain capture/control
-continuation, Studio recovery integration and removal of fixed composition remain
-active. No user Host or R session was restarted.
+other checks finished, without changing deadlines or guards. The current resolution
+acceptance passed in its first full isolated run, as did the Environment linkage
+above. A slow engine test launch was sampled at macOS `_dyld_start`; its original
+process subsequently completed all tests without a timeout. Uncertain/partial
+capture disposal, Studio recovery integration and removal of fixed composition
+remain active. No user Host or R session was restarted.
 
 The ordinary `org.rho.files` backend now assembles outside the checkout from eight
 public/plugin packages, with no private core dependency or independent journal.

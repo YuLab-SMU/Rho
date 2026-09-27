@@ -230,7 +230,7 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
 }
 fn supported_call(capability: &CapabilityKey, is_query: bool) -> bool {
     if owner::recovery::is_operation(capability.id.as_str()) || owner::recovery::is_query(capability.id.as_str()) {
-        return capability.version == 1 && owner::recovery::is_query(capability.id.as_str()) == is_query;
+        return owner::recovery::supported_version(capability) && owner::recovery::is_query(capability.id.as_str()) == is_query;
     }
     let valid_kind = match capability.id.as_str() {
         "r.session" | "r.console" | "r.snapshot" | "r.prepare" | "r.prepare_environment" | "r.check_code" | "r.output_events" | "r.inspection_state" => is_query,

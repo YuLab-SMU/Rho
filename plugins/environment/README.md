@@ -53,10 +53,13 @@ manifest. Environment asks `r.checkpoint@1` to qualify the original copy and its
 control history; it never reads R private archives. A logically deleted copy no
 longer protects graph dependencies, including when disk cleanup remains pending.
 Missing payload bytes alone do not remove protection. Incomplete dependencies,
-unknown contract versions, uncertain captures/controls and inaccessible history
-retain material.
+unknown contract versions, uncertain captures and inaccessible history retain
+material. An uncertain pin/delete or resolution attempt also retains material until
+`r.checkpoint_control@1` confirms an exact committed resolution of that original
+request. This does not rewrite its outcome or retire a still-live copy.
 
-Select the optional `r.checkpoint@1` grant in addition to the reference grants. The
+Select optional `r.checkpoint@1` and `r.checkpoint_control@1` grants in addition to
+the reference grants. The
 R reader itself needs `operation.get`, `operation.list_recent`, `resources.read`
 and `operation.project_coverage`. The exact active original provider is preferred;
 after release, a unique active supported reader can observe the retained copy.
@@ -85,12 +88,13 @@ Add `--r-references` with `RHO_R_PLUGIN_PACKAGE` and `RHO_ARK` to exercise nativ
 library and loaded-namespace protection through an ordinary R provider.
 Add `--checkpoint-references` and `RHO_CHECKPOINT_HELPER` to also verify retained
 namespace dependencies after session release, pure replacement reads, explicit reader
-selection when alternatives exist and retirement
-before material quarantine, restore and purge.
+selection when alternatives exist, uncertain deletion and resolution attempts,
+explicit completion with original records preserved, and retirement before
+material quarantine, restore and purge.
 
 The retiring `rho-r-environment` adapter delegates to the same native owner.
 `node scripts/test-environment.mjs` covers that real-R bridge, including live-library
 retention and legacy Host restart binding. These old composition paths are still
 being migrated; this package is not yet a complete replacement for all Environment
-behavior. Uncertain recovery controls and captures remain conservatively retained.
+behavior. Unresolved recovery controls and uncertain captures remain retained.
 Successful and uncertain source material stays retained.

@@ -138,6 +138,65 @@ pub struct RCheckpointControlResult {
     pub deleted: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum RCheckpointControlDecision {
+    Apply,
+    Discard,
+}
+
+/// Version 2 of pin/delete resolves one terminal version-1 request. Version 1
+/// readers reject that control version instead of silently ignoring a new fact.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ResolveRCheckpointControl {
+    pub reference: RCheckpointReference,
+    pub source_operation_id: OperationId,
+    pub expected_attempt: Option<OperationId>,
+    pub decision: RCheckpointControlDecision,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RCheckpointControlResolution {
+    pub operation_id: OperationId,
+    pub reference: RCheckpointReference,
+    pub source_operation_id: OperationId,
+    pub previous_attempt: Option<OperationId>,
+    pub decision: RCheckpointControlDecision,
+    pub pinned: bool,
+    pub deleted: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(untagged)]
+pub enum RCheckpointControlResolutionOutput {
+    Resolved(RCheckpointControlResolution),
+    NotStarted(crate::RExecutionNotStarted),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RCheckpointControlArguments {
+    pub reference: RCheckpointReference,
+    pub operation_id: OperationId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RCheckpointControlObservation {
+    pub operation_id: OperationId,
+    pub reference: RCheckpointReference,
+    pub status: rho_plugin_protocol::PluginOutcome,
+    pub source_operation_id: OperationId,
+    pub latest_attempt: Option<OperationId>,
+    /// A new committed resolution; the original outcome is never rewritten.
+    pub resolution: Option<OperationId>,
+    pub can_resolve: bool,
+    pub can_apply: bool,
+    pub notices: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum RCheckpointPayloadState {

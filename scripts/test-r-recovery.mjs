@@ -7,6 +7,7 @@ import readline from 'node:readline';
 import {createHash} from 'node:crypto';
 import {execFileSync,spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {recoveryFaultPackage} from './fixtures/r-recovery-fault.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 assert.ok(process.env.RHO_ARK&&process.env.RHO_R_HOME&&process.env.RHO_CHECKPOINT_HELPER,'Select existing verified Ark, R and recovery helper; no tools are installed.');
 const directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-r-recovery-')));
@@ -21,11 +22,11 @@ const trace=(kind,value)=>fs.appendFileSync(path.join(directory,'session.jsonl')
 function deadline(promise,label,ms=180000){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(`${label} timed out`)),ms);})]).finally(()=>clearTimeout(timer));}
 async function call(method,params){const id=`request-${++counter}`,result=new Promise((resolve,reject)=>pending.set(id,{resolve,reject}));host.stdin.write(JSON.stringify({id,request:{method,params}})+'\n');const reply=await deadline(result,`${method} ${id}`);assert.equal(reply.ok,true,JSON.stringify(reply.error));return reply.result;}
 async function query(id,args){const result=await call('query_snapshot',{capability:{id,version:1},arguments:args});assert.equal(result.status,'ready',JSON.stringify(result));return result.data;}
-const invoke=(request,id,args)=>call('invoke',{client_request_id:request,capability:{id,version:1},arguments:args,preconditions:[]});
+const invoke=(request,id,args,version=1)=>call('invoke',{client_request_id:request,capability:{id,version},arguments:args,preconditions:[]});
 const success=result=>{assert.equal(result.status,'succeeded',JSON.stringify({status:result.status,error:result.error,recovery:result.recovery}));return result;};
-const resolve=(instance,id)=>query('plugins.resolve',{instance,capability:{id,version:1}});
+const resolve=(instance,id,version=1)=>query('plugins.resolve',{instance,capability:{id,version}});
 const native=async(instance,id,args={})=>query(id,{binding:await resolve(instance,id),arguments:args});
-const action=async(instance,id,args,request=`action-${++counter}`)=>{const record=await invoke(request,id,{binding:await resolve(instance,id),arguments:args});const state=await native(instance,'r.session');await settled(instance,state.queue_target);return record;};
+const action=async(instance,id,args,request=`action-${++counter}`,version=1)=>{const record=await invoke(request,id,{binding:await resolve(instance,id,version),arguments:args},version);const state=await native(instance,'r.session');await settled(instance,state.queue_target);return record;};
 async function activate(snapshot,alias,grants=optional,config=configuration){const record=success(await invoke(`activate-${alias}`,'plugins.activate',{revision:snapshot.revision,artifact:snapshot.artifacts[0],target:'aarch64-apple-darwin',alias,configuration:config,optional_capabilities:grants}));const instance=record.output.instance.identity;instances.push(instance);return instance;}
 async function release(instance){success(await invoke(`release-${instance.instance}`,'plugins.release',{instance}));instances.splice(instances.findIndex(item=>item.instance===instance.instance),1);}
 const create=async instance=>success(await action(instance,'r.create_session',{})).output.session_id;
@@ -52,30 +53,10 @@ try {
   // Keep the registered contract unchanged and fault only the outgoing result.
   // The real owner has completed native capture and resource retention, while
   // the core must refuse the malformed plan and keep its own original outcome.
-  const rejectedPackage=path.join(directory,'rejected-output-package');fs.cpSync(source,rejectedPackage,{recursive:true});
-  const faultSource='#!'+process.execPath+'\n'+String.raw`
-import {spawn} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
-const child=spawn(fileURLToPath(new URL('./rho-r-backend',import.meta.url)),[],{stdio:['pipe','pipe','inherit']});
-process.stdin.pipe(child.stdin);child.stdin.on('error',()=>{});
-let buffered=Buffer.alloc(0);
-child.stdout.on('data',chunk=>{
-  buffered=Buffer.concat([buffered,chunk]);
-  while(buffered.length>=4){const size=buffered.readUInt32BE(0);if(size===0||size>1048576)throw new Error('Invalid test backend frame');if(buffered.length<size+4)break;
-    const frame=JSON.parse(buffered.subarray(4,size+4));buffered=buffered.subarray(size+4);
-    if(frame.body.type==='commit_plan'&&frame.body.data.output?.reference&&frame.body.data.output?.manifest)frame.body.data.output={invalid_checkpoint_output:true};
-    const encoded=Buffer.from(JSON.stringify(frame)),header=Buffer.alloc(4);header.writeUInt32BE(encoded.length);process.stdout.write(Buffer.concat([header,encoded]));
-  }
-});
-child.on('error',error=>{console.error(error);process.exit(1);});
-child.on('close',code=>{process.stdin.destroy();process.stdout.write(Buffer.alloc(0),()=>process.exit(code??1));});
-for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>child.kill(signal));
-`;
-  fs.writeFileSync(path.join(rejectedPackage,'recovery-fault.mjs'),faultSource);
-  fs.writeFileSync(path.join(rejectedPackage,'dist/recovery-fault.mjs'),faultSource,{mode:0o755});
-  fs.appendFileSync(path.join(rejectedPackage,'build.mjs'),'\nfs.copyFileSync(path.join(root,"recovery-fault.mjs"),path.join(root,"dist/recovery-fault.mjs"));\nfs.chmodSync(path.join(root,"dist/recovery-fault.mjs"),0o755);\n');
-  const manifest=JSON.parse(fs.readFileSync(path.join(rejectedPackage,'plugin.json'),'utf8'));manifest.version='0.1.1';manifest.backend.executable='dist/recovery-fault.mjs';manifest.source.files.push('recovery-fault.mjs');
-  fs.writeFileSync(path.join(rejectedPackage,'plugin.json'),JSON.stringify(manifest,null,2)+'\n');const rejectedRevision=snapshot(rejectedPackage);
+  const rejectedRevision=snapshot(recoveryFaultPackage(source,path.join(directory,'rejected-output-package')));
+  const oldSource=process.env.RHO_OLD_R_PLUGIN_PACKAGE?fs.realpathSync(process.env.RHO_OLD_R_PLUGIN_PACKAGE):null;
+  if(oldSource)assert.ok(!oldSource.startsWith(root+path.sep));
+  const oldRevision=oldSource?snapshot(oldSource):null;
   host=spawn(binary,['--database',database,'--project',project,'session'],{stdio:['pipe','pipe','pipe']});
   exited=new Promise(resolve=>host.once('close',(code,signal)=>resolve({code,signal})));
   const handshake=new Promise((resolve,reject)=>{ready={resolve,reject};});
@@ -143,12 +124,53 @@ for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>child.kill(signal
   await release(integrity);
 
   const manager=await activate(revision,'manager');
-  const pin=success(await action(manager,'r.pin_checkpoint',{reference,expected_control:null,pinned:true}));
+  const faultController=await activate(rejectedRevision,'uncertain-controls',optional,{});
+  const originalControls=[];
+  const uncertainControl=async(id,args,version=1)=>{
+    const record=await action(faultController,id,args,`uncertain-control-${++counter}`,version);assert.equal(record.status,'uncertain',JSON.stringify(record));originalControls.push(record);
+    const state=await native(faultController,'r.session');
+    if((await settled(faultController,state.queue_target)).console.pause)await resume(faultController,state.queue_target,[record.operation.operation_id]);return record;
+  };
+  const inspectControl=operation_id=>native(manager,'r.checkpoint_control',{reference,operation_id});
+  const resolveControl=(id,source,expected_attempt,decision,request=`resolve-${++counter}`)=>action(manager,id,{reference,source_operation_id:source.operation.operation_id,expected_attempt,decision},request,2);
+  const uncertainPin=await uncertainControl('r.pin_checkpoint',{reference,expected_control:null,pinned:true});
+  await assert.rejects(()=>native(manager,'r.checkpoint',{reference}),/uncertain|resolve/i);
+  let originalPin=await inspectControl(uncertainPin.operation.operation_id);assert.equal(originalPin.status,'uncertain');assert.equal(originalPin.can_apply,true);assert.equal(originalPin.resolution,null);
+  const applied=success(await resolveControl('r.pin_checkpoint',uncertainPin,null,'apply','apply-original-pin'));
+  assert.equal(applied.output.pinned,true);assert.equal((await native(manager,'r.checkpoint',{reference})).control_head,applied.operation.operation_id);
+  assert.deepEqual(await resolveControl('r.pin_checkpoint',uncertainPin,null,'apply','apply-original-pin'),applied);
+  await assert.rejects(()=>resolveControl('r.pin_checkpoint',uncertainPin,applied.operation.operation_id,'discard'),/already.*resolution|committed/i);
+  assert.equal((await inspectControl(uncertainPin.operation.operation_id)).resolution,applied.operation.operation_id);
+  const controlUnpin=success(await action(manager,'r.pin_checkpoint',{reference,expected_control:applied.operation.operation_id,pinned:false}));
+  const uncertainDelete=await uncertainControl('r.delete_checkpoint',{reference,expected_control:controlUnpin.operation.operation_id});
+  success(await resolveControl('r.delete_checkpoint',uncertainDelete,null,'discard'));
+  let preserved=await native(manager,'r.checkpoint',{reference});assert.equal(preserved.deleted,false);assert.equal(preserved.payload,'present');assert.equal(preserved.control_head,controlUnpin.operation.operation_id);
+  const secondPin=await uncertainControl('r.pin_checkpoint',{reference,expected_control:controlUnpin.operation.operation_id,pinned:true});
+  const lostResolution=await uncertainControl('r.pin_checkpoint',{reference,source_operation_id:secondPin.operation.operation_id,expected_attempt:null,decision:'apply'},2);
+  assert.equal((await inspectControl(secondPin.operation.operation_id)).latest_attempt,lostResolution.operation.operation_id);
+  await assert.rejects(()=>resolveControl('r.pin_checkpoint',secondPin,null,'discard'),/attempt changed/);
+  const discarded=success(await resolveControl('r.pin_checkpoint',secondPin,lostResolution.operation.operation_id,'discard'));
+  for(const operation of [secondPin,lostResolution]){
+    const observed=await inspectControl(operation.operation.operation_id);assert.equal(observed.status,'uncertain');assert.equal(observed.resolution,discarded.operation.operation_id);assert.equal(observed.can_resolve,false);
+  }
+  preserved=await native(manager,'r.checkpoint',{reference});assert.equal(preserved.control_head,controlUnpin.operation.operation_id);assert.equal(preserved.pinned,false);
+  if(oldRevision){
+    const oldReader=await activate(oldRevision,'older-reader',optional,{});
+    await assert.rejects(()=>native(oldReader,'r.checkpoint',{reference}),/unsupported control version/i);
+    assert.equal((await native(oldReader,'r.session')).state,'unstarted');await release(oldReader);
+  }
+  const pin=success(await action(manager,'r.pin_checkpoint',{reference,expected_control:controlUnpin.operation.operation_id,pinned:true}));
   assert.equal((await native(manager,'r.checkpoint',{reference})).pinned,true);
   await assert.rejects(()=>action(manager,'r.delete_checkpoint',{reference,expected_control:pin.operation.operation_id}),/Unpin|pinned/i);
   await assert.rejects(()=>action(manager,'r.pin_checkpoint',{reference,expected_control:null,pinned:false}),/precondition/i);
   const unpin=success(await action(manager,'r.pin_checkpoint',{reference,expected_control:pin.operation.operation_id,pinned:false}));
-  const deleted=success(await action(manager,'r.delete_checkpoint',{reference,expected_control:unpin.operation.operation_id}));
+  const uncertainFinalDelete=await uncertainControl('r.delete_checkpoint',{reference,expected_control:unpin.operation.operation_id});
+  assert.ok(fs.existsSync(file),'An uncertain deletion cannot remove payload bytes');
+  const uncertainAppliedDelete=await uncertainControl('r.delete_checkpoint',{reference,source_operation_id:uncertainFinalDelete.operation.operation_id,expected_attempt:null,decision:'apply'},2);
+  assert.ok(fs.existsSync(file),'An uncertain applied resolution cannot authorize post-commit cleanup');
+  const deleted=success(await resolveControl('r.delete_checkpoint',uncertainFinalDelete,uncertainAppliedDelete.operation.operation_id,'apply'));
+  for(const original of originalControls)assert.deepEqual(await call('get_operation',{operation_id:original.operation.operation_id}),original,'A new resolution never rewrites any uncertain original outcome');
+  assert.equal((await native(faultController,'r.session')).state,'unstarted');await release(faultController);
   assert.equal(deleted.output.deleted,true);assert.equal(deleted.output.payload_removed,undefined);
   const observed=await native(manager,'r.checkpoint',{reference});assert.equal(observed.deleted,true);assert.equal(observed.payload,'missing');
   success(await action(manager,'r.purge_checkpoint',{reference,deletion_operation_id:deleted.operation.operation_id}));
@@ -177,10 +199,12 @@ for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>child.kill(signal
   const final=await activate(revision,'recovered-session');const finalSession=await create(final);
   success(await action(final,'r.restore_checkpoint',{expected_session:finalSession,reference:adopted.output.reference}));
   assert.equal((await run(final,finalSession,'recovered')).value,17);
+  success(await action(manager,'r.delete_checkpoint',{reference:fallback.output.reference,expected_control:null}));
+  assert.equal((await native(manager,'r.checkpoint',{reference:fallback.output.reference})).deleted,true,'Version-1 deletion remains supported');
   for(const instance of [...instances].reverse())await release(instance);
   host.stdin.end();assert.equal((await deadline(exited,'Host shutdown',15000)).code,0);
   assert.equal(digest(fs.readFileSync(binary)),originalHost);complete=true;
-  console.log(`Ordinary R recovery passed: grants, query purity, verified helper, partial Unicode graph, original replay, replacement reads, bounded bytes, full digest refusal, empty-candidate restore, exact pin/deletion chain, physical cleanup, retained history and explicit reconciliation after rejected publication. Unchanged Host ${originalHost}`);
+  console.log(`Ordinary R recovery passed: grants, query purity, verified helper, partial Unicode graph, original replay, replacement reads, bounded bytes, full digest refusal, empty-candidate restore, exact pin/deletion chain, explicit apply/discard, uncertain resolution retry, unchanged original outcomes, physical cleanup, retained history and explicit reconciliation after rejected publication. Unchanged Host ${originalHost}`);
 } finally {
   if(!complete&&host&&host.exitCode===null&&host.signalCode===null)for(const instance of [...instances].reverse()){try{await release(instance);}catch(error){console.error(`Owned R instance cleanup unconfirmed (${instance.instance}): ${error.message}`);}}
   if(host&&host.exitCode===null&&host.signalCode===null){host.stdin.end();host.kill('SIGTERM');await deadline(exited,'Owned Host cleanup',15000);}

@@ -30,11 +30,17 @@ const readinessInput:RInspectionStateArguments={expected_session:null};
 function inspect(observation:RInspection<ObjectReadPage>){return observation.data?.columns[0]?.values[0]?.text??observation.diagnostic?.code;}
 function continueHelp(args:ReadPackageHelpArguments,offset:number,files:ReadPackageHelpArguments['expected_help_files']){return {...args,offset_utf8:offset,expected_help_files:files};}
 void [created,unqualified,execute,formatting,formatted,check,events,notStarted,contradictory,observe,output,answer,directory,busy,readiness,readinessInput,inspect,continueHelp];
-import type {RCheckpointReference,RCheckpointManifest,RCheckpointCaptureOutput,RCheckpointRestoreOutput,RCheckpointControlOutput,RCheckpointPurgeOutput,RCheckpointChunk,RCheckpointObservation,RCheckpointPage,RestoreRCheckpoint,ReconcileRCheckpoint,PinRCheckpoint,DeleteRCheckpoint,PurgeRCheckpoint} from './sdk/index.js';
+import type {ResolveRCheckpointControl,RCheckpointControlResolutionOutput,RCheckpointControlObservation,RCheckpointReference,RCheckpointManifest,RCheckpointCaptureOutput,RCheckpointRestoreOutput,RCheckpointControlOutput,RCheckpointPurgeOutput,RCheckpointChunk,RCheckpointObservation,RCheckpointPage,RestoreRCheckpoint,ReconcileRCheckpoint,PinRCheckpoint,DeleteRCheckpoint,PurgeRCheckpoint} from './sdk/index.js';
 function restore(reference:RCheckpointReference,expected_session:string):RestoreRCheckpoint{return {reference,expected_session};}
 function reconcile(original:string):ReconcileRCheckpoint{return {source_operation_id:original};}
 function controls(reference:RCheckpointReference,expected_control:string|null):[PinRCheckpoint,DeleteRCheckpoint,PurgeRCheckpoint]{return [{reference,expected_control,pinned:true},{reference,expected_control},{reference,deletion_operation_id:'original-deletion'}];}
 function checkpoint(value:RCheckpointCaptureOutput){if('started' in value)return value.started;return value.manifest.digest;}
+function resolveControl(reference:RCheckpointReference):ResolveRCheckpointControl{return {reference,source_operation_id:'uncertain-pin',expected_attempt:null,decision:'discard'};}
+function resolved(value:RCheckpointControlResolutionOutput){if('started' in value)return value.started;return [value.source_operation_id,value.previous_attempt,value.decision,value.pinned,value.deleted];}
+function controlHistory(value:RCheckpointControlObservation){return [value.status,value.latest_attempt,value.resolution,value.can_resolve,value.can_apply];}
+// @ts-expect-error A resolution must explicitly apply or discard the original request.
+const replayControl:ResolveRCheckpointControl={reference:{} as RCheckpointReference,source_operation_id:'uncertain',expected_attempt:null,decision:'replay'};
+void [resolveControl,resolved,controlHistory,replayControl];
 function restored(value:RCheckpointRestoreOutput){if('started' in value)return value.started;return value.report;}
 function controlled(value:RCheckpointControlOutput){if('started' in value)return value.started;return value.deleted;}
 function purged(value:RCheckpointPurgeOutput){if('started' in value)return value.started;const confirmed:true=value.payload_removed;return confirmed;}

@@ -144,6 +144,7 @@ pub fn manifest() -> PluginManifest {
         dependencies:Default::default(), requires:vec![CapabilityRequirement { capability:key("operation.get",1), scopes:["operation.read".into()].into() }, CapabilityRequirement { capability:key("resources.read",1), scopes:["resources.read".into()].into() }],
         optional_requires:vec![
             CapabilityRequirement { capability:key("r.checkpoint",1), scopes:["workspace.read", "operation.read", "resources.read", "project.references.read"].map(str::to_owned).into() },
+            CapabilityRequirement { capability:key("r.checkpoint_control",1), scopes:["workspace.read", "operation.read", "resources.read", "project.references.read"].map(str::to_owned).into() },
             CapabilityRequirement { capability:key("operation.project_coverage",1), scopes:["operation.read".into(),"project.references.read".into()].into() },
             CapabilityRequirement { capability:key("plugins.project_coverage",1), scopes:["plugins.read".into(),"project.references.read".into()].into() },
         ].into_iter().chain([

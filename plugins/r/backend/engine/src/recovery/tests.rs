@@ -160,20 +160,33 @@ fn payload_integrity_bounded_reads_and_immutable_evidence_survive_release() {
 
 #[test]
 fn capture_context_is_immutable_bounded_and_does_not_hide_missing_payloads() {
-    let (_temp,_root,archive)=fixture();
-    let lease=capture(&archive,"context",b"payload");
-    assert_eq!(lease.read_context::<serde_json::Value>().unwrap(),None);
-    let context=serde_json::json!({"original":"context","libraries_complete":false});
+    let (_temp, _root, archive) = fixture();
+    let lease = capture(&archive, "context", b"payload");
+    assert_eq!(lease.read_context::<serde_json::Value>().unwrap(), None);
+    let context = serde_json::json!({"original":"context","libraries_complete":false});
     lease.write_context(&context).unwrap();
-    assert_eq!(lease.read_context::<serde_json::Value>().unwrap(),Some(context));
-    assert!(lease.write_context(&serde_json::json!({"replaced":true})).is_err());
+    assert_eq!(
+        lease.read_context::<serde_json::Value>().unwrap(),
+        Some(context)
+    );
+    assert!(
+        lease
+            .write_context(&serde_json::json!({"replaced":true}))
+            .is_err()
+    );
     assert!(lease.payload_present().unwrap());
-    let deletion=id("delete-context-payload");
-    lease.record_control(&deletion,RecoveryControl::Delete).unwrap();
+    let deletion = id("delete-context-payload");
+    lease
+        .record_control(&deletion, RecoveryControl::Delete)
+        .unwrap();
     lease.remove_payload_after_commit(&deletion).unwrap();
     assert!(!lease.payload_present().unwrap());
     assert!(lease.read_context::<serde_json::Value>().unwrap().is_some());
-    fs::write(lease.directory.join("context.json"),vec![b' ';MAX_METADATA as usize+1]).unwrap();
+    fs::write(
+        lease.directory.join("context.json"),
+        vec![b' '; MAX_METADATA as usize + 1],
+    )
+    .unwrap();
     assert!(lease.read_context::<serde_json::Value>().is_err());
 }
 
@@ -241,6 +254,46 @@ fn incomplete_and_oversized_evidence_is_retained_without_becoming_a_capture() {
     )
     .unwrap();
     assert!(lease.capture().unwrap_err().contains("1 MiB"));
+}
+
+#[test]
+fn resolution_intent_keeps_payload_until_a_committed_applied_deletion() {
+    let (_temp, _root, archive) = fixture();
+    let lease = capture(&archive, "original", b"original graph");
+    for (name, apply, pinned, deleted) in [
+        ("discard", false, false, true),
+        ("pin", true, true, false),
+        ("invalid-pin-delete", true, true, true),
+        ("unpin", true, false, false),
+        ("delete", true, false, true),
+    ] {
+        let operation = id(name);
+        let control = RecoveryControl::Resolved {
+            source: id("uncertain-original"),
+            previous_attempt: None,
+            apply,
+            pinned,
+            deleted,
+        };
+        lease.record_control(&operation, control.clone()).unwrap();
+        assert_eq!(lease.control(&operation).unwrap().control, control);
+        assert!(
+            lease.verify().is_ok(),
+            "Native intent alone cannot remove the graph"
+        );
+        let removed = lease.remove_payload_after_commit(&operation);
+        if name == "delete" {
+            removed.unwrap();
+            assert!(!lease.payload_present().unwrap());
+            lease.remove_payload_after_commit(&operation).unwrap();
+        } else {
+            assert!(removed.is_err());
+        }
+    }
+    assert!(
+        lease.capture().is_ok(),
+        "Original capture metadata survives cleanup"
+    );
 }
 
 #[test]

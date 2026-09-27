@@ -57,6 +57,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     RCheckpointCaptureOutput::export_all(&types)?;
     RCheckpointRestoreOutput::export_all(&types)?;
     RCheckpointControlOutput::export_all(&types)?;
+    ResolveRCheckpointControl::export_all(&types)?;
+    RCheckpointControlResolutionOutput::export_all(&types)?;
+    RCheckpointControlArguments::export_all(&types)?;
+    RCheckpointControlObservation::export_all(&types)?;
     RCheckpointPurgeOutput::export_all(&types)?;
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
@@ -74,6 +78,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("delete-checkpoint", schemars::schema_for!(DeleteRCheckpoint)),
         ("purge-checkpoint", schemars::schema_for!(PurgeRCheckpoint)),
         ("checkpoint-control-output", schemars::schema_for!(RCheckpointControlOutput)),
+        ("resolve-checkpoint-control", schemars::schema_for!(ResolveRCheckpointControl)),
+        ("checkpoint-control-resolution-output", schemars::schema_for!(RCheckpointControlResolutionOutput)),
+        ("checkpoint-control-arguments", schemars::schema_for!(RCheckpointControlArguments)),
+        ("checkpoint-control-observation", schemars::schema_for!(RCheckpointControlObservation)),
         ("checkpoint-purge-output", schemars::schema_for!(RCheckpointPurgeOutput)),
         ("checkpoint-observation", schemars::schema_for!(RCheckpointObservation)),
         ("list-checkpoints", schemars::schema_for!(RCheckpointList)),

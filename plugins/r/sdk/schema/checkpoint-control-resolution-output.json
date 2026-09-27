@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RCheckpointControlResolutionOutput",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/RCheckpointControlResolution"
+    },
+    {
+      "$ref": "#/$defs/RExecutionNotStarted"
+    }
+  ],
+  "$defs": {
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "RCheckpointControlDecision": {
+      "type": "string",
+      "enum": [
+        "apply",
+        "discard"
+      ]
+    },
+    "RCheckpointControlResolution": {
+      "type": "object",
+      "properties": {
+        "decision": {
+          "$ref": "#/$defs/RCheckpointControlDecision"
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "pinned": {
+          "type": "boolean"
+        },
+        "previous_attempt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reference": {
+          "$ref": "#/$defs/RCheckpointReference"
+        },
+        "source_operation_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "operation_id",
+        "reference",
+        "source_operation_id",
+        "decision",
+        "pinned",
+        "deleted"
+      ]
+    },
+    "RCheckpointReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/InstanceRef"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "provider",
+        "operation_id",
+        "digest",
+        "bytes"
+      ]
+    },
+    "RExecutionNotStarted": {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "started": {
+          "description": "Always false when the owner confirms cancellation before native execution.",
+          "type": "boolean",
+          "const": false
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "operation_id",
+        "started"
+      ]
+    }
+  }
+}

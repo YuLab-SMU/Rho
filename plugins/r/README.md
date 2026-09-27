@@ -31,6 +31,12 @@ the remaining migration are recorded in `docs/STATUS.md` at the repository root.
   maintained through the existing ordered `patches/jet` workflow. No upstream
   notices or patches are replaced by this relocation.
 
+Public recovery controls retain original uncertain outcomes and support explicit
+application or discard through version-2 pin/delete requests. Their exact original
+request and latest attempt remain visible through `r.checkpoint_control@1`; see
+[public recovery contracts](sdk/README.md). Disposal of uncertain capture material
+and Studio recovery integration remain separate work.
+
 The existing Host temporarily uses a thin adapter outside this package. There is
 only one implementation of native R behavior. That adapter and the old scientific
 composition are removed as the full plugin path replaces them.

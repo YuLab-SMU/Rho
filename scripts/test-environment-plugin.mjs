@@ -11,6 +11,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync,spawn,spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {buildEnvironmentPlugin} from './build-environment-plugin.mjs';
+import {recoveryFaultPackage} from './fixtures/r-recovery-fault.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const checkpointReferences=process.argv.includes('--checkpoint-references');
 const rReferences=process.argv.includes('--r-references')||checkpointReferences;
@@ -35,7 +36,7 @@ assert.ok(!source.startsWith(root+path.sep),'Use independently assembled source'
 assert.equal(digest(fs.readFileSync(binary)),originalHost);
 let server,socket,socketClosed;
 let host, ready, exited, complete = false, counter = 0;
-let rIdentity,rSession,observerIdentity,otherReader;
+let rIdentity,rSession,observerIdentity,otherReader,faultController;
 const pending = new Map();
 const trace = (kind, value) => fs.appendFileSync(path.join(temporary, 'session.jsonl'), JSON.stringify({kind,value}) + '\n');
 function deadline(promise, label, ms = 180000) {
@@ -78,6 +79,7 @@ try {
   const snapshot=JSON.parse(execFileSync(binary,['--database',database,'--project',project,'plugins','snapshot',source,'--target','aarch64-apple-darwin'],{encoding:'utf8',timeout:180000,maxBuffer:16*1024*1024})).result;
   assert.ok(snapshot.revision&&snapshot.artifacts[0],JSON.stringify(snapshot)); trace('snapshot',snapshot);
   const rRevision=rReferences?JSON.parse(execFileSync(binary,['--database',database,'--project',project,'plugins','snapshot',fs.realpathSync(process.env.RHO_R_PLUGIN_PACKAGE),'--target','aarch64-apple-darwin'],{encoding:'utf8',timeout:180000,maxBuffer:16*1024*1024})).result:null;
+  const faultRevision=checkpointReferences?JSON.parse(execFileSync(binary,['--database',database,'--project',project,'plugins','snapshot',recoveryFaultPackage(fs.realpathSync(process.env.RHO_R_PLUGIN_PACKAGE),path.join(temporary,'r-control-fault')),'--target','aarch64-apple-darwin'],{encoding:'utf8',timeout:180000,maxBuffer:16*1024*1024})).result:null;
   host=spawn(binary,['--database',database,'--project',project,'session'],{stdio:['pipe','pipe','pipe']});
   const handshake=new Promise((resolve,reject) => {ready={resolve,reject};});
   exited=new Promise(resolve => host.once('close',(code,signal) => resolve({code,signal})));
@@ -187,7 +189,7 @@ try {
   if(rReferences){
     rIdentity=succeeded(await invoke('activate-r','plugins.activate',{revision:rRevision.revision,artifact:rRevision.artifacts[0],target:'aarch64-apple-darwin',alias:'material-r',configuration:{ark:fs.realpathSync(process.env.RHO_ARK),r_home:rhome,execution_timeout_seconds:60,...(checkpointReferences?{checkpoint_helper_path:fs.realpathSync(process.env.RHO_CHECKPOINT_HELPER)}:{})},optional_capabilities:checkpointReferences?checkpointGrants:[]})).output.instance.identity;
     materialGrants.push({id:'r.session',version:1},{id:'r.snapshot',version:1});
-    if(checkpointReferences)materialGrants.push({id:'r.checkpoint',version:1});
+    if(checkpointReferences)materialGrants.push({id:'r.checkpoint',version:1},{id:'r.checkpoint_control',version:1});
     rSession=succeeded(await invoke('create-r','r.create_session',{binding:await resolve(rIdentity,'r.create_session',1),arguments:{}})).output.session_id;
     observerIdentity=succeeded(await invoke('activate-observer-r','plugins.activate',{revision:rRevision.revision,artifact:rRevision.artifacts[0],target:'aarch64-apple-darwin',alias:'observer-r',configuration:{ark:fs.realpathSync(process.env.RHO_ARK),r_home:rhome,execution_timeout_seconds:60,...(checkpointReferences?{checkpoint_helper_path:fs.realpathSync(process.env.RHO_CHECKPOINT_HELPER)}:{})},optional_capabilities:checkpointReferences?checkpointGrants:[]})).output.instance.identity;
     const observerSession=succeeded(await invoke('create-observer-r','r.create_session',{binding:await resolve(observerIdentity,'r.create_session',1),arguments:{}})).output.session_id;
@@ -259,16 +261,30 @@ try {
       for(const id of Object.keys(materialBinding))materialBinding[id]=await resolve(replacement,`environment.${id}`);
       const selected=await materialQuery('retention',{operation_id:cancelled.operation.operation_id});assert.equal(selected.can_quarantine,false);assert.match(selected.retained_reasons.join(' '),/still references/);
       const reference=checkpoint.reference;
-      const control=async(id,name,args)=>{
-        const result=succeeded(await invoke(id,name,{binding:await resolve(observerIdentity,name,1),arguments:args}));
-        const session=await readSession(),binding=await resolve(observerIdentity,'r.console',1);
-        await until(()=>query('r.console',{binding,arguments:{expected_session:session.queue_target}}),state=>state.awaiting_commit.length===0,'Checkpoint control settlement');return result;
+      const control=async(id,name,args,version=1,instance=observerIdentity)=>{
+        const result=await invoke(id,name,{binding:await resolve(instance,name,version),arguments:args},version);
+        const session=await query('r.session',{binding:await resolve(instance,'r.session',1),arguments:{}}),binding=await resolve(instance,'r.console',1);
+        const settled=await until(()=>query('r.console',{binding,arguments:{expected_session:session.queue_target}}),state=>state.awaiting_commit.length===0,'Checkpoint control settlement');
+        if(settled.console.pause)await call('control',{capability:{id:'r.resume_queue',version:1},arguments:{binding:{...await resolve(instance,'r.resume_queue',1),target:session.queue_target},arguments:{session_id:session.queue_target,pause_id:settled.console.pause.id,only_operation_ids:[result.operation.operation_id]}}});
+        return result;
       };
-      const pinned=await control('protect-checkpoint','r.pin_checkpoint',{reference,expected_control:null,pinned:true});
+      const pinned=succeeded(await control('protect-checkpoint','r.pin_checkpoint',{reference,expected_control:null,pinned:true}));
       assert.equal((await materialQuery('retention',{operation_id:cancelled.operation.operation_id})).can_quarantine,false);
-      const unpinned=await control('unpin-checkpoint','r.pin_checkpoint',{reference,expected_control:pinned.operation.operation_id,pinned:false});
-      const deleted=await control('delete-checkpoint','r.delete_checkpoint',{reference,expected_control:unpinned.operation.operation_id});
-      await control('purge-checkpoint','r.purge_checkpoint',{reference,deletion_operation_id:deleted.operation.operation_id});
+      const unpinned=succeeded(await control('unpin-checkpoint','r.pin_checkpoint',{reference,expected_control:pinned.operation.operation_id,pinned:false}));
+      faultController=succeeded(await invoke('activate-control-fault','plugins.activate',{revision:faultRevision.revision,artifact:faultRevision.artifacts[0],target:'aarch64-apple-darwin',alias:'control-fault',configuration:{},optional_capabilities:checkpointGrants})).output.instance.identity;
+      const uncertain=await control('uncertain-deletion','r.delete_checkpoint',{reference,expected_control:unpinned.operation.operation_id},1,faultController);assert.equal(uncertain.status,'uncertain');
+      const resolveArgs={reference,source_operation_id:uncertain.operation.operation_id,expected_attempt:null,decision:'apply'};
+      const retry=await control('uncertain-resolution','r.delete_checkpoint',resolveArgs,2,faultController);assert.equal(retry.status,'uncertain');
+      const unresolved=await materialQuery('retention',{operation_id:cancelled.operation.operation_id});assert.equal(unresolved.can_quarantine,false);assert.match(unresolved.retained_reasons.join(' '),/uncertain.*resolution|uncertain.*resolve/i);
+      const deleted=succeeded(await control('resolve-deletion','r.delete_checkpoint',{...resolveArgs,expected_attempt:retry.operation.operation_id},2));
+      for(const original of [uncertain,retry]){
+        assert.deepEqual(await call('get_operation',{operation_id:original.operation.operation_id}),original,'Explicit resolution preserves the original uncertain outcome');
+        const observed=await query('r.checkpoint_control',{binding:await resolve(observerIdentity,'r.checkpoint_control',1),arguments:{reference,operation_id:original.operation.operation_id}});
+        assert.equal(observed.status,'uncertain');assert.equal(observed.resolution,deleted.operation.operation_id);
+      }
+      assert.equal((await query('r.session',{binding:await resolve(faultController,'r.session',1),arguments:{}})).state,'unstarted');
+      succeeded(await invoke('release-control-fault','plugins.release',{instance:faultController}));faultController=null;
+      succeeded(await control('purge-checkpoint','r.purge_checkpoint',{reference,deletion_operation_id:deleted.operation.operation_id}));
       assert.equal((await readSession()).state,'unstarted','Reference checks and controls must not start R');
       assert.deepEqual((await resource(checkpoint.manifest)).reference,reference,'Original public reports survive retirement');
     }
@@ -302,10 +318,10 @@ try {
   host.stdin.end();assert.equal((await deadline(exited,'Host shutdown',15000)).code,0);
   assert.equal(digest(fs.readFileSync(binary)),originalHost);complete=true;
   console.log(`Independent Environment package passed disconnected/query purity, material-owner exclusion, real pak/renv, resource reports, verified inventory, original idempotency, native cancellation, previous-instance resource reads, replacement recovery, explicit reference grants, stale preview refusal, quarantine/restore/purge and retained original results. Unchanged Host SHA256 ${originalHost}`);
-  if(checkpointReferences)console.log('Native checkpoint references passed: original provider preference, namespace-only dependencies, retention after unload and release, unavailable-reader retention, unstarted replacement reader, ambiguous reader refusal and exact configured selection, pin/unpin/delete/purge, preserved reports and subsequent material quarantine/restore/purge.');
+  if(checkpointReferences)console.log('Native checkpoint references passed: original provider preference, namespace-only dependencies, retention after unload and release, unavailable-reader retention, unstarted replacement reader, ambiguous reader refusal and exact configured selection, pin/unpin, uncertain deletion and resolution retry, explicit completion, unchanged original outcomes, purge, preserved reports and subsequent material quarantine/restore/purge.');
   if(rReferences)console.log('Native ordinary R reference checks passed: two exact idle sessions, live library paths, namespace retained after library-path removal, refused quarantine, explicit namespace unloading and released-instance observation.');
 } finally {
-  for(const instance of [rIdentity,observerIdentity,otherReader].filter(Boolean))if(host&&host.exitCode===null&&host.signalCode===null){
+  for(const instance of [rIdentity,observerIdentity,otherReader,faultController].filter(Boolean))if(host&&host.exitCode===null&&host.signalCode===null){
     try{succeeded(await invoke(`cleanup-${instance.instance}`,'plugins.release',{instance}));}
     catch(error){console.error(`Test-owned R release remains unconfirmed: ${error.message}`);}
   }

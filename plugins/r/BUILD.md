@@ -91,7 +91,10 @@ exact project/principal/provider identities, bounded reads and an OS artifact lo
 Read-only opening does not create storage or start R. Capture and adoption retain
 immutable native evidence; neither publishes a scientific result. The RPC owner
 must qualify the original Operation and retain the lease until core settlement.
-Pin/delete evidence alone cannot authorize deletion or restore. Physical deletion
+Pin/delete/resolution evidence alone cannot authorize deletion or restore. A
+resolution intent records its original request, previous attempt and decision;
+only Core-successful application of a deletion may remove payload bytes. Discard
+preserves logical state and cannot authorize cleanup. Physical deletion
 is an explicit post-commit action and returns any failure while preserving metadata.
 Adoption copies bytes, so source deletion cannot damage its replacement. Payloads
 retain the native 16 GiB upper bound and reads are at most 256 KiB.

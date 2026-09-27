@@ -2,9 +2,10 @@
 //! qualification remain private to R; Environment only protects published paths.
 use super::*;
 use rho_r_api::{
-    DeleteRCheckpoint, PinRCheckpoint, PurgeRCheckpoint, RCheckpointControlResult,
-    RCheckpointManifest, RCheckpointObservation, RCheckpointPurged, RCheckpointReference,
-    RCheckpointRestored, RCheckpointResult, RExecutionNotStarted, RestoreRCheckpoint,
+    DeleteRCheckpoint, PinRCheckpoint, PurgeRCheckpoint, RCheckpointControlObservation,
+    RCheckpointControlResolution, RCheckpointControlResult, RCheckpointManifest,
+    RCheckpointObservation, RCheckpointPurged, RCheckpointReference, RCheckpointRestored,
+    RCheckpointResult, RExecutionNotStarted, ResolveRCheckpointControl, RestoreRCheckpoint,
 };
 
 pub(super) fn supports(capability: &CapabilityKey) -> bool {
@@ -18,6 +19,11 @@ pub(super) fn supports(capability: &CapabilityKey) -> bool {
                 | "r.delete_checkpoint"
                 | "r.purge_checkpoint"
         )
+        || capability.version == 2
+            && matches!(
+                capability.id.as_str(),
+                "r.pin_checkpoint" | "r.delete_checkpoint"
+            )
 }
 
 fn reader<'a>(
@@ -64,6 +70,18 @@ impl Owner {
         capability: &CapabilityKey,
         status: &str,
     ) -> Result<(), String> {
+        let control = matches!(
+            capability.id.as_str(),
+            "r.pin_checkpoint" | "r.delete_checkpoint"
+        );
+        if !matches!(status, "succeeded" | "failed" | "cancelled")
+            && !(status == "uncertain" && control)
+        {
+            return Err(
+                "Live or uncertain scientific work still needs its original recovery references"
+                    .into(),
+            );
+        }
         let record = self
             .reference_query(call, "operation.get", json!({"operation_id":id}), false)
             .await?["record"]
@@ -83,6 +101,59 @@ impl Owner {
             return Err("R recovery reference differs from its original admitted record".into());
         }
         let name = capability.id.as_str();
+        if status == "uncertain" {
+            let args = &operation["normalized_arguments"]["arguments"];
+            let original: RCheckpointReference =
+                serde_json::from_value(args["reference"].clone()).map_err(error)?;
+            reference(&original, call)?;
+            let source_operation = if capability.version == 2 {
+                let args: ResolveRCheckpointControl =
+                    serde_json::from_value(args.clone()).map_err(error)?;
+                args.source_operation_id
+            } else {
+                id.clone()
+            };
+            let provider = reader(self.checkpoint_reader.as_ref(), &binding.provider, readers)?;
+            let observation: RCheckpointControlObservation = serde_json::from_value(self.reference_query(
+                call, "r.checkpoint_control", json!({"binding":ProviderBinding {
+                    capability:CapabilityKey {id:ContributionId::new("r.checkpoint_control").unwrap(),version:1},
+                    provider:provider.clone(),project:call.binding.project.clone(),target:None,
+                },"arguments":{"reference":original,"operation_id":id}}), false,
+            ).await?).map_err(error)?;
+            if observation.operation_id != *id
+                || observation.reference != original
+                || observation.status != PluginOutcome::Uncertain
+                || observation.source_operation_id != source_operation
+                || observation
+                    .resolution
+                    .as_ref()
+                    .is_none_or(|resolution| resolution == id)
+                || observation.can_resolve
+                || observation.can_apply
+            {
+                return Err("An uncertain R control has no confirmed original resolution; material is retained".into());
+            }
+            return Ok(());
+        }
+        if capability.version == 2 && status == "succeeded" {
+            let args: ResolveRCheckpointControl =
+                serde_json::from_value(operation["normalized_arguments"]["arguments"].clone())
+                    .map_err(error)?;
+            let out: RCheckpointControlResolution =
+                serde_json::from_value(record["output"].clone()).map_err(error)?;
+            reference(&args.reference, call)?;
+            if out.operation_id != *id
+                || out.reference != args.reference
+                || out.source_operation_id != args.source_operation_id
+                || out.previous_attempt != args.expected_attempt
+                || out.decision != args.decision
+            {
+                return Err(
+                    "R control resolution differs from its original admitted arguments".into(),
+                );
+            }
+            return Ok(());
+        }
         if status != "succeeded" {
             // Capture/adoption can leave complete or partial independent bytes.
             // Only the owner's confirmed not-started outcome excludes that case.
@@ -424,6 +495,112 @@ mod tests {
             assert_eq!(
                 std::fs::read(root.join("Rscript")).unwrap(),
                 b"must never execute in these tests"
+            );
+            assert!(!root.join("materials/recovery").exists());
+        }
+    }
+
+    #[tokio::test]
+    async fn uncertain_controls_require_a_matching_committed_public_resolution() {
+        for case in [
+            "resolved",
+            "retry_resolved",
+            "unresolved",
+            "wrong_id",
+            "wrong_source",
+            "wrong_reference",
+            "wrong_status",
+            "self_resolution",
+            "still_open",
+        ] {
+            let (directory, owner, mut requests) = crate::tests::fixture(true);
+            let root = directory.path().canonicalize().unwrap();
+            let query = crate::tests::query(source::RETENTION, json!({"operation_id":"stage"}));
+            let id = OperationId::new("uncertain-control").unwrap();
+            let capability = CapabilityKey {
+                id: ContributionId::new("r.pin_checkpoint").unwrap(),
+                version: if case == "retry_resolved" { 2 } else { 1 },
+            };
+            let mut binding = query.binding.clone();
+            binding.capability = capability.clone();
+            let reference = RCheckpointReference {
+                project: binding.project.clone(),
+                provider: binding.provider.clone(),
+                operation_id: OperationId::new("capture").unwrap(),
+                digest: ContentDigest::new(format!("sha256:{}", "c".repeat(64))).unwrap(),
+                bytes: 128,
+            };
+            let source_id = if case == "retry_resolved" {
+                OperationId::new("original-pin").unwrap()
+            } else {
+                id.clone()
+            };
+            let arguments = if case == "retry_resolved" {
+                json!({"reference":reference,"source_operation_id":source_id,"expected_attempt":null,"decision":"apply"})
+            } else {
+                json!({"reference":reference,"expected_control":null,"pinned":true})
+            };
+            let record = json!({"status":"uncertain","output":null,"operation":{"operation_id":id,"idempotency_scope":root,"capability":capability,"normalized_arguments":{"binding":binding,"arguments":arguments},"admission":{"owner_context":{"binding":binding}}}});
+            let mut observation = RCheckpointControlObservation {
+                operation_id: id.clone(),
+                reference: reference.clone(),
+                status: PluginOutcome::Uncertain,
+                source_operation_id: source_id,
+                latest_attempt: Some(OperationId::new("resolved-control").unwrap()),
+                resolution: Some(OperationId::new("resolved-control").unwrap()),
+                can_resolve: false,
+                can_apply: false,
+                notices: vec![],
+            };
+            match case {
+                "unresolved" => observation.resolution = None,
+                "wrong_id" => observation.operation_id = OperationId::new("other").unwrap(),
+                "wrong_source" => {
+                    observation.source_operation_id = OperationId::new("other").unwrap()
+                }
+                "wrong_reference" => observation.reference.bytes += 1,
+                "wrong_status" => observation.status = PluginOutcome::Succeeded,
+                "self_resolution" => observation.resolution = Some(id.clone()),
+                "still_open" => observation.can_resolve = true,
+                _ => (),
+            }
+            let expected = id.clone();
+            let responder = tokio::spawn(async move {
+                while let Some(request) = requests.recv().await {
+                    let data = match request.capability.id.as_str() {
+                        "operation.get" => json!({"record":record}),
+                        "r.checkpoint_control" => {
+                            assert_eq!(
+                                request.arguments["arguments"],
+                                json!({"reference":reference,"operation_id":expected})
+                            );
+                            json!(observation)
+                        }
+                        other => panic!("Unexpected control reference read {other}"),
+                    };
+                    let _ = request.reply.send(Ok(
+                        json!({"status":"ready","completeness":"complete","data":data}),
+                    ));
+                }
+            });
+            let mut refs =
+                References::new(&[root.join("materials/stage").to_str().unwrap().into()]).unwrap();
+            let result = owner
+                .checkpoint_references(
+                    &query,
+                    &mut refs,
+                    &[binding.provider],
+                    &id,
+                    &capability,
+                    "uncertain",
+                )
+                .await;
+            responder.abort();
+            let _ = responder.await;
+            assert_eq!(
+                result.is_ok(),
+                matches!(case, "resolved" | "retry_resolved"),
+                "{case}: {result:?}"
             );
             assert!(!root.join("materials/recovery").exists());
         }

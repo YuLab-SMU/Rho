@@ -72,7 +72,24 @@ cleanup using the exact committed deletion Operation and confirms
 `payload_removed: true` only after native removal. Original metadata remains.
 Read grants are explicit optional dependencies; state-sensitive operations also
 require project journal coverage so hidden records cannot be mistaken for no
-controls. Missing, uncertain or unsupported control history stays unavailable.
+controls. Missing or unsupported history stays unavailable. Uncertain control
+history stays unavailable until its original request is explicitly resolved.
+
+`r.checkpoint_control@1` accepts the copy reference and a control Operation ID.
+It returns that original terminal status, `source_operation_id`, `latest_attempt`,
+`resolution`, `can_resolve` and `can_apply`. The original status never changes.
+For a failed/cancelled/uncertain version-1 pin/delete, use the same capability at
+version 2 with `ResolveRCheckpointControl`: the exact reference, original
+`source_operation_id`, observed `expected_attempt` and `decision` (`apply` or
+`discard`). `apply` checks the original control precondition and establishes a new
+control head. `discard` closes only that request, preserving the current head and
+pin/deletion state. A stale original request may be discarded but cannot overwrite
+a newer choice. Core-successful applied deletion precedes physical payload cleanup;
+discard never authorizes cleanup. If resolution itself is uncertain, inspect the
+latest attempt and explicitly target it in the next resolution. Original outcomes
+and native evidence remain retained. Older readers refuse the version-2 controls
+rather than interpreting an incomplete history. These operations do not start R.
+This resolves metadata controls, not disposal of partial/uncertain captures.
 
 `r.inspection_state@1` returns `RInspectionState` without entering R or starting a
 session. Pass `expected_session: null` to observe an unstarted instance; after a

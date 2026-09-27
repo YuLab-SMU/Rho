@@ -257,12 +257,12 @@ impl Owner {
                 if !(name.starts_with("environment.") || name.starts_with("r.")) {
                     continue;
                 }
-                if !matches!(status, "succeeded" | "failed" | "cancelled") {
-                    return Err("Live or uncertain scientific work still needs its original recovery references".into());
-                }
                 if checkpoints::supports(&capability) {
                     self.checkpoint_references(call, references, readers, &id, &capability, status).await?;
                     continue;
+                }
+                if !matches!(status, "succeeded" | "failed" | "cancelled") {
+                    return Err("Live or uncertain scientific work still needs its original recovery references".into());
                 }
                 let known_r = match name {
                     "r.create_session" | "r.execute" => matches!(capability.version, 1 | 2),
