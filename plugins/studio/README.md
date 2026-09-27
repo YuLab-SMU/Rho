@@ -1,7 +1,7 @@
 # Plugin Studio
 
 An ordinary removable UI plugin using the public protocol and UI SDK. Open its
-`studio` contribution with empty configuration. Management grants are explicit: test creation and view opening can delegate the standard declared scopes to selected packages; Studio has no direct scientific operation grant.
+`studio` contribution with empty configuration. Management grants are explicit: scenario preparation, application, instance activation, test creation and view opening can delegate the standard declared scopes to selected packages; Studio has no direct scientific operation grant.
 Choose an installed revision and an existing development branch, or create a new
 branch. Source edits use the native immutable checkpoint ports and synchronized
 8 MiB document drafts. No package install, build, runtime or scene change is
@@ -74,3 +74,28 @@ The fixture preview and backend test have separate instances and state.
 
 Archive import/export, Agent tasks and scenario application remain unfinished. The inert editing canvas is separate
 from executable fixture preview. Default delivery is not yet changed.
+
+Apply to scenario reads named scenario heads and their immutable parent history.
+Choose the source checkpoint, its exact built artifact and an alias of the same
+plugin. Preview that build or create its explicit backend test first. Closing a
+preview retains this evidence. Initial states for the alias's new views must be
+provided by view ID; Studio does not convert state between revisions. Other
+configuration, dependencies, provider selections and layout stay in the captured
+scenario definition and remain subject to native validation. Use Plugins to edit
+those definitions or create a named scenario.
+
+Staging only changes the synchronized draft. Saving creates a checkpoint using the
+captured named head. Preparing reuses exact active runtime instances and live views,
+or creates new ones without changing the window layout. Apply to this window is a
+separate atomic selection using its captured layout version. Refresh preparation
+captures a new window version while retaining partially prepared identities. Each
+mutation persists and verifies its own original Operation. Inspection after a lost
+reply never proceeds to the next step; a replacement view cannot replay it.
+
+Scenario history can be compared with its parent and restored as a new checkpoint
+on the captured head, followed by explicit preparation and application. Hidden
+views retain current unsaved state when reused. Existing instances, accepted work
+and other windows retain their versions. Restoration does not rewind files, R
+memory, credentials or scientific outputs. Partial preparations stay retained and
+can be inspected and managed through Plugins; Studio never releases them as an
+implicit rollback. These UI flows use the public ports and declared scopes only.

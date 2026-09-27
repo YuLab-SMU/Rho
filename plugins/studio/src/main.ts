@@ -4,6 +4,7 @@ import { Studio, read, sourceTree, sourceText } from './model.js';
 import { bytes, diagnostic, isVisual, kinds, node, own, put } from './visual.js';
 import { renderCanvas } from './canvas.js';
 import { developmentPanel } from './development-panel.js';
+import { scenarioPanel } from './scenario-panel.js';
 const get=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
 const el=<K extends keyof HTMLElementTagNameMap>(tag:K,text='',className='')=>{const item=document.createElement(tag);item.textContent=text;item.className=className;return item;};
 const short=(id:string)=>id.startsWith('sha256:')?id.slice(7,15):id;
@@ -13,16 +14,17 @@ let ready=false,busy=false,preparing=false,composing=false,stopped=false,timer:R
 let navigationMode:'files'|'nodes'='nodes';
 let catalog:PluginCatalogPage={items:[],next:null,total:0},history:string[]=[],historyNext:string|null=null,historySelected:string|null=null,sourceKey='',inspectorKey='',fixtureKey='';
 let task:Promise<unknown>|null=null;
-const renderDevelopment=developmentPanel(studio,action,schedule,()=>!ready||busy||preparing||!!studio.pending||studio.drafts.unresolved);
-const frozen=()=>!ready||busy||preparing||!!studio.pending||!!studio.development.data.pending||!!studio.development.data.testing?.pending||studio.drafts.unresolved;
+const renderScenario=scenarioPanel(studio,action,schedule,()=>!ready||busy||preparing||!!studio.pending||!!studio.development.data.pending||!!studio.development.data.testing?.pending||studio.drafts.unresolved);
+const renderDevelopment=developmentPanel(studio,action,schedule,()=>!ready||busy||preparing||!!studio.pending||!!studio.application.data.pending||studio.drafts.unresolved);
+const frozen=()=>!ready||busy||preparing||!!studio.pending||!!studio.development.data.pending||!!studio.development.data.testing?.pending||!!studio.application.data.pending||studio.drafts.unresolved;
 // A document save captures an older body while typing may continue. Source
 // mutations freeze editing; an in-flight draft transfer must not drop keystrokes.
-const editable=()=>ready&&!busy&&!preparing&&!studio.pending&&!studio.development.data.pending&&!studio.development.data.testing?.pending&&!!studio.branch;
+const editable=()=>ready&&!busy&&!preparing&&!studio.pending&&!studio.development.data.pending&&!studio.development.data.testing?.pending&&!studio.application.data.pending&&!!studio.branch;
 function show(id:string,text:string){get(id).textContent=text;get(id).hidden=!text;}
 function dialogErrors(){document.querySelectorAll<HTMLElement>('.dialog-error').forEach(item=>{item.textContent=error;item.hidden=!error;});}
 function report(e:unknown){error=diagnostic(e);show('error',error);dialogErrors();}
 function schedule(){sync='Draft has unsynchronized changes';get('sync').textContent=sync;clearTimeout(timer);if(ready&&!preparing&&!stopped&&!composing)timer=setTimeout(()=>void flush().catch(report).finally(render),400);}
-async function flush(){clearTimeout(timer);if(!ready)throw Error('Inspect the saved draft before replacing its contents.');if(studio.document&&sourceKey===`${studio.document.data.revision}:${studio.document.data.selected}`&&document.activeElement===get('source'))studio.document.edit(studio.document.data.selected,get<HTMLTextAreaElement>('source').value);const before=JSON.stringify([studio.document?.snapshot,studio.branch,studio.pending,studio.development.data]);await studio.flush();const unchanged=before===JSON.stringify([studio.document?.snapshot,studio.branch,studio.pending,studio.development.data]);sync=unchanged?'Draft synchronized':'Draft has unsynchronized changes';get('sync').textContent=sync;if(!unchanged&&!preparing)schedule();}
+async function flush(){clearTimeout(timer);if(!ready)throw Error('Inspect the saved draft before replacing its contents.');if(studio.document&&sourceKey===`${studio.document.data.revision}:${studio.document.data.selected}`&&document.activeElement===get('source'))studio.document.edit(studio.document.data.selected,get<HTMLTextAreaElement>('source').value);const before=JSON.stringify([studio.document?.snapshot,studio.branch,studio.pending,studio.development.data,studio.application.data]);await studio.flush();const unchanged=before===JSON.stringify([studio.document?.snapshot,studio.branch,studio.pending,studio.development.data,studio.application.data]);sync=unchanged?'Draft synchronized':'Draft has unsynchronized changes';get('sync').textContent=sync;if(!unchanged&&!preparing)schedule();}
 function action(work:()=>Promise<unknown>){if(busy||preparing||composing||stopped)return;busy=true;error='';render();task=Promise.resolve().then(work).catch(report).finally(()=>{busy=false;task=null;render();});}
 function change(work:()=>void){if(!editable()||composing)return;try{work();error='';schedule();render();}catch(e){report(e);}}
 function button(label:string,work:()=>Promise<unknown>,disabled=false){const b=el('button',label,'item');b.disabled=disabled;b.onclick=()=>action(work);return b;}
@@ -30,7 +32,7 @@ function savePosition(){const doc=studio.document,source=get<HTMLTextAreaElement
 function chooseNode(id:string){const doc=studio.document;if(!doc)return;doc.data.selectedNode=id;doc.data.inspector=null;inspectorKey='';schedule();render();}
 function render(){
   if(stopped||composing)return;
-  renderDevelopment();
+  renderDevelopment();renderScenario();
   const doc=studio.document,buffer=doc?.current,invalid=doc?.error()??'',valid=!!doc?.canvas&&!invalid;
   show('error',error);dialogErrors();show('notice',notice);get('notice-banner').hidden=!notice;get('sync').textContent=sync;
   get('subtitle').textContent=studio.plugin?`${studio.plugin} / ${studio.branch?.name??'Read-only revision'}`:'Choose a revision to develop.';

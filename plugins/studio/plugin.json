@@ -3,7 +3,7 @@
   "id": "org.rho.studio",
   "name": "Plugin Studio",
   "version": "0.1.0",
-  "description": "Edit source on a development branch, build checkpoints, preview fixtures and explicitly test disposable projects.",
+  "description": "Edit and build source checkpoints, preview or test exact artifacts, and apply versioned project scenarios.",
   "license": "AGPL-3.0-only",
   "source": {
     "files": [
@@ -23,7 +23,9 @@
       "src/development.ts",
       "src/development-panel.ts",
       "src/backend-test.ts",
-      "src/backend-test-panel.ts"
+      "src/backend-test-panel.ts",
+      "src/scenario.ts",
+      "src/scenario-panel.ts"
     ],
     "lockfiles": [
       "dependencies.lock"
@@ -350,6 +352,149 @@
       "scopes": [
         "plugins.read",
         "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "scenarios.list",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "scenarios.get",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "scenarios.prepare",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read",
+        "application.read",
+        "application.control",
+        "skill.read",
+        "plugins.read",
+        "plugins.write",
+        "plugins.run",
+        "resources.read",
+        "documents.read",
+        "documents.write",
+        "workspace.run_r",
+        "workspace.read",
+        "project.read",
+        "project.write",
+        "environment.read",
+        "environment.write",
+        "process.run_local",
+        "remote.execute",
+        "slurm.read",
+        "slurm.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "scenarios.apply",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read",
+        "application.read",
+        "application.control",
+        "skill.read",
+        "plugins.read",
+        "plugins.write",
+        "plugins.run",
+        "resources.read",
+        "documents.read",
+        "documents.write",
+        "workspace.run_r",
+        "workspace.read",
+        "project.read",
+        "project.write",
+        "environment.read",
+        "environment.write",
+        "process.run_local",
+        "remote.execute",
+        "slurm.read",
+        "slurm.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.activate",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read",
+        "application.read",
+        "application.control",
+        "skill.read",
+        "plugins.read",
+        "plugins.write",
+        "plugins.run",
+        "resources.read",
+        "documents.read",
+        "documents.write",
+        "workspace.run_r",
+        "workspace.read",
+        "project.read",
+        "project.write",
+        "environment.read",
+        "environment.write",
+        "process.run_local",
+        "remote.execute",
+        "slurm.read",
+        "slurm.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "views.open",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read",
+        "application.read",
+        "application.control",
+        "skill.read",
+        "plugins.read",
+        "plugins.write",
+        "plugins.run",
+        "resources.read",
+        "documents.read",
+        "documents.write",
+        "workspace.run_r",
+        "workspace.read",
+        "project.read",
+        "project.write",
+        "environment.read",
+        "environment.write",
+        "process.run_local",
+        "remote.execute",
+        "slurm.read",
+        "slurm.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "scenarios.checkpoint",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
       ]
     }
   ],

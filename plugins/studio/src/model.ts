@@ -2,6 +2,7 @@ import type { PluginBranch, PluginBranchPage, PluginCheckpoint, PluginInspection
 import { ViewRequestError } from '../public/plugin-ui/index.js';
 import { DraftSync } from './draft-sync.js';
 import { Development, type DevelopmentState } from './development.js';
+import { ScenarioApplication, type ScenarioState } from './scenario.js';
 import { StudioDocument, MAX_TEXT_BYTES, type Snapshot } from './document.js';
 import { bytes, own, put } from './visual.js';
 import { type Client, type Intent, type RecordReply, json, same, verifyOriginal, inspectOriginal, terminal } from './operations.js';
@@ -40,17 +41,26 @@ export async function sourceText(client:Client,revision:string,path:string,file:
   const text=new TextDecoder('utf-8',{fatal:true}).decode(data);if(text.includes('\0'))throw Error('This source is binary. Its original bytes are retained.');return text;
 }
 type Pending={intent:Intent;proposal:PluginCheckpoint|null;restore:boolean};
-interface Payload { schema:1;plugin:string|null;branch:PluginBranch|null;document:Snapshot|null;pending:Pending|null;development?:DevelopmentState; }
+interface Payload { schema:1;plugin:string|null;branch:PluginBranch|null;document:Snapshot|null;pending:Pending|null;development?:DevelopmentState;application?:ScenarioState; }
 export class Studio {
   readonly drafts:DraftSync;
   readonly development:Development;
+  readonly application:ScenarioApplication;
   document:StudioDocument|null=null;
   plugin:string|null=null;
   branch:PluginBranch|null=null;
   pending:Pending|null=null;
   private queue:Promise<unknown>=Promise.resolve();
-  constructor(readonly client:Client) { this.drafts=new DraftSync(client);this.development=new Development(client,()=>this.flush(),()=>{if(this.pending||this.drafts.unresolved)throw Error('Inspect the original source or draft request before starting development work.');}); }
-  private payload():Payload { return {schema:1,plugin:this.plugin,branch:this.branch,document:this.document?.snapshot??null,pending:this.pending,development:this.development.data}; }
+  constructor(readonly client:Client) {
+    this.drafts=new DraftSync(client);
+    this.development=new Development(client,()=>this.flush(),()=>{
+      if(this.pending||this.application?.data.pending||this.drafts.unresolved)throw Error('Inspect the original source, scenario or draft request before starting development work.');
+    });
+    this.application=new ScenarioApplication(client,()=>this.flush(),()=>{
+      if(this.pending||this.development.data.pending||this.development.data.testing?.pending||this.drafts.unresolved)throw Error('Inspect the original source, development or draft request before changing the scenario.');
+    });
+  }
+  private payload():Payload { return {schema:1,plugin:this.plugin,branch:this.branch,document:this.document?.snapshot??null,pending:this.pending,development:this.development.data,application:this.application.data}; }
   flush() {
     const capture=bytes(JSON.stringify(this.payload()));
     const task=this.queue.then(()=>this.drafts.save(capture,{encoding:'org.rho.studio.draft.v1'}));this.queue=task.catch(()=>undefined);return task;
@@ -65,6 +75,7 @@ export class Studio {
     this.plugin=saved.plugin;this.branch=saved.branch;this.document=doc;this.pending=saved.pending;
     if(this.pending)await this.validatePending();
     if(saved.development)await this.development.restore(saved.development);
+    if(saved.application)this.application.restore(saved.application);
   }
   private async validatePending() {
     const pending=this.pending!,intent=pending.intent;
@@ -76,7 +87,7 @@ export class Studio {
       if(!this.branch||!this.document||!pending.proposal||pending.proposal.branch!==this.branch.id||args?.branch!==this.branch.id||args.expected_head!==pending.proposal.parent||![pending.proposal.parent,pending.proposal.revision].includes(this.document.data.revision))throw Error('The retained checkpoint differs from its captured branch or source.');
     }else throw Error('The retained request is not a Studio source operation.');
   }
-  private available() { if(this.pending||this.development.data.pending||this.development.data.testing?.pending||this.drafts.unresolved)throw Error('Inspect the original unconfirmed request before changing the development target.'); }
+  private available() { if(this.pending||this.development.data.pending||this.development.data.testing?.pending||this.application?.data.pending||this.drafts.unresolved)throw Error('Inspect the original unconfirmed request before changing the development target.'); }
   async select(revision:string,branch:PluginBranch|null=null) {
     this.available();if(this.document?.dirty)throw Error('Checkpoint current edits before choosing another revision.');
     const inspection:PluginInspection=await read(this.client,'plugins.inspect',{revision});

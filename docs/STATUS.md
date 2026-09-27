@@ -11,6 +11,52 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
+Studio scenario application is implemented through the ordinary public ports.
+The new surface selects a named scenario and plugin alias, stages an exact
+previewed/tested revision and artifact with explicit new view states, saves a
+checkpoint against its captured head, prepares runtime instances/views, and
+atomically applies to the current window against its captured layout version.
+Each step retains its original request in the synchronized draft. Lost replies,
+partial preparation and replacement-view inspection do not proceed to later steps
+automatically. History comparison and restoration create a new checkpoint; exact
+active instances and live view drafts can be reused without releasing older
+instances or rewinding scientific state. Configuration/dependency/provider/layout
+editing and initial named-scenario creation remain in Plugins.
+
+The generic containing window now refreshes its native layout observation before
+returning a successful presentation-operation receipt to a plugin. The browser
+flow exposed a stale-poll interval in which an immediate tab click could otherwise
+submit the old layout and produce a version conflict. This refresh does not trust
+a plugin-supplied layout, discard local edits, or rewrite the Operation outcome;
+selected child-project requests do not refresh the parent window.
+
+Studio model/recovery checks pass, including synchronized scenario payloads,
+source/development guards, lost checkpoint/activation/application replies, partial
+preparation reuse, layout conflicts and uncertain outcomes. All 528 client tests
+in 53 files pass, as do client build/consistency, the current binary build, public
+plugin boundaries, architecture and governance checks. Four affected browser flows
+pass across the recorded runs: generic window composition, source/build/preview,
+explicit backend tests, and scenario application/history restoration. The latter
+keeps old and new instances alive, restores the old unsaved Unicode draft, and
+preserves another window's unsaved text. Normal/wide/constrained scenario and
+editor captures, narrow history navigation/application controls and the restored
+live view were inspected; there is no overlap or horizontal overflow. The first
+restored screenshot preceded iframe paint; the final capture waits for visibility
+and painting and shows the retained draft.
+
+Initial scenario runs exposed the selection-reset and stale-window-observation
+bugs now fixed. Other failed runs were test timing/fixture issues: a wrong preview
+button label, reading the head before restore completed, typing before initial
+view state arrived, and incomplete model view metadata. The generated source index
+was refreshed after its mapped command changed. All failed evidence is retained;
+exact commands and current results are in
+`target/plugin-refactor/studio-scenario-verification.txt`. No real-R, full-workspace
+audit, installation or publication was run. New Studio package revisions still
+need explicit snapshot/activation; existing instances retain immutable assets.
+The shell change requires updated client assets, not a new Host capability. User
+Hosts and R sessions have not been replaced. Archive UI, Agent integration,
+remaining scientific migration and default delivery are still active work.
+
 Explicit backend tests have a native disposable-project owner and ordinary Studio
 controls. `plugins.test_create/test_stop` create and stop a separate generic Host,
 package catalog and Operation journal for exact source/artifact selections.
@@ -69,8 +115,8 @@ and fixture-preview regressions pass all fourteen cases. Dependency and governan
 checks pass. Exact commands, failures and current evidence are in
 `target/plugin-refactor/studio-test-verification.txt`. No real-R or full-workspace
 audit, installation or publication was run for this change. The overall migration,
-Studio scenario application/archive/Agent workflows and default delivery remain
-unfinished.
+Studio archive/Agent workflows, broader scientific acceptance and default delivery
+remain unfinished.
 
 Destroyed plugin documents retire their exact close-handler registration through
 the generic `views.release_renderer` Control. The shell assigns private document
@@ -245,7 +291,7 @@ Plugin boundaries, architecture and governance checks pass. The Studio UI stage
 reused the native build/client verification above; it changed no Host capability
 or embedded client source. The later generic-Host verification is recorded at the
 top of this page. User Hosts and R sessions were not replaced.
-Scenario application from Studio, archive UI, Agent integration, default delivery and remaining scientific migration are
+Archive UI, Agent integration, default delivery and remaining scientific migration are
 still unfinished. The inert editing canvas remains separate from executable
 fixture preview.
 

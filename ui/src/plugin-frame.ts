@@ -12,7 +12,7 @@ function bounded(value: unknown) {
 /** Generic composition primitive: opaque iframe, private MessagePort, immutable
  * assets and the same scoped Host ports. No scientific component is imported. */
 export function mountPluginFrame(container: HTMLElement, client: HostClient, project: string, connection: PluginViewConnection,
-  failed: (error: string) => void): () => void {
+  failed: (error: string) => void, refreshWindow?: () => Promise<void>): () => void {
   const iframe = document.createElement("iframe");
   const surface = document.createElement("div");
   surface.style.cssText = "display:flex;flex-direction:column;width:100%;height:100%;min-width:0;min-height:0";
@@ -169,6 +169,15 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
         } catch (error) {
           reply = { ...reply, ok: false, result: undefined, error: error instanceof Error ? error.message : String(error) };
         }
+      }
+      // A successful presentation mutation can make the shell's last poll
+      // stale. Refresh the native observation before exposing success to the
+      // plugin; never install a plugin-supplied layout or discard local edits.
+      const operation = reply.result as {status?: string; outcome?: string; operation?: {capability?: {id?: string; version?: number}}};
+      if (reply.ok && message.test_project === undefined && (body.type === "invoke" || body.type === "get_operation") && operation?.status === "succeeded" && operation.outcome === "succeeded" && operation.operation?.capability?.version === 1 &&
+          ["scenarios.apply", "windows.open_view", "windows.update_layout", "views.close"].includes(operation.operation.capability.id ?? "")) {
+        // A presentation refresh failure must not rewrite an accepted Operation.
+        await refreshWindow?.().catch(() => undefined);
       }
       if (disposed) return;
       const response = { protocol_version: 1, connection: connection.connection, view: connection.view.view,

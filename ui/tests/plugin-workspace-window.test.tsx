@@ -3,16 +3,16 @@ import { afterEach, expect, it, vi } from 'vitest';
 import type { HostClient } from '../src/host-client';
 import type { PluginWindowLayout } from '../../sdk/plugin-protocol/index.js';
 import { PluginWorkspace } from '../src/plugin-workspace-window';
-const mounted = vi.hoisted(() => ({ starts: [] as string[], stops: [] as string[] }));
+const mounted = vi.hoisted(() => ({ starts: [] as string[], stops: [] as string[], refreshers: new Map<string, () => Promise<void>>() }));
 vi.mock('../src/plugin-layout-host', () => ({ PluginLayoutHost: ({ frames, close }: any) => <div>
   {frames.map((frame: any) => <div key={frame.id}>{frame.content}<button onClick={() => close(frame.id)}>Close {frame.id}</button></div>)}
 </div> }));
-vi.mock('../src/plugin-frame', () => ({ mountPluginFrame: (container: HTMLElement, _client: unknown, _project: string, connection: any) => {
-  const id = connection.view.view; mounted.starts.push(id);
+vi.mock('../src/plugin-frame', () => ({ mountPluginFrame: (container: HTMLElement, _client: unknown, _project: string, connection: any, _failed: unknown, refresh: () => Promise<void>) => {
+  const id = connection.view.view; mounted.starts.push(id); mounted.refreshers.set(id, refresh);
   const input = document.createElement('input'); input.setAttribute('aria-label', `Draft ${id}`); container.append(input);
   return () => { mounted.stops.push(id); input.remove(); };
 } }));
-afterEach(() => { cleanup(); vi.useRealTimers(); mounted.starts = []; mounted.stops = []; });
+afterEach(() => { cleanup(); vi.useRealTimers(); mounted.starts = []; mounted.stops = []; mounted.refreshers.clear(); });
 function fixture() {
   const identity = { instance: 'instance', plugin: 'example', revision: 'revision', artifact: 'artifact' };
   const record = (id: string) => ({ view: id, instance: identity, project: 'project', principal: 'principal', window: 'window', contribution: id, closed: false, state: {}, configuration: {}, state_version: 0 });
@@ -51,4 +51,13 @@ it('disposes a frame only after the original close is confirmed and preserves it
   await waitFor(() => expect(screen.queryByLabelText('Draft one')).toBeNull());
   expect(mounted.stops).toEqual(['one']); expect(f.invoke.mock.calls[0][1].client_request_id).toBe(f.invoke.mock.calls[1][1].client_request_id);
   expect(screen.getByText('No views are open in this window.').isConnected).toBe(true);
+});
+
+it('refreshes a committed scenario immediately while keeping the original live document', async () => {
+  const f = fixture(); render(<PluginWorkspace client={f.client} project="/project" />);
+  const input = await screen.findByLabelText('Draft one'); fireEvent.change(input, {target: {value: 'Current unsaved state'}});
+  f.change({kind: 'tabs', id: 'next', views: ['two'], selected: 'two'});
+  await act(async () => { await mounted.refreshers.get('one')!(); });
+  expect(screen.getByLabelText('Draft two').isConnected).toBe(true);
+  expect(screen.getByLabelText('Draft one')).toBe(input); expect((input as HTMLInputElement).value).toBe('Current unsaved state'); expect(mounted.stops).toEqual([]);
 });

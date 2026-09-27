@@ -7,12 +7,13 @@ import { PluginLayoutHost } from './plugin-layout-host';
 import { Modal } from "./primitives";
 import { mountPluginFrame } from './plugin-frame';
 
-function ConnectedFrame({ client, project, connection, failed }: {
-  client: HostClient; project: string; connection: PluginViewConnection; failed(error: string): void;
+function ConnectedFrame({ client, project, connection, failed, refresh }: {
+  client: HostClient; project: string; connection: PluginViewConnection; failed(error: string): void; refresh(): Promise<void>;
 }) {
   const container = useRef<HTMLDivElement>(null), report = useRef(failed); report.current = failed;
+  const refreshRef = useRef(refresh); refreshRef.current = refresh;
   useEffect(() => {
-    if (container.current) return mountPluginFrame(container.current, client, project, connection, error => report.current(error));
+    if (container.current) return mountPluginFrame(container.current, client, project, connection, error => report.current(error), () => refreshRef.current());
   }, [client, project, connection]);
   return <div ref={container} style={{ width: '100%', height: '100%' }} />;
 }
@@ -27,10 +28,11 @@ export function PluginWorkspace({ client, project, testName }: { client: HostCli
   const [dock, setDock] = useState(() => pluginLayoutModel(saved.layout));
   const applied = useRef(saved.layout);
   const [error, setError] = useState('');
+  const refresh = useRef<() => Promise<void>>(async () => {});
   const [recovery, setRecovery] = useState<{ record: PluginViewRecord; busy: boolean } | null>(null);
   useEffect(() => {
-    let stopped = false, timer: ReturnType<typeof setTimeout> | undefined;
-    const observe = async () => {
+    let stopped = false, timer: ReturnType<typeof setTimeout> | undefined, observing: Promise<void> | null = null;
+    const read = async () => {
       try {
         const state = owners.layout.getSnapshot();
         if (!state.dirty && !state.saving) await owners.layout.load();
@@ -46,7 +48,19 @@ export function PluginWorkspace({ client, project, testName }: { client: HostCli
         }
         if (!stopped) setError('');
       } catch (error) { if (!stopped) setError(message(error)); }
-      finally { if (!stopped) timer = setTimeout(() => void observe(), 1500); }
+    };
+    const observe = (): Promise<void> => {
+      if (observing) return observing;
+      if (stopped) return Promise.resolve();
+      clearTimeout(timer);
+      observing = read().finally(() => { observing = null; if (!stopped) timer = setTimeout(() => void observe(), 1500); });
+      return observing;
+    };
+    refresh.current = async () => {
+      // A prior poll may have started before the mutation committed.
+      if (observing) await observing;
+      await observe();
+      if (!stopped && document.visibilityState === 'visible') await new Promise<void>(done => requestAnimationFrame(() => done()));
     };
     void observe();
     return () => { stopped = true; clearTimeout(timer); owners.layout.stop(); owners.views.stop(); owners.closes.stop(); };
@@ -83,7 +97,7 @@ export function PluginWorkspace({ client, project, testName }: { client: HostCli
   const frames = [...views].map(([id, entry]) => {
     const connection = owners.views.connection(id);
     return { id, title: entry.title, content: <div style={{ position: 'relative', height: '100%', width: '100%' }}>
-      {connection && <ConnectedFrame client={client} project={project} connection={connection} failed={error => owners.views.failed(id, error)} />}
+      {connection && <ConnectedFrame client={client} project={project} connection={connection} failed={error => owners.views.failed(id, error)} refresh={() => refresh.current()} />}
       {(!connection || entry.error) && <div className="empty" role={entry.error ? 'alert' : 'status'} style={{ position: 'absolute', inset: 0, background: 'var(--color-surface)' }}>
         {entry.error || 'Connecting view…'}
         {entry.error && <button onClick={() => void owners.views.retry(id).catch(error => setError(message(error)))}>Reconnect this view</button>}

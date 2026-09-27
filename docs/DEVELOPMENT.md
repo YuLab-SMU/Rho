@@ -95,8 +95,8 @@ closes/releases it while retaining its latest acknowledged state. It also reques
 stopping a real long-running build and verifies the original terminal outcome,
 with no new artifact and no replay. Inspect the
 captured normal, wide and constrained screenshots before claiming visual completion.
-The editing canvas itself does not execute plugin code. These checks do not
-establish scenario application. The separate `studio-backend-test.spec.ts` case
+The editing canvas itself does not execute plugin code. These checks cover
+source/build/fixture behavior. The separate `studio-backend-test.spec.ts` case
 uses a real external native backend and ordinary Studio: explicit creation, lost
 creation receipt and reload recovery, child view opening, private workspace
 navigation, native control, cooperative closure and stop while an analysis draft
@@ -105,6 +105,17 @@ plugin lifecycle integration, not real-R acceptance. The model fixture additiona
 covers unacknowledged saves, replacement-view recovery, retained child journals,
 failed activation and uncertain cleanup. Public SDK tests cover selected five-port
 calls and refusal of selected intrinsic requests.
+
+`npm run test:browser --prefix ui -- studio-scenario.spec.ts` exercises ordinary
+Studio against a separate generic Host: exact previewed build selection, explicit
+new view state, lost checkpoint acknowledgement/reload inspection, preparation
+without layout change, current-window application, and restoration as a new
+checkpoint. It verifies old instances and hidden live drafts, including another
+window's unsaved text. Inspect normal, wide and constrained screenshots plus the
+scrolled narrow application controls. The Studio model fixture also checks layout
+conflicts, partial-preparation reuse, failed final draft saves, replacement-view
+recovery, uncertain results and refusal to proceed to later steps after a lost
+reply. These do not establish real-R or full migration acceptance.
 
 Fixture preview uses `cargo test -p rho-host --test plugin_preview --locked` for
 exact artifact identity, no backend/project-path/grant creation, fixture-only

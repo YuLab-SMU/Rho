@@ -16,13 +16,13 @@ beforeEach(() => {
   });
 });
 afterEach(() => { disposals.splice(0).forEach(dispose => dispose()); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
-function mount(testProject: string | null = "test-child") {
+function mount(testProject: string | null = "test-child", refresh?: () => Promise<void>) {
   const client = new HostClient("private-host-credential", "window-a", testProject ?? undefined);
   const request = vi.spyOn(client, "request").mockResolvedValue({ ok: true, result: {} });
   const release = vi.spyOn(client, "port").mockResolvedValue({ released: true });
   const container = document.createElement("div"); document.body.append(container);
   const failed = vi.fn();
-  const dispose = mountPluginFrame(container, client, "/analysis", connection, failed); disposals.push(dispose);
+  const dispose = mountPluginFrame(container, client, "/analysis", connection, failed, refresh); disposals.push(dispose);
   const messagePort = port;
   let sequence = 0;
   const send = (body: PluginViewRequest, testProject?: string) => messagePort.onmessage!({ data: { protocol_version: 1, connection: connection.connection,
@@ -105,4 +105,27 @@ it.each(["rejected", "lost"])("does not claim a %s registration was acknowledged
   frame.send({ type: "register_close_handler", renderer: "unknown-document" });
   await vi.waitFor(() => expect(outcome === "lost" ? frame.failed : port.postMessage).toHaveBeenCalled());
   frame.dispose(); expect(frame.release).not.toHaveBeenCalled();
+});
+
+it("refreshes a successful scenario observation before delivering its original receipt", async () => {
+  let finish!: () => void;
+  const refresh = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+  const frame = mount(null, refresh), result = {status: "succeeded", outcome: "succeeded", operation: {capability: {id: "scenarios.apply", version: 1}}};
+  frame.request.mockResolvedValue({ok: true, result});
+  frame.send({type: "get_operation", operation_id: "original"});
+  await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  expect(frame.messagePort.postMessage).not.toHaveBeenCalled(); finish();
+  await vi.waitFor(() => expect(frame.messagePort.postMessage).toHaveBeenCalledTimes(1));
+  expect(frame.messagePort.postMessage.mock.calls[0][0]).toMatchObject({ok: true, result});
+});
+it.each(["child", "query", "uncertain", "refresh-failed"])("preserves scope and the Operation outcome during presentation refresh: %s", async mode => {
+  const refresh = vi.fn(async () => { throw Error("window observation unavailable"); });
+  const frame = mount(null, refresh), status = mode === "uncertain" ? "uncertain" : "succeeded";
+  const result = {status, outcome: status, operation: {capability: {id: "scenarios.apply", version: 1}}};
+  frame.request.mockResolvedValue({ok: true, result});
+  const body: PluginViewRequest = mode === "query" ? {type: "query", capability: {id: "example.read", version: 1}, arguments: {}} : {type: "get_operation", operation_id: "original"};
+  frame.send(body, mode === "child" ? "child" : undefined);
+  await vi.waitFor(() => expect(frame.messagePort.postMessage).toHaveBeenCalledTimes(1));
+  expect(refresh).toHaveBeenCalledTimes(mode === "refresh-failed" ? 1 : 0);
+  expect(frame.messagePort.postMessage.mock.calls[0][0]).toMatchObject({ok: true, result}); expect(frame.failed).not.toHaveBeenCalled();
 });

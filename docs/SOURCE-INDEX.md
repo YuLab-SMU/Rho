@@ -281,7 +281,7 @@ Checks:
 - `plugins.resource-download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts"]`
 - `plugins.scenario-ports`: `["cargo","test","-p","rho-host","--test","plugin_scenarios","--locked"]`
 - `plugins.self-requirements`: `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"]`
-- `plugins.studio-browser`: `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts","studio-backend-test.spec.ts"]`
+- `plugins.studio-browser`: `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts","studio-backend-test.spec.ts","studio-scenario.spec.ts"]`
 - `plugins.studio-model`: `["node","scripts/test-studio-plugin.mjs"]`
 - `plugins.test-project-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-test-project.spec.ts"]`
 - `plugins.test-project-edges`: `["cargo","test","-p","rho-workbench","--lib","plugin_test_","--locked"]`

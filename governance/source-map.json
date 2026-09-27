@@ -12,7 +12,7 @@
     "plugins.preview-host": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_preview", "--locked"]},
     "plugins.preview-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "plugin-preview.spec.ts"]},
     "plugins.studio-model": {"command": ["node", "scripts/test-studio-plugin.mjs"]},
-    "plugins.studio-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "studio-plugin.spec.ts", "studio-backend-test.spec.ts"]},
+    "plugins.studio-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "studio-plugin.spec.ts", "studio-backend-test.spec.ts", "studio-scenario.spec.ts"]},
     "plugins.build-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "build_operations", "--locked"]},
     "plugins.process-engine": {"command": ["cargo", "test", "-p", "rho-process-engine", "--locked"]},
     "plugins.development-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "source_development", "--locked"]},

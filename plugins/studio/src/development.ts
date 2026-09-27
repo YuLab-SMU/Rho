@@ -7,6 +7,7 @@ import { BackendTest, emptyBackendTest, type BackendTestState } from './backend-
 
 export interface DevelopmentState {
   testing?: BackendTestState;
+  previewed?: { revision: string; artifact: string };
   pending: Intent | null;
   stopRequested?: string;
   build: RecordReply | null;
@@ -192,6 +193,7 @@ export class Development {
         const output = record.output as OpenedPluginWindowView, view = output?.view;
         if (!view || !identity(view.view) || view.purpose !== 'fixture_preview' || view.project !== this.client.view.project || view.principal !== this.client.view.principal || !same(view.instance, args.view.instance) || view.contribution !== args.view.contribution || view.window !== args.view.window || !same(view.configuration, args.view.configuration) || !same(view.state, args.view.state) || view.closed) throw Error('View receipt differs from its original preview request.');
         this.data.preview!.view = view;
+        this.data.previewed = {revision: view.instance.revision, artifact: view.instance.artifact};
       } else if (id === 'views.close') {
         const view = record.output as PluginViewRecord;
         if (view?.view !== args.view || view.purpose !== 'fixture_preview' || view.project !== this.client.view.project || view.principal !== this.client.view.principal || view.window !== this.client.view.window || !same(view.instance, this.data.preview!.instance.instance.identity) || !view.closed) throw Error('The original preview closure is not confirmed.');
