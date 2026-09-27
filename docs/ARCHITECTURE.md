@@ -47,6 +47,21 @@ running instance. Invalid declaration drafts remain with the ordinary editor and
 are not accepted as validated source checkpoints. These capabilities require
 ordinary declared read/write grants and have no management-plugin exception.
 
+`plugins.build` requires ordinary write and execution grants and names an exact
+installed source revision. The package owner materializes only declared source in
+a fresh original-Operation directory and runs the literal declared recipe using
+existing toolchains. Rustup automatic installation is disabled and Cargo uses its
+offline cache. Generic supervision in `crates/process-engine` owns native process
+groups, bounded output, timeout and cancellation; scientific Process, Files,
+Remote and Environment owners reuse the same mechanism through the public protocol.
+A build cannot publish unless the process exits successfully, cleanup is confirmed,
+source identity is unchanged and the resulting artifact validates. Artifact import
+does not advance a branch, start an instance or change a scene. Source protections
+outlive execution until the original journal commit; uncertain work retains them.
+Working source, process reports and candidate artifact identities remain recovery
+material, not a second authoritative outcome database. A build command is trusted
+local code, not an OS filesystem or network sandbox.
+
 The ordinary Studio's editing canvas receives declaration data and fixtures, not
 a Host client or an action dispatcher. It treats custom components as opaque
 source references and renders text without executing code or fetching media.
@@ -1629,7 +1644,8 @@ package inspection.
 | `crates/adapters/` | SQLite and package implementations; transitional adapters to package-owned R, Files/Git, local process and SSH/Slurm owners |
 | `plugins/r/api`, `plugins/r/backend` | Public R data/native ports, isolated RPC owner and the sole Ark/R engine |
 | `plugins/files/api`, `plugins/files/backend/engine` | Public filesystem/text/Git contracts and the contained native implementation |
-| `plugins/process/api`, `plugins/process/backend` | Public local process requests/reports and ordinary RPC backend; `engine` supervises execution and `owner` manages canonical launch scope and original-operation native recovery |
+| `crates/process-engine` | Shared native process supervision for builds and plugins, using public protocol reports |
+| `plugins/process/api`, `plugins/process/backend` | Public local process requests and ordinary RPC backend; `owner` manages canonical launch scope and original-operation native recovery |
 | `plugins/remote/api`, `plugins/remote/backend/owner` | Public remote/Slurm contracts and the sole native SSH/scheduler implementation; caller-owned journal and source authorization remain outside the native library |
 | `plugins/remote/backend` | Ordinary configured Remote RPC provider; scoped original-submission reads, fixed target qualifications, resource evidence and settlement fencing; no independent journal or automatic resubmission |
 | `plugins/environment/api`, `plugins/environment/backend/owner` | Public Environment data and sole native execution, observation, staging and recovery implementation; transitional Host adapter preserves the core operation port |

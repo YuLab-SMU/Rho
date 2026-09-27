@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-rho-process-engine = { path = "../../../plugins/process/backend/engine" }
+rho-process-engine = { path = "../../process-engine" }
 rho-process-owner = { path = "../../../plugins/process/backend/owner" }
 async-trait.workspace = true
 rho-contract = { path = "../../contract" }

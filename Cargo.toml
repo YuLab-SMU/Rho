@@ -15,7 +15,7 @@ members = [
   "plugins/remote/api",
   "plugins/remote/backend",
   "plugins/remote/backend/owner",
-  "plugins/process/backend/engine",
+  "crates/process-engine",
   "plugins/process/backend/owner",
   "plugins/process/backend",
   "plugins/r/backend/engine",

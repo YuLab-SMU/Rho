@@ -14,7 +14,7 @@ assert.ok(target, 'The installed compiler did not identify its target');
 const temporary = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-process-owner-')));
 let complete = false;
 try {
-  const sources = ['plugins/process/api', 'plugins/process/backend/engine', 'plugins/process/backend/owner', 'crates/plugin-protocol'];
+  const sources = ['plugins/process/api', 'crates/process-engine', 'plugins/process/backend/owner', 'crates/plugin-protocol'];
   for (const source of sources) fs.cpSync(path.join(root, source), path.join(temporary, source), {
     recursive: true, filter: file => !/[\\/](?:target|node_modules|dist)(?:[\\/]|$)/.test(file),
   });

@@ -298,7 +298,7 @@ impl PluginRepository {
         ensure(
             matches!(
                 owner_kind,
-                "instance" | "view" | "operation" | "management" | "scenario" | "document" | "checkpoint"
+                "instance" | "view" | "operation" | "management" | "build" | "scenario" | "document" | "checkpoint"
             ),
             "unknown reference owner",
         )?;
@@ -337,7 +337,7 @@ impl PluginRepository {
         ensure(
             matches!(
                 owner_kind,
-                "instance" | "view" | "operation" | "management" | "scenario" | "document" | "checkpoint"
+                "instance" | "view" | "operation" | "management" | "build" | "scenario" | "document" | "checkpoint"
             ),
             "unknown reference owner",
         )?;
@@ -542,6 +542,24 @@ pub(crate) fn store_archive(
             )?;
         }
     }
+    // Repeated builds/imports must leave one exportable package, rather than
+    // individually valid artifacts accumulating beyond the archive quota. Check
+    // the complete retained inventory inside the same rollback-capable transaction.
+    let documents = transaction.prepare("SELECT document FROM artifacts WHERE revision=? LIMIT 33")?
+        .query_map([revision.id.as_str()], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    ensure(documents.len() <= 32, "retained artifact inventory exceeds limit")?;
+    let mut files = revision.files.len();
+    let mut bytes: u64 = revision.files.values().map(|file|file.bytes).sum();
+    for document in documents {
+        let artifact: BuildArtifact = serde_json::from_str(&document)?;
+        ensure(artifact.revision == revision.id && crate::artifact_digest(&artifact)? == artifact.id, "stored artifact identity mismatch")?;
+        files = files.checked_add(artifact.files.len()).ok_or_else(||PluginError::Invalid("package inventory overflow".into()))?;
+        for file in artifact.files.values() {
+            bytes = bytes.checked_add(file.bytes).ok_or_else(||PluginError::Invalid("package size overflow".into()))?;
+        }
+    }
+    ensure(files <= MAX_PACKAGE_FILES && bytes <= MAX_PACKAGE_BYTES, "retained package exceeds archive quota")?;
     if let Some(parent) = &revision.parent {
         transaction.execute(
             "INSERT OR IGNORE INTO revision_refs VALUES('revision',?,?)",

@@ -1,11 +1,11 @@
-//! Bounded native subprocess supervision, shared by ordinary plugin backends.
+//! Bounded native subprocess supervision, shared by builds and ordinary plugin backends.
 #![forbid(unsafe_code)]
 #[cfg(windows)]
 use process_wrap::tokio::JobObject;
 #[cfg(unix)]
 use process_wrap::tokio::ProcessGroup;
 use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
-pub use rho_process_api::{OutputCapture, ProcessReport, ProcessTermination};
+pub use rho_plugin_protocol::{OutputCapture, ProcessReport, ProcessTermination};
 use std::{io, process::{ExitStatus, Stdio}, sync::{Arc, Mutex}, time::{Duration, Instant}};
 use tokio::{io::{AsyncRead, AsyncReadExt, AsyncWriteExt}, process::Command, sync::watch, task::JoinHandle};
 

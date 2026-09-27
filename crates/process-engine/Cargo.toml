@@ -7,7 +7,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/YuLab-SMU/Rho"
 
 [dependencies]
-rho-process-api = { path = "../../api" }
+rho-plugin-protocol = { path = "../plugin-protocol" }
 process-wrap = { version = "10.0", features = ["tokio1"] }
 tokio = { version = "1.0", features = ["macros", "rt", "sync", "time", "process", "io-util"] }
 

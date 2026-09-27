@@ -18,6 +18,12 @@ import type { ActivatePlugin, WorkspacePaths, PluginManifest, RpcFrame, VisualDo
 import type {ProjectReadCoverage,ProjectReadCoverageArguments} from "../protocol/index.js";
 import type { SaveScenario, ScenarioPage, ScenarioRevisionArguments, ApplyScenario, WindowScenarioSnapshot, ResolveWindowProvider } from "../protocol/index.js";
 import type { ListPluginSource, PluginSourcePage, ReadPluginSource, PluginSourceChunk, ListPluginBranches, PluginBranchPage, CheckpointPlugin, PluginCheckpoint } from "../protocol/index.js";
+import type { BuildPlugin, PluginBuildResult, ProcessReport } from "../protocol/index.js";
+const buildRequest: BuildPlugin = { revision: "revision", timeout_ms: 120000 };
+function buildEvidence(result: PluginBuildResult): ProcessReport { return result.process; }
+// @ts-expect-error A build names immutable source, never an activated instance.
+const forgedBuild: BuildPlugin = { instance: "instance", timeout_ms: 120000 };
+void [buildRequest, buildEvidence, forgedBuild];
 const sourceList: ListPluginSource = { revision: "revision", after: null, limit: 20 };
 const sourcePage: PluginSourcePage = { revision: "revision", files: {}, total: 0, next: null };
 const sourceRead: ReadPluginSource = { revision: "revision", path: "main.ts", offset: 0, limit: 65536 };

@@ -9,7 +9,7 @@ repository = "https://github.com/YuLab-SMU/Rho"
 [dependencies]
 async-trait = "0.1"
 rho-files-api = { path = "../../api" }
-rho-process-engine = { path = "../../../process/backend/engine" }
+rho-process-engine = { path = "../../../../crates/process-engine" }
 sha2 = "0.10"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }

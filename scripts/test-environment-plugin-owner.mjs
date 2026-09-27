@@ -13,7 +13,7 @@ const cargo=installed('cargo');
 const target=execFileSync(env.RUSTC,['-vV'],{encoding:'utf8'}).match(/^host: (.+)$/m)?.[1];assert.ok(target);
 let complete=false;
 try {
-  const parts=['plugins/environment/api','plugins/environment/backend/owner','plugins/process/api','plugins/process/backend/engine','plugins/process/backend/owner','crates/plugin-protocol'];
+  const parts=['plugins/environment/api','plugins/environment/backend/owner','plugins/process/api','crates/process-engine','plugins/process/backend/owner','crates/plugin-protocol'];
   for(const part of parts)fs.cpSync(path.join(root,part),path.join(temporary,part),{recursive:true,filter:file=>!/[\\/](?:target|dist|node_modules)(?:[\\/]|$)/.test(file)});
   fs.writeFileSync(path.join(temporary,'Cargo.toml'),`[workspace]\nresolver = "3"\nmembers = ${JSON.stringify(parts)}\n`);
   fs.copyFileSync(path.join(root,'Cargo.lock'),path.join(temporary,'Cargo.lock'));

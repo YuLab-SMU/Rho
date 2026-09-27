@@ -23,7 +23,7 @@ assert.deepEqual(cli.targets.filter(target => target.kind.includes("bin")).map(t
 const allowed = {
   "rho-plugin-protocol": [],
   "rho-plugin-sdk": ["rho-plugin-protocol"],
-  "rho-plugins": ["rho-plugin-protocol", "rho-plugin-sdk", "rho-contract", "rho-operation"],
+  "rho-plugins": ["rho-process-engine", "rho-plugin-protocol", "rho-plugin-sdk", "rho-contract", "rho-operation"],
   "rho-r-backend": ["rho-plugin-sdk", "rho-r-api", "rho-r-engine", "rho-environment-api"],
   "rho-r-api": ["rho-plugin-protocol"],
   "rho-r-engine": ["rho-r-api", "rho-plugin-protocol"],
@@ -33,7 +33,7 @@ const allowed = {
   "rho-files-owner": ["rho-files-api"],
   "rho-files-engine": ["rho-files-api", "rho-process-engine"],
   "rho-process-api": ["rho-plugin-protocol"],
-  "rho-process-engine": ["rho-process-api"],
+  "rho-process-engine": ["rho-plugin-protocol"],
   "rho-process-owner": ["rho-process-api", "rho-process-engine", "rho-plugin-protocol"],
   "rho-process-backend": ["rho-process-api", "rho-process-owner", "rho-plugin-sdk"],
   "rho-remote-backend": ["rho-remote-api", "rho-remote-owner", "rho-process-api", "rho-plugin-sdk"],
@@ -70,7 +70,7 @@ const pluginLibraries = {
   "rho-r-api": "plugins/r/api", "rho-r-engine": "plugins/r/backend/engine",
   "rho-files-owner": "plugins/files/backend/owner",
   "rho-files-api": "plugins/files/api", "rho-files-engine": "plugins/files/backend/engine",
-  "rho-process-api": "plugins/process/api", "rho-process-engine": "plugins/process/backend/engine", "rho-process-owner": "plugins/process/backend/owner",
+  "rho-process-api": "plugins/process/api", "rho-process-owner": "plugins/process/backend/owner",
 };
 for (const pkg of metadata.packages) {
   assertAgentEngineBoundary(pkg);

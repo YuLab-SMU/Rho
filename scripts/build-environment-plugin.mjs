@@ -9,10 +9,12 @@ export function buildEnvironmentPlugin(destination) {
   const output = path.join(fs.realpathSync(path.dirname(path.resolve(destination))), path.basename(destination));
   assert.ok(output !== root && !output.startsWith(root + path.sep), 'Use an independent source directory');
   fs.mkdirSync(output);
-  for (const [from, to] of [['plugins/environment', '.'], ['plugins/r/api', 'r/api'], ['plugins/process/api', 'process/api'], ['plugins/process/backend/engine', 'process/backend/engine'], ['plugins/process/backend/owner', 'process/backend/owner'], ['crates/plugin-protocol', 'public/plugin-protocol'], ['crates/plugin-sdk', 'public/plugin-sdk']])
+  for (const [from, to] of [['plugins/environment', '.'], ['plugins/r/api', 'r/api'], ['plugins/process/api', 'process/api'], ['crates/process-engine', 'public/process-engine'], ['plugins/process/backend/owner', 'process/backend/owner'], ['crates/plugin-protocol', 'public/plugin-protocol'], ['crates/plugin-sdk', 'public/plugin-sdk']])
     fs.cpSync(path.join(root, from), path.join(output, to), {recursive: true, filter: source => !/[\\/](?:target|dist|node_modules|__pycache__)(?:[\\/]|$)/.test(source)});
   fs.copyFileSync(path.join(root, 'LICENSE'), path.join(output, 'LICENSE'));
   for (const [file, from, to] of [
+    ['process/backend/owner/Cargo.toml', '../../../../crates/process-engine', '../../../public/process-engine'],
+    ['backend/owner/Cargo.toml', '../../../../crates/process-engine', '../../public/process-engine'],
     ['api/Cargo.toml', '../../../crates/plugin-protocol', '../public/plugin-protocol'],
     ['api/Cargo.toml', '../../process/api', '../process/api'],
     ['backend/owner/Cargo.toml', '../../../process/', '../../process/'],
@@ -27,7 +29,7 @@ export function buildEnvironmentPlugin(destination) {
     assert.ok(source.includes(from), `Dependency layout changed: ${file}`);
     fs.writeFileSync(location, source.replaceAll(from, to));
   }
-  fs.writeFileSync(path.join(output, 'Cargo.toml'), '[workspace]\nresolver = "3"\nmembers = ["api", "r/api", "backend", "backend/owner", "process/api", "process/backend/engine", "process/backend/owner", "public/plugin-protocol", "public/plugin-sdk"]\n');
+  fs.writeFileSync(path.join(output, 'Cargo.toml'), '[workspace]\nresolver = "3"\nmembers = ["api", "r/api", "backend", "backend/owner", "process/api", "public/process-engine", "process/backend/owner", "public/plugin-protocol", "public/plugin-sdk"]\n');
   fs.copyFileSync(path.join(root, 'Cargo.lock'), path.join(output, 'Cargo.lock'));
   const installed = name => fs.realpathSync(execFileSync('rustup', ['which', name], {encoding: 'utf8'}).trim());
   const env = {...process.env, RHO_PLUGIN_CARGO: installed('cargo'), RUSTC: installed('rustc'), RUSTDOC: installed('rustdoc'), CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '4', CARGO_TARGET_DIR: path.join(root, 'target')};

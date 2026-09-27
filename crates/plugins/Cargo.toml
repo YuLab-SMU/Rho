@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+rho-process-engine = { path = "../process-engine" }
 rho-plugin-protocol = { path = "../plugin-protocol" }
 rho-plugin-sdk = { path = "../plugin-sdk" }
 rho-operation = { path = "../operation" }

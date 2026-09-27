@@ -10,7 +10,7 @@ repository = "https://github.com/YuLab-SMU/Rho"
 rho-plugin-protocol = { path = "../../../../crates/plugin-protocol" }
 rho-remote-api = { path = "../../api" }
 rho-process-api = { path = "../../../process/api" }
-rho-process-engine = { path = "../../../process/backend/engine" }
+rho-process-engine = { path = "../../../../crates/process-engine" }
 serde_json = "1.0"
 sha2 = "0.10"
 tokio = { version = "1.0", features = ["rt", "process", "sync", "time", "macros"] }

@@ -85,6 +85,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     PluginBranchPage::export_all(&types)?;
     CheckpointPlugin::export_all(&types)?;
     PluginCheckpoint::export_all(&types)?;
+    BuildPlugin::export_all(&types)?;
+    PluginBuildResult::export_all(&types)?;
     VisualDocument::export_all(&types)?;
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
@@ -94,6 +96,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("plugin-source-chunk", schemars::schema_for!(PluginSourceChunk)),
         ("list-plugin-branches", schemars::schema_for!(ListPluginBranches)),
         ("plugin-branch-page", schemars::schema_for!(PluginBranchPage)),
+        ("build-plugin", schemars::schema_for!(BuildPlugin)),
+        ("plugin-build-result", schemars::schema_for!(PluginBuildResult)),
         ("checkpoint-plugin", schemars::schema_for!(CheckpointPlugin)),
         ("plugin-checkpoint", schemars::schema_for!(PluginCheckpoint)),
         ("project-read-coverage", schemars::schema_for!(ProjectReadCoverage)),

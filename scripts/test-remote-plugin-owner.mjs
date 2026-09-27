@@ -18,7 +18,7 @@ assert.ok(target);
 const temporary = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-independent-remote-')));
 let complete = false;
 try {
-  const parts = ['plugins/remote/api', 'plugins/remote/backend/owner', 'plugins/process/api', 'plugins/process/backend/engine', 'crates/plugin-protocol'];
+  const parts = ['plugins/remote/api', 'plugins/remote/backend/owner', 'plugins/process/api', 'crates/process-engine', 'crates/plugin-protocol'];
   for (const part of parts) fs.cpSync(path.join(root, part), path.join(temporary, part), {
     recursive: true, filter: file => !/[\\/](?:target|node_modules|dist)(?:[\\/]|$)/.test(file),
   });

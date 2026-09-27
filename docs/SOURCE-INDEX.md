@@ -92,6 +92,7 @@ Sources:
 - `crates/plugin-protocol/**`
 - `crates/plugin-sdk/**`
 - `crates/plugins/**`
+- `crates/process-engine/**`
 - `plugins/**`
 - `scripts/build-console-plugin.mjs`
 - `scripts/build-editor-plugin.mjs`
@@ -186,6 +187,7 @@ Checks:
 - `plugins.backend-sdk`: `["cargo","test","-p","rho-plugin-sdk","--locked"]`
 - `plugins.boundaries`: `["node","scripts/check-plugin-boundaries.mjs"]`
 - `plugins.boundary-tests`: `["node","scripts/check-plugin-boundaries.mjs","--self-test"]`
+- `plugins.build-owner`: `["cargo","test","-p","rho-plugins","--test","build_operations","--locked"]`
 - `plugins.console`: `["node","scripts/test-console-plugin.mjs"]`
 - `plugins.console-editor`: `["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"]`
 - `plugins.development-host`: `["cargo","test","-p","rho-host","--test","plugin_development","--locked"]`
@@ -230,6 +232,7 @@ Checks:
 - `plugins.plots`: `["node","scripts/test-plots-plugin.mjs"]`
 - `plugins.plots-browser`: `["npm","run","test:browser","--prefix","ui","--","plots-plugin.spec.ts"]`
 - `plugins.process-backend`: `["cargo","test","-p","rho-process-backend","--lib","--locked"]`
+- `plugins.process-engine`: `["cargo","test","-p","rho-process-engine","--locked"]`
 - `plugins.process-independent`: `["node","scripts/test-process-plugin-owner.mjs"]`
 - `plugins.process-manifest`: `["node","plugins/process/generate-manifest.mjs","--check"]`
 - `plugins.process-native`: `["node","scripts/test-process-plugin.mjs"]`

@@ -3,6 +3,8 @@
   "checks": {
     "plugins.studio-model": {"command": ["node", "scripts/test-studio-plugin.mjs"]},
     "plugins.studio-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "studio-plugin.spec.ts"]},
+    "plugins.build-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "build_operations", "--locked"]},
+    "plugins.process-engine": {"command": ["cargo", "test", "-p", "rho-process-engine", "--locked"]},
     "plugins.development-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "source_development", "--locked"]},
     "plugins.development-host": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_development", "--locked"]},
     "plugins.manager-model": {"command": ["node", "scripts/test-manager-plugin.mjs"]},
@@ -915,6 +917,7 @@
         "crates/host/tests/plugin_development.rs",
         "crates/plugin-protocol/**",
         "crates/plugin-sdk/**",
+        "crates/process-engine/**",
         "crates/plugins/**",
         "crates/cli/src/plugins.rs",
         "sdk/**",
@@ -1013,6 +1016,8 @@
       ],
       "checks": [
         "plugins.development-owner",
+        "plugins.build-owner",
+        "plugins.process-engine",
         "plugins.development-host",
         "docs.index",
         "system.architecture",

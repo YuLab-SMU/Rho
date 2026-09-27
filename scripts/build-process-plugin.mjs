@@ -9,10 +9,11 @@ export function buildProcessPlugin(destination) {
   const output = path.join(fs.realpathSync(path.dirname(path.resolve(destination))), path.basename(destination));
   assert.ok(output !== root && !output.startsWith(root + path.sep), 'Use an independent source directory');
   fs.mkdirSync(output);
-  for (const [from, to] of [['plugins/process', '.'], ['crates/plugin-protocol', 'public/plugin-protocol'], ['crates/plugin-sdk', 'public/plugin-sdk']])
+  for (const [from, to] of [['plugins/process', '.'], ['crates/process-engine', 'public/process-engine'], ['crates/plugin-protocol', 'public/plugin-protocol'], ['crates/plugin-sdk', 'public/plugin-sdk']])
     fs.cpSync(path.join(root, from), path.join(output, to), {recursive: true, filter: source => !/[\\/](?:target|dist|node_modules)(?:[\\/]|$)/.test(source)});
   fs.copyFileSync(path.join(root, 'LICENSE'), path.join(output, 'LICENSE'));
   for (const [file, from, to] of [
+    ['backend/owner/Cargo.toml', '../../../../crates/process-engine', '../../public/process-engine'],
     ['api/Cargo.toml', '../../../crates/plugin-protocol', '../public/plugin-protocol'],
     ['backend/owner/Cargo.toml', '../../../../crates/plugin-protocol', '../../public/plugin-protocol'],
     ['backend/Cargo.toml', '../../../crates/plugin-sdk', '../public/plugin-sdk'],
@@ -21,7 +22,7 @@ export function buildProcessPlugin(destination) {
     assert.ok(source.includes(from), `Dependency layout changed: ${file}`);
     fs.writeFileSync(location, source.replace(from, to));
   }
-  fs.writeFileSync(path.join(output, 'Cargo.toml'), '[workspace]\nresolver = "3"\nmembers = ["api", "backend", "backend/engine", "backend/owner", "public/plugin-protocol", "public/plugin-sdk"]\n');
+  fs.writeFileSync(path.join(output, 'Cargo.toml'), '[workspace]\nresolver = "3"\nmembers = ["api", "backend", "public/process-engine", "backend/owner", "public/plugin-protocol", "public/plugin-sdk"]\n');
   fs.copyFileSync(path.join(root, 'Cargo.lock'), path.join(output, 'Cargo.lock'));
   const installed = name => fs.realpathSync(execFileSync('rustup', ['which', name], {encoding: 'utf8'}).trim());
   const env = {...process.env, RHO_PLUGIN_CARGO: installed('cargo'), RUSTC: installed('rustc'), RUSTDOC: installed('rustdoc'),

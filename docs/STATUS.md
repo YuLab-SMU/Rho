@@ -11,6 +11,38 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
+The native `plugins.build` port names an installed source revision, materializes
+its declared files in a fresh original-Operation directory, and runs its literal
+recipe with existing tools. It reuses generic supervision in `crates/process-engine`;
+Process, Files, Remote and Environment no longer obtain that mechanism through the
+scientific Process API. Builds require ordinary `plugins.write` and `plugins.run`
+grants, retain source references, serialize managed execution, and publish only
+validated artifacts for unchanged source. Aggregate quotas are checked inside the
+artifact transaction so repeated builds leave an exportable package. Native work
+directories and bounded reports remain recovery evidence. Uncertain Operations
+keep source protection; reference reconciliation cannot claim native cleanup.
+Builds do not activate instances or apply scenarios.
+
+Verification passes: 8 supervisor cases (`build-supervisor-v2.log`), 7 build + 13
+package-repository + 6 source-development cases (`build-repository-final.log`),
+and the final uncertain-reconciliation assertion (`build-uncertain-final.log`).
+Independent Process sources pass 4 native owner/recovery cases outside the checkout
+(`build-independent-process.log`); independent Files/Git sources pass 13 read/search,
+4 native owner and 8 supervisor cases without private core source
+(`build-independent-files.log`). `npm run generate --prefix ui`, `npm run build
+--prefix ui` and `npm run check --prefix ui` pass (`build-generate.log`,
+`build-client-build.log`, `build-client-check.log`), as do the public/Process
+NodeNext consumers and architecture, plugin-boundary and governance checks.
+All evidence is under `target/plugin-refactor/`; `build-verification.txt` records
+executed commands and the corrected initial failures: the first supervisor command
+was refused by `--locked` before compilation, and the first owner compile found an
+incorrect documentation-field type. No external dependency versions changed.
+
+Studio build controls and isolated executable preview remain outstanding. A fresh
+Host build is required before their browser acceptance; the user's running Host
+and R sessions have not been restarted. Full native package assemblies, real-R
+scene acceptance and the full-workspace audit were not rerun in this build phase.
+
 `plugins/studio` is an ordinary, independently assembled UI package using only the
 public protocol and UI SDK. It selects immutable source or an existing development
 branch, creates branches, reads bounded source pages, and checks/saves source
@@ -53,7 +85,7 @@ and `studio-browser-v2.log`; neither was a passing run. `cargo build --locked
 architecture/governance checks pass (`studio-host-build.log`,
 `studio-client-build.log`, `studio-client-check.log`, `studio-client-unit.log`).
 These runs use test-owned projects and do not replace user Hosts or R sessions.
-Native build, isolated executable preview, archive UI, Agent integration, default
+Studio build integration, isolated executable preview, archive UI, Agent integration, default
 delivery and remaining scientific migration are still unfinished; the inert
 editing canvas is not executable preview acceptance.
 
@@ -90,7 +122,7 @@ in `source-protocol.log`. Independent strict NodeNext consumption and standalone
 schema-reference checks pass (`source-public-types-v3.log`). Public bindings and
 schemas are generated; `npm run generate --prefix ui`, `npm run build --prefix ui`
 and `npm run check --prefix ui` pass (`source-generate.log`, `source-client-build.log`
-and `source-client-check.log`). Native build and executable preview still need
+and `source-client-check.log`). Studio build integration and executable preview still need
 ordinary public capabilities. A running Host needs a rebuilt replacement
 to expose the new ports; a client refresh cannot add them. Existing user Hosts and
 R sessions have not been replaced during these isolated-project checks.

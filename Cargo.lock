@@ -6269,6 +6269,7 @@ dependencies = [
  "rho-operation",
  "rho-plugin-protocol",
  "rho-plugin-sdk",
+ "rho-process-engine",
  "rho-sqlite",
  "rusqlite",
  "schemars 1.2.1",
@@ -6328,7 +6329,7 @@ version = "0.1.0"
 dependencies = [
  "nix",
  "process-wrap",
- "rho-process-api",
+ "rho-plugin-protocol",
  "tokio",
 ]
 

@@ -241,15 +241,34 @@ Use the smallest test tier that proves the current change. A small change must n
 rerun the entire workspace by default; expand the scope only when the dependency or
 owner boundary requires it.
 
+Native package builds use `plugins.build@1` through the shared Operation port:
+`{"revision":"sha256:…","timeout_ms":120000}`. Both `plugins.write` and
+`plugins.run` are required. Build a saved source checkpoint, retain its original
+request identity, and inspect that Operation after an interrupted acknowledgement.
+No instance activation or scenario application follows automatically. Iterate with
+`cargo test -p rho-plugins --test build_operations --locked`; changes to package
+storage also require the `package_repository` and `source_development` targets.
+
+The Host forwards existing tool/cache locations only, including optional
+`RHO_PLUGIN_CARGO` and `RHO_PLUGIN_NODE_MODULES`; it supplies neither a dependency
+installer nor a shared build target directory. Missing tools/cache entries produce
+build diagnostics. Rustup automatic toolchain installation is disabled and Cargo
+runs offline. Working source is retained under the repository's
+`builds-v1/<SHA256-of-original-operation-id>/source`. `request.json`, `process.json`
+and a possible `artifact.json` retain bounded native evidence. The latter names a
+validated candidate, not proof of a journal commit: inspect the original Operation
+and repository. Uncertain original builds retain source references and are never
+automatically rerun. A read or client refresh does not start or recover a build.
+
 Files/Git native sources now live in `plugins/files/backend/engine`; their public
 data and provider contracts live in `plugins/files/api`. Shared bounded subprocess
-supervision lives in `plugins/process/backend/engine` with public process reports
-in `plugins/process/api`. Search and patch interpretation live in
+supervision lives in `crates/process-engine` with public process reports
+in `crates/plugin-protocol`. Search and patch interpretation live in
 `plugins/files/backend/owner`; the retiring adapters and project handlers reuse
 these implementations. Iterate with
 `cargo test -p rho-files-engine -p rho-files-owner -p rho-process-engine --lib --tests --locked`.
 For the source boundary, `node scripts/test-files-plugin-engine.mjs` materializes
-those five libraries and the public plugin protocol outside the checkout, and
+those four libraries and the public plugin protocol outside the checkout, and
 runs their native tests with the installed toolchain. It is not a backend activation or packaging test.
 Generate public Files declarations with `node plugins/files/generate-sdk.mjs`,
 then run `node scripts/test-files-protocol.mjs`. Contract moves also require the

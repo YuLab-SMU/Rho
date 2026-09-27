@@ -8,7 +8,7 @@ repository = "https://github.com/YuLab-SMU/Rho"
 
 [dependencies]
 rho-process-api = { path = "../../api" }
-rho-process-engine = { path = "../engine" }
+rho-process-engine = { path = "../../../../crates/process-engine" }
 rho-plugin-protocol = { path = "../../../../crates/plugin-protocol" }
 tokio = { version = "1.0", features = ["rt", "process", "sync", "time"] }
 sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
