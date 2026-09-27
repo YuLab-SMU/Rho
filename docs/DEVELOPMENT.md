@@ -49,9 +49,14 @@ draft, receipt and recovery checks. After building the current client and Host,
 `npm run test:browser --prefix ui -- studio-plugin.spec.ts` runs its ordinary view
 against a disposable project. It covers fixture-only editing, declaration errors,
 source composition, drag, checkpoints, lost receipt recovery and historical source
-restoration. Inspect the captured normal, wide and constrained screenshots before
-claiming visual completion. The editing canvas does not execute plugin code;
-these checks do not establish native builds or isolated executable preview.
+restoration. Its development flow also builds a real source checkpoint, recovers a
+lost build acknowledgement without replay, starts an exact fixture preview and
+closes/releases it while retaining its latest acknowledged state. It also requests
+stopping a real long-running build and verifies the original terminal outcome,
+with no new artifact and no replay. Inspect the
+captured normal, wide and constrained screenshots before claiming visual completion.
+The editing canvas itself does not execute plugin code. These checks do not
+establish disposable-project real-backend testing or scenario application.
 
 Fixture preview uses `cargo test -p rho-host --test plugin_preview --locked` for
 exact artifact identity, no backend/project-path/grant creation, fixture-only
@@ -63,7 +68,7 @@ artifact with `plugins.preview`, and checks the ordinary SDK iframe, fixture
 queries, blocked writes, Unicode, state persistence, clipboard, narrow/wide layout
 and closure. `node scripts/test-manager-plugin.mjs` checks that fixture identities
 are excluded from runtime/scenario reuse. These do not establish disposable-project
-real-backend testing or Studio's end-user build/preview workflow.
+real-backend testing; Studio's end-user flow has its own browser case above.
 
 Scenario application uses `cargo test -p rho-host --test plugin_scenarios --locked`.
 The fixtures construct ordinary packages outside the checkout and exercise scoped

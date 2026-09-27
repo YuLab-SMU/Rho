@@ -121,6 +121,7 @@ Sources:
 - `scripts/fixtures/plugin-drafts.mjs`
 - `scripts/fixtures/plugin-ui.mjs`
 - `scripts/fixtures/ssh-slurm.mjs`
+- `scripts/fixtures/studio-development.mjs`
 - `scripts/generate-editor-context.mjs`
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-console-plugin.mjs`

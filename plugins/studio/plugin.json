@@ -3,7 +3,7 @@
   "id": "org.rho.studio",
   "name": "Plugin Studio",
   "version": "0.1.0",
-  "description": "Edit immutable plugin source on a development branch, inspect declarations and keep synchronized drafts.",
+  "description": "Edit plugin source on a development branch, build immutable checkpoints and run isolated fixture previews.",
   "license": "AGPL-3.0-only",
   "source": {
     "files": [
@@ -19,7 +19,9 @@
       "tsconfig.json",
       "package.json",
       "build.mjs",
-      "README.md"
+      "README.md",
+      "src/development.ts",
+      "src/development-panel.ts"
     ],
     "lockfiles": [
       "dependencies.lock"
@@ -194,6 +196,79 @@
       },
       "scopes": [
         "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.build",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write",
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.preview",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instance",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.release",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "windows.layout",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "windows.open_view",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "views.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "views.close",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run"
       ]
     }
   ],

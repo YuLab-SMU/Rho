@@ -73,12 +73,11 @@ fixtures and denied writes, preserves Unicode and state through refresh, copies
 explicit text, closes/revokes assets and releases the instance. Preview captures
 at 1440/1920/390/220 px and three normal-view/close-refusal captures were inspected
 without clipping or overlap. This establishes fixture preview through the public
-SDK; Studio's end-user controls and disposable-project real-backend testing still
-need their own acceptance. Exact commands and the corrected initial compile
+SDK. Studio's end-user controls are verified below; disposable-project real-backend
+testing remains unfinished. Exact commands and the corrected initial compile
 failure are recorded in `preview-verification.txt`.
 
-Studio build controls remain outstanding. The user's running Host and R sessions
-have not been restarted. Full native package assemblies, real-R scene acceptance
+The user's running Host and R sessions have not been restarted. Full native package assemblies, real-R scene acceptance
 and the full-workspace audit were not rerun in this phase.
 
 `plugins/studio` is an ordinary, independently assembled UI package using only the
@@ -99,33 +98,49 @@ a receipt. Reopen does not replay source work. History compares immutable source
 with its parent and restores selected bytes as a new checkpoint. Editing is limited
 to UTF-8 files up to 128 KiB; larger/binary historical files restore by exact source
 copy. Source and undo bodies have a bounded draft budget, and native checkpoint
-quotas remain visible. The package's README records these limits. It has no build,
-activation, scenario mutation or scientific execution grants.
+quotas remain visible. The package's README records these limits. It declares
+ordinary build and fixture-preview ports; it has no runtime activation, scenario
+mutation or scientific execution grants.
 
-The independent build and model checks pass with
-`node scripts/test-studio-plugin.mjs` (`target/plugin-refactor/studio-model-final.log`),
-including malformed declarations, cycles, shared undo, manifest inventory changes,
-UTF-8 split across pages, content verification, native rejection, conflict forks,
-mismatched receipts, lost acknowledgement and replacement-view inspection boundaries.
-The isolated Chrome run passes with
-`npm run test:browser --prefix ui -- studio-plugin.spec.ts --output
-../target/plugin-refactor/studio-browser-final`. It checks original save recovery
-after reload, continued input while an older draft receipt is delayed, shared IME
-undo, clipboard, drag, immutable checkpoint artifacts and restore, and absence of
-scientific calls. Canvas captures at 1440/1920 and 390/220 px, source/navigation
-and properties at 390/220 px, and history at 1440/390 px were inspected. The
-node/file switch keeps the node tree visible in canvas mode. Evidence is in
-`studio-browser-final.log` and `studio-browser-final/` in the same directory;
-unchanged layout observations from `studio-browser-v4/` remain valid. Initial
-fixture-ID and premature-read test failures are retained in `studio-browser-v1.log`
-and `studio-browser-v2.log`; neither was a passing run. `cargo build --locked
---offline`, client build/check, all 507 client unit tests, plugin boundaries and
-architecture/governance checks pass (`studio-host-build.log`,
-`studio-client-build.log`, `studio-client-check.log`, `studio-client-unit.log`).
-These runs use test-owned projects and do not replace user Hosts or R sessions.
-Studio build/preview controls, disposable-project real-backend testing, archive UI,
-Agent integration, default delivery and remaining scientific migration are still
-unfinished; the inert editing canvas is separate from executable fixture preview.
+Build & preview now builds the exact saved checkpoint, retains its original
+Operation and bounded logs, and selects the acknowledged artifact without applying
+it. Configuration text, fixtures, partial preview instances and original requests
+share the synchronized draft. Reload inspects the original work without replay;
+only the originating view can retry or request a build stop. Stop requests remain
+unconfirmed until the original Operation reports its terminal result. Normal view
+closure saves the preview's latest state; retained-state recovery and release are
+separate explicit actions. Successful preview opens collapse the configuration
+form so the retained instance and artifact remain visible on return.
+
+`node scripts/test-studio-plugin.mjs` passes the independent assembly and source,
+canvas, draft and development recovery checks (`studio-development-integrated-v9.log`).
+The isolated Chrome command `npm run test:browser --prefix ui --
+studio-plugin.spec.ts --output ../target/plugin-refactor/studio-development-browser-v5`
+passes its full end-to-end case (`studio-development-browser-v5.log`). It checks
+source/IME undo, clipboard, drag, immutable history, lost source/build receipts,
+exact fixture queries, preview state on closure/release, and confirmed cancellation
+of a real long-running build. The cancelled revision publishes no artifact, while
+the previous successful revision retains its artifact. The complete paged
+Operation history contains no scientific calls or duplicate checkpoints.
+
+Canvas and preview captures at 1440/1920/390/220 px, navigation/source/properties
+at 390/220 px, history at 1440/390 px, and running/cancelled build states were
+inspected without overlap or horizontal overflow. Unchanged layout observations
+from `studio-development-browser-v3/` cover the final UI; final diagnostics were
+inspected in `studio-development-browser-v5/`. Earlier failed runs retain evidence:
+v2 measured a tab before visibility settled, v3 read the previous source before
+file loading completed, and v4 counted only the first Operation-history page.
+These were corrected in the test rather than reported as passes. The initial
+model compile/fault-injection failures and exact commands remain in
+`studio-development-verification.txt` under `target/plugin-refactor/`.
+
+Plugin boundaries, architecture and governance checks pass. This UI-only stage
+reuses the current native build/client verification above; it changes no Host
+capability or embedded client source. User Hosts and R sessions were not replaced.
+Disposable-project real-backend testing, scenario application from Studio, archive
+UI, Agent integration, default delivery and remaining scientific migration are
+still unfinished. The inert editing canvas remains separate from executable
+fixture preview.
 
 Plugin source development now has public `plugins.source_tree/read_source`,
 `plugins.branches`, `plugins.check_source` and `plugins.checkpoint` ports.
@@ -161,7 +176,7 @@ schema-reference checks pass (`source-public-types-v3.log`). Public bindings and
 schemas are generated; `npm run generate --prefix ui`, `npm run build --prefix ui`
 and `npm run check --prefix ui` pass (`source-generate.log`, `source-client-build.log`
 and `source-client-check.log`). Native build and fixture-preview capabilities now
-exist; Studio still needs to integrate them. A running Host needs a rebuilt replacement
+exist and are integrated into Studio. A running Host needs a rebuilt replacement
 to expose the new ports; a client refresh cannot add them. Existing user Hosts and
 R sessions have not been replaced during these isolated-project checks.
 

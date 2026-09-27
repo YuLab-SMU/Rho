@@ -69,6 +69,15 @@ Declaration errors retain both the raw draft and last valid structure. Shared
 source/canvas undo belongs to its synchronized document draft; native revision
 history remains immutable. An executable preview is a separate, explicit lifecycle.
 
+Studio's explicit development actions use the same build, fixture-instance,
+window-view and release ports as any ordinary plugin. The synchronized draft
+retains original request identities, configuration text, build diagnostics and
+partly prepared preview identities. A missing receipt is inspected by its original
+caller/request; reopening never silently repeats execution. Failed or uncertain
+builds do not select a successful artifact. Preview closure cooperates with its
+own view, and release follows confirmed closure. A disconnected view's retained
+state can be used only through a separately explicit recovery action.
+
 `plugins.preview` creates a fixture presentation instance of an exact immutable
 artifact. `PluginInstance.purpose` and the corresponding view record distinguish
 this from a runtime instance. It never starts or materializes a backend, creates

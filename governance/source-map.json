@@ -943,6 +943,7 @@
         "crates/host/tests/r_plugin_real_r.rs",
         "scripts/build-studio-plugin.mjs",
         "scripts/test-studio-plugin.mjs",
+        "scripts/fixtures/studio-development.mjs",
         "ui/e2e/studio-plugin.spec.ts",
         "scripts/build-manager-plugin.mjs",
         "scripts/test-manager-plugin.mjs",

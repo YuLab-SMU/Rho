@@ -18,7 +18,7 @@ Files up to 128 KiB can be edited as UTF-8. Larger and binary files remain intac
 history restores them by immutable source reference. Checkpoints have the native
 128-edit and 256 KiB request limits. Loaded text and history share a 6 MiB editor
 budget within the document draft. Build instructions and declared lockfiles remain
-source, and are not executed by this editor. New files update the manifest in the
+source. They execute only through an explicit native build. New files update the manifest in the
 same undo transaction. Removal is reversible until a checkpoint, and remains
 recoverable through immutable source history afterward.
 
@@ -29,6 +29,32 @@ request but cannot replay it. A branch-head conflict can be resolved by creating
 a new branch from the captured baseline while retaining local edits. Source history
 restore creates a new checkpoint on the selected branch, never changing running instances or scientific state.
 
-This editor slice does not yet expose native builds, isolated executable previews,
-archive import/export, Agent tasks or scenario application. Its inert editing
-canvas is not an executable plugin preview. Default delivery is not yet changed.
+Build & preview opens the approved preview/diagnostics surface. Build checkpoint
+runs `plugins.build` for the exact saved revision; checkpoint unsaved edits first.
+The timeout defaults to 10 minutes and is selectable from 1 to 60 minutes.
+The original Operation and bounded stdout/stderr remain visible, including failed,
+truncated and uncertain results. The original view may request a build stop;
+only a terminal original Operation confirms its outcome. Missing tools/dependencies are reported without
+installing them. A successful receipt selects only its exact artifact; it does not
+activate a runtime or change a scenario.
+
+Start preview creates a fixture instance and opens its selected view through the
+ordinary window ports. Its editable configuration, initial view state and exact
+query fixtures remain in the synchronized draft, including invalid JSON. The
+native preview starts no backend, receives no scientific grants, and never falls
+through to project reads. The shell labels fixture mode outside the iframe. It
+can persist its own view state, cooperate with closure and copy explicit text.
+Other invocations, native controls, resource downloads and external navigation
+are refused. Fixture inputs are separate from the inert canvas's named data.
+
+Development requests retain original identity before dispatch. Reload or a new
+Studio view only inspects the originating Operation. A partly opened preview
+remains visible and may be opened explicitly; no replacement instance is created.
+Close preview view uses the ordinary flush handshake. Disconnected view recovery
+requires an explicit Close with saved state action, retaining only acknowledged
+state. Release is enabled after confirmed closure. The preview never becomes a
+scenario runtime; existing runtime instances retain their versions.
+
+Disposable-project real-backend tests, archive import/export, Agent tasks and
+scenario application remain unfinished. The inert editing canvas is separate
+from executable fixture preview. Default delivery is not yet changed.
