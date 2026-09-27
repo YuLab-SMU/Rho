@@ -65,8 +65,10 @@ Use `--checkpoint-references` with those variables and
 protection after namespace unloading and session release, an unstarted replacement
 reader, ambiguous-reader refusal, explicit reader configuration and
 pin/unpin, uncertain deletion and resolution retry, explicit completion and purge
-before Environment material cleanup. Both original uncertain records must remain
-byte-for-byte unchanged, and the control providers must remain unstarted.
+before Environment material cleanup. Unpublished capture checks add a real namespace
+dependency, protection after provider release, an uncertain disposal with missing
+bytes, and explicit confirmation before cleanup. All original failed/uncertain
+records remain unchanged; observation and disposal providers remain unstarted.
 The native absence check can be unavailable when the OS hides a contemporaneous
 process's environment or lifetime. Keep this acceptance run separate from
 additional shell commands; preserve such a refusal as unavailable evidence and
@@ -419,12 +421,14 @@ replacement-provider reads, bounded bytes, payload damage, empty-candidate resto
 pin/delete preconditions, explicit application/discard of uncertain controls,
 an uncertain resolution retry, unchanged original outcomes, post-commit cleanup,
 retained metadata and explicit reconciliation of a capture whose public output
-was rejected by the core. Set `RHO_OLD_R_PLUGIN_PACKAGE` to an existing prior
+was rejected by the core. Capture-disposal cases cover confirmed original-provider
+release, stale previews, partial graph/metadata files, lost commit after removal,
+fresh explicit confirmation, intact adopted copies and original outcomes. Set `RHO_OLD_R_PLUGIN_PACKAGE` to an existing prior
 version-1 recovery package to also verify it refuses version-2 control history.
 The test-owned fault proxy preserves registered contracts and native evidence;
 it changes only returned plans. The test uses
 disposable projects and native sessions and preserves failed evidence. It does not
-establish uncertain capture disposal or Studio recovery UI.
+establish Studio recovery UI.
 
 Skipped or unavailable real-R, browser, external-provider, and environment checks
 are not passes. Run them only with their documented prerequisites; preserve the

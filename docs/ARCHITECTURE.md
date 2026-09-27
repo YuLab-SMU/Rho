@@ -75,8 +75,8 @@ must qualify source records through the core Operation port and retain leases
 through settlement. Capture files, pin/delete evidence and resource reads do not
 constitute scientific result commits. Failed captures retain partial bytes and
 original cancellation/transport evidence; they cannot claim absence of effects
-when native payload bytes may remain. Physical deletion requires an explicitly
-qualified succeeded deletion and preserves metadata; adoption makes an independent
+when native payload bytes may remain. Physical deletion of a published copy
+requires an explicitly qualified succeeded deletion and preserves metadata; adoption makes an independent
 byte copy. The native restore accepts a locked, verified artifact rather than a
 caller-supplied RDS path. Native runtime, package inventory and empty-candidate
 checks still apply. Payload and metadata limits are independent of control-message
@@ -97,7 +97,23 @@ applied deletion authorizes post-commit payload cleanup. Original outcomes are
 never rewritten. `r.checkpoint_control@1` reports original status and qualified
 resolution without starting R. Existing readers reject version-2 pin/delete
 history rather than silently ignoring a separately named resolution. Uncertain
-capture disposal remains a separate owner capability.
+capture material has a separate owner contract. `r.capture_attempt@1` qualifies the
+original unsuccessful capture/reconciliation admission without requiring complete
+payload metadata. It reads a fixed bounded set of native file identities, lengths
+and timestamps, not full graph bytes. Its fingerprint is an exact preview
+precondition, not a payload digest. Missing archives stay missing.
+
+`r.discard_capture@1` requires the source provider to be confirmed released through
+the public instance port and checks that preview again before removing only the
+payload/staging files. Failed, disconnected or cleanup-failed lifecycle states do
+not establish native writer absence. Successful published captures use the normal
+logical deletion path. This explicit disposal may remove bytes before its own Core
+outcome is confirmed; errors after possible removal retain uncertainty. The owner
+keeps the artifact lease through settlement and preserves all original metadata.
+A fresh explicit request can confirm native absence after a lost result, without
+rewriting that result. The query exposes a committed disposal only when its original
+admission, successful Core output and current absence agree. Old readers cannot
+adopt a disposed payload; independently adopted copies remain intact.
 
 Environment data, native pak/renv execution, staged materials and recovery now
 live in `plugins/environment/api` and `backend/owner`, including the R helpers.
@@ -143,9 +159,11 @@ active R reader through `r.checkpoint@1`. R owns the native archive and control
 chain; Environment reads no private recovery files. Live copies protect complete
 library, namespace and selected Environment paths from the digest-verified public
 manifest. Logical deletion removes graph dependencies even if physical cleanup is
-pending; missing bytes alone do not. Unknown dependencies and uncertain captures
-remain protected. Failed or cancelled captures are excluded only when the owner
-explicitly confirmed no capture started. Uncertain pin/delete requests and
+pending; missing bytes alone do not. Unknown dependencies remain protected.
+Unsuccessful captures require an optional `r.capture_attempt@1` observation proving
+an exact committed disposal, confirmed source-provider release and current absence
+of both graph and staging files. Failed or cancelled captures are also excluded
+when the owner explicitly confirmed no capture started. Uncertain pin/delete requests and
 resolution attempts retain material until the optional `r.checkpoint_control@1`
 read confirms a committed resolution for the exact original request. Successful
 captures are still checked independently for live graph dependencies. Environment

@@ -95,6 +95,68 @@ pub struct ReconcileRCheckpoint {
     pub source_operation_id: OperationId,
 }
 
+/// An attempted capture can lack complete payload metadata. Its original Core
+/// operation and provider establish identity without inventing a payload digest.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RCaptureAttemptReference {
+    pub project: ProjectId,
+    pub provider: InstanceRef,
+    pub operation_id: OperationId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RCaptureMaterial {
+    /// Opaque native identity/metadata precondition, not a payload content hash.
+    pub fingerprint: ContentDigest,
+    pub payload_bytes: Option<u64>,
+    pub staging_bytes: Option<u64>,
+    /// Bounded capture metadata parsed successfully; payload integrity is separate.
+    pub capture_metadata_available: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RCaptureAttemptArguments {
+    pub source_operation_id: OperationId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RCaptureAttemptObservation {
+    pub reference: RCaptureAttemptReference,
+    pub original_status: rho_plugin_protocol::PluginOutcome,
+    pub material: RCaptureMaterial,
+    pub owner_released: bool,
+    pub can_discard: bool,
+    pub discarded_by: Option<OperationId>,
+    pub notices: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct DiscardRCapture {
+    pub source_operation_id: OperationId,
+    pub expected_fingerprint: ContentDigest,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RCaptureDiscarded {
+    pub operation_id: OperationId,
+    pub reference: RCaptureAttemptReference,
+    pub before: RCaptureMaterial,
+    pub after: RCaptureMaterial,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(untagged)]
+pub enum RCaptureDiscardOutput {
+    Discarded(RCaptureDiscarded),
+    NotStarted(crate::RExecutionNotStarted),
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct PinRCheckpoint {

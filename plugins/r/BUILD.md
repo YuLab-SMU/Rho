@@ -94,8 +94,13 @@ must qualify the original Operation and retain the lease until core settlement.
 Pin/delete/resolution evidence alone cannot authorize deletion or restore. A
 resolution intent records its original request, previous attempt and decision;
 only Core-successful application of a deletion may remove payload bytes. Discard
-preserves logical state and cannot authorize cleanup. Physical deletion
+preserves logical state and cannot authorize cleanup. Published-copy deletion
 is an explicit post-commit action and returns any failure while preserving metadata.
+Unpublished capture inspection reads only fixed file metadata under the original
+artifact identity. Disposal requires qualified owner release and an exact preview,
+removes only payload/staging files, and preserves metadata even when it cannot be
+parsed. Native absence alone is not a Core disposal result. The caller must preserve
+possible partial effects and hold the lease through settlement.
 Adoption copies bytes, so source deletion cannot damage its replacement. Payloads
 retain the native 16 GiB upper bound and reads are at most 256 KiB.
 

@@ -34,8 +34,10 @@ the remaining migration are recorded in `docs/STATUS.md` at the repository root.
 Public recovery controls retain original uncertain outcomes and support explicit
 application or discard through version-2 pin/delete requests. Their exact original
 request and latest attempt remain visible through `r.checkpoint_control@1`; see
-[public recovery contracts](sdk/README.md). Disposal of uncertain capture material
-and Studio recovery integration remain separate work.
+[public recovery contracts](sdk/README.md). Unpublished capture material can be inspected and explicitly discarded after its
+original provider is confirmed released. Missing bytes alone do not confirm that
+disposal; a new Core operation preserves the original outcome. Studio recovery
+integration remains separate work.
 
 The existing Host temporarily uses a thin adapter outside this package. There is
 only one implementation of native R behavior. That adapter and the old scientific

@@ -17,6 +17,7 @@ child.stdout.on('data',chunk=>{
   while(buffered.length>=4){const size=buffered.readUInt32BE(0);if(size===0||size>1048576)throw new Error('Invalid test backend frame');if(buffered.length<size+4)break;
     const frame=JSON.parse(buffered.subarray(4,size+4));buffered=buffered.subarray(size+4);
     if(frame.body.type==='commit_plan'&&frame.body.data.output?.reference&&frame.body.data.output?.manifest)frame.body.data.output={invalid_checkpoint_output:true};
+    if(frame.body.type==='commit_plan'&&frame.body.data.output?.before&&frame.body.data.output?.after){frame.body.data.outcome='uncertain';frame.body.data.error='Fixture: payload disposal completed without a confirmed Core outcome';}
     if(frame.body.type==='commit_plan'&&typeof frame.body.data.output?.pinned==='boolean'&&typeof frame.body.data.output?.deleted==='boolean'){frame.body.data.outcome='uncertain';frame.body.data.error='Fixture: native intent retained without a confirmed logical outcome';}
     const encoded=Buffer.from(JSON.stringify(frame)),header=Buffer.alloc(4);header.writeUInt32BE(encoded.length);process.stdout.write(Buffer.concat([header,encoded]));
   }

@@ -17,7 +17,7 @@ const checkpointReferences=process.argv.includes('--checkpoint-references');
 const rReferences=process.argv.includes('--r-references')||checkpointReferences;
 assert.ok(process.argv.slice(2).every(arg=>['--r-references','--checkpoint-references'].includes(arg)));
 if(checkpointReferences)assert.ok(process.env.RHO_CHECKPOINT_HELPER,'Checkpoint reference acceptance requires an existing verified helper.');
-const checkpointGrants=['operation.get','operation.list_recent','resources.read','operation.project_coverage'].map(id=>({id,version:1}));
+const checkpointGrants=['plugins.instance','operation.get','operation.list_recent','resources.read','operation.project_coverage'].map(id=>({id,version:1}));
 if(rReferences)assert.ok(process.env.RHO_R_PLUGIN_PACKAGE&&process.env.RHO_ARK,'R reference acceptance requires an independent R package and installed Ark.');
 const temporary=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-environment-plugin-')));
 const project=path.join(temporary,'project'),materials=path.join(temporary,'materials');
@@ -36,7 +36,7 @@ assert.ok(!source.startsWith(root+path.sep),'Use independently assembled source'
 assert.equal(digest(fs.readFileSync(binary)),originalHost);
 let server,socket,socketClosed;
 let host, ready, exited, complete = false, counter = 0;
-let rIdentity,rSession,observerIdentity,otherReader,faultController;
+let rIdentity,rSession,observerIdentity,otherReader,faultController,captureProvider;
 const pending = new Map();
 const trace = (kind, value) => fs.appendFileSync(path.join(temporary, 'session.jsonl'), JSON.stringify({kind,value}) + '\n');
 function deadline(promise, label, ms = 180000) {
@@ -189,7 +189,7 @@ try {
   if(rReferences){
     rIdentity=succeeded(await invoke('activate-r','plugins.activate',{revision:rRevision.revision,artifact:rRevision.artifacts[0],target:'aarch64-apple-darwin',alias:'material-r',configuration:{ark:fs.realpathSync(process.env.RHO_ARK),r_home:rhome,execution_timeout_seconds:60,...(checkpointReferences?{checkpoint_helper_path:fs.realpathSync(process.env.RHO_CHECKPOINT_HELPER)}:{})},optional_capabilities:checkpointReferences?checkpointGrants:[]})).output.instance.identity;
     materialGrants.push({id:'r.session',version:1},{id:'r.snapshot',version:1});
-    if(checkpointReferences)materialGrants.push({id:'r.checkpoint',version:1},{id:'r.checkpoint_control',version:1});
+    if(checkpointReferences)materialGrants.push({id:'r.checkpoint',version:1},{id:'r.checkpoint_control',version:1},{id:'r.capture_attempt',version:1});
     rSession=succeeded(await invoke('create-r','r.create_session',{binding:await resolve(rIdentity,'r.create_session',1),arguments:{}})).output.session_id;
     observerIdentity=succeeded(await invoke('activate-observer-r','plugins.activate',{revision:rRevision.revision,artifact:rRevision.artifacts[0],target:'aarch64-apple-darwin',alias:'observer-r',configuration:{ark:fs.realpathSync(process.env.RHO_ARK),r_home:rhome,execution_timeout_seconds:60,...(checkpointReferences?{checkpoint_helper_path:fs.realpathSync(process.env.RHO_CHECKPOINT_HELPER)}:{})},optional_capabilities:checkpointReferences?checkpointGrants:[]})).output.instance.identity;
     const observerSession=succeeded(await invoke('create-observer-r','r.create_session',{binding:await resolve(observerIdentity,'r.create_session',1),arguments:{}})).output.session_id;
@@ -272,6 +272,20 @@ try {
       assert.equal((await materialQuery('retention',{operation_id:cancelled.operation.operation_id})).can_quarantine,false);
       const unpinned=succeeded(await control('unpin-checkpoint','r.pin_checkpoint',{reference,expected_control:pinned.operation.operation_id,pinned:false}));
       faultController=succeeded(await invoke('activate-control-fault','plugins.activate',{revision:faultRevision.revision,artifact:faultRevision.artifacts[0],target:'aarch64-apple-darwin',alias:'control-fault',configuration:{},optional_capabilities:checkpointGrants})).output.instance.identity;
+      captureProvider=succeeded(await invoke('activate-failed-capture','plugins.activate',{revision:faultRevision.revision,artifact:faultRevision.artifacts[0],target:'aarch64-apple-darwin',alias:'failed-capture',configuration:{ark:fs.realpathSync(process.env.RHO_ARK),r_home:rhome,checkpoint_helper_path:fs.realpathSync(process.env.RHO_CHECKPOINT_HELPER),execution_timeout_seconds:60},optional_capabilities:checkpointGrants})).output.instance.identity;
+      const captureSession=succeeded(await control('create-failed-capture','r.create_session',{},1,captureProvider)).output.session_id;
+      succeeded(await control('capture-dependent-namespace','r.execute',{expected_session:captureSession,code:`loadNamespace('rhonextfixture',lib.loc=${JSON.stringify(candidate)}); protected <- 42L; TRUE`},1,captureProvider));
+      const unpublished=await control('unpublished-capture','r.capture_checkpoint',{expected_session:captureSession,include_names:['protected'],max_seconds:10},1,captureProvider);assert.ok(['failed','uncertain'].includes(unpublished.status));
+      succeeded(await invoke('release-failed-capture','plugins.release',{instance:captureProvider}));captureProvider=null;
+      const unconfirmed=await materialQuery('retention',{operation_id:cancelled.operation.operation_id});assert.equal(unconfirmed.can_quarantine,false);assert.match(unconfirmed.retained_reasons.join(' '),/unknown recovery references/i);
+      const inspectAttempt=()=>resolve(observerIdentity,'r.capture_attempt',1).then(binding=>query('r.capture_attempt',{binding,arguments:{source_operation_id:unpublished.operation.operation_id}}));
+      let preview=await inspectAttempt();assert.equal(preview.owner_released,true);assert.equal(preview.can_discard,true);
+      const lostDisposal=await control('lost-capture-disposal','r.discard_capture',{source_operation_id:unpublished.operation.operation_id,expected_fingerprint:preview.material.fingerprint},1,faultController);assert.equal(lostDisposal.status,'uncertain');
+      const stillProtected=await materialQuery('retention',{operation_id:cancelled.operation.operation_id});assert.equal(stillProtected.can_quarantine,false);assert.match(stillProtected.retained_reasons.join(' '),/unknown recovery references/i);
+      preview=await inspectAttempt();assert.equal(preview.material.payload_bytes,null);assert.equal(preview.discarded_by,null);
+      const confirmedDisposal=succeeded(await control('confirm-capture-disposal','r.discard_capture',{source_operation_id:unpublished.operation.operation_id,expected_fingerprint:preview.material.fingerprint}));
+      assert.equal((await inspectAttempt()).discarded_by,confirmedDisposal.operation.operation_id);
+      for(const original of [unpublished,lostDisposal])assert.deepEqual(await call('get_operation',{operation_id:original.operation.operation_id}),original);
       const uncertain=await control('uncertain-deletion','r.delete_checkpoint',{reference,expected_control:unpinned.operation.operation_id},1,faultController);assert.equal(uncertain.status,'uncertain');
       const resolveArgs={reference,source_operation_id:uncertain.operation.operation_id,expected_attempt:null,decision:'apply'};
       const retry=await control('uncertain-resolution','r.delete_checkpoint',resolveArgs,2,faultController);assert.equal(retry.status,'uncertain');
@@ -318,10 +332,10 @@ try {
   host.stdin.end();assert.equal((await deadline(exited,'Host shutdown',15000)).code,0);
   assert.equal(digest(fs.readFileSync(binary)),originalHost);complete=true;
   console.log(`Independent Environment package passed disconnected/query purity, material-owner exclusion, real pak/renv, resource reports, verified inventory, original idempotency, native cancellation, previous-instance resource reads, replacement recovery, explicit reference grants, stale preview refusal, quarantine/restore/purge and retained original results. Unchanged Host SHA256 ${originalHost}`);
-  if(checkpointReferences)console.log('Native checkpoint references passed: original provider preference, namespace-only dependencies, retention after unload and release, unavailable-reader retention, unstarted replacement reader, ambiguous reader refusal and exact configured selection, pin/unpin, uncertain deletion and resolution retry, explicit completion, unchanged original outcomes, purge, preserved reports and subsequent material quarantine/restore/purge.');
+  if(checkpointReferences)console.log('Native checkpoint references passed: original provider preference, namespace-only dependencies, retention after unload and release, unavailable-reader retention, unstarted replacement reader, ambiguous reader refusal and exact configured selection, pin/unpin, uncertain deletion and resolution retry, explicit completion, unpublished capture protection, uncertain disposal and explicit confirmation, unchanged original outcomes, purge, preserved reports and subsequent material quarantine/restore/purge.');
   if(rReferences)console.log('Native ordinary R reference checks passed: two exact idle sessions, live library paths, namespace retained after library-path removal, refused quarantine, explicit namespace unloading and released-instance observation.');
 } finally {
-  for(const instance of [rIdentity,observerIdentity,otherReader,faultController].filter(Boolean))if(host&&host.exitCode===null&&host.signalCode===null){
+  for(const instance of [rIdentity,observerIdentity,otherReader,faultController,captureProvider].filter(Boolean))if(host&&host.exitCode===null&&host.signalCode===null){
     try{succeeded(await invoke(`cleanup-${instance.instance}`,'plugins.release',{instance}));}
     catch(error){console.error(`Test-owned R release remains unconfirmed: ${error.message}`);}
   }

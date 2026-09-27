@@ -15,7 +15,7 @@ const project=path.join(directory,'project');fs.mkdirSync(project);
 const database=path.join(directory,'host.sqlite'),binary=process.env.RHO_TEST_BINARY??path.join(root,'target/debug/rho');
 const digest=bytes=>'sha256:'+createHash('sha256').update(bytes).digest('hex'),originalHost=digest(fs.readFileSync(binary));
 const configuration={ark:fs.realpathSync(process.env.RHO_ARK),r_home:fs.realpathSync(process.env.RHO_R_HOME),checkpoint_helper_path:fs.realpathSync(process.env.RHO_CHECKPOINT_HELPER),execution_timeout_seconds:30};
-const optional=['operation.get','operation.list_recent','resources.read','operation.project_coverage'].map(id=>({id,version:1}));
+const optional=['plugins.instance','operation.get','operation.list_recent','resources.read','operation.project_coverage'].map(id=>({id,version:1}));
 let host,exited,ready,complete=false,counter=0;
 const pending=new Map(),instances=[];
 const trace=(kind,value)=>fs.appendFileSync(path.join(directory,'session.jsonl'),JSON.stringify({kind,value})+'\n');
@@ -155,7 +155,7 @@ try {
   }
   preserved=await native(manager,'r.checkpoint',{reference});assert.equal(preserved.control_head,controlUnpin.operation.operation_id);assert.equal(preserved.pinned,false);
   if(oldRevision){
-    const oldReader=await activate(oldRevision,'older-reader',optional,{});
+    const oldReader=await activate(oldRevision,'older-reader',optional.filter(grant=>grant.id!=='plugins.instance'),{});
     await assert.rejects(()=>native(oldReader,'r.checkpoint',{reference}),/unsupported control version/i);
     assert.equal((await native(oldReader,'r.session')).state,'unstarted');await release(oldReader);
   }
@@ -182,7 +182,23 @@ try {
   await run(rejected,rejectedSession,'recovered <- 17L; 17L');
   const uncertain=await action(rejected,'r.capture_checkpoint',{expected_session:rejectedSession,max_seconds:10});assert.ok(['failed','uncertain'].includes(uncertain.status));
   const nativeCopy=payload(uncertain);assert.ok(fs.existsSync(path.join(path.dirname(nativeCopy),'context.json')));
+  const beforeRelease=await native(manager,'r.capture_attempt',{source_operation_id:uncertain.operation.operation_id});
+  assert.equal(beforeRelease.owner_released,false);assert.equal(beforeRelease.can_discard,false);assert.ok(beforeRelease.material.payload_bytes>0);
+  await assert.rejects(()=>action(manager,'r.discard_capture',{source_operation_id:uncertain.operation.operation_id,expected_fingerprint:beforeRelease.material.fingerprint}),/release/i);
+  await assert.rejects(()=>native(manager,'r.capture_attempt',{source_operation_id:captured.operation.operation_id}),/published copies/i);
+  await resume(rejected,rejectedSession,[uncertain.operation.operation_id]);
+  const partialCapture=await action(rejected,'r.capture_checkpoint',{expected_session:rejectedSession,max_seconds:10});assert.ok(['failed','uncertain'].includes(partialCapture.status));
+  const partialFile=payload(partialCapture),partialDirectory=path.dirname(partialFile);
   await release(rejected);
+  // Test-owned crash layout: graph staging and incomplete metadata, no published result.
+  fs.renameSync(partialFile,path.join(partialDirectory,'payload.staging'));
+  fs.unlinkSync(path.join(partialDirectory,'capture.json'));
+  fs.writeFileSync(path.join(partialDirectory,'capture.staging'),'{incomplete');
+  const partialPreview=await native(manager,'r.capture_attempt',{source_operation_id:partialCapture.operation.operation_id});
+  assert.equal(partialPreview.material.capture_metadata_available,false);assert.ok(partialPreview.material.staging_bytes>0);
+  const partialDiscard=success(await action(manager,'r.discard_capture',{source_operation_id:partialCapture.operation.operation_id,expected_fingerprint:partialPreview.material.fingerprint}));
+  assert.equal(partialDiscard.output.after.staging_bytes,null);assert.equal(fs.readFileSync(path.join(partialDirectory,'capture.staging'),'utf8'),'{incomplete');
+  assert.deepEqual(await call('get_operation',{operation_id:partialCapture.operation.operation_id}),partialCapture);
   const adopted=success(await action(manager,'r.reconcile_checkpoint',{source_operation_id:uncertain.operation.operation_id}));
   const adoptedManifest=await retained(adopted.output.manifest);
   assert.equal(adoptedManifest.source.operation_id,uncertain.operation.operation_id);assert.deepEqual(adopted.output.reference.provider,manager);
@@ -193,6 +209,24 @@ try {
   const fallback=success(await action(manager,'r.reconcile_checkpoint',{source_operation_id:uncertain.operation.operation_id}));
   const unknown=await retained(fallback.output.manifest);assert.equal(unknown.libraries.complete,false);assert.deepEqual(unknown.libraries.namespace_paths,[]);
   assert.equal(unknown.source.operation_id,uncertain.operation.operation_id);assert.ok(fs.existsSync(nativeCopy),'Adoption never removes the original evidence');
+  const capturePreview=await native(manager,'r.capture_attempt',{source_operation_id:uncertain.operation.operation_id});
+  assert.equal(capturePreview.owner_released,true);assert.equal(capturePreview.can_discard,true);
+  await assert.rejects(()=>action(manager,'r.discard_capture',{source_operation_id:uncertain.operation.operation_id,expected_fingerprint:beforeRelease.material.fingerprint}),/preview/i,'Changed context metadata invalidates the original preview');
+  const disposing=await activate(rejectedRevision,'uncertain-disposal',optional,{});
+  const lostDisposal=await action(disposing,'r.discard_capture',{source_operation_id:uncertain.operation.operation_id,expected_fingerprint:capturePreview.material.fingerprint});assert.equal(lostDisposal.status,'uncertain');
+  assert.equal(fs.existsSync(nativeCopy),false);assert.equal(fs.existsSync(path.join(path.dirname(nativeCopy),'capture.json')),true);
+  const missing=await native(manager,'r.capture_attempt',{source_operation_id:uncertain.operation.operation_id});assert.equal(missing.discarded_by,null);assert.equal(missing.can_discard,true);assert.equal(missing.material.payload_bytes,null);
+  const discardArgs={source_operation_id:uncertain.operation.operation_id,expected_fingerprint:missing.material.fingerprint};
+  const discardedCapture=success(await action(manager,'r.discard_capture',discardArgs,'confirm-original-disposal'));
+  assert.deepEqual(await action(manager,'r.discard_capture',discardArgs,'confirm-original-disposal'),discardedCapture);
+  const confirmed=await native(manager,'r.capture_attempt',{source_operation_id:uncertain.operation.operation_id});assert.equal(confirmed.discarded_by,discardedCapture.operation.operation_id);assert.equal(confirmed.can_discard,false);assert.equal(confirmed.original_status,uncertain.status);
+  for(const original of [uncertain,lostDisposal])assert.deepEqual(await call('get_operation',{operation_id:original.operation.operation_id}),original);
+  assert.equal((await native(disposing,'r.session')).state,'unstarted');await release(disposing);
+  if(oldRevision){
+    const oldDisposalReader=await activate(oldRevision,'older-disposal-reader',optional.filter(grant=>grant.id!=='plugins.instance'),{});
+    const cannotRevive=await action(oldDisposalReader,'r.reconcile_checkpoint',{source_operation_id:uncertain.operation.operation_id});assert.notEqual(cannotRevive.status,'succeeded');
+    assert.equal((await native(oldDisposalReader,'r.session')).state,'unstarted');await release(oldDisposalReader);
+  }
   await assert.rejects(()=>action(manager,'r.reconcile_checkpoint',{source_operation_id:adopted.operation.operation_id}),/terminal|outcome/i);
   const pages=[];let cursor=null;do{const page=await native(manager,'r.checkpoints',{before_cursor:cursor,limit:3});pages.push(...page.checkpoints);cursor=page.next_cursor;}while(cursor!==null);
   assert.ok(pages.some(item=>item.reference.operation_id===reference.operation_id));assert.ok(pages.some(item=>item.reference.operation_id===adopted.output.reference.operation_id));
@@ -204,7 +238,7 @@ try {
   for(const instance of [...instances].reverse())await release(instance);
   host.stdin.end();assert.equal((await deadline(exited,'Host shutdown',15000)).code,0);
   assert.equal(digest(fs.readFileSync(binary)),originalHost);complete=true;
-  console.log(`Ordinary R recovery passed: grants, query purity, verified helper, partial Unicode graph, original replay, replacement reads, bounded bytes, full digest refusal, empty-candidate restore, exact pin/deletion chain, explicit apply/discard, uncertain resolution retry, unchanged original outcomes, physical cleanup, retained history and explicit reconciliation after rejected publication. Unchanged Host ${originalHost}`);
+  console.log(`Ordinary R recovery passed: grants, query purity, verified helper, partial Unicode graph, original replay, replacement reads, bounded bytes, full digest refusal, empty-candidate restore, exact pin/deletion chain, explicit apply/discard, uncertain resolution retry, unchanged original outcomes, physical cleanup, retained history, explicit reconciliation after rejected publication, original-provider release, stale capture preview refusal, unpublished payload disposal and explicit confirmation after a lost disposal outcome. Unchanged Host ${originalHost}`);
 } finally {
   if(!complete&&host&&host.exitCode===null&&host.signalCode===null)for(const instance of [...instances].reverse()){try{await release(instance);}catch(error){console.error(`Owned R instance cleanup unconfirmed (${instance.instance}): ${error.message}`);}}
   if(host&&host.exitCode===null&&host.signalCode===null){host.stdin.end();host.kill('SIGTERM');await deadline(exited,'Owned Host cleanup',15000);}

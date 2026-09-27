@@ -48,6 +48,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     RCheckpointChunk::export_all(&types)?;
     RestoreRCheckpoint::export_all(&types)?;
     ReconcileRCheckpoint::export_all(&types)?;
+    RCaptureAttemptArguments::export_all(&types)?;
+    RCaptureAttemptObservation::export_all(&types)?;
+    DiscardRCapture::export_all(&types)?;
+    RCaptureDiscardOutput::export_all(&types)?;
     PinRCheckpoint::export_all(&types)?;
     DeleteRCheckpoint::export_all(&types)?;
     PurgeRCheckpoint::export_all(&types)?;
@@ -64,6 +68,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     RCheckpointPurgeOutput::export_all(&types)?;
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
+        ("prepare", schemars::schema_for!(rho_plugin_protocol::PluginPreflightRequest)),
+        ("prepared", schemars::schema_for!(rho_plugin_protocol::PluginPreflightResult)),
         ("capture-checkpoint", schemars::schema_for!(CheckpointCaptureArguments)),
         ("checkpoint-capture-output", schemars::schema_for!(RCheckpointCaptureOutput)),
         ("checkpoint-manifest", schemars::schema_for!(RCheckpointManifest)),
@@ -74,6 +80,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("checkpoint-restore-output", schemars::schema_for!(RCheckpointRestoreOutput)),
         ("checkpoint-restore-report", schemars::schema_for!(CheckpointNativeRestoreReport)),
         ("reconcile-checkpoint", schemars::schema_for!(ReconcileRCheckpoint)),
+        ("capture-attempt-arguments", schemars::schema_for!(RCaptureAttemptArguments)),
+        ("capture-attempt-observation", schemars::schema_for!(RCaptureAttemptObservation)),
+        ("discard-capture", schemars::schema_for!(DiscardRCapture)),
+        ("capture-discard-output", schemars::schema_for!(RCaptureDiscardOutput)),
         ("pin-checkpoint", schemars::schema_for!(PinRCheckpoint)),
         ("delete-checkpoint", schemars::schema_for!(DeleteRCheckpoint)),
         ("purge-checkpoint", schemars::schema_for!(PurgeRCheckpoint)),

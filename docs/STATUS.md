@@ -1,6 +1,6 @@
 # Rho: current state and focus
 
-Updated: 2026-09-26. This is the single current status summary. Git retains history.
+Updated: 2026-09-27. This is the single current status summary. Git retains history.
 
 ## Unified plugin refactor — active implementation
 
@@ -356,8 +356,11 @@ reader to qualify its current control state, then protects the library, namespac
 and selected Environment paths in the digest-verified public manifest. It reads no
 private R archive or control files. Logical deletion removes graph dependencies,
 including pending physical cleanup; missing payload bytes alone do not. Incomplete
-dependencies, unsupported versions and uncertain captures remain retained. Failed
-or cancelled captures are excluded only when R confirmed the capture never started.
+dependencies and unsupported versions remain retained. Unsuccessful captures use
+the optional public `r.capture_attempt@1` observation: only an exact committed
+disposal, confirmed source-provider release and absence of both graph and staging
+bytes release their protection. Missing bytes alone remain insufficient. Failed
+or cancelled captures are also excluded when R confirmed the capture never started.
 Uncertain pin/delete requests and resolution attempts use an additional optional
 `r.checkpoint_control@1` read. Only an exact committed resolution closes their
 uncertainty; the original successful capture is still checked for live dependencies.
@@ -373,9 +376,9 @@ protected after quarantine; an unconfirmed quarantine remains inspectable withou
 promoting its outcome. Original records and reports survive material removal.
 The scan is not a reference lease or an atomic cross-owner snapshot.
 
-`cargo test -p rho-environment-backend --lib --locked --offline` passes all 19
+`cargo test -p rho-environment-backend --lib --locked --offline` passes all 20
 backend cases, including 16 checkpoint-evidence scenarios, nine uncertain-control
-resolution scenarios, exact reader selection and the existing 22 reference-scan
+resolution scenarios, 12 capture-disposal scenarios, exact reader selection and the existing 22 reference-scan
 scenarios. Public SDK/manifest checks, independent TypeScript consumption, client
 generation/build/check and architecture/plugin-boundary checks
 pass. The nine-package standalone build and its wire tests pass. Full native
@@ -384,19 +387,21 @@ two live R sessions, paginated original records, library/namespace protection,
 checkpoint capture, protection after namespace unload and provider release,
 unavailable-reader retention, unstarted replacement reads, ambiguous-reader refusal,
 exact configured selection, pin/unpin, uncertain deletion and resolution retry,
-retention before explicit completion, purge, stale fingerprints, material
+retention before explicit completion, unpublished capture protection, uncertain
+disposal with missing bytes, explicit disposal confirmation, purge, stale fingerprints, material
 quarantine/restore/purge, idempotency and unchanged original records/reports. The
 Host remains byte-identical, SHA-256
 `3a9db963f49aeaa313e7db75f25f345a8c84fb7d20877eb1a5754be849bfe24a`.
 
-The first native run returned unavailable because a same-user process lacked
-observable environment or lifetime evidence. That failure remains retained; a new
-complete isolated run passed without changing guards or deadlines. Unfiltered
+The first native capture-disposal acceptance returned unavailable because a same-user
+process lacked observable environment or lifetime evidence, before reaching the new
+cases. Its log and disposable project remain retained; the evidence location is
+recorded in `target/plugin-refactor/environment-capture-disposal-native-v1.log`.
+The complete isolated v2 run passed without changing guards or deadlines. Unfiltered
 workspace metadata was unavailable because `combine 4.6.8` was not cached; the
 affected offline build and independent package's host-filtered metadata passed.
-Existing user Hosts and R sessions were not restarted. Disposal of uncertain or
-partial capture material, Studio integration and removal of fixed composition
-remain active.
+Existing user Hosts and R sessions were not restarted. Studio integration and
+removal of fixed composition remain active.
 
 The ordinary R owner now exposes capture, bounded listing/reads, restore,
 pin/unpin, logical deletion, physical cleanup and explicit capture reconciliation.
@@ -427,15 +432,23 @@ original precondition and creates a new control head; discard closes only the
 request, preserving the current state and head. A failed/cancelled/uncertain resolution
 requires the exact latest attempt before continuing. Original outcomes remain
 unchanged, and only Core-successful applied deletion authorizes payload cleanup.
-Old readers reject the new control version. Uncertain capture disposal remains
-separate work.
+Old readers reject the new control version.
 
-The current four API, 23 backend and 27 engine library cases pass.
+Unpublished failed/cancelled/uncertain capture material now has an explicit
+inspection and disposal path. `r.capture_attempt@1` observes a fixed set of native
+metadata without hashing graph bytes or creating absent storage. Its opaque
+fingerprint fixes the exact preview. `r.discard_capture@1` requires confirmed release
+of the original provider and removes only payload/staging bytes, preserving metadata,
+native leases and original outcomes. Failed/disconnected/cleanup-failed providers
+do not prove writer absence. A lost result after removal stays uncertain; a fresh
+explicit disposal can confirm absence. Successful published copies continue through
+normal deletion controls. Independently adopted copies remain restorable.
+
+The current four API, 26 backend and 31 engine library cases pass.
 `cargo test -p rho-r-api --lib --locked --offline` covers the public API;
 `cargo test -p rho-r-backend -p rho-r-engine --lib --bin rho-r-backend --locked
---offline` covers the owner, archive and routing changes. A final
-`cargo test -p rho-r-backend routing_tests --locked --offline` passes against the
-generated version-2 manifest. Independent public types,
+--offline` covers the owner, archive and routing changes against the generated
+manifest. Independent public types,
 generated SDK/schema consistency, client generation/build/check, architecture,
 plugin boundaries and documentation checks pass.
 
@@ -445,19 +458,23 @@ alias preservation, original replay, pending cancellation, replacement reads,
 bounded bytes, digest damage, empty-candidate restore, pin/delete preconditions,
 explicit apply/discard, repeated uncertainty for pin and deletion resolution,
 unchanged original outcomes, payload retention until confirmed deletion, cleanup,
-retained history and reconciliation after a rejected result. An explicitly supplied
+retained history and reconciliation after a rejected result. Capture-disposal
+acceptance adds partial graph/metadata files, stale-preview refusal, source-release
+requirements, lost confirmation after actual removal, fresh explicit confirmation,
+retained originals and restoration from an independent adopted copy. An explicitly supplied
 older package refuses version-2 controls without starting R; version-1 deletion
-remains covered. Missing capture context is also tested. Initial checks found an
+remains covered; the old reader also cannot adopt a disposed payload. Missing capture context is also tested. Initial checks found an
 unsupported cancellation enum and a stale generated index; both were corrected. A fault fixture first changed a
 registered contract and was correctly refused; it now faults only the returned
 plan. This exposed and fixed strict `10.0`/`10` comparison. A later fixture backend
 initialization timed out; that run remains failed evidence. A separate test process
 was sampled at the system loader, and the complete native rerun passed after
 other checks finished, without changing deadlines or guards. The current resolution
-acceptance passed in its first full isolated run, as did the Environment linkage
-above. A slow engine test launch was sampled at macOS `_dyld_start`; its original
-process subsequently completed all tests without a timeout. Uncertain/partial
-capture disposal, Studio recovery integration and removal of fixed composition
+acceptance passed in its first full isolated run. The current R capture-disposal
+acceptance also passed first run; Environment's complete rerun is recorded above.
+A slow engine test launch was sampled at macOS `_dyld_start`; its original
+process subsequently completed all tests without a timeout. Studio recovery
+integration, the remaining whole-plan migration and removal of fixed composition
 remain active. No user Host or R session was restarted.
 
 The ordinary `org.rho.files` backend now assembles outside the checkout from eight

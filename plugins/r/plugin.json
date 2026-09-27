@@ -7960,6 +7960,459 @@
       "effects": [],
       "cancellation": "unsupported",
       "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.prepare_capture_disposal",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Prepare capture disposal",
+      "description": "Qualify an original unsuccessful capture, confirmed owner release and exact native material preview. Never starts R or disposes material.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PluginPreflightRequest",
+        "type": "object",
+        "properties": {
+          "arguments": true,
+          "capability": {
+            "$ref": "#/$defs/CapabilityKey"
+          },
+          "preconditions": true,
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "capability",
+          "arguments",
+          "preconditions"
+        ],
+        "$defs": {
+          "CapabilityKey": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "version"
+            ]
+          }
+        }
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PluginPreflightResult",
+        "type": "object",
+        "properties": {
+          "arguments": true,
+          "owner_context": true,
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "arguments",
+          "owner_context"
+        ]
+      },
+      "examples": [
+        {
+          "capability": {
+            "id": "r.discard_capture",
+            "version": 1
+          },
+          "arguments": {
+            "source_operation_id": "original-capture",
+            "expected_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "target": null,
+          "preconditions": null
+        }
+      ],
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r",
+        "workspace.read",
+        "operation.read",
+        "plugins.read",
+        "project.references.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.capture_attempt",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Inspect unpublished capture material",
+      "description": "Observe bounded native file metadata, original terminal outcome, confirmed provider release and committed disposal. Missing bytes alone never confirm disposal. Does not hash full graphs or start R.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCaptureAttemptArguments",
+        "type": "object",
+        "properties": {
+          "source_operation_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "source_operation_id"
+        ]
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCaptureAttemptObservation",
+        "type": "object",
+        "properties": {
+          "can_discard": {
+            "type": "boolean"
+          },
+          "discarded_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "material": {
+            "$ref": "#/$defs/RCaptureMaterial"
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "original_status": {
+            "$ref": "#/$defs/PluginOutcome"
+          },
+          "owner_released": {
+            "type": "boolean"
+          },
+          "reference": {
+            "$ref": "#/$defs/RCaptureAttemptReference"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "reference",
+          "original_status",
+          "material",
+          "owner_released",
+          "can_discard",
+          "notices"
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "PluginOutcome": {
+            "type": "string",
+            "enum": [
+              "succeeded",
+              "failed",
+              "uncertain",
+              "cancelled"
+            ]
+          },
+          "RCaptureAttemptReference": {
+            "description": "An attempted capture can lack complete payload metadata. Its original Core\noperation and provider establish identity without inventing a payload digest.",
+            "type": "object",
+            "properties": {
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id"
+            ]
+          },
+          "RCaptureMaterial": {
+            "type": "object",
+            "properties": {
+              "capture_metadata_available": {
+                "description": "Bounded capture metadata parsed successfully; payload integrity is separate.",
+                "type": "boolean"
+              },
+              "fingerprint": {
+                "description": "Opaque native identity/metadata precondition, not a payload content hash.",
+                "type": "string"
+              },
+              "payload_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "staging_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "fingerprint",
+              "capture_metadata_available"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "source_operation_id": "original-capture"
+        }
+      ],
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read",
+        "operation.read",
+        "plugins.read",
+        "project.references.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.discard_capture",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Discard unpublished capture material",
+      "description": "Explicitly remove only graph/staging bytes for an original unsuccessful capture or adoption after its provider is confirmed released. Requires an exact native preview; preserves metadata and original outcomes. A lost commit requires fresh inspection and an explicit new request. Published copies use normal deletion.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "DiscardRCapture",
+        "type": "object",
+        "properties": {
+          "expected_fingerprint": {
+            "type": "string"
+          },
+          "source_operation_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "source_operation_id",
+          "expected_fingerprint"
+        ]
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCaptureDiscardOutput",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RCaptureDiscarded"
+          },
+          {
+            "$ref": "#/$defs/RExecutionNotStarted"
+          }
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCaptureAttemptReference": {
+            "description": "An attempted capture can lack complete payload metadata. Its original Core\noperation and provider establish identity without inventing a payload digest.",
+            "type": "object",
+            "properties": {
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id"
+            ]
+          },
+          "RCaptureDiscarded": {
+            "type": "object",
+            "properties": {
+              "after": {
+                "$ref": "#/$defs/RCaptureMaterial"
+              },
+              "before": {
+                "$ref": "#/$defs/RCaptureMaterial"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/RCaptureAttemptReference"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "reference",
+              "before",
+              "after"
+            ]
+          },
+          "RCaptureMaterial": {
+            "type": "object",
+            "properties": {
+              "capture_metadata_available": {
+                "description": "Bounded capture metadata parsed successfully; payload integrity is separate.",
+                "type": "boolean"
+              },
+              "fingerprint": {
+                "description": "Opaque native identity/metadata precondition, not a payload content hash.",
+                "type": "string"
+              },
+              "payload_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              },
+              "staging_bytes": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "uint64",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "fingerprint",
+              "capture_metadata_available"
+            ]
+          },
+          "RExecutionNotStarted": {
+            "type": "object",
+            "properties": {
+              "operation_id": {
+                "type": "string"
+              },
+              "started": {
+                "description": "Always false when the owner confirms cancellation before native execution.",
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "started"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "source_operation_id": "original-capture",
+          "expected_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r",
+        "workspace.read",
+        "operation.read",
+        "plugins.read",
+        "project.references.read"
+      ],
+      "effects": [
+        "recovery.discard"
+      ],
+      "cancellation": "unsupported",
+      "preflight": {
+        "id": "r.prepare_capture_disposal",
+        "version": 1
+      }
     }
   ],
   "optional_requires": [
@@ -8022,6 +8475,15 @@
       "scopes": [
         "operation.read",
         "project.references.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instance",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
       ]
     }
   ]

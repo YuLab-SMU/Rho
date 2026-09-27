@@ -53,15 +53,18 @@ manifest. Environment asks `r.checkpoint@1` to qualify the original copy and its
 control history; it never reads R private archives. A logically deleted copy no
 longer protects graph dependencies, including when disk cleanup remains pending.
 Missing payload bytes alone do not remove protection. Incomplete dependencies,
-unknown contract versions, uncertain captures and inaccessible history retain
-material. An uncertain pin/delete or resolution attempt also retains material until
+unknown contract versions and inaccessible history retain material. Unsuccessful
+captures remain protected until `r.capture_attempt@1` qualifies a successful disposal
+for the exact original capture, confirmed owner release and current absence of
+both graph and staging files. Missing files or an uncertain disposal do not suffice. An uncertain pin/delete or resolution attempt also retains material until
 `r.checkpoint_control@1` confirms an exact committed resolution of that original
 request. This does not rewrite its outcome or retire a still-live copy.
 
-Select optional `r.checkpoint@1` and `r.checkpoint_control@1` grants in addition to
-the reference grants. The
+Select optional `r.checkpoint@1`, `r.checkpoint_control@1` and
+`r.capture_attempt@1` grants in addition to the reference grants. The
 R reader itself needs `operation.get`, `operation.list_recent`, `resources.read`
-and `operation.project_coverage`. The exact active original provider is preferred;
+and `operation.project_coverage`; capture disposal observations also need
+`plugins.instance`. The exact active original provider is preferred;
 after release, a unique active supported reader can observe the retained copy.
 When several replacements exist, configure `checkpoint_reader` with an exact
 `InstanceRef`. An unavailable explicit reader never falls back silently. An active
@@ -89,12 +92,14 @@ library and loaded-namespace protection through an ordinary R provider.
 Add `--checkpoint-references` and `RHO_CHECKPOINT_HELPER` to also verify retained
 namespace dependencies after session release, pure replacement reads, explicit reader
 selection when alternatives exist, uncertain deletion and resolution attempts,
-explicit completion with original records preserved, and retirement before
+protection of unpublished captures, lost disposal confirmation and explicit
+completion with original records preserved, and retirement before
 material quarantine, restore and purge.
 
 The retiring `rho-r-environment` adapter delegates to the same native owner.
 `node scripts/test-environment.mjs` covers that real-R bridge, including live-library
 retention and legacy Host restart binding. These old composition paths are still
 being migrated; this package is not yet a complete replacement for all Environment
-behavior. Unresolved recovery controls and uncertain captures remain retained.
+behavior. Unresolved recovery controls and captures without confirmed disposal
+remain retained.
 Successful and uncertain source material stays retained.

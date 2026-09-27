@@ -2,7 +2,8 @@
 //! qualification remain private to R; Environment only protects published paths.
 use super::*;
 use rho_r_api::{
-    DeleteRCheckpoint, PinRCheckpoint, PurgeRCheckpoint, RCheckpointControlObservation,
+    DeleteRCheckpoint, DiscardRCapture, PinRCheckpoint, PurgeRCheckpoint,
+    RCaptureAttemptObservation, RCaptureDiscarded, RCheckpointControlObservation,
     RCheckpointControlResolution, RCheckpointControlResult, RCheckpointManifest,
     RCheckpointObservation, RCheckpointPurged, RCheckpointReference, RCheckpointRestored,
     RCheckpointResult, RExecutionNotStarted, ResolveRCheckpointControl, RestoreRCheckpoint,
@@ -18,6 +19,7 @@ pub(super) fn supports(capability: &CapabilityKey) -> bool {
                 | "r.pin_checkpoint"
                 | "r.delete_checkpoint"
                 | "r.purge_checkpoint"
+                | "r.discard_capture"
         )
         || capability.version == 2
             && matches!(
@@ -70,12 +72,17 @@ impl Owner {
         capability: &CapabilityKey,
         status: &str,
     ) -> Result<(), String> {
+        let capture = matches!(
+            capability.id.as_str(),
+            "r.capture_checkpoint" | "r.reconcile_checkpoint"
+        );
+        let disposal = capability.id.as_str() == "r.discard_capture";
         let control = matches!(
             capability.id.as_str(),
             "r.pin_checkpoint" | "r.delete_checkpoint"
         );
         if !matches!(status, "succeeded" | "failed" | "cancelled")
-            && !(status == "uncertain" && control)
+            && !(status == "uncertain" && (control || capture || disposal))
         {
             return Err(
                 "Live or uncertain scientific work still needs its original recovery references"
@@ -101,6 +108,63 @@ impl Owner {
             return Err("R recovery reference differs from its original admitted record".into());
         }
         let name = capability.id.as_str();
+        if disposal {
+            let args: DiscardRCapture =
+                serde_json::from_value(operation["normalized_arguments"]["arguments"].clone())
+                    .map_err(error)?;
+            if status == "succeeded" {
+                let out: RCaptureDiscarded =
+                    serde_json::from_value(record["output"].clone()).map_err(error)?;
+                if out.operation_id != *id
+                    || out.reference.operation_id != args.source_operation_id
+                    || out.reference.project != call.binding.project
+                    || out.before.fingerprint != args.expected_fingerprint
+                    || out.after.payload_bytes.is_some()
+                    || out.after.staging_bytes.is_some()
+                {
+                    return Err(
+                        "Capture disposal differs from its original admitted preview".into(),
+                    );
+                }
+            }
+            // Its original capture is independently scanned below. An unconfirmed
+            // disposal cannot create a new graph or remove that capture's protection.
+            return Ok(());
+        }
+        if capture && status != "succeeded" {
+            if matches!(status, "failed" | "cancelled") {
+                if let Ok(out) =
+                    serde_json::from_value::<RExecutionNotStarted>(record["output"].clone())
+                {
+                    if out.operation_id == *id && !out.started {
+                        return Ok(());
+                    }
+                }
+            }
+            let provider = reader(self.checkpoint_reader.as_ref(), &binding.provider, readers)?;
+            let observed: RCaptureAttemptObservation = serde_json::from_value(self.reference_query(
+                call, "r.capture_attempt", json!({"binding":ProviderBinding {
+                    capability:CapabilityKey {id:ContributionId::new("r.capture_attempt").unwrap(),version:1},
+                    provider:provider.clone(),project:call.binding.project.clone(),target:None,
+                },"arguments":{"source_operation_id":id}}), false,
+            ).await?).map_err(error)?;
+            if observed.reference.operation_id != *id
+                || observed.reference.provider != binding.provider
+                || observed.reference.project != call.binding.project
+                || json!(observed.original_status) != status
+                || !observed.owner_released
+                || observed.can_discard
+                || observed
+                    .discarded_by
+                    .as_ref()
+                    .is_none_or(|operation| operation == id)
+                || observed.material.payload_bytes.is_some()
+                || observed.material.staging_bytes.is_some()
+            {
+                return Err("An unsuccessful R capture has unknown recovery references until an exact disposal is confirmed".into());
+            }
+            return Ok(());
+        }
         if status == "uncertain" {
             let args = &operation["normalized_arguments"]["arguments"];
             let original: RCheckpointReference =
@@ -155,15 +219,6 @@ impl Owner {
             return Ok(());
         }
         if status != "succeeded" {
-            // Capture/adoption can leave complete or partial independent bytes.
-            // Only the owner's confirmed not-started outcome excludes that case.
-            if matches!(name, "r.capture_checkpoint" | "r.reconcile_checkpoint") {
-                let output: RExecutionNotStarted = serde_json::from_value(record["output"].clone())
-                    .map_err(|_| "An unsuccessful R capture has unknown recovery references")?;
-                if output.operation_id != *id || output.started {
-                    return Err("R capture was not confirmed unstarted".into());
-                }
-            }
             // Failed controls cannot retire a copy. The original successful
             // capture below asks R to qualify all control history. Restore creates
             // no new archive; its live session dependencies are observed separately.
@@ -457,6 +512,9 @@ mod tests {
                             );
                             json!(observation)
                         }
+                        "r.capture_attempt" => {
+                            json!({"reference":{"project":record["operation"]["normalized_arguments"]["binding"]["project"],"provider":expected_reader,"operation_id":"capture"},"original_status":"failed","material":{"fingerprint":format!("sha256:{}","a".repeat(64)),"payload_bytes":null,"staging_bytes":null,"capture_metadata_available":false},"owner_released":true,"can_discard":true,"discarded_by":null,"notices":[]})
+                        }
                         "resources.read" => {
                             assert!(
                                 !deleted,
@@ -603,6 +661,95 @@ mod tests {
                 "{case}: {result:?}"
             );
             assert!(!root.join("materials/recovery").exists());
+        }
+    }
+    #[tokio::test]
+    async fn unsuccessful_captures_require_confirmed_disposal_and_current_absence() {
+        for case in [
+            "disposed_failed",
+            "disposed_cancelled",
+            "disposed_uncertain",
+            "missing_only",
+            "active_owner",
+            "payload_present",
+            "partial_present",
+            "wrong_source",
+            "wrong_provider",
+            "wrong_status",
+            "self_reference",
+            "still_discardable",
+        ] {
+            let (directory, owner, mut requests) = crate::tests::fixture(true);
+            let root = directory.path().canonicalize().unwrap();
+            let query = crate::tests::query(source::RETENTION, json!({"operation_id":"stage"}));
+            let id = OperationId::new("original-capture").unwrap();
+            let capability = CapabilityKey {
+                id: ContributionId::new("r.capture_checkpoint").unwrap(),
+                version: 1,
+            };
+            let mut binding = query.binding.clone();
+            binding.capability = capability.clone();
+            let status = match case {
+                "disposed_failed" => "failed",
+                "disposed_cancelled" => "cancelled",
+                _ => "uncertain",
+            };
+            let record = json!({"status":status,"output":null,"operation":{"operation_id":id,"idempotency_scope":root,"capability":capability,
+                "normalized_arguments":{"binding":binding,"arguments":{"expected_session":"native"}},"admission":{"owner_context":{"binding":binding}}}});
+            let mut observed = json!({"reference":{"operation_id":id,"provider":binding.provider,"project":binding.project},"original_status":status,
+                "material":{"fingerprint":format!("sha256:{}","a".repeat(64)),"payload_bytes":null,"staging_bytes":null,"capture_metadata_available":false},
+                "owner_released":true,"can_discard":false,"discarded_by":"confirmed-disposal","notices":[]});
+            match case {
+                "missing_only" => observed["discarded_by"] = Value::Null,
+                "active_owner" => observed["owner_released"] = json!(false),
+                "payload_present" => observed["material"]["payload_bytes"] = json!(1),
+                "partial_present" => observed["material"]["staging_bytes"] = json!(0),
+                "wrong_source" => observed["reference"]["operation_id"] = json!("other"),
+                "wrong_provider" => observed["reference"]["provider"]["instance"] = json!("other"),
+                "wrong_status" => observed["original_status"] = json!("succeeded"),
+                "self_reference" => observed["discarded_by"] = json!(id),
+                "still_discardable" => observed["can_discard"] = json!(true),
+                _ => (),
+            }
+            let expected = id.clone();
+            let responder = tokio::spawn(async move {
+                while let Some(request) = requests.recv().await {
+                    let data = match request.capability.id.as_str() {
+                        "operation.get" => json!({"record":record}),
+                        "r.capture_attempt" => {
+                            assert_eq!(
+                                request.arguments["arguments"],
+                                json!({"source_operation_id":expected})
+                            );
+                            assert!(request.arguments["binding"]["target"].is_null());
+                            observed.clone()
+                        }
+                        other => panic!("Unexpected unpublished capture read {other}"),
+                    };
+                    let _ = request.reply.send(Ok(
+                        json!({"status":"ready","completeness":"complete","data":data}),
+                    ));
+                }
+            });
+            let mut references =
+                References::new(&[root.join("materials/stage").to_str().unwrap().into()]).unwrap();
+            let result = owner
+                .checkpoint_references(
+                    &query,
+                    &mut references,
+                    &[binding.provider],
+                    &id,
+                    &capability,
+                    status,
+                )
+                .await;
+            assert_eq!(
+                result.is_ok(),
+                case.starts_with("disposed_"),
+                "{case}: {result:?}"
+            );
+            responder.abort();
+            assert!(!directory.path().join("materials/recovery").exists());
         }
     }
 }

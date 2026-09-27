@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginPreflightResult",
+  "type": "object",
+  "properties": {
+    "arguments": true,
+    "owner_context": true,
+    "target": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "arguments",
+    "owner_context"
+  ]
+}

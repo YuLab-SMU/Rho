@@ -45,6 +45,18 @@
   "optional_requires": [
     {
       "capability": {
+        "id": "r.capture_attempt",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "plugins.read",
+        "project.references.read",
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
         "id": "r.checkpoint",
         "version": 1
       },

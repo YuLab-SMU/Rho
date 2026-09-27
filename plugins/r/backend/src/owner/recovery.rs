@@ -23,16 +23,18 @@ pub const CONTROL: &str = "r.checkpoint_control";
 pub const READ: &str = "r.read_checkpoint";
 pub const LIST: &str = "r.checkpoints";
 mod controls;
+mod attempts;
+use attempts::{ATTEMPT, DISCARD, PREPARE_DISCARD};
 
 const MAX_MANIFEST: u64 = 1024 * 1024;
 const PAGE: u32 = 32;
 const PAGES: usize = 128;
 
 pub fn is_operation(id: &str) -> bool {
-    matches!(id, CAPTURE | RESTORE | RECONCILE | PIN | DELETE | PURGE)
+    matches!(id, CAPTURE | RESTORE | RECONCILE | PIN | DELETE | PURGE | DISCARD)
 }
 pub fn is_query(id: &str) -> bool {
-    matches!(id, PREPARE | OBSERVE | READ | LIST | CONTROL)
+    matches!(id, PREPARE | OBSERVE | READ | LIST | CONTROL | ATTEMPT | PREPARE_DISCARD)
 }
 fn key(id: &str) -> CapabilityKey {
     environment_binding::key(id, 1)
@@ -52,6 +54,7 @@ pub struct Grants {
     list: bool,
     resources: bool,
     coverage: bool,
+    instance: bool,
 }
 impl Grants {
     pub fn new(grants: &[CapabilityRequirement]) -> Self {
@@ -61,6 +64,7 @@ impl Grants {
                 .any(|grant| grant.capability == key(id) && grant.scopes.contains(scope))
         };
         Self {
+            instance: has("plugins.instance", "plugins.read"),
             get: has("operation.get", "operation.read"),
             list: has("operation.list_recent", "operation.read"),
             resources: has("resources.read", "resources.read"),
@@ -183,6 +187,7 @@ impl Owner {
     }
 
     pub(super) fn admit_recovery(&self, call: &PluginCall) -> Result<(), String> {
+        if call.binding.capability.id.as_str() == DISCARD { return self.admit_capture_disposal(call); }
         if !supported_version(&call.binding.capability) {
             return Err("Unsupported recovery version".into());
         }
@@ -375,8 +380,11 @@ impl Owner {
         if call.binding.capability.id.as_str() == PREPARE {
             return self.prepare_recovery(call).await;
         }
+        if call.binding.capability.id.as_str() == PREPARE_DISCARD {
+            return self.prepare_capture_disposal(call).await;
+        }
         self.recovery_grants
-            .check(call, call.binding.capability.id.as_str() != LIST)?;
+            .check(call, !matches!(call.binding.capability.id.as_str(), LIST | ATTEMPT))?;
         if !call.owner_context.is_null()
             || !(call.preconditions.is_null() || call.preconditions == json!({}))
             || call
@@ -386,6 +394,9 @@ impl Owner {
                 .is_some_and(|target| target != &self.target())
         {
             return Err("Recovery observation changed its target or preconditions".into());
+        }
+        if call.binding.capability.id.as_str() == ATTEMPT {
+            return self.query_capture_attempt(call).await;
         }
         if call.binding.capability.id.as_str() == LIST {
             let args: RCheckpointList = decode(call.arguments.clone())?;
@@ -557,6 +568,9 @@ impl Owner {
         call: &PluginCall,
         cancellation: watch::Receiver<bool>,
     ) -> Result<PluginCommitPlan, NativeError> {
+        if call.binding.capability.id.as_str() == DISCARD {
+            return self.execute_capture_disposal(call, cancellation).await;
+        }
         self.admit_recovery(call).map_err(before)?;
         let operation = OperationId::new(
             call.operation_id

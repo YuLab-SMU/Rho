@@ -89,7 +89,27 @@ discard never authorizes cleanup. If resolution itself is uncertain, inspect the
 latest attempt and explicitly target it in the next resolution. Original outcomes
 and native evidence remain retained. Older readers refuse the version-2 controls
 rather than interpreting an incomplete history. These operations do not start R.
-This resolves metadata controls, not disposal of partial/uncertain captures.
+This resolves metadata controls. Unpublished capture material has a separate path.
+
+`r.capture_attempt@1` accepts an original failed/cancelled/uncertain capture or
+reconciliation Operation ID. Its `RCaptureAttemptReference` needs no invented
+payload digest. The query observes at most six fixed native files and bounded
+capture metadata; it neither reads full graphs nor creates missing storage.
+`material.fingerprint` identifies the native preview, not the payload content.
+`payload_bytes` and `staging_bytes` remain separate, and a parsed capture record
+is not a full integrity check. A missing payload alone does not confirm disposal.
+
+`r.discard_capture@1` requires that source ID and the exact preview fingerprint.
+The original provider must be confirmed `released` through the optional
+`plugins.instance@1` grant; a failed/disconnected provider or a stale PID does not
+prove native writers stopped. The new Operation removes only graph and staging
+payloads and preserves metadata, native locks and original Core outcomes. Published
+copies must use normal deletion controls. Already adopted independent copies are
+unaffected. The artifact lease remains held through settlement. A failed or lost
+commit may follow actual removal: inspect again and explicitly submit a new request
+to confirm current absence. `discarded_by` becomes available only after a qualified
+successful Core disposal agrees with current native absence. Any remaining bytes,
+changed material or unknown history keeps protection. No request starts or stops R.
 
 `r.inspection_state@1` returns `RInspectionState` without entering R or starting a
 session. Pass `expected_session: null` to observe an unstarted instance; after a

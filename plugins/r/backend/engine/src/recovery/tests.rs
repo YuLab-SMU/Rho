@@ -487,3 +487,78 @@ async fn invalid_recovery_component_is_refused_before_spawning_ark() {
     assert!(!root.join("ark.launched").exists());
     assert!(!root.join("native-data").exists());
 }
+
+#[test]
+fn capture_material_preview_is_bounded_pure_and_distinguishes_native_identity() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let empty = RecoveryArchive::inspect_attempt(&root, scope(&root), &id("absent")).unwrap();
+    assert!(empty.lease.is_none());
+    assert!(empty.material.payload_bytes.is_none());
+    assert!(!root.join("r-recovery-v1").exists());
+    let archive = RecoveryArchive::create(&root, scope(&root)).unwrap();
+    let missing = RecoveryArchive::inspect_attempt(&root, scope(&root), &id("absent")).unwrap();
+    assert_ne!(empty.material.fingerprint, missing.material.fingerprint);
+    assert!(!archive.directory(&id("absent")).exists());
+    let lease = archive.begin(&id("absent")).unwrap();
+    let partial = lease.capture_material().unwrap();
+    assert_ne!(partial.fingerprint, missing.material.fingerprint);
+    let file = create_file(&lease.directory.join("payload.staging")).unwrap();
+    file.set_len(MAX_RECOVERY_BYTES + 1).unwrap();
+    let large = lease.capture_material().unwrap();
+    assert_eq!(large.staging_bytes, Some(MAX_RECOVERY_BYTES + 1));
+    assert!(!large.capture_metadata_available);
+    assert!(lease.discard_capture_payloads(&partial.fingerprint).is_err());
+    assert_eq!(file.metadata().unwrap().len(), MAX_RECOVERY_BYTES + 1);
+    assert!(lease.discard_capture_payloads(&large.fingerprint).unwrap().staging_bytes.is_none());
+}
+
+#[test]
+fn incomplete_capture_disposal_preserves_metadata_and_refuses_changed_previews() {
+    let (_temp, _root, archive) = fixture();
+    let lease = archive.begin(&id("partial")).unwrap();
+    fs::write(lease.directory.join("payload.staging"), b"partial graph").unwrap();
+    fs::write(lease.directory.join("capture.json"), b"incomplete metadata").unwrap();
+    let before = lease.capture_material().unwrap();
+    assert!(!before.capture_metadata_available);
+    fs::write(lease.directory.join("payload.staging"), b"changed graph").unwrap();
+    assert!(lease.discard_capture_payloads(&before.fingerprint).unwrap_err().contains("preview"));
+    let current = lease.capture_material().unwrap();
+    let after = lease.discard_capture_payloads(&current.fingerprint).unwrap();
+    assert!(after.payload_bytes.is_none() && after.staging_bytes.is_none());
+    assert_eq!(fs::read(lease.directory.join("capture.json")).unwrap(), b"incomplete metadata");
+    assert!(lease.directory.join("lease").exists());
+    assert_eq!(lease.discard_capture_payloads(&after.fingerprint).unwrap(), after);
+}
+
+#[test]
+fn disposal_of_an_unpublished_original_cannot_remove_an_adopted_graph() {
+    let (_temp, _root, archive) = fixture();
+    let original = capture(&archive, "unpublished", b"independent graph");
+    let adopted = archive.adopt(&id("adopted"), &original).unwrap();
+    let before = original.capture_material().unwrap();
+    assert!(before.capture_metadata_available);
+    original.discard_capture_payloads(&before.fingerprint).unwrap();
+    assert!(original.capture().is_ok());
+    assert!(original.verify().is_err());
+    assert!(adopted.verify().is_ok());
+    assert!(archive.adopt(&id("cannot-revive"), &original).is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn disposal_refuses_payload_aliases_before_removing_any_graph_file() {
+    let (_temp, root, archive) = fixture();
+    let lease = capture(&archive, "aliases", b"original graph");
+    let before = lease.capture_material().unwrap();
+    let outside = root.join("unrelated");
+    fs::write(&outside, b"must retain").unwrap();
+    std::os::unix::fs::symlink(&outside, lease.directory.join("payload.staging")).unwrap();
+    assert!(lease.discard_capture_payloads(&before.fingerprint).is_err());
+    assert!(lease.verify().is_ok());
+    fs::remove_file(lease.directory.join("payload.staging")).unwrap();
+    fs::hard_link(&outside, lease.directory.join("payload.staging")).unwrap();
+    assert!(lease.capture_material().is_err());
+    assert_eq!(fs::read(outside).unwrap(), b"must retain");
+    assert!(lease.verify().is_ok());
+}

@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 fn id(value: &str) -> OperationId {
     OperationId::new(value).unwrap()
 }
-fn fixture() -> (
+pub(super) fn fixture() -> (
     tempfile::TempDir,
     Owner,
     PluginCall,
@@ -16,6 +16,7 @@ fn fixture() -> (
     let (tx, rx) = mpsc::channel(32);
     let grants = [
         ("operation.get", vec!["operation.read"]),
+        ("plugins.instance", vec!["plugins.read"]),
         ("operation.list_recent", vec!["operation.read"]),
         ("resources.read", vec!["resources.read"]),
         (
@@ -58,6 +59,7 @@ fn fixture() -> (
         principal: PrincipalId::new("principal").unwrap(),
         scopes: [
             "workspace.read",
+            "plugins.read",
             "workspace.run_r",
             "operation.read",
             "resources.read",

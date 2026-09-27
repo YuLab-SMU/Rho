@@ -30,7 +30,10 @@ const readinessInput:RInspectionStateArguments={expected_session:null};
 function inspect(observation:RInspection<ObjectReadPage>){return observation.data?.columns[0]?.values[0]?.text??observation.diagnostic?.code;}
 function continueHelp(args:ReadPackageHelpArguments,offset:number,files:ReadPackageHelpArguments['expected_help_files']){return {...args,offset_utf8:offset,expected_help_files:files};}
 void [created,unqualified,execute,formatting,formatted,check,events,notStarted,contradictory,observe,output,answer,directory,busy,readiness,readinessInput,inspect,continueHelp];
-import type {ResolveRCheckpointControl,RCheckpointControlResolutionOutput,RCheckpointControlObservation,RCheckpointReference,RCheckpointManifest,RCheckpointCaptureOutput,RCheckpointRestoreOutput,RCheckpointControlOutput,RCheckpointPurgeOutput,RCheckpointChunk,RCheckpointObservation,RCheckpointPage,RestoreRCheckpoint,ReconcileRCheckpoint,PinRCheckpoint,DeleteRCheckpoint,PurgeRCheckpoint} from './sdk/index.js';
+import type {RCaptureAttemptObservation,DiscardRCapture,RCaptureDiscardOutput,ResolveRCheckpointControl,RCheckpointControlResolutionOutput,RCheckpointControlObservation,RCheckpointReference,RCheckpointManifest,RCheckpointCaptureOutput,RCheckpointRestoreOutput,RCheckpointControlOutput,RCheckpointPurgeOutput,RCheckpointChunk,RCheckpointObservation,RCheckpointPage,RestoreRCheckpoint,ReconcileRCheckpoint,PinRCheckpoint,DeleteRCheckpoint,PurgeRCheckpoint} from './sdk/index.js';
+function dispose(attempt:RCaptureAttemptObservation):DiscardRCapture{return {source_operation_id:attempt.reference.operation_id,expected_fingerprint:attempt.material.fingerprint};}
+function disposed(result:RCaptureDiscardOutput){return 'started' in result ? result.started : result.after.payload_bytes;}
+void [dispose,disposed];
 function restore(reference:RCheckpointReference,expected_session:string):RestoreRCheckpoint{return {reference,expected_session};}
 function reconcile(original:string):ReconcileRCheckpoint{return {source_operation_id:original};}
 function controls(reference:RCheckpointReference,expected_control:string|null):[PinRCheckpoint,DeleteRCheckpoint,PurgeRCheckpoint]{return [{reference,expected_control,pinned:true},{reference,expected_control},{reference,deletion_operation_id:'original-deletion'}];}

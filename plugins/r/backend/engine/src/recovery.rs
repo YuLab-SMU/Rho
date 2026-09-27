@@ -22,6 +22,8 @@ pub const MAX_RECOVERY_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 pub const MAX_RECOVERY_READ: u32 = 256 * 1024;
 const MAX_METADATA: u64 = 1024 * 1024;
 const FORMAT: u32 = 1;
+mod material;
+pub use material::RecoveryAttempt;
 
 /// Native scope supplied by initialization or a qualified original Operation,
 /// never by an unqualified checkpoint request. References are not credentials.
@@ -710,7 +712,7 @@ fn digest(path: &Path, limit: u64) -> Result<(String, u64), String> {
     }
     Ok((format!("sha256:{:x}", sha.finalize()), bytes))
 }
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Serialize)]
 struct FileIdentity {
     #[cfg(unix)]
     device: u64,
