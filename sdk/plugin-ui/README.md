@@ -90,6 +90,24 @@ Preview creates no backend process or provider registration. It does not emulate
 successful scientific Operations. Use explicit disposable-project testing for a
 real backend.
 
+`client.testProject(id)` selects one existing disposable child for `query`,
+`control`, `invoke`, `operation` and `cancel`. It requires container feature
+`test_projects_v1` and an active runtime view declaring `plugins.test_project@1`
+with `plugins.read` and `plugins.run`. Actual capability calls still require their
+own declared grants, intersected with the parent authority. The selector never
+adds its management scopes to those grants. Fixture previews cannot select children.
+Missing or stopped targets refuse calls rather than falling back to analysis.
+
+The selection is immutable on each facade. Invocation request IDs and view identity
+are preserved in the child's original journal. Intrinsic state, close cooperation,
+copy and resource presentation stay bound to the original view; they cannot select
+a child. Selected draft writes are fenced while that original view is closing.
+`client.openTestWorkspace(id)` requests a new same-Host workspace from a focused
+explicit gesture. The shell validates the live child and constructs the private
+URL; the SDK sees only a navigation-request acknowledgement, not credentials or
+proof that the destination loaded. Child creation and view opening remain separate
+ordinary native operations. The facade exposes no lifecycle automation.
+
 The container creates one opaque-origin iframe and transfers one private
 MessagePort to that exact document. The SDK checks the parent, document nonce,
 connection/view identity, request correlation, ordering and a 1 MiB message quota.

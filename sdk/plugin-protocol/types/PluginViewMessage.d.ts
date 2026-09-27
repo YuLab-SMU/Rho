@@ -2,6 +2,12 @@
 import type { ConnectionId } from "./ConnectionId.js";
 import type { PluginViewRequest } from "./PluginViewRequest.js";
 import type { RequestId } from "./RequestId.js";
+import type { TestProjectId } from "./TestProjectId.js";
 import type { ViewInstanceId } from "./ViewInstanceId.js";
 
-export type PluginViewMessage = { protocol_version: number, connection: ConnectionId, view: ViewInstanceId, sequence: number, request: RequestId, body: PluginViewRequest, };
+export type PluginViewMessage = { protocol_version: number, connection: ConnectionId, view: ViewInstanceId, sequence: number, request: RequestId,
+/**
+ * Select only an already live child for ordinary port calls. Intrinsic
+ * view state, close cooperation and presentation stay with this view.
+ */
+test_project?: TestProjectId, body: PluginViewRequest, };

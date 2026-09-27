@@ -1,3 +1,4 @@
+import {testBackendTest} from './fixtures/studio-backend-test.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -96,5 +97,6 @@ try {
  const badClient={...client,query:async()=>({status:'ready',data:{revision,files,total:Object.keys(files).length,next:'BUILD.md'}})};await assert.rejects(sourceTree(badClient,revision),/pagination/);
  const unicodeClient={...client,query:async(_cap,args)=>({status:'ready',data:{revision,total:2,files:args.after?{'😀.ts':metadata('')}:{'\ue000.ts':metadata('')},next:args.after?null:'\ue000.ts'}})};assert.equal(Object.keys(await sourceTree(unicodeClient,revision)).length,2);
  await testDevelopment(module,operationRequestId,ViewRequestError);
+ await testBackendTest(module,operationRequestId,ViewRequestError);
  completed=true;console.log('Studio model: source/canvas shared undo, invalid drafts, opaque custom source, atomic inventory edits, native receipts, lost acknowledgements, reopen recovery, source integrity and bounded pagination passed.');
 }finally{if(completed)fs.rmSync(directory,{recursive:true,force:true});else console.error(`Studio test retained at ${directory}`);}

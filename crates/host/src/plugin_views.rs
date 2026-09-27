@@ -48,6 +48,7 @@ impl NextHost {
                 })?,
             )?),
             PluginViewRequest::DownloadResource { .. } => Some(CapabilityRef::new("resources.read", 1)?),
+            PluginViewRequest::OpenTestWorkspace { .. } => Some(CapabilityRef::new("plugins.test_project", 1)?),
             _ => None,
         };
         let mut context = service
@@ -59,12 +60,24 @@ impl NextHost {
                 &message.view,
                 message.sequence,
                 cap.as_ref(),
+                message.test_project.is_some() || matches!(&message.body, PluginViewRequest::OpenTestWorkspace { .. }),
             )
             .await?;
-        service.check_view_close_fence(&message.view, &message.body)?;
+        service.check_view_close_fence(&message.view, &message.body, message.test_project.is_some())?;
+        if message.test_project.is_some() && !matches!(&message.body,
+            PluginViewRequest::Query { .. } | PluginViewRequest::Control { .. } | PluginViewRequest::Invoke { .. }
+            | PluginViewRequest::GetOperation { .. } | PluginViewRequest::Cancel { .. })
+        {
+            return Err(OperationError::InvalidInput("intrinsic view requests cannot select a test project".into()));
+        }
         if let Some(response) = service.preview_response(&message.view, &message.body)? {
             return Ok(response);
         }
+        // The original live view has separately validated the exact declaration
+        // and current parent scopes for selection. Keep this native lease through
+        // ordinary dispatch; the capability retains only its own frozen scopes.
+        let child = message.test_project.as_ref().map(|id| self.plugin_test_host(parent, id)).transpose()?;
+        let target = child.as_deref().unwrap_or(self);
         let cancel = matches!(&message.body, PluginViewRequest::Cancel { .. });
         let request = match message.body {
             body @ (PluginViewRequest::RegisterCloseHandler { .. }
@@ -106,6 +119,13 @@ impl NextHost {
                 // The browser independently parses the URL and checks a current
                 // focused-frame gesture before creating a new browsing context.
                 return Ok(json!({"authorized_view":message.view}));
+            }
+            PluginViewRequest::OpenTestWorkspace { test_project } => {
+                let _child = self.plugin_test_host(parent, &test_project)?;
+                // No view is created and no native work starts. The browser
+                // checks a current gesture before constructing a credentialed
+                // same-Host URL, never accepting one from plugin code.
+                return Ok(json!({"authorized_view":message.view,"test_project":test_project,"window":window}));
             }
             PluginViewRequest::DownloadResource { reference, filename } => {
                 if !parent.scopes.contains(rho_plugins::PLUGINS_RUN_SCOPE) {
@@ -161,7 +181,7 @@ impl NextHost {
             PluginViewRequest::GetOperation { operation_id }
             | PluginViewRequest::Cancel { operation_id } => {
                 let id = rho_contract::OperationId::new(operation_id)?;
-                let record = self
+                let record = target
                     .runtime
                     .gateway
                     .owner_record(&context, &id)
@@ -214,6 +234,6 @@ impl NextHost {
                 })
             }
         };
-        self.dispatch(&context, request).await
+        target.dispatch(&context, request).await
     }
 }

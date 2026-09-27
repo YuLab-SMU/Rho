@@ -1,7 +1,7 @@
 /** Original-operation inspection for this source editor. No speculative replay. */
 import type { JsonValue, CapabilityKey } from '../public/plugin-protocol/index.js';
 import { operationRequestId, type PluginViewClient } from '../public/plugin-ui/index.js';
-export type Client = Pick<PluginViewClient, 'view' | 'query' | 'control' | 'invoke' | 'operation' | 'cancel' | 'setState'>;
+export type Client = Pick<PluginViewClient, 'view' | 'query' | 'control' | 'invoke' | 'operation' | 'cancel' | 'setState' | 'testProject' | 'openTestWorkspace'>;
 export interface Intent { view: string; request: string; capability: CapabilityKey; arguments: JsonValue; operation: string | null; }
 export interface RecordReply {
   operation: { operation_id: string; caller: { kind: string; id: string }; client_request_id: string;
@@ -24,7 +24,7 @@ export async function verifyOriginal(value: unknown, intent: Intent): Promise<Re
     throw new Error('The result does not match the original source request.');
   return record;
 }
-export async function inspectOriginal(client: Client, intent: Intent): Promise<RecordReply> {
+export async function inspectOriginal(client: Pick<Client, 'view' | 'query' | 'operation'>, intent: Intent): Promise<RecordReply> {
   const frozen = structuredClone(intent);
   if (frozen.operation) {
     if (frozen.view === client.view.view) return verifyOriginal(await client.operation(frozen.operation), frozen);

@@ -11,3 +11,5 @@
 #development-summary{margin:0 32px 12px;padding:12px 16px;background:var(--color-subtle)}@media(max-width:760px){#development-summary{margin-inline:16px}}
 
 #build-timeout{max-width:160px}
+
+#backend-test{border-top:1px solid var(--color-border);margin-top:28px;padding-top:20px}#backend-test>button{margin-top:12px}#test-pending{margin-top:20px;padding:16px;background:var(--color-subtle)}#test-diagnostic{color:var(--color-danger)}#test-instances{min-height:180px}

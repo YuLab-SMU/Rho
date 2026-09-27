@@ -76,7 +76,7 @@ export class Studio {
       if(!this.branch||!this.document||!pending.proposal||pending.proposal.branch!==this.branch.id||args?.branch!==this.branch.id||args.expected_head!==pending.proposal.parent||![pending.proposal.parent,pending.proposal.revision].includes(this.document.data.revision))throw Error('The retained checkpoint differs from its captured branch or source.');
     }else throw Error('The retained request is not a Studio source operation.');
   }
-  private available() { if(this.pending||this.development.data.pending||this.drafts.unresolved)throw Error('Inspect the original unconfirmed request before changing the development target.'); }
+  private available() { if(this.pending||this.development.data.pending||this.development.data.testing?.pending||this.drafts.unresolved)throw Error('Inspect the original unconfirmed request before changing the development target.'); }
   async select(revision:string,branch:PluginBranch|null=null) {
     this.available();if(this.document?.dirty)throw Error('Checkpoint current edits before choosing another revision.');
     const inspection:PluginInspection=await read(this.client,'plugins.inspect',{revision});

@@ -30,6 +30,31 @@ try {
   await assert.rejects(client.query({id:"fixture.read",version:1},{text:"x".repeat(sdk.MAX_UI_MESSAGE_BYTES)}),/quota/);
   client.dispose();channel.port2.close();
   await assert.rejects(client.operation("op"),/closed/);
+  const testChannel=new MessageChannel(),testClient=new sdk.PluginViewClient(testChannel.port1,{...init,features:['test_projects_v1']});
+  let testSequence=0;const testCalls=[];
+  testChannel.port2.on('message',message=>{
+    testCalls.push(message);
+    testChannel.port2.postMessage({protocol_version:1,connection:init.connection,view:init.view.view,sequence:++testSequence,request:message.request,ok:true,
+      result:message.body.type==='open_test_workspace'?{navigation_requested:true}:message.body});
+  });
+  const selected=testClient.testProject('test-original');
+  await selected.query({id:'fixture.read',version:1},{});
+  await selected.control({id:'fixture.answer',version:2},{value:'test'});
+  await selected.invoke({id:'fixture.run',version:1},{value:1},{requestId:'original-request'});
+  await selected.operation('original-operation');await selected.cancel('original-operation');
+  assert.deepEqual(testCalls.map(call=>call.test_project),Array(5).fill('test-original'));
+  assert.deepEqual(testCalls.map(call=>call.body.type),['query','control','invoke','get_operation','cancel']);
+  assert.equal(testCalls[2].body.request_id,'original-request');
+  await testClient.query({id:'plugins.list',version:1},{});assert.equal(testCalls.at(-1).test_project,undefined);
+  for(const body of [{type:'set_state',expected_version:0,state:{}},{type:'register_close_handler',renderer:'renderer'},{type:'open_test_workspace',test_project:'test-original'}])
+    await assert.rejects(testClient.request(body,'test-original'),/ordinary Host port/);
+  for(const id of ['', 'bad..id','/analysis',null])assert.throws(()=>testClient.testProject(id),/identity/);
+  assert.throws(()=>client.testProject('test-original'),/unavailable/);
+  await testClient.openTestWorkspace('test-original');
+  assert.equal(testCalls.at(-1).test_project,undefined);
+  assert.deepEqual(testCalls.at(-1).body,{type:'open_test_workspace',test_project:'test-original'});
+  testClient.dispose();testChannel.port2.close();
+  await assert.rejects(selected.query({id:'fixture.read',version:1},{}),/closed/);
   const staleChannel=new MessageChannel(),stale=new sdk.PluginViewClient(staleChannel.port1,init);
   staleChannel.port2.on("message",message=>staleChannel.port2.postMessage({protocol_version:1,connection:"another",view:"view",sequence:1,request:message.request,ok:true,result:null}));
   await assert.rejects(stale.query({id:"fixture.read",version:1},{}),/identity or sequence/);

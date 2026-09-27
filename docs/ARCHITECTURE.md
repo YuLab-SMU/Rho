@@ -59,8 +59,7 @@ child Operation IDs in the original parent's recovery, even if a catalog write
 fails. A current-process proof that no backend ever
 started can also establish stopped state; a historical record alone cannot.
 Confirmed stop releases parent source pins but preserves independent directories,
-archives and journals as recovery evidence. This native lifetime underpins the
-still-unfinished Studio test UI.
+archives and journals as recovery evidence. Studio uses this native lifetime through ordinary declared public ports.
 Public transport selection retains the same caller and five Host ports. Optional
 `SessionFrame.test_project` selects an existing child for session/HTTP calls;
 connected CLI `--test-project` supplies that field. Parent project-root checks
@@ -75,6 +74,19 @@ instance/project/window. Invalid, unavailable or stopped selection never falls
 back to analysis, starts a Host or recovers work. Fixed application endpoints are
 unavailable to this shell. These are transport references, not native filesystem
 sandboxing or additional authority.
+
+An ordinary parent plugin view may explicitly select one existing test child in
+`PluginViewMessage.test_project` for the five public ports. Original private view
+credentials, sequence, principal, window and capability grants validate first.
+Selection additionally requires an active non-preview view's declared
+`plugins.test_project@1` grant and current parent `plugins.read`/`plugins.run`.
+These selector scopes never broaden the actual capability grant. Intrinsic
+presentation/state requests cannot retarget; child draft writes cannot use the
+parent's close-time persistence exception. Original get/cancel requests remain
+owned by the originating view in the selected journal. No child is created by a
+read. Explicit `open_test_workspace` validates the existing child and original
+window, then the focused browser shell alone constructs the credentialed URL.
+Studio is an ordinary consumer; no Studio-specific routing or authority exists.
 
 Host drain cancels and joins the plugin lifecycle publication task before returning;
 a pending observation cannot retain the original journal lock across immediate reopen.

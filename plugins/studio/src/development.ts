@@ -3,8 +3,10 @@
 import type { PluginBuildResult, PluginInspection, PluginInstanceObservation, PluginViewRecord, PluginWindowLayout, PluginWindowNode, PreviewPlugin, OpenedPluginWindowView } from '../public/plugin-protocol/index.js';
 import { ViewRequestError } from '../public/plugin-ui/index.js';
 import { type Client, type Intent, type RecordReply, json, same, terminal, verifyOriginal, inspectOriginal } from './operations.js';
+import { BackendTest, emptyBackendTest, type BackendTestState } from './backend-test.js';
 
 export interface DevelopmentState {
+  testing?: BackendTestState;
   pending: Intent | null;
   stopRequested?: string;
   build: RecordReply | null;
@@ -40,7 +42,10 @@ function firstGroup(node: PluginWindowNode): string | null {
 
 export class Development {
   data = emptyDevelopment();
-  constructor(readonly client: Client, private readonly persist: () => Promise<unknown>, private readonly guard: () => void) {}
+  readonly testing: BackendTest;
+  constructor(readonly client: Client, private readonly persist: () => Promise<unknown>, private readonly guard: () => void) {
+    this.testing=new BackendTest(client,()=>this.data.testing??=emptyBackendTest(),value=>this.data.testing=value,persist,()=>{guard();if(this.data.pending)throw Error('Inspect the original build or preview request first.');});
+  }
   async restore(value: DevelopmentState) {
     if (!value || !['pending', 'build', 'preview', 'inputs'].every(key => Object.hasOwn(value, key))) throw Error('Saved development state is incomplete.');
     this.data = structuredClone(value);
@@ -52,8 +57,9 @@ export class Development {
       if (output && (!digest(output.revision) || output.operation_id !== record.operation.operation_id || output.revision !== (record.operation.normalized_arguments as any)?.revision)) throw Error('Saved build evidence has a different identity.');
     }
     if (this.data.preview) this.previewIdentity(this.data.preview.instance);
+    if (this.data.testing) this.testing.validate();
   }
-  private available() { this.guard(); if (this.data.pending) throw Error('Inspect the original development request before starting another action.'); }
+  private available() { this.guard(); if (this.data.pending || this.data.testing?.pending) throw Error('Inspect the original development request before starting another action.'); }
   private validateIntent() {
     const intent = this.data.pending;
     if (!intent) return;

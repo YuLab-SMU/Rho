@@ -4,7 +4,7 @@ import { MessageChannel } from "node:worker_threads";
 export async function checkViewClose(sdk) {
   const channel = new MessageChannel();
   const client = new sdk.PluginViewClient(channel.port1, { protocol_version: 1, connection: "connection",
-    features: ["view_close_v1", "external_links_v1", "resource_download_v1"], view: { view: "view", state: { text: "old" }, state_version: 0 } });
+    features: ["view_close_v1", "external_links_v1", "resource_download_v1", "test_projects_v1"], view: { view: "view", state: { text: "old" }, state_version: 0 } });
   let phase = { phase: "open" }, version = 0, sequence = 0, state = { text: "old" };
   const requests = [];
   channel.port2.on("message", message => {
@@ -38,6 +38,10 @@ export async function checkViewClose(sdk) {
     await assert.rejects(client.invoke({ id: "fixture.run", version: 1 }, {}), /closure is preparing/);
     await assert.rejects(client.control({ id: "fixture.answer", version: 1 }, {}), /closure is preparing/);
     await assert.rejects(client.cancel("accepted-work"), /closure is preparing/);
+    await assert.rejects(client.openTestWorkspace("test-child"), /closure is preparing/);
+    const child=client.testProject("test-child");
+    await assert.rejects(child.control({id:"documents.stage",version:1},{}), /closure is preparing/);
+    await assert.rejects(child.invoke({id:"documents.save",version:1},{}), /closure is preparing/);
     await client.operation("accepted-work"); // Read-only recovery remains available.
     release(); await observing;
     const prepared = requests.filter(r => r.type === "prepare_close");

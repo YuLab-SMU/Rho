@@ -16,8 +16,8 @@ beforeEach(() => {
   });
 });
 afterEach(() => { disposals.splice(0).forEach(dispose => dispose()); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
-function mount() {
-  const client = new HostClient("private-host-credential", "window-a", "test-child");
+function mount(testProject: string | null = "test-child") {
+  const client = new HostClient("private-host-credential", "window-a", testProject ?? undefined);
   const request = vi.spyOn(client, "request").mockResolvedValue({ ok: true, result: {} });
   const release = vi.spyOn(client, "port").mockResolvedValue({ released: true });
   const container = document.createElement("div"); document.body.append(container);
@@ -25,10 +25,31 @@ function mount() {
   const dispose = mountPluginFrame(container, client, "/analysis", connection, failed); disposals.push(dispose);
   const messagePort = port;
   let sequence = 0;
-  const send = (body: PluginViewRequest) => messagePort.onmessage!({ data: { protocol_version: 1, connection: connection.connection,
-    view: connection.view.view, sequence: ++sequence, request: `request-${sequence}`, body } });
+  const send = (body: PluginViewRequest, testProject?: string) => messagePort.onmessage!({ data: { protocol_version: 1, connection: connection.connection,
+    view: connection.view.view, sequence: ++sequence, request: `request-${sequence}`, test_project: testProject, body } });
   return { client, request, release, container, failed, dispose, send, messagePort };
 }
+it("forwards an explicit child selection inside the original private view channel", async () => {
+  const frame = mount(null); frame.send({ type: "query", capability: { id: "plugins.instances", version: 1 }, arguments: {} }, "selected-child");
+  await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+  expect(frame.request.mock.calls[0]).toEqual(["/api/plugin-view", { project_root: "/analysis", call_token: connection.call_token,
+    message: { protocol_version: 1, connection: connection.connection, view: connection.view.view, sequence: 7,
+      request: "request-1", test_project: "selected-child", body: { type: "query", capability: { id: "plugins.instances", version: 1 }, arguments: {} } } }]);
+});
+it.each(["valid", "unfocused", "wrong-target"])("opens a test workspace only for an exact Host result and current gesture: %s", async mode => {
+  const frame = mount(null), open = vi.spyOn(frame.client, "openTestWorkspace").mockReturnValue({ navigation_requested: true });
+  vi.spyOn(document, "hasFocus").mockReturnValue(mode !== "unfocused");
+  vi.stubGlobal("navigator", { userActivation: { isActive: true } });
+  frame.container.querySelector("iframe")!.focus();
+  frame.request.mockResolvedValue({ ok: true, result: { authorized_view: "view-a", window: "window-a", test_project: mode === "wrong-target" ? "wrong" : "selected-child" } });
+  frame.send({ type: "open_test_workspace", test_project: "selected-child" });
+  await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+  const reply = port.postMessage.mock.calls[0]![0];
+  expect(reply.ok).toBe(mode === "valid");
+  if (mode === "valid") { expect(open).toHaveBeenCalledExactlyOnceWith("selected-child", "window-a"); expect(reply.result).toEqual({ navigation_requested: true }); }
+  else expect(open).not.toHaveBeenCalled();
+  expect(JSON.stringify(reply)).not.toContain("private-host-credential");
+});
 it("retires only acknowledged handlers after destruction, through a selected keepalive Control", async () => {
   const frame = mount();
   frame.send({ type: "register_close_handler", renderer: "document-a" });

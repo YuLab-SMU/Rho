@@ -1,7 +1,7 @@
 # Plugin Studio
 
 An ordinary removable UI plugin using the public protocol and UI SDK. Open its
-`studio` contribution with empty configuration. It has no scientific grants.
+`studio` contribution with empty configuration. Management grants are explicit: test creation and view opening can delegate the standard declared scopes to selected packages; Studio has no direct scientific operation grant.
 Choose an installed revision and an existing development branch, or create a new
 branch. Source edits use the native immutable checkpoint ports and synchronized
 8 MiB document drafts. No package install, build, runtime or scene change is
@@ -55,6 +55,22 @@ requires an explicit Close with saved state action, retaining only acknowledged
 state. Release is enabled after confirmed closure. The preview never becomes a
 scenario runtime; existing runtime instances retain their versions.
 
-Disposable-project real-backend tests, archive import/export, Agent tasks and
-scenario application remain unfinished. The inert editing canvas is separate
+Explicit backend test uses the selected checkpoint and artifact in a new disposable
+project. Use selected build prepares an editable subject selection; additional
+exact dependency instances can be declared by alias. New disposable test project
+calls the native lifecycle owner. It does not reuse the current analysis session.
+Open test view uses the selected contribution, view configuration and initial state;
+Open test workspace is a separate explicit browser action. The containing shell
+keeps credentials private. Close test view flushes that original child view; Stop
+test project requires native cleanup, without deleting the retained journal.
+Refresh distinguishes live native state from recorded unavailable state.
+
+Creation, opening, closure and stop retain their original request and exact target
+before dispatch. Lost receipts can be inspected after reload without replay. Only
+the original Studio view can retry the original request. Child Operation IDs remain
+inspectable through the parent journal port after stop. Failed activation and
+uncertain cleanup retain their original evidence; no replacement is automatic.
+The fixture preview and backend test have separate instances and state.
+
+Archive import/export, Agent tasks and scenario application remain unfinished. The inert editing canvas is separate
 from executable fixture preview. Default delivery is not yet changed.

@@ -57,8 +57,12 @@ configuration and dependency aliases; it accepts no existing project path or
 session. Keep the returned test identity, lifecycle version and original Operation.
 Stop refuses active work or connections and reports failed cleanup explicitly.
 Directories and journals remain available as recovery evidence; reading history
-never restarts a test. Studio's end-user controls remain unfinished. To use an
-already created live test through the public edges:
+never restarts a test. In Studio’s **Build & preview**, **Use selected build**
+prepares an exact subject selection. **New disposable test project** creates it;
+**Open test view** and **Open test workspace** are separate actions. The selected
+view configuration and initial state are used at opening. Inspect retained requests
+after a lost reply; do not create a replacement to recover an original result.
+To use an already created live test through other public edges:
 
 - HTTP `/api/host` and JSON-lines session frames accept `test_project` beside
   `id` and `request`. Keep `project_root` as the parent Host's root on HTTP.
@@ -76,10 +80,11 @@ already created live test through the public edges:
 
 Unavailable or stopped tests report an error and never open the current analysis
 instead. Close contributed views normally before requesting stop. After browser refresh,
-previous document registrations can prevent a flush confirmation; inspect the
+a lost document-end notification can prevent a flush confirmation; inspect the
 saved version and use the explicit **Close with saved state…** recovery if needed.
 This retains acknowledged state and does not claim that an absent document saved
-its buffer. Retired-document cleanup is still unfinished. Retained test records
+its buffer. A confirmed document-end notification retires only that renderer and
+does not claim a save. Retained test records
 remain readable through the parent lifecycle observation ports.
 
 ### Open the bundled demo

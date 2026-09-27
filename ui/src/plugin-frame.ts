@@ -59,11 +59,11 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
         window: connection.view.window, renderer, call_token: connection.call_token } satisfies ReleasePluginViewRenderer),
     } }, client.testProject ?? null, true).catch(() => { /* Unconfirmed release retains native recovery. */ });
   };
-  const send = (body: PluginViewRequest, request: string = crypto.randomUUID()) => {
+  const send = (body: PluginViewRequest, request: string = crypto.randomUUID(), testProject?: string) => {
     if (disposed) return Promise.reject(new Error("The view connection is closed."));
     if (serverSequence >= 0xffffffff) return Promise.reject(new Error("The view sequence is exhausted."));
     const message: PluginViewMessage = { protocol_version: 1, connection: connection.connection,
-      view: connection.view.view, sequence: ++serverSequence, request, body };
+      view: connection.view.view, sequence: ++serverSequence, request, ...(testProject !== undefined ? { test_project: testProject } : {}), body };
     return client.request<SessionReply>("/api/plugin-view", { project_root: project, call_token: connection.call_token, message });
   };
   const internal = async (body: PluginViewRequest) => {
@@ -97,7 +97,7 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
       message.view !== connection.view.view || message.sequence !== sequence + 1 || typeof message.request !== "string" ||
       !message.body || typeof message.body.type !== "string" || pending >= 128) { fence("The view connection failed its identity, sequence or size check."); return; }
     sequence++; pending++;
-    const currentGesture = (message.body.type === "open_external_url" || message.body.type === "download_resource" || message.body.type === "begin_text_copy" && clipboardAvailable) &&
+    const currentGesture = (message.body.type === "open_external_url" || message.body.type === "open_test_workspace" || message.body.type === "download_resource" || message.body.type === "begin_text_copy" && clipboardAvailable) &&
       document.hasFocus() && document.activeElement === iframe && navigator.userActivation?.isActive === true;
     // Allocate the wire sequence before starting concurrent requests. The Host
     // orders their acceptance, not completion: slow reads cannot block control.
@@ -107,7 +107,7 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
       let body: PluginViewRequest;
       try {
         body = scopedBody(message.body);
-        reply = await send(body, message.request);
+        reply = await send(body, message.request, message.test_project);
       } catch (error) { fence(error instanceof Error ? error.message : String(error)); return; }
       if (reply.ok && body.type === "register_close_handler") {
         // A late acknowledgement still identifies this destroyed document;
@@ -158,6 +158,18 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
           reply = { ...reply, ok: false, result: undefined, error: error instanceof Error ? error.message : String(error) };
         }
       }
+      if (reply.ok && message.body.type === "open_test_workspace") {
+        try {
+          const authorized = reply.result as { authorized_view?: string; test_project?: string; window?: string };
+          if (authorized?.authorized_view !== connection.view.view || authorized.test_project !== message.body.test_project || authorized.window !== connection.view.window)
+            throw new Error("The Host did not validate this test workspace request.");
+          if (!currentGesture || !document.hasFocus() || document.activeElement !== iframe || !navigator.userActivation?.isActive)
+            throw new Error("Use an explicit Open test workspace action in this view.");
+          reply = { ...reply, result: client.openTestWorkspace(authorized.test_project, authorized.window) };
+        } catch (error) {
+          reply = { ...reply, ok: false, result: undefined, error: error instanceof Error ? error.message : String(error) };
+        }
+      }
       if (disposed) return;
       const response = { protocol_version: 1, connection: connection.connection, view: connection.view.view,
         sequence: ++replies, request: message.request, ok: reply.ok, result: reply.result, error: reply.error, diagnostic: reply.diagnostic };
@@ -178,7 +190,7 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
     // Opaque origins require '*'; the transferred port is addressed to this
     // exact WindowProxy and bootstrap is tied to this document's random nonce.
     iframe.contentWindow?.postMessage({ type: "rho:view:connect", protocol_version: 1, nonce,
-      connection: connection.connection, view: connection.view, features: ["view_close_v1", "external_links_v1", "resource_download_v1", ...(clipboardAvailable ? ["text_copy_v1"] : [])] }, "*", [channel.port2]);
+      connection: connection.connection, view: connection.view, features: ["view_close_v1", "external_links_v1", "resource_download_v1", "test_projects_v1", ...(clipboardAvailable ? ["text_copy_v1"] : [])] }, "*", [channel.port2]);
   };
   window.addEventListener("message", ready);
   surface.append(iframe);

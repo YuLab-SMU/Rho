@@ -11,6 +11,24 @@ export type { CapabilityKey, PluginViewRecord, PluginViewRequest } from "../plug
 export const UI_PROTOCOL_VERSION = 1;
 export const MAX_UI_MESSAGE_BYTES = 1024 * 1024;
 export const MAX_UI_PENDING = 128;
+function testProjectId(value: string): string {
+  if (typeof value !== "string" || !/^[a-z][a-z0-9._-]{0,127}$/.test(value) || value.includes(".."))
+    throw new Error("Invalid disposable test project identity.");
+  return value;
+}
+const testPortRequest = (body: PluginViewRequest) => ["query", "control", "invoke", "get_operation", "cancel"].includes(body.type);
+/** A fixed child selection over the original document channel. No view-state,
+ * credential, principal or project-path authority is exposed by this facade. */
+export class PluginTestClient {
+  constructor(private readonly send: <T>(body: PluginViewRequest) => Promise<T>) {}
+  query<T = unknown>(capability: CapabilityKey, arguments_: JsonValue) { return this.send<T>({ type: "query", capability, arguments: arguments_ }); }
+  control<T = unknown>(capability: CapabilityKey, arguments_: JsonValue) { return this.send<T>({ type: "control", capability, arguments: arguments_ }); }
+  invoke<T = unknown>(capability: CapabilityKey, arguments_: JsonValue, options: { requestId?: string; preconditions?: JsonValue[] } = {}) {
+    return this.send<T>({ type: "invoke", capability, arguments: arguments_, request_id: options.requestId ?? crypto.randomUUID(), preconditions: options.preconditions ?? [] });
+  }
+  operation<T = unknown>(operationId: string) { return this.send<T>({ type: "get_operation", operation_id: operationId }); }
+  cancel<T = unknown>(operationId: string) { return this.send<T>({ type: "cancel", operation_id: operationId }); }
+}
 const isDraftFlush = (body: PluginViewRequest) =>
   (body.type === "control" && body.capability.id === "documents.stage" && body.capability.version === 1) ||
   (body.type === "invoke" && body.capability.id === "documents.save" && body.capability.version === 1);
@@ -73,15 +91,20 @@ export class PluginViewClient {
     try { await cooperation.start(); return cooperation; }
     catch (error) { cooperation.dispose(); this.closeCooperation = null; throw error; }
   }
-  request<T = unknown>(body: PluginViewRequest): Promise<T> {
+  request<T = unknown>(body: PluginViewRequest, testProject?: string): Promise<T> {
     if (this.closed) return Promise.reject(new Error("View connection is closed"));
-    if (this.closeCooperation?.getSnapshot().preparing && !isDraftFlush(body) && ["invoke", "control", "cancel", "begin_text_copy", "finish_text_copy", "open_external_url", "download_resource"].includes(body.type))
+    if (testProject !== undefined) {
+      try { testProjectId(testProject); } catch (error) { return Promise.reject(error); }
+      if (!this.initialization.features?.includes("test_projects_v1") || !testPortRequest(body))
+        return Promise.reject(new Error("Test selection is available only for ordinary Host port calls in a supporting container."));
+    }
+    if (this.closeCooperation?.getSnapshot().preparing && (!isDraftFlush(body) || testProject !== undefined) && ["invoke", "control", "cancel", "begin_text_copy", "finish_text_copy", "open_external_url", "open_test_workspace", "download_resource"].includes(body.type))
       return Promise.reject(new Error("View closure is preparing; wait before starting another action."));
     if (this.pending.size >= MAX_UI_PENDING) return Promise.reject(new Error("View request quota reached"));
     if (this.sequence >= 0xffffffff) { this.dispose("View sequence exhausted"); return Promise.reject(new Error("View sequence exhausted")); }
     const request = crypto.randomUUID();
     const message: PluginViewMessage = { protocol_version: UI_PROTOCOL_VERSION, connection: this.initialization.connection,
-      view: this.current.view, sequence: this.sequence + 1, request, body };
+      view: this.current.view, sequence: this.sequence + 1, request, ...(testProject !== undefined ? { test_project: testProject } : {}), body };
     if (!boundedJson(message)) return Promise.reject(new Error("View request exceeds the message quota"));
     this.sequence++;
     return new Promise<T>((resolve, reject) => {
@@ -105,6 +128,18 @@ export class PluginViewClient {
   }
   operation<T = unknown>(operationId: string) { return this.request<T>({ type: "get_operation", operation_id: operationId }); }
   cancel<T = unknown>(operationId: string) { return this.request<T>({ type: "cancel", operation_id: operationId }); }
+  testProject(id: string): PluginTestClient {
+    const selected = testProjectId(id);
+    if (!this.initialization.features?.includes("test_projects_v1")) throw new Error("Disposable test projects are unavailable in this container.");
+    return new PluginTestClient(<T>(body: PluginViewRequest) => this.request<T>(body, selected));
+  }
+  /** Explicit Open test workspace action. The containing shell constructs the
+   * private same-Host URL; resolution confirms navigation request, not loading. */
+  async openTestWorkspace(id: string): Promise<void> {
+    if (!this.initialization.features?.includes("test_projects_v1")) throw new Error("Disposable test projects are unavailable in this container.");
+    const result = await this.request<{ navigation_requested: boolean }>({ type: "open_test_workspace", test_project: testProjectId(id) });
+    if (result?.navigation_requested !== true) throw new Error("Test workspace navigation is unconfirmed.");
+  }
   /** Explicit link action only. Acknowledges a new browser navigation request,
    * not remote page loading. No opener, referrer or Host credential is sent. */
   async openExternal(url: string): Promise<void> {

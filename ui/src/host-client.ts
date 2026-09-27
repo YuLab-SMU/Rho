@@ -1,4 +1,5 @@
 import type { PluginTestProjectObservation } from "../../sdk/plugin-protocol/index.js";
+import { requestExternalNavigation } from "./plugin-external";
 import type { HostRequest } from "./generated/HostRequest";
 import type { SessionReply } from "./generated/SessionReply";
 import type { WorkbenchInfo } from "./generated/WorkbenchInfo";
@@ -137,6 +138,15 @@ export class HostClient {
   pluginAssetUrl(connection: string, token: string, path: string) {
     const prefix = this.testProject ? `/view/plugin-test/${encodeURIComponent(this.testProject)}` : "/view/plugin";
     return `${prefix}/${encodeURIComponent(connection)}/${encodeURIComponent(token)}/${path.split("/").map(encodeURIComponent).join("/")}`;
+  }
+  openTestWorkspace(testProject: string, windowId: string, open?: () => Window | null) {
+    if (this.testProject || windowId !== this.windowId || !/^[a-z][a-z0-9._-]{0,127}$/.test(testProject) || testProject.includes(".."))
+      throw new Error("The test workspace does not belong to this containing window.");
+    const address = new URL("/", location.href);
+    address.searchParams.set("plugin-window", ""); address.searchParams.set("window", windowId);
+    address.searchParams.set("test-project", testProject);
+    address.hash = new URLSearchParams({ token: this.token }).toString();
+    return requestExternalNavigation(address.href, open);
   }
   async testProjectObservation(project: string): Promise<PluginTestProjectObservation | undefined> {
     if (!this.testProject) return undefined;

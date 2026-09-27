@@ -24,6 +24,23 @@ it("keeps an explicit window reference in a credential-free resume URL", () => {
   }
 });
 function client() { const host = new HostClient("test-only-token"); clients.push(host); return host; }
+it("constructs only a same-Host private test URL and severs the opener", () => {
+  const host = new HostClient("private-launch-token", "parent-window"); clients.push(host);
+  const target = { opener: window, document: document.implementation.createHTMLDocument(), close: vi.fn() };
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  const open = vi.fn(() => target as unknown as Window);
+  expect(host.openTestWorkspace("test-child", "parent-window", open)).toEqual({ navigation_requested: true });
+  const link = target.document.querySelector('a')!, address = new URL(link.href);
+  expect(address.origin).toBe(location.origin); expect(address.pathname).toBe("/");
+  expect(address.searchParams.get("window")).toBe("parent-window"); expect(address.searchParams.get("test-project")).toBe("test-child");
+  expect(address.searchParams.has("plugin-window")).toBe(true); expect(new URLSearchParams(address.hash.slice(1)).get("token")).toBe("private-launch-token");
+  expect(target.opener).toBeNull(); expect(link.rel).toContain("noreferrer"); expect(link.referrerPolicy).toBe("no-referrer");
+  expect(click).toHaveBeenCalledOnce();
+  for (const id of ["", "bad..id", "https://outside.invalid"]) expect(() => host.openTestWorkspace(id, "parent-window", open)).toThrow();
+  expect(() => host.openTestWorkspace("test-child", "another-window", open)).toThrow();
+  expect(() => new HostClient("private-launch-token", "parent-window", "original-child").openTestWorkspace("test-child", "parent-window", open)).toThrow();
+  expect(open).toHaveBeenCalledTimes(1); click.mockRestore();
+});
 it("keeps ending-document Control delivery on the authenticated selected Host port", async () => {
   const fetch = vi.fn(async (_url: unknown, options?: RequestInit) => {
     const { frame } = JSON.parse(String(options?.body));

@@ -442,12 +442,13 @@ impl PluginService {
         view: &ViewInstanceId,
         sequence: u32,
         capability: Option<&host::CapabilityRef>,
+        selecting_test: bool,
     ) -> Result<host::CallContext, OperationError> {
         let mut changed = self.view_sequences.subscribe();
         tokio::time::timeout(std::time::Duration::from_secs(10), async {
             loop {
                 match self.try_view_context(
-                    parent, connection, token, window, view, sequence, capability,
+                    parent, connection, token, window, view, sequence, capability, selecting_test,
                 ) {
                     Ok(None) => {
                         changed.changed().await.map_err(invalid)?;
@@ -472,6 +473,7 @@ impl PluginService {
         view: &ViewInstanceId,
         sequence: u32,
         capability: Option<&host::CapabilityRef>,
+        selecting_test: bool,
     ) -> Result<Option<host::CallContext>, OperationError> {
         let mut views = self.views.lock().unwrap();
         let live = views
@@ -499,6 +501,18 @@ impl PluginService {
             observation.instance.identity == live.connection.view.instance
                 && observation.instance.state == InstanceState::Active
         });
+        if selecting_test {
+            // Target selection needs its own frozen declaration. Do not merge
+            // these management scopes into the actual capability's grant.
+            let declared = live.connection.grants.iter().find(|grant|
+                grant.capability.id.as_str() == "plugins.test_project" && grant.capability.version == 1);
+            if !active || live.connection.view.purpose == PluginInstancePurpose::FixturePreview
+                || ![PLUGINS_READ_SCOPE, PLUGINS_RUN_SCOPE].iter().all(|scope|
+                    parent.scopes.contains(*scope) && declared.is_some_and(|grant| grant.scopes.contains(*scope)))
+            {
+                return Err(invalid("test project selection requires an active view's declared plugins.test_project grant with plugins.read and plugins.run"));
+            }
+        }
         let mut scope = host::ViewCallScope {
             window: live.connection.view.window.clone(),
             draft_source: (live.closing.is_some() || !active).then(|| DraftSource {

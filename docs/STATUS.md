@@ -11,85 +11,79 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
-Explicit backend tests now have a native disposable-project owner. The public
-`plugins.test_create/test_stop` ports create and stop a separate generic Host,
+Explicit backend tests have a native disposable-project owner and ordinary Studio
+controls. `plugins.test_create/test_stop` create and stop a separate generic Host,
 package catalog and Operation journal for exact source/artifact selections.
-Dependencies, configuration, grants, storage containment and native quotas are
-checked without borrowing current analysis instances. Open views and accepted
-work prevent stop; failed or partial cleanup retains its original records and
-source protections. Confirmed stop keeps the independent directory as evidence.
-Scoped observations and `plugins.test_operation` read retained original records
-without restarting a child. Session/HTTP frames, connected CLI and MCP now have
-explicit child selection, and the generic browser shell scopes layouts, view
-messages and immutable asset imports to that child. It labels the disposable
-workspace and preserves selection on refresh. Missing or stopped selections
-cannot fall back to analysis. MCP keeps selection fixed through RPC/GET/DELETE
-and holds a native lease until disconnect. Studio's end-user test controls remain
-unfinished; the transport alone does not complete that workflow.
+Dependencies, configuration, grants, containment and native quotas validate without
+borrowing current analysis. Open views, borrowed connections and accepted work
+prevent stop; failed cleanup retains original records and source protections.
+Confirmed stop preserves the independent directory and journal as evidence.
+Observations and `plugins.test_operation` never restart a recorded child.
 
-Destroyed plugin documents now retire their exact close-handler registration
-through the generic `views.release_renderer` Control. The containing shell assigns
-private per-document identities and sends a keepalive notification after actual
-destruction; hidden or cached documents stay registered. This does not save state,
-close the view or release a backend. A document ending during preparation refuses
-the original close. Missing notifications retain uncertainty and the explicit
-saved-state recovery path. Refreshing an older Host cannot add this native port;
-use a rebuilt Host when an authorized restart is appropriate.
+Studio's Build & preview surface now separates fixture preview from explicit
+backend testing. Use selected build prepares a subject and optional exact
+dependency selections. Creation, opening a test view, opening its workspace,
+closure and stop are separate actions. Original requests and child selections are
+saved before dispatch; lost results are inspected after reload without replay.
+Replacement Studio views cannot resubmit an originating view's request. Known
+child Operations remain readable through the parent after stop. Failed activation
+and uncertain outcomes retain their original evidence. Live and recorded state
+are distinguished; no replacement test starts automatically.
 
-All nine native draft/close cases and 46 affected client unit cases pass, including
-principal/window/project checks, independent document identities, late or lost
-registration receipts, prepared/unprepared document loss and last-handler recovery.
-The first native test run had one failure because its all-prepared case allowed
-native closure to finish before release; the corrected case exercises loss while
-another participant remains pending. The independent protocol and public UI SDK
-checks, client generation/build/consistency, current binary build, dependency
-boundaries and governance checks pass.
+The public UI SDK selects child Query/Control/Invoke/GetOperation/Cancel calls over
+the original private view channel. It requires explicit test-project access and
+per-capability grants; selector scopes cannot expand those grants. Intrinsic
+view state, close cooperation and presentation remain on the original view.
+Selected draft writes are fenced during parent closure. Only the focused shell
+can open the requested child workspace and construct its credentialed URL.
+Session/HTTP, connected CLI and MCP retain their existing explicit selection and
+never fall back to analysis. MCP holds a native lease until disconnect.
 
-All three affected Chrome cases have passing results. The child case verifies
-normal closure after refresh and standalone navigation while analysis keeps its
-unsaved draft. Deliberately dropping one document-end notification retains the
-original uncertainty, requires explicit saved-state recovery, then permits child
-stop without falling back to analysis. Existing workspace closure, composition
-refusal, original lost-receipt retry and draining large-Unicode-draft restoration
-also pass. All 13 captures were inspected: normal/wide/constrained child and parent
-windows, standalone view, recovery dialogs, stopped child and large draft states.
-No overlap or page overflow was observed; constrained fixture content scrolls
-inside its iframe. The first combined browser run passed two cases but failed the
-new recovery fixture's missing tab-group input; the next child run failed because
-page routing did not intercept the unload keepalive. Corrected only the fixtures:
-use the observed group and reject the exact ending-document fetch while exercising
-the real pagehide handler and iframe destruction. The final child run passes.
-Exact commands, failed runs and retained traces are in
-`target/plugin-refactor/renderer-verification.txt`. No user Host or R session was
-replaced; no real-R or full-workspace audit was run for this lifecycle change.
+Six native lifecycle cases pass, including the new ordinary-view case for selection,
+missing grants, fixture refusal, independent original requests and cancellation,
+parent closure fencing and stopped-target refusal. Initial runs failed on fixture
+assumptions: an insufficient declared grant is refused at activation; cancellation
+is confirmed only when the fixture is configured to confirm it; parent idleness
+also requires releasing the test's explicitly borrowed child lease. Corrected
+fixtures pass without weakening native checks. Public protocol/SDK consumers and
+Studio's independent build/model recovery checks pass. Two initial model runs
+failed only on an expected error wording and a synchronous-throw assertion.
+Client generation/build/consistency and all 522 client tests in 53 files pass.
+The current binary build and both affected Chrome cases pass. Studio creates an
+exact native test, recovers a lost creation reply after reload without duplication,
+opens its separate workspace, calls its own backend, flushes the latest Unicode
+view text and stops the child while analysis keeps unsaved text. All thirteen
+affected captures were inspected: development/build diagnostics and backend
+lifecycle at normal, wide and constrained sizes, including scrolled controls and
+stopped state. There is no overlap or horizontal overflow; narrow controls remain
+accessible by scrolling. Unchanged editor/history layout observations are reused.
 
-The previous transport acceptance established separate journals/catalogs, scoped
-view tokens, opaque-origin imports, message replay refusal, stopped-state rejection,
-MCP connection leases and connected CLI/JSON-lines selection. The earlier browser
-case kept an analysis draft intact while the child saved, refreshed and stopped,
-with normal/wide/constrained captures inspected. Its close-after-refresh limitation
-motivated the document-retirement work above. Prior evidence is retained in
-`target/plugin-refactor/test-project-edges-verification.txt`. Studio backend-test
-controls and real-R acceptance remain unfinished.
+The first two backend browser runs exceeded the native initialization timeout;
+a separate direct launch of the unchanged Python fixture also exceeded ten seconds,
+then the same script completed its handshake in 0.255 seconds. Subsequent browser
+runs pass without changing production code or timeouts. The cause of the initial
+launch delay is not established; failed traces and native observations are retained.
+The first passing run needed additional scrolled captures for narrow controls;
+the final run includes those and confirms exact close-time saved text. Native draft
+and fixture-preview regressions pass all fourteen cases. Dependency and governance
+checks pass. Exact commands, failures and current evidence are in
+`target/plugin-refactor/studio-test-verification.txt`. No real-R or full-workspace
+audit, installation or publication was run for this change. The overall migration,
+Studio scenario application/archive/Agent workflows and default delivery remain
+unfinished.
 
-All five native lifecycle cases pass after fixing a plugin publication-task race
-that retained the parent journal during immediate reopen. Host drain now cancels
-and joins that task. The full case keeps parent analysis running through test
-creation/stop, refuses borrowed/busy/open-view stop attempts, injects a failed
-stopped-state write, inspects the original release and retries cleanup without
-replay. Separate cases cover failure recovery, containment/grants and the four-live-
-project quota. The two generic workspace, thirteen plugin, five shared-port and
-thirteen package repository regressions pass. All four new metadata cases pass
-after correcting an assertion that omitted a pre-existing dependency pin; no
-production change was needed for that correction. Public protocol generation,
-external NodeNext consumption, client build and client consistency checks pass.
-The creation-catalog-write fault case also passes: acknowledged activation IDs
-survive in the original parent recovery record if metadata saving fails, remain
-readable after stop/reopen, and a repeated request does not create another project.
-Exact commands, initial failures and current results are retained in
-`target/plugin-refactor/test-project-verification.txt`; no user Host or R session
-has been replaced. New lifecycle ports require a rebuilt Host; browser refresh
-alone cannot add them. Real-R acceptance is not established by these fixtures.
+Destroyed plugin documents retire their exact close-handler registration through
+the generic `views.release_renderer` Control. The shell assigns private document
+identities and sends keepalive notification after destruction; hidden/cached
+views remain registered. Retirement never claims a save, closes a view or releases
+a backend. Missing notifications retain uncertainty and explicit saved-state
+recovery. Prior nine native draft/close cases, affected browser cases and all 13
+captures passed inspection; retained evidence is in
+`target/plugin-refactor/renderer-verification.txt`. Previous transport and native
+repository/lifecycle checks are retained in `test-project-edges-verification.txt`
+and `test-project-verification.txt` in that directory. New native capabilities
+require a rebuilt Host; browser refresh alone cannot add them. User Hosts and R
+sessions have not been replaced.
 
 The explicit `--plugins-only` development mode now opens the generic package,
 window and Operation workspace through the shared Host ports. Its canonical
@@ -186,8 +180,8 @@ fixtures and denied writes, preserves Unicode and state through refresh, copies
 explicit text, closes/revokes assets and releases the instance. Preview captures
 at 1440/1920/390/220 px and three normal-view/close-refusal captures were inspected
 without clipping or overlap. This establishes fixture preview through the public
-SDK. Studio's end-user controls are verified below; its disposable-project testing
-UI remains unfinished, with native lifecycle progress recorded above. Exact commands and the corrected initial compile
+SDK. Studio's end-user controls are verified below; disposable-project testing
+progress is recorded at the top of this page. Exact commands and the corrected initial compile
 failure are recorded in `preview-verification.txt`.
 
 The user's running Host and R sessions have not been restarted. Full native package assemblies, real-R scene acceptance
@@ -251,8 +245,7 @@ Plugin boundaries, architecture and governance checks pass. The Studio UI stage
 reused the native build/client verification above; it changed no Host capability
 or embedded client source. The later generic-Host verification is recorded at the
 top of this page. User Hosts and R sessions were not replaced.
-Studio's disposable-project test controls, scenario application from Studio, archive
-UI, Agent integration, default delivery and remaining scientific migration are
+Scenario application from Studio, archive UI, Agent integration, default delivery and remaining scientific migration are
 still unfinished. The inert editing canvas remains separate from executable
 fixture preview.
 
@@ -344,7 +337,7 @@ view-opening dialogs. Initial browser failures and corrected fixture timing rema
 under `target/plugin-refactor/manager-browser*`; the final captures wait for both
 iframe geometry and compositor painting. Import/export still use
 the CLI. Plugin Studio now supports visual/source editing, native builds and
-fixture previews as described above. The disposable-test UI, real-R scene
+fixture previews and explicit disposable-test controls as described above. Real-R scene
 continuity, default delivery and removal of the fixed composition remain unfinished.
 The manager is not silently installed into existing user projects.
 

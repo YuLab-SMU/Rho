@@ -14,10 +14,10 @@ let navigationMode:'files'|'nodes'='nodes';
 let catalog:PluginCatalogPage={items:[],next:null,total:0},history:string[]=[],historyNext:string|null=null,historySelected:string|null=null,sourceKey='',inspectorKey='',fixtureKey='';
 let task:Promise<unknown>|null=null;
 const renderDevelopment=developmentPanel(studio,action,schedule,()=>!ready||busy||preparing||!!studio.pending||studio.drafts.unresolved);
-const frozen=()=>!ready||busy||preparing||!!studio.pending||!!studio.development.data.pending||studio.drafts.unresolved;
+const frozen=()=>!ready||busy||preparing||!!studio.pending||!!studio.development.data.pending||!!studio.development.data.testing?.pending||studio.drafts.unresolved;
 // A document save captures an older body while typing may continue. Source
 // mutations freeze editing; an in-flight draft transfer must not drop keystrokes.
-const editable=()=>ready&&!busy&&!preparing&&!studio.pending&&!studio.development.data.pending&&!!studio.branch;
+const editable=()=>ready&&!busy&&!preparing&&!studio.pending&&!studio.development.data.pending&&!studio.development.data.testing?.pending&&!!studio.branch;
 function show(id:string,text:string){get(id).textContent=text;get(id).hidden=!text;}
 function dialogErrors(){document.querySelectorAll<HTMLElement>('.dialog-error').forEach(item=>{item.textContent=error;item.hidden=!error;});}
 function report(e:unknown){error=diagnostic(e);show('error',error);dialogErrors();}

@@ -3,7 +3,7 @@
   "id": "org.rho.studio",
   "name": "Plugin Studio",
   "version": "0.1.0",
-  "description": "Edit plugin source on a development branch, build immutable checkpoints and run isolated fixture previews.",
+  "description": "Edit source on a development branch, build checkpoints, preview fixtures and explicitly test disposable projects.",
   "license": "AGPL-3.0-only",
   "source": {
     "files": [
@@ -21,7 +21,9 @@
       "build.mjs",
       "README.md",
       "src/development.ts",
-      "src/development-panel.ts"
+      "src/development-panel.ts",
+      "src/backend-test.ts",
+      "src/backend-test-panel.ts"
     ],
     "lockfiles": [
       "dependencies.lock"
@@ -250,7 +252,27 @@
         "version": 1
       },
       "scopes": [
-        "plugins.run"
+        "operation.read",
+        "project.references.read",
+        "application.read",
+        "application.control",
+        "skill.read",
+        "plugins.read",
+        "resources.read",
+        "documents.read",
+        "documents.write",
+        "plugins.write",
+        "plugins.run",
+        "workspace.run_r",
+        "workspace.read",
+        "project.read",
+        "project.write",
+        "environment.read",
+        "environment.write",
+        "process.run_local",
+        "remote.execute",
+        "slurm.read",
+        "slurm.write"
       ]
     },
     {
@@ -269,6 +291,65 @@
       },
       "scopes": [
         "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.test_create",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read",
+        "application.read",
+        "application.control",
+        "skill.read",
+        "plugins.read",
+        "resources.read",
+        "documents.read",
+        "documents.write",
+        "plugins.write",
+        "plugins.run",
+        "workspace.run_r",
+        "workspace.read",
+        "project.read",
+        "project.write",
+        "environment.read",
+        "environment.write",
+        "process.run_local",
+        "remote.execute",
+        "slurm.read",
+        "slurm.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.test_stop",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read",
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.test_project",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read",
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.test_operation",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read",
+        "operation.read"
       ]
     }
   ],

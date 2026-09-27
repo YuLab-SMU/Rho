@@ -17,6 +17,12 @@ try {
 import type { ActivatePlugin, WorkspacePaths, PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage, PendingCancellation, UpdatePluginWindowLayout, OpenPluginWindowView, ClosePluginView, PluginViewLifecycle, SaveDocumentDraft, StageDraftChunk, DocumentDraftChunk, ListDocumentDrafts, DocumentDraftPage, ContextSearch, ContextPage, PreviewContext, ContextPreview } from "../protocol/index.js";
 import type {ProjectReadCoverage,ProjectReadCoverageArguments} from "../protocol/index.js";
 import type {ReleasePluginViewRenderer,PluginViewRendererRelease} from "../protocol/index.js";
+import type {PluginViewMessage,PluginViewRequest} from "../protocol/index.js";
+const selectedTestMessage: PluginViewMessage = {protocol_version:1,connection:"connection",view:"view",sequence:1,request:"original",test_project:"test-one",body:{type:"query",capability:{id:"plugins.instances",version:1},arguments:{limit:20}}};
+const testWindowNavigation: PluginViewRequest = {type:"open_test_workspace",test_project:"test-one"};
+// @ts-expect-error Public plugin messages cannot carry the private Host credential.
+const forgedTestMessage:PluginViewMessage={...selectedTestMessage,token:"private"};
+void [selectedTestMessage,testWindowNavigation,forgedTestMessage];
 const endedDocument: ReleasePluginViewRenderer = { view: "view", connection: "connection", window: "window", renderer: "renderer", call_token: "shell-only" };
 const releaseReceipt: PluginViewRendererRelease = { view: endedDocument.view, renderer: endedDocument.renderer, released: true };
 // @ts-expect-error Deregistration is not a saved-state receipt.

@@ -126,6 +126,7 @@ Sources:
 - `scripts/fixtures/plugin-drafts.mjs`
 - `scripts/fixtures/plugin-ui.mjs`
 - `scripts/fixtures/ssh-slurm.mjs`
+- `scripts/fixtures/studio-backend-test.mjs`
 - `scripts/fixtures/studio-development.mjs`
 - `scripts/generate-editor-context.mjs`
 - `scripts/plugin-protocol.mjs`
@@ -188,6 +189,7 @@ Sources:
 - `ui/e2e/r-plugin-objects.spec.ts`
 - `ui/e2e/r-plugin-packages.spec.ts`
 - `ui/e2e/r-plugin-plots.spec.ts`
+- `ui/e2e/studio-backend-test.spec.ts`
 - `ui/e2e/studio-plugin.spec.ts`
 
 Checks:
@@ -279,7 +281,7 @@ Checks:
 - `plugins.resource-download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts"]`
 - `plugins.scenario-ports`: `["cargo","test","-p","rho-host","--test","plugin_scenarios","--locked"]`
 - `plugins.self-requirements`: `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"]`
-- `plugins.studio-browser`: `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts"]`
+- `plugins.studio-browser`: `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts","studio-backend-test.spec.ts"]`
 - `plugins.studio-model`: `["node","scripts/test-studio-plugin.mjs"]`
 - `plugins.test-project-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-test-project.spec.ts"]`
 - `plugins.test-project-edges`: `["cargo","test","-p","rho-workbench","--lib","plugin_test_","--locked"]`

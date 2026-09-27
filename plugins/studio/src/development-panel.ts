@@ -2,16 +2,18 @@ import type { PluginBuildResult, PluginInspection } from '../public/plugin-proto
 import type { Studio } from './model.js';
 import { read } from './model.js';
 import { buildDiagnostic } from './development.js';
+import { backendTestPanel } from './backend-test-panel.js';
 const get = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const short = (value: string) => value.startsWith('sha256:') ? value.slice(7, 15) : value;
 export function developmentPanel(studio: Studio, run: (work: () => Promise<unknown>) => void, changed: () => void, frozen: () => boolean) {
   const dev = studio.development;
+  const renderTest = backendTestPanel(studio, run, changed, frozen);
   let inspection: PluginInspection | null = null;
   const fields = { 'preview-configuration': 'configuration', 'preview-view-configuration': 'viewConfiguration', 'preview-state': 'viewState', 'preview-queries': 'queries' } as const;
   async function inspect() {
     const revision = studio.document?.data.revision;
     if (!revision) throw Error('Choose a source checkpoint first.');
-    if (!dev.data.pending) await dev.configure(revision);
+    if (!dev.data.pending && !dev.data.testing?.pending) await dev.configure(revision);
     const captured = dev.data.inputs?.revision ?? revision;
     inspection = await read(studio.client, 'plugins.inspect', { revision: captured });
     if (inspection!.summary.revision !== captured) throw Error('Inspection returned another source revision.');
@@ -31,21 +33,22 @@ export function developmentPanel(studio: Studio, run: (work: () => Promise<unkno
   get('inspect-development').onclick = () => run(async () => { await dev.recover(); if (!dev.data.pending) await inspect(); });
   get('retry-development').onclick = () => run(() => dev.dispatch());
   get('stop-build').onclick = () => run(() => dev.stopBuild());
-  get<HTMLInputElement>('build-timeout').oninput = () => { if (!dev.data.inputs || frozen() || dev.data.pending) return; dev.data.inputs.timeoutMinutes = get<HTMLInputElement>('build-timeout').value; changed(); };
+  get<HTMLInputElement>('build-timeout').oninput = () => { if (!dev.data.inputs || frozen() || dev.data.pending || dev.data.testing?.pending) return; dev.data.inputs.timeoutMinutes = get<HTMLInputElement>('build-timeout').value; changed(); };
   get('inspect-preview').onclick = () => run(() => dev.inspectPreview());
   get('close-preview').onclick = () => run(() => dev.closePreview());
   get('retain-preview').onclick = () => run(() => dev.closePreview(true));
   get('release-preview').onclick = () => run(() => dev.releasePreview());
   for (const [id, field] of Object.entries(fields)) get<HTMLTextAreaElement>(id).addEventListener('input', () => {
-    if (!dev.data.inputs || frozen() || dev.data.pending) return;
+    if (!dev.data.inputs || frozen() || dev.data.pending || dev.data.testing?.pending) return;
     dev.data.inputs[field] = get<HTMLTextAreaElement>(id).value; changed();
   });
   for (const [id, field] of [['preview-artifact', 'artifact'], ['preview-contribution', 'contribution']] as const) get<HTMLSelectElement>(id).onchange = () => {
-    if (!dev.data.inputs || frozen() || dev.data.pending) return;
+    if (!dev.data.inputs || frozen() || dev.data.pending || dev.data.testing?.pending) return;
     dev.data.inputs[field] = get<HTMLSelectElement>(id).value; changed();
   };
   return () => {
-    const data = dev.data, input = data.inputs, preview = data.preview, disabled = frozen() || !!data.pending;
+    const data = dev.data, input = data.inputs, preview = data.preview, disabled = frozen() || !!data.pending || !!data.testing?.pending;
+    renderTest();
     get<HTMLButtonElement>('development').disabled = !studio.document || frozen();
     get('development-source').textContent = input ? `${short(input.revision)} · artifact ${input.artifact ? short(input.artifact) : 'not built'}` : 'Choose a source checkpoint.';
     get('development-edits').textContent = studio.document?.dirty ? 'Checkpoint current edits before building or starting a preview.' : 'Builds use the saved source checkpoint. Current analysis keeps its own versions.';
@@ -65,8 +68,8 @@ export function developmentPanel(studio: Studio, run: (work: () => Promise<unkno
       if (select.dataset.key !== key) { select.dataset.key = key; select.replaceChildren(); for (const [value, label] of choices) { const option = document.createElement('option'); option.value = value!; option.textContent = label!; select.append(option); } }
       select.value = input?.[field] ?? ''; select.disabled = disabled || !input;
     }
-    get('development-summary').hidden = !data.pending;
-    get('development-summary').textContent = data.pending ? 'Build or preview request awaiting confirmation. Open Build & preview to inspect the original result.' : '';
+    get('development-summary').hidden = !data.pending && !data.testing?.pending;
+    get('development-summary').textContent = data.testing?.pending ? 'Backend-test request awaiting confirmation. Open Build & preview to inspect the original result.' : data.pending ? 'Build or preview request awaiting confirmation. Open Build & preview to inspect the original result.' : '';
     const timeout = get<HTMLInputElement>('build-timeout');
     if (document.activeElement !== timeout) timeout.value = input?.timeoutMinutes ?? '10'; timeout.disabled = disabled || !input;
     get<HTMLButtonElement>('stop-build').disabled = frozen() || data.pending?.capability.id !== 'plugins.build' || !data.pending.operation || data.pending.view !== studio.client.view.view;

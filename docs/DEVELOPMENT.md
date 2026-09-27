@@ -96,7 +96,15 @@ stopping a real long-running build and verifies the original terminal outcome,
 with no new artifact and no replay. Inspect the
 captured normal, wide and constrained screenshots before claiming visual completion.
 The editing canvas itself does not execute plugin code. These checks do not
-establish disposable-project real-backend testing or scenario application.
+establish scenario application. The separate `studio-backend-test.spec.ts` case
+uses a real external native backend and ordinary Studio: explicit creation, lost
+creation receipt and reload recovery, child view opening, private workspace
+navigation, native control, cooperative closure and stop while an analysis draft
+remains unsaved. Inspect its normal/wide/constrained captures. This establishes
+plugin lifecycle integration, not real-R acceptance. The model fixture additionally
+covers unacknowledged saves, replacement-view recovery, retained child journals,
+failed activation and uncertain cleanup. Public SDK tests cover selected five-port
+calls and refusal of selected intrinsic requests.
 
 Fixture preview uses `cargo test -p rho-host --test plugin_preview --locked` for
 exact artifact identity, no backend/project-path/grant creation, fixture-only
