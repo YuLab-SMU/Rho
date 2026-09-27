@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DeleteRCheckpoint",
+  "type": "object",
+  "properties": {
+    "expected_control": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reference": {
+      "$ref": "#/$defs/RCheckpointReference"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "reference"
+  ],
+  "$defs": {
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "RCheckpointReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/InstanceRef"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "provider",
+        "operation_id",
+        "digest",
+        "bytes"
+      ]
+    }
+  }
+}

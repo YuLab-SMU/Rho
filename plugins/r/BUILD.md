@@ -83,7 +83,7 @@ inspect the original Operation for that. See [public contracts](sdk/README.md).
 
 Release confirms native shutdown and keeps original resource bytes. The ordinary
 Viewer package can read retained HTML. Console and inspection views consume the
-public contracts; captured document execution and checkpoints still need integration.
+public contracts. Recovery capabilities also use those ports and original records.
 
 The engine's `recovery` module supplies the native archive for checkpoint migration.
 It uses a new `r-recovery-v1` directory under the initialized provider data root,
@@ -101,5 +101,38 @@ native layer with explicit `RHO_ARK`, `RHO_R_HOME` and `RHO_CHECKPOINT_HELPER` p
 The helper and its verified manifest must already exist. The test creates and
 stops disposable sessions. `node scripts/test-r-plugin-engine.mjs --recovery`
 repeats the archive and native tests in an independent public/plugin source tree.
-These checks do not establish ordinary RPC publication, recovery authorization,
-checkpoint-reference protection or the complete checkpoint interface.
+For ordinary RPC recovery, configure the existing canonical `checkpoint_helper_path`
+before explicitly creating a session. `r.session.checkpoint_available` reports its
+availability. No activation or query builds, installs or loads a helper into R.
+`r.capture_checkpoint` retains a small full manifest as a core resource and keeps
+the larger graph in its scoped native archive. `r.checkpoints` returns one bounded
+journal page; an empty page can still have a continuation. `r.checkpoint` observes
+current committed control state and native presence; presence is not a fresh hash
+check. `r.read_checkpoint` serves at most 64 KiB per request. Original references
+are identities, not permission or arbitrary filesystem paths.
+
+Select `operation.get`, `operation.list_recent` and `resources.read` optional
+grants for original-copy access. State-sensitive reads, restore and controls also
+require `operation.project_coverage` with `project.references.read`; hidden project
+records cannot establish absence of a pin or deletion. Reading old references
+works through a replacement instance without starting R. The original capture,
+manifest and native storage must still agree. `r.restore_checkpoint` checks the
+full payload digest and the existing empty candidate's native prerequisites.
+It never creates a replacement session or replays analysis code.
+
+`r.pin_checkpoint` and `r.delete_checkpoint` require the observed `control_head`
+as `expected_control` (null for an unchanged original). Unpin before deleting.
+Deletion commits logical retirement first, then attempts physical cleanup after
+the exact Host settlement. Observe `payload` to distinguish remaining bytes;
+`r.purge_checkpoint` retries cleanup using the committed deletion identity. Native
+control files alone establish no pin or deletion. Missing or uncertain original
+controls make the copy unavailable. Original metadata and results remain readable.
+
+`r.reconcile_checkpoint` qualifies a terminal failed/cancelled/uncertain original
+capture and copies complete native evidence into a new operation identity. The
+original outcome remains unchanged. Missing capture context preserves unknown
+library/namespace dependencies. Partial native bytes without a complete capture
+cannot be adopted. `scripts/test-r-recovery.mjs` exercises these public capabilities
+through an independent package and unchanged Host with disposable native sessions.
+Full Environment checkpoint-reference protection and Studio recovery UI remain
+separate integration work.

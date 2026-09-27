@@ -54,6 +54,14 @@
         "type": "integer",
         "minimum": 1,
         "maximum": 86400
+      },
+      "checkpoint_helper_path": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "minLength": 1,
+        "description": "Existing canonical path to the verified native recovery helper and its adjacent manifest. Never built or installed by plugin activation."
       }
     },
     "additionalProperties": false
@@ -5054,6 +5062,2141 @@
       "effects": [],
       "cancellation": "unsupported",
       "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.prepare_checkpoint",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Prepare R recovery",
+      "description": "Qualify the exact native target and original core capture through explicitly selected read grants. Never starts R, builds a helper, loads a namespace or recovers implicitly.",
+      "input_schema": {
+        "type": "object"
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "examples": [
+        {
+          "capability": {
+            "id": "r.capture_checkpoint",
+            "version": 1
+          },
+          "arguments": {
+            "expected_session": "copy-session-from-r.session"
+          },
+          "target": null,
+          "preconditions": null
+        }
+      ],
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.capture_checkpoint",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Capture R recovery",
+      "description": "Capture the eligible native object graph from the exact session into bounded scoped storage. Retain a complete metadata resource; skipped bindings and partial coverage remain explicit. Automatic captures require an idle settled queue.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "CheckpointCaptureArguments",
+        "type": "object",
+        "properties": {
+          "automatic": {
+            "type": "boolean",
+            "default": false
+          },
+          "exclude_names": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          },
+          "exclude_patterns": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          },
+          "expected_session": {
+            "type": "string"
+          },
+          "include_names": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "default": null,
+            "items": {
+              "type": "string"
+            }
+          },
+          "include_patterns": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          },
+          "max_bytes": {
+            "type": "integer",
+            "format": "uint64",
+            "default": 2147483648,
+            "minimum": 0
+          },
+          "max_seconds": {
+            "type": "number",
+            "format": "double",
+            "default": 2
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "expected_session"
+        ]
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCheckpointCaptureOutput",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RCheckpointResult"
+          },
+          {
+            "$ref": "#/$defs/RExecutionNotStarted"
+          }
+        ],
+        "$defs": {
+          "CheckpointCoverage": {
+            "type": "string",
+            "enum": [
+              "complete_eligible_graph",
+              "partial"
+            ]
+          },
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          },
+          "RCheckpointResult": {
+            "type": "object",
+            "properties": {
+              "coverage": {
+                "$ref": "#/$defs/CheckpointCoverage"
+              },
+              "manifest": {
+                "$ref": "#/$defs/ResourceReference"
+              },
+              "native_session_id": {
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/RCheckpointReference"
+              },
+              "saved_count": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "skipped_count": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "reference",
+              "manifest",
+              "native_session_id",
+              "saved_count",
+              "skipped_count",
+              "coverage"
+            ]
+          },
+          "RExecutionNotStarted": {
+            "type": "object",
+            "properties": {
+              "operation_id": {
+                "type": "string"
+              },
+              "started": {
+                "description": "Always false when the owner confirms cancellation before native execution.",
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "started"
+            ]
+          },
+          "ResourceReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "expected_session": "copy-session-from-r.session"
+        }
+      ],
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r"
+      ],
+      "effects": [
+        "recovery.capture"
+      ],
+      "cancellation": "request",
+      "preflight": {
+        "id": "r.prepare_checkpoint",
+        "version": 1
+      }
+    },
+    {
+      "capability": {
+        "id": "r.restore_checkpoint",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Restore R recovery",
+      "description": "Restore one exact committed copy into the existing empty candidate. Verify the full payload digest, native installation, libraries and inventory; retain namespace effects and the original restore report. Never starts a replacement R session.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RestoreRCheckpoint",
+        "type": "object",
+        "properties": {
+          "expected_session": {
+            "type": "string"
+          },
+          "reference": {
+            "$ref": "#/$defs/RCheckpointReference"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "expected_session",
+          "reference"
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          }
+        }
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCheckpointRestoreOutput",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RCheckpointRestored"
+          },
+          {
+            "$ref": "#/$defs/RExecutionNotStarted"
+          }
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          },
+          "RCheckpointRestored": {
+            "type": "object",
+            "properties": {
+              "initialized_namespace_count": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/RCheckpointReference"
+              },
+              "report": {
+                "$ref": "#/$defs/ResourceReference"
+              },
+              "restored_count": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "session_id": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "session_id",
+              "reference",
+              "report",
+              "restored_count",
+              "initialized_namespace_count"
+            ]
+          },
+          "RExecutionNotStarted": {
+            "type": "object",
+            "properties": {
+              "operation_id": {
+                "type": "string"
+              },
+              "started": {
+                "description": "Always false when the owner confirms cancellation before native execution.",
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "started"
+            ]
+          },
+          "ResourceReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "expected_session": "copy-session-from-r.session",
+          "reference": {
+            "project": "copy-original-project",
+            "provider": {
+              "plugin": "org.rho.r",
+              "instance": "copy-original-instance",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "operation_id": "copy-original-capture-operation",
+            "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "bytes": 1024
+          }
+        }
+      ],
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r",
+        "workspace.read",
+        "operation.read",
+        "resources.read",
+        "project.references.read"
+      ],
+      "effects": [
+        "r.workspace",
+        "r.namespaces"
+      ],
+      "cancellation": "request",
+      "preflight": {
+        "id": "r.prepare_checkpoint",
+        "version": 1
+      }
+    },
+    {
+      "capability": {
+        "id": "r.reconcile_checkpoint",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Reconcile an original capture",
+      "description": "Qualify a failed, cancelled or uncertain original operation and adopt its complete native capture into a new operation. Does not replay R code or rewrite the original outcome.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ReconcileRCheckpoint",
+        "type": "object",
+        "properties": {
+          "source_operation_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "source_operation_id"
+        ]
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCheckpointCaptureOutput",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RCheckpointResult"
+          },
+          {
+            "$ref": "#/$defs/RExecutionNotStarted"
+          }
+        ],
+        "$defs": {
+          "CheckpointCoverage": {
+            "type": "string",
+            "enum": [
+              "complete_eligible_graph",
+              "partial"
+            ]
+          },
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          },
+          "RCheckpointResult": {
+            "type": "object",
+            "properties": {
+              "coverage": {
+                "$ref": "#/$defs/CheckpointCoverage"
+              },
+              "manifest": {
+                "$ref": "#/$defs/ResourceReference"
+              },
+              "native_session_id": {
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/RCheckpointReference"
+              },
+              "saved_count": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "skipped_count": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "reference",
+              "manifest",
+              "native_session_id",
+              "saved_count",
+              "skipped_count",
+              "coverage"
+            ]
+          },
+          "RExecutionNotStarted": {
+            "type": "object",
+            "properties": {
+              "operation_id": {
+                "type": "string"
+              },
+              "started": {
+                "description": "Always false when the owner confirms cancellation before native execution.",
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "started"
+            ]
+          },
+          "ResourceReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "source_operation_id": "copy-original-capture-operation"
+        }
+      ],
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r",
+        "workspace.read",
+        "operation.read",
+        "resources.read"
+      ],
+      "effects": [
+        "recovery.adopt"
+      ],
+      "cancellation": "unsupported",
+      "preflight": {
+        "id": "r.prepare_checkpoint",
+        "version": 1
+      }
+    },
+    {
+      "capability": {
+        "id": "r.pin_checkpoint",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Pin R recovery",
+      "description": "Record an exact copy pin using the latest original control operation as its precondition. Native intent alone never establishes a committed pin.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PinRCheckpoint",
+        "type": "object",
+        "properties": {
+          "expected_control": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pinned": {
+            "type": "boolean"
+          },
+          "reference": {
+            "$ref": "#/$defs/RCheckpointReference"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "reference",
+          "pinned"
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          }
+        }
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCheckpointControlOutput",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RCheckpointControlResult"
+          },
+          {
+            "$ref": "#/$defs/RExecutionNotStarted"
+          }
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointControlResult": {
+            "type": "object",
+            "properties": {
+              "deleted": {
+                "description": "Logical retirement is committed by the core. This does not claim that\nthe post-commit disk cleanup has completed; observe the original copy.",
+                "type": "boolean"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "pinned": {
+                "type": "boolean"
+              },
+              "reference": {
+                "$ref": "#/$defs/RCheckpointReference"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "reference",
+              "pinned",
+              "deleted"
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          },
+          "RExecutionNotStarted": {
+            "type": "object",
+            "properties": {
+              "operation_id": {
+                "type": "string"
+              },
+              "started": {
+                "description": "Always false when the owner confirms cancellation before native execution.",
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "started"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "reference": {
+            "project": "copy-original-project",
+            "provider": {
+              "plugin": "org.rho.r",
+              "instance": "copy-original-instance",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "operation_id": "copy-original-capture-operation",
+            "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "bytes": 1024
+          },
+          "expected_control": null,
+          "pinned": true
+        }
+      ],
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r",
+        "workspace.read",
+        "operation.read",
+        "resources.read",
+        "project.references.read"
+      ],
+      "effects": [
+        "recovery.pin"
+      ],
+      "cancellation": "unsupported",
+      "preflight": {
+        "id": "r.prepare_checkpoint",
+        "version": 1
+      }
+    },
+    {
+      "capability": {
+        "id": "r.delete_checkpoint",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Delete R recovery",
+      "description": "Logically retire an unpinned copy through the core journal, then attempt native payload cleanup after confirmed settlement. Observe the copy to distinguish logical deletion from remaining bytes.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "DeleteRCheckpoint",
+        "type": "object",
+        "properties": {
+          "expected_control": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reference": {
+            "$ref": "#/$defs/RCheckpointReference"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "reference"
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          }
+        }
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCheckpointControlOutput",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RCheckpointControlResult"
+          },
+          {
+            "$ref": "#/$defs/RExecutionNotStarted"
+          }
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointControlResult": {
+            "type": "object",
+            "properties": {
+              "deleted": {
+                "description": "Logical retirement is committed by the core. This does not claim that\nthe post-commit disk cleanup has completed; observe the original copy.",
+                "type": "boolean"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "pinned": {
+                "type": "boolean"
+              },
+              "reference": {
+                "$ref": "#/$defs/RCheckpointReference"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "reference",
+              "pinned",
+              "deleted"
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          },
+          "RExecutionNotStarted": {
+            "type": "object",
+            "properties": {
+              "operation_id": {
+                "type": "string"
+              },
+              "started": {
+                "description": "Always false when the owner confirms cancellation before native execution.",
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "started"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "reference": {
+            "project": "copy-original-project",
+            "provider": {
+              "plugin": "org.rho.r",
+              "instance": "copy-original-instance",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "operation_id": "copy-original-capture-operation",
+            "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "bytes": 1024
+          },
+          "expected_control": null
+        }
+      ],
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r",
+        "workspace.read",
+        "operation.read",
+        "resources.read",
+        "project.references.read"
+      ],
+      "effects": [
+        "recovery.delete"
+      ],
+      "cancellation": "unsupported",
+      "preflight": {
+        "id": "r.prepare_checkpoint",
+        "version": 1
+      }
+    },
+    {
+      "capability": {
+        "id": "r.purge_checkpoint",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Clean up deleted recovery",
+      "description": "Retry native payload removal for the exact committed deletion. Keep original metadata and operation history; report payload_removed only after confirmed absence.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PurgeRCheckpoint",
+        "type": "object",
+        "properties": {
+          "deletion_operation_id": {
+            "type": "string"
+          },
+          "reference": {
+            "$ref": "#/$defs/RCheckpointReference"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "reference",
+          "deletion_operation_id"
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          }
+        }
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCheckpointPurgeOutput",
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RCheckpointPurged"
+          },
+          {
+            "$ref": "#/$defs/RExecutionNotStarted"
+          }
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointPurged": {
+            "type": "object",
+            "properties": {
+              "operation_id": {
+                "type": "string"
+              },
+              "payload_removed": {
+                "type": "boolean",
+                "const": true
+              },
+              "reference": {
+                "$ref": "#/$defs/RCheckpointReference"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "reference",
+              "payload_removed"
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          },
+          "RExecutionNotStarted": {
+            "type": "object",
+            "properties": {
+              "operation_id": {
+                "type": "string"
+              },
+              "started": {
+                "description": "Always false when the owner confirms cancellation before native execution.",
+                "type": "boolean",
+                "const": false
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "operation_id",
+              "started"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "reference": {
+            "project": "copy-original-project",
+            "provider": {
+              "plugin": "org.rho.r",
+              "instance": "copy-original-instance",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "operation_id": "copy-original-capture-operation",
+            "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "bytes": 1024
+          },
+          "deletion_operation_id": "copy-original-delete-operation"
+        }
+      ],
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.run_r",
+        "workspace.read",
+        "operation.read",
+        "resources.read",
+        "project.references.read"
+      ],
+      "effects": [
+        "recovery.cleanup"
+      ],
+      "cancellation": "unsupported",
+      "preflight": {
+        "id": "r.prepare_checkpoint",
+        "version": 1
+      }
+    },
+    {
+      "capability": {
+        "id": "r.checkpoint",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Observe an original recovery copy",
+      "description": "Read committed control history and native payload presence without starting R. Presence is a length/identity observation, not a fresh full digest check.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCheckpointArguments",
+        "type": "object",
+        "properties": {
+          "reference": {
+            "$ref": "#/$defs/RCheckpointReference"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "reference"
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          }
+        }
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCheckpointObservation",
+        "type": "object",
+        "properties": {
+          "checkpoint": {
+            "$ref": "#/$defs/RCheckpointResult"
+          },
+          "control_head": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "payload": {
+            "$ref": "#/$defs/RCheckpointPayloadState"
+          },
+          "pinned": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "checkpoint",
+          "pinned",
+          "deleted",
+          "payload",
+          "notices"
+        ],
+        "$defs": {
+          "CheckpointCoverage": {
+            "type": "string",
+            "enum": [
+              "complete_eligible_graph",
+              "partial"
+            ]
+          },
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointPayloadState": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "missing",
+                  "unavailable"
+                ]
+              },
+              {
+                "description": "Length and native identity are present. This is not a fresh digest check.",
+                "type": "string",
+                "const": "present"
+              }
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          },
+          "RCheckpointResult": {
+            "type": "object",
+            "properties": {
+              "coverage": {
+                "$ref": "#/$defs/CheckpointCoverage"
+              },
+              "manifest": {
+                "$ref": "#/$defs/ResourceReference"
+              },
+              "native_session_id": {
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/RCheckpointReference"
+              },
+              "saved_count": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "skipped_count": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "reference",
+              "manifest",
+              "native_session_id",
+              "saved_count",
+              "skipped_count",
+              "coverage"
+            ]
+          },
+          "ResourceReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "reference": {
+            "project": "copy-original-project",
+            "provider": {
+              "plugin": "org.rho.r",
+              "instance": "copy-original-instance",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "operation_id": "copy-original-capture-operation",
+            "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "bytes": 1024
+          }
+        }
+      ],
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read",
+        "operation.read",
+        "resources.read",
+        "project.references.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.read_checkpoint",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Read original recovery bytes",
+      "description": "Read at most 64 KiB from the exact committed nondeleted native copy. Qualify original operation, caller visibility and control history; the reference is an identity, not permission.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCheckpointRead",
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "format": "uint32",
+            "maximum": 65536,
+            "minimum": 1
+          },
+          "offset": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "reference": {
+            "$ref": "#/$defs/RCheckpointReference"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "reference",
+          "offset",
+          "limit"
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          }
+        }
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCheckpointChunk",
+        "type": "object",
+        "properties": {
+          "base64": {
+            "type": "string"
+          },
+          "next": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "offset": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 0
+          },
+          "reference": {
+            "$ref": "#/$defs/RCheckpointReference"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "reference",
+          "offset",
+          "base64"
+        ],
+        "$defs": {
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "reference": {
+            "project": "copy-original-project",
+            "provider": {
+              "plugin": "org.rho.r",
+              "instance": "copy-original-instance",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "operation_id": "copy-original-capture-operation",
+            "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "bytes": 1024
+          },
+          "offset": 0,
+          "limit": 65536
+        }
+      ],
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read",
+        "operation.read",
+        "resources.read",
+        "project.references.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "r.checkpoints",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "List original recovery results",
+      "description": "Read one bounded visible journal page of successful capture/reconciliation results. Empty pages can have a continuation; inspect each reference for current native and control state.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCheckpointList",
+        "type": "object",
+        "properties": {
+          "before_cursor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "format": "uint32",
+            "default": 20,
+            "maximum": 32,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "RCheckpointPage",
+        "type": "object",
+        "properties": {
+          "checkpoints": {
+            "description": "Successful original capture/reconciliation results in this bounded journal\npage. Inspect each exact reference for current pin/deletion/native state.",
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/RCheckpointResult"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "uint64",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "checkpoints"
+        ],
+        "$defs": {
+          "CheckpointCoverage": {
+            "type": "string",
+            "enum": [
+              "complete_eligible_graph",
+              "partial"
+            ]
+          },
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "RCheckpointReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "operation_id": {
+                "type": "string"
+              },
+              "project": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "project",
+              "provider",
+              "operation_id",
+              "digest",
+              "bytes"
+            ]
+          },
+          "RCheckpointResult": {
+            "type": "object",
+            "properties": {
+              "coverage": {
+                "$ref": "#/$defs/CheckpointCoverage"
+              },
+              "manifest": {
+                "$ref": "#/$defs/ResourceReference"
+              },
+              "native_session_id": {
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/RCheckpointReference"
+              },
+              "saved_count": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              },
+              "skipped_count": {
+                "type": "integer",
+                "format": "uint32",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "reference",
+              "manifest",
+              "native_session_id",
+              "saved_count",
+              "skipped_count",
+              "coverage"
+            ]
+          },
+          "ResourceReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "before_cursor": null,
+          "limit": 20
+        }
+      ],
+      "recovery_schema": true,
+      "required_scopes": [
+        "workspace.read",
+        "operation.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
     }
   ],
   "optional_requires": [
@@ -5088,6 +7231,34 @@
       },
       "scopes": [
         "resources.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.get",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.list_recent",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.project_coverage",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read"
       ]
     }
   ]

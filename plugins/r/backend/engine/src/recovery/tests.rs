@@ -159,6 +159,25 @@ fn payload_integrity_bounded_reads_and_immutable_evidence_survive_release() {
 }
 
 #[test]
+fn capture_context_is_immutable_bounded_and_does_not_hide_missing_payloads() {
+    let (_temp,_root,archive)=fixture();
+    let lease=capture(&archive,"context",b"payload");
+    assert_eq!(lease.read_context::<serde_json::Value>().unwrap(),None);
+    let context=serde_json::json!({"original":"context","libraries_complete":false});
+    lease.write_context(&context).unwrap();
+    assert_eq!(lease.read_context::<serde_json::Value>().unwrap(),Some(context));
+    assert!(lease.write_context(&serde_json::json!({"replaced":true})).is_err());
+    assert!(lease.payload_present().unwrap());
+    let deletion=id("delete-context-payload");
+    lease.record_control(&deletion,RecoveryControl::Delete).unwrap();
+    lease.remove_payload_after_commit(&deletion).unwrap();
+    assert!(!lease.payload_present().unwrap());
+    assert!(lease.read_context::<serde_json::Value>().unwrap().is_some());
+    fs::write(lease.directory.join("context.json"),vec![b' ';MAX_METADATA as usize+1]).unwrap();
+    assert!(lease.read_context::<serde_json::Value>().is_err());
+}
+
+#[test]
 fn adoption_has_independent_bytes_and_deletion_keeps_all_original_evidence() {
     let (_temp, root, archive) = fixture();
     let source = capture(&archive, "original", b"one immutable R graph");

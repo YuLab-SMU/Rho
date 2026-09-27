@@ -13,12 +13,14 @@ use std::{
     time::Duration,
 };
 use tokio::sync::{Mutex as Lane, watch};
+pub(crate) mod recovery;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Configuration {
     pub ark: Option<PathBuf>,
     pub r_home: Option<PathBuf>,
+    pub checkpoint_helper_path: Option<PathBuf>,
     #[serde(default = "timeout")]
     pub execution_timeout_seconds: u64,
 }
@@ -53,6 +55,8 @@ pub struct Owner {
     host: HostCalls,
     environment_enabled: bool,
     selected_environment: Mutex<Option<RSessionEnvironment>>,
+    recovery_grants: recovery::Grants,
+    recovery_pending: Mutex<std::collections::BTreeMap<OperationId, recovery::Pending>>,
 }
 impl Owner {
     pub fn new(
@@ -62,6 +66,7 @@ impl Owner {
         resources: ResourceClient,
         host: HostCalls,
         environment_enabled: bool,
+        grants: &[CapabilityRequirement],
     ) -> Result<Self, String> {
         let config: Configuration =
             serde_json::from_value(configuration).map_err(|e| e.to_string())?;
@@ -74,6 +79,7 @@ impl Owner {
         for path in [
             config.ark.as_ref(),
             config.r_home.as_ref(),
+            config.checkpoint_helper_path.as_ref(),
             Some(&project),
             Some(&data),
         ]
@@ -86,6 +92,7 @@ impl Owner {
         }
         if config.ark.as_ref().is_some_and(|path| !path.is_file())
             || config.r_home.as_ref().is_some_and(|path| !path.is_dir())
+            || config.checkpoint_helper_path.as_ref().is_some_and(|path| !path.is_file())
         {
             return Err("select an existing Ark executable and R installation".into());
         }
@@ -103,6 +110,8 @@ impl Owner {
             host,
             environment_enabled,
             selected_environment: Mutex::new(None),
+            recovery_grants: recovery::Grants::new(grants),
+            recovery_pending: Mutex::new(std::collections::BTreeMap::new()),
         })
     }
     fn admitted_environment(&self, call: &PluginCall, target: &str) -> Result<Option<EnvironmentLibrary>, String> {
@@ -173,6 +182,14 @@ impl Owner {
         {
             return Err("R target or preconditions changed after admission".into());
         }
+        if recovery::is_operation(call.binding.capability.id.as_str()) {
+            self.admit_recovery(call)?;
+            if call.binding.capability.id.as_str() == recovery::CAPTURE
+                && call.arguments["automatic"] == true && !self.queue.is_empty() {
+                return Err("Automatic capture requires an idle, settled native queue".into());
+            }
+            return self.queue.admit(call);
+        }
         self.admitted_environment(call,&self.target())?;
         match call.binding.capability.id.as_str() {
             "r.execute" => {
@@ -187,7 +204,8 @@ impl Owner {
         self.queue.admit(call)
     }
     pub fn settle(&self, settlement: &OperationSettlement) -> Result<(), String> {
-        self.queue.settle(settlement)
+        self.queue.settle(settlement)?;
+        self.settle_recovery(settlement)
     }
     pub fn ready_to_release(&self) -> bool {
         self.queue.is_empty()
@@ -243,6 +261,9 @@ impl Owner {
         }
     }
     pub async fn query(&self, call: &PluginCall) -> Result<Value, String> {
+        if recovery::is_query(call.binding.capability.id.as_str()) {
+            return self.query_recovery(call).await;
+        }
         if let Some(kind) = r_inspection_kind(call.binding.capability.id.as_str()) {
             return self.inspect(call, kind).await;
         }
@@ -251,11 +272,11 @@ impl Owner {
             "r.session" => Ok(match self.runtime.lock().unwrap().as_ref() {
                 Some(runtime) => {
                     json!({"state":runtime.execution_state(), "session_id":runtime.session_id(), "queue_target":runtime.session_id(),
-                    "process":runtime.process_identity(), "installation":runtime.installation_identity(), "input":runtime.input_request(), "environment":*self.selected_environment.lock().unwrap()})
+                    "process":runtime.process_identity(), "installation":runtime.installation_identity(), "input":runtime.input_request(), "environment":*self.selected_environment.lock().unwrap(), "checkpoint_available":runtime.checkpoint_available()})
                 }
                 None => {
                     let attempt = self.launch_attempt.lock().unwrap();
-                    json!({"state":self.creation_state.lock().unwrap().unwrap_or(if attempt.is_some() { "launch_unconfirmed" } else { "unstarted" }), "session_id":null, "queue_target":format!("unstarted:{}",self.instance.instance), "launch_operation":*attempt,"environment":*self.selected_environment.lock().unwrap()})
+                    json!({"state":self.creation_state.lock().unwrap().unwrap_or(if attempt.is_some() { "launch_unconfirmed" } else { "unstarted" }), "session_id":null, "queue_target":format!("unstarted:{}",self.instance.instance), "launch_operation":*attempt,"environment":*self.selected_environment.lock().unwrap(), "checkpoint_available":false})
                 }
             }),
             "r.console" => {
@@ -516,7 +537,9 @@ impl Owner {
             match self.execute(call, cancellation).await {
             Ok(plan) => plan,
             Err(error) => PluginCommitPlan {
-                outcome: if error.effect_may_have_occurred {
+                outcome: if recovery::is_operation(call.binding.capability.id.as_str()) && error.query_code.as_deref() == Some("checkpoint_cancelled") {
+                    PluginOutcome::Cancelled
+                } else if error.effect_may_have_occurred {
                     PluginOutcome::Uncertain
                 } else {
                     PluginOutcome::Failed
@@ -529,7 +552,7 @@ impl Owner {
                 }))),
                 facts: vec![],
                 evidence: vec![],
-                cancellation_confirmed: false,
+                cancellation_confirmed: recovery::is_operation(call.binding.capability.id.as_str()) && error.query_code.as_deref() == Some("checkpoint_cancelled"),
             },
         }
         } else {
@@ -598,6 +621,9 @@ impl Owner {
                 "R native target changed after admission",
             ));
         }
+        if recovery::is_operation(call.binding.capability.id.as_str()) {
+            return self.execute_recovery(call, cancellation).await;
+        }
         let environment=self.admitted_environment(call,&target).map_err(NativeError::before_effect)?;
         if *cancellation.borrow() {
             return Ok(plan(
@@ -634,7 +660,7 @@ impl Owner {
                 }
                 *self.creation_state.lock().unwrap()=Some("launch_unconfirmed");
                 let runtime = Arc::new(ArkRuntime::launch(ArkConfig {
-                    checkpoint_helper_path: None, executable: self.config.ark.clone().ok_or_else(|| NativeError::before_effect("Ark is not configured"))?,
+                    checkpoint_helper_path: self.config.checkpoint_helper_path.clone(), executable: self.config.ark.clone().ok_or_else(|| NativeError::before_effect("Ark is not configured"))?,
                     r_home: self.config.r_home.clone().ok_or_else(|| NativeError::before_effect("R is not configured"))?,
                     project_root: self.environment.project_root.clone().into(), data_root: self.environment.data_root.clone().into(),
                     execution_timeout: Duration::from_secs(self.config.execution_timeout_seconds), library_path: environment.as_ref().map(|selected|selected.library_path.clone().into()),
@@ -809,7 +835,7 @@ impl Owner {
     pub fn prepare_pending_cancellation(&self, cancellation: &PendingCancellation) -> Result<bool, String> {
         let binding = &cancellation.binding;
         if binding.provider != self.instance || binding.target.as_deref() != Some(self.target().as_str())
-            || !matches!((binding.capability.id.as_str(), binding.capability.version), ("r.execute", 1 | 2) | ("r.format", 1)) {
+            || !matches!((binding.capability.id.as_str(), binding.capability.version), ("r.execute", 1 | 2) | ("r.format" | recovery::CAPTURE | recovery::RESTORE, 1)) {
             return Err("Pending cancellation requires the exact admitted R execution".into());
         }
         self.queue.prepare_pending_cancellation(cancellation)

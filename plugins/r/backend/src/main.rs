@@ -42,6 +42,7 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
         )?,
         host_calls::HostCalls(host_sender),
         environment::granted(&connection.grants),
+        &connection.grants,
     )?);
     connection.ready_with_features([PENDING_CANCELLATION_FEATURE.into()].into()).await?;
     let instance = connection.instance.clone();
@@ -228,6 +229,9 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 fn supported_call(capability: &CapabilityKey, is_query: bool) -> bool {
+    if owner::recovery::is_operation(capability.id.as_str()) || owner::recovery::is_query(capability.id.as_str()) {
+        return capability.version == 1 && owner::recovery::is_query(capability.id.as_str()) == is_query;
+    }
     let valid_kind = match capability.id.as_str() {
         "r.session" | "r.console" | "r.snapshot" | "r.prepare" | "r.prepare_environment" | "r.check_code" | "r.output_events" | "r.inspection_state" => is_query,
         id if rho_r_api::r_inspection_kind(id).is_some() => is_query,

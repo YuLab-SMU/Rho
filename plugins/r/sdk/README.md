@@ -41,6 +41,39 @@ resources through the generic read ports instead of recreating R.
 All calls use the public plugin UI/backend SDK and an exact `ProviderBinding`.
 Changing a view, scenario or current selection must not retarget accepted work.
 
+Recovery contributions use `RCheckpointReference`, containing the original
+project, provider, capture/reconciliation Operation, payload digest and byte count.
+The reference grants no authority. `r.capture_checkpoint` returns
+`RCheckpointCaptureOutput`; confirmed pre-start cancellation has `started: false`.
+A successful result points to a complete `RCheckpointManifest` resource, including
+skipped bindings, graph coverage, original Environment and observed library usage.
+Unknown library/namespace dependencies remain `libraries.complete: false`.
+The potentially larger native payload is read through `r.read_checkpoint` in
+chunks of at most 65536 bytes; verify the complete reference digest when consuming
+all bytes. The provider checks that reference against the caller-readable original
+Operation, manifest, native scope and committed control history on every request.
+
+`r.restore_checkpoint` requires the exact existing empty candidate session and
+returns `RCheckpointRestoreOutput`. Its retained `CheckpointNativeRestoreReport`
+contains the full restored names and namespace effects; a summary is not a claim
+of functional equivalence for arbitrary R objects. `r.reconcile_checkpoint`
+accepts an original failed/cancelled/uncertain capture Operation, preserves that
+outcome and publishes an independent copy through a new Operation. Neither action
+automatically starts R or reexecutes analysis.
+
+`r.checkpoints` returns one journal page and `next_cursor`; it can return no
+captures while still having another page. `r.checkpoint` returns current logical
+pin/deletion state separately from `payload` presence. Present means native
+identity and length were observed, not a new full hash verification. Pass the
+observed `control_head` as `expected_control` to `r.pin_checkpoint` or
+`r.delete_checkpoint`. Unpin before deleting. Core-confirmed deletion retires the
+copy, then the owner attempts cleanup. `r.purge_checkpoint` retries physical
+cleanup using the exact committed deletion Operation and confirms
+`payload_removed: true` only after native removal. Original metadata remains.
+Read grants are explicit optional dependencies; state-sensitive operations also
+require project journal coverage so hidden records cannot be mistaken for no
+controls. Missing, uncertain or unsupported control history stays unavailable.
+
 `r.inspection_state@1` returns `RInspectionState` without entering R or starting a
 session. Pass `expected_session: null` to observe an unstarted instance; after a
 session is known, retain it in subsequent requests and the binding target. A

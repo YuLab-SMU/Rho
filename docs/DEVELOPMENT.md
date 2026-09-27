@@ -401,8 +401,17 @@ Unicode graph aliases, bounded payload reads, nonempty-candidate refusal and
 retained native evidence. `node scripts/test-r-plugin-engine.mjs --recovery`
 checks the same native layer from an independent public/plugin source tree.
 Archive checks include separate-process lock contention and process exit without
-a destructor. These are native-owner checks, not proof of core publication or
-ordinary RPC checkpoint authorization, which remain separate work.
+a destructor. For ordinary RPC publication and original-operation authorization,
+run `cargo test -p rho-r-backend --locked --offline`, generate the R SDK, and build
+an independent package with `scripts/build-r-plugin.mjs`. With that package selected
+as `RHO_R_PLUGIN_PACKAGE`, run `node scripts/test-r-recovery.mjs` using the same
+three native prerequisites and an already built Host. The test verifies unchanged
+Host bytes, optional read grants, pure observations, partial Unicode graph capture,
+replacement-provider reads, bounded bytes, payload damage, empty-candidate restore,
+pin/delete preconditions, post-commit cleanup, retained metadata and explicit
+reconciliation of a capture whose public output was rejected by the core. It uses
+disposable projects and native sessions and preserves failed evidence. It does not
+establish complete Environment checkpoint-reference protection or Studio recovery UI.
 
 Skipped or unavailable real-R, browser, external-provider, and environment checks
 are not passes. Run them only with their documented prerequisites; preserve the

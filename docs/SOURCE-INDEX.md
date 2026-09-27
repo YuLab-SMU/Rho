@@ -147,6 +147,7 @@ Sources:
 - `scripts/test-r-plugin-engine.mjs`
 - `scripts/test-r-plugin.mjs`
 - `scripts/test-r-protocol.mjs`
+- `scripts/test-r-recovery.mjs`
 - `scripts/test-r-viewer.mjs`
 - `scripts/test-remote-plugin-owner.mjs`
 - `scripts/test-remote-plugin-types.mjs`
@@ -236,6 +237,7 @@ Checks:
 - `plugins.r-packages`: `["node","scripts/test-r-packages.mjs"]`
 - `plugins.r-plots`: `["node","scripts/test-r-plots.mjs"]`
 - `plugins.r-protocol`: `["node","plugins/r/generate-sdk.mjs","--check"]`
+- `plugins.r-public-recovery`: `["node","scripts/test-r-recovery.mjs"]`
 - `plugins.r-public-types`: `["node","scripts/test-r-protocol.mjs"]`
 - `plugins.r-recovery`: `["node","scripts/test-real-r.mjs","--plugin-recovery"]`
 - `plugins.r-viewer`: `["node","scripts/test-r-viewer.mjs"]`

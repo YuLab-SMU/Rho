@@ -410,6 +410,39 @@ impl RecoveryLease {
         Ok(capture)
     }
 
+    /// Presence and length only, never a fresh integrity or publication claim.
+    pub fn payload_present(&self) -> Result<bool, String> {
+        let capture = self.capture()?;
+        let path = self.directory.join("payload.rds");
+        match fs::symlink_metadata(&path) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(e) => return Err(error(e)),
+            Ok(_) => {}
+        }
+        if checked_file(&path, false)?.metadata().map_err(error)?.len() != capture.artifact.byte_size {
+            return Err("Recovery payload length differs".into());
+        }
+        self.check()?;
+        Ok(true)
+    }
+
+    /// Bounded immutable owner evidence for recovering a lost resource transfer.
+    /// It must be qualified against the original core admission before use.
+    pub fn write_context(&self, value: &impl Serialize) -> Result<(), String> {
+        self.capture()?;
+        write_immutable(&self.directory.join("context.json"), value)
+    }
+    pub fn read_context<T: DeserializeOwned>(&self) -> Result<Option<T>, String> {
+        self.capture()?;
+        let path = self.directory.join("context.json");
+        match fs::symlink_metadata(&path) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => return Err(error(e)),
+            Ok(_) => {}
+        }
+        read_json(&path).map(Some)
+    }
+
     /// Bounded, lock-qualified transport. The complete digest in capture metadata
     /// remains the caller's end-to-end integrity check; a chunk is not a result.
     pub fn read(&self, offset: u64, limit: u32) -> Result<Vec<u8>, String> {

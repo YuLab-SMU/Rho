@@ -378,28 +378,48 @@ boundaries and documentation checks pass. Existing user Hosts and R sessions wer
 not changed. Complete ordinary R checkpoint-reference protection and removal of
 the fixed composition remain active.
 
-The R engine now supplies a scoped native recovery archive for the ordinary-owner
-migration. Its new format records exact project, principal, provider and original
-operation identities; it does not read legacy Workspace manifests. OS artifact
-locks coordinate separate backend processes and release on process exit. Bounded
-payload reads preserve the 16 GiB native limit, while adoption makes independent
-copies and deletion keeps original metadata. Failed captures retain partial bytes
-and original cancellation/transport uncertainty. Invalid native components are
-refused before Ark starts. All 25 engine library cases pass in the independent
-public/plugin source tree, including a payload larger than the generic 256 MiB
-resource limit. Focused native `scripts/test-real-r.mjs --plugin-recovery` and
-independent `scripts/test-r-plugin-engine.mjs --recovery` acceptance pass. The final
-independent run also verifies exhausted capture budgets, original recovery identity,
-Unicode graph aliases, preservation of a changed nonempty candidate, source-session
-isolation and original evidence after source deletion. An initial focused compile
-used incorrect SDK identity names and an error conversion; the corrected checks
-pass. One slow native-test startup was sampled at the system loader before test
-code, then completed without changing deadlines. All four R API and twelve backend
-cases pass (`cargo test -p rho-r-api -p rho-r-backend --locked --offline`). Generated
-public SDK/schema consistency, independent TypeScript consumption, architecture,
-plugin boundaries and documentation checks pass. This is the native foundation:
-ordinary RPC capture/list/pin/delete/restore/reconciliation and complete Environment
-checkpoint-reference protection are still to be connected. No user Host or R
+The ordinary R owner now exposes capture, bounded listing/reads, restore,
+pin/unpin, logical deletion, physical cleanup and explicit capture reconciliation.
+Public recovery references name the exact project, provider, original Operation,
+digest and byte count. Complete manifests and restore reports use core resources;
+larger graphs retain the scoped native archive's 16 GiB limit. Original core
+admission, caller visibility, retained manifests and native evidence must agree.
+Project journal coverage is required before interpreting control absence. Native
+control files establish no scientific truth; artifact leases remain held through
+matching core settlement. Deletion commits logical retirement before physical
+cleanup, whose failure remains observable and explicitly retryable. Unknown,
+missing or uncertain control history remains unavailable. Queries, controls and
+reconciliation never start R. Restore requires the exact existing empty candidate
+and verifies the full payload and native prerequisites. The existing verified
+helper is selected explicitly before session creation, without installation.
+
+Reconciliation copies complete native evidence from a terminal failed/cancelled/
+uncertain capture into a new identity and never rewrites the original outcome.
+Missing capture context preserves unknown namespace dependencies. Partial bytes
+without complete native evidence cannot be adopted. Automatic capture requires an
+idle settled queue; pending cancellation retains `started:false`. Argument digests
+freeze normalized semantics, including equivalent JSON numbers across languages.
+The current four API, eighteen backend and twenty-six engine library cases pass.
+`cargo test -p rho-r-api -p rho-r-backend --locked --offline` covers the final owner;
+`cargo test -p rho-r-backend -p rho-r-engine --lib --bin rho-r-backend --locked
+--offline` covered the archive and routing changes. Independent public types,
+generated SDK/schema consistency, client generation/build/check, architecture,
+plugin boundaries and documentation checks pass.
+
+`scripts/test-r-recovery.mjs` passes through an independently built ordinary package
+and unchanged Host: explicit grants, pure observations, partial Unicode graph and
+alias preservation, original replay, pending cancellation, replacement reads,
+bounded bytes, digest damage, empty-candidate restore, pin/delete preconditions,
+cleanup, retained history and reconciliation after a rejected result. Missing
+context is also tested. Initial checks found an unsupported cancellation enum and
+a stale generated index; both were corrected. A fault fixture first changed a
+registered contract and was correctly refused; it now faults only the returned
+plan. This exposed and fixed strict `10.0`/`10` comparison. A later fixture backend
+initialization timed out; that run remains failed evidence. A separate test process
+was sampled at the system loader, and the complete native rerun passed after
+other checks finished, without changing deadlines or guards. Complete Environment
+checkpoint-reference protection, uncertain-control continuation, Studio recovery
+integration and removal of fixed composition remain active. No user Host or R
 session was restarted.
 
 The ordinary `org.rho.files` backend now assembles outside the checkout from eight

@@ -30,6 +30,20 @@ const readinessInput:RInspectionStateArguments={expected_session:null};
 function inspect(observation:RInspection<ObjectReadPage>){return observation.data?.columns[0]?.values[0]?.text??observation.diagnostic?.code;}
 function continueHelp(args:ReadPackageHelpArguments,offset:number,files:ReadPackageHelpArguments['expected_help_files']){return {...args,offset_utf8:offset,expected_help_files:files};}
 void [created,unqualified,execute,formatting,formatted,check,events,notStarted,contradictory,observe,output,answer,directory,busy,readiness,readinessInput,inspect,continueHelp];
+import type {RCheckpointReference,RCheckpointManifest,RCheckpointCaptureOutput,RCheckpointRestoreOutput,RCheckpointControlOutput,RCheckpointPurgeOutput,RCheckpointChunk,RCheckpointObservation,RCheckpointPage,RestoreRCheckpoint,ReconcileRCheckpoint,PinRCheckpoint,DeleteRCheckpoint,PurgeRCheckpoint} from './sdk/index.js';
+function restore(reference:RCheckpointReference,expected_session:string):RestoreRCheckpoint{return {reference,expected_session};}
+function reconcile(original:string):ReconcileRCheckpoint{return {source_operation_id:original};}
+function controls(reference:RCheckpointReference,expected_control:string|null):[PinRCheckpoint,DeleteRCheckpoint,PurgeRCheckpoint]{return [{reference,expected_control,pinned:true},{reference,expected_control},{reference,deletion_operation_id:'original-deletion'}];}
+function checkpoint(value:RCheckpointCaptureOutput){if('started' in value)return value.started;return value.manifest.digest;}
+function restored(value:RCheckpointRestoreOutput){if('started' in value)return value.started;return value.report;}
+function controlled(value:RCheckpointControlOutput){if('started' in value)return value.started;return value.deleted;}
+function purged(value:RCheckpointPurgeOutput){if('started' in value)return value.started;const confirmed:true=value.payload_removed;return confirmed;}
+function recoveryData(manifest:RCheckpointManifest,page:RCheckpointPage,observation:RCheckpointObservation,chunk:RCheckpointChunk){return [manifest.libraries.complete,manifest.source?.operation_id,page.next_cursor,observation.payload,observation.control_head,chunk.next];}
+// @ts-expect-error A native filename is not an original scoped recovery reference.
+const arbitraryRestore:RestoreRCheckpoint={expected_session:'native',path:'/tmp/arbitrary.rds'};
+// @ts-expect-error A core resource reference cannot substitute for native recovery identity.
+const arbitraryCheckpoint:RCheckpointReference={resource:'generic-file',digest:'sha256:abc',bytes:1};
+void [restore,reconcile,controls,checkpoint,restored,controlled,purged,recoveryData,arbitraryRestore,arbitraryCheckpoint];
 `);
   execFileSync(process.execPath,[path.join(root,'ui/node_modules/typescript/bin/tsc'),'--noEmit','--strict','--target','ES2022','--module','NodeNext','--moduleResolution','NodeNext','--rootDir',directory,path.join(directory,'consumer.ts')],{cwd:directory,stdio:'inherit'});
   console.log('Independent R protocol consumer compiles with only public declarations.');

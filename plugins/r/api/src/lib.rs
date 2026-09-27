@@ -33,3 +33,5 @@ pub mod plugin;
 pub use plugin::*;
 pub mod session;
 pub use session::*;
+pub mod recovery;
+pub use recovery::*;

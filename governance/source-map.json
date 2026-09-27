@@ -295,6 +295,9 @@
     "plugins.r-recovery": {
       "command": ["node", "scripts/test-real-r.mjs", "--plugin-recovery"]
     },
+    "plugins.r-public-recovery": {
+      "command": ["node", "scripts/test-r-recovery.mjs"]
+    },
     "plugins.r-format": {
       "command": [
         "node",
@@ -911,6 +914,7 @@
         "scripts/build-r-plugin.mjs",
         "scripts/test-r-plugin.mjs",
         "scripts/test-r-format.mjs",
+        "scripts/test-r-recovery.mjs",
         "scripts/test-r-environment.mjs",
         "crates/host/tests/r_plugin_real_r.rs",
         "scripts/build-viewer-plugin.mjs",
@@ -1001,6 +1005,7 @@
         "plugins.r-independent",
         "plugins.r-native",
         "plugins.r-recovery",
+        "plugins.r-public-recovery",
         "plugins.r-format",
         "plugins.r-environment",
         "plugins.viewer",

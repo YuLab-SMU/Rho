@@ -40,8 +40,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     PackageSnapshotData::export_all(&types)?;
     PackageIndexPage::export_all(&types)?;
     PackageHelpPage::export_all(&types)?;
+    CheckpointCaptureArguments::export_all(&types)?;
+    RCheckpointManifest::export_all(&types)?;
+    CheckpointNativeRestoreReport::export_all(&types)?;
+    RCheckpointArguments::export_all(&types)?;
+    RCheckpointRead::export_all(&types)?;
+    RCheckpointChunk::export_all(&types)?;
+    RestoreRCheckpoint::export_all(&types)?;
+    ReconcileRCheckpoint::export_all(&types)?;
+    PinRCheckpoint::export_all(&types)?;
+    DeleteRCheckpoint::export_all(&types)?;
+    PurgeRCheckpoint::export_all(&types)?;
+    RCheckpointObservation::export_all(&types)?;
+    RCheckpointList::export_all(&types)?;
+    RCheckpointPage::export_all(&types)?;
+    RCheckpointCaptureOutput::export_all(&types)?;
+    RCheckpointRestoreOutput::export_all(&types)?;
+    RCheckpointControlOutput::export_all(&types)?;
+    RCheckpointPurgeOutput::export_all(&types)?;
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
+        ("capture-checkpoint", schemars::schema_for!(CheckpointCaptureArguments)),
+        ("checkpoint-capture-output", schemars::schema_for!(RCheckpointCaptureOutput)),
+        ("checkpoint-manifest", schemars::schema_for!(RCheckpointManifest)),
+        ("checkpoint-arguments", schemars::schema_for!(RCheckpointArguments)),
+        ("read-checkpoint", schemars::schema_for!(RCheckpointRead)),
+        ("checkpoint-chunk", schemars::schema_for!(RCheckpointChunk)),
+        ("restore-checkpoint", schemars::schema_for!(RestoreRCheckpoint)),
+        ("checkpoint-restore-output", schemars::schema_for!(RCheckpointRestoreOutput)),
+        ("checkpoint-restore-report", schemars::schema_for!(CheckpointNativeRestoreReport)),
+        ("reconcile-checkpoint", schemars::schema_for!(ReconcileRCheckpoint)),
+        ("pin-checkpoint", schemars::schema_for!(PinRCheckpoint)),
+        ("delete-checkpoint", schemars::schema_for!(DeleteRCheckpoint)),
+        ("purge-checkpoint", schemars::schema_for!(PurgeRCheckpoint)),
+        ("checkpoint-control-output", schemars::schema_for!(RCheckpointControlOutput)),
+        ("checkpoint-purge-output", schemars::schema_for!(RCheckpointPurgeOutput)),
+        ("checkpoint-observation", schemars::schema_for!(RCheckpointObservation)),
+        ("list-checkpoints", schemars::schema_for!(RCheckpointList)),
+        ("checkpoint-page", schemars::schema_for!(RCheckpointPage)),
         ("execute", schemars::schema_for!(ExecuteR)),
         ("create-session", schemars::schema_for!(CreateRSession)),
         ("session-created", schemars::schema_for!(RSessionCreated)),
