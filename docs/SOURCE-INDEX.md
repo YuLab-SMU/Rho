@@ -84,6 +84,7 @@ Sources:
 - `crates/cli/src/plugins.rs`
 - `crates/host/tests/files_plugin.rs`
 - `crates/host/tests/fixtures/view_delegation.py`
+- `crates/host/tests/plugin_development.rs`
 - `crates/host/tests/plugin_optional_requirements.rs`
 - `crates/host/tests/plugin_self_requirements.rs`
 - `crates/host/tests/plugin_view_delegation.rs`
@@ -184,6 +185,8 @@ Checks:
 - `plugins.boundary-tests`: `["node","scripts/check-plugin-boundaries.mjs","--self-test"]`
 - `plugins.console`: `["node","scripts/test-console-plugin.mjs"]`
 - `plugins.console-editor`: `["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"]`
+- `plugins.development-host`: `["cargo","test","-p","rho-host","--test","plugin_development","--locked"]`
+- `plugins.development-owner`: `["cargo","test","-p","rho-plugins","--test","source_development","--locked"]`
 - `plugins.download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-download.spec.ts"]`
 - `plugins.draft-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-drafts.spec.ts"]`
 - `plugins.draft-ports`: `["cargo","test","-p","rho-host","--test","plugin_drafts","--locked"]`

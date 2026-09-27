@@ -829,6 +829,28 @@ store and native artifact target. Package viewing does not start code. Instance
 lists show only the caller's project/principal; `observed_in_this_host` must be
 read together with lifecycle state, and does not itself establish process liveness.
 
+Source development uses the same ports. `plugins.source_tree` accepts an exact
+`revision`, exclusive `after` path and `limit` of 1–100. `plugins.read_source`
+accepts `revision`, `path`, byte `offset` and `limit` of 1–65,536; it returns the
+file metadata, base64 bytes and `next_offset`. It checks the full file digest
+before returning any slice, so repeated pages of a large file repeat that
+verification. These source ports cannot read `dist/` artifacts. `plugins.branches`
+takes a `plugin`, optional exclusive branch cursor and a 1–100 limit; origins
+without recorded evidence stay null.
+
+`plugins.check_source` and `plugins.checkpoint` take `CheckpointPlugin`: a branch,
+its `expected_head`, and a map of path edits. `put` supplies `content_base64` and
+an explicit executable flag; `remove` deletes an existing source path; `copy`
+reuses a source `revision`/`path`, including binary or larger retained files.
+One request allows 128 edits and 128 KiB of decoded inline bytes, within the
+256 KiB argument limit. The resulting tree must match the manifest declarations
+and satisfy package/schema/visual-document validation. This check does not
+compile TypeScript or run a build. `check_source` only reports a proposed identity;
+`checkpoint` saves a source-only child and advances the expected head in one
+transaction. Failed validation or a stale head preserves the old branch. Retain
+a stable request ID and recover the original Operation after an unconfirmed
+save. Neither operation copies old artifacts onto the new source or applies it.
+
 `plugins.activate` accepts an installed revision, artifact, target, alias and
 configuration through the normal Operation port. It validates configuration and
 all declared grants against existing caller authority before admission, waits

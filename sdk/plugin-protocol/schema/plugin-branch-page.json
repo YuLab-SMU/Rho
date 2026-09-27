@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginBranchPage",
+  "type": "object",
+  "properties": {
+    "branches": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PluginBranch"
+      }
+    },
+    "next": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "branches"
+  ],
+  "$defs": {
+    "PluginBranch": {
+      "type": "object",
+      "properties": {
+        "head": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "origin": {
+          "description": "The recorded branch point. Absent when no origin was recorded; never inferred.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "plugin": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "plugin",
+        "name",
+        "head"
+      ]
+    }
+  }
+}

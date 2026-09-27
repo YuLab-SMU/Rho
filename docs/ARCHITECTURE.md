@@ -33,6 +33,20 @@ independent; execution must use immutable artifact bytes, never a development
 directory. Import verifies containment, source/lock/build declarations, schemas,
 inventories and digests without running a build or loading code.
 
+Development also uses public package ports. `plugins.source_tree/read_source`
+observe exact immutable source identities; byte reads verify the complete file
+while retaining only the requested bounded slice. `plugins.branches` reports the
+recorded origin, leaving it unknown when no origin was recorded.
+`plugins.check_source` validates an editing snapshot without storing it.
+`plugins.checkpoint` uses the same validation, then atomically stores a source-only
+child, source blobs, references and the expected branch head. A concurrent head
+change cannot leave an imported losing child. Source restore copies selected
+retained bytes into a new child; it cannot rewind a branch or scientific effects.
+Neither path carries parent artifacts forward, executes a build or changes a
+running instance. Invalid declaration drafts remain with the ordinary editor and
+are not accepted as validated source checkpoints. These capabilities require
+ordinary declared read/write grants and have no management-plugin exception.
+
 The same repository owns immutable project/principal-scoped scenario checkpoints
 and named heads through `scenarios.list/get/checkpoint`. Saving is a native
 compare-and-swap transaction: content identity, head and all referenced plugin

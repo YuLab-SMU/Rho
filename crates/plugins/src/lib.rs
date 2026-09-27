@@ -3,6 +3,7 @@
 
 mod package;
 mod repository;
+mod development;
 mod backend;
 mod runtime;
 mod instance_records;

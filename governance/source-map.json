@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "checks": {
+    "plugins.development-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "source_development", "--locked"]},
+    "plugins.development-host": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_development", "--locked"]},
     "plugins.manager-model": {"command": ["node", "scripts/test-manager-plugin.mjs"]},
     "plugins.manager-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "manager-plugin.spec.ts"]},
     "plugins.process-owner": {
@@ -908,6 +910,7 @@
     },
     "plugins": {
       "sources": [
+        "crates/host/tests/plugin_development.rs",
         "crates/plugin-protocol/**",
         "crates/plugin-sdk/**",
         "crates/plugins/**",
@@ -1004,6 +1007,8 @@
         "scripts/test-environment-plugin.mjs"
       ],
       "checks": [
+        "plugins.development-owner",
+        "plugins.development-host",
         "docs.index",
         "system.architecture",
         "system.client",

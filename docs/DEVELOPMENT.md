@@ -33,6 +33,16 @@ case in `--test plugins` checks direct Host access. Public protocol generation a
 the independent TypeScript consumer include the coverage DTO and empty-input schema.
 These checks establish metadata visibility, not Environment cleanup safety.
 
+Source development uses `cargo test -p rho-plugins --test source_development --locked`
+for binary/paged reads, full-file corruption detection, source-only history,
+concurrent head conflicts and transactional rollback. The shared-port fixture is
+`cargo test -p rho-host --test plugin_development --locked`; it covers pure checks,
+explicit scopes, original Operation replay and an ordinary view's declared calls.
+Run the existing package repository suite after changes to shared archive storage.
+Public DTO changes also require client generation and
+`node scripts/test-plugin-protocol.mjs`. These tests do not establish the Studio
+editor, build/preview, scene application or real-R continuity.
+
 Scenario application uses `cargo test -p rho-host --test plugin_scenarios --locked`.
 The fixtures construct ordinary packages outside the checkout and exercise scoped
 checkpoint/application ports, exact dependency/grant validation, delegated view

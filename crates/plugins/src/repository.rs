@@ -39,6 +39,7 @@ impl PluginRepository {
             CREATE TABLE IF NOT EXISTS revision_refs(owner_kind TEXT NOT NULL, owner TEXT NOT NULL, revision TEXT NOT NULL, PRIMARY KEY(owner_kind,owner,revision));
             CREATE INDEX IF NOT EXISTS revision_refs_target ON revision_refs(revision);
             CREATE TABLE IF NOT EXISTS branches(id TEXT PRIMARY KEY, plugin TEXT NOT NULL, head TEXT NOT NULL REFERENCES revisions(id), name TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS plugin_branch_origins(branch TEXT PRIMARY KEY REFERENCES branches(id), revision TEXT NOT NULL REFERENCES revisions(id));
             CREATE TABLE IF NOT EXISTS plugin_instances(id TEXT PRIMARY KEY, document TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS plugin_views(id TEXT PRIMARY KEY, project TEXT NOT NULL, principal TEXT NOT NULL, document TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS plugin_window_layouts(project TEXT NOT NULL, principal TEXT NOT NULL, window TEXT NOT NULL, document TEXT NOT NULL, PRIMARY KEY(project,principal,window));")?;
@@ -73,101 +74,9 @@ impl PluginRepository {
         let transaction = self
             .connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-        let revision = &archive.revision;
-        let document = serde_json::to_string(revision)?;
-        if let Some(existing) = transaction
-            .query_row(
-                "SELECT document FROM revisions WHERE id=?",
-                [revision.id.as_str()],
-                |r| r.get::<_, String>(0),
-            )
-            .optional()?
-        {
-            ensure(
-                serde_json::from_str::<PluginRevision>(&existing)? == *revision,
-                "immutable revision collision",
-            )?;
-        } else {
-            transaction.execute(
-                "INSERT INTO revisions VALUES(?,?,?)",
-                params![
-                    revision.id.as_str(),
-                    revision.manifest.id.as_str(),
-                    document
-                ],
-            )?;
-        }
-        for (digest, encoded) in &archive.blobs {
-            let bytes = STANDARD
-                .decode(encoded)
-                .map_err(|e| PluginError::Invalid(e.to_string()))?;
-            if let Some(existing) = transaction
-                .query_row(
-                    "SELECT bytes FROM blobs WHERE digest=?",
-                    [digest.as_str()],
-                    |r| r.get::<_, Vec<u8>>(0),
-                )
-                .optional()?
-            {
-                ensure(existing == bytes, "immutable blob collision or corruption")?;
-            } else {
-                transaction.execute(
-                    "INSERT INTO blobs VALUES(?,?)",
-                    params![digest.as_str(), bytes],
-                )?;
-            }
-        }
-        for (path, file) in &revision.files {
-            transaction.execute(
-                "INSERT OR IGNORE INTO source_files VALUES(?,?,?)",
-                params![revision.id.as_str(), path.as_str(), file.digest.as_str()],
-            )?;
-        }
-        for artifact in &archive.artifacts {
-            if let Some(existing) = transaction
-                .query_row(
-                    "SELECT document FROM artifacts WHERE id=?",
-                    [artifact.id.as_str()],
-                    |r| r.get::<_, String>(0),
-                )
-                .optional()?
-            {
-                ensure(
-                    serde_json::from_str::<BuildArtifact>(&existing)? == *artifact,
-                    "immutable artifact collision",
-                )?;
-            } else {
-                transaction.execute(
-                    "INSERT INTO artifacts VALUES(?,?,?)",
-                    params![
-                        artifact.id.as_str(),
-                        revision.id.as_str(),
-                        serde_json::to_string(artifact)?
-                    ],
-                )?;
-            }
-            for (path, file) in &artifact.files {
-                transaction.execute(
-                    "INSERT OR IGNORE INTO artifact_files VALUES(?,?,?)",
-                    params![artifact.id.as_str(), path.as_str(), file.digest.as_str()],
-                )?;
-            }
-        }
-        if let Some(parent) = &revision.parent {
-            transaction.execute(
-                "INSERT OR IGNORE INTO revision_refs VALUES('revision',?,?)",
-                params![revision.id.as_str(), parent.as_str()],
-            )?;
-        }
-        // Dependencies can be absent at import. Activation must resolve exact revisions.
-        for dependency in revision.manifest.dependencies.values() {
-            transaction.execute(
-                "INSERT OR IGNORE INTO revision_refs VALUES('dependency',?,?)",
-                params![revision.id.as_str(), dependency.revision.as_str()],
-            )?;
-        }
+        store_archive(&transaction, archive)?;
         transaction.commit()?;
-        self.inspect(&revision.id)
+        self.inspect(&archive.revision.id)
     }
 
     pub fn revision(&self, id: &RevisionId) -> Result<PluginRevision, PluginError> {
@@ -466,6 +375,10 @@ impl PluginRepository {
             "INSERT INTO revision_refs VALUES('branch',?,?)",
             params![id.as_str(), from.as_str()],
         )?;
+        transaction.execute(
+            "INSERT INTO plugin_branch_origins VALUES(?,?)",
+            params![id.as_str(), from.as_str()],
+        )?;
         transaction.commit()?;
         Ok(id)
     }
@@ -542,4 +455,105 @@ impl PluginRepository {
         transaction.commit()?;
         Ok(())
     }
+}
+
+/// Caller validates the archive and owns the encompassing transaction.
+pub(crate) fn store_archive(
+    transaction: &rusqlite::Transaction<'_>,
+    archive: &PluginArchive,
+) -> Result<(), PluginError> {
+    let revision = &archive.revision;
+    let document = serde_json::to_string(revision)?;
+    if let Some(existing) = transaction
+        .query_row(
+            "SELECT document FROM revisions WHERE id=?",
+            [revision.id.as_str()],
+            |r| r.get::<_, String>(0),
+        )
+        .optional()?
+    {
+        ensure(
+            serde_json::from_str::<PluginRevision>(&existing)? == *revision,
+            "immutable revision collision",
+        )?;
+    } else {
+        transaction.execute(
+            "INSERT INTO revisions VALUES(?,?,?)",
+            params![
+                revision.id.as_str(),
+                revision.manifest.id.as_str(),
+                document
+            ],
+        )?;
+    }
+    for (digest, encoded) in &archive.blobs {
+        let bytes = STANDARD
+            .decode(encoded)
+            .map_err(|e| PluginError::Invalid(e.to_string()))?;
+        if let Some(existing) = transaction
+            .query_row(
+                "SELECT bytes FROM blobs WHERE digest=?",
+                [digest.as_str()],
+                |r| r.get::<_, Vec<u8>>(0),
+            )
+            .optional()?
+        {
+            ensure(existing == bytes, "immutable blob collision or corruption")?;
+        } else {
+            transaction.execute(
+                "INSERT INTO blobs VALUES(?,?)",
+                params![digest.as_str(), bytes],
+            )?;
+        }
+    }
+    for (path, file) in &revision.files {
+        transaction.execute(
+            "INSERT OR IGNORE INTO source_files VALUES(?,?,?)",
+            params![revision.id.as_str(), path.as_str(), file.digest.as_str()],
+        )?;
+    }
+    for artifact in &archive.artifacts {
+        if let Some(existing) = transaction
+            .query_row(
+                "SELECT document FROM artifacts WHERE id=?",
+                [artifact.id.as_str()],
+                |r| r.get::<_, String>(0),
+            )
+            .optional()?
+        {
+            ensure(
+                serde_json::from_str::<BuildArtifact>(&existing)? == *artifact,
+                "immutable artifact collision",
+            )?;
+        } else {
+            transaction.execute(
+                "INSERT INTO artifacts VALUES(?,?,?)",
+                params![
+                    artifact.id.as_str(),
+                    revision.id.as_str(),
+                    serde_json::to_string(artifact)?
+                ],
+            )?;
+        }
+        for (path, file) in &artifact.files {
+            transaction.execute(
+                "INSERT OR IGNORE INTO artifact_files VALUES(?,?,?)",
+                params![artifact.id.as_str(), path.as_str(), file.digest.as_str()],
+            )?;
+        }
+    }
+    if let Some(parent) = &revision.parent {
+        transaction.execute(
+            "INSERT OR IGNORE INTO revision_refs VALUES('revision',?,?)",
+            params![revision.id.as_str(), parent.as_str()],
+        )?;
+    }
+    // Dependencies can be absent at import. Activation must resolve exact revisions.
+    for dependency in revision.manifest.dependencies.values() {
+        transaction.execute(
+            "INSERT OR IGNORE INTO revision_refs VALUES('dependency',?,?)",
+            params![revision.id.as_str(), dependency.revision.as_str()],
+        )?;
+    }
+    Ok(())
 }

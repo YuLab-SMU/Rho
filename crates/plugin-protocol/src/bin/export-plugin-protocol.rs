@@ -77,9 +77,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ApplyScenario::export_all(&types)?;
     WindowScenarioSnapshot::export_all(&types)?;
     ResolveWindowProvider::export_all(&types)?;
+    ListPluginSource::export_all(&types)?;
+    PluginSourcePage::export_all(&types)?;
+    ReadPluginSource::export_all(&types)?;
+    PluginSourceChunk::export_all(&types)?;
+    ListPluginBranches::export_all(&types)?;
+    PluginBranchPage::export_all(&types)?;
+    CheckpointPlugin::export_all(&types)?;
+    PluginCheckpoint::export_all(&types)?;
     VisualDocument::export_all(&types)?;
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
+        ("list-plugin-source", schemars::schema_for!(ListPluginSource)),
+        ("plugin-source-page", schemars::schema_for!(PluginSourcePage)),
+        ("read-plugin-source", schemars::schema_for!(ReadPluginSource)),
+        ("plugin-source-chunk", schemars::schema_for!(PluginSourceChunk)),
+        ("list-plugin-branches", schemars::schema_for!(ListPluginBranches)),
+        ("plugin-branch-page", schemars::schema_for!(PluginBranchPage)),
+        ("checkpoint-plugin", schemars::schema_for!(CheckpointPlugin)),
+        ("plugin-checkpoint", schemars::schema_for!(PluginCheckpoint)),
         ("project-read-coverage", schemars::schema_for!(ProjectReadCoverage)),
         ("project-read-coverage-arguments", schemars::schema_for!(ProjectReadCoverageArguments)),
         ("manifest", schemars::schema_for!(PluginManifest)),

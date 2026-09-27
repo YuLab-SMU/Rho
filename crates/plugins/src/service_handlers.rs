@@ -24,6 +24,16 @@ fn scenario_error(error_value: PluginError) -> OperationError {
         other => error(other),
     }
 }
+fn source_error(value: PluginError) -> OperationError {
+    match value {
+        PluginError::Conflict => OperationError::ContentChanged("plugin branch head changed".into()),
+        PluginError::Missing(id) => OperationError::NotFound(id),
+        PluginError::Invalid(message) => invalid(message),
+        PluginError::Contract(message) => invalid(message),
+        PluginError::Json(message) => invalid(message),
+        other => error(other),
+    }
+}
 fn key(id: &str) -> host::CapabilityRef {
     host::CapabilityRef::new(id, 1).unwrap()
 }
@@ -71,6 +81,10 @@ pub(crate) fn register(
         "plugins.project_coverage",
         "plugins.instance",
         "plugins.resolve",
+        "plugins.source_tree",
+        "plugins.read_source",
+        "plugins.branches",
+        "plugins.check_source",
         "plugins.branch_head",
         "plugins.compare",
     ] {
@@ -93,6 +107,7 @@ pub(crate) fn register(
         "plugins.remove",
         "plugins.branch",
         "plugins.advance_branch",
+        "plugins.checkpoint",
         "plugins.reconcile_references",
     ] {
         registry.register(Arc::new(Manage {
@@ -237,6 +252,27 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
             false,
             PLUGINS_READ_SCOPE,
         ),
+        "plugins.source_tree" => (
+            schema_for!(ListPluginSource).to_value(), schema_for!(PluginSourcePage).to_value(),
+            json!({"revision":digest(),"after":null,"limit":20}),
+            "List immutable source file identities in a bounded page", false, PLUGINS_READ_SCOPE,
+        ),
+        "plugins.read_source" => (
+            schema_for!(ReadPluginSource).to_value(), schema_for!(PluginSourceChunk).to_value(),
+            json!({"revision":digest(),"path":"plugin.json","offset":0,"limit":65536}),
+            "Read binary-safe source bytes after verifying the complete stored file digest", false, PLUGINS_READ_SCOPE,
+        ),
+        "plugins.branches" => (
+            schema_for!(ListPluginBranches).to_value(), schema_for!(PluginBranchPage).to_value(),
+            json!({"plugin":"example.plugin","after":null,"limit":20}),
+            "List a plugin's development branches and recorded origins", false, PLUGINS_READ_SCOPE,
+        ),
+        "plugins.check_source" | "plugins.checkpoint" => (
+            schema_for!(CheckpointPlugin).to_value(), schema_for!(PluginCheckpoint).to_value(),
+            json!({"branch":"branch-example","expected_head":digest(),"changes":{}}),
+            "Validate source edits or atomically save them as a new branch checkpoint", id == "plugins.checkpoint",
+            if id == "plugins.checkpoint" { PLUGINS_WRITE_SCOPE } else { PLUGINS_READ_SCOPE },
+        ),
         "plugins.branch_head" => (
             schema_for!(PluginBranchArguments).to_value(),
             json!({"type":"object","properties":{"revision":{"type":"string"}},"required":["revision"],"additionalProperties":false}),
@@ -316,6 +352,10 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
             related_capabilities:vec![key("plugins.list"),key("plugins.instances")],related_skills:vec![],position_units:vec!["Offsets and byte bounds are bytes, not tokens. Page item limits are 1–100.".into()],
         },
     };
+    if matches!(id, "plugins.check_source" | "plugins.checkpoint") {
+        descriptor.documentation.limitations.push("At most 128 edits and 128 KiB of decoded inline content per checkpoint; copy can reuse exact retained source, including larger files. Paths, manifest declarations and visual documents must validate. Invalid drafts remain the editor's responsibility.".into());
+        descriptor.documentation.effects = if operation { "Atomically store a source-only child and advance the expected branch head. Never reuse parent build artifacts, run a build, activate a provider, apply a scenario or replay scientific effects." } else { "Validate and return the proposed source identity only. The returned revision is not installed by this observation." }.into();
+    }
     if id == "workspace.paths" {
         descriptor.domain = "workspace".into();
         descriptor.documentation.owner = "workspace".into();
@@ -409,6 +449,10 @@ fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
         "plugins.instances" => normalize::<PluginInstancesArguments>(value),
         "plugins.instance" | "plugins.release" => normalize::<PluginInstanceArguments>(value),
         "plugins.resolve" => normalize::<PluginResolveArguments>(value),
+        "plugins.source_tree" => normalize::<ListPluginSource>(value),
+        "plugins.read_source" => normalize::<ReadPluginSource>(value),
+        "plugins.branches" => normalize::<ListPluginBranches>(value),
+        "plugins.check_source" | "plugins.checkpoint" => normalize::<CheckpointPlugin>(value),
         "plugins.branch_head" => normalize::<PluginBranchArguments>(value),
         "plugins.compare" => normalize::<ComparePluginRevisions>(value),
         "views.inspect" | "views.connection" => normalize::<PluginViewArguments>(value),
@@ -579,6 +623,21 @@ impl QueryHandler for Read {
                     .map_err(error)?;
                 json!(lease.binding(args.target))
             }
+            "plugins.source_tree" => json!(service.repository.lock().unwrap().source_page(&decode::<ListPluginSource>(value)?).map_err(source_error)?),
+            "plugins.read_source" => {
+                let args: ReadPluginSource = decode(value)?;
+                let service = service.clone();
+                json!(tokio::task::spawn_blocking(move || service.repository.lock().unwrap().read_source(&args).map_err(source_error)).await.map_err(error)??)
+            }
+            "plugins.branches" => json!(service.repository.lock().unwrap().branches(&decode::<ListPluginBranches>(value)?).map_err(source_error)?),
+            "plugins.check_source" => {
+                let args: CheckpointPlugin = decode(value)?;
+                let service = service.clone();
+                json!(tokio::task::spawn_blocking(move || {
+                    let archive = service.repository.lock().unwrap().prepare_checkpoint(&args).map_err(source_error)?;
+                    Ok::<_, OperationError>(PluginCheckpoint { branch: args.branch, revision: archive.revision.id, parent: args.expected_head })
+                }).await.map_err(error)??)
+            }
             "plugins.branch_head" => {
                 json!({"revision":service.repository.lock().unwrap().branch_head(&decode::<PluginBranchArguments>(value)?.branch).map_err(error)?})
             }
@@ -616,6 +675,7 @@ struct Bound {
     target: host::TargetRef,
     revision: Option<RevisionId>,
     grants: Vec<CapabilityRequirement>,
+    source_checkpoint: Option<Arc<PluginArchive>>,
 }
 struct Manage {
     service: Arc<PluginService>,
@@ -645,7 +705,11 @@ impl OperationHandler for Manage {
             }))
     }
     fn execution_context(&self) -> Value {
-        json!({"managed_revision":self.bound.as_ref().and_then(|b|b.revision.as_ref())})
+        let mut context = json!({"managed_revision":self.bound.as_ref().and_then(|b|b.revision.as_ref())});
+        if let Some(bound) = &self.bound && let Some(archive) = &bound.source_checkpoint {
+            context["source_checkpoint"] = json!({"branch":bound.target.identity,"revision":archive.revision.id,"parent":archive.revision.parent});
+        }
+        context
     }
     async fn bind(
         &self,
@@ -660,6 +724,7 @@ impl OperationHandler for Manage {
         }
         let mut revision = None;
         let mut grants = vec![];
+        let mut source_checkpoint = None;
         let mut target = host::TargetRef {
             kind: "plugin_repository".into(),
             identity: self.service.scope.clone(),
@@ -786,6 +851,13 @@ impl OperationHandler for Manage {
                     identity: args.instance.instance.to_string(),
                 };
             }
+            "plugins.checkpoint" => {
+                let args: CheckpointPlugin = decode(value)?;
+                revision = Some(args.expected_head.clone());
+                target = host::TargetRef { kind: "plugin_branch".into(), identity: args.branch.to_string() };
+                let service = self.service.clone();
+                source_checkpoint = Some(Arc::new(tokio::task::spawn_blocking(move || service.repository.lock().unwrap().prepare_checkpoint(&args).map_err(source_error)).await.map_err(error)??));
+            }
             "plugins.branch" => {
                 let args: BranchPlugin = decode(value)?;
                 if args.name.trim().is_empty() || args.name.len() > 128 {
@@ -837,6 +909,7 @@ impl OperationHandler for Manage {
                 target,
                 revision,
                 grants,
+                source_checkpoint,
             }),
         })))
     }
@@ -864,7 +937,7 @@ impl OperationHandler for Manage {
     }
     async fn execute(&self, operation: &host::Operation) -> Result<CommitPlan, HandlerError> {
         self.run(operation).await.map(CommitPlan::succeeded).map_err(|error| {
-            if matches!(self.id, "windows.update_layout" | "windows.open_view" | "views.close" | "scenarios.checkpoint" | "scenarios.apply") && matches!(&error,
+            if matches!(self.id, "windows.update_layout" | "windows.open_view" | "views.close" | "scenarios.checkpoint" | "scenarios.apply" | "plugins.checkpoint") && matches!(&error,
                 OperationError::ContentChanged(_) | OperationError::InvalidInput(_) | OperationError::NotFound(_)) {
                 return HandlerError::before_effect(error.to_string());
             }
@@ -1030,6 +1103,12 @@ impl Manage {
                         other => error(other),
                     })?;
                 Ok(json!({"removed":args.revision}))
+            }
+            "plugins.checkpoint" => {
+                let args: CheckpointPlugin = decode(value)?;
+                let archive = bound.source_checkpoint.clone().ok_or_else(|| error("source checkpoint was not prepared"))?;
+                let service = service.clone();
+                Ok(json!(tokio::task::spawn_blocking(move || service.repository.lock().unwrap().commit_checkpoint(&args, &archive).map_err(source_error)).await.map_err(error)??))
             }
             "plugins.branch" => {
                 let args: BranchPlugin = decode(value)?;

@@ -17,6 +17,23 @@ try {
 import type { ActivatePlugin, WorkspacePaths, PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage, PendingCancellation, UpdatePluginWindowLayout, OpenPluginWindowView, ClosePluginView, PluginViewLifecycle, SaveDocumentDraft, StageDraftChunk, DocumentDraftChunk, ListDocumentDrafts, DocumentDraftPage, ContextSearch, ContextPage, PreviewContext, ContextPreview } from "../protocol/index.js";
 import type {ProjectReadCoverage,ProjectReadCoverageArguments} from "../protocol/index.js";
 import type { SaveScenario, ScenarioPage, ScenarioRevisionArguments, ApplyScenario, WindowScenarioSnapshot, ResolveWindowProvider } from "../protocol/index.js";
+import type { ListPluginSource, PluginSourcePage, ReadPluginSource, PluginSourceChunk, ListPluginBranches, PluginBranchPage, CheckpointPlugin, PluginCheckpoint } from "../protocol/index.js";
+const sourceList: ListPluginSource = { revision: "revision", after: null, limit: 20 };
+const sourcePage: PluginSourcePage = { revision: "revision", files: {}, total: 0, next: null };
+const sourceRead: ReadPluginSource = { revision: "revision", path: "main.ts", offset: 0, limit: 65536 };
+const sourceChunk: PluginSourceChunk = { ...sourceRead, file: { digest: "digest", bytes: 0, executable: false }, content_base64: "", next_offset: null };
+const branchList: ListPluginBranches = { plugin: "example.plugin", after: null, limit: 20 };
+const branchPage: PluginBranchPage = { branches: [{ id: "branch", plugin: branchList.plugin, name: "Editing", head: "revision", origin: null }], next: null };
+const sourceCheckpoint: CheckpointPlugin = { branch: "branch", expected_head: "revision", changes: {
+  "main.ts": { kind: "put", content_base64: "", executable: false },
+  "old.ts": { kind: "remove" },
+  "restored.ts": { kind: "copy", revision: "original", path: "main.ts" },
+} };
+const checkedSource: PluginCheckpoint = { branch: "branch", revision: "checked", parent: "revision" };
+// @ts-expect-error Source editing never accepts an output artifact as an input.
+const artifactCheckpoint: CheckpointPlugin = { ...sourceCheckpoint, artifact: "artifact" };
+// @ts-expect-error Byte content is explicit; text is not silently re-encoded.
+const guessedEncoding: CheckpointPlugin = { ...sourceCheckpoint, changes: { "main.ts": {kind:"put",text:"code",executable:false} } };
 const application: ApplyScenario = { window: "window", revision: "revision", expected_layout_version: 2, instances: {}, views: {} };
 const selectedProvider: ResolveWindowProvider = { window: "window", capability: { id: "example.read", version: 1 } };
 const observation: WindowScenarioSnapshot = { scenario: null, layout: { window: "window", project: "project", principal: "principal", version: 0, layout: {kind:"empty"} } };
@@ -66,10 +83,31 @@ export function inspect(manifest: PluginManifest, visual: VisualDocument, page: 
   execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"),
     "--noEmit", "--strict", "--module", "NodeNext", "--moduleResolution", "NodeNext",
     "--target", "ES2022", "--rootDir", consumer, path.join(consumer, "consumer.mts")], { stdio: "inherit" });
-  for (const name of ["manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "view-close", "window-layout", "window-open-view", "context-page", "preview-context", "context-preview", "document-draft", "list-document-drafts", "document-draft-page", "save-document-draft", "scenario", "save-scenario", "scenario-page", "apply-scenario", "window-scenario-snapshot", "resolve-window-provider", "visual-document"]) {
+  for (const name of ["list-plugin-source", "plugin-source-page", "read-plugin-source", "plugin-source-chunk", "list-plugin-branches", "plugin-branch-page", "checkpoint-plugin", "plugin-checkpoint", "manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "view-close", "window-layout", "window-open-view", "context-page", "preview-context", "context-preview", "document-draft", "list-document-drafts", "document-draft-page", "save-document-draft", "scenario", "save-scenario", "scenario-page", "apply-scenario", "window-scenario-snapshot", "resolve-window-provider", "visual-document"]) {
     const schema = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema", `${name}.json`), "utf8"));
-    assert.ok(schema.$schema && schema.$defs, `missing standalone schema: ${name}`);
+    assert.ok(schema.$schema && schema.title, `missing standalone schema: ${name}`);
+    const visit = value => {
+      if (!value || typeof value !== "object") return;
+      if (typeof value.$ref === "string") {
+        assert.ok(value.$ref === "#" || value.$ref.startsWith("#/"), `external reference in ${name}: ${value.$ref}`);
+        let resolved = schema;
+        for (const token of value.$ref === "#" ? [] : value.$ref.slice(2).split("/")) {
+          const key = token.replace(/~1/g, "/").replace(/~0/g, "~");
+          assert.ok(resolved && Object.hasOwn(resolved, key), `unresolved reference in ${name}: ${value.$ref}`);
+          resolved = resolved[key];
+        }
+      }
+      Object.values(value).forEach(visit);
+    };
+    visit(schema);
   }
+  const sourceRead = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/read-plugin-source.json"), "utf8"));
+  assert.equal(sourceRead.additionalProperties, false);
+  assert.equal(sourceRead.properties.limit.minimum, 1);
+  assert.equal(sourceRead.properties.limit.maximum, 65536);
+  const sourceCheckpoint = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/checkpoint-plugin.json"), "utf8"));
+  assert.equal(sourceCheckpoint.additionalProperties, false);
+  assert.deepEqual(sourceCheckpoint.required, ["branch", "expected_head", "changes"]);
   const contextSearch = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/context-search.json"), "utf8"));
   const scenarioList = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/list-scenarios.json"), "utf8"));
   assert.equal(scenarioList.additionalProperties, false);

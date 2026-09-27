@@ -11,6 +11,44 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
+Plugin source development now has public `plugins.source_tree/read_source`,
+`plugins.branches`, `plugins.check_source` and `plugins.checkpoint` ports.
+Reads page immutable file identities and return binary-safe byte slices after
+checking the complete file digest. New branches record their origin; missing
+origin evidence remains unknown. Source checks validate a proposed child without
+installing it. Saving captures that proposed identity in the original Operation,
+then atomically stores the source-only revision, blobs, references and expected
+branch head. Put/remove/exact-source-copy edits preserve the previous revision's
+artifacts, and restoration creates another child. Invalid manifests/declarations,
+quota failures and stale heads leave the branch intact. Inline edits are bounded
+to 128 KiB and the whole request to the shared 256 KiB argument limit; large
+retained files can be copied without inline encoding. These ports do not compile
+code, start providers or apply a scenario.
+
+`cargo test -p rho-plugins --lib --test source_development --test
+package_repository --locked --offline` passes all 41 cases (22 owner, 13 existing
+repository and 6 source-development cases). The source cases cover binary/paged
+reads, corruption outside the requested slice, immutable restore, large-file
+rename, concurrent writers and forced reference-write rollback. Evidence is in
+`target/plugin-refactor/source-owner-final.log`.
+`cargo test -p rho-host --test plugin_development --test plugins --test
+port_contracts --locked --offline` also passes all 20 cases. The two new cases
+exercise pure checks, scope refusal, ordinary view grants, original-request replay,
+concurrent saves and a forced write failure whose uncertain original record is
+preserved without re-execution. Evidence is in `source-host-v1.log` in the same
+directory. A final branch-update guard is additionally covered by the focused
+`--test source_development` and `--test plugin_development` reruns (6 and 2 passed),
+including a database-ignored update that must roll back all newly stored content;
+see `source-owner-guard.log` and `source-host-guard.log`. The 17 protocol cases pass
+in `source-protocol.log`. Independent strict NodeNext consumption and standalone
+schema-reference checks pass (`source-public-types-v3.log`). Public bindings and
+schemas are generated; `npm run generate --prefix ui`, `npm run build --prefix ui`
+and `npm run check --prefix ui` pass (`source-generate.log`, `source-client-build.log`
+and `source-client-check.log`). Studio editing, native build and preview still need
+to be connected through ordinary public capabilities. A running Host needs a rebuilt replacement
+to expose the new ports; a client refresh cannot add them. Existing user Hosts and
+R sessions have not been replaced during these isolated-project checks.
+
 Named scenario checkpoints now have scoped storage and public
 `scenarios.list/get/checkpoint` ports. Saving compares the current head and commits
 immutable content plus protecting package references atomically. Old checkpoints

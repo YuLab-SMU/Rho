@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginSourceChunk",
+  "type": "object",
+  "properties": {
+    "content_base64": {
+      "description": "Binary-safe bytes. The owner verifies the full stored file digest before returning.",
+      "type": "string"
+    },
+    "file": {
+      "$ref": "#/$defs/PackageFile"
+    },
+    "next_offset": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "offset": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "path": {
+      "type": "string"
+    },
+    "revision": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "revision",
+    "path",
+    "file",
+    "offset",
+    "content_base64"
+  ],
+  "$defs": {
+    "PackageFile": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "executable": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "digest",
+        "bytes",
+        "executable"
+      ]
+    }
+  }
+}
