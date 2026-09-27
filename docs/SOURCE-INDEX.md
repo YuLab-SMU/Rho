@@ -89,6 +89,7 @@ Sources:
 - `crates/host/tests/plugin_preview.rs`
 - `crates/host/tests/plugin_self_requirements.rs`
 - `crates/host/tests/plugin_view_delegation.rs`
+- `crates/host/tests/plugin_workspace.rs`
 - `crates/host/tests/r_plugin_real_r.rs`
 - `crates/plugin-protocol/**`
 - `crates/plugin-sdk/**`
@@ -279,6 +280,9 @@ Checks:
 - `plugins.view-delegation`: `["cargo","test","-p","rho-host","--test","plugin_view_delegation","--locked"]`
 - `plugins.viewer`: `["node","scripts/test-viewer-plugin.mjs"]`
 - `plugins.window-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-workspace.spec.ts"]`
+- `plugins.workspace-cli`: `["cargo","test","-p","rho-cli","--bin","rho","plugin_workspace","--locked"]`
+- `plugins.workspace-host`: `["cargo","test","-p","rho-host","--test","plugin_workspace","--locked"]`
+- `plugins.workspace-http`: `["cargo","test","-p","rho-workbench","--lib","plugin_workspace","--locked"]`
 - `system.architecture`: `["node","scripts/check-architecture.mjs"]`
 - `system.client`: `["node","scripts/client.mjs","check"]`
 - `system.project-coverage`: `["cargo","test","-p","rho-sqlite","-p","rho-operation","-p","rho-plugins","--lib","project_coverage","--locked"]`

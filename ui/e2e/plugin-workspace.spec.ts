@@ -26,14 +26,19 @@ test.beforeAll(async () => {
   const plugin = buildUiFixture(directory), database = join(directory, "state.sqlite");
   const installed = JSON.parse(execFileSync(resolve("../target/debug/rho"), ["--database", database, "plugins", "snapshot", plugin], { encoding: "utf8" })).result;
   const native = JSON.parse(execFileSync(resolve("../target/debug/rho"), ["--database", database, "plugins", "snapshot", buildControlFixture(directory), "--target", "aarch64-apple-darwin"], { encoding: "utf8" })).result;
-  process_ = spawn(resolve("../target/debug/rho"), ["--database", database, "--project", project, "workbench"], { stdio: ["ignore", "pipe", "pipe"] });
+  process_ = spawn(resolve("../target/debug/rho"), ["--database", database, "--project", project, "--plugins-only", "workbench"], { stdio: ["ignore", "pipe", "pipe"] });
   url = new URL(await new Promise<string>((done, reject) => {
     let output = "", errors = "";
     const timer = setTimeout(() => reject(new Error(`Fixture Host startup timed out: ${errors}`)), 40000);
     process_.stderr!.on("data", b => errors += b);
-    process_.stdout!.on("data", b => { output += b; const found = output.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[a-z0-9]+/); if (found) { clearTimeout(timer); done(found[0]); } });
+    process_.stdout!.on("data", b => { output += b; const found = output.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/); if (found) { clearTimeout(timer); done(found[0]); } });
     process_.once("exit", code => { clearTimeout(timer); reject(new Error(`Fixture Host exited ${code}: ${errors}`)); });
   }));
+  expect(url.searchParams.has('plugin-window')).toBe(true);
+  const info = await fetch(new URL('/api/info', url), { headers: { Authorization: `Bearer ${url.hash.slice(7)}` } }).then(r => r.json());
+  expect(info.runtime).toBe('plugins');
+  expect(info.capabilities.some((entry: any) => entry.capability.id === 'workspace.run_r' || entry.capability.id === 'runtime.instances')).toBe(false);
+  expect((await query('plugins.instances', { after: null, limit: 100 })).total).toBe(0);
   const nativeInstance = (await invoke("plugins.activate", { revision: native.revision, artifact: native.artifacts[0], target: "aarch64-apple-darwin", alias: "native", configuration: {} })).instance;
   instance = (await invoke("plugins.activate", { revision: installed.revision, artifact: installed.artifacts[0], target: "ui-web", alias: "external", configuration: {} })).instance;
   const binding = await query("plugins.resolve", { capability: { id: "fixture.answer", version: 2 }, instance: nativeInstance.identity });

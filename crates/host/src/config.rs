@@ -7,6 +7,8 @@ use crate::{ArkConfig, NextHost, REnvironmentConfig, SshConfig};
 /// Native runtime selection shared by all edges. This is hosting, not a domain.
 #[derive(Debug, Clone)]
 pub enum RuntimeConfiguration {
+    /// Generic plugin workspace; no fixed scientific owners or R discovery.
+    Plugins,
     Project,
     Environment {
         rscript: PathBuf,
@@ -38,6 +40,7 @@ pub struct ReservedHost {
 impl HostProfile {
     pub fn runtime_name(&self) -> &'static str {
         match self.runtime {
+            RuntimeConfiguration::Plugins => "plugins",
             RuntimeConfiguration::Project => "project",
             RuntimeConfiguration::Environment { .. } => "environment",
             RuntimeConfiguration::Ark { .. } => "ark",
@@ -63,6 +66,11 @@ impl HostProfile {
     }
 
     pub fn reserve(&self, project: &Path) -> Result<ReservedHost, String> {
+        if matches!(self.runtime, RuntimeConfiguration::Plugins)
+            && (self.remote.is_some() || self.host_skills.is_some())
+        {
+            return Err("Plugin workspaces receive scientific providers and context through installed packages, not fixed Host bindings".into());
+        }
         crate::skills::validate_manifest_for_project(
             project,
             &self.database,
@@ -88,6 +96,9 @@ impl ReservedHost {
         let project = lease.root().to_owned();
         let data = profile.database.parent().unwrap_or(Path::new("."));
         match &profile.runtime {
+            RuntimeConfiguration::Plugins => {
+                NextHost::open_plugin_workspace_reserved(&profile.database, lease).await
+            }
             RuntimeConfiguration::Project => {
                 NextHost::open_project_reserved(
                     &profile.database,

@@ -211,6 +211,39 @@ fn remote_components(
 }
 
 impl NextHost {
+    /// Compose only the generic plugin/Operation workspace. Package discovery
+    /// never selects providers, starts a scientific owner or attaches R. A fresh
+    /// test project can use this same Host flow without inheriting an analysis.
+    pub async fn open_plugin_workspace(
+        database: impl AsRef<Path>,
+        project_root: impl AsRef<Path>,
+    ) -> Result<Self, OperationError> {
+        let database = database.as_ref();
+        let lease = ProjectLease::acquire(project_root.as_ref())?;
+        Self::open_plugin_workspace_reserved(database, lease).await
+    }
+
+    async fn open_plugin_workspace_reserved(
+        database: &Path,
+        lease: ProjectLease,
+    ) -> Result<Self, OperationError> {
+        let journal = Arc::new(SqliteOperationJournal::open(database)?);
+        let mut protected = skills::protected_path_candidates(database);
+        protected.push(lease.path().to_owned());
+        Self::compose(
+            journal,
+            HostDomains {
+                plugin_store: Some(rho_plugins::repository_path(database)),
+                skill_exclusions: protected,
+                project_lease: Some(lease),
+                ..HostDomains::default()
+            },
+            Arc::new(SystemClock),
+            Arc::new(UuidOperationIdGenerator),
+        )
+        .await
+    }
+
     pub async fn open_project(
         database: impl AsRef<Path>,
         project_root: impl AsRef<Path>,
@@ -821,7 +854,13 @@ impl NextHost {
             project_lease,
         } = domains;
         let project_lease = project_lease.map(Arc::new);
-        let output_project = project.as_ref().map(|p| p.root().to_string());
+        // Project identity belongs to the native Host lease, independently of
+        // whether a Files/Git or scientific owner is composed. Test components
+        // without a native lease continue to supply their own explicit root.
+        let output_project = project_lease
+            .as_ref()
+            .map(|lease| lease.root().to_string_lossy().into_owned())
+            .or_else(|| project.as_ref().map(|p| p.root().to_string()));
         let auto_continue = managed
             .as_ref()
             .is_some_and(|managed| managed.auto_continue);
@@ -855,11 +894,13 @@ impl NextHost {
                 });
         let mut registry = CapabilityRegistry::new();
         let mut targets = Vec::new();
-        if let Some(project) = &project {
+        if let Some(project) = &output_project {
             targets.push(rho_contract::TargetRef {
                 kind: "project".into(),
-                identity: project.root().into(),
+                identity: project.clone(),
             });
+        }
+        if let Some(project) = &project {
             targets.push(rho_contract::TargetRef {
                 kind: "local_process".into(),
                 identity: project.root().into(),

@@ -310,6 +310,9 @@ async fn select_project_root(state: &AppState, root: PathBuf) -> Response {
             Json(hosting.info()).into_response()
         }
         Err(error) => {
+            if matches!(hosting.profile.runtime, rho_host::RuntimeConfiguration::Plugins) {
+                return failure(StatusCode::INTERNAL_SERVER_ERROR, format!("Plugin workspace could not be opened: {error}"));
+            }
             hosting.r_configuration.error = Some(format!(
                 "R startup failed; previous session memory has ended. {error}"
             ));
@@ -617,6 +620,10 @@ pub async fn serve_with_assets(
     url_file: Option<&Path>,
     dev_assets: Option<&Path>,
 ) -> Result<(), String> {
+    let plugins_only = matches!(profile.runtime, rho_host::RuntimeConfiguration::Plugins);
+    if plugins_only && project.is_none() {
+        return Err("Plugin workspace launch requires an explicit project".into());
+    }
     let application = Arc::new(rho_host::ApplicationStore::open(
         &profile.database.with_extension("studio.sqlite"),
     )?);
@@ -628,6 +635,7 @@ pub async fn serve_with_assets(
         let root = project_root(&project.to_string_lossy())?;
         let host = match profile.open_deferred(&root).await {
             Ok(host) => host,
+            Err(error) if plugins_only => return Err(error),
             Err(error) => {
                 r_configuration.error = Some(format!("R startup failed: {error}"));
                 profile.runtime = rho_host::RuntimeConfiguration::Project;
@@ -664,7 +672,7 @@ pub async fn serve_with_assets(
         uuid::Uuid::new_v4().simple(),
         uuid::Uuid::new_v4().simple()
     );
-    let url = format!("{origin}/#token={token}");
+    let url = format!("{origin}/{}#token={token}", if plugins_only { "?plugin-window" } else { "" });
     let state = AppState {
         hosting: hosting.clone(),
         authority,
@@ -733,6 +741,12 @@ mod tests {
     use tower::ServiceExt;
 
     pub(super) async fn fixture() -> (tempfile::TempDir, AppState, Router) {
+        fixture_with_runtime(RuntimeConfiguration::Project).await
+    }
+
+    async fn fixture_with_runtime(
+        runtime: RuntimeConfiguration,
+    ) -> (tempfile::TempDir, AppState, Router) {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("project");
         std::fs::create_dir(&root).unwrap();
@@ -740,7 +754,7 @@ mod tests {
         let profile = HostProfile {
             host_skills: None,
             database: temp.path().join("next.sqlite"),
-            runtime: RuntimeConfiguration::Project,
+            runtime,
             remote: None,
         };
         let host = Arc::new(profile.open(&root).await.unwrap());
@@ -801,6 +815,68 @@ mod tests {
     }
     async fn frame(state: &AppState, method: &str, params: Value) -> Value {
         json!({"project_root":state.hosting.read().await.info().project_root, "frame":{"id":"request","request":{"method":method,"params":params}}})
+    }
+
+    #[tokio::test]
+    async fn plugin_workspace_uses_generic_ports_and_never_applies_saved_r_configuration() {
+        let (temp, state, app) = fixture_with_runtime(RuntimeConfiguration::Plugins).await;
+        let mut profile = state.hosting.read().await.profile.clone();
+        let saved = state.application.read("user", "runtime").unwrap();
+        state
+            .application
+            .write(
+                "user",
+                &rho_contract::ApplicationState {
+                    value: json!({"executable":"/must-not-probe/R","ark":"/must-not-start/ark"}),
+                    ..saved
+                },
+            )
+            .unwrap();
+        let settings = settings::configure_startup(&mut profile, &state.application).await;
+        assert_eq!(settings.source, "plugins");
+        assert!(settings.current.is_none());
+        assert!(settings.candidates.is_empty());
+        assert!(settings.error.is_none());
+        assert!(matches!(profile.runtime, RuntimeConfiguration::Plugins));
+        let info = json_body(request(&app, "/api/info", None).await).await;
+        assert_eq!(info["runtime"], "plugins");
+        assert!(
+            !info["capabilities"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|cap| cap["capability"]["id"] == "workspace.run_r")
+        );
+        let body = frame(&state, "query_snapshot", json!({"capability":{"id":"plugins.list","version":1},"arguments":{"after":null,"limit":100}})).await;
+        let inventory = json_body(request(&app, "/api/host", Some(body)).await).await;
+        assert_eq!(inventory["result"]["data"]["total"], 0);
+        let refusal = request(&app, "/api/r", Some(json!({"selection":{"executable":"/missing/R","ark":"/missing/ark"},"end_session":true}))).await;
+        assert_eq!(refusal.status(), StatusCode::CONFLICT);
+        assert!(
+            json_body(refusal).await["error"]
+                .as_str()
+                .unwrap()
+                .contains("plugin providers")
+        );
+        let probe = request(
+            &app,
+            "/api/r/probe",
+            Some(json!({"executable":"/missing/R","ark":"/missing/ark"})),
+        )
+        .await;
+        assert_eq!(probe.status(), StatusCode::CONFLICT);
+        let other = temp.path().join("other-project");
+        std::fs::create_dir(&other).unwrap();
+        let switched =
+            json_body(request(&app, "/api/project", Some(json!({"project_root":other}))).await)
+                .await;
+        assert_eq!(switched["runtime"], "plugins");
+        assert_eq!(
+            switched["project_root"],
+            other.canonicalize().unwrap().to_str().unwrap()
+        );
+        assert!(!temp.path().join("runtime").exists());
+        assert!(!temp.path().join("environment").exists());
     }
 
     #[tokio::test]

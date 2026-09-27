@@ -30,6 +30,25 @@ ends the R processes this Host started; an exiting Host cannot leave them reacha
 and they are not reattached by a later one. Closing a browser page cancels nothing and
 leaves R running.
 
+### Open a plugin-only development workspace
+
+Use a separate project and database directory when testing plugin composition:
+
+```sh
+target/debug/rho --database /absolute/path/to/test-state/state.sqlite \
+  --project /absolute/path/to/test-project --plugins-only workbench
+```
+
+This explicit development mode opens the generic plugin window and does not
+discover or start R, import defaults or construct fixed scientific owners. The
+project must already exist. Install packages through the ordinary recovery CLI,
+then activate exact revisions and open views through the shared Host ports.
+`--plugins-only` also applies to `session`, `mcp` and native `invoke`; standalone
+read-only queries use their normal observer, while live plugin reads connect to
+the running Host. It cannot be combined with fixed R/remote/Skill startup flags.
+Closing views keeps their instances alive; normal Host shutdown drains its own
+instances. Studio's automatic disposable test-project flow remains unfinished.
+
 ### Open the bundled demo
 
 The welcome page's **Open Rho Demo** action materializes a writable copy of the

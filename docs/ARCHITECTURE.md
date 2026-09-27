@@ -23,6 +23,17 @@ plugins. Management and Plugin Studio are ordinary plugins too; core CLI remains
 the recovery entry when they are absent. Default delivery imports the same package
 format and never introduces source-based validation exceptions or silent reinstall.
 
+`NextHost::open_plugin_workspace` composes the generic package, presentation and
+Operation ports without fixed Files/Git, process, R, Environment or Agent owners.
+The canonical native project lease supplies project identity independently of a
+scientific owner. `RuntimeConfiguration::Plugins` and the explicit development
+launch flag `--plugins-only` use this path through the same CLI, session and MCP
+ports. Workbench opens the generic window, skips saved/discovered R settings and
+does not fall back to scientific composition if opening fails. Packages remain
+inactive until explicitly selected. This path is the foundation for disposable
+backend-test projects; it does not itself implement Studio's test-project lifecycle
+or complete removal of the older composition and dependencies.
+
 `rho-plugin-protocol` is an independently packageable public contract with no core
 or scientific dependencies. Its generated language-neutral JSON Schemas and
 TypeScript definitions are in `sdk/plugin-protocol`. `rho-plugins` owns package

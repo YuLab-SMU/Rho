@@ -9,8 +9,12 @@ pub(super) async fn configure_startup(
     profile: &mut HostProfile,
     store: &ApplicationStore,
 ) -> RConfiguration {
+    if matches!(profile.runtime, RuntimeConfiguration::Plugins) {
+        return RConfiguration { source: "plugins".into(), current: None, candidates: vec![], error: None };
+    }
     let candidates = discover_r();
     let (source, selection) = match &profile.runtime {
+        RuntimeConfiguration::Plugins => unreachable!("plugin workspaces do not discover R"),
         RuntimeConfiguration::Ark {
             executable, r_home, ..
         } => (
@@ -105,15 +109,21 @@ pub(super) async fn read_r(State(state): State<AppState>) -> Response {
     Json(state.hosting.read().await.r_configuration.clone()).into_response()
 }
 pub(super) async fn probe(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(selection): Json<RSelection>,
 ) -> Response {
+    if matches!(state.hosting.read().await.profile.runtime, RuntimeConfiguration::Plugins) {
+        return failure(StatusCode::CONFLICT, "This workspace uses plugin providers. Configure the selected runtime plugin instead.");
+    }
     Json(probe_r(&selection).await).into_response()
 }
 pub(super) async fn apply_r(
     State(state): State<AppState>,
     Json(request): Json<ApplyRConfiguration>,
 ) -> Response {
+    if matches!(state.hosting.read().await.profile.runtime, RuntimeConfiguration::Plugins) {
+        return failure(StatusCode::CONFLICT, "This workspace uses plugin providers. Configure the selected runtime plugin instead.");
+    }
     let candidate = probe_r(&request.selection).await;
     if !candidate.usable {
         return (StatusCode::BAD_REQUEST, Json(candidate)).into_response();

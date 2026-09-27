@@ -22,8 +22,8 @@ test.beforeAll(async()=>{
  await mkdir(join(subjectPath,'views'));await mkdir(join(subjectPath,'src'),{recursive:true});
  await writeFile(join(subjectPath,'views/report.json'),JSON.stringify(declaration,null,2)+'\n');await writeFile(join(subjectPath,'src/ReportFrame.ts'),'export const ReportFrame = () => "Opaque custom report 中文";\n');
  manifest.source.files.push('views/report.json','src/ReportFrame.ts');await writeFile(join(subjectPath,'plugin.json'),JSON.stringify(manifest,null,2));subject=snapshot(subjectPath);
- host=spawn(binary,['--database',database,'--project',project,'workbench'],{stdio:['ignore','pipe','pipe']});
- url=new URL(await new Promise<string>((done,reject)=>{let out='',errors='';const timer=setTimeout(()=>reject(Error(`Host startup timed out: ${errors}`)),40000);host.stderr!.on('data',b=>errors+=b);host.stdout!.on('data',b=>{out+=b;const found=out.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[a-z0-9]+/);if(found){clearTimeout(timer);done(found[0]);}});host.once('exit',code=>{clearTimeout(timer);reject(Error(`Host exited ${code}: ${errors}`));});}));
+ host=spawn(binary,['--database',database,'--project',project,'--plugins-only','workbench'],{stdio:['ignore','pipe','pipe']});
+ url=new URL(await new Promise<string>((done,reject)=>{let out='',errors='';const timer=setTimeout(()=>reject(Error(`Host startup timed out: ${errors}`)),40000);host.stderr!.on('data',b=>errors+=b);host.stdout!.on('data',b=>{out+=b;const found=out.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/);if(found){clearTimeout(timer);done(found[0]);}});host.once('exit',code=>{clearTimeout(timer);reject(Error(`Host exited ${code}: ${errors}`));});}));
  const instance=(await invoke('plugins.activate',{revision:studio.revision,artifact:studio.artifacts[0],target:'ui-web',alias:'development',configuration:{}})).instance.identity;
  studioView=(await invoke('windows.open_view',{expected_layout_version:0,group:null,view:{instance,window:windowId,contribution:'studio',configuration:{},state:{}}})).view;
 });

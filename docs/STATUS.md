@@ -11,6 +11,39 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
+The explicit `--plugins-only` development mode now opens the generic package,
+window and Operation workspace through the shared Host ports. Its canonical
+project lease is independent of a scientific owner. Empty repositories stay empty;
+opening, switching projects and reading metadata do not discover R, apply saved R
+configuration or fall back to fixed scientific composition. Ordinary instances
+must still be activated explicitly. The older composition and dependencies remain
+in the binary pending their removal; this mode does not complete default delivery.
+
+Two focused native cases pass (`plugin-workspace-host-v2.log`): canonical project
+exclusion and empty-catalog reopen, plus two independent backend projects whose
+accepted work, identities and records remain separate. Removing the test package
+and reopening its empty catalog retains visible original Operation results without
+reinstallation. The CLI launch-argument case passes, as does the focused Workbench
+library case for ignored R settings, refused R setup and plugin-only project
+switching (`plugin-workspace-http-v1.log`). All 28 affected Host regression cases
+pass for ownership, plugin paths, shared ports and project file/history boundaries
+(`plugin-workspace-regression.log`). `cargo build --locked --offline` and the
+startup help check pass. The isolated Chrome command `npm run test:browser --prefix
+ui -- plugin-workspace.spec.ts studio-plugin.spec.ts --output
+../target/plugin-refactor/plugin-workspace-browser-v1` passes both cases, including
+Studio source/build/fixture recovery and cancellation through the generic Host.
+All 22 captures were inspected: generic views at 1440/1920/390 px and narrow close
+recovery; Studio canvas/development at 1440/1920/390/220 px, constrained navigation,
+source/properties, history and build diagnostics. No overlap or page overflow was
+observed. This reuses unchanged client assets; it does not establish real-R
+acceptance or Studio's automatic disposable-project lifecycle. Existing user Hosts
+and R sessions were not replaced. New startup behavior requires the rebuilt binary.
+Evidence and exact commands are in
+`target/plugin-refactor/plugin-workspace-verification.txt`. The initial native
+fixture used invalid inventory paging input and failed; its corrected rerun passes.
+The initial combined edge command was deliberately interrupted during unrelated
+filtered-out CLI target loading; it is not an overall pass.
+
 The native `plugins.build` port names an installed source revision, materializes
 its declared files in a fresh original-Operation directory, and runs its literal
 recipe with existing tools. It reuses generic supervision in `crates/process-engine`;
@@ -134,9 +167,10 @@ These were corrected in the test rather than reported as passes. The initial
 model compile/fault-injection failures and exact commands remain in
 `studio-development-verification.txt` under `target/plugin-refactor/`.
 
-Plugin boundaries, architecture and governance checks pass. This UI-only stage
-reuses the current native build/client verification above; it changes no Host
-capability or embedded client source. User Hosts and R sessions were not replaced.
+Plugin boundaries, architecture and governance checks pass. The Studio UI stage
+reused the native build/client verification above; it changed no Host capability
+or embedded client source. The later generic-Host verification is recorded at the
+top of this page. User Hosts and R sessions were not replaced.
 Disposable-project real-backend testing, scenario application from Studio, archive
 UI, Agent integration, default delivery and remaining scientific migration are
 still unfinished. The inert editing canvas remains separate from executable
@@ -229,10 +263,10 @@ were inspected at 1440, 1920, 390 and 220 pixels, along with normal and constrai
 view-opening dialogs. Initial browser failures and corrected fixture timing remain
 under `target/plugin-refactor/manager-browser*`; the final captures wait for both
 iframe geometry and compositor painting. Import/export still use
-the CLI. Plugin Studio now supports visual/source editing; its build/preview
-controls, real-R scene continuity, default delivery and removal of the fixed
-composition remain unfinished. The
-manager is not silently installed into existing user projects.
+the CLI. Plugin Studio now supports visual/source editing, native builds and
+fixture previews as described above. Disposable backend testing, real-R scene
+continuity, default delivery and removal of the fixed composition remain unfinished.
+The manager is not silently installed into existing user projects.
 
 The complete 13-case package repository suite and 17 protocol cases pass, including
 concurrent head conflicts, project/principal visibility, immutable history, missing

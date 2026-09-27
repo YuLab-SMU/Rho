@@ -19,6 +19,9 @@ struct Cli {
     /// Connect to an existing Workbench using its private launch URL file; no local Host is opened.
     #[arg(long)]
     connect_url_file: Option<PathBuf>,
+    /// Open only generic plugin/Operation ports. Does not discover R or install packages.
+    #[arg(long, requires = "project", conflicts_with_all = ["demo", "demo_project", "ark", "r_home", "checkpoint_helper", "rscript", "environment", "remote_host", "host_skills", "connect_url_file"])]
+    plugins_only: bool,
     /// Explicit test-only runtime; does not run R.
     #[arg(long, conflicts_with = "ark")]
     demo: bool,
@@ -60,7 +63,9 @@ impl Cli {
             project_root: self.remote_root.clone().unwrap_or_default(),
             slurm_cluster: self.slurm_cluster.clone(),
         });
-        let runtime = if let Some(executable) = &self.ark {
+        let runtime = if self.plugins_only {
+            RuntimeConfiguration::Plugins
+        } else if let Some(executable) = &self.ark {
             RuntimeConfiguration::Ark {
                 executable: executable.clone(),
                 r_home: self
@@ -228,6 +233,9 @@ impl From<rho_host::OperationError> for CliFailure {
 async fn run() -> Result<(), CliFailure> {
     let cli = Cli::parse();
     if let Command::Plugins { store, command } = &cli.command {
+        if cli.plugins_only {
+            return Err("Plugin repository commands need no Host; omit --plugins-only".into());
+        }
         if cli.connect_url_file.is_some() {
             return Err("Plugin recovery commands address a local --store; they do not use --connect-url-file".into());
         }
@@ -238,7 +246,8 @@ async fn run() -> Result<(), CliFailure> {
     }
     let context = NextHost::local_context();
     if let Some(path) = &cli.connect_url_file {
-        if cli.demo
+        if cli.plugins_only
+            || cli.demo
             || cli.demo_project
             || cli.ark.is_some()
             || cli.r_home.is_some()
@@ -320,7 +329,8 @@ async fn run() -> Result<(), CliFailure> {
         arguments,
     } = &cli.command
     {
-        if cli.demo
+        if cli.plugins_only
+            || cli.demo
             || cli.ark.is_some()
             || cli.r_home.is_some()
             || cli.checkpoint_helper.is_some()
@@ -483,4 +493,34 @@ fn print_json(value: &serde_json::Value) -> Result<(), String> {
         serde_json::to_string_pretty(value).map_err(|error| error.to_string())?
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod plugin_workspace_arguments {
+    use super::*;
+    #[test]
+    fn plugin_only_profile_is_explicit_and_rejects_fixed_runtime_configuration() {
+        for command in ["session", "mcp", "workbench"] {
+            let cli = Cli::try_parse_from(["rho", "--project", "/test", "--plugins-only", command])
+                .unwrap();
+            assert!(matches!(
+                cli.profile().unwrap().runtime,
+                RuntimeConfiguration::Plugins
+            ));
+        }
+        assert!(Cli::try_parse_from(["rho", "--plugins-only", "session"]).is_err());
+        for extra in [
+            vec!["--demo"],
+            vec!["--ark", "/ark"],
+            vec!["--r-home", "/R"],
+            vec!["--rscript", "/Rscript"],
+            vec!["--host-skills", "/skills"],
+            vec!["--connect-url-file", "/launch"],
+        ] {
+            let mut args = vec!["rho", "--project", "/test", "--plugins-only"];
+            args.extend(extra);
+            args.push("session");
+            assert!(Cli::try_parse_from(args).is_err());
+        }
+    }
 }

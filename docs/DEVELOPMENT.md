@@ -20,6 +20,18 @@ commands to complete instead of polling them with sleep loops.
 
 ## Testing SOP
 
+The generic plugin-only Host uses `cargo test -p rho-host --test plugin_workspace
+--locked` for canonical project identity, native lease exclusion, empty-catalog
+startup, retained history after package removal, and two independently running
+backend projects. `cargo test -p rho-cli --bin rho plugin_workspace --locked`
+checks launch selection and refusal of fixed runtime flags;
+`cargo test -p rho-workbench --lib plugin_workspace --locked` checks skipped R
+configuration and generic HTTP ports. Run these Cargo commands serially. After
+building the current binary, the existing `plugin-workspace.spec.ts` and
+`studio-plugin.spec.ts` browser cases run with `--plugins-only` and ordinary external
+packages. These establish the generic project substrate, not Studio's
+disposable-project creation or real-R acceptance.
+
 Generic project read coverage is separate from scientific reference interpretation.
 `cargo test -p rho-sqlite --lib project_coverage --locked` and
 `cargo test -p rho-operation -p rho-plugins --lib project_coverage --locked` check

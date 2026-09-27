@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "checks": {
+    "plugins.workspace-http": {"command": ["cargo", "test", "-p", "rho-workbench", "--lib", "plugin_workspace", "--locked"]},
+    "plugins.workspace-cli": {"command": ["cargo", "test", "-p", "rho-cli", "--bin", "rho", "plugin_workspace", "--locked"]},
+    "plugins.workspace-host": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_workspace", "--locked"]},
     "plugins.preview-host": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_preview", "--locked"]},
     "plugins.preview-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "plugin-preview.spec.ts"]},
     "plugins.studio-model": {"command": ["node", "scripts/test-studio-plugin.mjs"]},
@@ -918,6 +921,7 @@
       "sources": [
         "crates/host/tests/plugin_development.rs",
         "crates/host/tests/plugin_preview.rs",
+        "crates/host/tests/plugin_workspace.rs",
         "ui/e2e/plugin-preview.spec.ts",
         "crates/plugin-protocol/**",
         "crates/plugin-sdk/**",
@@ -1023,6 +1027,9 @@
         "plugins.development-owner",
         "plugins.build-owner",
         "plugins.preview-host",
+        "plugins.workspace-host",
+        "plugins.workspace-http",
+        "plugins.workspace-cli",
         "plugins.preview-browser",
         "plugins.process-engine",
         "plugins.development-host",
