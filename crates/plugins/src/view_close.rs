@@ -11,8 +11,11 @@ pub(crate) struct CloseAttempt {
     refused: Option<String>,
 }
 impl CloseAttempt {
+    pub(crate) fn renderer_ended(&mut self) {
+        self.refused = Some("a participating document ended during close preparation".into());
+    }
     pub(crate) fn sealed(&self, participants: usize) -> bool {
-        participants > 0 && self.prepared.len() == participants
+        self.refused.is_none() && participants > 0 && self.prepared.len() == participants
     }
 }
 
@@ -278,6 +281,16 @@ impl PluginService {
             }
         }).await.map_err(|_| invalid("the view did not confirm saved state before the close deadline; the view remains open"))??;
         let _guard = self.gate.lock().await;
+        // A document can end while this task waits for the native gate. A
+        // smaller participant set must never turn that loss into flush proof.
+        {
+            let views = self.views.lock().unwrap();
+            let close = views.get(&args.view).and_then(|live| live.closing.as_ref())
+                .ok_or_else(|| invalid("view close preparation ended"))?;
+            if let Some(reason) = &close.refused {
+                return Err(invalid(format!("view state was not flushed: {reason}")));
+            }
+        }
         self.close_view_at_version(context, &args.view, expected_version, true)
     }
 }

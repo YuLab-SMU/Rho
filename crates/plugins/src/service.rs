@@ -122,6 +122,7 @@ impl PluginService {
         registry: &mut CapabilityRegistry,
     ) -> Result<(), OperationError> {
         crate::service_handlers::register(self, registry)?;
+        crate::view_renderer::register(self, registry)?;
         crate::build_service::register(self, registry)?;
         crate::draft_service::register(self, registry)
     }

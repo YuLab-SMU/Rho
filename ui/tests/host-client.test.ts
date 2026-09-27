@@ -24,6 +24,19 @@ it("keeps an explicit window reference in a credential-free resume URL", () => {
   }
 });
 function client() { const host = new HostClient("test-only-token"); clients.push(host); return host; }
+it("keeps ending-document Control delivery on the authenticated selected Host port", async () => {
+  const fetch = vi.fn(async (_url: unknown, options?: RequestInit) => {
+    const { frame } = JSON.parse(String(options?.body));
+    return response({ id: frame.id, ok: true, result: { released: true } });
+  });
+  vi.stubGlobal("fetch", fetch);
+  const host = new HostClient("test-only-token", "ending-window", "test-child"); clients.push(host);
+  await host.port("/analysis", { method: "control", params: { capability: { id: "views.release_renderer", version: 1 }, arguments: {} } }, host.testProject!, true);
+  const [url, options] = fetch.mock.calls[0]!;
+  expect(url).toBe("/api/host"); expect(options?.keepalive).toBe(true); expect(options?.signal).toBeUndefined();
+  expect(options?.headers).toMatchObject({ Authorization: "Bearer test-only-token", "X-Rho-Studio-Window": "ending-window" });
+  expect(JSON.parse(String(options?.body))).toMatchObject({ project_root: "/analysis", frame: { test_project: "test-child", request: { method: "control" } } });
+});
 it('retains structured port rejection only when correlated to the original request', async () => {
   const diagnostic = { code: 'invalid_input', message: 'Close handler is unavailable', continuation: 'correct_input', next_reads: [] };
   const fetch = vi.fn(async (_url: unknown, options?: RequestInit) => {

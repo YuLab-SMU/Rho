@@ -18,6 +18,7 @@ mod resource_channel;
 mod views;
 mod preview;
 mod view_close;
+mod view_renderer;
 mod window_layout;
 mod scenarios;
 mod scenario_application;

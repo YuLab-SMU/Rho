@@ -207,8 +207,13 @@ Successful closure removes the exact tab and releases its view reference in one
 transaction with closure of the acknowledged record. A lost reply is unconfirmed;
 the container must inspect the original Operation before removing the iframe.
 Disposal, navigation and browser reload do not prove that the destroyed document
-saved its local buffer. Its registration is retained rather than silently
-acknowledged. For an unavailable document, explicitly inspect `views.inspect` and
+saved its local buffer. The containing shell assigns a private native identity to
+each document's SDK handler and retires that exact registration through
+`views.release_renderer` after destruction. This transient Control carries the
+original private view credential, never enters the iframe or Operation journal,
+and never attests to saved state. Destruction during preparation refuses that
+close; cached and hidden documents stay registered. Lost registration or release
+acknowledgements remain uncertain. For an unavailable document, explicitly inspect `views.inspect` and
 invoke `views.close` with `mode: { kind: "retain_acknowledged", expected_version }`.
 This recovery mode retains that exact acknowledged state and does not claim to
 have saved disconnected edits. Never automatically fall back to it after failure.

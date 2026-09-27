@@ -149,7 +149,7 @@ export class HostClient {
       throw new Error("This disposable test workspace is unavailable. Inspect its original test record.");
     return observation;
   }
-  async request<T>(path: string, body?: unknown): Promise<T> {
+  async request<T>(path: string, body?: unknown, keepalive = false): Promise<T> {
     this.assertEndpoint(path);
     if (path === "/api/plugin-view" && body !== undefined)
       body = { ...(body as object), test_project: this.testProject ?? null };
@@ -170,6 +170,7 @@ export class HostClient {
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller?.signal,
+      ...(keepalive ? { keepalive: true } : {}),
     });
     const value: unknown = await response.json();
     if (!response.ok) {
@@ -260,12 +261,12 @@ export class HostClient {
       state,
     });
   }
-  async port<T>(project_root: string, request: HostRequest, testProject: string | null = this.testProject ?? null): Promise<T> {
+  async port<T>(project_root: string, request: HostRequest, testProject: string | null = this.testProject ?? null, keepalive = false): Promise<T> {
     const frame: WorkbenchFrame = {
       project_root,
       frame: { id: crypto.randomUUID(), ...(testProject ? { test_project: testProject } : {}), request: structuredClone(request) },
     };
-    const reply = await this.request<SessionReply>(request.method === "application_bridge" ? "/api/application/bridge" : "/api/host", frame);
+    const reply = await this.request<SessionReply>(request.method === "application_bridge" ? "/api/application/bridge" : "/api/host", frame, keepalive);
     if (!reply || typeof reply.ok !== "boolean")
       throw new Error("Invalid Host reply");
     if (!reply.ok) {

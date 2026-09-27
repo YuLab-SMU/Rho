@@ -1,6 +1,6 @@
-import type { PluginViewConnection, PluginViewMessage, PluginViewRequest } from "../../sdk/plugin-protocol/index.js";
+import type { PluginViewConnection, PluginViewMessage, PluginViewRequest, ReleasePluginViewRenderer } from "../../sdk/plugin-protocol/index.js";
 import type { SessionReply } from "./generated/SessionReply";
-import { HostClient } from "./host-client";
+import { HostClient, json } from "./host-client";
 import { requestExternalNavigation } from "./plugin-external";
 import { PluginDownloads } from "./plugin-download";
 import { PluginClipboard } from "./plugin-clipboard";
@@ -35,6 +35,30 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
   const clipboardAvailable = typeof ClipboardItem === "function" && typeof navigator.clipboard?.write === "function";
   const clipboard = new PluginClipboard(text => navigator.clipboard.write([new ClipboardItem({ "text/plain": text })]));
   let disposed = false, loaded = false, sequence = 0, replies = 0, serverSequence = connection.next_sequence - 1, pending = 0;
+  const renderers = new Set<string>();
+  const rendererIds = new Map<string, string>();
+  const scopedBody = (body: PluginViewRequest): PluginViewRequest => {
+    if (!["register_close_handler", "observe_lifecycle", "prepare_close", "refuse_close"].includes(body.type)) return body;
+    if (!("renderer" in body) || typeof body.renderer !== "string" || !/^[A-Za-z0-9._-]{1,128}$/.test(body.renderer))
+      throw new Error("The document sent an invalid close-handler identity.");
+    let renderer = rendererIds.get(body.renderer);
+    if (!renderer && body.type === "register_close_handler" && rendererIds.size < 32) {
+      renderer = crypto.randomUUID(); rendererIds.set(body.renderer, renderer);
+    }
+    if (!renderer) throw new Error("This document has not registered that close handler.");
+    // Document-local SDK names cannot select another iframe's native handler,
+    // even when two documents intentionally choose the same public name.
+    return { ...body, renderer };
+  };
+  const releaseRenderer = (renderer: string) => {
+    // Separate Control does not consume the shared view sequence: an ending
+    // document must not race the next document's bootstrap sequence.
+    void client.port(project, { method: "control", params: {
+      capability: { id: "views.release_renderer", version: 1 },
+      arguments: json({ view: connection.view.view, connection: connection.connection,
+        window: connection.view.window, renderer, call_token: connection.call_token } satisfies ReleasePluginViewRenderer),
+    } }, client.testProject ?? null, true).catch(() => { /* Unconfirmed release retains native recovery. */ });
+  };
   const send = (body: PluginViewRequest, request: string = crypto.randomUUID()) => {
     if (disposed) return Promise.reject(new Error("The view connection is closed."));
     if (serverSequence >= 0xffffffff) return Promise.reject(new Error("The view sequence is exhausted."));
@@ -55,7 +79,16 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
       if ((final as { authorized_view?: string })?.authorized_view !== connection.view.view)
         throw new Error("The Host did not validate the original download request.");
     });
-  const dispose = () => { disposed = true; downloads.dispose(); clipboard.dispose(); window.removeEventListener("message", ready); channel.port1.close(); channel.port2.close(); surface.remove(); };
+  const dispose = () => {
+    if (disposed) return;
+    disposed = true; downloads.dispose(); clipboard.dispose(); window.removeEventListener("message", ready);
+    window.removeEventListener("pagehide", pagehide);
+    channel.port1.close(); channel.port2.close(); surface.remove();
+    for (const renderer of renderers) releaseRenderer(renderer);
+    renderers.clear();
+  };
+  const pagehide = (event: PageTransitionEvent) => { if (!event.persisted) dispose(); };
+  window.addEventListener("pagehide", pagehide);
   const fence = (reason: string) => { if (!disposed) { dispose(); failed(reason); } };
   channel.port1.onmessageerror = () => fence("The view sent an invalid message.");
   channel.port1.onmessage = event => {
@@ -71,9 +104,17 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
     void (async () => {
       if (disposed) return;
       let reply: SessionReply;
+      let body: PluginViewRequest;
       try {
-        reply = await send(message.body, message.request);
+        body = scopedBody(message.body);
+        reply = await send(body, message.request);
       } catch (error) { fence(error instanceof Error ? error.message : String(error)); return; }
+      if (reply.ok && body.type === "register_close_handler") {
+        // A late acknowledgement still identifies this destroyed document;
+        // failed or lost acknowledgements never justify clearing another one.
+        if (disposed) releaseRenderer(body.renderer);
+        else renderers.add(body.renderer);
+      }
       if (disposed) return;
       if (!reply.ok && (message.body.type === "finish_text_copy" || message.body.type === "cancel_text_copy"))
         clipboard.cancel(message.body.copy_id);

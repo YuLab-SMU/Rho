@@ -1,0 +1,87 @@
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import type { PluginViewConnection, PluginViewRequest } from "../../sdk/plugin-protocol/index.js";
+import { HostClient } from "../src/host-client";
+import { mountPluginFrame } from "../src/plugin-frame";
+
+const connection = {
+  view: { view: "view-a", window: "window-a", contribution: "document", state: {}, state_version: 0 },
+  connection: "connection-a", call_token: "private-call-credential", asset_token: "asset", entrypoint: "index.html", next_sequence: 7,
+} as PluginViewConnection;
+let port: { onmessage?: (event: { data: unknown }) => void; close: ReturnType<typeof vi.fn>; postMessage: ReturnType<typeof vi.fn> };
+const disposals: (() => void)[] = [];
+beforeEach(() => {
+  vi.stubGlobal("MessageChannel", class {
+    port1 = port = { close: vi.fn(), postMessage: vi.fn(), start: vi.fn() };
+    port2 = { close: vi.fn() };
+  });
+});
+afterEach(() => { disposals.splice(0).forEach(dispose => dispose()); document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+function mount() {
+  const client = new HostClient("private-host-credential", "window-a", "test-child");
+  const request = vi.spyOn(client, "request").mockResolvedValue({ ok: true, result: {} });
+  const release = vi.spyOn(client, "port").mockResolvedValue({ released: true });
+  const container = document.createElement("div"); document.body.append(container);
+  const failed = vi.fn();
+  const dispose = mountPluginFrame(container, client, "/analysis", connection, failed); disposals.push(dispose);
+  const messagePort = port;
+  let sequence = 0;
+  const send = (body: PluginViewRequest) => messagePort.onmessage!({ data: { protocol_version: 1, connection: connection.connection,
+    view: connection.view.view, sequence: ++sequence, request: `request-${sequence}`, body } });
+  return { client, request, release, container, failed, dispose, send, messagePort };
+}
+it("retires only acknowledged handlers after destruction, through a selected keepalive Control", async () => {
+  const frame = mount();
+  frame.send({ type: "register_close_handler", renderer: "document-a" });
+  await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+  frame.send({ type: "register_close_handler", renderer: "document-a" });
+  await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(2));
+  frame.container.style.display = "none";
+  expect(frame.release).not.toHaveBeenCalled();
+  expect(frame.container.querySelector("iframe")!.src).not.toContain(connection.call_token);
+  const nativeRenderer = (frame.request.mock.calls[0]![1] as { message: { body: { renderer: string } } }).message.body.renderer;
+  expect(nativeRenderer).not.toBe("document-a");
+  frame.dispose(); frame.dispose();
+  expect(frame.release).toHaveBeenCalledExactlyOnceWith("/analysis", { method: "control", params: {
+    capability: { id: "views.release_renderer", version: 1 }, arguments: {
+      view: "view-a", connection: "connection-a", window: "window-a", renderer: nativeRenderer, call_token: connection.call_token,
+    },
+  } }, "test-child", true);
+  expect(frame.container.querySelector("iframe")).toBeNull();
+});
+it("keeps equal SDK handler names in different documents independent", async () => {
+  const first = mount(), second = mount();
+  for (const frame of [first, second]) frame.send({ type: "register_close_handler", renderer: "same-public-name" });
+  await vi.waitFor(() => expect(first.messagePort.postMessage).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() => expect(second.messagePort.postMessage).toHaveBeenCalledTimes(1));
+  const renderer = (frame: typeof first) => (frame.request.mock.calls[0]![1] as { message: { body: { renderer: string } } }).message.body.renderer;
+  expect(renderer(first)).not.toBe(renderer(second));
+  first.dispose(); expect(first.release).toHaveBeenCalledTimes(1); expect(second.release).not.toHaveBeenCalled();
+  second.send({ type: "observe_lifecycle", renderer: renderer(first) });
+  await vi.waitFor(() => expect(second.failed).toHaveBeenCalledWith("This document has not registered that close handler."));
+  expect(second.request).toHaveBeenCalledTimes(1);
+});
+it("retains cached documents and retires an actually ending browser document", async () => {
+  const frame = mount(); frame.send({ type: "register_close_handler", renderer: "document-a" });
+  await vi.waitFor(() => expect(port.postMessage).toHaveBeenCalledTimes(1));
+  window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+  expect(frame.release).not.toHaveBeenCalled(); expect(frame.container.querySelector("iframe")).not.toBeNull();
+  window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false }));
+  expect(frame.release).toHaveBeenCalledTimes(1); expect(frame.container.querySelector("iframe")).toBeNull();
+});
+it("uses a late registration acknowledgement only for its already destroyed document", async () => {
+  const frame = mount(); let acknowledge!: (value: unknown) => void;
+  frame.request.mockImplementationOnce(() => new Promise(resolve => { acknowledge = resolve; }));
+  frame.send({ type: "register_close_handler", renderer: "late-document" });
+  frame.dispose(); expect(frame.release).not.toHaveBeenCalled();
+  acknowledge({ ok: true, result: {} });
+  await vi.waitFor(() => expect(frame.release).toHaveBeenCalledTimes(1));
+  expect(port.postMessage).not.toHaveBeenCalled();
+});
+it.each(["rejected", "lost"])("does not claim a %s registration was acknowledged", async outcome => {
+  const frame = mount();
+  if (outcome === "lost") frame.request.mockRejectedValueOnce(new Error("disconnected"));
+  else frame.request.mockResolvedValueOnce({ ok: false, error: "not registered" });
+  frame.send({ type: "register_close_handler", renderer: "unknown-document" });
+  await vi.waitFor(() => expect(outcome === "lost" ? frame.failed : port.postMessage).toHaveBeenCalled());
+  frame.dispose(); expect(frame.release).not.toHaveBeenCalled();
+});

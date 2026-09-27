@@ -92,8 +92,37 @@ test('the child workspace preserves its selection, public SDK and state without 
   await page.goto(address.href); await expect(input).toHaveValue('Test-only saved Ω');
   await input.fill('Closed test retains this 中文');
   await page.locator('.flexlayout__tab_button [data-layout-path$="/button/close"]').click();
-  // Old documents are not assumed to have flushed merely because a browser
-  // refreshed. Their retained registrations require explicit saved-state recovery.
+  await expect(page.getByText('No views are open in this window.')).toBeVisible();
+  expect((await query(observed.project.id, 'views.inspect', { view: childView.view })).state.text).toBe('Closed test retains this 中文');
+  // A genuinely lost document-end notification still requires explicit recovery;
+  // no query, refresh or timeout is allowed to erase that uncertainty.
+  const retainedLayout = await query(observed.project.id, 'windows.layout', { window: windowId });
+  const recovery = (await invoke(observed.project.id, 'windows.open_view', { expected_layout_version: retainedLayout.version, group: retainedLayout.layout.kind === 'tabs' ? retainedLayout.layout.id : null,
+    view: { instance: observed.project.instances.ui, contribution: 'view', window: windowId, configuration: childView.configuration, state: { text: 'Recovery retains acknowledged text' } } })).view;
+  await expect(input).toHaveValue('Recovery retains acknowledged text');
+  await input.fill('Acknowledged recovery Ω'); await frame.getByRole('button', { name: 'Save note', exact: true }).click();
+  await expect(frame.locator('#result')).toHaveText('Saved');
+  // Chrome's unload keepalive can outlive page-level route interception. Fail
+  // exactly that fetch in the ending document while exercising its real handler
+  // and iframe destruction; no Host state or close result is mocked.
+  const droppedRelease = await page.evaluate(({ view, selected }) => {
+    const original = window.fetch; let dropped = 0;
+    window.fetch = (input, options) => {
+      const body = typeof options?.body === 'string' ? JSON.parse(options.body) : null;
+      if (body?.frame?.request?.params?.capability?.id === 'views.release_renderer' &&
+          body.frame.request.params.arguments.view === view && body.frame.test_project === selected) {
+        dropped++; return Promise.reject(new TypeError('Injected document-end transport loss'));
+      }
+      return original.call(window, input, options);
+    };
+    try { window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: false })); }
+    finally { window.fetch = original; }
+    return dropped;
+  }, { view: recovery.view, selected: observed.project.id });
+  expect(droppedRelease).toBe(1);
+  await page.reload(); await expect(input).toHaveValue('Acknowledged recovery Ω');
+  await input.fill('Current document flushes despite missing predecessor 中文');
+  await page.locator('.flexlayout__tab_button [data-layout-path$="/button/close"]').click();
   await expect(page.getByRole('button', { name: 'Close with saved state…', exact: true })).toBeVisible({ timeout: 20000 });
   await page.getByRole('button', { name: 'Close with saved state…', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
@@ -101,7 +130,7 @@ test('the child workspace preserves its selection, public SDK and state without 
   await page.screenshot({ path: info.outputPath('test-workspace-close-recovery-390.png') });
   await page.getByRole('button', { name: 'Keep saved state and close', exact: true }).click();
   await expect(page.getByText('No views are open in this window.')).toBeVisible();
-  expect((await query(observed.project.id, 'views.inspect', { view: childView.view })).state.text).toBe('Closed test retains this 中文');
+  expect((await query(observed.project.id, 'views.inspect', { view: recovery.view })).state.text).toBe('Current document flushes despite missing predecessor 中文');
   await expect(analysis).toHaveValue('Unsaved analysis remains here 中文');
   expect((await query(null, 'views.inspect', { view: parentView.view })).state.text).toBe('Current analysis draft');
   const stopped = await invoke(null, 'plugins.test_stop', { id: observed.project.id, expected_version: observed.project.version });

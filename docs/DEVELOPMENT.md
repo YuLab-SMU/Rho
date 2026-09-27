@@ -55,8 +55,9 @@ After public DTO generation and client/binary builds, `npm run test:browser
 --prefix ui -- plugin-test-project.spec.ts` exercises the actual connected CLI,
 public SDK, native control, refresh, saved closure, stopped-state refusal and
 normal/wide/constrained layouts while another analysis view retains its draft.
-It checks ordinary flush closure on a fresh view and explicit saved-state recovery
-after refresh: old renderer registrations are not automatically reclaimed yet.
+It checks ordinary flush closure after refresh and standalone navigation. A
+deliberately dropped document-end notification still requires explicit saved-state
+recovery; browser disappearance alone cannot prove a saved draft.
 
 
 Generic project read coverage is separate from scientific reference interpretation.
@@ -421,7 +422,13 @@ checks frozen captures, verified staging/read transfers, malformed content,
 acknowledgement identity, interruptions and view cooperation. The Host draft target
 also covers a draining instance's open view flushing large content through original
 grants, refusal of another encoding, all-renderer preparation and the final write
-fence. The SDK check verifies that preparation waits for the original save and
+fence. The Host target also checks private renderer
+release, caller/window/project boundaries, idempotent retirement without state or
+sequence changes, prepared/unprepared document loss during closure and last-handler
+saved-state recovery. `plugin-frame.test.ts` checks document-local native identities,
+hidden/cached document retention, destruction and late/lost registration receipts;
+the selected keepalive transport is covered by `host-client.test.ts`. The SDK check
+verifies that preparation waits for the original save and
 its synchronized reference state. After building the current client and Host,
 `npm run test:browser --prefix ui -- plugin-drafts.spec.ts` uses an independent
 ordinary view to flush more than 512 KiB while draining, hold the original receipt

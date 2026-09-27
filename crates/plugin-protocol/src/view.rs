@@ -56,6 +56,26 @@ pub struct PluginViewLifecycle {
     pub state_version: u32,
     pub close: PluginViewCloseState,
 }
+/// Sent by the containing shell after this exact document is destroyed. The
+/// private credential must never enter a plugin frame or an Operation journal.
+#[derive(Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ReleasePluginViewRenderer {
+    pub view: ViewInstanceId,
+    pub connection: ConnectionId,
+    pub window: WindowId,
+    pub renderer: RequestId,
+    pub call_token: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginViewRendererRelease {
+    pub view: ViewInstanceId,
+    pub renderer: RequestId,
+    /// False on an identical repeat. This acknowledges only deregistration,
+    /// never saved content, view closure or backend release.
+    pub released: bool,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct UpdatePluginView {

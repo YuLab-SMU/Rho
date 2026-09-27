@@ -597,8 +597,15 @@ racing closure. Preparation releases the service gate while waiting, and refusal
 timeout or interruption clears the fence without cancelling accepted science.
 The final native transaction closes the retained record, removes its exact tab
 and releases its view revision reference together. Failed writes cannot partially
-close the view. Browser disposal is not an acknowledgement. Lost documents require
-explicit `retain_acknowledged` recovery with the observed state version; no
+close the view. Browser disposal is not a flush acknowledgement. The containing
+shell gives each document's SDK handler a separate private native identity. After
+destroying the document, it uses `views.release_renderer` Control with the original
+view credential to retire only its acknowledged registration; this neither changes
+state nor closes a view. The notification uses bounded keepalive delivery without
+allocating a view message sequence. A cached or hidden document remains registered.
+Release during preparation refuses the original close, including after all handlers
+acknowledge but before native closure. Lost notifications or registration receipts
+retain uncertainty and require explicit `retain_acknowledged` recovery with the observed state version; no
 automatic fallback may claim that a disconnected buffer was saved. Host shutdown
 keeps acknowledged state and layout placeholders without claiming a UI flush.
 The containing window retains the original request and recovery version across

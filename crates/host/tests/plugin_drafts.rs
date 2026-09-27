@@ -954,6 +954,122 @@ struct DraftChannel {
     connection: PluginViewConnection,
     sequence: u32,
 }
+async fn renderer_fixture(fixture: &Fixture, context: &CallContext) -> (NextHost, DraftChannel) {
+    let host = NextHost::open_project(&fixture.db, &fixture.root).await.unwrap();
+    let instance = succeeded(host.invoke(context, invoke("activate", "plugins.activate", json!({
+        "revision":fixture.archive.revision.id,"artifact":fixture.archive.artifacts[0].id,
+        "target":"ui-web","alias":"document","configuration":{}
+    }))).await.unwrap()).output.unwrap()["instance"]["identity"].clone();
+    let view = succeeded(host.invoke(context, invoke("open", "views.open", json!({
+        "instance":instance,"contribution":"document","window":"window-a","configuration":{},"state":{"text":"retained 中文"}
+    }))).await.unwrap()).output.unwrap()["view"].clone();
+    let connection = serde_json::from_value(query(&host, context, "views.connection", json!({"view":view})).await.unwrap()).unwrap();
+    (host, DraftChannel { connection, sequence: 0 })
+}
+fn renderer_release(channel: &DraftChannel, renderer: &str) -> Value {
+    json!({"view":channel.connection.view.view,"connection":channel.connection.connection,
+        "window":channel.connection.view.window,"call_token":channel.connection.call_token,"renderer":renderer})
+}
+async fn renderer_close(host: &NextHost, context: &CallContext, channel: &mut DraftChannel, id: &str) -> OperationRecord {
+    let close: OperationRecord = serde_json::from_value(host.dispatch(context, HostRequest::Invoke(InvokeRequest {
+        invocation: invoke(id, "views.close", json!({"view":channel.connection.view.view})), return_after_acceptance: Some(true),
+    })).await.unwrap()).unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let state = channel.send(host, context, json!({"type":"observe_lifecycle","renderer":"current"})).await.unwrap();
+            if state["close"]["phase"] == "requested" { break; }
+            tokio::task::yield_now().await;
+        }
+    }).await.unwrap();
+    close
+}
+async fn renderer_settled(host: &NextHost, context: &CallContext, operation: &OperationId) -> OperationRecord {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let record = host.get_operation(context, operation).await.unwrap().unwrap();
+            if record.status.is_terminal() { break record; }
+            tokio::task::yield_now().await;
+        }
+    }).await.unwrap()
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn renderer_release_is_scoped_idempotent_and_does_not_attest_to_state() {
+    let fixture = Fixture::new();
+    let context = NextHost::local_context();
+    let (host, mut channel) = renderer_fixture(&fixture, &context).await;
+    for renderer in ["ended", "current"] {
+        channel.send(&host, &context, json!({"type":"register_close_handler","renderer":renderer})).await.unwrap();
+    }
+    let args = renderer_release(&channel, "ended");
+    for field in ["view", "connection", "window", "call_token"] {
+        let mut forged = args.clone(); forged[field] = json!("wrong");
+        assert!(control(&host, &context, "views.release_renderer", forged).await.is_err(), "{field}");
+    }
+    let mut weak = context.clone(); weak.scopes.remove("plugins.run");
+    assert!(control(&host, &weak, "views.release_renderer", args.clone()).await.is_err());
+    let mut other = context.clone(); other.caller.id = "another-user".into();
+    assert!(control(&host, &other, "views.release_renderer", args.clone()).await.is_err());
+    let mut plugin = context.clone(); plugin.caller.kind = CallerKind::Plugin;
+    assert!(control(&host, &plugin, "views.release_renderer", args.clone()).await.is_err());
+    let mut window = context.clone(); window.view_scope = Some(ViewCallScope { window: rho_plugin_protocol::WindowId::new("another").unwrap(), draft_source: None });
+    assert!(control(&host, &window, "views.release_renderer", args.clone()).await.is_err());
+    let foreign_fixture = Fixture::new();
+    let (foreign, _) = renderer_fixture(&foreign_fixture, &context).await;
+    assert!(control(&foreign, &context, "views.release_renderer", args.clone()).await.is_err());
+    foreign.drain().await;
+    let before = query(&host, &context, "views.connection", json!({"view":channel.connection.view.view})).await.unwrap();
+    assert_eq!(control(&host, &context, "views.release_renderer", args.clone()).await.unwrap()["released"], true);
+    assert_eq!(control(&host, &context, "views.release_renderer", args).await.unwrap()["released"], false);
+    assert_eq!(query(&host, &context, "views.connection", json!({"view":channel.connection.view.view})).await.unwrap(), before);
+    assert!(channel.send(&host, &context, json!({"type":"observe_lifecycle","renderer":"ended"})).await.is_err());
+    let close = renderer_close(&host, &context, &mut channel, "normal-close").await;
+    channel.send(&host, &context, json!({"type":"prepare_close","renderer":"current","operation":close.operation.operation_id,"state_version":0})).await.unwrap();
+    let closed = succeeded(renderer_settled(&host, &context, &close.operation.operation_id).await);
+    assert_eq!(closed.output.unwrap()["state"], json!({"text":"retained 中文"}));
+    host.drain().await;
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn renderer_release_during_close_refuses_prepared_and_unprepared_documents() {
+    for prepared in [false, true] {
+        let fixture = Fixture::new();
+        let context = NextHost::local_context();
+        let (host, mut channel) = renderer_fixture(&fixture, &context).await;
+        for renderer in ["ending", "current"] {
+            channel.send(&host, &context, json!({"type":"register_close_handler","renderer":renderer})).await.unwrap();
+        }
+        let close = renderer_close(&host, &context, &mut channel, "interrupted-close").await;
+        channel.send(&host, &context, json!({"type":"prepare_close","renderer":if prepared {"ending"} else {"current"},"operation":close.operation.operation_id,"state_version":0})).await.unwrap();
+        control(&host, &context, "views.release_renderer", renderer_release(&channel, "ending")).await.unwrap();
+        let refused = renderer_settled(&host, &context, &close.operation.operation_id).await;
+        assert_eq!(refused.status, OperationStatus::Failed, "{refused:?}");
+        assert!(format!("{:?}", refused.error).contains("document ended"));
+        let retained = query(&host, &context, "views.inspect", json!({"view":channel.connection.view.view})).await.unwrap();
+        assert_eq!(retained["closed"], false); assert_eq!(retained["state_version"], 0);
+        let retry = renderer_close(&host, &context, &mut channel, "explicit-retry").await;
+        channel.send(&host, &context, json!({"type":"prepare_close","renderer":"current","operation":retry.operation.operation_id,"state_version":0})).await.unwrap();
+        succeeded(renderer_settled(&host, &context, &retry.operation.operation_id).await);
+        host.drain().await;
+    }
+}
+
+#[tokio::test]
+async fn renderer_release_of_last_document_requires_explicit_saved_state_recovery() {
+    let fixture = Fixture::new();
+    let context = NextHost::local_context();
+    let (host, mut channel) = renderer_fixture(&fixture, &context).await;
+    channel.send(&host, &context, json!({"type":"register_close_handler","renderer":"ended"})).await.unwrap();
+    control(&host, &context, "views.release_renderer", renderer_release(&channel, "ended")).await.unwrap();
+    let view = channel.connection.view.view;
+    let close = host.invoke(&context, invoke("ordinary-close", "views.close", json!({"view":view}))).await;
+    assert!(close.unwrap_err().to_string().contains("no view close handler"));
+    let retained = query(&host, &context, "views.inspect", json!({"view":view})).await.unwrap();
+    assert_eq!(retained["closed"], false); assert_eq!(retained["state_version"], 0);
+    let recovery = succeeded(host.invoke(&context, invoke("explicit-recovery", "views.close", json!({"view":view,"mode":{"kind":"retain_acknowledged","expected_version":0}}))).await.unwrap());
+    assert_eq!(recovery.output.unwrap()["state"], retained["state"]);
+    host.drain().await;
+}
 impl DraftChannel {
     async fn send(
         &mut self,

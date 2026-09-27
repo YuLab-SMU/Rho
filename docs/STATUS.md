@@ -27,29 +27,50 @@ cannot fall back to analysis. MCP keeps selection fixed through RPC/GET/DELETE
 and holds a native lease until disconnect. Studio's end-user test controls remain
 unfinished; the transport alone does not complete that workflow.
 
-The two new HTTP/MCP cases pass after correcting a missing type qualification in
-the first compile. They verify separate journals/catalogs, scoped view tokens,
-opaque-origin imports, message replay refusal, stopped-state rejection and MCP
-connection leases. All 39 affected client unit cases, 29 Workbench and 15 MCP
-regressions, six connected-CLI cases and the real JSON-lines session case pass.
-Public DTO generation, independent protocol consumption, client build/consistency,
-current binary build, dependency boundaries and governance checks pass.
+Destroyed plugin documents now retire their exact close-handler registration
+through the generic `views.release_renderer` Control. The containing shell assigns
+private per-document identities and sends a keepalive notification after actual
+destruction; hidden or cached documents stay registered. This does not save state,
+close the view or release a backend. A document ending during preparation refuses
+the original close. Missing notifications retain uncertainty and the explicit
+saved-state recovery path. Refreshing an older Host cannot add this native port;
+use a rebuilt Host when an authorized restart is appropriate.
 
-The isolated Chrome test passes with the actual connected CLI, public UI SDK and
-native control. An analysis view retains its unsaved draft while a child saves,
-refreshes and stops independently. A fresh child view flushes and closes normally;
-a stopped child's URL displays unavailable without opening analysis. The normal,
-wide and constrained captures (1440/1920/390/220 px), standalone child view,
-recovery dialog and stopped state were inspected without overlap or page overflow. Fixture content
-scrolls normally inside the narrow iframe. Initial browser failures are retained:
-one click occurred while the analysis page held focus; after explicit foreground
-selection, the close-after-refresh expectation exposed retained registrations from
-previous documents. Those registrations are not silently treated as flushed.
-The browser case verifies explicit saved-state recovery after the close deadline;
-automatic retired-document lifecycle cleanup remains unresolved. Studio backend-
-test controls and real-R acceptance also remain unfinished. Exact commands,
-initial failures and current evidence are in
-`target/plugin-refactor/test-project-edges-verification.txt`.
+All nine native draft/close cases and 46 affected client unit cases pass, including
+principal/window/project checks, independent document identities, late or lost
+registration receipts, prepared/unprepared document loss and last-handler recovery.
+The first native test run had one failure because its all-prepared case allowed
+native closure to finish before release; the corrected case exercises loss while
+another participant remains pending. The independent protocol and public UI SDK
+checks, client generation/build/consistency, current binary build, dependency
+boundaries and governance checks pass.
+
+All three affected Chrome cases have passing results. The child case verifies
+normal closure after refresh and standalone navigation while analysis keeps its
+unsaved draft. Deliberately dropping one document-end notification retains the
+original uncertainty, requires explicit saved-state recovery, then permits child
+stop without falling back to analysis. Existing workspace closure, composition
+refusal, original lost-receipt retry and draining large-Unicode-draft restoration
+also pass. All 13 captures were inspected: normal/wide/constrained child and parent
+windows, standalone view, recovery dialogs, stopped child and large draft states.
+No overlap or page overflow was observed; constrained fixture content scrolls
+inside its iframe. The first combined browser run passed two cases but failed the
+new recovery fixture's missing tab-group input; the next child run failed because
+page routing did not intercept the unload keepalive. Corrected only the fixtures:
+use the observed group and reject the exact ending-document fetch while exercising
+the real pagehide handler and iframe destruction. The final child run passes.
+Exact commands, failed runs and retained traces are in
+`target/plugin-refactor/renderer-verification.txt`. No user Host or R session was
+replaced; no real-R or full-workspace audit was run for this lifecycle change.
+
+The previous transport acceptance established separate journals/catalogs, scoped
+view tokens, opaque-origin imports, message replay refusal, stopped-state rejection,
+MCP connection leases and connected CLI/JSON-lines selection. The earlier browser
+case kept an analysis draft intact while the child saved, refreshed and stopped,
+with normal/wide/constrained captures inspected. Its close-after-refresh limitation
+motivated the document-retirement work above. Prior evidence is retained in
+`target/plugin-refactor/test-project-edges-verification.txt`. Studio backend-test
+controls and real-R acceptance remain unfinished.
 
 All five native lifecycle cases pass after fixing a plugin publication-task race
 that retained the parent journal during immediate reopen. Host drain now cancels
