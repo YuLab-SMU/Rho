@@ -9,6 +9,7 @@ mod build_service;
 mod backend;
 mod runtime;
 mod instance_records;
+mod test_projects;
 mod operations;
 mod resources;
 pub use resources::*;

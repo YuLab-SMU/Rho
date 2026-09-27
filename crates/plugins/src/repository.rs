@@ -45,6 +45,7 @@ impl PluginRepository {
             CREATE TABLE IF NOT EXISTS plugin_window_layouts(project TEXT NOT NULL, principal TEXT NOT NULL, window TEXT NOT NULL, document TEXT NOT NULL, PRIMARY KEY(project,principal,window));")?;
         crate::drafts::initialize(&connection)?;
         crate::scenarios::initialize(&connection)?;
+        crate::test_projects::initialize(&connection)?;
         Ok(Self { root, connection })
     }
 
@@ -298,7 +299,7 @@ impl PluginRepository {
         ensure(
             matches!(
                 owner_kind,
-                "instance" | "view" | "operation" | "management" | "build" | "scenario" | "document" | "checkpoint"
+                "instance" | "view" | "operation" | "management" | "build" | "scenario" | "document" | "checkpoint" | "test_project"
             ),
             "unknown reference owner",
         )?;
@@ -337,7 +338,7 @@ impl PluginRepository {
         ensure(
             matches!(
                 owner_kind,
-                "instance" | "view" | "operation" | "management" | "build" | "scenario" | "document" | "checkpoint"
+                "instance" | "view" | "operation" | "management" | "build" | "scenario" | "document" | "checkpoint" | "test_project"
             ),
             "unknown reference owner",
         )?;

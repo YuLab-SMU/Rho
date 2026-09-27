@@ -19,6 +19,18 @@ import type {ProjectReadCoverage,ProjectReadCoverageArguments} from "../protocol
 import type { SaveScenario, ScenarioPage, ScenarioRevisionArguments, ApplyScenario, WindowScenarioSnapshot, ResolveWindowProvider } from "../protocol/index.js";
 import type { ListPluginSource, PluginSourcePage, ReadPluginSource, PluginSourceChunk, ListPluginBranches, PluginBranchPage, CheckpointPlugin, PluginCheckpoint } from "../protocol/index.js";
 import type { BuildPlugin, PluginBuildResult, ProcessReport, PreviewPlugin, PluginInstancePurpose, PluginInstancesArguments } from "../protocol/index.js";
+import type { CreatePluginTestProject, PluginTestProjectObservation, PluginTestProjectArguments, PluginTestOperationArguments, StopPluginTestProject, ListPluginTestProjects, PluginTestProjectPage } from "../protocol/index.js";
+const testSelection: CreatePluginTestProject = { name: "Backend test", instances: {subject:{plugin:"example.plugin",revision:"revision",artifact:"artifact",configuration:{},dependencies:{}}} };
+const testRead: PluginTestProjectArguments = { id: "test-one" };
+const testOriginal: PluginTestOperationArguments = { ...testRead, operation_id: "original-operation" };
+const testStop: StopPluginTestProject = { ...testRead, expected_version: 4 };
+const testList: ListPluginTestProjects = { after: null, limit: 20 };
+function testObservation(page: PluginTestProjectPage): PluginTestProjectObservation | undefined { return page.projects[0]; }
+// @ts-expect-error Backend tests cannot select an existing project or session.
+const borrowedTest: CreatePluginTestProject = { ...testSelection, project_root: "/analysis" };
+// @ts-expect-error Stop must carry the observed lifecycle version.
+const guessedStop: StopPluginTestProject = testRead;
+void [testSelection,testOriginal,testStop,testList,testObservation,borrowedTest,guessedStop];
 const runtimeDiscovery: PluginInstancesArguments = { after: null, limit: 20 };
 const completeDiscovery: PluginInstancesArguments = { ...runtimeDiscovery, include_previews: true };
 void [runtimeDiscovery, completeDiscovery];
@@ -97,7 +109,7 @@ export function inspect(manifest: PluginManifest, visual: VisualDocument, page: 
   execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"),
     "--noEmit", "--strict", "--module", "NodeNext", "--moduleResolution", "NodeNext",
     "--target", "ES2022", "--rootDir", consumer, path.join(consumer, "consumer.mts")], { stdio: "inherit" });
-  for (const name of ["list-plugin-source", "plugin-source-page", "read-plugin-source", "plugin-source-chunk", "list-plugin-branches", "plugin-branch-page", "checkpoint-plugin", "plugin-checkpoint", "manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "view-close", "window-layout", "window-open-view", "context-page", "preview-context", "context-preview", "document-draft", "list-document-drafts", "document-draft-page", "save-document-draft", "scenario", "save-scenario", "scenario-page", "apply-scenario", "window-scenario-snapshot", "resolve-window-provider", "visual-document"]) {
+  for (const name of ["create-plugin-test-project", "plugin-test-project-observation", "plugin-test-project-arguments", "plugin-test-operation-arguments", "stop-plugin-test-project", "list-plugin-test-projects", "plugin-test-project-page", "list-plugin-source", "plugin-source-page", "read-plugin-source", "plugin-source-chunk", "list-plugin-branches", "plugin-branch-page", "checkpoint-plugin", "plugin-checkpoint", "manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "view-close", "window-layout", "window-open-view", "context-page", "preview-context", "context-preview", "document-draft", "list-document-drafts", "document-draft-page", "save-document-draft", "scenario", "save-scenario", "scenario-page", "apply-scenario", "window-scenario-snapshot", "resolve-window-provider", "visual-document"]) {
     const schema = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema", `${name}.json`), "utf8"));
     assert.ok(schema.$schema && schema.title, `missing standalone schema: ${name}`);
     const visit = value => {

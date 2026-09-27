@@ -27,6 +27,7 @@ mod annotations;
 pub use annotations::AnnotationService;
 mod html_views;
 mod plugin_views;
+mod plugin_tests;
 pub use html_views::HtmlViewTokens;
 mod agent_connections;
 pub use agent_connections::{AgentMcpConnections, AgentMcpIdentity};
@@ -172,12 +173,14 @@ struct HostRuntime {
     output_owner: Option<Arc<rho_workspace::WorkspaceOutputHandler>>,
     skills: Option<Arc<rho_skills::SkillOwner>>,
     plugins: Option<Arc<rho_plugins::PluginService>>,
+    test_projects: Option<Arc<plugin_tests::TestProjects>>,
     method_binding_gate: tokio::sync::Mutex<()>,
     _project_lease: Option<Arc<ProjectLease>>,
 }
 
 #[derive(Default)]
 struct HostDomains {
+    disable_test_projects: bool,
     plugin_store: Option<PathBuf>,
     host_skills: Option<std::path::PathBuf>,
     skill_exclusions: Vec<std::path::PathBuf>,
@@ -227,6 +230,14 @@ impl NextHost {
         database: &Path,
         lease: ProjectLease,
     ) -> Result<Self, OperationError> {
+        Self::open_generic_reserved(database, lease, false).await
+    }
+
+    async fn open_plugin_test_workspace(database: &Path, root: &Path) -> Result<Self, OperationError> {
+        Self::open_generic_reserved(database, ProjectLease::acquire(root)?, true).await
+    }
+
+    async fn open_generic_reserved(database: &Path, lease: ProjectLease, disable_test_projects: bool) -> Result<Self, OperationError> {
         let journal = Arc::new(SqliteOperationJournal::open(database)?);
         let mut protected = skills::protected_path_candidates(database);
         protected.push(lease.path().to_owned());
@@ -234,6 +245,7 @@ impl NextHost {
             journal,
             HostDomains {
                 plugin_store: Some(rho_plugins::repository_path(database)),
+                disable_test_projects,
                 skill_exclusions: protected,
                 project_lease: Some(lease),
                 ..HostDomains::default()
@@ -306,6 +318,7 @@ impl NextHost {
             journal,
             HostDomains {
                 plugin_store: Some(rho_plugins::repository_path(database)),
+                disable_test_projects: false,
                 host_skills: host_skills.map(Path::to_path_buf),
                 skill_exclusions: excluded,
                 application_store: Some(Arc::new(
@@ -559,6 +572,7 @@ impl NextHost {
             journal,
             HostDomains {
                 plugin_store: Some(rho_plugins::repository_path(database)),
+                disable_test_projects: false,
                 host_skills: host_skills.map(Path::to_path_buf),
                 skill_exclusions: excluded,
                 application_store: Some(Arc::new(
@@ -712,6 +726,7 @@ impl NextHost {
             journal,
             HostDomains {
                 plugin_store: Some(rho_plugins::repository_path(database)),
+                disable_test_projects: false,
                 host_skills: host_skills.map(Path::to_path_buf),
                 skill_exclusions: excluded,
                 application_store: Some(Arc::new(
@@ -797,6 +812,7 @@ impl NextHost {
                 output_owner: None,
                 skills: None,
                 plugins: None,
+                test_projects: None,
                 method_binding_gate: tokio::sync::Mutex::new(()),
                 _project_lease: None,
             }),
@@ -840,6 +856,7 @@ impl NextHost {
         id_generator: Arc<dyn OperationIdGenerator>,
     ) -> Result<Self, OperationError> {
         let HostDomains {
+            disable_test_projects,
             plugin_store,
             host_skills,
             skill_exclusions,
@@ -1131,6 +1148,11 @@ impl NextHost {
                 )))?;
             }
         }
+        let test_projects = if disable_test_projects { None } else {
+            plugin_store.as_ref().zip(output_project.clone())
+                .map(|(store, project)| plugin_tests::TestProjects::open(store, project)).transpose()?
+        };
+        if let Some(owner) = &test_projects { owner.register(&mut registry)?; }
         let plugins = plugin_store.zip(output_project.clone())
             .map(|(store, project)| rho_plugins::PluginService::open(&store, project, skill_exclusions, journal.clone()))
             .transpose()?;
@@ -1173,11 +1195,18 @@ impl NextHost {
             output_owner,
             skills: skill_owner,
             plugins,
+            test_projects,
             method_binding_gate: tokio::sync::Mutex::new(()),
             _project_lease: project_lease,
         });
         if let Some(plugins) = &runtime.plugins { plugins.bind_lifetime(&runtime, &tasks); }
         Ok(Self { runtime, recovered_on_open, tasks })
+    }
+
+    /// Select an already running disposable Host. Holding this handle prevents
+    /// its stop operation from racing requests through the ordinary Host ports.
+    pub fn plugin_test_host(&self, context: &CallContext, id: &rho_plugin_protocol::TestProjectId) -> Result<Arc<NextHost>, OperationError> {
+        self.runtime.test_projects.as_ref().ok_or_else(||OperationError::Unavailable("Test project hosting is unavailable".into()))?.host(context, id)
     }
 
     pub fn capability_publications(&self) -> tokio::sync::watch::Receiver<u64> {
@@ -1394,6 +1423,7 @@ impl NextHost {
     /// Hosting lifecycle only: keep accepted work alive after an edge disconnects.
     pub fn is_idle(&self) -> bool {
         self.tasks.is_empty() && !self.runtime.gateway.commit_recovery().has_retained_results()
+            && self.runtime.test_projects.as_ref().is_none_or(|owner| owner.is_idle())
     }
 
     /// The caller must first stop accepting new work through every edge.
@@ -1424,6 +1454,7 @@ impl NextHost {
         }
         self.tasks.close();
         self.tasks.wait().await;
+        if let Some(owner) = &self.runtime.test_projects { Box::pin(owner.drain()).await; }
         if let Some(plugins) = &self.runtime.plugins { plugins.drain().await; }
         // Accepted work has drained. The native adapter has no drop teardown, so an
         // exiting Host must end the R processes it started rather than orphan them.

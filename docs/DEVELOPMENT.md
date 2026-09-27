@@ -32,6 +32,19 @@ building the current binary, the existing `plugin-workspace.spec.ts` and
 packages. These establish the generic project substrate, not Studio's
 disposable-project creation or real-R acceptance.
 
+Disposable-project metadata uses `cargo test -p rho-plugins --test test_projects
+--locked` for exact dependency/configuration selection, scoped byte-bounded paging, immutable
+identity, lifecycle compare-and-swap and transactional source protections. The
+native lifecycle fixture is `cargo test -p rho-host --test plugin_test_projects
+--locked`: a separate external backend, concurrent analysis work, borrowed/busy/open-view
+stop refusal, original request recovery, cleanup failure and read-only history
+across reopen. Catalog-write faults preserve acknowledged activation/release IDs
+in their original parent Operations without replay. It also rejects caller paths,
+invalid grants/artifacts and symlink
+storage before backend startup. Run the repository and generic workspace
+regressions after changes to these shared owners. These tests do not establish
+Studio's backend-test UI or real-R acceptance.
+
 Generic project read coverage is separate from scientific reference interpretation.
 `cargo test -p rho-sqlite --lib project_coverage --locked` and
 `cargo test -p rho-operation -p rho-plugins --lib project_coverage --locked` check

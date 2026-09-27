@@ -5,6 +5,8 @@ mod build;
 pub use build::*;
 mod preview;
 pub use preview::*;
+mod test_project;
+pub use test_project::*;
 mod process;
 pub use process::*;
 mod identity;

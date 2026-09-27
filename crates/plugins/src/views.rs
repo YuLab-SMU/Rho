@@ -37,6 +37,11 @@ fn bounded_state(value: &Value) -> Result<(), OperationError> {
     Ok(())
 }
 impl PluginService {
+    /// Native hosting precondition. Closing a project must not strand an open
+    /// view behind a release fence before its ordinary close cooperation.
+    pub fn has_live_views(&self) -> bool {
+        !self.views.lock().unwrap().is_empty()
+    }
     pub(crate) fn close_live_views(&self) {
         let records = self
             .views

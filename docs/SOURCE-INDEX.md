@@ -82,12 +82,14 @@ Documentation:
 Sources:
 
 - `crates/cli/src/plugins.rs`
+- `crates/host/src/plugin_tests.rs`
 - `crates/host/tests/files_plugin.rs`
 - `crates/host/tests/fixtures/view_delegation.py`
 - `crates/host/tests/plugin_development.rs`
 - `crates/host/tests/plugin_optional_requirements.rs`
 - `crates/host/tests/plugin_preview.rs`
 - `crates/host/tests/plugin_self_requirements.rs`
+- `crates/host/tests/plugin_test_projects.rs`
 - `crates/host/tests/plugin_view_delegation.rs`
 - `crates/host/tests/plugin_workspace.rs`
 - `crates/host/tests/r_plugin_real_r.rs`
@@ -276,6 +278,8 @@ Checks:
 - `plugins.self-requirements`: `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"]`
 - `plugins.studio-browser`: `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts"]`
 - `plugins.studio-model`: `["node","scripts/test-studio-plugin.mjs"]`
+- `plugins.test-project-host`: `["cargo","test","-p","rho-host","--test","plugin_test_projects","--locked"]`
+- `plugins.test-project-owner`: `["cargo","test","-p","rho-plugins","--test","test_projects","--locked"]`
 - `plugins.ui-sdk`: `["node","scripts/test-plugin-ui.mjs"]`
 - `plugins.view-delegation`: `["cargo","test","-p","rho-host","--test","plugin_view_delegation","--locked"]`
 - `plugins.viewer`: `["node","scripts/test-viewer-plugin.mjs"]`

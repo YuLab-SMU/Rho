@@ -11,6 +11,36 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
+Explicit backend tests now have a native disposable-project owner. The public
+`plugins.test_create/test_stop` ports create and stop a separate generic Host,
+package catalog and Operation journal for exact source/artifact selections.
+Dependencies, configuration, grants, storage containment and native quotas are
+checked without borrowing current analysis instances. Open views and accepted
+work prevent stop; failed or partial cleanup retains its original records and
+source protections. Confirmed stop keeps the independent directory as evidence.
+Scoped observations and `plugins.test_operation` read retained original records
+without restarting a child. Studio controls and child selection through public
+edges remain unfinished; the lifecycle ports alone do not open a test window.
+
+All five native lifecycle cases pass after fixing a plugin publication-task race
+that retained the parent journal during immediate reopen. Host drain now cancels
+and joins that task. The full case keeps parent analysis running through test
+creation/stop, refuses borrowed/busy/open-view stop attempts, injects a failed
+stopped-state write, inspects the original release and retries cleanup without
+replay. Separate cases cover failure recovery, containment/grants and the four-live-
+project quota. The two generic workspace, thirteen plugin, five shared-port and
+thirteen package repository regressions pass. All four new metadata cases pass
+after correcting an assertion that omitted a pre-existing dependency pin; no
+production change was needed for that correction. Public protocol generation,
+external NodeNext consumption, client build and client consistency checks pass.
+The creation-catalog-write fault case also passes: acknowledged activation IDs
+survive in the original parent recovery record if metadata saving fails, remain
+readable after stop/reopen, and a repeated request does not create another project.
+Exact commands, initial failures and current results are retained in
+`target/plugin-refactor/test-project-verification.txt`; no user Host or R session
+has been replaced. New lifecycle ports require a rebuilt Host; browser refresh
+alone cannot add them. Real-R acceptance is not established by these fixtures.
+
 The explicit `--plugins-only` development mode now opens the generic package,
 window and Operation workspace through the shared Host ports. Its canonical
 project lease is independent of a scientific owner. Empty repositories stay empty;
@@ -106,8 +136,8 @@ fixtures and denied writes, preserves Unicode and state through refresh, copies
 explicit text, closes/revokes assets and releases the instance. Preview captures
 at 1440/1920/390/220 px and three normal-view/close-refusal captures were inspected
 without clipping or overlap. This establishes fixture preview through the public
-SDK. Studio's end-user controls are verified below; disposable-project real-backend
-testing remains unfinished. Exact commands and the corrected initial compile
+SDK. Studio's end-user controls are verified below; its disposable-project testing
+UI remains unfinished, with native lifecycle progress recorded above. Exact commands and the corrected initial compile
 failure are recorded in `preview-verification.txt`.
 
 The user's running Host and R sessions have not been restarted. Full native package assemblies, real-R scene acceptance
@@ -171,7 +201,7 @@ Plugin boundaries, architecture and governance checks pass. The Studio UI stage
 reused the native build/client verification above; it changed no Host capability
 or embedded client source. The later generic-Host verification is recorded at the
 top of this page. User Hosts and R sessions were not replaced.
-Disposable-project real-backend testing, scenario application from Studio, archive
+Studio's disposable-project test controls, scenario application from Studio, archive
 UI, Agent integration, default delivery and remaining scientific migration are
 still unfinished. The inert editing canvas remains separate from executable
 fixture preview.
@@ -264,7 +294,7 @@ view-opening dialogs. Initial browser failures and corrected fixture timing rema
 under `target/plugin-refactor/manager-browser*`; the final captures wait for both
 iframe geometry and compositor painting. Import/export still use
 the CLI. Plugin Studio now supports visual/source editing, native builds and
-fixture previews as described above. Disposable backend testing, real-R scene
+fixture previews as described above. The disposable-test UI, real-R scene
 continuity, default delivery and removal of the fixed composition remain unfinished.
 The manager is not silently installed into existing user projects.
 

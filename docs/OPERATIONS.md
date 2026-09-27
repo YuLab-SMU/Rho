@@ -47,7 +47,18 @@ then activate exact revisions and open views through the shared Host ports.
 read-only queries use their normal observer, while live plugin reads connect to
 the running Host. It cannot be combined with fixed R/remote/Skill startup flags.
 Closing views keeps their instances alive; normal Host shutdown drains its own
-instances. Studio's automatic disposable test-project flow remains unfinished.
+instances.
+
+The native development ports `plugins.test_create`, `plugins.test_project`,
+`plugins.test_projects`, `plugins.test_operation` and `plugins.test_stop` create,
+observe and stop a separate test project. Describe their input contracts through
+the same live Host catalog. Creation takes exact plugin revision/artifact selections,
+configuration and dependency aliases; it accepts no existing project path or
+session. Keep the returned test identity, lifecycle version and original Operation.
+Stop refuses active work or connections and reports failed cleanup explicitly.
+Directories and journals remain available as recovery evidence; reading history
+never restarts a test. Studio's end-user controls and shared-edge child transport
+remain unfinished; these native ports alone do not expose a child browser window.
 
 ### Open the bundled demo
 

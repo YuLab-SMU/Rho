@@ -115,6 +115,47 @@ released after its historical views close, without claiming native process recov
 Real-backend testing in a disposable project is a separate lifecycle, not an option
 that elevates a fixture instance.
 
+### Disposable native test projects
+
+`plugins.test_create` accepts `CreatePluginTestProject`: a name and 1–16 aliases
+with exact `ScenarioInstance` selections. It validates immutable source/artifact,
+native target, configuration, dependency pins/order and the original caller's
+grants. It captures at most 256 MiB of package data into a fresh managed project;
+no existing path, session, runtime or caller-selected credential is accepted.
+It requires `plugins.read`, `plugins.write` and `plugins.run`; selection never
+adds scopes. At most four test Hosts may be live in a parent Host, and test Hosts
+do not recursively expose creation. Native packages remain trusted local code.
+
+The result is `PluginTestProjectObservation`. Keep its original creation Operation,
+test identity, lifecycle version and per-alias activation Operations. Lifecycle
+metadata belongs to the parent catalog; scientific work belongs solely to the
+child's ordinary Operation journal. Failed creation retains acknowledged activation
+IDs in `recovery.activation_operations`, even if the catalog could not save them.
+`plugins.test_project/test_projects` require
+`plugins.read`; listing is cursor- and byte-bounded, so a page may contain fewer
+than the requested limit. `observed_in_this_host:false` is explicit absence of a
+current native observation, even when the retained state says `ready`.
+
+`plugins.test_operation` takes `PluginTestOperationArguments` and requires both
+`plugins.read` and `operation.read`. It reuses ordinary project/principal-visible
+Operation records through a read-only original journal, including after stop or
+parent reopen. It returns the ordinary operation-get envelope; a foreign or absent
+operation is null. Reading never recreates a child or performs recovery.
+
+`plugins.test_stop` takes the observed `expected_version` and requires
+`plugins.read` plus `plugins.run`. Close views through normal state cooperation
+and finish original work before stopping. Retained connections, accepted work and
+unconfirmed native cleanup prevent a successful stop. Partial cleanup keeps its
+original records and source protections. The stop Operation retains each release
+request and any acknowledged child Operation ID in its `recovery.releases`; these
+are references, never a replacement scientific result. Confirmed stopped state releases parent
+source pins; the independent directory, archives and journal remain as evidence.
+A Host restart does not silently reattach or restart a recorded test project.
+
+The native Host selector reuses the child's existing five ports. The Studio UI
+and public edge selection for a child window are still being implemented; these
+lifecycle capabilities alone do not open a separate browser workspace.
+
 `plugins.project_coverage@1` and `operation.project_coverage@1` accept
 `ProjectReadCoverageArguments` (`{}`) and return `ProjectReadCoverage` in the query
 envelope's `data`. They require `project.references.read` together with

@@ -55,6 +55,7 @@ pub struct PluginService {
     pub(crate) services: Arc<Services>,
     published: Mutex<Vec<CapabilityContribution>>,
     stopped: tokio_util::sync::CancellationToken,
+    publication_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
 }
 impl PluginService {
     pub fn open(
@@ -113,6 +114,7 @@ impl PluginService {
             services,
             published: Mutex::new(vec![]),
             stopped: tokio_util::sync::CancellationToken::new(),
+            publication_task: Mutex::new(None),
         }))
     }
     pub fn register(
@@ -142,19 +144,25 @@ impl PluginService {
         let mut lifecycle = self.runtime.subscribe_lifecycle();
         let weak = Arc::downgrade(self);
         let stopped = self.stopped.clone();
-        tokio::spawn(async move {
+        let publication_task = tokio::spawn(async move {
             loop {
                 tokio::select! {
+                    biased;
                     _=stopped.cancelled()=>break,
                     changed=lifecycle.changed()=>{
                         if changed.is_err() { break; }
                         let Some(service)=weak.upgrade() else { break };
-                        let _guard=service.gate.lock().await;
+                        let _guard=tokio::select! {
+                            biased;
+                            _=stopped.cancelled()=>break,
+                            guard=service.gate.lock()=>guard,
+                        };
                         if let Err(error)=service.refresh_locked() { eprintln!("plugin lifecycle publication: {error}"); }
                     }
                 }
             }
         });
+        *self.publication_task.lock().unwrap() = Some(publication_task);
     }
     pub fn bind_lifetime<T: Send + Sync + 'static>(
         &self,
@@ -307,7 +315,8 @@ impl PluginService {
         Ok(())
     }
     pub async fn drain(&self) {
-        let _guard = self.gate.lock().await;
+        self.stopped.cancel();
+        let guard = self.gate.lock().await;
         self.close_live_views();
         for observation in self.runtime.observe() {
             if matches!(
@@ -318,6 +327,13 @@ impl PluginService {
             }
         }
         let _ = self.refresh_locked();
+        drop(guard);
+        // A watcher may have upgraded its weak service reference before drain.
+        // Join it before returning so it cannot retain the journal across reopen.
+        let publication_task = self.publication_task.lock().unwrap().take();
+        if let Some(task) = publication_task {
+            let _ = task.await;
+        }
     }
 }
 

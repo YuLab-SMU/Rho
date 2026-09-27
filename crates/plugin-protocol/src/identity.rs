@@ -127,6 +127,7 @@ identity!(DraftId, opaque);
 identity!(ConnectionId, opaque);
 identity!(RequestId, opaque);
 identity!(ProjectId, opaque);
+identity!(TestProjectId, name);
 identity!(PrincipalId, opaque);
 identity!(WindowId, opaque);
 identity!(ScenarioId, opaque);

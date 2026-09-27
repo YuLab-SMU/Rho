@@ -34,6 +34,36 @@ inactive until explicitly selected. This path is the foundation for disposable
 backend-test projects; it does not itself implement Studio's test-project lifecycle
 or complete removal of the older composition and dependencies.
 
+Explicit backend development tests use `plugins.test_create/test_stop` and bounded
+`plugins.test_project/test_projects` observations. Host owns each fresh canonical
+project lease, separate ordinary package catalog and Operation journal; it calls
+that child's existing activation/release ports with the original principal and
+scopes. No existing path/session/provider or synthetic broader authority is
+accepted. Exact source/artifact/configuration/dependency selections validate before
+admission. Captured archives remain immutable; no toolchain is installed and no
+nested test-project owner is composed. Limits are four live children, sixteen
+selected instances per child and 256 MiB of captured package content.
+
+The package repository retains only scoped lifecycle metadata, original activation
+identities and source protections. Each child's ordinary journal remains the sole
+scientific result owner. Versioned state and protections commit together. Reads
+never recreate a child: a recorded ready state and native presence are distinct.
+`plugins.test_operation` delegates to the ordinary Operation query owner with a
+read-only original journal, including after stop or parent reopen. It checks both
+parent test visibility and the child journal's project/principal scope.
+Stop refuses open views until their ordinary state-saving close completes; it
+fences new child calls, refuses retained connections or accepted work, then
+requires confirmed native releases. Partial cleanup retains diagnostics, original
+records and source protections. Creation/release failures preserve acknowledged
+child Operation IDs in the original parent's recovery, even if a catalog write
+fails. A current-process proof that no backend ever
+started can also establish stopped state; a historical record alone cannot.
+Confirmed stop releases parent source pins but preserves independent directories,
+archives and journals as recovery evidence. This native lifetime underpins the
+still-unfinished Studio test UI and shared-edge child transport.
+Host drain cancels and joins the plugin lifecycle publication task before returning;
+a pending observation cannot retain the original journal lock across immediate reopen.
+
 `rho-plugin-protocol` is an independently packageable public contract with no core
 or scientific dependencies. Its generated language-neutral JSON Schemas and
 TypeScript definitions are in `sdk/plugin-protocol`. `rho-plugins` owns package
