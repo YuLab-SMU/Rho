@@ -1,6 +1,8 @@
 //! Public, language-neutral plugin contracts. No scientific owner or Host dependency.
 #![forbid(unsafe_code)]
 
+mod archive;
+pub use archive::*;
 mod build;
 pub use build::*;
 mod preview;

@@ -124,7 +124,8 @@ impl PluginService {
         crate::service_handlers::register(self, registry)?;
         crate::view_renderer::register(self, registry)?;
         crate::build_service::register(self, registry)?;
-        crate::draft_service::register(self, registry)
+        crate::draft_service::register(self, registry)?;
+        crate::archive_service::register(self, registry)
     }
     pub fn bind(
         self: &Arc<Self>,
@@ -277,6 +278,8 @@ impl PluginService {
         }
         if record.operation.domain == "documents" && record.operation.capability.id == "documents.save" {
             self.complete_draft_save(record)?;
+        } else if matches!(record.operation.capability.id.as_str(), "plugins.archive_import" | "plugins.archive_export") {
+            self.complete_archive(record)?;
         } else if record.operation.capability.id == "plugins.build" {
             if record.status == host::OperationStatus::Uncertain {
                 return Err(error("Native build settlement is uncertain; retain its evidence and source protection. Reference reconciliation cannot confirm process cleanup."));

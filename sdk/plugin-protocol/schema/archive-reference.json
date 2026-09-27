@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginArchiveReference",
+  "type": "object",
+  "properties": {
+    "archive": {
+      "type": "string"
+    },
+    "bytes": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "digest": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "archive",
+    "digest",
+    "bytes"
+  ]
+}

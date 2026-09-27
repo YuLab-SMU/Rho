@@ -41,6 +41,25 @@ it does not authorize automatic retry. Control errors redact native payloads.
 `ViewRequestError.diagnostic` retains the original structured Host diagnostic,
 including recovery material; an error string does not replace that evidence.
 
+For `.rho-plugin` bytes, use `capturePluginArchive(blob, archiveId)` to bind an
+immutable Blob, opaque identity, full SHA-256 and length. Persist the returned
+reference before `stagePluginArchive(client, capture, { signal, progress })`.
+Staging uses only the declared `plugins.archive_stage@1` / `plugins.write` grant,
+verifies the capture and every bounded acknowledgement, and can repeat identical
+chunks after an interrupted upload. Retain/reselect the exact file to resume;
+never put the full Blob into a small view-state record. Completion means staged
+bytes, not validated package content or an installed revision.
+
+`readPluginArchive(client, reference, { maxBytes, signal })` requires
+`plugins.archive_read@1` / `plugins.read`. It verifies the exact reference, every
+64 KiB page and final checksum, using the package archive limit (374,691,157 bytes),
+independently of the smaller media-view limit. Both helpers stop further transfer
+on abort without discarding bytes or cancelling accepted work. Neither helper
+invokes import/export, activates code, triggers a browser download or claims a
+saved file. Use the separate explicit archive ports for inspection, import,
+export and safe discard, with normal original-Operation recovery. Ship the emitted
+`archives.js` alongside the other public SDK modules.
+
 For opaque document content larger than view state, use `captureDraftContent(bytes)`
 to freeze and hash the current bytes, then
 `stageDraftContent(client, { draft, upload }, capture)` with an explicit

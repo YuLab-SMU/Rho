@@ -7,11 +7,13 @@ import { MessageChannel } from "node:worker_threads";
 import { createHash } from "node:crypto";
 import { compilePublicUiSdk } from "./fixtures/plugin-ui.mjs";
 import { checkViewClose } from "./fixtures/plugin-close.mjs";
+import { checkArchiveTransfers } from "./fixtures/plugin-archives.mjs";
 import { checkDraftTransfers } from "./fixtures/plugin-drafts.mjs";
 const directory=fs.mkdtempSync(path.join(os.tmpdir(),"rho-public-ui-"));
 try {
   const sdk=await import(pathToFileURL(compilePublicUiSdk(directory)).href);
   await checkDraftTransfers(sdk);
+  await checkArchiveTransfers(sdk);
   await checkViewClose(sdk);
   const scopedRequest = `sha256:${createHash('sha256').update('original-view:request-中文').digest('hex')}`;
   assert.equal(await sdk.operationRequestId('original-view','request-中文'), scopedRequest);

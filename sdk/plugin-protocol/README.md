@@ -45,6 +45,49 @@ files, traversal, case collisions, undeclared blobs and digest mismatches are
 rejected. Limits are 8,192 file entries and 256 MiB decoded package bytes.
 Archives can be unbuilt source checkpoints; activation needs a complete artifact.
 
+## Archive transfer ports
+
+Ordinary plugins, connected CLI and MCP use the same `plugins.archive_*@1`
+ports. `archive_stage` and `archive_discard` are Controls with `plugins.write`; `archive_import` is an
+Operation with that scope. Progress, inspection, chunk reads and original receipt
+queries use `plugins.read`; `archive_export` is an Operation with `plugins.read`.
+Each reference binds an opaque archive ID, SHA-256 and exact encoded byte count.
+Native project/principal identity supplies visibility; requests cannot select a
+filesystem path, different principal or runtime resource owner.
+
+Upload exact 65,536-byte chunks at aligned offsets, with a shorter final chunk.
+Identical chunks may be retried in any order; changed content at a staged range is
+rejected. `archive_progress.complete` means only that all ranges are retained.
+`archive_inspect` verifies the full content digest and package contract before
+returning metadata. `archive_import` revalidates and atomically installs the package
+with its original transaction receipt. Neither staging nor inspection installs;
+import never activates, builds or executes a package.
+
+`ExportPluginArchive` specifies exact source and a sorted unique artifact list;
+use an empty list for source only. Export fixes downloadable bytes in the scoped
+transfer store and returns a `PluginArchiveReceipt`. Read at most 65,536 bytes per
+`archive_read`, checking the unchanged reference, offsets and final digest.
+Preparing or reading an export does not attest to a local file being saved.
+
+The encoded archive limit is 374,691,157 bytes, with the package's separate
+256 MiB decoded-content limit. Each principal may retain up to sixteen transfers
+reserving twice that encoded limit; the repository allows 128 transfers reserving
+eight times the limit. Upload declares and reserves its full length on the first
+chunk. Explicit mutations collect expired unheld transfers after 24 hours;
+queries neither renew leases nor collect bytes. Explicit `archive_discard` can
+remove an unheld transfer to free capacity; it preserves package content and
+original receipts and refuses accepted recovery bytes. Accepted unresolved imports and
+exports keep their exact transfers and source revisions protected. Confirmed
+original settlement releases protections and renews the download lease.
+
+Persist the original request ID and arguments before invoking. After a lost reply,
+inspect that Operation and `archive_receipt` with its original operation ID.
+A catalog receipt is evidence of one atomic catalog transaction, not authority to
+rewrite an uncertain Operation or replay it. Recover a durable original commit
+through the regular Operation ports; `plugins.reconcile_references` can release
+protections only after the original result is certain. Removed package content is
+not reinstalled by requesting an old successful Operation again.
+
 ## Host lifecycle ports
 
 Active Hosts expose package/lifecycle DTOs from this package through their ordinary

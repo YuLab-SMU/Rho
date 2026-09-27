@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginArchiveInspection",
+  "type": "object",
+  "properties": {
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PluginArtifactSummary"
+      }
+    },
+    "description": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "plugin": {
+      "type": "string"
+    },
+    "reference": {
+      "$ref": "#/$defs/PluginArchiveReference"
+    },
+    "revision": {
+      "type": "string"
+    },
+    "source_files": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "reference",
+    "revision",
+    "plugin",
+    "name",
+    "version",
+    "description",
+    "source_files",
+    "artifacts"
+  ],
+  "$defs": {
+    "PluginArchiveReference": {
+      "type": "object",
+      "properties": {
+        "archive": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "archive",
+        "digest",
+        "bytes"
+      ]
+    },
+    "PluginArtifactSummary": {
+      "type": "object",
+      "properties": {
+        "file_count": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "id": {
+          "type": "string"
+        },
+        "target": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "target",
+        "file_count"
+      ]
+    }
+  }
+}

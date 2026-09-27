@@ -133,6 +133,7 @@ identity!(WindowId, opaque);
 identity!(ScenarioId, opaque);
 identity!(BranchId, opaque);
 identity!(ResourceId, opaque);
+identity!(ArchiveId, opaque);
 identity!(NodeId, opaque);
 identity!(PackagePath, package_path);
 

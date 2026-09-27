@@ -238,3 +238,5 @@ export { readResource, isResourceReference, sameResource, DEFAULT_RESOURCE_VIEW_
 export type { ResourceReference, ResourceReader } from "./resources.js";
 export { captureDraftContent, stageDraftContent, readDraft, isDraftContent, isDocumentDraft, MAX_DRAFT_BYTES, DRAFT_CHUNK_BYTES } from "./drafts.js";
 export type { CapturedDraftContent, DraftReader, DraftWriter, DocumentDraft, DraftContent } from "./drafts.js";
+export { capturePluginArchive, stagePluginArchive, readPluginArchive, isPluginArchiveReference, samePluginArchive, ARCHIVE_CHUNK_BYTES, MAX_PLUGIN_ARCHIVE_BYTES } from "./archives.js";
+export type { CapturedPluginArchive, ArchiveReader, ArchiveWriter, PluginArchiveReference, PluginArchiveProgress } from "./archives.js";

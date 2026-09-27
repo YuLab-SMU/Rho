@@ -13,6 +13,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_large_int("number");
     OperationId::export_all(&types)?;
     PluginArchive::export_all(&types)?;
+    StagePluginArchive::export_all(&types)?;
+    PluginArchiveDiscarded::export_all(&types)?;
+    PluginArchiveProgress::export_all(&types)?;
+    PluginArchiveArguments::export_all(&types)?;
+    ReadPluginArchive::export_all(&types)?;
+    PluginArchiveChunk::export_all(&types)?;
+    ExportPluginArchive::export_all(&types)?;
+    PluginArchiveReceipt::export_all(&types)?;
+    PluginArchiveInspection::export_all(&types)?;
+    PluginArchiveOperationArguments::export_all(&types)?;
     PluginRevisionPage::export_all(&types)?;
     RevisionDifference::export_all(&types)?;
     PluginInstance::export_all(&types)?;
@@ -122,6 +132,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("project-read-coverage-arguments", schemars::schema_for!(ProjectReadCoverageArguments)),
         ("manifest", schemars::schema_for!(PluginManifest)),
         ("archive", schemars::schema_for!(PluginArchive)),
+        ("stage-archive", schemars::schema_for!(StagePluginArchive)),
+        ("read-archive", schemars::schema_for!(ReadPluginArchive)),
+        ("export-archive", schemars::schema_for!(ExportPluginArchive)),
+        ("archive-reference", schemars::schema_for!(PluginArchiveReference)),
+        ("archive-arguments", schemars::schema_for!(PluginArchiveArguments)),
+        ("archive-progress", schemars::schema_for!(PluginArchiveProgress)),
+        ("archive-discarded", schemars::schema_for!(PluginArchiveDiscarded)),
+        ("archive-chunk", schemars::schema_for!(PluginArchiveChunk)),
+        ("archive-receipt", schemars::schema_for!(PluginArchiveReceipt)),
+        ("archive-inspection", schemars::schema_for!(PluginArchiveInspection)),
+        ("archive-operation-arguments", schemars::schema_for!(PluginArchiveOperationArguments)),
         ("rpc", schemars::schema_for!(RpcFrame)),
         ("workspace-paths", schemars::schema_for!(WorkspacePaths)),
         ("view-message", schemars::schema_for!(PluginViewMessage)),

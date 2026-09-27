@@ -15,6 +15,24 @@ try {
   fs.mkdirSync(consumer);
   fs.writeFileSync(path.join(consumer, "consumer.mts"), `
 import type { ActivatePlugin, WorkspacePaths, PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage, PendingCancellation, UpdatePluginWindowLayout, OpenPluginWindowView, ClosePluginView, PluginViewLifecycle, SaveDocumentDraft, StageDraftChunk, DocumentDraftChunk, ListDocumentDrafts, DocumentDraftPage, ContextSearch, ContextPage, PreviewContext, ContextPreview } from "../protocol/index.js";
+import type {PluginArchiveDiscarded,PluginArchiveReference,StagePluginArchive,PluginArchiveProgress,PluginArchiveInspection,PluginArchiveReceipt,PluginArchiveOperationArguments,PluginArchiveArguments,ReadPluginArchive,PluginArchiveChunk,ExportPluginArchive} from "../protocol/index.js";
+const archiveReference:PluginArchiveReference={archive:"upload",digest:"sha256:"+"a".repeat(64),bytes:7};
+const archiveStage:StagePluginArchive={reference:archiveReference,offset:0,base64:"ZXhhbXBsZQ=="};
+const archiveRead:ReadPluginArchive={reference:archiveReference,offset:0,limit:65536};
+const archiveChunk:PluginArchiveChunk={reference:archiveReference,offset:0,base64:archiveStage.base64,next:null};
+const archiveProgress:PluginArchiveProgress={reference:archiveReference,received:7,complete:true};
+const archiveImport:PluginArchiveArguments={reference:archiveReference};
+const archiveExport:ExportPluginArchive={revision:"revision",artifacts:[]};
+const archiveDiscarded:PluginArchiveDiscarded={reference:archiveReference,discarded:true};
+const archiveOperation:PluginArchiveOperationArguments={operation_id:"original"};
+function archiveEvidence(observation:PluginArchiveInspection,receipt:PluginArchiveReceipt):boolean {return observation.revision===receipt.revision;}
+// @ts-expect-error Import cannot read an arbitrary caller path.
+const archivePath:PluginArchiveArguments={path:"/package"};
+// @ts-expect-error Export must make the artifact selection explicit.
+const guessedArchive:ExportPluginArchive={revision:"revision"};
+// @ts-expect-error Archive references do not impersonate runtime-owned resources.
+const archiveOwner:PluginArchiveReference={...archiveReference,owner:{instance:"fake"}};
+void [archiveDiscarded,archiveStage,archiveRead,archiveChunk,archiveProgress,archiveImport,archiveExport,archiveOperation,archiveEvidence,archivePath,guessedArchive,archiveOwner];
 import type {ProjectReadCoverage,ProjectReadCoverageArguments} from "../protocol/index.js";
 import type {ReleasePluginViewRenderer,PluginViewRendererRelease} from "../protocol/index.js";
 import type {PluginViewMessage,PluginViewRequest} from "../protocol/index.js";
@@ -121,7 +139,7 @@ export function inspect(manifest: PluginManifest, visual: VisualDocument, page: 
   execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"),
     "--noEmit", "--strict", "--module", "NodeNext", "--moduleResolution", "NodeNext",
     "--target", "ES2022", "--rootDir", consumer, path.join(consumer, "consumer.mts")], { stdio: "inherit" });
-  for (const name of ["release-view-renderer", "view-renderer-release", "create-plugin-test-project", "plugin-test-project-observation", "plugin-test-project-arguments", "plugin-test-operation-arguments", "stop-plugin-test-project", "list-plugin-test-projects", "plugin-test-project-page", "list-plugin-source", "plugin-source-page", "read-plugin-source", "plugin-source-chunk", "list-plugin-branches", "plugin-branch-page", "checkpoint-plugin", "plugin-checkpoint", "manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "view-close", "window-layout", "window-open-view", "context-page", "preview-context", "context-preview", "document-draft", "list-document-drafts", "document-draft-page", "save-document-draft", "scenario", "save-scenario", "scenario-page", "apply-scenario", "window-scenario-snapshot", "resolve-window-provider", "visual-document"]) {
+  for (const name of ["stage-archive", "read-archive", "export-archive", "archive-reference", "archive-arguments", "archive-progress", "archive-discarded", "archive-chunk", "archive-receipt", "archive-inspection", "archive-operation-arguments", "release-view-renderer", "view-renderer-release", "create-plugin-test-project", "plugin-test-project-observation", "plugin-test-project-arguments", "plugin-test-operation-arguments", "stop-plugin-test-project", "list-plugin-test-projects", "plugin-test-project-page", "list-plugin-source", "plugin-source-page", "read-plugin-source", "plugin-source-chunk", "list-plugin-branches", "plugin-branch-page", "checkpoint-plugin", "plugin-checkpoint", "manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "view-close", "window-layout", "window-open-view", "context-page", "preview-context", "context-preview", "document-draft", "list-document-drafts", "document-draft-page", "save-document-draft", "scenario", "save-scenario", "scenario-page", "apply-scenario", "window-scenario-snapshot", "resolve-window-provider", "visual-document"]) {
     const schema = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema", `${name}.json`), "utf8"));
     assert.ok(schema.$schema && schema.title, `missing standalone schema: ${name}`);
     const visit = value => {

@@ -23,6 +23,19 @@ plugins. Management and Plugin Studio are ordinary plugins too; core CLI remains
 the recovery entry when they are absent. Default delivery imports the same package
 format and never introduces source-based validation exceptions or silent reinstall.
 
+Package transfer bytes have a native scoped owner independent of runtime resources.
+`plugins.archive_*` stages aligned immutable chunks, observes or validates the
+complete encoded archive, imports exact content, and exports explicit source and
+artifact selections through the public ports. Caller paths and synthetic resource
+owners are not accepted. Import/catalog and export/transfer receipts commit
+atomically with their bytes; they attest only to that native transaction. The
+original Operation journal still owns settlement. Unresolved original requests
+retain captured transfer bytes and source protections, including across Host
+reopen, without automatic replay. Reads neither install nor collect content.
+[The public protocol](../sdk/plugin-protocol/README.md#archive-transfer-ports)
+defines bounds, expiry, authority and recovery. Offline CLI remains the bootstrap
+and filesystem recovery edge; ordinary plugins receive no special import privilege.
+
 `NextHost::open_plugin_workspace` composes the generic package, presentation and
 Operation ports without fixed Files/Git, process, R, Environment or Agent owners.
 The canonical native project lease supplies project identity independently of a

@@ -885,8 +885,9 @@ client TypeScript compiler; the directory must be outside the core checkout.
 Snapshot that package and open its `studio` contribution with `{}` configuration
 through the same activation/view ports as any UI plugin. It can inspect its own
 source and create development branches. Source editing and checkpoint history use
-the ports below. This package currently has an inert fixture canvas; native build,
-executable preview, archive controls and Agent integration remain unfinished.
+the ports below. Explicit native build, isolated fixture preview, disposable backend
+tests and scenario application/history are implemented. Archive controls and Agent
+integration remain unfinished; see Status for the executed acceptance checks.
 
 Active Hosts expose `plugins.repository`, `plugins.list`, `plugins.inspect`,
 `plugins.instances`, `plugins.instance`, `plugins.resolve`, `plugins.branch_head`
@@ -935,9 +936,37 @@ exact acknowledgement before retiring protections. A pending acknowledgement doe
 not change an already committed scientific result. Retain the original operation
 ID; after observing a completed but unsuccessful reconciliation attempt, use a new
 client request ID for another explicit attempt. No scientific execution is repeated
-and no disconnected backend is restarted. The CLI recovery interface still
-handles archive import/export and source snapshots; active Host build/import
-flows remain part of the ongoing Plugin Studio work.
+and no disconnected backend is restarted. The offline CLI recovery interface
+handles filesystem archive import/export and source snapshots. Active Hosts also
+provide the bounded archive ports below; ordinary UI controls remain ongoing work.
+
+Archive transfer through an active Host uses ordinary Control, Query and Operation
+calls; no filesystem path is accepted. Stage the selected UTF-8 `.rho-plugin`
+bytes with `plugins.archive_stage`, using one opaque archive ID, full SHA-256,
+encoded byte length, and aligned 64 KiB chunks (the final chunk may be shorter).
+`plugins.archive_progress` reports retained byte completeness.
+`plugins.archive_inspect` verifies the full package before displaying metadata.
+Invoke `plugins.archive_import` with the exact reference to install; it does not
+build or activate anything. Stage/import require `plugins.write`; the observations
+require `plugins.read` and remain limited to this project/principal.
+
+Invoke `plugins.archive_export` with an exact `revision` and explicit sorted
+`artifacts` list; `[]` exports source only. It requires `plugins.read` and returns
+an immutable transfer reference. `plugins.archive_read` retrieves bounded 64 KiB
+pages. Verify the reference, byte sequence and final SHA-256 before saving the
+chosen local file. Export preparation is not a local-file-save receipt.
+Unheld transfers expire after 24 hours and are collected by later mutations;
+reads do not extend this lease. Explicit `plugins.archive_discard` frees an unheld
+transfer using `plugins.write`; accepted unresolved captures cannot be discarded.
+Package content and original receipts are retained independently.
+
+After a lost import/export reply, inspect the original Operation and
+`plugins.archive_receipt` with its `operation_id`. Keep the exact request ID and
+arguments. A receipt proves the catalog transaction, but cannot turn an uncertain
+Operation into success. Regular original commit reconciliation releases transfer
+and source protections only after a certain terminal result. Never issue a fresh
+import/export just to determine what the old request did. Detailed bounds and
+contracts are in the [public protocol](../sdk/plugin-protocol/README.md#archive-transfer-ports).
 
 The ordinary management UI is assembled with
 `node scripts/build-manager-plugin.mjs DEST`, using a new directory outside the
@@ -964,8 +993,9 @@ in that view. Inspect the original request to refresh its outcome; recovery neve
 continues later preparation steps automatically. Only the original view can retry
 the same captured request. A replacement manager can inspect the original record
 but cannot reissue it under a new identity. Read-only inspection and navigation
-remain available. Package import/export and full Studio development still use
-the CLI or remain tracked implementation work; see Status.
+remain available. Archive UI and Agent-assisted Studio development remain tracked
+implementation work; archive operations are already available through the public
+Host ports and offline CLI. See Status for verification and remaining scope.
 
 The ordinary R package exposes `r.console` for current/pending original operations,
 pause identity and `awaiting_commit`. Copy `r.session.queue_target` into the query's

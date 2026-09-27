@@ -11,6 +11,28 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
+Active Hosts now expose scoped package archive staging, inspection, import,
+export, bounded reads, original transaction receipts and explicit transient-byte
+discard through the same public ports. Native project/principal identity and exact
+SHA-256/length references bind transfers; no caller filesystem path or fabricated
+runtime resource owner is accepted. Import does not build or activate code. Export
+captures the exact revision and selected artifacts, including source-only exports.
+Original unresolved Operations retain their bytes/source protections. Catalog
+receipts never turn uncertain Operations into success or authorize replay.
+
+The public UI SDK captures immutable Blob content, stages identical bounded
+chunks and verifies complete archive reads independently of the smaller media
+limit. These helpers do not trigger browser downloads. Studio/Plugins archive
+controls and the containing browser's archive-download action remain unfinished.
+The new ports require a rebuilt Host; existing user Hosts and R sessions have not
+been replaced. All 30 affected repository/build/source-development tests pass on
+the current implementation. Public protocol/SDK consumers, independent Studio and
+Plugins builds/models, client build and all 528 client tests also pass. Host
+archive/shared-port regressions, native protocol/SDK tests and client consistency
+remain in progress; they are not yet acceptance passes. Exact commands, initial
+fixture/build failures and results are retained in
+`target/plugin-refactor/archive-verification.txt`.
+
 Studio scenario application is implemented through the ordinary public ports.
 The new surface selects a named scenario and plugin alias, stages an exact
 previewed/tested revision and artifact with explicit new view states, saves a

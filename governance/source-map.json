@@ -13,6 +13,8 @@
     "plugins.preview-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "plugin-preview.spec.ts"]},
     "plugins.studio-model": {"command": ["node", "scripts/test-studio-plugin.mjs"]},
     "plugins.studio-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "studio-plugin.spec.ts", "studio-backend-test.spec.ts", "studio-scenario.spec.ts"]},
+    "plugins.archive-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "archive_transfers", "--locked"]},
+    "plugins.archive-ports": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_archives", "--locked"]},
     "plugins.build-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "build_operations", "--locked"]},
     "plugins.process-engine": {"command": ["cargo", "test", "-p", "rho-process-engine", "--locked"]},
     "plugins.development-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "source_development", "--locked"]},
@@ -925,6 +927,7 @@
     "plugins": {
       "sources": [
         "crates/host/tests/plugin_development.rs",
+        "crates/host/tests/plugin_archives.rs",
         "crates/host/tests/plugin_preview.rs",
         "crates/host/tests/plugin_workspace.rs",
         "crates/host/tests/plugin_test_projects.rs",
@@ -1020,6 +1023,7 @@
         "crates/host/tests/plugin_self_requirements.rs",
         "crates/host/tests/plugin_optional_requirements.rs",
         "scripts/fixtures/plugin-drafts.mjs",
+        "scripts/fixtures/plugin-archives.mjs",
         "scripts/fixtures/plugin-draft-view.mjs",
         "ui/e2e/plugin-drafts.spec.ts",
         "scripts/build-process-plugin.mjs",
@@ -1037,7 +1041,7 @@
       ],
       "checks": [
         "plugins.development-owner",
-        "plugins.build-owner",
+        "plugins.build-owner", "plugins.archive-owner", "plugins.archive-ports",
         "plugins.preview-host",
         "plugins.workspace-host", "plugins.test-project-host", "plugins.test-project-owner",
         "plugins.test-project-edges", "plugins.test-project-browser", "plugins.test-project-session",

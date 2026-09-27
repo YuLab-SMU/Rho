@@ -43,6 +43,7 @@ impl PluginRepository {
             CREATE TABLE IF NOT EXISTS plugin_instances(id TEXT PRIMARY KEY, document TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS plugin_views(id TEXT PRIMARY KEY, project TEXT NOT NULL, principal TEXT NOT NULL, document TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS plugin_window_layouts(project TEXT NOT NULL, principal TEXT NOT NULL, window TEXT NOT NULL, document TEXT NOT NULL, PRIMARY KEY(project,principal,window));")?;
+        crate::archives::initialize(&connection)?;
         crate::drafts::initialize(&connection)?;
         crate::scenarios::initialize(&connection)?;
         crate::test_projects::initialize(&connection)?;
@@ -237,13 +238,21 @@ impl PluginRepository {
 
     pub fn export(&self, id: &RevisionId) -> Result<PluginArchive, PluginError> {
         let snapshot = self.connection.unchecked_transaction()?;
-        let revision = self.revision(id)?;
-        let artifacts = self
-            .inspect(id)?
-            .artifacts
-            .into_iter()
-            .map(|id| self.artifact(&id))
-            .collect::<Result<Vec<_>, _>>()?;
+        let archive = self.export_selection(&ExportPluginArchive {
+            revision: id.clone(), artifacts: self.inspect(id)?.artifacts,
+        })?;
+        snapshot.commit()?;
+        Ok(archive)
+    }
+
+    pub fn export_selection(&self, args: &ExportPluginArchive) -> Result<PluginArchive, PluginError> {
+        args.validate()?;
+        let revision = self.revision(&args.revision)?;
+        let artifacts = args.artifacts.iter().map(|id| {
+            let artifact = self.artifact(id)?;
+            ensure(artifact.revision == args.revision, "export artifact belongs to another revision")?;
+            Ok(artifact)
+        }).collect::<Result<Vec<_>, PluginError>>()?;
         let mut blobs = BTreeMap::new();
         for file in revision
             .files
@@ -264,7 +273,6 @@ impl PluginRepository {
             blobs,
         };
         validate_archive(&archive)?;
-        snapshot.commit()?;
         Ok(archive)
     }
 
@@ -299,7 +307,7 @@ impl PluginRepository {
         ensure(
             matches!(
                 owner_kind,
-                "instance" | "view" | "operation" | "management" | "build" | "scenario" | "document" | "checkpoint" | "test_project"
+                "instance" | "view" | "operation" | "management" | "build" | "scenario" | "document" | "checkpoint" | "test_project" | "archive_export" | "archive_import"
             ),
             "unknown reference owner",
         )?;
@@ -338,7 +346,7 @@ impl PluginRepository {
         ensure(
             matches!(
                 owner_kind,
-                "instance" | "view" | "operation" | "management" | "build" | "scenario" | "document" | "checkpoint" | "test_project"
+                "instance" | "view" | "operation" | "management" | "build" | "scenario" | "document" | "checkpoint" | "test_project" | "archive_export" | "archive_import"
             ),
             "unknown reference owner",
         )?;

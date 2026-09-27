@@ -11,7 +11,7 @@ use std::{
     path::Path,
 };
 
-pub const MAX_ARCHIVE_BYTES: u64 = MAX_PACKAGE_BYTES * 4 / 3 + 16 * 1024 * 1024;
+pub const MAX_ARCHIVE_BYTES: u64 = MAX_PLUGIN_ARCHIVE_BYTES;
 
 pub fn content_digest(bytes: &[u8]) -> ContentDigest {
     ContentDigest::new(format!("sha256:{:x}", Sha256::digest(bytes))).expect("SHA256 encoding")

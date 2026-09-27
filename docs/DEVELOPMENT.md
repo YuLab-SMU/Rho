@@ -73,6 +73,17 @@ case in `--test plugins` checks direct Host access. Public protocol generation a
 the independent TypeScript consumer include the coverage DTO and empty-input schema.
 These checks establish metadata visibility, not Environment cleanup safety.
 
+Archive transfer uses `cargo test -p rho-plugins --test archive_transfers --locked`
+for native visibility, immutable ranges, full digest checks, capacity, expiry,
+exact artifact export and atomic receipt rollback. The generic Host check is
+`cargo test -p rho-host --test plugin_archives --locked`: empty-core import/export,
+removal/reimport without activation, ordinary-view grants, native principal,
+original commit recovery after reopen and preserved uncertainty when result
+staging is lost. Run these serially, then the affected package-repository and
+public-port regressions. Public DTO changes also require client generation and
+`node scripts/test-plugin-protocol.mjs`. These establish archive port behavior;
+they do not establish a browser file save or Studio archive UI acceptance.
+
 Source development uses `cargo test -p rho-plugins --test source_development --locked`
 for binary/paged reads, full-file corruption detection, source-only history,
 concurrent head conflicts and transactional rollback. The shared-port fixture is

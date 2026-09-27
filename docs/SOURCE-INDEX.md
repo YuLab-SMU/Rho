@@ -86,6 +86,7 @@ Sources:
 - `crates/host/src/plugin_tests.rs`
 - `crates/host/tests/files_plugin.rs`
 - `crates/host/tests/fixtures/view_delegation.py`
+- `crates/host/tests/plugin_archives.rs`
 - `crates/host/tests/plugin_development.rs`
 - `crates/host/tests/plugin_optional_requirements.rs`
 - `crates/host/tests/plugin_preview.rs`
@@ -120,6 +121,7 @@ Sources:
 - `scripts/fixtures/editor-format.mjs`
 - `scripts/fixtures/editor-save-run.mjs`
 - `scripts/fixtures/editor-sessions.mjs`
+- `scripts/fixtures/plugin-archives.mjs`
 - `scripts/fixtures/plugin-close.mjs`
 - `scripts/fixtures/plugin-download.mjs`
 - `scripts/fixtures/plugin-draft-view.mjs`
@@ -195,6 +197,8 @@ Sources:
 Checks:
 
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
+- `plugins.archive-owner`: `["cargo","test","-p","rho-plugins","--test","archive_transfers","--locked"]`
+- `plugins.archive-ports`: `["cargo","test","-p","rho-host","--test","plugin_archives","--locked"]`
 - `plugins.backend-sdk`: `["cargo","test","-p","rho-plugin-sdk","--locked"]`
 - `plugins.boundaries`: `["node","scripts/check-plugin-boundaries.mjs"]`
 - `plugins.boundary-tests`: `["node","scripts/check-plugin-boundaries.mjs","--self-test"]`

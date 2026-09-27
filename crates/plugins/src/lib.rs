@@ -1,6 +1,8 @@
 //! Package and instance ownership. Does not start a scientific runtime when read.
 #![forbid(unsafe_code)]
 
+mod archives;
+mod archive_service;
 mod package;
 mod repository;
 mod development;
