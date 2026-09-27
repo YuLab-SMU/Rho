@@ -33,6 +33,16 @@ case in `--test plugins` checks direct Host access. Public protocol generation a
 the independent TypeScript consumer include the coverage DTO and empty-input schema.
 These checks establish metadata visibility, not Environment cleanup safety.
 
+Scenario application uses `cargo test -p rho-host --test plugin_scenarios --locked`.
+The fixtures construct ordinary packages outside the checkout and exercise scoped
+checkpoint/application ports, exact dependency/grant validation, delegated view
+calls, transaction rollback, concurrent window conflicts, native work across
+version switching and unavailable-default refusal. `--test plugins` covers the
+shared view/lifecycle ports and `--test port_contracts` their public discovery.
+These tests do not establish the management UI, iframe continuity in a browser or
+real-R scenario acceptance. View resource context is qualified against bounded
+retained metadata; the separate byte ports remain responsible for byte integrity.
+
 Environment contracts, native execution and R helpers live in
 `plugins/environment/api` and `plugins/environment/backend/owner`. The retiring
 `rho-r-environment` adapter delegates to this owner. Iterate with

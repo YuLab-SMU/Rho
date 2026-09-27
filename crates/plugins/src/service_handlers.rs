@@ -61,6 +61,9 @@ pub(crate) fn register(
         "windows.layout",
         "scenarios.list",
         "scenarios.get",
+        "scenarios.prepare",
+        "windows.scenario",
+        "windows.resolve",
         "plugins.repository",
         "plugins.list",
         "plugins.inspect",
@@ -84,6 +87,7 @@ pub(crate) fn register(
         "windows.update_layout",
         "windows.open_view",
         "scenarios.checkpoint",
+        "scenarios.apply",
         "plugins.activate",
         "plugins.release",
         "plugins.remove",
@@ -102,6 +106,20 @@ pub(crate) fn register(
 }
 fn descriptor(id: &str) -> host::CapabilityDescriptor {
     let (input, output, example, summary, operation, scope) = match id {
+        "scenarios.prepare" | "scenarios.apply" => (
+            schema_for!(ApplyScenario).to_value(), schema_for!(WindowScenarioSnapshot).to_value(),
+            json!({"window":"window-example","revision":digest(),"expected_layout_version":0,"instances":{},"views":{}}),
+            "Validate or atomically select an exact prepared scenario in one window", id == "scenarios.apply", PLUGINS_RUN_SCOPE,
+        ),
+        "windows.scenario" => (
+            schema_for!(PluginWindowArguments).to_value(), schema_for!(WindowScenarioSnapshot).to_value(),
+            json!({"window":"window-example"}), "Observe a window's scenario and current layout together", false, PLUGINS_RUN_SCOPE,
+        ),
+        "windows.resolve" => (
+            schema_for!(ResolveWindowProvider).to_value(), schema_for!(ProviderBinding).to_value(),
+            json!({"window":"window-example","capability":{"id":"example.read","version":1}}),
+            "Resolve this window's selected exact provider without fallback", false, PLUGINS_RUN_SCOPE,
+        ),
         "scenarios.list" => (
             schema_for!(ListScenarios).to_value(), schema_for!(ScenarioPage).to_value(),
             json!({"after":null,"limit":20}), "List the caller's named project scenarios", false, PLUGINS_READ_SCOPE,
@@ -349,6 +367,17 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
         descriptor.documentation.effects = "Atomically create one scoped view, retain its exact revision, and select it in the expected window layout. Does not start or stop a backend.".into();
         descriptor.documentation.limitations.push("The view instance must already be active. A null group is valid only for an empty window; no panel names or fallback routing are inferred. Conflict or validation failure leaves the view and layout unchanged.".into());
     }
+    if matches!(id, "scenarios.prepare" | "scenarios.apply" | "windows.scenario" | "windows.resolve") {
+        descriptor.documentation.when_to_use = vec!["Prepare and apply a complete scene in one explicit window, or inspect its exact selected providers.".into()];
+        descriptor.documentation.retry_rule = if operation { "Retain client_request_id after lost acknowledgement and inspect the original Operation. Observe the current window version before a new application." } else { "Repeat a bounded observation; preparation reserves nothing and apply revalidates it." }.into();
+        descriptor.documentation.position_units = vec!["Application and prepared output are limited to 256 KiB; live layouts allow 256 views.".into()];
+        descriptor.documentation.limitations = vec![
+            "Prepare instances and views through ordinary public activation and view ports. The complete scene requires exact Ready identities, artifacts, configuration, selected grants and manifest dependency bindings. No provider starts or stops here.".into(),
+            "Apply revalidates preparation and atomically commits one window's layout and provider selection against its expected layout version. Other windows, existing operations and hidden views retain their identities and current state.".into(),
+            "A preparation is an observation, not a reservation. A saved selection is not evidence of live providers after disconnection. Missing exact providers never fall back to another instance.".into()];
+        descriptor.documentation.effects = if operation { "Change only the addressed window's presentation and default provider selection in one transaction." } else { "Bounded read of composition and native readiness; no activation, reconnection, view creation or scientific call." }.into();
+        descriptor.documentation.related_capabilities = vec![key("scenarios.prepare"), key("scenarios.apply"), key("windows.scenario"), key("windows.resolve")];
+    }
     if id == "views.connection" {
         descriptor.documentation.when_to_use = vec!["Connect the trusted containing shell to an already opened view.".into()];
         descriptor.documentation.limitations = vec!["Returns private connection credentials to the containing Host shell. Plugin callers are refused, including with an explicit capability grant. Plugins use views.inspect for public metadata/state.".into(),
@@ -366,6 +395,9 @@ fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
     match id {
         "scenarios.list" => normalize::<ListScenarios>(value),
         "scenarios.get" => normalize::<ScenarioRevisionArguments>(value),
+        "scenarios.prepare" | "scenarios.apply" => normalize::<ApplyScenario>(value),
+        "windows.scenario" => normalize::<PluginWindowArguments>(value),
+        "windows.resolve" => normalize::<ResolveWindowProvider>(value),
         "scenarios.checkpoint" => normalize::<SaveScenario>(value),
         "resources.list" => normalize::<ResourceList>(value),
         "resources.inspect" => normalize::<ResourceInspect>(value),
@@ -416,6 +448,17 @@ impl QueryHandler for Read {
     ) -> Result<host::QuerySnapshot, OperationError> {
         let service = &self.service;
         let data = match self.id {
+            "scenarios.prepare" => {
+                let _guard = service.gate.lock().await;
+                json!(service.prepare_scenario_application(context, &decode(value)?)?)
+            }
+            "windows.scenario" => {
+                let args: PluginWindowArguments = decode(value)?;
+                service.check_window_context(context, &args.window)?;
+                json!(service.repository.lock().unwrap().window_scenario(&service.project,
+                    &plugin_principal_id(context.principal()), &args.window).map_err(crate::scenario_application::fault)?)
+            }
+            "windows.resolve" => json!(service.resolve_window_provider(context, &decode(value)?)?),
             "scenarios.list" => json!(service.repository.lock().unwrap().scenarios(
                 &service.project, &plugin_principal_id(context.principal()), &decode(value)?).map_err(scenario_error)?),
             "scenarios.get" => json!(service.repository.lock().unwrap().scenario_revision(
@@ -622,6 +665,12 @@ impl OperationHandler for Manage {
             identity: self.service.scope.clone(),
         };
         match self.id {
+            "scenarios.apply" => {
+                let args: ApplyScenario = decode(value)?;
+                self.service.prepare_scenario_application(context, &args)?;
+                target = host::TargetRef { kind: "plugin_window".into(), identity: format!("{}:{}:{}",
+                    self.service.project, plugin_principal_id(context.principal()), args.window) };
+            }
             "scenarios.checkpoint" => {
                 let principal = plugin_principal_id(context.principal());
                 let args: SaveScenario = decode(value)?;
@@ -815,7 +864,7 @@ impl OperationHandler for Manage {
     }
     async fn execute(&self, operation: &host::Operation) -> Result<CommitPlan, HandlerError> {
         self.run(operation).await.map(CommitPlan::succeeded).map_err(|error| {
-            if matches!(self.id, "windows.update_layout" | "windows.open_view" | "views.close" | "scenarios.checkpoint") && matches!(&error,
+            if matches!(self.id, "windows.update_layout" | "windows.open_view" | "views.close" | "scenarios.checkpoint" | "scenarios.apply") && matches!(&error,
                 OperationError::ContentChanged(_) | OperationError::InvalidInput(_) | OperationError::NotFound(_)) {
                 return HandlerError::before_effect(error.to_string());
             }
@@ -852,6 +901,10 @@ impl Manage {
         let value = &operation.normalized_arguments;
         let service = &self.service;
         match self.id {
+            "scenarios.apply" => {
+                let _guard = service.gate.lock().await;
+                Ok(json!(service.apply_scenario(&bound.context, &decode(value)?)?))
+            }
             "scenarios.checkpoint" => {
                 let _guard = service.gate.lock().await;
                 Ok(json!(service.repository.lock().unwrap().save_scenario(&service.project,

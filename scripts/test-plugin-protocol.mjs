@@ -16,7 +16,10 @@ try {
   fs.writeFileSync(path.join(consumer, "consumer.mts"), `
 import type { ActivatePlugin, WorkspacePaths, PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage, PendingCancellation, UpdatePluginWindowLayout, OpenPluginWindowView, ClosePluginView, PluginViewLifecycle, SaveDocumentDraft, StageDraftChunk, DocumentDraftChunk, ListDocumentDrafts, DocumentDraftPage, ContextSearch, ContextPage, PreviewContext, ContextPreview } from "../protocol/index.js";
 import type {ProjectReadCoverage,ProjectReadCoverageArguments} from "../protocol/index.js";
-import type { SaveScenario, ScenarioPage, ScenarioRevisionArguments } from "../protocol/index.js";
+import type { SaveScenario, ScenarioPage, ScenarioRevisionArguments, ApplyScenario, WindowScenarioSnapshot, ResolveWindowProvider } from "../protocol/index.js";
+const application: ApplyScenario = { window: "window", revision: "revision", expected_layout_version: 2, instances: {}, views: {} };
+const selectedProvider: ResolveWindowProvider = { window: "window", capability: { id: "example.read", version: 1 } };
+const observation: WindowScenarioSnapshot = { scenario: null, layout: { window: "window", project: "project", principal: "principal", version: 0, layout: {kind:"empty"} } };
 const checkpoint: SaveScenario = { scenario: "analysis", expected_head: null, name: "Analysis", instances: {}, providers: [], layout: { kind: "empty" } };
 const scenarios: ScenarioPage = { scenarios: [{ scenario: checkpoint.scenario, revision: "revision", name: checkpoint.name }], next: null };
 const scenarioRead: ScenarioRevisionArguments = { revision: scenarios.scenarios[0]!.revision };
@@ -63,7 +66,7 @@ export function inspect(manifest: PluginManifest, visual: VisualDocument, page: 
   execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"),
     "--noEmit", "--strict", "--module", "NodeNext", "--moduleResolution", "NodeNext",
     "--target", "ES2022", "--rootDir", consumer, path.join(consumer, "consumer.mts")], { stdio: "inherit" });
-  for (const name of ["manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "view-close", "window-layout", "window-open-view", "context-page", "preview-context", "context-preview", "document-draft", "list-document-drafts", "document-draft-page", "save-document-draft", "scenario", "save-scenario", "scenario-page", "visual-document"]) {
+  for (const name of ["manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "view-close", "window-layout", "window-open-view", "context-page", "preview-context", "context-preview", "document-draft", "list-document-drafts", "document-draft-page", "save-document-draft", "scenario", "save-scenario", "scenario-page", "apply-scenario", "window-scenario-snapshot", "resolve-window-provider", "visual-document"]) {
     const schema = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema", `${name}.json`), "utf8"));
     assert.ok(schema.$schema && schema.$defs, `missing standalone schema: ${name}`);
   }

@@ -306,3 +306,6 @@ async fn an_external_plugin_uses_scenario_ports_without_a_management_privilege()
         "External manager"
     );
 }
+
+#[path = "fixtures/scenario_application.rs"]
+mod application;

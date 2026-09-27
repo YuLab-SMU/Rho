@@ -15,6 +15,7 @@ mod views;
 mod view_close;
 mod window_layout;
 mod scenarios;
+mod scenario_application;
 pub use scenarios::scenario_digest;
 mod drafts;
 mod draft_service;

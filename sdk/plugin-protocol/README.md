@@ -249,9 +249,41 @@ Save validates structural bounds (256 KiB, 256 instances, 512 providers and 1024
 layout nodes including views) without claiming the referenced artifacts are available.
 Missing packages remain explicit references and become protected if imported later.
 The per-instance `optional_capabilities` selection is retained without conferring
-activation authority. Applying a composition still needs separate exact manifest,
-artifact, dependency, configuration, caller-grant and readiness validation. These
-storage ports do not yet implement window scenario application.
+activation authority.
+
+`scenarios.prepare@1` and `scenarios.apply@1` both accept `ApplyScenario` under
+`plugins.run`. The caller explicitly prepares instances with `plugins.activate`
+and views with `views.open` before applying. Supply every scenario alias as an exact
+`InstanceRef`, and every reusable view definition id as its prepared live view id.
+Preparation does not reserve, activate or change anything. It checks the expected
+window layout version, exact artifacts/configuration, manifest dependency aliases,
+frozen optional grants, caller authority, view schemas, resource context and live
+readiness. Apply repeats these checks and commits layout plus selection in one
+transaction. Failure leaves the former window composition intact. Preparation
+resources remain inspectable through normal instance/view ports; apply never
+releases them or cancels scientific work.
+
+Reuse is explicit. The chosen live view must have the same owner, contribution,
+configuration and resource context and belong to this window. Its current state
+and unsynchronized content are retained, even when different from the checkpoint.
+To open the checkpoint's saved state, explicitly create a new view with that state.
+Hiding a former view does not close its channel or backend. `OpenPluginView.resource`
+is optional immutable context and is present in the public record/bootstrap when
+supplied. Its media type must be declared by the contribution and its retained
+identity must match this project/principal. Qualification reads bounded metadata;
+resource byte reads still require the separate resource grant and verify bytes.
+
+`windows.scenario@1` returns `WindowScenarioSnapshot`: selection and current layout
+observed together. `applied_layout_version` identifies the initial application;
+later docking edits may advance the layout version. Retained selection does not
+attest to runtime readiness after disconnect. `windows.resolve@1` accepts
+`ResolveWindowProvider` and resolves only the exact selected default, including
+its target. Both use `plugins.run` and preserve caller/project/window restrictions.
+There is no fallback to another active revision. New interactions may resolve the
+current selection; existing documents and accepted work retain their original
+explicit bindings. Apply uses the shared Operation idempotency contract: after a
+lost acknowledgement inspect the original operation, rather than retrying under
+a new request identity.
 
 Regenerate these artifacts from the repository with `npm run generate --prefix ui`.
 

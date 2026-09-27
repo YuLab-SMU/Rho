@@ -331,6 +331,27 @@ impl PluginRuntime {
         Ok(())
     }
 
+    /// Linearize a presentation commit while every chosen owner is still Ready.
+    /// State locks precede the catalog lock, as in release and native failure.
+    /// This does not acquire execution pins, call a provider or change lifetime.
+    pub(crate) fn with_ready_instances<T>(&self, identities: &BTreeMap<InstanceAlias, InstanceRef>,
+        project: &ProjectId, principal: &PrincipalId, commit: impl FnOnce() -> Result<T, PluginError>,
+    ) -> Result<T, PluginError> {
+        let entries = self.entries.lock().unwrap();
+        let mut guards = Vec::new();
+        let mut seen = std::collections::BTreeSet::new();
+        for identity in identities.values() {
+            ensure(seen.insert(&identity.instance), "scenario aliases must use distinct instances")?;
+            let entry = entries.get(&identity.instance).ok_or_else(|| PluginError::Unavailable("scenario instance is unavailable".into()))?;
+            let state = entry.state.lock().unwrap();
+            ensure(state.record.identity == *identity && &state.record.project == project
+                && &state.record.principal == principal && state.record.state == InstanceState::Active
+                && entry.published.load(Ordering::Acquire), "scenario instance is not Ready in this scope")?;
+            guards.push(state);
+        }
+        commit()
+    }
+
     pub(crate) fn hold_operation(&self, identity: &InstanceRef, operation: &str) -> Result<(), PluginError> {
         self.repository.lock().unwrap().retain("operation", &format!("{}:{operation}",identity.instance), &identity.revision)
     }

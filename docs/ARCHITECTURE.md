@@ -47,7 +47,20 @@ Storage validates structure and bounds, not availability or readiness. Optional
 capability selections remain declarations, not activation authority. Applying a
 scenario must separately validate exact artifacts, dependency bindings, view
 schemas and caller grants before publishing a complete per-window composition.
-Scenario storage is implemented; atomic window application remains in progress.
+`scenarios.prepare` observes exact prepared instances and views; `scenarios.apply`
+repeats validation and atomically commits layout and selection against the native
+window layout version. Ordinary management plugins prepare with the same activation
+and view ports; application does not own their lifetime. The commit locks selected
+native readiness and view availability through the catalog transaction. Reused
+views keep their acknowledged and local state, and hidden views remain connected.
+Manifest dependencies resolve only to their declared exact plugin revisions;
+selected optional grants must match the frozen instance grants and fit the caller.
+`windows.scenario` observes selection and layout together. `windows.resolve` returns
+only that window's selected exact provider; missing owners never trigger fallback
+or activation. Existing bindings and admitted operations never consult a later
+window selection. Scene state is presentation metadata, not proof of a live provider
+after disconnection. Manager/Studio orchestration and product acceptance remain
+separate from these core ports.
 
 Files/Git contracts and native provider ports now live in `plugins/files/api`;
 the contained filesystem, text and Git implementation lives in

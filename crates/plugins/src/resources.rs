@@ -217,6 +217,10 @@ impl PluginResources {
         };
         Ok(ResourcePage { items, next, total })
     }
+    pub(crate) fn qualify_reference(&self, project: &ProjectId, principal: &PrincipalId,
+        reference: &ResourceReference) -> Result<(), PluginError> {
+        qualify(&self.connection.lock().unwrap(), project, principal, reference)
+    }
     pub fn inspect(
         &self,
         project: &ProjectId,

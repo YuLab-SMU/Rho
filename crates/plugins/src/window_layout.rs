@@ -380,6 +380,7 @@ mod tests {
             contribution: ContributionId::new("panel").unwrap(),
             configuration: json!({}),
             state: json!({"draft":"中文"}),
+            resource: None,
             state_version: 1,
             closed: true,
         };

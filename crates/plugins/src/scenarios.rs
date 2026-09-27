@@ -18,7 +18,10 @@ pub(crate) fn initialize(connection: &Connection) -> Result<(), PluginError> {
             revision TEXT NOT NULL, name TEXT NOT NULL,
             PRIMARY KEY(project,principal,scenario),
             FOREIGN KEY(project,principal,revision)
-              REFERENCES plugin_scenario_revisions(project,principal,id));",
+              REFERENCES plugin_scenario_revisions(project,principal,id));
+         CREATE TABLE IF NOT EXISTS plugin_window_scenarios(
+            project TEXT NOT NULL, principal TEXT NOT NULL, window TEXT NOT NULL,
+            document TEXT NOT NULL, PRIMARY KEY(project,principal,window));",
     )?;
     Ok(())
 }

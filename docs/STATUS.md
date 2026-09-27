@@ -18,23 +18,40 @@ keep their references, including versions absent from the catalog and resource-o
 versions; importing a missing version does not erase that protection. Restoring a
 former composition creates a new child. Optional capability selections remain
 configuration and grant no activation authority. Queries and saves neither start
-providers nor change a window. Atomic window application, its validation and the
-ordinary management/Plugin Studio interfaces remain active work.
+providers nor change a window.
+
+Window application is implemented through `scenarios.prepare/apply` and
+`windows.scenario/resolve`. The caller prepares ordinary instances and views;
+application revalidates their exact artifacts, configuration, frozen grants,
+dependencies, schemas and live readiness, then commits one window's layout and
+provider selection together against its native layout version. Hidden and reused
+views keep their current state and connection. View records can carry an immutable,
+scoped resource context without gaining resource-read authority. Selected providers
+are observed explicitly after release; resolution never falls back to another
+revision. The ordinary management/Plugin Studio orchestration and browser/real-R
+scenario-switching acceptance remain active work.
 
 The complete 13-case package repository suite and 17 protocol cases pass, including
 concurrent head conflicts, project/principal visibility, immutable history, missing
 version protection, invalid metadata and transactional reference-write failure.
-All 20 Host cases pass: two new scenario cases, 13 existing plugin cases and five
-shared-port cases. They cover original-request replay, scope refusal, window/runtime
-independence and an external plugin's delegated reads/writes without a management
-privilege. The executed commands were `cargo test -p rho-plugins --test
+All 22 Host cases pass: four scenario cases, 13 existing plugin cases and five
+shared-port cases. They cover original-request replay, scope refusal, pure
+preparation, exact dependency/grant/state/resource validation, failed-write rollback,
+concurrent application, retained live views and an external plugin's delegated
+reads/writes without a management privilege. A held native operation completes
+through its original revision after window switching; releasing that provider
+leaves an explicit unavailable selection without fallback. The 22 plugin-owner unit
+cases also pass. The executed commands include `cargo test -p rho-plugins --lib
+--locked --offline`, `cargo test -p rho-plugins --test
 package_repository --locked --offline`, `cargo test -p rho-plugin-protocol --lib
 --test contract --locked --offline` and `cargo test -p rho-host --test
 plugin_scenarios --test plugins --test port_contracts --locked --offline`.
 Independent strict TypeScript consumption and standalone schema checks also pass.
 `npm run generate --prefix ui`, `npm run build --prefix ui` and
 `npm run check --prefix ui` pass, as do architecture, plugin-boundary and
-documentation checks. No visual or live scenario-switching acceptance is claimed.
+documentation checks. The 34 focused window/frame/layout/close/client model cases
+and the independent UI SDK checks also pass. No browser or real-R scenario-switching
+acceptance is claimed.
 
 The initial `cargo test -p rho-plugins --test package_repository scenario_ --locked
 --offline` was interrupted with exit 130 while macOS waited to load a compiler

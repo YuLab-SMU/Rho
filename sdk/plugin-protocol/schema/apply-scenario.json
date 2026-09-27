@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApplyScenario",
+  "description": "Exact, already prepared instances and views. Preparation uses ordinary\nactivation/view ports; applying changes presentation and routing only.",
+  "type": "object",
+  "properties": {
+    "expected_layout_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "instances": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/InstanceRef"
+      }
+    },
+    "revision": {
+      "type": "string"
+    },
+    "views": {
+      "description": "Definition view id to an existing live view in this exact window. Reused\nviews retain their current state and unsynchronized document contents.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "window": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "window",
+    "revision",
+    "expected_layout_version",
+    "instances",
+    "views"
+  ],
+  "$defs": {
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    }
+  }
+}

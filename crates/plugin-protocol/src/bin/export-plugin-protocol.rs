@@ -74,6 +74,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ScenarioPage::export_all(&types)?;
     ScenarioRevisionArguments::export_all(&types)?;
     WindowScenario::export_all(&types)?;
+    ApplyScenario::export_all(&types)?;
+    WindowScenarioSnapshot::export_all(&types)?;
+    ResolveWindowProvider::export_all(&types)?;
     VisualDocument::export_all(&types)?;
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
@@ -116,6 +119,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             schemars::schema_for!(ResourceTransferResponse),
         ),
         ("scenario", schemars::schema_for!(ScenarioRevision)),
+        ("apply-scenario", schemars::schema_for!(ApplyScenario)),
+        ("window-scenario-snapshot", schemars::schema_for!(WindowScenarioSnapshot)),
+        ("resolve-window-provider", schemars::schema_for!(ResolveWindowProvider)),
         ("save-scenario", schemars::schema_for!(SaveScenario)),
         ("list-scenarios", schemars::schema_for!(ListScenarios)),
         ("scenario-page", schemars::schema_for!(ScenarioPage)),

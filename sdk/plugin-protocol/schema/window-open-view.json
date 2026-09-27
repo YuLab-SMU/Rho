@@ -60,6 +60,17 @@
         "instance": {
           "$ref": "#/$defs/InstanceRef"
         },
+        "resource": {
+          "description": "Immutable resource context; it confers no resource-read authority.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceReference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "state": true,
         "window": {
           "type": "string"
@@ -72,6 +83,36 @@
         "window",
         "configuration",
         "state"
+      ]
+    },
+    "ResourceReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "resource": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "resource",
+        "digest",
+        "media_type",
+        "bytes"
       ]
     }
   }

@@ -14,6 +14,10 @@ pub struct OpenPluginView {
     pub window: WindowId,
     pub configuration: Value,
     pub state: Value,
+    /// Immutable resource context; it confers no resource-read authority.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub resource: Option<ResourceReference>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
@@ -71,6 +75,9 @@ pub struct PluginViewRecord {
     pub window: WindowId,
     pub configuration: Value,
     pub state: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub resource: Option<ResourceReference>,
     pub state_version: u32,
     pub closed: bool,
 }

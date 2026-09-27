@@ -127,7 +127,39 @@ pub struct WindowScenario {
     pub project: ProjectId,
     pub principal: PrincipalId,
     pub revision: ScenarioRevisionId,
-    pub instances: BTreeMap<InstanceAlias, PluginInstanceId>,
+    /// Native layout version at application; later docking edits can advance it.
+    pub applied_layout_version: u32,
+    pub instances: BTreeMap<InstanceAlias, InstanceRef>,
+    pub views: BTreeMap<ViewInstanceId, ViewInstanceId>,
+    pub providers: Vec<ProviderBinding>,
+}
+
+/// Exact, already prepared instances and views. Preparation uses ordinary
+/// activation/view ports; applying changes presentation and routing only.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ApplyScenario {
+    pub window: WindowId,
+    pub revision: ScenarioRevisionId,
+    pub expected_layout_version: u32,
+    pub instances: BTreeMap<InstanceAlias, InstanceRef>,
+    /// Definition view id to an existing live view in this exact window. Reused
+    /// views retain their current state and unsynchronized document contents.
+    pub views: BTreeMap<ViewInstanceId, ViewInstanceId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct WindowScenarioSnapshot {
+    pub scenario: Option<WindowScenario>,
+    pub layout: PluginWindowLayout,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ResolveWindowProvider {
+    pub window: WindowId,
+    pub capability: CapabilityKey,
 }
 
 impl ScenarioRevision {

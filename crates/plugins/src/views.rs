@@ -73,6 +73,15 @@ impl PluginService {
             .into_iter()
             .find(|v| v.id == args.contribution)
             .ok_or_else(|| invalid("view is not contributed by this exact revision"))?;
+        if let Some(resource) = &args.resource {
+            if !contribution.resource_kinds.contains(&resource.media_type) {
+                return Err(invalid("view does not declare this resource kind"));
+            }
+            // Metadata qualification is bounded. Reading bytes still requires a
+            // separately granted resources port and verifies those bytes there.
+            self.resources.qualify_reference(&self.project,
+                &plugin_principal_id(context.principal()), resource).map_err(error)?;
+        }
         bounded_state(&args.state)?;
         if serde_json::to_vec(args).map_err(invalid)?.len() > MAX_CONTROL_BYTES / 2 {
             return Err(invalid(
@@ -172,6 +181,7 @@ impl PluginService {
             window: args.window,
             configuration: args.configuration,
             state: args.state,
+            resource: args.resource,
             state_version: 0,
             closed: false,
         };
