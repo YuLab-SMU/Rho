@@ -84,3 +84,22 @@ inspect the original Operation for that. See [public contracts](sdk/README.md).
 Release confirms native shutdown and keeps original resource bytes. The ordinary
 Viewer package can read retained HTML. Console and inspection views consume the
 public contracts; captured document execution and checkpoints still need integration.
+
+The engine's `recovery` module supplies the native archive for checkpoint migration.
+It uses a new `r-recovery-v1` directory under the initialized provider data root,
+exact project/principal/provider identities, bounded reads and an OS artifact lock.
+Read-only opening does not create storage or start R. Capture and adoption retain
+immutable native evidence; neither publishes a scientific result. The RPC owner
+must qualify the original Operation and retain the lease until core settlement.
+Pin/delete evidence alone cannot authorize deletion or restore. Physical deletion
+is an explicit post-commit action and returns any failure while preserving metadata.
+Adoption copies bytes, so source deletion cannot damage its replacement. Payloads
+retain the native 16 GiB upper bound and reads are at most 256 KiB.
+
+`node scripts/test-real-r.mjs --plugin-recovery` from the checkout exercises this
+native layer with explicit `RHO_ARK`, `RHO_R_HOME` and `RHO_CHECKPOINT_HELPER` paths.
+The helper and its verified manifest must already exist. The test creates and
+stops disposable sessions. `node scripts/test-r-plugin-engine.mjs --recovery`
+repeats the archive and native tests in an independent public/plugin source tree.
+These checks do not establish ordinary RPC publication, recovery authorization,
+checkpoint-reference protection or the complete checkpoint interface.

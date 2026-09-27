@@ -251,6 +251,8 @@ pub trait NativeRuntime: Send + Sync {
 pub trait CheckpointArtifactLease: Send + Sync {}
 impl<T: Send + Sync> CheckpointArtifactLease for T {}
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CheckpointArtifact {
     pub report: CheckpointNativeReport,
     pub sha256: String,

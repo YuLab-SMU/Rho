@@ -292,6 +292,9 @@
         "scripts/test-r-plugin.mjs"
       ]
     },
+    "plugins.r-recovery": {
+      "command": ["node", "scripts/test-real-r.mjs", "--plugin-recovery"]
+    },
     "plugins.r-format": {
       "command": [
         "node",
@@ -997,6 +1000,7 @@
         "plugins.r-engine",
         "plugins.r-independent",
         "plugins.r-native",
+        "plugins.r-recovery",
         "plugins.r-format",
         "plugins.r-environment",
         "plugins.viewer",

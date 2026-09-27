@@ -389,6 +389,24 @@ impl ArkRuntime {
             return Err(before("Checkpoint native component unavailable"));
         }
         let path = self.checkpoints.prepare(&op).map_err(before)?;
+        let report = self.capture_native_graph(op, &path, args, cancel).await?;
+        let store = self.checkpoints.clone();
+        let id = op.clone();
+        let limit = args.max_bytes;
+        let (sha256, byte_size) =
+            tokio::task::spawn_blocking(move || store.finish_payload(&id, limit))
+                .await
+                .map_err(before)?
+                .map_err(before)?;
+        Ok(CheckpointArtifact { report, sha256, byte_size })
+    }
+    pub(super) async fn capture_native_graph(
+        &self,
+        op: &OperationId,
+        path: &Path,
+        args: &CheckpointCaptureArguments,
+        cancel: watch::Receiver<bool>,
+    ) -> Result<CheckpointNativeReport, NativeError> {
         let payload = json!({"path":path,"max_bytes":args.max_bytes,"max_seconds":args.max_seconds,"project_root":self.project_root,"include_names":args.include_names,"exclude_names":args.exclude_names,"include_patterns":args.include_patterns,"exclude_patterns":args.exclude_patterns});
         let (response, _, _) = self
             .bridge_call(
@@ -408,21 +426,7 @@ impl ArkRuntime {
             }
             return Err(error);
         }
-        let report: CheckpointNativeReport =
-            serde_json::from_value(response.value).map_err(before)?;
-        let store = self.checkpoints.clone();
-        let id = op.clone();
-        let limit = args.max_bytes;
-        let (sha256, byte_size) =
-            tokio::task::spawn_blocking(move || store.finish_payload(&id, limit))
-                .await
-                .map_err(before)?
-                .map_err(before)?;
-        Ok(CheckpointArtifact {
-            report,
-            sha256,
-            byte_size,
-        })
+        serde_json::from_value(response.value).map_err(before)
     }
     pub(super) async fn restore_checkpoint(
         &self,
@@ -442,7 +446,16 @@ impl ArkRuntime {
         {
             return Err(before("Checkpoint payload integrity differs"));
         }
-        let payload = json!({"path":self.checkpoints.dir(&manifest.checkpoint_id).join("payload.rds"),"r_version":manifest.report.r_version,"platform":manifest.report.platform,"library_paths":manifest.report.library_paths,"package_inventory_digest":manifest.report.package_inventory_digest,"saved_names":manifest.report.saved_names,"project_root":self.project_root,"working_directory":manifest.report.working_directory,"safe_options":manifest.report.safe_options,"required_core_namespaces":manifest.report.required_core_namespaces,"required_class_namespaces":manifest.report.required_class_namespaces,"max_bytes":16u64*1024*1024*1024});
+        self.restore_native_graph(op, &self.checkpoints.dir(&manifest.checkpoint_id).join("payload.rds"), &manifest.report, cancel).await
+    }
+    pub(super) async fn restore_native_graph(
+        &self,
+        op: &OperationId,
+        path: &Path,
+        report: &CheckpointNativeReport,
+        cancel: watch::Receiver<bool>,
+    ) -> Result<CheckpointNativeRestoreReport, NativeError> {
+        let payload = json!({"path":path,"r_version":report.r_version,"platform":report.platform,"library_paths":report.library_paths,"package_inventory_digest":report.package_inventory_digest,"saved_names":report.saved_names,"project_root":self.project_root,"working_directory":report.working_directory,"safe_options":report.safe_options,"required_core_namespaces":report.required_core_namespaces,"required_class_namespaces":report.required_class_namespaces,"max_bytes":16u64*1024*1024*1024});
         let (response, _, _) = self
             .bridge_call(
                 op.as_str(),

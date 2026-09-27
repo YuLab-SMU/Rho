@@ -65,6 +65,25 @@ Operation records partial native visibility without changing the source outcome
 or replaying its command. Transport loss abandons queued recovery before signalling;
 an already-started bounded native inspection finishes with its real evidence.
 
+The R engine's ordinary-provider recovery archive uses the initialized native
+data root and exact project/principal/provider scope. It reads only the new
+`r-recovery-v1` format; legacy Workspace manifests are not inputs. Original
+operation IDs address immutable capture and control evidence. Artifact leases use
+OS file locks across backend processes and keep stable directory/lock identities;
+contention or replacement is a refusal, not authority to steal a lease. The owner
+must qualify source records through the core Operation port and retain leases
+through settlement. Capture files, pin/delete evidence and resource reads do not
+constitute scientific result commits. Failed captures retain partial bytes and
+original cancellation/transport evidence; they cannot claim absence of effects
+when native payload bytes may remain. Physical deletion requires an explicitly
+qualified succeeded deletion and preserves metadata; adoption makes an independent
+byte copy. The native restore accepts a locked, verified artifact rather than a
+caller-supplied RDS path. Native runtime, package inventory and empty-candidate
+checks still apply. Payload and metadata limits are independent of control-message
+limits; bounded reads do not reduce the native 16 GiB graph limit. This library is
+a migration foundation; ordinary RPC checkpoint publication/reference protection
+is not yet wired to it.
+
 Environment data, native pak/renv execution, staged materials and recovery now
 live in `plugins/environment/api` and `backend/owner`, including the R helpers.
 The native library returns possible effects, confirmed cancellation and recovery

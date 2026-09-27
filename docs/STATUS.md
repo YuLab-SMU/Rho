@@ -357,7 +357,8 @@ preview fingerprint. The original path remains protected after quarantine; an
 unconfirmed quarantine can be inspected without promoting its outcome. Reports
 and original records remain after material removal. The scan is not a reference
 lease or an atomic cross-owner snapshot. All 25 affected API/backend/native-owner
-cases pass, including the final focused rerun of 21 reference scenarios. Public
+cases pass, including the current focused rerun of 22 reference scenarios. Known
+`r.execute@2` results are recognized; unknown versions still retain material. Public
 SDK/manifest consistency, independent TypeScript consumption, client generation,
 build and embedded-resource checks pass. The eight-package standalone build and
 its wire tests pass, including material query purity, unsupported cancellation and
@@ -376,6 +377,30 @@ system loader before test code and subsequently completed. Architecture, plugin
 boundaries and documentation checks pass. Existing user Hosts and R sessions were
 not changed. Complete ordinary R checkpoint-reference protection and removal of
 the fixed composition remain active.
+
+The R engine now supplies a scoped native recovery archive for the ordinary-owner
+migration. Its new format records exact project, principal, provider and original
+operation identities; it does not read legacy Workspace manifests. OS artifact
+locks coordinate separate backend processes and release on process exit. Bounded
+payload reads preserve the 16 GiB native limit, while adoption makes independent
+copies and deletion keeps original metadata. Failed captures retain partial bytes
+and original cancellation/transport uncertainty. Invalid native components are
+refused before Ark starts. All 25 engine library cases pass in the independent
+public/plugin source tree, including a payload larger than the generic 256 MiB
+resource limit. Focused native `scripts/test-real-r.mjs --plugin-recovery` and
+independent `scripts/test-r-plugin-engine.mjs --recovery` acceptance pass. The final
+independent run also verifies exhausted capture budgets, original recovery identity,
+Unicode graph aliases, preservation of a changed nonempty candidate, source-session
+isolation and original evidence after source deletion. An initial focused compile
+used incorrect SDK identity names and an error conversion; the corrected checks
+pass. One slow native-test startup was sampled at the system loader before test
+code, then completed without changing deadlines. All four R API and twelve backend
+cases pass (`cargo test -p rho-r-api -p rho-r-backend --locked --offline`). Generated
+public SDK/schema consistency, independent TypeScript consumption, architecture,
+plugin boundaries and documentation checks pass. This is the native foundation:
+ordinary RPC capture/list/pin/delete/restore/reconciliation and complete Environment
+checkpoint-reference protection are still to be connected. No user Host or R
+session was restarted.
 
 The ordinary `org.rho.files` backend now assembles outside the checkout from eight
 public/plugin packages, with no private core dependency or independent journal.

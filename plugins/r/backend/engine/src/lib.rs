@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 mod outputs;
 mod checkpoints;
+pub mod recovery;
 pub use checkpoints::{CheckpointArchiveRuntime, verify_checkpoint_helper, recorded_process_alive};
 pub use outputs::OutputStore;
 
@@ -94,6 +95,8 @@ impl ArkRuntime {
         if config.execution_timeout.is_zero() {
             return Err("execution timeout must be positive".into());
         }
+        // Refuse an invalid native component before starting any child process.
+        let helper = config.checkpoint_helper_path.as_ref().map(|p|checkpoints::verify_checkpoint_helper(p,&config.r_home)).transpose()?;
         let session_id = format!("ark_{}", Uuid::new_v4().simple());
         let data_root = config.data_root.join(&session_id);
         std::fs::create_dir_all(&data_root).map_err(|error| error.to_string())?;
@@ -148,7 +151,6 @@ impl ArkRuntime {
         .map_err(|error| error.to_string())?;
         drop(boot);
         let native_process=match client.child_pid(){Some(pid)=>checkpoints::process_start(pid).await.map_err(|e|e.message)?.map(|start|(pid,start)),None=>None};
-        let helper = config.checkpoint_helper_path.as_ref().map(|p|checkpoints::verify_checkpoint_helper(p,&config.r_home)).transpose()?;
         let checkpoint_store = checkpoints::CheckpointStore::new(&config.data_root,&project)?;
         let mut runtime = Self {
             checkpoints:checkpoint_store,

@@ -17,6 +17,16 @@ const run = (command, args, options = {}) => {
 assert.ok(fs.existsSync(ark), "Set RHO_ARK to an installed Ark executable.");
 const rHome = process.env.RHO_R_HOME || run("Rscript", ["--vanilla", "-e", "cat(R.home())"]).trim();
 const env = { ...process.env, RHO_ARK: ark, RHO_R_HOME: rHome };
+if (process.argv.includes("--plugin-recovery")) {
+  assert.deepEqual(process.argv.slice(2), ["--plugin-recovery"], "Use --plugin-recovery alone for the focused native check");
+  assert.ok(process.env.RHO_CHECKPOINT_HELPER && fs.existsSync(process.env.RHO_CHECKPOINT_HELPER),
+    "Set RHO_CHECKPOINT_HELPER to an already built, verified native component for this R");
+  run("cargo", ["test", "-p", "rho-r-engine", "--test", "recovery_real_r", "--locked", "--offline", "--no-run"], { env, stdio: "inherit" });
+  run("cargo", ["test", "-p", "rho-r-engine", "--test", "recovery_real_r", "--locked", "--offline", "--", "--ignored", "--nocapture"],
+    { env, stdio: "inherit", timeout: 300_000 });
+  console.log("Verified ordinary-provider native recovery, exact sessions, graph aliases, bounded payload reads and retained original evidence.");
+  process.exit(0);
+}
 run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", "scripts/test-r-tools.R"], { env, stdio: "inherit" });
 run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", "scripts/test-r-read-help.R"], { env, stdio: "inherit" });
 run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", "scripts/test-r-packages.R"], { env, stdio: "inherit" });

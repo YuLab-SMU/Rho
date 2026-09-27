@@ -390,6 +390,20 @@ The complete native matrix is:
 node scripts/test-real-r.mjs
 ```
 
+For the ordinary R recovery archive, iterate with `cargo test -p rho-r-engine
+--lib recovery:: --locked`, then run the engine library cases after changes settle.
+`node scripts/test-real-r.mjs --plugin-recovery` selects the focused native
+capture/restore/adoption check. Supply existing `RHO_ARK`, `RHO_R_HOME` and
+`RHO_CHECKPOINT_HELPER` paths; the helper's adjacent manifest and bytes are verified
+before launching R. This mode does not install or build a helper. It creates and
+stops disposable sessions and tests exact sessions, pre-start cancellation,
+Unicode graph aliases, bounded payload reads, nonempty-candidate refusal and
+retained native evidence. `node scripts/test-r-plugin-engine.mjs --recovery`
+checks the same native layer from an independent public/plugin source tree.
+Archive checks include separate-process lock contention and process exit without
+a destructor. These are native-owner checks, not proof of core publication or
+ordinary RPC checkpoint authorization, which remain separate work.
+
 Skipped or unavailable real-R, browser, external-provider, and environment checks
 are not passes. Run them only with their documented prerequisites; preserve the
 failure log when the prerequisite is missing.

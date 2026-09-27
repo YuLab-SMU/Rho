@@ -50,6 +50,12 @@ try {
     execFileSync(cargo, ["test", "-p", "rho-r-engine", "--test", "real_r", "--offline",
       "--target-dir", path.join(root, "target"), "--", "--ignored", "--nocapture"], { cwd: temp, env, stdio: "inherit" });
   }
+  if (process.argv.includes("--recovery")) {
+    assert.ok(process.env.RHO_ARK && process.env.RHO_R_HOME && process.env.RHO_CHECKPOINT_HELPER,
+      "Set RHO_ARK, RHO_R_HOME and RHO_CHECKPOINT_HELPER for the explicit native recovery check");
+    execFileSync(cargo, ["test", "-p", "rho-r-engine", "--test", "recovery_real_r", "--offline", "--locked",
+      "--target-dir", path.join(root, "target"), "--", "--ignored", "--nocapture"], { cwd: temp, env, stdio: "inherit" });
+  }
   console.log("Independent R engine tests passed using public contracts and pinned Jet, without core source.");
 } finally {
   fs.rmSync(temp, { recursive: true, force: true });

@@ -258,8 +258,8 @@ impl Owner {
                     return Err("Live or uncertain scientific work still needs its original recovery references".into());
                 }
                 let known_r = match name {
-                    "r.create_session" => matches!(capability.version, 1 | 2),
-                    "r.execute" | "r.format" => capability.version == 1,
+                    "r.create_session" | "r.execute" => matches!(capability.version, 1 | 2),
+                    "r.format" => capability.version == 1,
                     _ => false,
                 };
                 if name.starts_with("r.") && !known_r {
@@ -521,6 +521,7 @@ mod tests {
             ("empty", None),
             ("idle", None),
             ("released", None),
+            ("execute_v2", None),
             ("unstarted", None),
             ("foreign", Some("outside")),
             ("grant", Some("not granted")),
@@ -670,14 +671,14 @@ mod tests {
                             let (capability, status) = match scenario {
                                 "plan" => (source::PLAN, "succeeded"),
                                 "checkpoint" => ("r.capture_checkpoint", "succeeded"),
-                                "unknown_r_version" => ("r.execute", "succeeded"),
+                                "unknown_r_version" | "execute_v2" => ("r.execute", "succeeded"),
                                 "unknown_environment" => ("environment.capture", "succeeded"),
                                 "native_owner" => ("workspace.run_r", "succeeded"),
                                 "uncertain" => ("r.execute", "uncertain"),
                                 _ => ("", ""),
                             };
                             (
-                                json!({"operations":if capability.is_empty(){vec![]}else{vec![json!({"cursor":1,"operation_id":"original-plan","capability":{"id":capability,"version":2},"status":status})]},"next_cursor":null}),
+                                json!({"operations":if capability.is_empty(){vec![]}else{vec![json!({"cursor":1,"operation_id":"original-plan","capability":{"id":capability,"version":if scenario=="unknown_r_version" {3}else{2}},"status":status})]},"next_cursor":null}),
                                 true,
                             )
                         }

@@ -237,6 +237,7 @@ Checks:
 - `plugins.r-plots`: `["node","scripts/test-r-plots.mjs"]`
 - `plugins.r-protocol`: `["node","plugins/r/generate-sdk.mjs","--check"]`
 - `plugins.r-public-types`: `["node","scripts/test-r-protocol.mjs"]`
+- `plugins.r-recovery`: `["node","scripts/test-real-r.mjs","--plugin-recovery"]`
 - `plugins.r-viewer`: `["node","scripts/test-r-viewer.mjs"]`
 - `plugins.remote-backend`: `["cargo","test","-p","rho-remote-backend","--lib","--locked"]`
 - `plugins.remote-independent`: `["node","scripts/test-remote-plugin-owner.mjs"]`
