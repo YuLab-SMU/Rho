@@ -4,6 +4,8 @@ use std::{
     path::{Component, PathBuf},
 };
 
+mod checkpoints;
+
 const PAGE: u32 = 32;
 const PAGES: usize = 128;
 
@@ -200,6 +202,7 @@ impl Owner {
         call: &PluginCall,
         references: &mut References,
         inspected_cleanup: Option<&OperationId>,
+        readers: &[InstanceRef],
     ) -> Result<(), String> {
         let mut before = None::<u64>;
         let mut seen = BTreeSet::new();
@@ -256,6 +259,10 @@ impl Owner {
                 }
                 if !matches!(status, "succeeded" | "failed" | "cancelled") {
                     return Err("Live or uncertain scientific work still needs its original recovery references".into());
+                }
+                if checkpoints::supports(&capability) {
+                    self.checkpoint_references(call, references, readers, &id, &capability, status).await?;
+                    continue;
                 }
                 let known_r = match name {
                     "r.create_session" | "r.execute" => matches!(capability.version, 1 | 2),
@@ -359,7 +366,8 @@ impl Owner {
         call: &PluginCall,
         instances: &[PluginInstanceObservation],
         references: &mut References,
-    ) -> Result<(), String> {
+    ) -> Result<Vec<InstanceRef>, String> {
+        let mut readers = Vec::new();
         for observed in instances {
             let instance = &observed.instance;
             let inspected: PluginInspection = serde_json::from_value(
@@ -403,6 +411,10 @@ impl Owner {
                             .into(),
                     );
                 }
+            }
+            if capabilities.iter().any(|c| c.capability.id.as_str() == "r.checkpoint"
+                && c.capability.version == 1 && c.kind == CapabilityKind::Query) {
+                readers.push(instance.identity.clone());
             }
             let binding = |name: &str, target: Option<String>| ProviderBinding {
                 capability: CapabilityKey {
@@ -466,7 +478,7 @@ impl Owner {
                 return Err("R session changed while observing material references".into());
             }
         }
-        Ok(())
+        Ok(readers)
     }
 
     pub(super) async fn check_material_references(
@@ -480,9 +492,9 @@ impl Owner {
             let checkpoint = self.reference_checkpoint(call).await?;
             let instances = self.reference_instances(call).await?;
             let mut references = References::new(paths)?;
-            self.operation_references(call, &mut references, inspected_cleanup)
+            let readers = self.r_references(call, &instances, &mut references).await?;
+            self.operation_references(call, &mut references, inspected_cleanup, &readers)
                 .await?;
-            self.r_references(call, &instances, &mut references).await?;
             let current = self.reference_instances(call).await?;
             let identity = |observed: &PluginInstanceObservation| {
                 (

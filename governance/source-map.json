@@ -769,6 +769,13 @@
         "scripts/test-environment-plugin.mjs",
         "--r-references"
       ]
+    },
+    "plugins.environment-checkpoint-references": {
+      "command": [
+        "node",
+        "scripts/test-environment-plugin.mjs",
+        "--checkpoint-references"
+      ]
     }
   },
   "areas": {
@@ -1072,7 +1079,8 @@
         "plugins.environment-protocol",
         "plugins.environment-types",
         "plugins.environment-native",
-        "plugins.environment-r-references"
+        "plugins.environment-r-references",
+        "plugins.environment-checkpoint-references"
       ]
     }
   }

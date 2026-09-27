@@ -40,7 +40,7 @@ const allowed = {
   "rho-remote-api": ["rho-plugin-protocol", "rho-process-api"],
   "rho-remote-owner": ["rho-remote-api", "rho-process-api", "rho-process-engine", "rho-plugin-protocol"],
   "rho-environment-api": ["rho-process-api", "rho-plugin-protocol"],
-  "rho-environment-backend": ["rho-environment-api", "rho-environment-owner", "rho-process-api", "rho-plugin-sdk"],
+  "rho-environment-backend": ["rho-environment-api", "rho-environment-owner", "rho-process-api", "rho-plugin-sdk", "rho-r-api"],
   "rho-environment-owner": ["rho-environment-api", "rho-process-engine", "rho-process-owner"],
   "rho-contract": ["rho-plugin-protocol", "rho-r-api", "rho-files-api", "rho-process-api", "rho-remote-api", "rho-environment-api"],
   "rho-operation": ["rho-contract", "rho-plugin-protocol"],

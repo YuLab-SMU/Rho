@@ -39,14 +39,31 @@ Material inspection requires explicit optional grants for `operation.project_cov
 is implied by preinstallation. Missing visibility, busy or disconnected R providers,
 partial native usage or changing records retain the material. Bounded observations
 cover successful plan inputs, realized libraries and every recorded R provider.
-An unsupported scientific/recovery contract also retains material; ordinary R
-checkpoint protection remains to be migrated.
+An unsupported scientific/recovery contract also retains material.
 
 Only failed or cancelled original staging can be quarantined. All actions re-read
 the admitted source chain and check the exact preview fingerprint, native process
 absence and owned directories. Quarantine status also accepts the original
 unconfirmed quarantine; this does not promote its outcome. Restore and purge check
 both the original and quarantine paths, even when the original path is absent.
+
+Successful ordinary R captures and reconciled copies protect the library paths,
+loaded namespace paths and selected Environment library in their retained public
+manifest. Environment asks `r.checkpoint@1` to qualify the original copy and its
+control history; it never reads R private archives. A logically deleted copy no
+longer protects graph dependencies, including when disk cleanup remains pending.
+Missing payload bytes alone do not remove protection. Incomplete dependencies,
+unknown contract versions, uncertain captures/controls and inaccessible history
+retain material.
+
+Select the optional `r.checkpoint@1` grant in addition to the reference grants. The
+R reader itself needs `operation.get`, `operation.list_recent`, `resources.read`
+and `operation.project_coverage`. The exact active original provider is preferred;
+after release, a unique active supported reader can observe the retained copy.
+When several replacements exist, configure `checkpoint_reader` with an exact
+`InstanceRef`. An unavailable explicit reader never falls back silently. An active
+unstarted reader works without starting R or requiring the native capture helper.
+
 The scan is an observation, not a lease on external references. Changes preserve
 original Operations and report resources, and do not replay installation or undo
 scientific effects. Material actions do not support confirmed cancellation.
@@ -66,10 +83,14 @@ and an unchanged, already built Host in disposable projects and libraries.
 It requires installed R, pak, renv, ps and jsonlite; it never installs tools.
 Add `--r-references` with `RHO_R_PLUGIN_PACKAGE` and `RHO_ARK` to exercise native
 library and loaded-namespace protection through an ordinary R provider.
+Add `--checkpoint-references` and `RHO_CHECKPOINT_HELPER` to also verify retained
+namespace dependencies after session release, pure replacement reads, explicit reader
+selection when alternatives exist and retirement
+before material quarantine, restore and purge.
 
 The retiring `rho-r-environment` adapter delegates to the same native owner.
 `node scripts/test-environment.mjs` covers that real-R bridge, including live-library
 retention and legacy Host restart binding. These old composition paths are still
-being migrated. Complete recovery-reference protection remains in progress;
-this package is not yet a complete replacement for all Environment behavior.
+being migrated; this package is not yet a complete replacement for all Environment
+behavior. Uncertain recovery controls and captures remain conservatively retained.
 Successful and uncertain source material stays retained.

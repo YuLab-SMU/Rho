@@ -35,6 +35,7 @@ pub struct Owner {
     lease: Option<MaterialLease>,
     resources: ResourceClient,
     reads: HostReads,
+    checkpoint_reader: Option<InstanceRef>,
     lane: Arc<tokio::sync::Mutex<()>>,
     accepted: Mutex<BTreeMap<OperationId, Entry>>,
 }
@@ -101,6 +102,7 @@ impl Owner {
             lease,
             resources,
             reads,
+            checkpoint_reader: config.checkpoint_reader,
             lane: Arc::new(tokio::sync::Mutex::new(())),
             accepted: Mutex::new(BTreeMap::new()),
         })

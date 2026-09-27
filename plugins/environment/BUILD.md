@@ -1,7 +1,7 @@
 # Build the Environment plugin
 
 The standalone package contains the Environment API, RPC backend and native owner,
-the Process API/engine/recovery library, the public backend SDK and protocol,
+the Process API/engine/recovery library, the public R API, backend SDK and protocol,
 first-party R helpers, a Cargo lockfile and these build instructions.
 It imports no private Rho modules and owns no operation journal.
 
@@ -16,7 +16,7 @@ It does not activate the package, start R, install R packages or modify a scenar
 The native backend is trusted local code, without an OS sandbox claim.
 
 From the Rho checkout, `node scripts/build-environment-plugin.mjs /absolute/new/package`
-assembles the eight public/plugin Rust packages outside the checkout before
+assembles the nine public/plugin Rust packages outside the checkout before
 building. In that source package, use `cargo test -p rho-environment-api -p
 rho-environment-backend --lib --locked --offline` for focused validation.
 The manifest and TypeScript/schema exporters run through `generate-manifest.mjs`
@@ -42,6 +42,7 @@ verification before launch. Material inspection and quarantine/restore/purge use
 the optional public reference grants described in README.md. The ordinary R
 provider must be available when selecting its read grants at activation; it may
 remain unstarted. Missing or incomplete reference observations retain materials.
-Recovery-reference protection is still being migrated, so the package does not
-yet replace the entire Environment feature. Successful and uncertain original
-attempts stay retained.
+Checkpoint dependencies use the public R recovery contract and an active read-only
+provider. Configure `checkpoint_reader` with an exact instance identity when several
+replacement readers are available; see README.md for selection and retention rules.
+Uncertain original attempts stay retained. Fixed composition remains under migration.

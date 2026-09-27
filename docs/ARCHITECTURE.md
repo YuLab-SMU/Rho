@@ -80,9 +80,11 @@ qualified succeeded deletion and preserves metadata; adoption makes an independe
 byte copy. The native restore accepts a locked, verified artifact rather than a
 caller-supplied RDS path. Native runtime, package inventory and empty-candidate
 checks still apply. Payload and metadata limits are independent of control-message
-limits; bounded reads do not reduce the native 16 GiB graph limit. This library is
-a migration foundation; ordinary RPC checkpoint publication/reference protection
-is not yet wired to it.
+limits; bounded reads do not reduce the native 16 GiB graph limit. The ordinary
+R owner publishes these references and manifests through public operations and
+resources, qualifies their original records and control history, and serves pure
+reads even after the original provider releases. Logical retirement and physical
+payload cleanup are separate outcomes.
 
 Environment data, native pak/renv execution, staged materials and recovery now
 live in `plugins/environment/api` and `backend/owner`, including the R helpers.
@@ -121,8 +123,21 @@ re-reads the source chain and checks the current fingerprint, owned directories
 and native process absence; reports and original outcomes survive material removal.
 An unconfirmed original quarantine can be inspected by its admitted source chain
 without rewriting that outcome. Material operations do not confirm cancellation
-or automatically replay changes. Ordinary R checkpoint references still need their
-public recovery contract; until then their presence retains material.
+or automatically replay changes. The backend imports only the public R API for
+checkpoint references, results and manifests. Successful capture/reconciliation
+records are checked against the original admitted binding, then qualified by an
+active R reader through `r.checkpoint@1`. R owns the native archive and control
+chain; Environment reads no private recovery files. Live copies protect complete
+library, namespace and selected Environment paths from the digest-verified public
+manifest. Logical deletion removes graph dependencies even if physical cleanup is
+pending; missing bytes alone do not. Unknown dependencies and uncertain captures
+remain protected. Failed or cancelled captures are excluded only when the owner
+explicitly confirmed no capture started.
+
+An exact configured `checkpoint_reader` takes precedence; otherwise the original
+active reader is preferred, followed by a unique active replacement. Ambiguity or
+unavailability retains material. Reader selection never activates a provider or
+starts R, and does not retarget previously admitted work.
 
 `operation.project_coverage@1` and `plugins.project_coverage@1` expose one bit of
 current read coverage for the normalized project and authenticated principal.

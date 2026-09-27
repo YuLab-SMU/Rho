@@ -3,6 +3,17 @@
   "title": "EnvironmentConfiguration",
   "type": "object",
   "properties": {
+    "checkpoint_reader": {
+      "description": "Exact read-only R provider for retained checkpoints. None prefers the original\nactive provider, then a unique active reader; ambiguity retains material.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "rscript": {
       "description": "An explicit installed executable; activation never discovers or installs R.",
       "type": [
@@ -25,5 +36,31 @@
       "minimum": 1
     }
   },
-  "additionalProperties": false
+  "additionalProperties": false,
+  "$defs": {
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    }
+  }
 }

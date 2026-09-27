@@ -9,6 +9,7 @@ repository = "https://github.com/YuLab-SMU/Rho"
 [dependencies]
 rho-environment-api = { path = "../api" }
 rho-environment-owner = { path = "owner" }
+rho-r-api = { path = "../../r/api" }
 rho-process-api = { path = "../../process/api" }
 rho-plugin-sdk = { path = "../../../crates/plugin-sdk" }
 serde = { version = "1.0", features = ["derive"] }

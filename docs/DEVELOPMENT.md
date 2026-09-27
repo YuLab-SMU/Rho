@@ -48,7 +48,7 @@ and contributed schemas with `node plugins/environment/generate-sdk.mjs` and
 `node plugins/environment/generate-manifest.mjs` (both support `--check`).
 `node scripts/test-environment-plugin-types.mjs` checks an independent TypeScript
 consumer. `node scripts/build-environment-plugin.mjs /absolute/new/package`
-assembles eight public/plugin Rust crates outside the checkout and builds offline
+assembles nine public/plugin Rust crates outside the checkout and builds offline
 with locked dependencies. The shipped `python3 tests/protocol.py
 /absolute/package/dist/rho-environment-backend` exercises the actual executable
 without R. With an already built Host and the installed R prerequisites,
@@ -60,6 +60,11 @@ It retains failed evidence and only cleans test-owned native markers. Add
 `--r-references` and set `RHO_R_PLUGIN_PACKAGE=/absolute/r-package` and
 `RHO_ARK=/absolute/ark` for exact-session live-library and namespace retention,
 including namespace use after removal from `.libPaths()` and eventual release.
+Use `--checkpoint-references` with those variables and
+`RHO_CHECKPOINT_HELPER=/absolute/verified/rho_checkpoint.so` to add recovery capture,
+protection after namespace unloading and session release, an unstarted replacement
+reader, ambiguous-reader refusal, explicit reader configuration and
+pin/unpin/delete/purge before Environment material cleanup.
 The native absence check can be unavailable when the OS hides a contemporaneous
 process's environment or lifetime. Keep this acceptance run separate from
 additional shell commands; preserve such a refusal as unavailable evidence and
@@ -68,8 +73,9 @@ The Host must include the public project-coverage capabilities; the script never
 rebuilds or replaces it. Backend unit checks include bounded reference scans,
 unavailable visibility, unknown recovery, changed observations, original scope,
 absent-path references and uncertainty. The shipped wire check includes material
-query purity and unsupported cancellation before EOF. Full recovery-reference
-protection remains in progress. `environment.library@2` is a pure original-realization observation;
+query purity and unsupported cancellation before EOF. Ordinary checkpoint references
+are read through the public R owner; uncertain original captures/controls retain
+material. `environment.library@2` is a pure original-realization observation;
 `r.create_session@2` explicitly delegates native verification before starting R.
 `RHO_ENVIRONMENT_PLUGIN_PACKAGE=/absolute/environment-package
 RHO_R_PLUGIN_PACKAGE=/absolute/r-package RHO_ARK=/absolute/ark

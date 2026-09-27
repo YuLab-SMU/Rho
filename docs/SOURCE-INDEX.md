@@ -191,6 +191,7 @@ Checks:
 - `plugins.editor-context-manifest`: `["node","scripts/generate-editor-context.mjs","--check"]`
 - `plugins.editor-model`: `["node","scripts/test-editor-plugin.mjs"]`
 - `plugins.environment-backend`: `["cargo","test","-p","rho-environment-backend","--lib","--locked"]`
+- `plugins.environment-checkpoint-references`: `["node","scripts/test-environment-plugin.mjs","--checkpoint-references"]`
 - `plugins.environment-independent`: `["node","scripts/test-environment-plugin-owner.mjs"]`
 - `plugins.environment-manifest`: `["node","plugins/environment/generate-manifest.mjs","--check"]`
 - `plugins.environment-native`: `["node","scripts/test-environment-plugin.mjs"]`

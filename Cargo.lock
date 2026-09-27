@@ -6063,6 +6063,7 @@ dependencies = [
  "rho-environment-owner",
  "rho-plugin-sdk",
  "rho-process-api",
+ "rho-r-api",
  "schemars 1.2.1",
  "serde",
  "serde_json",

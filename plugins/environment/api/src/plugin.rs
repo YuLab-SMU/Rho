@@ -1,6 +1,6 @@
 //! Bounded ordinary-plugin results. Full native reports travel as resources.
 use crate::EnvironmentObservation;
-use rho_plugin_protocol::{ContentDigest, OperationId, ProviderBinding, ResourceReference};
+use rho_plugin_protocol::{ContentDigest, InstanceRef, OperationId, ProviderBinding, ResourceReference};
 use rho_process_api::ProcessActivity;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -14,6 +14,9 @@ pub struct EnvironmentConfiguration {
     /// Reopen an existing material directory after its previous owner has exited.
     /// None uses this instance's Host-provided data directory.
     pub storage_root: Option<String>,
+    /// Exact read-only R provider for retained checkpoints. None prefers the original
+    /// active provider, then a unique active reader; ambiguity retains material.
+    pub checkpoint_reader: Option<InstanceRef>,
     #[serde(default = "default_timeout")]
     #[schemars(range(min = 1, max = 86400))]
     pub timeout_seconds: u64,
@@ -26,6 +29,7 @@ impl Default for EnvironmentConfiguration {
         Self {
             rscript: None,
             storage_root: None,
+            checkpoint_reader: None,
             timeout_seconds: default_timeout(),
         }
     }

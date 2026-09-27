@@ -143,6 +143,7 @@ pub fn manifest() -> PluginManifest {
         source:SourceDeclaration { files:[PackagePath::new("backend/src/main.rs").unwrap(), PackagePath::new("build.mjs").unwrap()].into(), lockfiles:[PackagePath::new("Cargo.lock").unwrap()].into(), build_instructions:PackagePath::new("BUILD.md").unwrap(), build:Some(BuildRecipe { command:vec!["node".into(),"build.mjs".into()] }) },
         dependencies:Default::default(), requires:vec![CapabilityRequirement { capability:key("operation.get",1), scopes:["operation.read".into()].into() }, CapabilityRequirement { capability:key("resources.read",1), scopes:["resources.read".into()].into() }],
         optional_requires:vec![
+            CapabilityRequirement { capability:key("r.checkpoint",1), scopes:["workspace.read", "operation.read", "resources.read", "project.references.read"].map(str::to_owned).into() },
             CapabilityRequirement { capability:key("operation.project_coverage",1), scopes:["operation.read".into(),"project.references.read".into()].into() },
             CapabilityRequirement { capability:key("plugins.project_coverage",1), scopes:["plugins.read".into(),"project.references.read".into()].into() },
         ].into_iter().chain([

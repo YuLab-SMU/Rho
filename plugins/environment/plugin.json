@@ -45,6 +45,18 @@
   "optional_requires": [
     {
       "capability": {
+        "id": "r.checkpoint",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read",
+        "resources.read",
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
         "id": "operation.project_coverage",
         "version": 1
       },
@@ -3640,9 +3652,46 @@
     "arguments": []
   },
   "configuration_schema": {
+    "$defs": {
+      "InstanceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact": {
+            "type": "string"
+          },
+          "instance": {
+            "type": "string"
+          },
+          "plugin": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance",
+          "plugin",
+          "revision",
+          "artifact"
+        ],
+        "type": "object"
+      }
+    },
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {
+      "checkpoint_reader": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/InstanceRef"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Exact read-only R provider for retained checkpoints. None prefers the original\nactive provider, then a unique active reader; ambiguity retains material."
+      },
       "rscript": {
         "description": "An explicit installed executable; activation never discovers or installs R.",
         "type": [
@@ -3669,6 +3718,7 @@
     "type": "object"
   },
   "default_configuration": {
+    "checkpoint_reader": null,
     "rscript": null,
     "storage_root": null,
     "timeout_seconds": 300

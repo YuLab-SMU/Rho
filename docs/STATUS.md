@@ -346,37 +346,52 @@ and documentation checks pass; the focused cases are in the source/check index.
 These capabilities are included in the new test Host below; existing user Hosts
 and R memory have not been restarted.
 
-The ordinary Environment backend now contributes 21 capabilities, including bounded
+The ordinary Environment backend contributes 21 capabilities, including bounded
 material retention/status queries and explicit quarantine, restore and purge with
 their preflights. Optional public reads check project coverage, original successful
-results, recorded provider instances and idle R library/namespace usage. Missing
-grants, foreign coverage, changed observations, busy/disconnected R, unsupported
-recovery contracts and uncertain source work retain material. Mutations re-read
-the admitted source chain and validate native process absence, owned paths and the
-preview fingerprint. The original path remains protected after quarantine; an
-unconfirmed quarantine can be inspected without promoting its outcome. Reports
-and original records remain after material removal. The scan is not a reference
-lease or an atomic cross-owner snapshot. All 25 affected API/backend/native-owner
-cases pass, including the current focused rerun of 22 reference scenarios. Known
-`r.execute@2` results are recognized; unknown versions still retain material. Public
-SDK/manifest consistency, independent TypeScript consumption, client generation,
-build and embedded-resource checks pass. The eight-package standalone build and
-its wire tests pass, including material query purity, unsupported cancellation and
-queued EOF without native effects. Full native
-`scripts/test-environment-plugin.mjs --r-references` acceptance passes: two R
-sessions, paginated original records, live library and namespace protection after
-`.libPaths()` removal, namespace unloading, released providers, stale fingerprints,
-quarantine/restore/purge, idempotency and retained records/reports. The Host stays
-byte-identical during acceptance, SHA-256
+results, recorded provider instances and idle R library/namespace usage. Ordinary
+R capture and reconciliation results are now recognized through the public R API.
+Environment verifies the original admitted result, asks an active `r.checkpoint@1`
+reader to qualify its current control state, then protects the library, namespace
+and selected Environment paths in the digest-verified public manifest. It reads no
+private R archive or control files. Logical deletion removes graph dependencies,
+including pending physical cleanup; missing payload bytes alone do not. Incomplete
+dependencies, unsupported versions and uncertain captures remain retained. Failed
+or cancelled captures are excluded only when R confirmed the capture never started.
+
+`checkpoint_reader` selects an exact active supported instance. Without an explicit
+choice, the original active reader is preferred, then a unique active replacement.
+Ambiguity and an unavailable explicit choice retain material. An unstarted reader
+can qualify old copies without starting R or selecting a capture helper. Missing
+grants, foreign coverage, changing observations and busy/disconnected R remain
+conservative refusals. Mutations re-read the admitted source chain and validate
+native process absence, owned paths and preview fingerprints. Original paths stay
+protected after quarantine; an unconfirmed quarantine remains inspectable without
+promoting its outcome. Original records and reports survive material removal.
+The scan is not a reference lease or an atomic cross-owner snapshot.
+
+`cargo test -p rho-environment-backend --offline` passes all 18 backend cases,
+including 16 checkpoint-evidence scenarios, exact reader selection and the existing
+22 reference-scan scenarios. Public SDK/manifest checks, independent TypeScript
+consumption, client generation/build/check and architecture/plugin-boundary checks
+pass. The nine-package standalone build and its wire tests pass. Full native
+`node scripts/test-environment-plugin.mjs --checkpoint-references` acceptance passes:
+two live R sessions, paginated original records, library/namespace protection,
+checkpoint capture, protection after namespace unload and provider release,
+unavailable-reader retention, unstarted replacement reads, ambiguous-reader refusal,
+exact configured selection, pin/unpin/delete/purge, stale fingerprints, material
+quarantine/restore/purge, idempotency and retained records/reports. The Host remains
+byte-identical, SHA-256
 `3a9db963f49aeaa313e7db75f25f345a8c84fb7d20877eb1a5754be849bfe24a`.
-An initial fixture supplied a symlinked R home and was corrected to its real path.
-An intermediate run refused unobservable native process absence; that failure is
-retained, not counted as a pass. The complete isolated rerun passes without
-changing native guards or deadlines. A slow test startup was sampled in the
-system loader before test code and subsequently completed. Architecture, plugin
-boundaries and documentation checks pass. Existing user Hosts and R sessions were
-not changed. Complete ordinary R checkpoint-reference protection and removal of
-the fixed composition remain active.
+
+The first native run returned unavailable because a same-user process lacked
+observable environment or lifetime evidence. That failure remains retained; a new
+complete isolated run passed without changing guards or deadlines. Unfiltered
+workspace metadata was unavailable because `combine 4.6.8` was not cached; the
+affected offline build and independent package's host-filtered metadata passed.
+Existing user Hosts and R sessions were not restarted. Explicit continuation/disposal
+for uncertain recovery attempts and controls, Studio integration and removal of
+fixed composition remain active.
 
 The ordinary R owner now exposes capture, bounded listing/reads, restore,
 pin/unpin, logical deletion, physical cleanup and explicit capture reconciliation.
@@ -417,10 +432,10 @@ registered contract and was correctly refused; it now faults only the returned
 plan. This exposed and fixed strict `10.0`/`10` comparison. A later fixture backend
 initialization timed out; that run remains failed evidence. A separate test process
 was sampled at the system loader, and the complete native rerun passed after
-other checks finished, without changing deadlines or guards. Complete Environment
-checkpoint-reference protection, uncertain-control continuation, Studio recovery
-integration and removal of fixed composition remain active. No user Host or R
-session was restarted.
+other checks finished, without changing deadlines or guards. Environment now consumes
+the successful recovery references as described above. Uncertain capture/control
+continuation, Studio recovery integration and removal of fixed composition remain
+active. No user Host or R session was restarted.
 
 The ordinary `org.rho.files` backend now assembles outside the checkout from eight
 public/plugin packages, with no private core dependency or independent journal.
