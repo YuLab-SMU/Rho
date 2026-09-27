@@ -17,3 +17,8 @@ of the instances they manage. The Host intersects them with the caller's actual
 authority. Installing the package does not grant authority, and no source or
 delivery-origin privilege exists. Narrow these declarations when building a
 manager for a restricted deployment.
+
+Import controls require a Host that advertises the declared `plugins.archive_*`
+ports. A client refresh cannot add those native capabilities to an older running
+Host. New manager source must be built and snapshotted as an immutable revision;
+existing manager instances retain their original assets and grants.

@@ -5,3 +5,4 @@
 @media(max-width:320px){header{flex-wrap:wrap}header>div{flex-basis:100%}nav button{padding:7px 9px}dialog{padding:14px}}
 .table-head{font-size:12px;color:var(--color-muted);cursor:default}@media(max-width:700px){.table-head{display:none}}
 .switch-grid>div{display:flex;flex-direction:column;gap:20px}
+#import-package{font-size:13px;line-height:20px}#archive-details{display:flex;flex-direction:column;gap:12px;overflow-wrap:anywhere}#import-error{color:var(--color-danger);overflow-wrap:anywhere}#import-dialog{width:min(660px,calc(100vw - 32px))}@media(max-width:700px){header{flex-wrap:wrap}header>div{flex-basis:100%}header>button{flex:1}}

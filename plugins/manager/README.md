@@ -13,6 +13,17 @@ The instance list explicitly includes fixture previews, labels their disabled
 backend, and permits ordinary view closure/release. Previews never qualify as
 runtime instances or reusable scenario views.
 
+Import package captures a user-selected `.rho-plugin` file and saves its exact
+digest/length reference before transferring bounded chunks. Upload and inspection
+are separate from the explicit Import revision action. A refreshed view can
+inspect retained progress and reselect the exact bytes to resume; a changed file
+is refused. The original filename, last observation, package metadata and successful
+import request remain saved. Lost import replies use the same original-operation
+recovery as other management actions, including read-only recovery from a
+replacement view. An uncertain Operation remains pending. Import never builds,
+activates, changes a scenario or replaces the current selection. Explicit discard
+removes only unheld transfer bytes, preserving imported revisions and receipts.
+
 Scenarios are paged, immutable checkpoints. A retained JSON draft can edit exact
 definitions, including aliases, provider bindings, resource context and layout.
 Viewing an older checkpoint does not alter its branch. Saving it creates a new
@@ -32,8 +43,10 @@ management view. Only the original view can explicitly retry that identical
 request. Recovery does not start later preparation steps. Uncertain work stays
 visible. Hiding this view retains its DOM; closing cooperatively saves its state.
 
-This package is an implementation stage, not the completed Plugin Studio. Local
-package import/export still use the CLI. Visual/source Studio editing, build and
-preview workflows and default delivery remain separate unfinished work. The
+This package is an implementation stage, not the completed Plugin Studio. Archive
+export still uses the CLI or public ports. Visual/source editing, build, preview
+and scenario application are provided by the separate ordinary Studio package;
+remaining archive/Agent workflows and default delivery are ongoing work. The
 manager does not add its own approval system, run scientific operations on read,
-or claim OS-level isolation for native plugins.
+or claim OS-level isolation for native plugins. See the repository Status page for
+executed checks; implementation alone does not establish browser acceptance.

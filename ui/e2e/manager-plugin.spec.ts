@@ -27,9 +27,9 @@ test.beforeAll(async()=>{
   manifest.description='Inspect retained reports and keep a Unicode analysis note across scene switches.';
   await writeFile(join(ui,'plugin.json'),JSON.stringify(manifest));const firstPackage=snapshot(ui);
   const newer=join(directory,'newer');await cp(ui,newer,{recursive:true});manifest.name='Independent View · comparison';manifest.version='2.0';await writeFile(join(newer,'plugin.json'),JSON.stringify(manifest));secondPackage=snapshot(newer);
-  host=spawn(binary,['--database',database,'--project',project,'workbench'],{stdio:['ignore','pipe','pipe']});
+  host=spawn(binary,['--database',database,'--project',project,'--plugins-only','workbench'],{stdio:['ignore','pipe','pipe']});
   url=new URL(await new Promise<string>((done,reject)=>{let out='',errors='';const timer=setTimeout(()=>reject(Error(`Host startup timed out: ${errors}`)),40000);
-    host.stderr!.on('data',b=>errors+=b);host.stdout!.on('data',b=>{out+=b;const found=out.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[a-z0-9]+/);if(found){clearTimeout(timer);done(found[0]);}});host.once('exit',code=>{clearTimeout(timer);reject(Error(`Host exited ${code}: ${errors}`));});}));
+    host.stderr!.on('data',b=>errors+=b);host.stdout!.on('data',b=>{out+=b;const found=out.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/);if(found){clearTimeout(timer);done(found[0]);}});host.once('exit',code=>{clearTimeout(timer);reject(Error(`Host exited ${code}: ${errors}`));});}));
   const activate=async(pkg:any,alias:string)=>(await invoke('plugins.activate',{revision:pkg.revision,artifact:pkg.artifacts[0],target:'ui-web',alias,configuration:{}})).instance.identity;
   manager=await activate(managerPackage,'manager');original=await activate(firstPackage,'original-report');
   originalView=(await invoke('windows.open_view',{expected_layout_version:0,group:null,view:{instance:original,window:windowId,contribution:'view',configuration:{},state:{text:'Saved note'}}})).view;

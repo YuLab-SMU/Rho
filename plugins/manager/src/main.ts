@@ -24,7 +24,7 @@ const identity = (value:string)=>node('code',value,'identity');
 function detail(title:string,value:unknown){const e=node('details');e.append(node('summary',title),node('pre',JSON.stringify(value,null,2)));return e;}
 function act(work:()=>Promise<unknown>|void) {
   if (busy||stopped||composing) return;
-  busy=true;error='';renderControls();
+  busy=true;error='';notice='';renderControls();
   void Promise.resolve().then(work).catch(e=>{error=message(e);}).finally(()=>{busy=false;renderControls();});
 }
 async function save(){clearTimeout(draftTimer);await manager.save();}
@@ -45,6 +45,28 @@ function renderControls(){
   const switchButton=document.querySelector<HTMLButtonElement>('[data-switch]');if(switchButton)switchButton.disabled=busy||!!pending||!manager.state.preparation?.ready;
   const selfRelease=document.querySelector<HTMLButtonElement>('[data-self-release]');if(selfRelease)selfRelease.disabled=true;
   document.querySelectorAll<HTMLButtonElement>('[data-protected]').forEach(b=>b.disabled=true);
+  renderImport();
+}
+function renderImport(){
+  const upload=manager.state.upload,pending=!!manager.state.pending,out=get('archive-details');
+  out.replaceChildren();
+  if(upload){
+    out.append(node('h3',upload.name),identity(upload.reference.digest),node('p',`${upload.reference.bytes.toLocaleString()} bytes`));
+    const p=upload.inspection;
+    if(p)out.append(block(p.name,node('p',p.description),node('p',`${p.plugin} · ${p.version}`),identity(p.revision),node('p',`${p.source_files} source files · ${p.artifacts.length} build artifacts`),...p.artifacts.map(a=>block(a.target,identity(a.id)))));
+    if(upload.imported)out.append(node('p','Original import succeeded. View the revision to inspect its current references.','success'),identity(upload.original!.operation!));
+  }
+  get('archive-progress').textContent=upload?`Last known upload: ${upload.received.toLocaleString()} / ${upload.reference.bytes.toLocaleString()} bytes${upload.inspection?' · Last package inspection available':''}`:'No archive selected.';
+  get('import-error').textContent=error;get('import-error').hidden=!error;
+  get('import-notice').textContent=notice;get('import-notice').hidden=!notice;
+  get<HTMLButtonElement>('choose-archive').textContent=upload?'Reselect retained file':'Choose archive';
+  get<HTMLButtonElement>('choose-archive').disabled=busy||pending||!!upload?.imported;
+  get<HTMLButtonElement>('stage-archive').disabled=busy||pending||!manager.upload.fileAvailable||!!upload?.imported;
+  get<HTMLButtonElement>('inspect-archive').disabled=busy||!upload;
+  get<HTMLButtonElement>('confirm-import').disabled=busy||pending||!upload?.inspection||upload.received!==upload.reference.bytes||!!upload.imported;
+  get<HTMLButtonElement>('show-imported').hidden=!upload?.imported;
+  get<HTMLButtonElement>('inspect-import').hidden=!upload?.imported;
+  get<HTMLButtonElement>('discard-archive').disabled=busy||pending||!upload;
 }
 async function refresh(more=false){
   const section=manager.state.section;
@@ -122,7 +144,7 @@ function renderInspection(){
   }));
   const remove=button('Remove revision',async()=>{await manager.invoke('plugins.remove',{revision:p.summary.revision});manager.state.selected='';manager.state.detail=false;await save();await refresh();},'danger');
   if(p.summary.reference_count>0){remove.dataset.protected='true';remove.title='Unbind retained references before removing this revision.';}actions.append(remove);out.append(actions);
-  out.append(node('p','Package import and export currently use the plugin CLI. Every installed revision uses the same package validation and permissions.','small'));
+  out.append(node('p','Every installed revision uses the same package validation and permissions. Archive export currently uses the plugin CLI.','small'));
 }
 function renderInstance(){
   const p=instance!,i=p.instance,out=get('contents');out.replaceChildren(heading(i.alias,node('p',`${i.identity.plugin} · ${short(i.identity.revision)}`)));
@@ -196,6 +218,16 @@ async function openInstance(){
   get('open-error').textContent='';get<HTMLDialogElement>('open-dialog').showModal();
 }
 get('refresh').onclick=()=>act(()=>refresh());
+get('import-package').onclick=()=>{error='';notice='';renderImport();get<HTMLDialogElement>('import-dialog').showModal();};
+get('close-import').onclick=()=>get<HTMLDialogElement>('import-dialog').close();
+get('choose-archive').onclick=()=>get<HTMLInputElement>('archive-file').click();
+get<HTMLInputElement>('archive-file').onchange=()=>{const input=get<HTMLInputElement>('archive-file'),file=input.files?.[0];input.value='';if(file)act(()=>manager.upload.choose(file,file.name));};
+get('stage-archive').onclick=()=>act(()=>manager.upload.stage(received=>{get('archive-progress').textContent=`${received.toLocaleString()} / ${manager.state.upload!.reference.bytes.toLocaleString()} bytes retained`;}));
+get('inspect-archive').onclick=()=>act(()=>manager.upload.inspect());
+get('confirm-import').onclick=()=>act(async()=>{await manager.importArchive();await refresh();notice='Original import succeeded. The revision is available for inspection.';});
+get('show-imported').onclick=()=>act(async()=>{const revision=manager.state.upload?.imported?.revision;if(!revision)return;manager.state.section='installed';await select(revision);await refresh();get<HTMLDialogElement>('import-dialog').close();});
+get('inspect-import').onclick=()=>act(async()=>{await manager.inspectArchiveImport();notice='Original import result confirmed.';});
+get('discard-archive').onclick=()=>act(()=>manager.upload.discard());
 document.querySelectorAll<HTMLButtonElement>('nav button').forEach(b=>b.onclick=()=>act(async()=>{manager.state.section=b.dataset.section as Saved['section'];manager.state.selected='';manager.state.detail=false;manager.state.scroll=0;await save();await refresh();}));
 get('back').onclick=()=>act(async()=>{manager.state.detail=false;await save();renderList();requestAnimationFrame(()=>get('list').querySelector<HTMLButtonElement>('[aria-pressed=true]')?.focus({preventScroll:true}));});
 get('inspect-request').onclick=()=>act(async()=>{await manager.recover();notice='Original request inspected. Continue explicitly when ready.';await refresh();});
@@ -213,5 +245,5 @@ get('confirm-open').onclick=()=>act(async()=>{try{
 document.addEventListener('compositionstart',()=>composing=true);document.addEventListener('compositionend',()=>{composing=false;if(manager.state.draft!==null)saveDraftSoon();});
 get<HTMLDialogElement>('edit-dialog').addEventListener('cancel',e=>{e.preventDefault();act(async()=>{await save();get<HTMLDialogElement>('edit-dialog').close();renderList();});});
 client.installCloseHandler({flush:async()=>{if(busy||composing)throw new Error('Finish the current interaction before closing.');await save();},resume:()=>{}});
-addEventListener('pagehide',()=>{stopped=true;clearTimeout(draftTimer);client.dispose();},{once:true});
+addEventListener('pagehide',()=>{stopped=true;clearTimeout(draftTimer);manager.upload.dispose();client.dispose();},{once:true});
 act(()=>refresh());

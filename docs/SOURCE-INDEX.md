@@ -121,6 +121,7 @@ Sources:
 - `scripts/fixtures/editor-format.mjs`
 - `scripts/fixtures/editor-save-run.mjs`
 - `scripts/fixtures/editor-sessions.mjs`
+- `scripts/fixtures/manager-archive.mjs`
 - `scripts/fixtures/plugin-archives.mjs`
 - `scripts/fixtures/plugin-close.mjs`
 - `scripts/fixtures/plugin-download.mjs`
@@ -176,6 +177,7 @@ Sources:
 - `ui/e2e/files-plugin.spec.ts`
 - `ui/e2e/fixtures/plugin-download.ts`
 - `ui/e2e/help-plugin.spec.ts`
+- `ui/e2e/manager-archive.spec.ts`
 - `ui/e2e/manager-plugin.spec.ts`
 - `ui/e2e/objects-plugin.spec.ts`
 - `ui/e2e/packages-plugin.spec.ts`
@@ -238,7 +240,7 @@ Checks:
 - `plugins.files-ui`: `["node","scripts/test-files-ui.mjs"]`
 - `plugins.help`: `["node","scripts/test-help-plugin.mjs"]`
 - `plugins.help-browser`: `["npm","run","test:browser","--prefix","ui","--","help-plugin.spec.ts"]`
-- `plugins.manager-browser`: `["npm","run","test:browser","--prefix","ui","--","manager-plugin.spec.ts"]`
+- `plugins.manager-browser`: `["npm","run","test:browser","--prefix","ui","--","manager-plugin.spec.ts","manager-archive.spec.ts"]`
 - `plugins.manager-model`: `["node","scripts/test-manager-plugin.mjs"]`
 - `plugins.objects`: `["node","scripts/test-objects-plugin.mjs"]`
 - `plugins.objects-browser`: `["npm","run","test:browser","--prefix","ui","--","objects-plugin.spec.ts"]`

@@ -3,14 +3,16 @@ import type { ApplyScenario, ScenarioRevision, ScenarioLayout, ScenarioView, Plu
   PluginInspection, PluginViewRecord, InstanceRef, JsonValue } from '../public/plugin-protocol/index.js';
 import { type Client, type Intent, type RecordReply, json, same, verifyOriginal, inspectOriginal } from './operations.js';
 import { ViewRequestError } from '../public/plugin-ui/index.js';
+import { ArchiveUpload, verifyArchiveImport, type ArchiveUploadState } from './archive.js';
 export { same, json } from './operations.js';
-export type Purpose = { kind: 'activate' | 'view'; key: string } | { kind: 'apply' | 'checkpoint' | 'other' };
+export type Purpose = { kind: 'activate' | 'view'; key: string } | { kind: 'apply' | 'checkpoint' | 'archive_import' | 'other' };
 export interface Preparation { definition: ScenarioRevision; request: ApplyScenario; ready: boolean; }
 export interface Saved {
   section: 'installed' | 'instances' | 'scenarios'; selected: string; detail: boolean; scroll: number;
   draft: string | null; preparation: Preparation | null;
   retained_views: string[];
   pending: { intent: Intent; purpose: Purpose } | null;
+  upload?: ArchiveUploadState | null;
 }
 export const initial = (): Saved => ({ section: 'installed', selected: '', detail: false, scroll: 0, draft: null, preparation: null, retained_views: [], pending: null });
 export const viewsOf = (layout: ScenarioLayout): ScenarioView[] => layout.kind === 'tabs' ? layout.views : layout.kind === 'split' ? layout.children.flatMap(viewsOf) : [];
@@ -51,8 +53,27 @@ export async function read<T>(client: Client, id: string, args: unknown): Promis
  * Recovery inspects one original request, and never resumes later steps itself. */
 export class Manager {
   state: Saved;
-  constructor(readonly client: Client, saved: Saved = initial()) { this.state = structuredClone(saved); }
+  readonly upload: ArchiveUpload;
+  constructor(readonly client: Client, saved: Saved = initial()) {
+    this.state = structuredClone(saved);
+    this.upload = new ArchiveUpload(client, () => this.state.upload ?? null, value => { this.state.upload = value; }, () => this.save(), () => {
+      if (this.state.pending) throw Error('Inspect the original request before changing its archive transfer.');
+    });
+  }
   save() { return this.client.setState(json(structuredClone(this.state))); }
+  async importArchive() {
+    const upload = this.state.upload;
+    if (!upload?.inspection || upload.received !== upload.reference.bytes || upload.imported) throw Error('Inspect a complete archive before importing it.');
+    return this.invoke('plugins.archive_import', { reference: upload.reference }, { kind: 'archive_import' });
+  }
+  async inspectArchiveImport() {
+    const upload = this.state.upload;
+    if (!upload?.original || !upload.imported) throw Error('No original successful import is retained.');
+    const record = await inspectOriginal(this.client, upload.original);
+    if (record.status !== 'succeeded' || !same(verifyArchiveImport(record.output, upload), upload.imported))
+      throw Error('The original import result is not confirmed.');
+    return record;
+  }
   async invoke(id: string, args: unknown, purpose: Purpose = {kind:'other'}) {
     if (this.state.pending) throw new Error('Inspect the original request before starting another operation.');
     const intent: Intent = {view:this.client.view.view,request:crypto.randomUUID(),capability:{id,version:1},arguments:json(structuredClone(args)),operation:null};
@@ -116,6 +137,12 @@ export class Manager {
       if (prep) prep.ready = false;
     } else if (pending.purpose.kind === 'checkpoint') {
       this.state.draft = null; this.state.section = 'scenarios'; this.state.selected = (record.output as ScenarioRevision).id; this.state.detail = true;
+    } else if (pending.purpose.kind === 'archive_import') {
+      const upload = this.state.upload;
+      if (!upload || pending.intent.capability.id !== 'plugins.archive_import' || !same(pending.intent.arguments, { reference: upload.reference }))
+        throw Error('The retained import differs from its captured archive.');
+      upload.imported = verifyArchiveImport(record.output, upload);
+      upload.original = structuredClone(pending.intent);
     }
     this.state.pending = null;
     try { await this.save(); } catch (error) { this.state.pending = pending; throw error; }

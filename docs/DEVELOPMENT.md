@@ -84,6 +84,17 @@ public-port regressions. Public DTO changes also require client generation and
 `node scripts/test-plugin-protocol.mjs`. These establish archive port behavior;
 they do not establish a browser file save or Studio archive UI acceptance.
 
+The Manager import model runs in `node scripts/test-manager-plugin.mjs`: retained
+file capture, identical-content reselection, partial uploads, lost acknowledgements,
+original import recovery, replacement views, preserved uncertainty and explicit
+discard. After building the current client and Host, run `npm run test:browser
+--prefix ui -- manager-plugin.spec.ts manager-archive.spec.ts` for the ordinary
+Manager composition and local-file import flow. The archive fixture uses independent
+source and target catalogs, loses a chunk reply and an import reply, reloads the
+view, and verifies one import without activation while a second window keeps its
+unsaved Unicode text. Inspect normal, wide and constrained dialog captures and
+scrolled controls; passing model checks alone does not establish visual acceptance.
+
 Source development uses `cargo test -p rho-plugins --test source_development --locked`
 for binary/paged reads, full-file corruption detection, source-only history,
 concurrent head conflicts and transactional rollback. The shared-port fixture is

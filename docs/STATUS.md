@@ -22,16 +22,36 @@ receipts never turn uncertain Operations into success or authorize replay.
 
 The public UI SDK captures immutable Blob content, stages identical bounded
 chunks and verifies complete archive reads independently of the smaller media
-limit. These helpers do not trigger browser downloads. Studio/Plugins archive
-controls and the containing browser's archive-download action remain unfinished.
+limit. These helpers do not trigger browser downloads. Manager import controls are
+implemented and verified in Chrome: captured local files, retained
+upload inspection, identical-content reselection, explicit import and recovery of
+the original request. Model checks cover partial/lost replies, replacement views,
+uncertainty, receipt identity and explicit transient-byte discard. Export/download
+controls and Studio archive integration remain unfinished.
 The new ports require a rebuilt Host; existing user Hosts and R sessions have not
 been replaced. All 30 affected repository/build/source-development tests pass on
 the current implementation. Public protocol/SDK consumers, independent Studio and
-Plugins builds/models, client build and all 528 client tests also pass. Host
-archive/shared-port regressions, native protocol/SDK tests and client consistency
-remain in progress; they are not yet acceptance passes. Exact commands, initial
-fixture/build failures and results are retained in
+Plugins builds/models, client build and all 528 client tests also pass. All 15 Host
+archive/shared-port regressions and 9 native protocol tests pass. The backend SDK
+library compiles (its library target has no tests), and client consistency passes.
+Exact commands, initial fixture/build failures and results are retained in
 `target/plugin-refactor/archive-verification.txt`.
+
+The current binary builds, and both affected Manager browser flows pass across
+the recorded runs. Import resumes after a lost chunk acknowledgement, recovers a
+lost successful import reply without duplication, explicitly opens the imported
+revision and discards only transient bytes. Running instances and another window's
+unsaved Unicode text remain unchanged. All 25 affected captures were inspected:
+normal/wide/constrained import, list, revision, scenario and instance surfaces,
+scrolled narrow import controls and the successful receipt. No overlap or horizontal
+overflow was observed; long narrow contents remain scrollable. The initial archive
+fixture placed two database files in one directory, which intentionally shares one
+package repository. The corrected fixture uses separate repository directories and
+asserts the subject is absent before import. No production behavior was weakened.
+Exact commands and retained failures are in
+`target/plugin-refactor/manager-archive-verification.txt`. No real-R or full-workspace
+audit, installation or publication ran. New Manager assets require an explicit
+package snapshot/activation; existing immutable instances remain unchanged.
 
 Studio scenario application is implemented through the ordinary public ports.
 The new surface selects a named scenario and plugin alias, stages an exact

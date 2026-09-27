@@ -938,7 +938,8 @@ ID; after observing a completed but unsuccessful reconciliation attempt, use a n
 client request ID for another explicit attempt. No scientific execution is repeated
 and no disconnected backend is restarted. The offline CLI recovery interface
 handles filesystem archive import/export and source snapshots. Active Hosts also
-provide the bounded archive ports below; ordinary UI controls remain ongoing work.
+provide the bounded archive ports below. Plugins provides the import workflow
+described below; export controls and Studio archive integration remain ongoing work.
 
 Archive transfer through an active Host uses ordinary Control, Query and Operation
 calls; no filesystem path is accepted. Stage the selected UTF-8 `.rho-plugin`
@@ -977,6 +978,18 @@ provide an observed tab-group ID and layout version. The manager has no private
 Host token, database access or delivery privilege; its explicit delegation scopes
 must fit the activating caller's authority.
 
+In Plugins, Import package captures a chosen local archive before uploading its
+bytes. Upload and inspect displays the exact revision and included artifacts;
+Import revision is a separate action. Reload retains the original file reference,
+but requires reselecting identical file content before resuming an upload. Inspect
+retained upload refreshes native progress without installing anything. After a lost
+import reply, use Inspect original request; a successful result retains its original
+Operation identity and offers View imported revision. Import does not activate code,
+change the scenario, or replace another selection or draft. Discard transfer removes
+unheld upload bytes only; the installed revision and Operation records remain.
+These controls require the archive-capable Host and a new Manager package revision;
+refreshing an older Host or instance does not add the ports or replace its assets.
+
 In Scenarios, Review captures the current window version. Choose an exact existing
 instance or create a new one for each alias, and choose live view state or saved
 checkpoint state for each view. Prepare creates missing instances/views and
@@ -993,9 +1006,10 @@ in that view. Inspect the original request to refresh its outcome; recovery neve
 continues later preparation steps automatically. Only the original view can retry
 the same captured request. A replacement manager can inspect the original record
 but cannot reissue it under a new identity. Read-only inspection and navigation
-remain available. Archive UI and Agent-assisted Studio development remain tracked
-implementation work; archive operations are already available through the public
-Host ports and offline CLI. See Status for verification and remaining scope.
+remain available. Export/download UI, Studio archive integration and Agent-assisted
+development remain tracked implementation work; archive operations are already
+available through the public Host ports and offline CLI. See Status for verification
+and remaining scope.
 
 The ordinary R package exposes `r.console` for current/pending original operations,
 pause identity and `awaiting_commit`. Copy `r.session.queue_target` into the query's

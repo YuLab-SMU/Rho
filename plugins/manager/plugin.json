@@ -15,7 +15,8 @@
       "tsconfig.json",
       "package.json",
       "build.mjs",
-      "README.md"
+      "README.md",
+      "src/archive.ts"
     ],
     "lockfiles": [
       "dependencies.lock"
@@ -326,6 +327,51 @@
       },
       "scopes": [
         "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_stage",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_progress",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_discard",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_import",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
       ]
     }
   ],
