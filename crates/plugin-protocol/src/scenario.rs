@@ -26,6 +26,53 @@ pub struct ScenarioInstance {
     pub artifact: ArtifactId,
     pub configuration: Value,
     pub dependencies: BTreeMap<InstanceAlias, InstanceAlias>,
+    /// Selected declarations remain configuration, not authority to activate.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<_>", optional)]
+    pub optional_capabilities: Vec<CapabilityKey>,
+}
+
+/// Save an immutable checkpoint and compare-and-swap this named scenario's head.
+/// Project and principal are supplied by the Host, never by the request.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SaveScenario {
+    pub scenario: ScenarioId,
+    pub expected_head: Option<ScenarioRevisionId>,
+    pub name: String,
+    pub instances: BTreeMap<InstanceAlias, ScenarioInstance>,
+    pub providers: Vec<ScenarioProvider>,
+    pub layout: ScenarioLayout,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ScenarioRevisionArguments {
+    pub revision: ScenarioRevisionId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ListScenarios {
+    pub after: Option<ScenarioId>,
+    #[schemars(range(min = 1, max = 100))]
+    pub limit: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ScenarioSummary {
+    pub scenario: ScenarioId,
+    pub revision: ScenarioRevisionId,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ScenarioPage {
+    #[schemars(length(max = 100))]
+    pub scenarios: Vec<ScenarioSummary>,
+    pub next: Option<ScenarioId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
@@ -91,6 +138,11 @@ impl ScenarioRevision {
             "scenario exceeds instance/provider limit",
         )?;
         for (alias, instance) in &self.instances {
+            let mut grants = BTreeSet::new();
+            require(instance.optional_capabilities.len() <= 512, "too many scenario optional capabilities")?;
+            for capability in &instance.optional_capabilities {
+                require(capability.version > 0 && grants.insert(capability), "invalid or duplicate scenario optional capability")?;
+            }
             for target in instance.dependencies.values() {
                 require(
                     target != alias && self.instances.contains_key(target),
@@ -136,11 +188,13 @@ impl ScenarioRevision {
         fn layout(
             node: &ScenarioLayout,
             depth: usize,
+            count: &mut usize,
             ids: &mut BTreeSet<String>,
             instances: &BTreeMap<InstanceAlias, ScenarioInstance>,
         ) -> Result<(), ProtocolError> {
+            *count += 1;
             require(
-                depth <= 32 && ids.len() <= 1024,
+                depth <= 32 && *count <= 1024,
                 "layout exceeds depth or node limit",
             )?;
             match node {
@@ -156,11 +210,12 @@ impl ScenarioRevision {
                         children.len() >= 2
                             && children.len() <= 32
                             && children.len() == weights.len()
-                            && weights.iter().all(|w| w.is_finite() && *w > 0.0),
+                            && weights.iter().all(|w| w.is_finite() && *w > 0.0)
+                            && weights.iter().sum::<f64>().is_finite(),
                         "invalid layout split",
                     )?;
                     for child in children {
-                        layout(child, depth + 1, ids, instances)?;
+                        layout(child, depth + 1, count, ids, instances)?;
                     }
                 }
                 ScenarioLayout::Tabs {
@@ -179,6 +234,7 @@ impl ScenarioRevision {
                         )?;
                     }
                     for view in views {
+                        *count += 1;
                         require(ids.insert(view.id.to_string()), "duplicate view identity")?;
                         let instance = instances
                             .get(&view.instance)
@@ -190,8 +246,8 @@ impl ScenarioRevision {
                     }
                 }
             }
-            require(ids.len() <= 1024, "layout exceeds node limit")
+            require(*count <= 1024, "layout exceeds node limit")
         }
-        layout(&self.layout, 0, &mut BTreeSet::new(), &self.instances)
+        layout(&self.layout, 0, &mut 0, &mut BTreeSet::new(), &self.instances)
     }
 }

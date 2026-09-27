@@ -355,6 +355,13 @@ this is not a reason to expand a focused check into a workspace audit.
 
 ### Common L2 commands
 
+Scenario metadata changes use `cargo test -p rho-plugins --test package_repository
+--locked`, `cargo test -p rho-plugin-protocol --test contract --locked` and
+`cargo test -p rho-host --test plugin_scenarios --locked` serially. They cover
+immutable history, concurrent head changes, protecting references, visibility and
+ordinary external-plugin calls. They do not establish live window switching,
+scenario readiness or Plugin Studio interaction acceptance.
+
 HTML widget, Viewer and Plot changes should cover both native and browser paths:
 
 ```sh

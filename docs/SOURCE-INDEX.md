@@ -252,6 +252,7 @@ Checks:
 - `plugins.remote-visibility`: `["cargo","test","-p","rho-execution","slurm","--locked"]`
 - `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`
 - `plugins.resource-download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts"]`
+- `plugins.scenario-ports`: `["cargo","test","-p","rho-host","--test","plugin_scenarios","--locked"]`
 - `plugins.self-requirements`: `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"]`
 - `plugins.ui-sdk`: `["node","scripts/test-plugin-ui.mjs"]`
 - `plugins.view-delegation`: `["cargo","test","-p","rho-host","--test","plugin_view_delegation","--locked"]`

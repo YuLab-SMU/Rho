@@ -553,6 +553,9 @@
         "--locked"
       ]
     },
+    "plugins.scenario-ports": {
+      "command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_scenarios", "--locked"]
+    },
     "plugins.draft-ports": {
       "command": [
         "cargo",
@@ -1051,6 +1054,7 @@
         "plugins.self-requirements",
         "plugins.drafts",
         "plugins.draft-ports",
+        "plugins.scenario-ports",
         "plugins.draft-browser",
         "plugins.view-delegation",
         "plugins.editor-context",

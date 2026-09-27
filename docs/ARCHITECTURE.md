@@ -33,6 +33,22 @@ independent; execution must use immutable artifact bytes, never a development
 directory. Import verifies containment, source/lock/build declarations, schemas,
 inventories and digests without running a build or loading code.
 
+The same repository owns immutable project/principal-scoped scenario checkpoints
+and named heads through `scenarios.list/get/checkpoint`. Saving is a native
+compare-and-swap transaction: content identity, head and all referenced plugin
+revision protections commit together. Earlier checkpoints remain immutable and
+retain their references, including resource-owner revisions and packages currently
+missing from the catalog. A restored composition becomes another child of the
+current head. Reads are bounded metadata and never create instances or change
+windows. Checkpoint configuration contains public values and credential references,
+never a capture of credential-owner state.
+
+Storage validates structure and bounds, not availability or readiness. Optional
+capability selections remain declarations, not activation authority. Applying a
+scenario must separately validate exact artifacts, dependency bindings, view
+schemas and caller grants before publishing a complete per-window composition.
+Scenario storage is implemented; atomic window application remains in progress.
+
 Files/Git contracts and native provider ports now live in `plugins/files/api`;
 the contained filesystem, text and Git implementation lives in
 `plugins/files/backend/engine`. Shared native subprocess supervision and its public

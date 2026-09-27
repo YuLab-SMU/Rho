@@ -15,6 +15,15 @@ fn decode<T: DeserializeOwned>(value: &Value) -> Result<T, OperationError> {
 fn normalize<T: DeserializeOwned + Serialize>(value: &Value) -> Result<Value, OperationError> {
     serde_json::to_value(decode::<T>(value)?).map_err(invalid)
 }
+fn scenario_error(error_value: PluginError) -> OperationError {
+    match error_value {
+        PluginError::Conflict => OperationError::ContentChanged("scenario head changed".into()),
+        PluginError::Missing(id) => OperationError::NotFound(id),
+        PluginError::Invalid(message) => invalid(message),
+        PluginError::Contract(message) => invalid(message),
+        other => error(other),
+    }
+}
 fn key(id: &str) -> host::CapabilityRef {
     host::CapabilityRef::new(id, 1).unwrap()
 }
@@ -50,6 +59,8 @@ pub(crate) fn register(
         "views.inspect",
         "views.connection",
         "windows.layout",
+        "scenarios.list",
+        "scenarios.get",
         "plugins.repository",
         "plugins.list",
         "plugins.inspect",
@@ -72,6 +83,7 @@ pub(crate) fn register(
         "views.close",
         "windows.update_layout",
         "windows.open_view",
+        "scenarios.checkpoint",
         "plugins.activate",
         "plugins.release",
         "plugins.remove",
@@ -90,6 +102,19 @@ pub(crate) fn register(
 }
 fn descriptor(id: &str) -> host::CapabilityDescriptor {
     let (input, output, example, summary, operation, scope) = match id {
+        "scenarios.list" => (
+            schema_for!(ListScenarios).to_value(), schema_for!(ScenarioPage).to_value(),
+            json!({"after":null,"limit":20}), "List the caller's named project scenarios", false, PLUGINS_READ_SCOPE,
+        ),
+        "scenarios.get" => (
+            schema_for!(ScenarioRevisionArguments).to_value(), schema_for!(ScenarioRevision).to_value(),
+            json!({"revision":digest()}), "Read an exact retained scenario checkpoint", false, PLUGINS_READ_SCOPE,
+        ),
+        "scenarios.checkpoint" => (
+            schema_for!(SaveScenario).to_value(), schema_for!(ScenarioRevision).to_value(),
+            json!({"scenario":"analysis","expected_head":null,"name":"Analysis","instances":{},"providers":[],"layout":{"kind":"empty"}}),
+            "Create a scenario checkpoint and advance its expected head atomically", true, PLUGINS_WRITE_SCOPE,
+        ),
         "workspace.paths" => (
             schema_for!(Empty).to_value(), schema_for!(WorkspacePaths).to_value(),
             json!({}), "Read Host-owned project and protected path boundaries", false, "project.read",
@@ -281,6 +306,18 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
         descriptor.documentation.effects = "Read configuration metadata only. No runtime, filesystem scan, recovery or Operation is started.".into();
         descriptor.documentation.related_capabilities = vec![];
     }
+    if id.starts_with("scenarios.") {
+        descriptor.domain = "scenarios".into();
+        descriptor.documentation.owner = "plugins".into();
+        descriptor.documentation.when_to_use = vec!["Save named project compositions or inspect their exact history through the same public ports used by Plugin Studio.".into()];
+        descriptor.documentation.limitations = vec!["Project and principal come from the caller. Checkpoints record composition metadata only; no window changes, provider activation, credential capture, scientific execution or rollback occurs.".into(),
+            "Saving checks structure and the expected head, not package availability or runtime readiness. Missing exact revisions remain explicit references. Applying a scenario requires separate validation and activation; saved optional selections do not grant authority.".into(),
+            "Every checkpoint protects referenced plugin revisions, including earlier heads. Saving a former composition creates a new child; it never rewrites history or discards references.".into()];
+        descriptor.documentation.effects = if operation { "Atomically save immutable scenario metadata, its head and protecting package references." } else { "Bounded observation only. Does not create a scenario, activate a provider or change a window." }.into();
+        descriptor.documentation.retry_rule = if operation { "Retain the original client_request_id after a lost acknowledgement and inspect that Operation. Read the current head separately before making a new edit." } else { "Follow the explicit exclusive list cursor or the original revision's parent." }.into();
+        descriptor.documentation.related_capabilities = vec![key("scenarios.list"),key("scenarios.get"),key("scenarios.checkpoint")];
+        descriptor.documentation.position_units = vec!["Checkpoint metadata is limited to 256 KiB, 256 instances, 512 providers and 1024 layout nodes including views. Page limits are 1–100.".into()];
+    }
     if id == "plugins.project_coverage" {
         descriptor.required_scopes.insert("project.references.read".into());
         descriptor.documentation.limitations = vec!["Returns only whether all recorded project instances are visible to this principal. It includes preparing, failed, released and historical instances; it exposes no foreign identities, counts, configuration or logs.".into(), "This is current visibility metadata, not a lease or native-process proof. Read owner-specific references separately; incomplete or unavailable coverage cannot establish absence. No provider is started, reconnected or recovered.".into()];
@@ -327,6 +364,9 @@ fn instance() -> Value {
 }
 fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
     match id {
+        "scenarios.list" => normalize::<ListScenarios>(value),
+        "scenarios.get" => normalize::<ScenarioRevisionArguments>(value),
+        "scenarios.checkpoint" => normalize::<SaveScenario>(value),
         "resources.list" => normalize::<ResourceList>(value),
         "resources.inspect" => normalize::<ResourceInspect>(value),
         "resources.read" => normalize::<ResourceRead>(value),
@@ -376,6 +416,10 @@ impl QueryHandler for Read {
     ) -> Result<host::QuerySnapshot, OperationError> {
         let service = &self.service;
         let data = match self.id {
+            "scenarios.list" => json!(service.repository.lock().unwrap().scenarios(
+                &service.project, &plugin_principal_id(context.principal()), &decode(value)?).map_err(scenario_error)?),
+            "scenarios.get" => json!(service.repository.lock().unwrap().scenario_revision(
+                &service.project, &plugin_principal_id(context.principal()), &decode::<ScenarioRevisionArguments>(value)?.revision).map_err(scenario_error)?),
             "plugins.project_coverage" => json!(service.repository.lock().unwrap().instance_project_coverage(&service.project,&plugin_principal_id(context.principal())).map_err(error)?),
             "workspace.paths" => json!(service.workspace_paths),
             "windows.layout" => {
@@ -578,6 +622,12 @@ impl OperationHandler for Manage {
             identity: self.service.scope.clone(),
         };
         match self.id {
+            "scenarios.checkpoint" => {
+                let principal = plugin_principal_id(context.principal());
+                let args: SaveScenario = decode(value)?;
+                self.service.repository.lock().unwrap().prepare_scenario(&self.service.project, &principal, &args).map_err(scenario_error)?;
+                target = host::TargetRef { kind:"scenario".into(), identity:format!("{}:{}:{}",self.service.project,principal,args.scenario) };
+            }
             "windows.open_view" => {
                 let args: OpenPluginWindowView = decode(value)?;
                 let id = ViewInstanceId::new(format!("view-{}", uuid::Uuid::new_v4().simple())).map_err(error)?;
@@ -765,7 +815,7 @@ impl OperationHandler for Manage {
     }
     async fn execute(&self, operation: &host::Operation) -> Result<CommitPlan, HandlerError> {
         self.run(operation).await.map(CommitPlan::succeeded).map_err(|error| {
-            if matches!(self.id, "windows.update_layout" | "windows.open_view" | "views.close") && matches!(&error,
+            if matches!(self.id, "windows.update_layout" | "windows.open_view" | "views.close" | "scenarios.checkpoint") && matches!(&error,
                 OperationError::ContentChanged(_) | OperationError::InvalidInput(_) | OperationError::NotFound(_)) {
                 return HandlerError::before_effect(error.to_string());
             }
@@ -802,6 +852,11 @@ impl Manage {
         let value = &operation.normalized_arguments;
         let service = &self.service;
         match self.id {
+            "scenarios.checkpoint" => {
+                let _guard = service.gate.lock().await;
+                Ok(json!(service.repository.lock().unwrap().save_scenario(&service.project,
+                    &plugin_principal_id(bound.context.principal()), &decode(value)?).map_err(scenario_error)?))
+            }
             "windows.open_view" => {
                 let _guard = service.gate.lock().await;
                 Ok(json!(service.open_window_view(&bound.context,

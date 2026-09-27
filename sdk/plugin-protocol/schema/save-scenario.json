@@ -1,10 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "ScenarioRevision",
+  "title": "SaveScenario",
+  "description": "Save an immutable checkpoint and compare-and-swap this named scenario's head.\nProject and principal are supplied by the Host, never by the request.",
   "type": "object",
   "properties": {
-    "id": {
-      "type": "string"
+    "expected_head": {
+      "type": [
+        "string",
+        "null"
+      ]
     },
     "instances": {
       "type": "object",
@@ -16,15 +20,6 @@
       "$ref": "#/$defs/ScenarioLayout"
     },
     "name": {
-      "type": "string"
-    },
-    "parent": {
-      "type": [
-        "string",
-        "null"
-      ]
-    },
-    "project": {
       "type": "string"
     },
     "providers": {
@@ -39,9 +34,7 @@
   },
   "additionalProperties": false,
   "required": [
-    "id",
     "scenario",
-    "project",
     "name",
     "instances",
     "providers",

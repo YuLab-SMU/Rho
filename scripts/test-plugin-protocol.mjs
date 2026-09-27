@@ -16,6 +16,12 @@ try {
   fs.writeFileSync(path.join(consumer, "consumer.mts"), `
 import type { ActivatePlugin, WorkspacePaths, PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage, PendingCancellation, UpdatePluginWindowLayout, OpenPluginWindowView, ClosePluginView, PluginViewLifecycle, SaveDocumentDraft, StageDraftChunk, DocumentDraftChunk, ListDocumentDrafts, DocumentDraftPage, ContextSearch, ContextPage, PreviewContext, ContextPreview } from "../protocol/index.js";
 import type {ProjectReadCoverage,ProjectReadCoverageArguments} from "../protocol/index.js";
+import type { SaveScenario, ScenarioPage, ScenarioRevisionArguments } from "../protocol/index.js";
+const checkpoint: SaveScenario = { scenario: "analysis", expected_head: null, name: "Analysis", instances: {}, providers: [], layout: { kind: "empty" } };
+const scenarios: ScenarioPage = { scenarios: [{ scenario: checkpoint.scenario, revision: "revision", name: checkpoint.name }], next: null };
+const scenarioRead: ScenarioRevisionArguments = { revision: scenarios.scenarios[0]!.revision };
+// @ts-expect-error The caller cannot choose a checkpoint's project or principal.
+const foreignScenario: SaveScenario = { ...checkpoint, project: "foreign" };
 const coverageInput:ProjectReadCoverageArguments={};
 const coverage:ProjectReadCoverage={all_visible:false};
 // @ts-expect-error Missing coverage cannot be treated as complete.
@@ -57,11 +63,18 @@ export function inspect(manifest: PluginManifest, visual: VisualDocument, page: 
   execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"),
     "--noEmit", "--strict", "--module", "NodeNext", "--moduleResolution", "NodeNext",
     "--target", "ES2022", "--rootDir", consumer, path.join(consumer, "consumer.mts")], { stdio: "inherit" });
-  for (const name of ["manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "view-close", "window-layout", "window-open-view", "context-page", "preview-context", "context-preview", "document-draft", "list-document-drafts", "document-draft-page", "save-document-draft", "scenario", "visual-document"]) {
+  for (const name of ["manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "view-close", "window-layout", "window-open-view", "context-page", "preview-context", "context-preview", "document-draft", "list-document-drafts", "document-draft-page", "save-document-draft", "scenario", "save-scenario", "scenario-page", "visual-document"]) {
     const schema = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema", `${name}.json`), "utf8"));
     assert.ok(schema.$schema && schema.$defs, `missing standalone schema: ${name}`);
   }
   const contextSearch = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/context-search.json"), "utf8"));
+  const scenarioList = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/list-scenarios.json"), "utf8"));
+  assert.equal(scenarioList.additionalProperties, false);
+  assert.equal(scenarioList.properties.limit.maximum, 100);
+  const scenarioSave = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/save-scenario.json"), "utf8"));
+  assert.equal(scenarioSave.additionalProperties, false);
+  assert.equal(scenarioSave.properties.project, undefined);
+  assert.equal(scenarioSave.properties.principal, undefined);
   const coverage = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/project-read-coverage.json"), "utf8"));
   assert.deepEqual(coverage.required,["all_visible"]);
   assert.equal(coverage.additionalProperties,false);

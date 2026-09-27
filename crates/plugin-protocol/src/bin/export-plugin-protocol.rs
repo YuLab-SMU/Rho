@@ -69,6 +69,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     DiscardDocumentDraft::export_all(&types)?;
     RpcFrame::export_all(&types)?;
     ScenarioRevision::export_all(&types)?;
+    SaveScenario::export_all(&types)?;
+    ListScenarios::export_all(&types)?;
+    ScenarioPage::export_all(&types)?;
+    ScenarioRevisionArguments::export_all(&types)?;
     WindowScenario::export_all(&types)?;
     VisualDocument::export_all(&types)?;
     fs::create_dir_all(root.join("schema"))?;
@@ -112,6 +116,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             schemars::schema_for!(ResourceTransferResponse),
         ),
         ("scenario", schemars::schema_for!(ScenarioRevision)),
+        ("save-scenario", schemars::schema_for!(SaveScenario)),
+        ("list-scenarios", schemars::schema_for!(ListScenarios)),
+        ("scenario-page", schemars::schema_for!(ScenarioPage)),
+        ("scenario-revision-arguments", schemars::schema_for!(ScenarioRevisionArguments)),
         ("visual-document", schemars::schema_for!(VisualDocument)),
     ] {
         fs::write(

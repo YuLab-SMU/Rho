@@ -11,6 +11,39 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
+Named scenario checkpoints now have scoped storage and public
+`scenarios.list/get/checkpoint` ports. Saving compares the current head and commits
+immutable content plus protecting package references atomically. Old checkpoints
+keep their references, including versions absent from the catalog and resource-owner
+versions; importing a missing version does not erase that protection. Restoring a
+former composition creates a new child. Optional capability selections remain
+configuration and grant no activation authority. Queries and saves neither start
+providers nor change a window. Atomic window application, its validation and the
+ordinary management/Plugin Studio interfaces remain active work.
+
+The complete 13-case package repository suite and 17 protocol cases pass, including
+concurrent head conflicts, project/principal visibility, immutable history, missing
+version protection, invalid metadata and transactional reference-write failure.
+All 20 Host cases pass: two new scenario cases, 13 existing plugin cases and five
+shared-port cases. They cover original-request replay, scope refusal, window/runtime
+independence and an external plugin's delegated reads/writes without a management
+privilege. The executed commands were `cargo test -p rho-plugins --test
+package_repository --locked --offline`, `cargo test -p rho-plugin-protocol --lib
+--test contract --locked --offline` and `cargo test -p rho-host --test
+plugin_scenarios --test plugins --test port_contracts --locked --offline`.
+Independent strict TypeScript consumption and standalone schema checks also pass.
+`npm run generate --prefix ui`, `npm run build --prefix ui` and
+`npm run check --prefix ui` pass, as do architecture, plugin-boundary and
+documentation checks. No visual or live scenario-switching acceptance is claimed.
+
+The initial `cargo test -p rho-plugins --test package_repository scenario_ --locked
+--offline` was interrupted with exit 130 while macOS waited to load a compiler
+dynamic library; it is not a pass. Its log and sample are retained under
+`target/plugin-refactor/scenario-repository-initial.log` and
+`target/plugin-refactor/scenario-rustc-sample.txt`; the complete repository rerun
+passed. These new ports require a rebuilt Host; existing user Hosts and scientific
+sessions have not been restarted.
+
 Package activation now supports explicitly selected optional capability grants.
 Unselected declarations add no authority, even when the provider is available;
 configuration and subsequent views cannot expand the frozen selection. View
@@ -630,7 +663,8 @@ references, branch compare-and-swap, source comparison and bounded repository
 pages. Sources, dependency locks and build instructions are required. The recovery
 CLI, `rho plugins --store ...`, works without a scientific Host. Packages are not
 activated or reinstalled implicitly, and native builds are explicit trusted local
-code. Scenario and visual-document contracts do not establish their product UI.
+code. Scenario storage is implemented above; it and the visual-document contracts
+do not establish their product UI or atomic window switching.
 
 Backend instances run immutable artifacts in separate processes. Exact readiness
 precedes atomic contribution publication. Binding resolution is explicit; accepted

@@ -213,6 +213,28 @@ fn distinct_revisions_coexist_but_default_routing_is_unique() {
 }
 
 #[test]
+fn scenario_bounds_include_empty_nodes_and_explicit_optional_selections() {
+    let mut value = scenario();
+    let instance = value.instances.values_mut().next().unwrap();
+    let capability = CapabilityKey { id:ContributionId::new("example.read").unwrap(),version:1 };
+    instance.optional_capabilities = vec![capability.clone(),capability];
+    assert!(value.validate().is_err());
+    value.instances.values_mut().next().unwrap().optional_capabilities.pop();
+    value.validate().unwrap();
+    value.layout = ScenarioLayout::Split { id:NodeId::new("root").unwrap(),direction:SplitDirection::Horizontal,
+        weights:vec![1.0;32],children:(0..32).map(|i| ScenarioLayout::Split {
+            id:NodeId::new(format!("group-{i}")).unwrap(),direction:SplitDirection::Vertical,
+            weights:vec![1.0;32],children:vec![ScenarioLayout::Empty;32],
+        }).collect() };
+    assert!(value.validate().is_err());
+    for field in ["project","principal","id"] {
+        let mut input = json!({"scenario":"analysis","expected_head":null,"name":"Analysis","instances":{},"providers":[],"layout":{"kind":"empty"}});
+        input[field] = json!("forged");
+        assert!(serde_json::from_value::<SaveScenario>(input).is_err());
+    }
+}
+
+#[test]
 fn aggregate_layout_and_visual_source_limits_are_enforced() {
     let mut document = visual();
     for index in 0..257 {

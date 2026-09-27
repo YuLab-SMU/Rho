@@ -14,6 +14,8 @@ mod resource_channel;
 mod views;
 mod view_close;
 mod window_layout;
+mod scenarios;
+pub use scenarios::scenario_digest;
 mod drafts;
 mod draft_service;
 pub use views::PluginViewAsset;

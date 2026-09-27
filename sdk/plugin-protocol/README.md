@@ -233,6 +233,26 @@ Checkpoint configuration uses public values and credential references. Actual
 credential bytes remain with the credential owner, outside revision and scenario
 storage. History is not a rollback mechanism for scientific effects or R memory.
 
+`scenarios.list@1` returns up to 100 `ScenarioSummary` values with an exclusive
+scenario-identity cursor. `scenarios.get@1` reads one exact `ScenarioRevision`;
+follow its parent for history. Both use `plugins.read` and the authenticated project
+and principal. They do not initialize a provider or change a window.
+
+`scenarios.checkpoint@1` accepts `SaveScenario` under `plugins.write`. A null
+`expected_head` creates a named scenario; an existing head must match exactly.
+The owner computes the content identity and commits the immutable checkpoint, new
+head and all package protections together. Earlier checkpoints keep their references.
+Restoring a previous composition means saving it against the current head, creating
+another child. Retain the original request identity after a lost acknowledgement.
+
+Save validates structural bounds (256 KiB, 256 instances, 512 providers and 1024
+layout nodes including views) without claiming the referenced artifacts are available.
+Missing packages remain explicit references and become protected if imported later.
+The per-instance `optional_capabilities` selection is retained without conferring
+activation authority. Applying a composition still needs separate exact manifest,
+artifact, dependency, configuration, caller-grant and readiness validation. These
+storage ports do not yet implement window scenario application.
+
 Regenerate these artifacts from the repository with `npm run generate --prefix ui`.
 
 ## Document draft content
