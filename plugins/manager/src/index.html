@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Plugin manager</title><link rel="stylesheet" href="style.css"></head>
+<body><header><div><h1>Plugins</h1><p id="subtitle">Installed revisions, their purpose, and the instances using them.</p></div><button id="refresh">Refresh</button></header>
+<nav aria-label="Management"><button data-section="installed">Installed</button><button data-section="instances">Instances</button><button data-section="scenarios">Scenarios</button></nav>
+<div id="notice" role="status"></div><div id="error" role="alert" hidden></div>
+<section id="recovery" hidden><strong>Original request needs inspection</strong><p id="pending"></p><div class="actions"><button id="inspect-request">Inspect original request</button><button id="retry-request">Retry original request</button></div></section>
+<main><section id="list" aria-label="Items"></section><section id="detail" aria-label="Inspection"><button id="back">Back to list</button><div id="contents"></div></section></main>
+<dialog id="edit-dialog"><h2 id="edit-title">Scenario checkpoint</h2><p>Exact revisions, instance aliases, layout and providers. Saving does not switch this window.</p><label for="source">Scenario definition</label><textarea id="source" spellcheck="false"></textarea><div id="edit-error" role="alert"></div><div class="actions"><button id="keep-draft">Keep draft and close</button><button id="save-checkpoint" class="primary">Save checkpoint</button></div></dialog>
+<dialog id="open-dialog"><h2>Open instance view</h2><label for="contribution">View</label><select id="contribution"></select><label for="view-config">Configuration</label><textarea id="view-config" spellcheck="false">{}</textarea><label for="view-state">Initial state</label><textarea id="view-state" spellcheck="false">{}</textarea><div id="open-error" role="alert"></div><div class="actions"><button id="cancel-open">Cancel</button><button id="confirm-open" class="primary">Open view</button></div></dialog>
+<script type="module" src="main.js"></script></body></html>

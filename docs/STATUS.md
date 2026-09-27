@@ -28,8 +28,41 @@ provider selection together against its native layout version. Hidden and reused
 views keep their current state and connection. View records can carry an immutable,
 scoped resource context without gaining resource-read authority. Selected providers
 are observed explicitly after release; resolution never falls back to another
-revision. The ordinary management/Plugin Studio orchestration and browser/real-R
-scenario-switching acceptance remain active work.
+revision.
+
+The ordinary `plugins/manager` UI now assembles independently using only the public
+SDKs. Installed inspection shows purpose, exact revisions/artifacts, contributions,
+dependencies and protecting-reference counts; protected removal remains disabled.
+Branch creation, instance inspection and opening an instance's view use shared
+Host Operations. Scenario review captures a native window version, explicitly
+selects new or reused instances/views, and prepares them before atomic application.
+Partially prepared objects stay retained; a lost acknowledgement is inspected by
+its original request, including from a replacement manager. Normal asynchronous
+acceptance is observed before continuing. JSON checkpoint drafts retain invalid
+text and save independently from applying a scene. Older checkpoints remain intact.
+Narrow details replace the list, with Back preserving selection, scroll and focus.
+Async tab-title observations no longer attempt to save an old composition over a
+newly selected scenario.
+
+The manager's independent model/build checks pass, including explicit reuse,
+partial preparation, original-request recovery, fresh pre-admission refusal,
+uncertainty, layout preconditions and prototype-like native aliases. The 13 focused
+layout/state/frame cases pass. `npm run build --prefix ui`, `npm run check --prefix
+ui` and `cargo build --locked` pass. Browser acceptance through an independently
+assembled package verifies two coexisting UI revisions, unchanged iframe identity
+and unsaved Unicode text after switching back, lost-application-acknowledgement
+recovery without a second operation, branch creation, exact-instance view opening,
+invalid draft retention and immutable checkpoint parents. The complete
+`npm run test:browser --prefix ui -- manager-plugin.spec.ts plugin-workspace.spec.ts`
+run passes both cases; the manager rerun also verifies read-only navigation while
+an original request remains unresolved. Installed/scenario and instance details
+were inspected at 1440, 1920, 390 and 220 pixels, along with normal and constrained
+view-opening dialogs. Initial browser failures and corrected fixture timing remain
+under `target/plugin-refactor/manager-browser*`; the final captures wait for both
+iframe geometry and compositor painting. Import/export still use
+the CLI. Plugin Studio visual/source editing, build/preview, real-R scene continuity,
+default delivery and removal of the fixed composition remain unfinished. The
+manager is not silently installed into existing user projects.
 
 The complete 13-case package repository suite and 17 protocol cases pass, including
 concurrent head conflicts, project/principal visibility, immutable history, missing
@@ -50,8 +83,8 @@ Independent strict TypeScript consumption and standalone schema checks also pass
 `npm run generate --prefix ui`, `npm run build --prefix ui` and
 `npm run check --prefix ui` pass, as do architecture, plugin-boundary and
 documentation checks. The 34 focused window/frame/layout/close/client model cases
-and the independent UI SDK checks also pass. No browser or real-R scenario-switching
-acceptance is claimed.
+and the independent UI SDK checks also pass. Real-R scenario-switching acceptance
+has not run; the new manager browser acceptance uses ordinary UI fixtures.
 
 The initial `cargo test -p rho-plugins --test package_repository scenario_ --locked
 --offline` was interrupted with exit 130 while macOS waited to load a compiler

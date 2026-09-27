@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { PluginViewConnection, PluginViewRecord, PluginViewCloseMode } from '../../sdk/plugin-protocol/index.js';
 import { HostClient, message } from './host-client';
 import { createPluginWindowClosures, createPluginWindowState, createPluginWindowViews } from './plugin-window-client';
-import { pluginLayoutDocument, pluginLayoutModel, pluginLayoutViews, namePluginLayoutViews } from './plugin-layout';
+import { pluginLayoutDocument, pluginLayoutModel, pluginLayoutViews, namePluginLayoutViews, pluginLayoutActionChangesDocument } from './plugin-layout';
 import { PluginLayoutHost } from './plugin-layout-host';
 import { Modal } from "./primitives";
 import { mountPluginFrame } from './plugin-frame';
@@ -111,7 +111,8 @@ export function PluginWorkspace({ client, project }: { client: HostClient; proje
       </div>
     </Modal>}
     <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0 }}>
-      <PluginLayoutHost model={dock} frames={frames} close={id => void close(id)} changed={() => {
+      <PluginLayoutHost model={dock} frames={frames} close={id => void close(id)} changed={action => {
+        if (!pluginLayoutActionChangesDocument(action)) return;
         try { owners.layout.change(pluginLayoutDocument(dock)); applied.current = owners.layout.getSnapshot().layout; void owners.layout.save().catch(error => setError(message(error))); }
         catch (error) { setError(message(error)); }
       }} />

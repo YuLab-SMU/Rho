@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "checks": {
+    "plugins.manager-model": {"command": ["node", "scripts/test-manager-plugin.mjs"]},
+    "plugins.manager-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "manager-plugin.spec.ts"]},
     "plugins.process-owner": {
       "command": [
         "cargo",
@@ -927,6 +929,9 @@
         "scripts/test-r-recovery.mjs",
         "scripts/test-r-environment.mjs",
         "crates/host/tests/r_plugin_real_r.rs",
+        "scripts/build-manager-plugin.mjs",
+        "scripts/test-manager-plugin.mjs",
+        "ui/e2e/manager-plugin.spec.ts",
         "scripts/build-viewer-plugin.mjs",
         "scripts/test-viewer-plugin.mjs",
         "scripts/test-r-viewer.mjs",
@@ -1018,6 +1023,8 @@
         "plugins.r-public-recovery",
         "plugins.r-format",
         "plugins.r-environment",
+        "plugins.manager-model",
+        "plugins.manager-browser",
         "plugins.viewer",
         "plugins.r-viewer",
         "plugins.r-protocol",

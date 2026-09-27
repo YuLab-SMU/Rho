@@ -1,9 +1,15 @@
 import { expect, it } from "vitest";
 import { Actions, DockLocation, Orientation, RowNode, TabSetNode } from "flexlayout-react";
 import type { PluginWindowNode } from "../../sdk/plugin-protocol/index.js";
-import { pluginLayoutDocument, pluginLayoutModel, pluginLayoutViews } from "../src/plugin-layout";
+import { pluginLayoutDocument, pluginLayoutModel, pluginLayoutViews, pluginLayoutActionChangesDocument } from "../src/plugin-layout";
 
 const tabs = (id: string, ...views: string[]): PluginWindowNode => ({ kind: "tabs", id, selected: views[0] ?? null, views });
+it("late title observations cannot save an old composition over a selected scenario", () => {
+  expect(pluginLayoutActionChangesDocument(Actions.updateNodeAttributes('retained', { name: 'Observed title' }))).toBe(false);
+  expect(pluginLayoutActionChangesDocument(Actions.selectTab('retained'))).toBe(true);
+  expect(pluginLayoutActionChangesDocument(Actions.moveNode('retained', 'destination', DockLocation.CENTER, -1, true))).toBe(true);
+  expect(pluginLayoutActionChangesDocument(Actions.updateNodeAttributes('group', { weight: 40 }))).toBe(true);
+});
 it("round trips exact view identities, Unicode labels and empty groups without default panels", () => {
   const source: PluginWindowNode = { kind: "split", id: "root", direction: "vertical", weights: [3, 2],
     children: [tabs("top", "old-revision", "user-revision"), tabs("bottom")] };

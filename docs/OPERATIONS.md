@@ -851,6 +851,34 @@ and no disconnected backend is restarted. The CLI recovery interface still
 handles archive import/export and source snapshots; active Host build/import
 flows remain part of the ongoing Plugin Studio work.
 
+The ordinary management UI is assembled with
+`node scripts/build-manager-plugin.mjs DEST`, using a new directory outside the
+checkout and existing build tools. Snapshot/import it through the same package
+CLI, activate its exact `ui-web` artifact, and open contribution `manager` with
+configuration/state `{}` through `windows.open_view`. For an existing window,
+provide an observed tab-group ID and layout version. The manager has no private
+Host token, database access or delivery privilege; its explicit delegation scopes
+must fit the activating caller's authority.
+
+In Scenarios, Review captures the current window version. Choose an exact existing
+instance or create a new one for each alias, and choose live view state or saved
+checkpoint state for each view. Prepare creates missing instances/views and
+validates the complete mapping; Switch applies it atomically. Failed preparation
+does not release what it already prepared or replace the current composition.
+Review a new switch after an intervening layout edit. Hidden views observed by
+this manager remain reusable (up to 256 retained view identities); selecting a
+checkpoint does not implicitly recreate a missing provider or release old work.
+Saving a checkpoint advances only its expected scenario head. Edit an older
+checkpoint and save to create a new child of the observed current head.
+
+Original unresolved management requests remain visible and block a second mutation
+in that view. Inspect the original request to refresh its outcome; recovery never
+continues later preparation steps automatically. Only the original view can retry
+the same captured request. A replacement manager can inspect the original record
+but cannot reissue it under a new identity. Read-only inspection and navigation
+remain available. Package import/export and full Studio development still use
+the CLI or remain tracked implementation work; see Status.
+
 The ordinary R package exposes `r.console` for current/pending original operations,
 pause identity and `awaiting_commit`. Copy `r.session.queue_target` into the query's
 `expected_session`. Queue controls `r.pause_queue` and `r.resume_queue` take that

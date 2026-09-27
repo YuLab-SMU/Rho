@@ -1,5 +1,5 @@
 import { Actions, Model, Orientation, RowNode, TabNode, TabSetNode } from "flexlayout-react";
-import type { IJsonRowNode, IJsonTabSetNode, Node } from "flexlayout-react";
+import type { Action, IJsonRowNode, IJsonTabSetNode, Node } from "flexlayout-react";
 import type { PluginWindowNode } from "../../sdk/plugin-protocol/index.js";
 
 const generatedNodeIds = new WeakMap<Model, Map<string, string>>();
@@ -74,6 +74,13 @@ export function pluginLayoutDocument(model: Model): PluginWindowNode {
 
 export function pluginLayoutViews(layout: PluginWindowNode): string[] {
   return layout.kind === "tabs" ? [...layout.views] : layout.kind === "split" ? layout.children.flatMap(pluginLayoutViews) : [];
+}
+
+/** Async title observations are not layout edits. In particular an old dock may
+ * receive a title while a newer native scene is being presented; persisting that
+ * cosmetic notification would try to write its old composition over the scene. */
+export function pluginLayoutActionChangesDocument(action: Action): boolean {
+  return action.type !== Actions.UPDATE_NODE_ATTRIBUTES || Object.keys(action.data.json ?? {}).some(key => key !== 'name');
 }
 
 /** Names are presentation metadata; changing them never changes a view identity. */
