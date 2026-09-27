@@ -23,8 +23,8 @@ export class PluginWindowViews extends Model<ReadonlyMap<string,WindowView>> {
   private scoped(record:PluginViewRecord,id:string){
     if(!this.scope||record.view!==id||record.window!==this.scope.window||record.project!==this.scope.project||record.principal!==this.scope.principal)
       throw new Error('The view observation belongs to another window or authority.');
-    const previous=this.connections.get(id)?.view.instance,current=record.instance;
-    if(previous&&['instance','plugin','revision','artifact'].some(field=>previous[field as keyof typeof previous]!==current[field as keyof typeof current]))
+    const prior=this.connections.get(id)?.view,previous=prior?.instance,current=record.instance;
+    if(previous&&((prior?.purpose??'runtime')!==(record.purpose??'runtime')||['instance','plugin','revision','artifact'].some(field=>previous[field as keyof typeof previous]!==current[field as keyof typeof current])))
       throw new Error('The retained view changed its original plugin identity.');
   }
   observe(layout:PluginWindowLayout){

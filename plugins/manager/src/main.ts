@@ -52,7 +52,7 @@ async function refresh(more=false){
     const page=await read<PluginCatalogPage>(client,'plugins.list',{after:more?catalog.next:null,limit:100});
     catalog={...page,items:more?[...catalog.items,...page.items]:page.items};
   }else if(section==='instances'){
-    const page=await read<PluginInstanceObservations>(client,'plugins.instances',{after:more?instances.next:null,limit:100});
+    const page=await read<PluginInstanceObservations>(client,'plugins.instances',{after:more?instances.next:null,limit:100,include_previews:true});
     instances={...page,instances:more?[...instances.instances,...page.instances]:page.instances};
   }else{
     const page=await read<ScenarioPage>(client,'scenarios.list',{after:more?scenes.next:null,limit:100});
@@ -78,7 +78,7 @@ function renderList(){
     labels.append(...(section==='installed'?['PLUGIN','REVISION','REFERENCES']:['INSTANCE / REVISION','STATE','WORK']).map(label=>node('span',label)));list.append(labels);
   }
   const items=section==='installed'?catalog.items.map(p=>({id:p.revision,name:p.name,description:p.description,revision:`${p.version} · ${short(p.revision)}`,usage:`${p.reference_count} protecting references`})):
-    section==='instances'?instances.instances.map(p=>({id:p.instance.identity.instance,name:p.instance.alias,description:`${p.instance.identity.plugin} · ${short(p.instance.identity.revision)}`,revision:p.observed_in_this_host?p.instance.state.replaceAll('_',' '):'Recorded · unavailable in this Host',usage:p.retained_calls===null?'Work count unavailable':`${p.retained_calls} retained calls`})):
+    section==='instances'?instances.instances.map(p=>({id:p.instance.identity.instance,name:p.instance.alias,description:`${p.instance.purpose==='fixture_preview'?'Fixture preview · ':''}${p.instance.identity.plugin} · ${short(p.instance.identity.revision)}`,revision:p.observed_in_this_host?p.instance.state.replaceAll('_',' '):'Recorded · unavailable in this Host',usage:p.retained_calls===null?'Work count unavailable':`${p.retained_calls} retained calls`})):
     scenes.scenarios.map(p=>({id:p.revision,name:p.name,description:current?.scenario?.revision===p.revision?'Current window':`Checkpoint ${short(p.revision)}`,revision:'',usage:''}));
   for(const item of items){const row=button('',()=>select(item.id),'row'+(section==='scenarios'?' scenario-row':''),true);row.setAttribute('aria-pressed',String(manager.state.selected===item.id));const title=node('span');title.append(node('span',item.name,'name'),node('span',item.description,'sub'));row.append(title);if(section!=='scenarios')row.append(node('span',item.revision),node('span',item.usage));list.append(row);}
   if(!items.length)list.append(node('p','No items on this page.','empty'));
@@ -127,6 +127,7 @@ function renderInspection(){
 function renderInstance(){
   const p=instance!,i=p.instance,out=get('contents');out.replaceChildren(heading(i.alias,node('p',`${i.identity.plugin} · ${short(i.identity.revision)}`)));
   out.append(block('Actual instance',identity(i.identity.instance),identity(i.identity.revision),identity(i.identity.artifact)),
+    block('Purpose',node('p',i.purpose==='fixture_preview'?'Fixture preview · Backend disabled':'Runtime instance')),
     block('State',node('p',p.observed_in_this_host?i.state.replaceAll('_',' '):'Recorded instance; unavailable in this Host'),node('p',i.diagnostic??'')),
     block('Retained work',node('p',p.retained_calls===null?'No current Host observation.':`${p.retained_calls} calls; ${p.pending_messages??'unknown'} pending messages.`)),detail('Configuration',i.configuration));
   const actions=node('div','','actions');actions.append(button('Open view',()=>openInstance()));

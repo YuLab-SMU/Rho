@@ -138,6 +138,9 @@ impl PluginService {
             }
             let requested = &definition.instances[alias];
             let live = self.observe_instance(context, chosen, false)?;
+            if live.instance.purpose != PluginInstancePurpose::Runtime {
+                return Err(invalid("fixture previews cannot be applied as scenario runtime instances"));
+            }
             if !live.observed_in_this_host
                 || live.instance.state != InstanceState::Active
                 || chosen.plugin != requested.plugin

@@ -26,7 +26,7 @@ export async function readSessions(client: Client, after: string | null = null):
     const instance = observed?.instance;
     if (!instance || instance.project !== client.view.project || instance.principal !== client.view.principal || !validProvider(instance.identity) || !token(instance.alias))
       throw new Error('The session catalog contains another project or an invalid instance.');
-    if (!observed.observed_in_this_host || instance.state !== 'active') continue;
+    if (!observed.observed_in_this_host || instance.state !== 'active' || (instance.purpose??'runtime') !== 'runtime') continue;
     const identity = instance.identity;
     let inspection = inspected.get(identity.revision);
     if (!inspection) {

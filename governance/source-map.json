@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "checks": {
+    "plugins.preview-host": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_preview", "--locked"]},
+    "plugins.preview-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "plugin-preview.spec.ts"]},
     "plugins.studio-model": {"command": ["node", "scripts/test-studio-plugin.mjs"]},
     "plugins.studio-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "studio-plugin.spec.ts"]},
     "plugins.build-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "build_operations", "--locked"]},
@@ -915,6 +917,8 @@
     "plugins": {
       "sources": [
         "crates/host/tests/plugin_development.rs",
+        "crates/host/tests/plugin_preview.rs",
+        "ui/e2e/plugin-preview.spec.ts",
         "crates/plugin-protocol/**",
         "crates/plugin-sdk/**",
         "crates/process-engine/**",
@@ -1017,6 +1021,8 @@
       "checks": [
         "plugins.development-owner",
         "plugins.build-owner",
+        "plugins.preview-host",
+        "plugins.preview-browser",
         "plugins.process-engine",
         "plugins.development-host",
         "docs.index",

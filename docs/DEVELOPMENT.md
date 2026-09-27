@@ -53,6 +53,18 @@ restoration. Inspect the captured normal, wide and constrained screenshots befor
 claiming visual completion. The editing canvas does not execute plugin code;
 these checks do not establish native builds or isolated executable preview.
 
+Fixture preview uses `cargo test -p rho-host --test plugin_preview --locked` for
+exact artifact identity, no backend/project-path/grant creation, fixture-only
+query routing, write/cancel refusal, scope/sequence checks, state and credential
+lifetime, scenario exclusion and noninterference with real providers. After
+building the current client and Host, `npm run test:browser --prefix ui --
+plugin-preview.spec.ts` builds source through `plugins.build`, opens that exact
+artifact with `plugins.preview`, and checks the ordinary SDK iframe, fixture
+queries, blocked writes, Unicode, state persistence, clipboard, narrow/wide layout
+and closure. `node scripts/test-manager-plugin.mjs` checks that fixture identities
+are excluded from runtime/scenario reuse. These do not establish disposable-project
+real-backend testing or Studio's end-user build/preview workflow.
+
 Scenario application uses `cargo test -p rho-host --test plugin_scenarios --locked`.
 The fixtures construct ordinary packages outside the checkout and exercise scoped
 checkpoint/application ports, exact dependency/grant validation, delegated view

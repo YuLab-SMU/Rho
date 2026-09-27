@@ -29,7 +29,9 @@ export async function checkEditorSessions({readSessions,observeSession,EditorCon
   const calls=[],row=(identity,alias='R session')=>({instance:{identity,alias,project:'project',principal:'principal',state:'active'},observed_in_this_host:true});
   const plain={...provider,instance:'not-r',plugin:'text.tools',revision:'sha256:'+'9'.repeat(64)};
   const busy={...provider,instance:'unavailable-r'},stopped={...provider,instance:'stopped-r'};
-  const rows=[row(provider,'分析会话'),row(plain),row(busy),{...row(stopped),observed_in_this_host:false}];
+  const preview={...provider,instance:'fixture-preview-r'};
+  const rows=[row(provider,'分析会话'),row(plain),row(busy),{...row(stopped),observed_in_this_host:false},
+    {...row(preview),instance:{...row(preview).instance,purpose:'fixture_preview'}}];
   const capabilities=[{capability:{id:'r.session',version:1},kind:'query'},{capability:{id:'r.execute',version:2},kind:'operation'},{capability:{id:'r.format',version:1},kind:'operation'}];
   const client={view:{project:'project',principal:'principal'},query:async(cap,args)=>{
     calls.push(structuredClone({cap,args}));

@@ -86,6 +86,7 @@ Sources:
 - `crates/host/tests/fixtures/view_delegation.py`
 - `crates/host/tests/plugin_development.rs`
 - `crates/host/tests/plugin_optional_requirements.rs`
+- `crates/host/tests/plugin_preview.rs`
 - `crates/host/tests/plugin_self_requirements.rs`
 - `crates/host/tests/plugin_view_delegation.rs`
 - `crates/host/tests/r_plugin_real_r.rs`
@@ -172,6 +173,7 @@ Sources:
 - `ui/e2e/plots-plugin.spec.ts`
 - `ui/e2e/plugin-download.spec.ts`
 - `ui/e2e/plugin-drafts.spec.ts`
+- `ui/e2e/plugin-preview.spec.ts`
 - `ui/e2e/plugin-resource-download.spec.ts`
 - `ui/e2e/plugin-workspace.spec.ts`
 - `ui/e2e/r-plugin-console.spec.ts`
@@ -231,6 +233,8 @@ Checks:
 - `plugins.packages-browser`: `["npm","run","test:browser","--prefix","ui","--","packages-plugin.spec.ts"]`
 - `plugins.plots`: `["node","scripts/test-plots-plugin.mjs"]`
 - `plugins.plots-browser`: `["npm","run","test:browser","--prefix","ui","--","plots-plugin.spec.ts"]`
+- `plugins.preview-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-preview.spec.ts"]`
+- `plugins.preview-host`: `["cargo","test","-p","rho-host","--test","plugin_preview","--locked"]`
 - `plugins.process-backend`: `["cargo","test","-p","rho-process-backend","--lib","--locked"]`
 - `plugins.process-engine`: `["cargo","test","-p","rho-process-engine","--locked"]`
 - `plugins.process-independent`: `["node","scripts/test-process-plugin-owner.mjs"]`

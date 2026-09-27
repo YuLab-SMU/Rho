@@ -7,13 +7,17 @@ import {buildManagerPlugin} from './build-manager-plugin.mjs';
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'rho-manager-model-'));
 try {
   const plugin=buildManagerPlugin(path.join(dir,'manager'));
-  const {Manager,checkpointInput}=await import(pathToFileURL(path.join(plugin,'dist/src/model.js')));
+  const {Manager,checkpointInput,matches,viewMatches}=await import(pathToFileURL(path.join(plugin,'dist/src/model.js')));
   const {operationRequestId,ViewRequestError}=await import(pathToFileURL(path.join(plugin,'dist/public/plugin-ui/index.js')));
   const digest=n=>'sha256:'+n.repeat(64),identity={instance:'instance',plugin:'example.plugin',revision:digest('a'),artifact:digest('b')};
-  const observed={instance:{identity,configuration:{},state:'active',alias:'example'},observed_in_this_host:true};
+  const observed={instance:{identity,purpose:'runtime',configuration:{},state:'active',alias:'example'},observed_in_this_host:true};
   const definition={id:digest('c'),parent:null,scenario:'example',project:'project',name:'Example',instances:{example:{plugin:identity.plugin,revision:identity.revision,artifact:identity.artifact,configuration:{},dependencies:{}}},providers:[],
     layout:{kind:'tabs',id:'group',selected:'saved',views:[{id:'saved',instance:'example',contribution:'view',configuration:{},state:{text:'checkpoint'},state_revision:identity.revision,resource:null}]}};
-  const live={view:'live',instance:identity,window:'window',contribution:'view',configuration:{},state:{text:'new unsaved text'},closed:false};
+  const live={view:'live',purpose:'runtime',instance:identity,window:'window',contribution:'view',configuration:{},state:{text:'new unsaved text'},closed:false};
+  assert.equal(matches({...observed,instance:{...observed.instance,purpose:'fixture_preview'}},definition.instances.example),false,'a preview cannot satisfy a runtime selection');
+  assert.equal(viewMatches({...live,purpose:'fixture_preview'},definition.layout.views[0],identity,'window'),false,'a preview cannot satisfy a scenario view');
+  assert.equal(matches({...observed,instance:{...observed.instance,purpose:undefined}},definition.instances.example),true,'normal runtime messages omit the marker');
+  assert.equal(viewMatches({...live,purpose:undefined},definition.layout.views[0],identity,'window'),true);
   const inspection={summary:{plugin:identity.plugin},artifacts:[{id:identity.artifact,target:'ui-web'}]};
   let saved=null,records=[],calls=[],fault=null,saveFault=false;
   const client={view:{view:'manager',window:'window'},setState:async value=>{if(saveFault)throw Error('state acknowledgement lost');saved=structuredClone(value);},

@@ -422,6 +422,7 @@ mod tests {
                     }
                     "plugins.instance" => json!(PluginInstanceObservation {
                         instance: PluginInstance {
+                            purpose: rho_plugin_sdk::protocol::PluginInstancePurpose::Runtime,
                             identity: call.binding.provider.clone(),
                             project: call.binding.project.clone(),
                             principal: call.principal.clone(),

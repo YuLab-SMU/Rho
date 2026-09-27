@@ -14,6 +14,7 @@ pub(crate) struct LiveView {
     sequence: u32,
     pub(crate) renderers: BTreeSet<RequestId>,
     pub(crate) closing: Option<crate::view_close::CloseAttempt>,
+    pub(crate) fixtures: Vec<PluginPreviewQuery>,
 }
 pub struct PluginViewAsset {
     pub bytes: Vec<u8>,
@@ -167,12 +168,15 @@ impl PluginService {
     ) -> Result<(PluginViewRecord, Option<PluginWindowLayout>), OperationError> {
         let contribution = self.prepare_view(context, &args)?;
         let grants = self.runtime.view_grants(&args.instance).map_err(error)?;
+        let purpose = self.observe_instance(context, &args.instance, false)?.instance.purpose;
+        let fixtures = self.runtime.view_fixtures(&args.instance).map_err(error)?;
         let mut views = self.views.lock().unwrap();
         if views.len() >= MAX_OPEN_VIEWS {
             return Err(invalid("open view quota reached"));
         }
         let mut repo = self.repository.lock().unwrap();
         let record = PluginViewRecord {
+            purpose,
             view: id,
             instance: args.instance,
             project: self.project.clone(),
@@ -261,6 +265,7 @@ impl PluginService {
                 sequence: 0,
                 renderers: BTreeSet::new(),
                 closing: None,
+                fixtures,
             },
         );
         Ok((record, layout))
@@ -516,16 +521,25 @@ impl PluginService {
             if !active && !crate::draft_service::view_persistence_capability(&cap.id, cap.version) {
                 return Err(invalid("view instance is no longer accepting calls"));
             }
-            let grant = live
-                .connection
-                .grants
-                .iter()
-                .find(|g| {
-                    g.capability.id.as_str() == cap.id
-                        && g.capability.version == u32::from(cap.version)
-                })
-                .ok_or_else(|| invalid("capability is not granted to this view"))?;
-            context.scopes = grant.scopes.clone();
+            if live.connection.view.purpose == PluginInstancePurpose::FixturePreview {
+                if !parent.scopes.contains(PLUGINS_RUN_SCOPE) {
+                    return Err(OperationError::AccessDenied { capability: "fixture_preview".into(), missing: vec![PLUGINS_RUN_SCOPE.into()] });
+                }
+                // This channel carries fixture data only. No declared capability
+                // becomes an actual Host grant, even if the parent has authority.
+                context.scopes.clear();
+            } else {
+                let grant = live
+                    .connection
+                    .grants
+                    .iter()
+                    .find(|g| {
+                        g.capability.id.as_str() == cap.id
+                            && g.capability.version == u32::from(cap.version)
+                    })
+                    .ok_or_else(|| invalid("capability is not granted to this view"))?;
+                context.scopes = grant.scopes.clone();
+            }
         }
         context.scopes = context
             .scopes

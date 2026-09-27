@@ -367,6 +367,7 @@ mod tests {
         window: &WindowId,
     ) -> ViewInstanceId {
         let record = PluginViewRecord {
+            purpose: PluginInstancePurpose::Runtime,
             view: ViewInstanceId::new(id).unwrap(),
             instance: InstanceRef {
                 instance: PluginInstanceId::new("instance").unwrap(),

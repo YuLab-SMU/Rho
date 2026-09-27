@@ -103,6 +103,7 @@ pub(crate) fn register(
         "scenarios.checkpoint",
         "scenarios.apply",
         "plugins.activate",
+        "plugins.preview",
         "plugins.release",
         "plugins.remove",
         "plugins.branch",
@@ -121,6 +122,11 @@ pub(crate) fn register(
 }
 fn descriptor(id: &str) -> host::CapabilityDescriptor {
     let (input, output, example, summary, operation, scope) = match id {
+        "plugins.preview" => (
+            schema_for!(PreviewPlugin).to_value(), schema_for!(PluginInstanceObservation).to_value(),
+            json!({"revision":digest(),"artifact":digest(),"alias":"preview","configuration":{},"queries":[]}),
+            "Create an isolated fixture presentation instance without starting a backend or granting Host capabilities", true, PLUGINS_RUN_SCOPE,
+        ),
         "scenarios.prepare" | "scenarios.apply" => (
             schema_for!(ApplyScenario).to_value(), schema_for!(WindowScenarioSnapshot).to_value(),
             json!({"window":"window-example","revision":digest(),"expected_layout_version":0,"instances":{},"views":{}}),
@@ -341,7 +347,7 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
     };
     let mut descriptor = host::CapabilityDescriptor {
         kind:if operation {host::CapabilityKind::Operation}else{host::CapabilityKind::Query},capability:key(id),domain:"plugins".into(),input_schema:input,output_schema:output,recovery_schema:json!({"type":["object","null"]}),
-        required_scopes:BTreeSet::from([scope.into()]),potential_effects:match id {"plugins.activate"=>BTreeSet::from([host::EffectHint::MaySpawnProcess,host::EffectHint::MayMutateRuntime]),"plugins.release"|"plugins.reconcile_references"=>BTreeSet::from([host::EffectHint::MayMutateRuntime]),_=>BTreeSet::new()},
+        required_scopes:BTreeSet::from([scope.into()]),potential_effects:match id {"plugins.activate"=>BTreeSet::from([host::EffectHint::MaySpawnProcess,host::EffectHint::MayMutateRuntime]),"plugins.preview"|"plugins.release"|"plugins.reconcile_references"=>BTreeSet::from([host::EffectHint::MayMutateRuntime]),_=>BTreeSet::new()},
         idempotency:if operation {host::IdempotencyClass::CallerScoped}else{host::IdempotencyClass::Pure},retry:if operation {host::RetryClass::ReconcileFirst}else{host::RetryClass::Safe},cancellation:host::CancellationClass::Unsupported,
         documentation:host::CapabilityDocumentation {
             summary:summary.into(),purpose:summary.into(),when_to_use:vec!["Manage or observe ordinary installed packages through the shared Host ports.".into()],
@@ -380,6 +386,17 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
         descriptor.required_scopes.insert("project.references.read".into());
         descriptor.documentation.limitations = vec!["Returns only whether all recorded project instances are visible to this principal. It includes preparing, failed, released and historical instances; it exposes no foreign identities, counts, configuration or logs.".into(), "This is current visibility metadata, not a lease or native-process proof. Read owner-specific references separately; incomplete or unavailable coverage cannot establish absence. No provider is started, reconnected or recovered.".into()];
         descriptor.documentation.related_capabilities = vec![key("plugins.instances"),key("operation.project_coverage")];
+    }
+    if id == "plugins.instances" {
+        descriptor.documentation.limitations.push("Runtime discovery excludes fixture previews by default, preserving normal protocol-v1 instance replies. Management tools may explicitly set include_previews:true for a complete lifecycle listing; its pagination and total cover that selected set.".into());
+    }
+    if id == "plugins.preview" {
+        descriptor.documentation.limitations = vec![
+            "Runs the exact retained artifact's view code with no backend, project path, provider registration or Host grant. Optional and required query fixtures are exact argument matches; a miss never falls through to real queries.".into(),
+            "At most 128 fixtures and 256 KiB per preview request. Only view state, close cooperation and explicit text copy use real presentation owners. Other operations, cancellation, resource downloads and external navigation are denied.".into(),
+            "Open views through views.open or windows.open_view, close them and release the preview explicitly. A preview cannot satisfy a scenario runtime instance. Restart does not silently recreate its connection or fixtures.".into(),
+        ];
+        descriptor.documentation.related_capabilities = vec![key("plugins.build"),key("views.open"),key("windows.open_view"),key("plugins.release")];
     }
     if id == "plugins.activate" {
         descriptor.documentation.limitations.push("Optional capabilities must be declared by this exact manifest and explicitly selected in optional_capabilities. Selection cannot enlarge declared scopes or caller authority; it does not install or start another provider. The selected grants stay fixed for this instance and its views.".into());
@@ -458,6 +475,7 @@ fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
         "views.inspect" | "views.connection" => normalize::<PluginViewArguments>(value),
         "views.close" => normalize::<ClosePluginView>(value),
         "views.open" => normalize::<OpenPluginView>(value),
+        "plugins.preview" => normalize::<PreviewPlugin>(value),
         "views.update" => normalize::<UpdatePluginView>(value),
         "windows.layout" => normalize::<PluginWindowArguments>(value),
         "windows.update_layout" => normalize::<UpdatePluginWindowLayout>(value),
@@ -588,10 +606,11 @@ impl QueryHandler for Read {
                     .repository
                     .lock()
                     .unwrap()
-                    .recorded_instances_scoped(
+                    .recorded_instances_filtered(
                         args.after.as_ref(),
                         args.limit as usize,
                         Some((&service.project, &principal)),
+                        args.include_previews,
                     )
                     .map_err(error)?;
                 let instances = page
@@ -730,6 +749,12 @@ impl OperationHandler for Manage {
             identity: self.service.scope.clone(),
         };
         match self.id {
+            "plugins.preview" => {
+                let args: PreviewPlugin = decode(value)?;
+                self.service.prepare_preview(&args)?;
+                revision = Some(args.revision);
+                target = host::TargetRef { kind: "plugin_instance".into(), identity: format!("plugin-{}", uuid::Uuid::new_v4().simple()) };
+            }
             "scenarios.apply" => {
                 let args: ApplyScenario = decode(value)?;
                 self.service.prepare_scenario_application(context, &args)?;
@@ -837,6 +862,7 @@ impl OperationHandler for Manage {
                     .observe_instance(context, &args.instance, false)?;
                 if !observation.observed_in_this_host
                     && observation.instance.state != InstanceState::Released
+                    && observation.instance.purpose != PluginInstancePurpose::FixturePreview
                     && self.service.repository.lock().unwrap().revision(&args.instance.revision).map_err(error)?.manifest.backend.is_some()
                 {
                     return Err(error(
@@ -974,6 +1000,18 @@ impl Manage {
         let value = &operation.normalized_arguments;
         let service = &self.service;
         match self.id {
+            "plugins.preview" => {
+                let args: PreviewPlugin = decode(value)?;
+                let _guard = service.gate.lock().await;
+                let target = service.prepare_preview(&args)?;
+                let instance = service.runtime.preview_identified(PluginActivation {
+                    revision: args.revision, artifact: args.artifact, target,
+                    project: service.project.clone(), project_root: None,
+                    principal: plugin_principal_id(bound.context.principal()), alias: args.alias,
+                    configuration: args.configuration, grants: vec![],
+                }, PluginInstanceId::new(&bound.target.identity).map_err(error)?, args.queries).await.map_err(error)?;
+                Ok(json!(service.observe_instance(&bound.context, &instance.identity, false)?))
+            }
             "scenarios.apply" => {
                 let _guard = service.gate.lock().await;
                 Ok(json!(service.apply_scenario(&bound.context, &decode(value)?)?))
@@ -1066,7 +1104,7 @@ impl Manage {
                 if !observation.observed_in_this_host {
                     let mut repo=service.repository.lock().unwrap();
                     let manifest=repo.revision(&args.instance.revision).map_err(error)?.manifest;
-                    if manifest.backend.is_none() {
+                    if observation.instance.purpose == PluginInstancePurpose::FixturePreview || manifest.backend.is_none() {
                         let references=repo.references(&args.instance.revision).map_err(error)?;
                         let view_prefix=format!("view:{}:",args.instance.instance);
                         let operation_prefix=format!("operation:{}:",args.instance.instance);

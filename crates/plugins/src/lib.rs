@@ -15,6 +15,7 @@ pub use resources::*;
 #[cfg(unix)]
 mod resource_channel;
 mod views;
+mod preview;
 mod view_close;
 mod window_layout;
 mod scenarios;

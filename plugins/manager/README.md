@@ -9,6 +9,9 @@ dependencies, requested scopes and protecting-reference counts. Branch creation
 and removal use journaled operations. Instances distinguish a current Host
 observation from a stored historical record; release remains explicit. Views
 can be opened with explicit configuration and initial state.
+The instance list explicitly includes fixture previews, labels their disabled
+backend, and permits ordinary view closure/release. Previews never qualify as
+runtime instances or reusable scenario views.
 
 Scenarios are paged, immutable checkpoints. A retained JSON draft can edit exact
 definitions, including aliases, provider bindings, resource context and layout.

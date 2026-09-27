@@ -77,7 +77,7 @@ async function context(){
   const selected=current.scenario?Object.entries(current.scenario.instances).filter(([,instance])=>instance.plugin===studio.plugin):[];
   get('scenario').textContent=current.scenario?`Scenario / ${selected.length?selected.map(([alias,instance])=>`${alias}: ${short(instance.revision)}`).join(', '):'plugin not selected'}`:'Scenario / none selected';
   const instances=await read<PluginInstanceObservations>(client,'plugins.instances',{after:null,limit:100});
-  const matching=instances.instances.filter(i=>i.instance.identity.plugin===studio.plugin);
+  const matching=instances.instances.filter(i=>i.instance.identity.plugin===studio.plugin&&(i.instance.purpose??'runtime')==='runtime');
   get('running').textContent=studio.plugin?`Running / ${matching.length?matching.map(i=>`${short(i.instance.identity.revision)} · ${i.instance.state}${i.observed_in_this_host?'':' · retained record'}`).join(', '):'none in observed page'}${instances.next?' · partial page':''}`:'Running / choose a plugin';
 }
 async function listRevisions(more=false){

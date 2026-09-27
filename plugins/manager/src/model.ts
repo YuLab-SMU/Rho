@@ -35,11 +35,11 @@ export function checkpointInput(value: unknown): JsonValue {
 }
 export function matches(instance: PluginInstanceObservation, wanted: ScenarioRevision['instances'][string]) {
   const found = instance.instance;
-  return instance.observed_in_this_host && found.state === 'active' && found.identity.plugin === wanted.plugin &&
+  return instance.observed_in_this_host && (found.purpose??'runtime') === 'runtime' && found.state === 'active' && found.identity.plugin === wanted.plugin &&
     found.identity.revision === wanted.revision && found.identity.artifact === wanted.artifact && same(found.configuration, wanted.configuration);
 }
 export function viewMatches(view: PluginViewRecord, wanted: ScenarioView, instance: InstanceRef, window: string) {
-  return !view.closed && view.window === window && same(view.instance, instance) && view.contribution === wanted.contribution &&
+  return !view.closed && (view.purpose??'runtime') === 'runtime' && view.window === window && same(view.instance, instance) && view.contribution === wanted.contribution &&
     same(view.configuration, wanted.configuration) && same(view.resource ?? null, wanted.resource);
 }
 export async function read<T>(client: Client, id: string, args: unknown): Promise<T> {

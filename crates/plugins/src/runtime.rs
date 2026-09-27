@@ -101,6 +101,7 @@ struct Entry {
     grants: Vec<CapabilityRequirement>,
     state: SharedBackendState,
     process: OnceLock<backend::ProcessClient>,
+    fixtures: Vec<PluginPreviewQuery>,
 }
 
 /// The registry publishes every contribution of an instance in one lock only
@@ -140,7 +141,17 @@ impl PluginRuntime {
 
     /// Host publication stages readiness before exposing any new invocation route.
     pub async fn activate_identified(&self, request: PluginActivation, identity: PluginInstanceId, publish: bool) -> Result<PluginInstance, PluginError> {
-        let mut prepared = PreparedInstance::new(&self.repository, request, identity)?;
+        self.activate_purpose(request, identity, publish, PluginInstancePurpose::Runtime, vec![]).await
+    }
+
+    pub(crate) async fn preview_identified(&self, request: PluginActivation, identity: PluginInstanceId,
+        fixtures: Vec<PluginPreviewQuery>) -> Result<PluginInstance, PluginError> {
+        self.activate_purpose(request, identity, false, PluginInstancePurpose::FixturePreview, fixtures).await
+    }
+
+    async fn activate_purpose(&self, request: PluginActivation, identity: PluginInstanceId, publish: bool,
+        purpose: PluginInstancePurpose, fixtures: Vec<PluginPreviewQuery>) -> Result<PluginInstance, PluginError> {
+        let mut prepared = PreparedInstance::new(&self.repository, request, identity, purpose)?;
         prepared.lifecycle = Some(self.lifecycle.clone());
         let identity = prepared.record.identity.clone();
         // Failure before readiness has no published registrations. The prepared
@@ -159,6 +170,7 @@ impl PluginRuntime {
             grants: prepared.grants.clone(),
             state: state.clone(),
             process: OnceLock::new(),
+            fixtures,
         });
         {
             let mut entries = self.entries.lock().unwrap();
@@ -197,7 +209,7 @@ impl PluginRuntime {
             state: state.clone(),
             repository: self.repository.clone(),
         };
-        if prepared.manifest.backend.is_none() {
+        if purpose == PluginInstancePurpose::FixturePreview || prepared.manifest.backend.is_none() {
             // UI-only instances own the same durable identity and revision lease.
             // They never spawn a process merely to publish view contributions.
             prepared.retain_after_drop = true;
@@ -239,7 +251,7 @@ impl PluginRuntime {
             let entries = self.entries.lock().unwrap();
             let compatible = entries.values().all(|other| {
                 let state = other.state.lock().unwrap();
-                !matches!(
+                state.record.purpose == PluginInstancePurpose::FixturePreview || !matches!(
                     state.record.state,
                     InstanceState::Active | InstanceState::Draining
                 ) || compatible_contracts(&entry.manifest, &other.manifest)
@@ -282,6 +294,14 @@ impl PluginRuntime {
             "view requires the exact active instance")?;
         Ok(entry.grants.clone())
     }
+    pub(crate) fn view_fixtures(&self, identity: &InstanceRef) -> Result<Vec<PluginPreviewQuery>, PluginError> {
+        let entries = self.entries.lock().unwrap();
+        let entry = entries.get(&identity.instance).ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?;
+        let state = entry.state.lock().unwrap();
+        ensure(state.record.identity == *identity && state.record.state == InstanceState::Active,
+            "view requires the exact active instance")?;
+        Ok(entry.fixtures.clone())
+    }
     /// Bounded observations do not create processes, reconnect, or recover work.
     pub fn observe(&self) -> Vec<BackendObservation> {
         self.entries
@@ -308,7 +328,7 @@ impl PluginRuntime {
         let mut capabilities = BTreeMap::new();
         for entry in self.entries.lock().unwrap().values() {
             let state = entry.state.lock().unwrap();
-            if &state.record.project == project && matches!(state.record.state, InstanceState::Active | InstanceState::Draining)
+            if state.record.purpose == PluginInstancePurpose::Runtime && &state.record.project == project && matches!(state.record.state, InstanceState::Active | InstanceState::Draining)
                 && (entry.published.load(Ordering::Acquire) || pending == Some(&state.record.identity)) {
                 for contribution in &entry.manifest.capabilities {
                     // A draining owner must remain observable and able to answer
@@ -326,6 +346,7 @@ impl PluginRuntime {
         let entries = self.entries.lock().unwrap();
         let entry = entries.get(&identity.instance).ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?;
         let state = entry.state.lock().unwrap();
+        ensure(state.record.purpose == PluginInstancePurpose::Runtime, "fixture previews cannot publish providers")?;
         ensure(state.record.identity == *identity && state.record.state == InstanceState::Active, "ready instance ended before Host publication")?;
         entry.published.store(true, Ordering::Release);
         Ok(())
@@ -346,6 +367,7 @@ impl PluginRuntime {
             let state = entry.state.lock().unwrap();
             ensure(state.record.identity == *identity && &state.record.project == project
                 && &state.record.principal == principal && state.record.state == InstanceState::Active
+                && state.record.purpose == PluginInstancePurpose::Runtime
                 && entry.published.load(Ordering::Acquire), "scenario instance is not Ready in this scope")?;
             guards.push(state);
         }
@@ -402,7 +424,7 @@ impl PluginRuntime {
         let entries = self.entries.lock().unwrap();
         let mut candidates = entries.values().filter(|entry| {
             let state = entry.state.lock().unwrap();
-            (state.record.state == InstanceState::Active
+            state.record.purpose == PluginInstancePurpose::Runtime && (state.record.state == InstanceState::Active
                 || (state.record.state == InstanceState::Draining && selected.is_some()
                     && entry.manifest.capabilities.iter().any(|cap| &cap.capability == capability
                         && matches!(cap.kind, CapabilityKind::Query | CapabilityKind::Control))))
@@ -491,7 +513,7 @@ impl PluginRuntime {
         if let Some(process) = entry.process.get() {
             process.release().await
         } else {
-            ensure(entry.manifest.backend.is_none(), "backend release is unconfirmed")?;
+            ensure(entry.state.lock().unwrap().record.purpose == PluginInstancePurpose::FixturePreview || entry.manifest.backend.is_none(), "backend release is unconfirmed")?;
             let mut state = entry.state.lock().unwrap();
             state.record.state = InstanceState::Released;
             self.repository.lock().unwrap().record_instance(&state.record)?;
@@ -726,6 +748,7 @@ impl PreparedInstance {
         repository: &Arc<Mutex<PluginRepository>>,
         request: PluginActivation,
         identity: PluginInstanceId,
+        purpose: PluginInstancePurpose,
     ) -> Result<Self, PluginError> {
         let mut repo = repository.lock().unwrap();
         let archive = repo.export(&request.revision)?;
@@ -745,8 +768,9 @@ impl PreparedInstance {
             &request.configuration,
             "configuration",
         )?;
-        manifest.validate_activation_grants(&request.grants)?;
-        for dependency in manifest.dependencies.values() {
+        if purpose == PluginInstancePurpose::Runtime { manifest.validate_activation_grants(&request.grants)?; }
+        else { ensure(request.grants.is_empty() && request.project_root.is_none(), "fixture preview cannot receive Host grants or a project path")?; }
+        for dependency in manifest.dependencies.values().filter(|_| purpose == PluginInstancePurpose::Runtime) {
             ensure(
                 repo.revision(&dependency.revision)?.manifest.id == dependency.plugin,
                 "dependency identity mismatch",
@@ -755,7 +779,7 @@ impl PreparedInstance {
         let directory = tempfile::Builder::new()
             .prefix("rho-plugin-instance-")
             .tempdir()?;
-        for (path, file) in &artifact.files {
+        for (path, file) in artifact.files.iter().filter(|_| purpose == PluginInstancePurpose::Runtime) {
             let destination = directory.path().join(path.as_str());
             fs::create_dir_all(destination.parent().unwrap())?;
             let bytes = STANDARD
@@ -777,8 +801,9 @@ impl PreparedInstance {
                 }))?;
             }
         }
-        let executable = manifest.backend.as_ref().map(|backend| directory.path().join(backend.executable.as_str()));
+        let executable = manifest.backend.as_ref().filter(|_| purpose == PluginInstancePurpose::Runtime).map(|backend| directory.path().join(backend.executable.as_str()));
         let record = PluginInstance {
+            purpose,
             identity: InstanceRef {
                 instance: identity,
                 plugin: manifest.id.clone(),

@@ -3,6 +3,8 @@
 
 mod build;
 pub use build::*;
+mod preview;
+pub use preview::*;
 mod process;
 pub use process::*;
 mod identity;

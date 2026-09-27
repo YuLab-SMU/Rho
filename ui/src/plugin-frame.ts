@@ -14,11 +14,21 @@ function bounded(value: unknown) {
 export function mountPluginFrame(container: HTMLElement, client: HostClient, project: string, connection: PluginViewConnection,
   failed: (error: string) => void): () => void {
   const iframe = document.createElement("iframe");
+  const surface = document.createElement("div");
+  surface.style.cssText = "display:flex;flex-direction:column;width:100%;height:100%;min-width:0;min-height:0";
+  if (connection.view.purpose === "fixture_preview") {
+    const notice = document.createElement("div");
+    notice.setAttribute("role", "note");
+    notice.dataset.pluginPreview = "fixture";
+    notice.textContent = "Fixture preview · Scientific writes disabled";
+    notice.style.cssText = "flex:none;padding:6px 12px;font:14px/20px var(--font-ui,system-ui);color:var(--color-success,#25775b);background:var(--color-subtle,#f8fafc);border-bottom:1px solid var(--color-border,#dde3ec);overflow-wrap:anywhere";
+    surface.append(notice);
+  }
   iframe.title = connection.view.contribution;
   iframe.setAttribute("sandbox", "allow-scripts");
   iframe.setAttribute("referrerpolicy", "no-referrer");
   iframe.setAttribute("allow", "clipboard-read 'none'; clipboard-write 'none'; camera 'none'; microphone 'none'; geolocation 'none'");
-  iframe.style.cssText = "width:100%;height:100%;border:0;display:block;background:white";
+  iframe.style.cssText = "flex:1;min-height:0;width:100%;height:0;border:0;display:block;background:white";
   const nonce = crypto.randomUUID();
   const assetPath = connection.entrypoint.split("/").map(encodeURIComponent).join("/");
   iframe.src = `/view/plugin/${encodeURIComponent(connection.connection)}/${encodeURIComponent(connection.asset_token)}/${assetPath}#rho-view-nonce=${nonce}`;
@@ -46,7 +56,7 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
       if ((final as { authorized_view?: string })?.authorized_view !== connection.view.view)
         throw new Error("The Host did not validate the original download request.");
     });
-  const dispose = () => { disposed = true; downloads.dispose(); clipboard.dispose(); window.removeEventListener("message", ready); channel.port1.close(); channel.port2.close(); iframe.remove(); };
+  const dispose = () => { disposed = true; downloads.dispose(); clipboard.dispose(); window.removeEventListener("message", ready); channel.port1.close(); channel.port2.close(); surface.remove(); };
   const fence = (reason: string) => { if (!disposed) { dispose(); failed(reason); } };
   channel.port1.onmessageerror = () => fence("The view sent an invalid message.");
   channel.port1.onmessage = event => {
@@ -131,6 +141,7 @@ export function mountPluginFrame(container: HTMLElement, client: HostClient, pro
       connection: connection.connection, view: connection.view, features: ["view_close_v1", "external_links_v1", "resource_download_v1", ...(clipboardAvailable ? ["text_copy_v1"] : [])] }, "*", [channel.port2]);
   };
   window.addEventListener("message", ready);
-  container.append(iframe);
+  surface.append(iframe);
+  container.append(surface);
   return dispose;
 }

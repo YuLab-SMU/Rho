@@ -42,6 +42,10 @@ pub enum InstanceState {
 #[serde(deny_unknown_fields)]
 pub struct PluginInstance {
     pub identity: InstanceRef,
+    /// Omitted for normal runtime instances, preserving native initialization.
+    #[serde(default, skip_serializing_if = "PluginInstancePurpose::is_runtime")]
+    #[ts(as = "Option<_>", optional)]
+    pub purpose: PluginInstancePurpose,
     pub project: ProjectId,
     pub principal: PrincipalId,
     pub alias: InstanceAlias,

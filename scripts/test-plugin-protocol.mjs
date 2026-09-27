@@ -18,7 +18,15 @@ import type { ActivatePlugin, WorkspacePaths, PluginManifest, RpcFrame, VisualDo
 import type {ProjectReadCoverage,ProjectReadCoverageArguments} from "../protocol/index.js";
 import type { SaveScenario, ScenarioPage, ScenarioRevisionArguments, ApplyScenario, WindowScenarioSnapshot, ResolveWindowProvider } from "../protocol/index.js";
 import type { ListPluginSource, PluginSourcePage, ReadPluginSource, PluginSourceChunk, ListPluginBranches, PluginBranchPage, CheckpointPlugin, PluginCheckpoint } from "../protocol/index.js";
-import type { BuildPlugin, PluginBuildResult, ProcessReport } from "../protocol/index.js";
+import type { BuildPlugin, PluginBuildResult, ProcessReport, PreviewPlugin, PluginInstancePurpose, PluginInstancesArguments } from "../protocol/index.js";
+const runtimeDiscovery: PluginInstancesArguments = { after: null, limit: 20 };
+const completeDiscovery: PluginInstancesArguments = { ...runtimeDiscovery, include_previews: true };
+void [runtimeDiscovery, completeDiscovery];
+const previewArtifact: PreviewPlugin = { revision: "revision", artifact: "artifact", alias: "preview", configuration: {}, queries: [{capability:{id:"data.read",version:1},arguments:{},data:{rows:[]}}] };
+const fixturePurpose: PluginInstancePurpose = "fixture_preview";
+// @ts-expect-error Fixture preview never accepts native paths or lifecycle grants.
+const forgedPreview: PreviewPlugin = { ...previewArtifact, project_root: "/current-project" };
+void [previewArtifact, fixturePurpose, forgedPreview];
 const buildRequest: BuildPlugin = { revision: "revision", timeout_ms: 120000 };
 function buildEvidence(result: PluginBuildResult): ProcessReport { return result.process; }
 // @ts-expect-error A build names immutable source, never an activated instance.
@@ -107,6 +115,10 @@ export function inspect(manifest: PluginManifest, visual: VisualDocument, page: 
     };
     visit(schema);
   }
+  const previewSchema = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/preview-plugin.json"), "utf8"));
+  assert.equal(previewSchema.additionalProperties, false);
+  assert.equal(previewSchema.properties.queries.maxItems, 128);
+  assert.deepEqual(previewSchema.required, ["revision", "artifact", "alias", "configuration", "queries"]);
   const sourceRead = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/read-plugin-source.json"), "utf8"));
   assert.equal(sourceRead.additionalProperties, false);
   assert.equal(sourceRead.properties.limit.minimum, 1);

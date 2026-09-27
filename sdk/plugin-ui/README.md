@@ -80,6 +80,16 @@ instead of returning newer content. Even empty content crosses authorized reads.
 This is synchronized current content, not historical execution evidence or a
 filesystem-save receipt. Ship the emitted `drafts.js` with the other SDK modules.
 
+`client.view.purpose === "fixture_preview"`
+identifies an executable fixture preview; the containing shell also labels it
+outside the iframe. Queries use only explicitly supplied fixture data and never
+fall through to real project reads. Invocations, controls, operation access,
+resource downloads and external links are disabled. Self `setState`, close
+cooperation and explicit `copyText` retain their normal presentation behavior.
+Preview creates no backend process or provider registration. It does not emulate
+successful scientific Operations. Use explicit disposable-project testing for a
+real backend.
+
 The container creates one opaque-origin iframe and transfers one private
 MessagePort to that exact document. The SDK checks the parent, document nonce,
 connection/view identity, request correlation, ordering and a 1 MiB message quota.

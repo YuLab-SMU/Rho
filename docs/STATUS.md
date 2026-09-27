@@ -38,10 +38,48 @@ executed commands and the corrected initial failures: the first supervisor comma
 was refused by `--locked` before compilation, and the first owner compile found an
 incorrect documentation-field type. No external dependency versions changed.
 
-Studio build controls and isolated executable preview remain outstanding. A fresh
-Host build is required before their browser acceptance; the user's running Host
-and R sessions have not been restarted. Full native package assemblies, real-R
-scene acceptance and the full-workspace audit were not rerun in this build phase.
+The native `plugins.preview` port now opens an exact built artifact as a fixture
+presentation instance. It starts no backend, receives no native project path or
+Host grants, and publishes no providers. Queries match captured fixture arguments;
+missing fixtures remain unavailable. Scientific operations, controls, original
+operation inspection/cancellation, resource downloads and external links are
+refused. View state, close cooperation and explicit text copy reuse the ordinary
+presentation owners. The shell labels preview mode outside the isolated iframe.
+Preview cannot satisfy a scenario runtime or interfere with a real provider.
+
+Runtime discovery excludes previews by default; normal instance and initialization
+records retain their existing wire shape. Management explicitly includes previews
+with consistent counts and pagination. Editor, Studio and Environment readers
+also distinguish fixture instances from scientific runtimes. Preview uses normal
+revision retention, scoped identity, view closure and explicit instance release;
+restarting a Host does not reconstruct preview connections or fixtures.
+
+The five native preview cases pass (`preview-host-discovery.log`), covering
+artifact identity, fixture routing, refused writes, credential/sequence boundaries,
+parent authority, provider/scenario exclusion, scoped discovery and pagination.
+The prior affected Host run passed those five plus 11 scenario, self-grant, view
+and shared-port cases (`preview-host-final.log`). The ten public contract cases
+pass (`preview-contract.log`), including unchanged normal wire records. Public
+protocol generation, independent protocol/UI SDK consumption, Manager, Editor
+and Studio model checks pass. The two affected client unit files pass six cases
+(`preview-client-tests.log`). Environment's reference scan passes one case and R
+recovery passes three (`preview-environment-references.log`, `preview-r-records.log`).
+The current `cargo build --locked --offline` and final client check pass
+(`preview-host-build.log`, `preview-client-check-banner.log`). The isolated Chrome
+command `npm run test:browser --prefix ui -- plugin-preview.spec.ts
+plugin-view.spec.ts --output ../target/plugin-refactor/preview-browser-v1` passes
+both cases (`preview-browser-v1.log`). It builds real source, exercises exact
+fixtures and denied writes, preserves Unicode and state through refresh, copies
+explicit text, closes/revokes assets and releases the instance. Preview captures
+at 1440/1920/390/220 px and three normal-view/close-refusal captures were inspected
+without clipping or overlap. This establishes fixture preview through the public
+SDK; Studio's end-user controls and disposable-project real-backend testing still
+need their own acceptance. Exact commands and the corrected initial compile
+failure are recorded in `preview-verification.txt`.
+
+Studio build controls remain outstanding. The user's running Host and R sessions
+have not been restarted. Full native package assemblies, real-R scene acceptance
+and the full-workspace audit were not rerun in this phase.
 
 `plugins/studio` is an ordinary, independently assembled UI package using only the
 public protocol and UI SDK. It selects immutable source or an existing development
@@ -85,9 +123,9 @@ and `studio-browser-v2.log`; neither was a passing run. `cargo build --locked
 architecture/governance checks pass (`studio-host-build.log`,
 `studio-client-build.log`, `studio-client-check.log`, `studio-client-unit.log`).
 These runs use test-owned projects and do not replace user Hosts or R sessions.
-Studio build integration, isolated executable preview, archive UI, Agent integration, default
-delivery and remaining scientific migration are still unfinished; the inert
-editing canvas is not executable preview acceptance.
+Studio build/preview controls, disposable-project real-backend testing, archive UI,
+Agent integration, default delivery and remaining scientific migration are still
+unfinished; the inert editing canvas is separate from executable fixture preview.
 
 Plugin source development now has public `plugins.source_tree/read_source`,
 `plugins.branches`, `plugins.check_source` and `plugins.checkpoint` ports.
@@ -122,8 +160,8 @@ in `source-protocol.log`. Independent strict NodeNext consumption and standalone
 schema-reference checks pass (`source-public-types-v3.log`). Public bindings and
 schemas are generated; `npm run generate --prefix ui`, `npm run build --prefix ui`
 and `npm run check --prefix ui` pass (`source-generate.log`, `source-client-build.log`
-and `source-client-check.log`). Studio build integration and executable preview still need
-ordinary public capabilities. A running Host needs a rebuilt replacement
+and `source-client-check.log`). Native build and fixture-preview capabilities now
+exist; Studio still needs to integrate them. A running Host needs a rebuilt replacement
 to expose the new ports; a client refresh cannot add them. Existing user Hosts and
 R sessions have not been replaced during these isolated-project checks.
 
@@ -176,8 +214,9 @@ were inspected at 1440, 1920, 390 and 220 pixels, along with normal and constrai
 view-opening dialogs. Initial browser failures and corrected fixture timing remain
 under `target/plugin-refactor/manager-browser*`; the final captures wait for both
 iframe geometry and compositor painting. Import/export still use
-the CLI. Plugin Studio visual/source editing, build/preview, real-R scene continuity,
-default delivery and removal of the fixed composition remain unfinished. The
+the CLI. Plugin Studio now supports visual/source editing; its build/preview
+controls, real-R scene continuity, default delivery and removal of the fixed
+composition remain unfinished. The
 manager is not silently installed into existing user projects.
 
 The complete 13-case package repository suite and 17 protocol cases pass, including

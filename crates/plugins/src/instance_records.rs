@@ -65,6 +65,7 @@ impl PluginRepository {
         let old: PluginInstance = serde_json::from_str(&old)?;
         ensure(
             old.identity == instance.identity
+                && old.purpose == instance.purpose
                 && old.project == instance.project
                 && old.principal == instance.principal
                 && old.alias == instance.alias
@@ -113,6 +114,10 @@ impl PluginRepository {
     }
 
     pub fn recorded_instances_scoped(&self, after: Option<&PluginInstanceId>, limit: usize, scope: Option<(&ProjectId, &PrincipalId)>) -> Result<PluginInstancePage, PluginError> {
+        self.recorded_instances_filtered(after, limit, scope, true)
+    }
+
+    pub(crate) fn recorded_instances_filtered(&self, after: Option<&PluginInstanceId>, limit: usize, scope: Option<(&ProjectId, &PrincipalId)>, include_previews: bool) -> Result<PluginInstancePage, PluginError> {
         ensure(
             (1..=100).contains(&limit),
             "instance page size must be 1–100",
@@ -135,15 +140,15 @@ impl PluginRepository {
                 total: 0,
             });
         }
-        let mut instances = self.connection.prepare("SELECT document FROM plugin_instances WHERE (?1 IS NULL OR id>?1) AND (?3 IS NULL OR json_extract(document,'$.project')=?3) AND (?4 IS NULL OR json_extract(document,'$.principal')=?4) ORDER BY id LIMIT ?2")?
-            .query_map(params![after.map(PluginInstanceId::as_str), (limit + 1) as u64, scope.map(|s|s.0.as_str()),scope.map(|s|s.1.as_str())], |r| r.get::<_, String>(0))?
+        let mut instances = self.connection.prepare("SELECT document FROM plugin_instances WHERE (?1 IS NULL OR id>?1) AND (?3 IS NULL OR json_extract(document,'$.project')=?3) AND (?4 IS NULL OR json_extract(document,'$.principal')=?4) AND (?5 OR COALESCE(json_extract(document,'$.purpose'),'runtime')='runtime') ORDER BY id LIMIT ?2")?
+            .query_map(params![after.map(PluginInstanceId::as_str), (limit + 1) as u64, scope.map(|s|s.0.as_str()),scope.map(|s|s.1.as_str()),include_previews], |r| r.get::<_, String>(0))?
             .collect::<Result<Vec<_>, _>>()?.into_iter().map(|s| serde_json::from_str::<PluginInstance>(&s)).collect::<Result<Vec<_>, _>>()?;
         let more = instances.len() > limit;
         instances.truncate(limit);
         let next = more.then(|| instances.last().unwrap().identity.instance.clone());
         let total =
             self.connection
-                .query_row("SELECT count(*) FROM plugin_instances WHERE (?1 IS NULL OR json_extract(document,'$.project')=?1) AND (?2 IS NULL OR json_extract(document,'$.principal')=?2)", params![scope.map(|s|s.0.as_str()),scope.map(|s|s.1.as_str())], |r| r.get(0))?;
+                .query_row("SELECT count(*) FROM plugin_instances WHERE (?1 IS NULL OR json_extract(document,'$.project')=?1) AND (?2 IS NULL OR json_extract(document,'$.principal')=?2) AND (?3 OR COALESCE(json_extract(document,'$.purpose'),'runtime')='runtime')", params![scope.map(|s|s.0.as_str()),scope.map(|s|s.1.as_str()),include_previews], |r| r.get(0))?;
         snapshot.commit()?;
         Ok(PluginInstancePage {
             instances,

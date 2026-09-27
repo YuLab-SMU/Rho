@@ -78,6 +78,43 @@ child. Neither check nor save starts a provider, runs code, applies a scenario o
 replays scientific effects. Ordinary request identity and original-operation
 recovery rules apply to the save.
 
+`plugins.preview@1` accepts `PreviewPlugin` and returns an ordinary
+`PluginInstanceObservation` with `purpose:"fixture_preview"`. It requires
+`plugins.run`, an installed source revision and an exact built artifact, an alias,
+configuration and `queries`. Each `PluginPreviewQuery` supplies a declared
+required/optional capability, exact arguments and fixture data. Requests are
+limited to 128 fixtures and 256 KiB; duplicate matches are invalid. Preview does
+not need the native target platform, activate dependencies or start a backend.
+It receives no Host grants or native project path and cannot be a scenario's
+runtime instance or a provider. Its query fixtures do not participate in normal
+capability resolution or contract collision checks.
+
+For normal instances and views, `purpose` is omitted and means `runtime`; normal
+backend initialization retains its original protocol-v1 shape. Only fixture
+instances/views carry the new marker, and they are never sent to native backends.
+`plugins.instances` defaults to runtime instances only, so existing protocol-v1
+readers continue receiving the original record shape. Management tools may set
+`include_previews:true` to include previews; pagination and counts use that same
+selected set. The repository's administrative CLI listing includes all purposes.
+
+Open preview views with `views.open` or `windows.open_view`. The normal private
+view connection carries `purpose:"fixture_preview"` in its public view record.
+Query replies use the ordinary observation envelope with `source:"fixture_preview"`
+and an explicit fixture notice. Unmatched queries return unavailable without
+consulting the real Host. Invocations, controls, operation reads and cancellation,
+original resource downloads and external links are denied. Only self `set_state`,
+close cooperation and explicit text copying retain intrinsic presentation authority.
+Fixtures cannot manufacture committed Operations or scientific evidence.
+
+Preview uses the same immutable asset channel, quotas, identity/sequence checks,
+revision references, acknowledged state and close protocol as runtime views.
+Close its views and call `plugins.release` explicitly. A new Host does not silently
+reopen or rebuild the preview; retain original Operation identities after lost
+acknowledgements. A fixture instance that was never native can be explicitly
+released after its historical views close, without claiming native process recovery.
+Real-backend testing in a disposable project is a separate lifecycle, not an option
+that elevates a fixture instance.
+
 `plugins.project_coverage@1` and `operation.project_coverage@1` accept
 `ProjectReadCoverageArguments` (`{}`) and return `ProjectReadCoverage` in the query
 envelope's `data`. They require `project.references.read` together with

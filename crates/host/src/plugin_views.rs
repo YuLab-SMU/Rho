@@ -62,6 +62,9 @@ impl NextHost {
             )
             .await?;
         service.check_view_close_fence(&message.view, &message.body)?;
+        if let Some(response) = service.preview_response(&message.view, &message.body)? {
+            return Ok(response);
+        }
         let cancel = matches!(&message.body, PluginViewRequest::Cancel { .. });
         let request = match message.body {
             body @ (PluginViewRequest::RegisterCloseHandler { .. }

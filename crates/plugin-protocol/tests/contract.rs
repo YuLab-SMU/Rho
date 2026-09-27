@@ -13,6 +13,26 @@ fn frame(sequence: u32) -> RpcFrame {
 }
 
 #[test]
+fn fixture_purpose_does_not_change_normal_instance_or_view_wire_shapes() {
+    let identity = json!({"instance":"instance","plugin":"example.plugin","revision":format!("sha256:{}","a".repeat(64)),"artifact":format!("sha256:{}","b".repeat(64))});
+    let original = json!({"identity":identity,"project":"project","principal":"principal","alias":"runtime","configuration":{},"state":"active","diagnostic":null});
+    let mut instance: PluginInstance = serde_json::from_value(original.clone()).unwrap();
+    assert_eq!(instance.purpose, PluginInstancePurpose::Runtime);
+    assert_eq!(serde_json::to_value(&instance).unwrap(), original);
+    let mut initialize = frame(1);
+    initialize.body = RpcBody::Initialize { instance: instance.clone(), grants: vec![], environment: None, resource_channel: None };
+    assert!(!String::from_utf8(initialize.encode().unwrap()).unwrap().contains("purpose"));
+    instance.purpose = PluginInstancePurpose::FixturePreview;
+    assert_eq!(serde_json::to_value(instance).unwrap()["purpose"], "fixture_preview");
+    let original = json!({"view":"view","instance":identity,"project":"project","principal":"principal","contribution":"view","window":"window","configuration":{},"state":{},"state_version":0,"closed":false});
+    let mut view: PluginViewRecord = serde_json::from_value(original.clone()).unwrap();
+    assert_eq!(view.purpose, PluginInstancePurpose::Runtime);
+    assert_eq!(serde_json::to_value(&view).unwrap(), original);
+    view.purpose = PluginInstancePurpose::FixturePreview;
+    assert_eq!(serde_json::to_value(view).unwrap()["purpose"], "fixture_preview");
+}
+
+#[test]
 fn readiness_extensions_are_optional_bounded_and_do_not_change_manifest_contracts() {
     let mut ready = frame(1);
     ready.body = RpcBody::Ready {

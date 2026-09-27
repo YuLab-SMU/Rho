@@ -71,6 +71,10 @@ pub struct PluginInstancesArguments {
     pub after: Option<PluginInstanceId>,
     #[schemars(range(min = 1, max = 100))]
     pub limit: u32,
+    /// Runtime discovery excludes fixture previews unless explicitly requested.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[ts(as = "Option<_>", optional)]
+    pub include_previews: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]

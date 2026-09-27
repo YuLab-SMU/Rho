@@ -69,6 +69,27 @@ Declaration errors retain both the raw draft and last valid structure. Shared
 source/canvas undo belongs to its synchronized document draft; native revision
 history remains immutable. An executable preview is a separate, explicit lifecycle.
 
+`plugins.preview` creates a fixture presentation instance of an exact immutable
+artifact. `PluginInstance.purpose` and the corresponding view record distinguish
+this from a runtime instance. It never starts or materializes a backend, creates
+a native project/data environment, receives Host grants, or publishes providers.
+Required and optional query fixtures match exact capabilities and JSON arguments;
+a missing fixture returns unavailable, never a real Host query. The shared view
+transport still enforces credentials, scope, sequence, quotas and close fences.
+Only self view-state persistence, close cooperation and gesture-based text copy
+reach presentation owners. Invocations, controls, operation reads/cancellation,
+resource downloads and external navigation are refused before Host dispatch.
+Fixture instances cannot satisfy scenario readiness, shadow provider contracts,
+or change an existing runtime. They use normal revision retention and explicit
+view closure/instance release; Host restart does not recreate their connections.
+The containing shell labels executable fixture previews outside the iframe.
+Normal instances omit the marker and retain their original initialization shape;
+adding fixture preview does not require rebuilding existing native artifacts.
+Runtime instance discovery excludes previews by default. Management tools request
+`include_previews:true` to list every purpose with consistent counts/pagination;
+scientific readers continue receiving normal instance records. New scientific
+readers also reject preview candidates before requesting native observations.
+
 The same repository owns immutable project/principal-scoped scenario checkpoints
 and named heads through `scenarios.list/get/checkpoint`. Saving is a native
 compare-and-swap transaction: content identity, head and all referenced plugin

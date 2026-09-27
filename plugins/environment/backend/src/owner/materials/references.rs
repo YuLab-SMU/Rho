@@ -370,6 +370,9 @@ impl Owner {
         let mut readers = Vec::new();
         for observed in instances {
             let instance = &observed.instance;
+            // The Host never starts or publishes a native provider for fixture
+            // previews. Their package capabilities are not live R references.
+            if instance.purpose == PluginInstancePurpose::FixturePreview { continue; }
             let inspected: PluginInspection = serde_json::from_value(
                 self.reference_query(
                     call,
@@ -533,6 +536,7 @@ mod tests {
             ("empty", None),
             ("idle", None),
             ("released", None),
+            ("fixture_preview", None),
             ("execute_v2", None),
             ("unstarted", None),
             ("foreign", Some("outside")),
@@ -570,6 +574,7 @@ mod tests {
             identity.instance = PluginInstanceId::new("r-instance").unwrap();
             let instance = PluginInstanceObservation {
                 instance: PluginInstance {
+                    purpose: if scenario == "fixture_preview" { PluginInstancePurpose::FixturePreview } else { PluginInstancePurpose::Runtime },
                     identity: identity.clone(),
                     project: query.binding.project.clone(),
                     principal: query.principal.clone(),
@@ -642,6 +647,10 @@ mod tests {
                 let mut sessions = 0;
                 while let Some(request) = requests.recv().await {
                     let id = request.capability.id.as_str();
+                    if scenario == "fixture_preview" {
+                        assert_ne!(id, "plugins.inspect", "preview packages are not native R references");
+                        assert!(!id.starts_with("r."), "preview must never be queried as an R provider");
+                    }
                     if scenario == "grant" && id == "operation.project_coverage" {
                         let _ = request
                             .reply
@@ -664,6 +673,7 @@ mod tests {
                             let has_r = matches!(
                                 scenario,
                                 "idle"
+                                    | "fixture_preview"
                                     | "released"
                                     | "unstarted"
                                     | "busy"
