@@ -626,6 +626,19 @@ fingerprint. Only eligible failed/confirmed-cancelled staging is collected.
 Successful, uncertain, active or unobservable references are protected. Purge is
 irreversible; original operation records and native recovery markers remain.
 
+The ordinary Environment package exposes the same material actions at version 2
+through an exact provider binding. Select its optional reference-read capabilities
+when activating the instance; see the [package instructions](../plugins/environment/README.md).
+An ordinary R provider must be available when selecting `r.session` and `r.snapshot`
+grants, but activation need not start its R session. Missing grants or incomplete
+reference coverage keep materials retained. Re-query after R work settles or a
+namespace is explicitly unloaded; removing a directory from `.libPaths()` does not
+unload its namespaces. A previous instance's material is accessible only through
+its original authorized operation and the same native storage context. An
+unconfirmed quarantine must be inspected by its original cleanup ID before any
+further action. Recovery contracts not yet migrated to ordinary plugins remain
+unknown and retain their materials.
+
 ### Remote execution
 
 Supply an existing OpenSSH alias with `--remote-host ALIAS --remote-root /absolute/project`;

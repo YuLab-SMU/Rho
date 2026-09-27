@@ -81,7 +81,7 @@ class Backend:
     def call(self, request, capability="environment.status", arguments=None, operation=None, prepared=None):
         return dict(request=request, binding=dict(capability=dict(id=capability, version=1 if capability == "environment.status" else 2),
                     provider=self.identity, project="project", target=prepared["target"] if prepared else None), principal="principal",
-                    scopes=["project.read", "environment.read", "environment.write", "operation.read", "resources.read"],
+                    scopes=["project.read", "environment.read", "environment.write", "operation.read", "resources.read", "plugins.read", "project.references.read", "workspace.read"],
                     arguments=prepared["arguments"] if prepared else (arguments or {}), preconditions=None,
                     owner_context=prepared["owner_context"] if prepared else None, operation_id=operation)
 
@@ -167,6 +167,13 @@ try:
         assert not (root / "plans").exists() and not (root / "recovery").exists()
         backend.settle("second-settled", second, "cancelled"); backend.settle("first-settled", first, "uncertain")
         backend.settle("settlement-retry", first, "uncertain")
+        backend.send("retention", "query", backend.call("retention", "environment.retention", dict(operation_id="original-plan")))
+        reverse = backend.receive()
+        assert reverse["body"]["data"]["capability"]["id"] == "operation.get", reverse
+        backend.send(reverse["request"], "host_result", dict(result=backend.original(original, "failed")))
+        retained = backend.read("retention", "query_result")["data"]
+        assert not retained["can_quarantine"] and not retained["material"]["native_marker_present"], retained
+        assert "native reference" in " ".join(retained["retained_reasons"])
         pending = [(f"source-{i}",backend.start_source(f"source-{i}",f"original-{i}")) for i in range(16)]
         backend.send("overflow", "query", backend.call("overflow","environment.prepare_reconcile",{}))
         assert backend.read("overflow", "error")["code"] == "busy"
@@ -195,6 +202,18 @@ try:
         prepared = backend.source("queued-source", original)
         queued = backend.call("queued", "environment.reconcile", operation="queued-operation", prepared=prepared)
         backend.send("queued","invoke",queued)
+        material_prepared = dict(target=original["binding"]["target"],
+            arguments=dict(operation_id=original["operation_id"], expected_fingerprint="sha256:"+"0"*64),
+            owner_context=dict(scope=original["owner_context"]["scope"],
+                source=dict(operation=original["operation_id"], binding=original["binding"], status="failed"), cleanup=None))
+        material = backend.call("queued-material", "environment.cleanup", operation="queued-material-operation", prepared=material_prepared)
+        backend.send("queued-material", "invoke", material)
+        backend.send("cancel-material", "cancel", dict(operation_id=material["operation_id"]))
+        refusal = backend.read("cancel-material", "cancel_acknowledged")
+        assert not refusal["confirmed"], refusal
+        backend.send("material-status", "query", backend.call("material-status"))
+        activities = backend.read("material-status", "query_result")["data"]["activities"]
+        assert next(item for item in activities if item["operation"] == material["operation_id"])["phase"] == "waiting", activities
         backend.start_source("pending-read","unanswered-original")
         backend.process.stdin.close()
         assert backend.process.wait(timeout=10) == 0
@@ -208,7 +227,7 @@ try:
         assert backend.process.wait(timeout=10) != 0
     finally: backend.close()
     complete = True
-    print("Standalone Environment wire checks passed: resource failure, settlement fencing, queued cancellation, bounded/reordered source reads, identity refusal and release; no R was launched.")
+    print("Standalone Environment wire checks passed: resource failure, settlement fencing, queued cancellation, material retention, unsupported material cancellation, pending EOF, bounded/reordered source reads, identity refusal and release; no R was launched.")
 finally:
     if complete: shutil.rmtree(root)
     else: print(f"Environment wire evidence retained at {root}",file=sys.stderr)

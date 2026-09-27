@@ -12,6 +12,9 @@ import {execFileSync,spawn,spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {buildEnvironmentPlugin} from './build-environment-plugin.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const rReferences=process.argv.includes('--r-references');
+assert.ok(process.argv.slice(2).every(arg=>arg==='--r-references'));
+if(rReferences)assert.ok(process.env.RHO_R_PLUGIN_PACKAGE&&process.env.RHO_ARK,'R reference acceptance requires an independent R package and installed Ark.');
 const temporary=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-environment-plugin-')));
 const project=path.join(temporary,'project'),materials=path.join(temporary,'materials');
 fs.mkdirSync(project);fs.mkdirSync(materials);
@@ -21,7 +24,7 @@ const database=path.join(temporary,'host.sqlite');
 const binary=process.env.RHO_TEST_BINARY??path.join(root,'target/debug/rho');
 const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const originalHost=digest(fs.readFileSync(binary));
-const rhome=process.env.RHO_R_HOME??execFileSync('Rscript',['--vanilla','-e','cat(R.home())'],{encoding:'utf8'}).trim();
+const rhome=fs.realpathSync(process.env.RHO_R_HOME??execFileSync('Rscript',['--vanilla','-e','cat(R.home())'],{encoding:'utf8'}).trim());
 const rscript=fs.realpathSync(path.join(rhome,'bin/Rscript'));
 execFileSync(rscript,['--vanilla','-e',"stopifnot(all(vapply(c('pak','renv','ps','jsonlite'),requireNamespace,logical(1),quietly=TRUE)))"],{stdio:'inherit',timeout:30000});
 const source=process.env.RHO_ENVIRONMENT_PLUGIN_PACKAGE?fs.realpathSync(process.env.RHO_ENVIRONMENT_PLUGIN_PACKAGE):buildEnvironmentPlugin(path.join(temporary,'package'));
@@ -29,6 +32,7 @@ assert.ok(!source.startsWith(root+path.sep),'Use independently assembled source'
 assert.equal(digest(fs.readFileSync(binary)),originalHost);
 let server,socket,socketClosed;
 let host, ready, exited, complete = false, counter = 0;
+let rIdentity,rSession,observerIdentity;
 const pending = new Map();
 const trace = (kind, value) => fs.appendFileSync(path.join(temporary, 'session.jsonl'), JSON.stringify({kind,value}) + '\n');
 function deadline(promise, label, ms = 180000) {
@@ -70,6 +74,7 @@ try {
   execFileSync('python3',[path.join(source,'tests/protocol.py'),path.join(source,'dist/rho-environment-backend')],{cwd:source,stdio:'inherit',timeout:180000});
   const snapshot=JSON.parse(execFileSync(binary,['--database',database,'--project',project,'plugins','snapshot',source,'--target','aarch64-apple-darwin'],{encoding:'utf8',timeout:180000,maxBuffer:16*1024*1024})).result;
   assert.ok(snapshot.revision&&snapshot.artifacts[0],JSON.stringify(snapshot)); trace('snapshot',snapshot);
+  const rRevision=rReferences?JSON.parse(execFileSync(binary,['--database',database,'--project',project,'plugins','snapshot',fs.realpathSync(process.env.RHO_R_PLUGIN_PACKAGE),'--target','aarch64-apple-darwin'],{encoding:'utf8',timeout:180000,maxBuffer:16*1024*1024})).result:null;
   host=spawn(binary,['--database',database,'--project',project,'session'],{stdio:['pipe','pipe','pipe']});
   const handshake=new Promise((resolve,reject) => {ready={resolve,reject};});
   exited=new Promise(resolve => host.once('close',(code,signal) => resolve({code,signal})));
@@ -82,10 +87,15 @@ try {
     catch(error){ready.reject(error);for(const request of pending.values())request.reject(error);}
   });
   assert.equal((await deadline(handshake,'Host ready')).protocol_version,1);
-  async function activate(id,configuration) {
-    return succeeded(await invoke(`activate-${id}`,'plugins.activate',{revision:snapshot.revision,artifact:snapshot.artifacts[0],target:'aarch64-apple-darwin',alias:id,configuration})).output.instance.identity;
+  const materialGrants=['operation.project_coverage','plugins.project_coverage','operation.list_recent','operation.events_checkpoint','plugins.instances','plugins.inspect'].map(id=>({id,version:1}));
+  async function activate(id,configuration,optional_capabilities=[]) {
+    return succeeded(await invoke(`activate-${id}`,'plugins.activate',{revision:snapshot.revision,artifact:snapshot.artifacts[0],target:'aarch64-apple-darwin',alias:id,configuration,optional_capabilities})).output.instance.identity;
   }
   const resolve=(instance,id,version=2) => query('plugins.resolve',{instance,capability:{id,version}});
+  const rIdle=async(instance,session)=>{
+    const binding=await resolve(instance,'r.inspection_state',1);
+    await until(()=>query('r.inspection_state',{binding,arguments:{expected_session:session}}),value=>value.status==='ready','R settlement and native idle state');
+  };
 
   const disconnected=await activate('disconnected',{});
   const disconnectedStatus=await resolve(disconnected,'environment.status',1);
@@ -163,10 +173,25 @@ try {
   const nativeRecovery=await resource(recovery.native_recovery);assert.equal(nativeRecovery.runtime.tree_cleanup_confirmed,true);assert.ok(fs.statSync(nativeRecovery.stage).isDirectory());
   await deadline(socketClosed,'Cancelled installer exit',5000);socket.destroy();server.close();server=null;
   assert.deepEqual(await invoke('slow-realize','environment.realize',slowArgs,2),cancelled);
+  await until(status,value=>value.activities.length===0,'Cancelled material settlement');
+  const retainedBinding=await resolve(identity,'environment.retention');
+  const noGrant=await query('environment.retention',{binding:retainedBinding,arguments:{operation_id:cancelled.operation.operation_id}},2);
+  assert.equal(noGrant.can_quarantine,false);assert.match(noGrant.retained_reasons.join(' '),/grant|selected/i);
+  assert.ok(fs.statSync(nativeRecovery.stage).isDirectory(),'Missing grants must retain original files');
   const after=(await observe()).observation;assert.deepEqual(after.packages,before.packages);assert.deepEqual(after.library_paths,before.library_paths);
   await until(status,value=>value.activities.length===0,'Original settlements');
   succeeded(await invoke('release-original','plugins.release',{instance:identity}));
-  const replacement=await activate('replacement',configuration);
+  if(rReferences){
+    rIdentity=succeeded(await invoke('activate-r','plugins.activate',{revision:rRevision.revision,artifact:rRevision.artifacts[0],target:'aarch64-apple-darwin',alias:'material-r',configuration:{ark:fs.realpathSync(process.env.RHO_ARK),r_home:rhome,execution_timeout_seconds:60}})).output.instance.identity;
+    materialGrants.push({id:'r.session',version:1},{id:'r.snapshot',version:1});
+    rSession=succeeded(await invoke('create-r','r.create_session',{binding:await resolve(rIdentity,'r.create_session',1),arguments:{}})).output.session_id;
+    observerIdentity=succeeded(await invoke('activate-observer-r','plugins.activate',{revision:rRevision.revision,artifact:rRevision.artifacts[0],target:'aarch64-apple-darwin',alias:'observer-r',configuration:{ark:fs.realpathSync(process.env.RHO_ARK),r_home:rhome,execution_timeout_seconds:60}})).output.instance.identity;
+    const observerSession=succeeded(await invoke('create-observer-r','r.create_session',{binding:await resolve(observerIdentity,'r.create_session',1),arguments:{}})).output.session_id;
+    await rIdle(rIdentity,rSession);await rIdle(observerIdentity,observerSession);
+    // Put the protected session last so the scan must visit every R provider.
+    if(rIdentity.instance<observerIdentity.instance){[rIdentity,observerIdentity]=[observerIdentity,rIdentity];rSession=observerSession;}
+  }
+  const replacement=await activate('replacement',configuration,materialGrants);
   const replacementRealize=await resolve(replacement,'environment.realize');
   const fromOriginal=succeeded(await invoke('replacement-realize','environment.realize',{binding:replacementRealize,arguments:{plan_operation_id:planned.operation.operation_id}},2));
   const qualified=fromOriginal.operation.admission.owner_context.qualification.source;
@@ -178,13 +203,72 @@ try {
   assert.deepEqual(await call('get_operation',{operation_id:cancelled.operation.operation_id}),cancelled);
   const replacementStatus=await resolve(replacement,'environment.status',1);
   await until(()=>query('environment.status',{binding:replacementStatus,arguments:{}}),value=>value.activities.length===0,'Replacement settlements');
+  const materialBinding={};
+  for(const id of ['retention','cleanup_status','cleanup','restore_cleanup','purge_cleanup'])materialBinding[id]=await resolve(replacement,`environment.${id}`);
+  const materialQuery=(id,arguments_)=>query(`environment.${id}`,{binding:materialBinding[id],arguments:arguments_},2);
+  const materialInvoke=async(id,action,arguments_)=>{
+    const value=await invoke(id,`environment.${action}`,{binding:materialBinding[action],arguments:arguments_},2);
+    await until(()=>query('environment.status',{binding:replacementStatus,arguments:{}}),state=>state.activities.length===0,'Material settlement');
+    return value;
+  };
+  const successfulMaterial=await materialQuery('retention',{operation_id:realized.operation.operation_id});
+  assert.equal(successfulMaterial.can_quarantine,false);assert.match(successfulMaterial.retained_reasons.join(' '),/Successful outputs/);
+  let eligible=await materialQuery('retention',{operation_id:cancelled.operation.operation_id});
+  assert.equal(eligible.can_quarantine,true,JSON.stringify(eligible));assert.equal(eligible.material.stage.path,nativeRecovery.stage);
+  if(rReferences){
+    const candidate=path.join(nativeRecovery.stage,'reference-library');fs.mkdirSync(candidate);
+    fs.cpSync(path.join(receipt.library_path,'rhonextfixture'),path.join(candidate,'rhonextfixture'),{recursive:true});
+    const rBinding=await resolve(rIdentity,'r.execute',1);
+    const run=async(id,code)=>{const result=succeeded(await invoke(id,'r.execute',{binding:rBinding,arguments:{expected_session:rSession,code}}));await rIdle(rIdentity,rSession);return result;};
+    // Put the original successful plans beyond the first reference page.
+    for(let page=0;page<12;page++)await run(`reference-history-${page}`,'invisible(NULL)');
+    assert.ok(Number.isSafeInteger((await query('operation.list_recent',{limit:32})).next_cursor),'Exercise continuation to older original references');
+    await run('reference-library',`original_paths <- .libPaths(); .libPaths(c(${JSON.stringify(candidate)}, original_paths)); stopifnot(${JSON.stringify(candidate)} %in% .libPaths()); TRUE`);
+    const libraryUse=await materialQuery('retention',{operation_id:cancelled.operation.operation_id});
+    assert.equal(libraryUse.can_quarantine,false);assert.match(libraryUse.retained_reasons.join(' '),/still references/);
+    await run('reference-namespace',`loadNamespace('rhonextfixture',lib.loc=${JSON.stringify(candidate)}); .libPaths(original_paths); stopifnot(!${JSON.stringify(candidate)} %in% .libPaths()); TRUE`);
+    const namespaceUse=await materialQuery('retention',{operation_id:cancelled.operation.operation_id});
+    assert.equal(namespaceUse.can_quarantine,false);assert.match(namespaceUse.retained_reasons.join(' '),/still references/);
+    await assert.rejects(()=>materialInvoke('namespace-quarantine','cleanup',{operation_id:cancelled.operation.operation_id,expected_fingerprint:namespaceUse.material.stage.fingerprint}),/still references/);
+    await run('release-namespace',"unloadNamespace('rhonextfixture'); TRUE");
+    const unused=await materialQuery('retention',{operation_id:cancelled.operation.operation_id});assert.equal(unused.can_quarantine,true,JSON.stringify(unused));
+    succeeded(await invoke('release-material-r','plugins.release',{instance:rIdentity}));
+    rIdentity=null;
+    eligible=await materialQuery('retention',{operation_id:cancelled.operation.operation_id});assert.equal(eligible.can_quarantine,true,JSON.stringify(eligible));
+    succeeded(await invoke('release-observer-r','plugins.release',{instance:observerIdentity}));observerIdentity=null;
+  }
+  await assert.rejects(()=>materialInvoke('stale-quarantine','cleanup',{operation_id:cancelled.operation.operation_id,expected_fingerprint:`sha256:${'0'.repeat(64)}`}),/changed since.*preview/i);
+  const quarantineArgs={operation_id:cancelled.operation.operation_id,expected_fingerprint:eligible.material.stage.fingerprint};
+  const quarantined=succeeded(await materialInvoke('quarantine','cleanup',quarantineArgs));
+  assert.equal(quarantined.output.kind,'material');const moved=await resource(quarantined.output.report);assert.equal(moved.action,'quarantine');
+  assert.equal(fs.existsSync(nativeRecovery.stage),false);assert.ok(fs.statSync(moved.trash_path).isDirectory());
+  assert.deepEqual(await materialInvoke('quarantine','cleanup',quarantineArgs),quarantined,'Replay cannot move material again');
+  let trash=await materialQuery('cleanup_status',{cleanup_operation_id:quarantined.operation.operation_id});
+  assert.equal(trash.can_restore,true,JSON.stringify(trash));assert.equal(trash.can_purge,true);
+  const restored=succeeded(await materialInvoke('restore','restore_cleanup',{cleanup_operation_id:quarantined.operation.operation_id,expected_fingerprint:trash.material.trash.fingerprint}));
+  assert.equal((await resource(restored.output.report)).action,'restore');assert.ok(fs.statSync(nativeRecovery.stage).isDirectory());assert.equal(fs.existsSync(moved.trash_path),false);
+  const again=await materialQuery('retention',{operation_id:cancelled.operation.operation_id});assert.equal(again.can_quarantine,true,JSON.stringify(again));
+  const quarantinedAgain=succeeded(await materialInvoke('quarantine-again','cleanup',{operation_id:cancelled.operation.operation_id,expected_fingerprint:again.material.stage.fingerprint}));
+  trash=await materialQuery('cleanup_status',{cleanup_operation_id:quarantinedAgain.operation.operation_id});assert.equal(trash.can_purge,true,JSON.stringify(trash));
+  const purgeArgs={cleanup_operation_id:quarantinedAgain.operation.operation_id,expected_fingerprint:trash.material.trash.fingerprint};
+  const purged=succeeded(await materialInvoke('purge','purge_cleanup',purgeArgs));assert.equal((await resource(purged.output.report)).action,'purge');
+  assert.equal(fs.existsSync(trash.material.trash.path),false);assert.equal(fs.existsSync(nativeRecovery.stage),false);
+  const gone=await materialQuery('cleanup_status',{cleanup_operation_id:quarantinedAgain.operation.operation_id});assert.equal(gone.can_purge,false);assert.equal(gone.material.stage,null);assert.equal(gone.material.trash,null);
+  assert.deepEqual(await materialInvoke('purge','purge_cleanup',purgeArgs),purged);
+  assert.deepEqual(await call('get_operation',{operation_id:cancelled.operation.operation_id}),cancelled,'Material changes do not rewrite the original scientific outcome');
+  assert.deepEqual(await resource(quarantined.output.report),moved,'Material reports survive purge');
   succeeded(await invoke('release-replacement','plugins.release',{instance:replacement}));
   assert.deepEqual(await resource(planned.output.report),plan);assert.deepEqual(await resource(realized.output.report),receipt);
   assert.deepEqual(await invoke('plan','environment.plan',planArgs,2),planned);
   host.stdin.end();assert.equal((await deadline(exited,'Host shutdown',15000)).code,0);
   assert.equal(digest(fs.readFileSync(binary)),originalHost);complete=true;
-  console.log(`Independent Environment package passed disconnected/query purity, material-owner exclusion, real pak/renv, resource reports, verified inventory, original idempotency, native cancellation, previous-instance resource reads, replacement recovery and retained results. Unchanged Host SHA256 ${originalHost}`);
+  console.log(`Independent Environment package passed disconnected/query purity, material-owner exclusion, real pak/renv, resource reports, verified inventory, original idempotency, native cancellation, previous-instance resource reads, replacement recovery, explicit reference grants, stale preview refusal, quarantine/restore/purge and retained original results. Unchanged Host SHA256 ${originalHost}`);
+  if(rReferences)console.log('Native ordinary R reference checks passed: two exact idle sessions, live library paths, namespace retained after library-path removal, refused quarantine, explicit namespace unloading and released-instance observation.');
 } finally {
+  for(const instance of [rIdentity,observerIdentity].filter(Boolean))if(host&&host.exitCode===null&&host.signalCode===null){
+    try{succeeded(await invoke(`cleanup-${instance.instance}`,'plugins.release',{instance}));}
+    catch(error){console.error(`Test-owned R release remains unconfirmed: ${error.message}`);}
+  }
   if(host&&host.exitCode===null&&host.signalCode===null){host.stdin.end();host.kill('SIGTERM');await deadline(exited,'Owned Host cleanup',15000);}
   const recoveryRoot=path.join(materials,'recovery');
   if(fs.existsSync(recoveryRoot))for(const file of fs.readdirSync(recoveryRoot)) {

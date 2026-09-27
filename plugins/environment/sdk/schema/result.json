@@ -34,7 +34,8 @@
         "realization",
         "verification",
         "reconciliation",
-        "configuration"
+        "configuration",
+        "material"
       ]
     },
     "InstanceRef": {

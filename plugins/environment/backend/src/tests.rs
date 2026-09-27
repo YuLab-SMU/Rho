@@ -3,10 +3,10 @@ use rho_environment_api::*;
 use rho_plugin_sdk::{ResourceClient, protocol::*};
 use serde_json::{Value, json};
 use tokio::sync::{mpsc, watch};
-fn identity() -> InstanceRef {
+pub(crate) fn identity() -> InstanceRef {
     serde_json::from_value(json!({"plugin":"org.rho.environment","instance":"current","revision":format!("sha256:{}","a".repeat(64)),"artifact":format!("sha256:{}","b".repeat(64))})).unwrap()
 }
-fn query(id: &str, args: Value) -> PluginCall {
+pub(crate) fn query(id: &str, args: Value) -> PluginCall {
     PluginCall {
         request: RequestId::new("query").unwrap(),
         binding: ProviderBinding {
@@ -26,7 +26,7 @@ fn query(id: &str, args: Value) -> PluginCall {
         operation_id: None,
     }
 }
-fn prepare(operation: &str, args: Value) -> PluginCall {
+pub(crate) fn prepare(operation: &str, args: Value) -> PluginCall {
     query(
         &format!(
             "environment.prepare_{}",
@@ -35,7 +35,7 @@ fn prepare(operation: &str, args: Value) -> PluginCall {
         json!({"capability":{"id":operation,"version":2},"arguments":args,"target":null,"preconditions":null}),
     )
 }
-fn invoke(id: &str, operation: &str, prepared: Value) -> PluginCall {
+pub(crate) fn invoke(id: &str, operation: &str, prepared: Value) -> PluginCall {
     let mut call = query(operation, prepared["arguments"].clone());
     call.request = RequestId::new(format!("request-{id}")).unwrap();
     call.operation_id = Some(id.into());
@@ -43,14 +43,14 @@ fn invoke(id: &str, operation: &str, prepared: Value) -> PluginCall {
     call.owner_context = prepared["owner_context"].clone();
     call
 }
-fn settlement(call: &PluginCall, outcome: PluginOutcome) -> OperationSettlement {
+pub(crate) fn settlement(call: &PluginCall, outcome: PluginOutcome) -> OperationSettlement {
     OperationSettlement {
         operation_id: OperationId::new(call.operation_id.clone().unwrap()).unwrap(),
         binding: call.binding.clone(),
         outcome,
     }
 }
-fn fixture(
+pub(crate) fn fixture(
     configured: bool,
 ) -> (
     tempfile::TempDir,
@@ -86,7 +86,7 @@ fn fixture(
     .unwrap();
     (directory, owner, receiver)
 }
-async fn original(owner: &Owner) -> Value {
+pub(crate) async fn original(owner: &Owner) -> Value {
     let prepared = owner
         .query(&prepare(
             source::PLAN,
@@ -107,7 +107,7 @@ async fn original(owner: &Owner) -> Value {
 async fn disconnected_activation_and_native_queries_do_not_start_r() {
     let manifest = crate::manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 13);
+    assert_eq!(manifest.capabilities.len(), 21);
     assert_eq!(manifest.requires.len(), 2);
     let (_directory, owner, _reads) = fixture(false);
     let status = owner

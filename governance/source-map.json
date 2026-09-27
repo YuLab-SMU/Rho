@@ -756,6 +756,13 @@
         "node",
         "scripts/test-environment-plugin.mjs"
       ]
+    },
+    "plugins.environment-r-references": {
+      "command": [
+        "node",
+        "scripts/test-environment-plugin.mjs",
+        "--r-references"
+      ]
     }
   },
   "areas": {
@@ -1055,7 +1062,8 @@
         "plugins.environment-manifest",
         "plugins.environment-protocol",
         "plugins.environment-types",
-        "plugins.environment-native"
+        "plugins.environment-native",
+        "plugins.environment-r-references"
       ]
     }
   }

@@ -120,7 +120,7 @@ where
                                 Ok(()) => {
                                     let operation = operation.clone();
                                     let (cancel,cancellation) = watch::channel(false);
-                                    cancellations.insert(operation.clone(),(cancel,call.binding.capability.id.as_str() != source::RECONCILE));
+                                    cancellations.insert(operation.clone(),(cancel,call.binding.capability.id.as_str() != source::RECONCILE && !source::material_operation(call.binding.capability.id.as_str())));
                                     active.insert(call.request.clone()); let owner=owner.clone();
                                     jobs.spawn(async move { let plan=owner.execute(&call,cancellation).await; (call.request,Some(operation),RpcBody::CommitPlan(plan)) }); None
                                 },

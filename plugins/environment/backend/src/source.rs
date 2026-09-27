@@ -13,7 +13,19 @@ pub const REFRESH: &str = "environment.refresh";
 pub const OBSERVE: &str = "environment.observe";
 pub const LIBRARY: &str = "environment.library";
 pub const STATUS: &str = "environment.status";
+pub const RETENTION: &str = "environment.retention";
+pub const CLEANUP_STATUS: &str = "environment.cleanup_status";
+pub const CLEANUP: &str = "environment.cleanup";
+pub const RESTORE: &str = "environment.restore_cleanup";
+pub const PURGE: &str = "environment.purge_cleanup";
 pub const MAX_REPORT_BYTES: u64 = 4 * 1024 * 1024;
+
+pub fn material_operation(id: &str) -> bool {
+    matches!(id, CLEANUP | RESTORE | PURGE)
+}
+pub fn material_capability(id: &str) -> bool {
+    material_operation(id) || matches!(id, RETENTION | CLEANUP_STATUS)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -46,6 +58,9 @@ pub fn prepared_operation(id: &str) -> Option<&'static str> {
         "environment.prepare_verify" => Some(VERIFY),
         "environment.prepare_reconcile" => Some(RECONCILE),
         "environment.prepare_refresh" => Some(REFRESH),
+        "environment.prepare_cleanup" => Some(CLEANUP),
+        "environment.prepare_restore_cleanup" => Some(RESTORE),
+        "environment.prepare_purge_cleanup" => Some(PURGE),
         _ => None,
     }
 }
@@ -53,7 +68,7 @@ pub fn scopes(id: &str) -> BTreeSet<String> {
     let id = prepared_operation(id).unwrap_or(id);
     let mut scopes: BTreeSet<String> = [
         "project.read".into(),
-        if matches!(id, STATUS | OBSERVE | LIBRARY) {
+        if matches!(id, STATUS | OBSERVE | LIBRARY | RETENTION | CLEANUP_STATUS) {
             "environment.read".into()
         } else {
             "environment.write".into()
@@ -65,6 +80,9 @@ pub fn scopes(id: &str) -> BTreeSet<String> {
     }
     if matches!(id, REALIZE | VERIFY | OBSERVE | LIBRARY) {
         scopes.insert("resources.read".into());
+    }
+    if material_capability(id) {
+        scopes.extend(["operation.read", "resources.read", "plugins.read", "project.references.read", "workspace.read"].map(str::to_owned));
     }
     scopes
 }
@@ -91,6 +109,28 @@ pub fn normalize(id: &str, value: Value) -> Result<Value, String> {
             OperationId::new(&args.operation_id).map_err(|e| e.to_string())?;
             json!(args)
         }
+        RETENTION => {
+            let args: EnvironmentSourceArguments = serde_json::from_value(value).map_err(invalid)?;
+            OperationId::new(&args.operation_id).map_err(|e| e.to_string())?;
+            json!(args)
+        }
+        CLEANUP_STATUS => {
+            let args: EnvironmentTrashArguments = serde_json::from_value(value).map_err(invalid)?;
+            OperationId::new(&args.cleanup_operation_id).map_err(|e| e.to_string())?;
+            json!(args)
+        }
+        CLEANUP => {
+            let args: EnvironmentCleanupArguments = serde_json::from_value(value).map_err(invalid)?;
+            OperationId::new(&args.operation_id).map_err(|e| e.to_string())?;
+            ContentDigest::new(&args.expected_fingerprint).map_err(|e| e.to_string())?;
+            json!(args)
+        }
+        RESTORE | PURGE => {
+            let args: EnvironmentChangeTrashArguments = serde_json::from_value(value).map_err(invalid)?;
+            OperationId::new(&args.cleanup_operation_id).map_err(|e| e.to_string())?;
+            ContentDigest::new(&args.expected_fingerprint).map_err(|e| e.to_string())?;
+            json!(args)
+        }
         OBSERVE => {
             let args: ObserveArguments = serde_json::from_value(value).map_err(invalid)?;
             if !(1..=500).contains(&args.limit) {
@@ -114,6 +154,8 @@ pub fn source_id(id: &str, value: &Value) -> Result<Option<OperationId>, String>
         REALIZE => "plan_operation_id",
         VERIFY | OBSERVE | LIBRARY => "realization_operation_id",
         RECONCILE => "operation_id",
+        RETENTION | CLEANUP => "operation_id",
+        CLEANUP_STATUS | RESTORE | PURGE => "cleanup_operation_id",
         _ => return Ok(None),
     };
     normalized[key]

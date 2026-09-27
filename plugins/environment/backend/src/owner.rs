@@ -17,6 +17,7 @@ use std::{
     time::Duration,
 };
 use tokio::sync::{OwnedMutexGuard, watch};
+mod materials;
 
 const CAPACITY: usize = 16;
 struct Entry {
@@ -177,7 +178,7 @@ impl Owner {
         self.query_call(call)?;
         if matches!(
             call.binding.capability.id.as_str(),
-            source::OBSERVE | source::LIBRARY
+            source::OBSERVE | source::LIBRARY | source::RETENTION | source::CLEANUP_STATUS
         ) {
             Ok((
                 call.binding.capability.id.to_string(),
@@ -242,6 +243,9 @@ impl Owner {
         observation: Value,
     ) -> Result<Value, String> {
         let (action, args) = self.query_arguments(call)?;
+        if source::material_capability(&action) {
+            return self.prepare_material(call, &action, &args, observation).await;
+        }
         let qualified = source::qualify(
             call,
             self.scope()?,
@@ -345,7 +349,11 @@ impl Owner {
         Ok(qualification)
     }
     pub fn admit(&self, call: &PluginCall) -> Result<(), String> {
-        self.qualification(call)?;
+        if source::material_operation(call.binding.capability.id.as_str()) {
+            self.material_qualification(call)?;
+        } else {
+            self.qualification(call)?;
+        }
         let id = original(call)?;
         let mut accepted = self.accepted.lock().unwrap();
         if accepted.len() >= CAPACITY || accepted.contains_key(&id) {
@@ -372,8 +380,8 @@ impl Owner {
         let id = original(call).expect("validated admission");
         let lane = tokio::select! { biased; _ = cancelled(&mut cancellation) => None, lane = self.lane.clone().lock_owned() => Some(lane) };
         let result = if lane.is_none() || *cancellation.borrow() {
-            if call.binding.capability.id.as_str() == source::RECONCILE {
-                failed("Reconciliation did not start before its control channel ended")
+            if call.binding.capability.id.as_str() == source::RECONCILE || source::material_operation(call.binding.capability.id.as_str()) {
+                failed("Recovery or material work did not start before its control channel ended")
             } else {
                 PluginCommitPlan {
                     outcome: PluginOutcome::Cancelled,
@@ -387,14 +395,21 @@ impl Owner {
             }
         } else {
             self.accepted.lock().unwrap().get_mut(&id).unwrap().phase = ProcessPhase::Running;
-            match self.qualification(call) {
-                Err(error) => failed(error),
-                Ok(qualification) => {
-                    match self.perform(call, &id, qualification, cancellation).await {
-                        Ok((kind, value, verified)) => {
-                            self.publish(call, &id, kind, value, verified).await
+            if source::material_operation(call.binding.capability.id.as_str()) {
+                match self.perform_material(call, &id, cancellation).await {
+                    Ok((kind, value, verified)) => self.publish(call, &id, kind, value, verified).await,
+                    Err(error) => self.native_error(call, &id, error).await,
+                }
+            } else {
+                match self.qualification(call) {
+                    Err(error) => failed(error),
+                    Ok(qualification) => {
+                        match self.perform(call, &id, qualification, cancellation).await {
+                            Ok((kind, value, verified)) => {
+                                self.publish(call, &id, kind, value, verified).await
+                            }
+                            Err(error) => self.native_error(call, &id, error).await,
                         }
-                        Err(error) => self.native_error(call, &id, error).await,
                     }
                 }
             }

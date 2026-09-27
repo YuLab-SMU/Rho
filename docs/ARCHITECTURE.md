@@ -89,8 +89,21 @@ retains the child Operation under the original creation's causation. R verifies
 the complete result resource and unchanged selection before launching Ark, then
 checks the actual R installation. Existing sessions retain their original provider
 and library binding. Failed or unconfirmed verification starts no session and is
-never automatically replayed. Ordinary material collection still needs complete
-live-library usage protection; unknown references cannot be treated as unused.
+never automatically replayed.
+
+Ordinary Environment material operations qualify an original failed/cancelled
+source and its exact native scope. Explicit optional Host reads cover project
+visibility, original results and recorded provider instances; ordinary R session
+and snapshot contracts expose idle native library and namespace usage. The scan
+is bounded, compares journal observation positions and instance identities, and
+retains material when coverage, grants, recovery contracts or native usage remain
+unknown. It preserves original path references after quarantine. Each mutation
+re-reads the source chain and checks the current fingerprint, owned directories
+and native process absence; reports and original outcomes survive material removal.
+An unconfirmed original quarantine can be inspected by its admitted source chain
+without rewriting that outcome. Material operations do not confirm cancellation
+or automatically replay changes. Ordinary R checkpoint references still need their
+public recovery contract; until then their presence retains material.
 
 `operation.project_coverage@1` and `plugins.project_coverage@1` expose one bit of
 current read coverage for the normalized project and authenticated principal.

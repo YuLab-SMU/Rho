@@ -294,10 +294,9 @@ original lifecycle operation uncertain and the instance failed. The corrected
 test verifies both states, the native lock refusal, absent process and unchanged
 original owner; the full run passes. Public TypeScript consumption, manifest/SDK
 consistency, client generation/build/check, architecture/package boundaries and
-documentation checks pass. Material
-collection and complete live-library retention across ordinary R providers remain
-to be integrated; this package does not yet replace the
-entire Environment feature. Existing user Hosts and R sessions were not restarted;
+documentation checks pass. Subsequent material and reference work is described
+below; this package does not yet replace the entire Environment feature.
+Existing user Hosts and R sessions were not restarted;
 the relocated Host adapter requires a new binary.
 
 The ordinary R package now supports explicit Environment binding through
@@ -344,9 +343,39 @@ path where a reference was required; it is corrected and the complete focused re
 passes. Public protocol generation, an independent strict TypeScript consumer,
 client build and generated/embedded-asset checks pass. Architecture, plugin-boundary
 and documentation checks pass; the focused cases are in the source/check index.
-These capabilities need a newly built Host; existing user Hosts and R memory have
-not been restarted. Ordinary material collection, recovery-reference protection
-and the full migration remain active.
+These capabilities are included in the new test Host below; existing user Hosts
+and R memory have not been restarted.
+
+The ordinary Environment backend now contributes 21 capabilities, including bounded
+material retention/status queries and explicit quarantine, restore and purge with
+their preflights. Optional public reads check project coverage, original successful
+results, recorded provider instances and idle R library/namespace usage. Missing
+grants, foreign coverage, changed observations, busy/disconnected R, unsupported
+recovery contracts and uncertain source work retain material. Mutations re-read
+the admitted source chain and validate native process absence, owned paths and the
+preview fingerprint. The original path remains protected after quarantine; an
+unconfirmed quarantine can be inspected without promoting its outcome. Reports
+and original records remain after material removal. The scan is not a reference
+lease or an atomic cross-owner snapshot. All 25 affected API/backend/native-owner
+cases pass, including the final focused rerun of 21 reference scenarios. Public
+SDK/manifest consistency, independent TypeScript consumption, client generation,
+build and embedded-resource checks pass. The eight-package standalone build and
+its wire tests pass, including material query purity, unsupported cancellation and
+queued EOF without native effects. Full native
+`scripts/test-environment-plugin.mjs --r-references` acceptance passes: two R
+sessions, paginated original records, live library and namespace protection after
+`.libPaths()` removal, namespace unloading, released providers, stale fingerprints,
+quarantine/restore/purge, idempotency and retained records/reports. The Host stays
+byte-identical during acceptance, SHA-256
+`3a9db963f49aeaa313e7db75f25f345a8c84fb7d20877eb1a5754be849bfe24a`.
+An initial fixture supplied a symlinked R home and was corrected to its real path.
+An intermediate run refused unobservable native process absence; that failure is
+retained, not counted as a pass. The complete isolated rerun passes without
+changing native guards or deadlines. A slow test startup was sampled in the
+system loader before test code and subsequently completed. Architecture, plugin
+boundaries and documentation checks pass. Existing user Hosts and R sessions were
+not changed. Complete ordinary R checkpoint-reference protection and removal of
+the fixed composition remain active.
 
 The ordinary `org.rho.files` backend now assembles outside the checkout from eight
 public/plugin packages, with no private core dependency or independent journal.

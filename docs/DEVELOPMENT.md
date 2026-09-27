@@ -54,10 +54,22 @@ with locked dependencies. The shipped `python3 tests/protocol.py
 without R. With an already built Host and the installed R prerequisites,
 `RHO_ENVIRONMENT_PLUGIN_PACKAGE=/absolute/package node scripts/test-environment-plugin.mjs`
 checks ordinary activation, original source/report authority, native pak/renv,
-verification, installer cancellation and previous-instance resource reads through
-that unchanged Host. It retains failed evidence and only cleans test-owned native
-markers. Ordinary material collection and complete live-library retention remain
-in progress. `environment.library@2` is a pure original-realization observation;
+verification, installer cancellation, previous-instance resource reads, explicit
+reference grants and material quarantine/restore/purge through that unchanged Host.
+It retains failed evidence and only cleans test-owned native markers. Add
+`--r-references` and set `RHO_R_PLUGIN_PACKAGE=/absolute/r-package` and
+`RHO_ARK=/absolute/ark` for exact-session live-library and namespace retention,
+including namespace use after removal from `.libPaths()` and eventual release.
+The native absence check can be unavailable when the OS hides a contemporaneous
+process's environment or lifetime. Keep this acceptance run separate from
+additional shell commands; preserve such a refusal as unavailable evidence and
+do not weaken the native check to turn it into a pass.
+The Host must include the public project-coverage capabilities; the script never
+rebuilds or replaces it. Backend unit checks include bounded reference scans,
+unavailable visibility, unknown recovery, changed observations, original scope,
+absent-path references and uncertainty. The shipped wire check includes material
+query purity and unsupported cancellation before EOF. Full recovery-reference
+protection remains in progress. `environment.library@2` is a pure original-realization observation;
 `r.create_session@2` explicitly delegates native verification before starting R.
 `RHO_ENVIRONMENT_PLUGIN_PACKAGE=/absolute/environment-package
 RHO_R_PLUGIN_PACKAGE=/absolute/r-package RHO_ARK=/absolute/ark

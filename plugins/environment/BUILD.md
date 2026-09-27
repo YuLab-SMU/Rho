@@ -38,6 +38,10 @@ caller and project; a report reference is not authority. The same rule applies t
 This package's initial RPC contributions cover configuration, planning, realization,
 verification, native recovery, inventory and pure library qualification. The
 ordinary R package can explicitly select the original realization and delegate
-verification before launch. Material collection and complete live-library usage
-protection are still being integrated; the package does not yet replace the
-entire Environment feature. Keep successful and uncertain materials intact.
+verification before launch. Material inspection and quarantine/restore/purge use
+the optional public reference grants described in README.md. The ordinary R
+provider must be available when selecting its read grants at activation; it may
+remain unstarted. Missing or incomplete reference observations retain materials.
+Recovery-reference protection is still being migrated, so the package does not
+yet replace the entire Environment feature. Successful and uncertain original
+attempts stay retained.

@@ -195,6 +195,7 @@ Checks:
 - `plugins.environment-native`: `["node","scripts/test-environment-plugin.mjs"]`
 - `plugins.environment-owner`: `["cargo","test","-p","rho-environment-api","-p","rho-environment-owner","--lib","--locked"]`
 - `plugins.environment-protocol`: `["node","plugins/environment/generate-sdk.mjs","--check"]`
+- `plugins.environment-r-references`: `["node","scripts/test-environment-plugin.mjs","--r-references"]`
 - `plugins.environment-types`: `["node","scripts/test-environment-plugin-types.mjs"]`
 - `plugins.environment-visibility`: `["cargo","test","-p","rho-environment","visibility","--locked"]`
 - `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`

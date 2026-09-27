@@ -16,6 +16,20 @@ fn name(id: &str) -> String {
     format!("{:x}", Sha256::digest(id.as_bytes()))
 }
 impl REnvironmentOwner {
+    /// Reference comparisons must retain the original location after quarantine:
+    /// a loaded namespace or recovery point can still name that absent path.
+    pub fn material_reference_paths(
+        &self,
+        source: &str,
+        kind: MaterialKind,
+        cleanup: Option<&str>,
+    ) -> Result<Vec<String>, String> {
+        let (stage, trash) = self.material_paths(source, kind, cleanup)?;
+        Ok(std::iter::once(stage)
+            .chain(trash)
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect())
+    }
     fn material_paths(
         &self,
         source: &str,
@@ -382,6 +396,46 @@ mod tests {
         let mut reply = String::new();
         std::io::stdin().read_line(&mut reply).unwrap();
         assert_eq!(reply, "finish\n");
+    }
+
+    #[test]
+    fn reference_paths_keep_absent_original_identity_and_reject_parent_aliases() {
+        let (_dir, runtime) = crate::recovery_tests::environment();
+        let paths = runtime
+            .material_reference_paths("original", MaterialKind::Realization, Some("cleanup"))
+            .unwrap();
+        assert_eq!(paths.len(), 2);
+        for path in &paths {
+            assert!(!Path::new(path).exists());
+        }
+        assert!(!runtime.config.data_root.join("realizations").exists());
+        fs::create_dir_all(&paths[0]).unwrap();
+        fs::write(Path::new(&paths[0]).join("retained"), "original bytes").unwrap();
+        fs::create_dir_all(Path::new(&paths[1]).parent().unwrap()).unwrap();
+        fs::rename(&paths[0], &paths[1]).unwrap();
+        assert_eq!(
+            runtime
+                .material_reference_paths("original", MaterialKind::Realization, Some("cleanup"))
+                .unwrap(),
+            paths
+        );
+        assert!(!Path::new(&paths[0]).exists());
+        #[cfg(unix)]
+        {
+            fs::remove_dir(runtime.config.data_root.join("realizations")).unwrap();
+            std::os::unix::fs::symlink("trash", runtime.config.data_root.join("realizations"))
+                .unwrap();
+            assert!(
+                runtime
+                    .material_reference_paths(
+                        "original",
+                        MaterialKind::Realization,
+                        Some("cleanup")
+                    )
+                    .unwrap_err()
+                    .contains("owned directory")
+            );
+        }
     }
 
     #[tokio::test]

@@ -84,6 +84,7 @@ pub enum EnvironmentReportKind {
     Verification,
     Reconciliation,
     Configuration,
+    Material,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]

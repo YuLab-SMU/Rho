@@ -42,8 +42,380 @@
       ]
     }
   ],
+  "optional_requires": [
+    {
+      "capability": {
+        "id": "operation.project_coverage",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.project_coverage",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read",
+        "project.references.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.list_recent",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.events_checkpoint",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instances",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.session",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.snapshot",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    }
+  ],
   "views": [],
   "capabilities": [
+    {
+      "capability": {
+        "id": "environment.retention",
+        "version": 2
+      },
+      "kind": "query",
+      "title": "Inspect original material retention",
+      "description": "Inspect exact original staging and quarantine references. Successful, live, uncertain, inaccessible or incompletely observed references retain material; observation never starts R or reconciles work.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "operation_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_id"
+        ],
+        "title": "EnvironmentSourceArguments",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "operation_id": "original-environment"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "MaterialObject": {
+            "properties": {
+              "bytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "entries": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "fingerprint": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "fingerprint",
+              "bytes",
+              "entries"
+            ],
+            "type": "object"
+          },
+          "MaterialState": {
+            "properties": {
+              "live_processes": {
+                "items": {
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              "native_marker_present": {
+                "type": "boolean"
+              },
+              "stage": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MaterialObject"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "trash": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MaterialObject"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "native_marker_present",
+              "live_processes"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "can_purge": {
+            "type": "boolean"
+          },
+          "can_quarantine": {
+            "type": "boolean"
+          },
+          "can_restore": {
+            "type": "boolean"
+          },
+          "material": {
+            "$ref": "#/$defs/MaterialState"
+          },
+          "retained_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "source_operation_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_operation_id",
+          "material",
+          "can_quarantine",
+          "can_restore",
+          "can_purge",
+          "retained_reasons"
+        ],
+        "title": "RetentionView",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "type": "null"
+      },
+      "required_scopes": [
+        "environment.read",
+        "operation.read",
+        "plugins.read",
+        "project.read",
+        "project.references.read",
+        "resources.read",
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "environment.cleanup_status",
+        "version": 2
+      },
+      "kind": "query",
+      "title": "Inspect original quarantine",
+      "description": "Inspect exact original staging and quarantine references. Successful, live, uncertain, inaccessible or incompletely observed references retain material; observation never starts R or reconciles work.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "cleanup_operation_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cleanup_operation_id"
+        ],
+        "title": "EnvironmentTrashArguments",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "cleanup_operation_id": "original-quarantine"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "MaterialObject": {
+            "properties": {
+              "bytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "entries": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "fingerprint": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "fingerprint",
+              "bytes",
+              "entries"
+            ],
+            "type": "object"
+          },
+          "MaterialState": {
+            "properties": {
+              "live_processes": {
+                "items": {
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              "native_marker_present": {
+                "type": "boolean"
+              },
+              "stage": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MaterialObject"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "trash": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MaterialObject"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "native_marker_present",
+              "live_processes"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "can_purge": {
+            "type": "boolean"
+          },
+          "can_quarantine": {
+            "type": "boolean"
+          },
+          "can_restore": {
+            "type": "boolean"
+          },
+          "material": {
+            "$ref": "#/$defs/MaterialState"
+          },
+          "retained_reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "source_operation_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_operation_id",
+          "material",
+          "can_quarantine",
+          "can_restore",
+          "can_purge",
+          "retained_reasons"
+        ],
+        "title": "RetentionView",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "type": "null"
+      },
+      "required_scopes": [
+        "environment.read",
+        "operation.read",
+        "plugins.read",
+        "project.read",
+        "project.references.read",
+        "resources.read",
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
     {
       "capability": {
         "id": "environment.status",
@@ -526,6 +898,1047 @@
     },
     {
       "capability": {
+        "id": "environment.cleanup",
+        "version": 2
+      },
+      "kind": "operation",
+      "title": "Quarantine original material",
+      "description": "Quarantine eligible failed or cancelled original material after bounded project, result and live R reference checks. Revalidate the preview fingerprint, owned directory and native process absence before moving files.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "expected_fingerprint": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_id",
+          "expected_fingerprint"
+        ],
+        "title": "EnvironmentCleanupArguments",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "expected_fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+          "operation_id": "original-environment"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "EnvironmentReportKind": {
+            "enum": [
+              "plan",
+              "realization",
+              "verification",
+              "reconciliation",
+              "configuration",
+              "material"
+            ],
+            "type": "string"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          },
+          "ResourceReference": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "$ref": "#/$defs/EnvironmentReportKind"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "report": {
+            "$ref": "#/$defs/ResourceReference"
+          },
+          "verified": {
+            "description": "None for planning/configuration; false never means successful verification.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "operation",
+          "kind",
+          "report"
+        ],
+        "title": "EnvironmentResult",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "$defs": {
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          },
+          "ResourceReference": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "automatic_reexecution": {
+            "type": "boolean"
+          },
+          "native_recovery": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ResourceReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operation": {
+            "type": "string"
+          },
+          "report_digest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "storage_root": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "storage_root",
+          "automatic_reexecution",
+          "action"
+        ],
+        "title": "EnvironmentRecovery",
+        "type": "object"
+      },
+      "required_scopes": [
+        "environment.write",
+        "operation.read",
+        "plugins.read",
+        "project.read",
+        "project.references.read",
+        "resources.read",
+        "workspace.read"
+      ],
+      "effects": [
+        "artifact.create",
+        "environment.materials"
+      ],
+      "cancellation": "unsupported",
+      "preflight": {
+        "id": "environment.prepare_cleanup",
+        "version": 2
+      }
+    },
+    {
+      "capability": {
+        "id": "environment.prepare_cleanup",
+        "version": 2
+      },
+      "kind": "query",
+      "title": "Prepare: Quarantine original material",
+      "description": "Observe configured activity or qualify explicit work without starting R or installing packages.",
+      "input_schema": {
+        "$defs": {
+          "CapabilityKey": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "version": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "version"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "arguments": true,
+          "capability": {
+            "$ref": "#/$defs/CapabilityKey"
+          },
+          "preconditions": true,
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "capability",
+          "arguments",
+          "preconditions"
+        ],
+        "title": "PluginPreflightRequest",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "arguments": {
+            "expected_fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "operation_id": "original-environment"
+          },
+          "capability": {
+            "id": "environment.cleanup",
+            "version": 2
+          },
+          "preconditions": null,
+          "target": null
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "arguments": true,
+          "owner_context": true,
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "arguments",
+          "owner_context"
+        ],
+        "title": "PluginPreflightResult",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "type": "null"
+      },
+      "required_scopes": [
+        "environment.write",
+        "operation.read",
+        "plugins.read",
+        "project.read",
+        "project.references.read",
+        "resources.read",
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "environment.restore_cleanup",
+        "version": 2
+      },
+      "kind": "operation",
+      "title": "Restore original material",
+      "description": "Restore one exact original quarantine after rechecking its source, references and fingerprint. Do not replace an occupied staging path or repeat the original installation.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "cleanup_operation_id": {
+            "type": "string"
+          },
+          "expected_fingerprint": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cleanup_operation_id",
+          "expected_fingerprint"
+        ],
+        "title": "EnvironmentChangeTrashArguments",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "cleanup_operation_id": "original-quarantine",
+          "expected_fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "EnvironmentReportKind": {
+            "enum": [
+              "plan",
+              "realization",
+              "verification",
+              "reconciliation",
+              "configuration",
+              "material"
+            ],
+            "type": "string"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          },
+          "ResourceReference": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "$ref": "#/$defs/EnvironmentReportKind"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "report": {
+            "$ref": "#/$defs/ResourceReference"
+          },
+          "verified": {
+            "description": "None for planning/configuration; false never means successful verification.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "operation",
+          "kind",
+          "report"
+        ],
+        "title": "EnvironmentResult",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "$defs": {
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          },
+          "ResourceReference": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "automatic_reexecution": {
+            "type": "boolean"
+          },
+          "native_recovery": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ResourceReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operation": {
+            "type": "string"
+          },
+          "report_digest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "storage_root": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "storage_root",
+          "automatic_reexecution",
+          "action"
+        ],
+        "title": "EnvironmentRecovery",
+        "type": "object"
+      },
+      "required_scopes": [
+        "environment.write",
+        "operation.read",
+        "plugins.read",
+        "project.read",
+        "project.references.read",
+        "resources.read",
+        "workspace.read"
+      ],
+      "effects": [
+        "artifact.create",
+        "environment.materials"
+      ],
+      "cancellation": "unsupported",
+      "preflight": {
+        "id": "environment.prepare_restore_cleanup",
+        "version": 2
+      }
+    },
+    {
+      "capability": {
+        "id": "environment.prepare_restore_cleanup",
+        "version": 2
+      },
+      "kind": "query",
+      "title": "Prepare: Restore original material",
+      "description": "Observe configured activity or qualify explicit work without starting R or installing packages.",
+      "input_schema": {
+        "$defs": {
+          "CapabilityKey": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "version": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "version"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "arguments": true,
+          "capability": {
+            "$ref": "#/$defs/CapabilityKey"
+          },
+          "preconditions": true,
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "capability",
+          "arguments",
+          "preconditions"
+        ],
+        "title": "PluginPreflightRequest",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "arguments": {
+            "cleanup_operation_id": "original-quarantine",
+            "expected_fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "capability": {
+            "id": "environment.restore_cleanup",
+            "version": 2
+          },
+          "preconditions": null,
+          "target": null
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "arguments": true,
+          "owner_context": true,
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "arguments",
+          "owner_context"
+        ],
+        "title": "PluginPreflightResult",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "type": "null"
+      },
+      "required_scopes": [
+        "environment.write",
+        "operation.read",
+        "plugins.read",
+        "project.read",
+        "project.references.read",
+        "resources.read",
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "environment.purge_cleanup",
+        "version": 2
+      },
+      "kind": "operation",
+      "title": "Purge original quarantine",
+      "description": "Permanently remove one eligible original quarantine after rechecking its source, references and fingerprint. Preserve original Operations and reports; deleting material does not roll back scientific effects.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "cleanup_operation_id": {
+            "type": "string"
+          },
+          "expected_fingerprint": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cleanup_operation_id",
+          "expected_fingerprint"
+        ],
+        "title": "EnvironmentChangeTrashArguments",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "cleanup_operation_id": "original-quarantine",
+          "expected_fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "EnvironmentReportKind": {
+            "enum": [
+              "plan",
+              "realization",
+              "verification",
+              "reconciliation",
+              "configuration",
+              "material"
+            ],
+            "type": "string"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          },
+          "ResourceReference": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "$ref": "#/$defs/EnvironmentReportKind"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "report": {
+            "$ref": "#/$defs/ResourceReference"
+          },
+          "verified": {
+            "description": "None for planning/configuration; false never means successful verification.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "operation",
+          "kind",
+          "report"
+        ],
+        "title": "EnvironmentResult",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "$defs": {
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          },
+          "ResourceReference": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "automatic_reexecution": {
+            "type": "boolean"
+          },
+          "native_recovery": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ResourceReference"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "operation": {
+            "type": "string"
+          },
+          "report_digest": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "storage_root": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "storage_root",
+          "automatic_reexecution",
+          "action"
+        ],
+        "title": "EnvironmentRecovery",
+        "type": "object"
+      },
+      "required_scopes": [
+        "environment.write",
+        "operation.read",
+        "plugins.read",
+        "project.read",
+        "project.references.read",
+        "resources.read",
+        "workspace.read"
+      ],
+      "effects": [
+        "artifact.create",
+        "environment.materials"
+      ],
+      "cancellation": "unsupported",
+      "preflight": {
+        "id": "environment.prepare_purge_cleanup",
+        "version": 2
+      }
+    },
+    {
+      "capability": {
+        "id": "environment.prepare_purge_cleanup",
+        "version": 2
+      },
+      "kind": "query",
+      "title": "Prepare: Purge original quarantine",
+      "description": "Observe configured activity or qualify explicit work without starting R or installing packages.",
+      "input_schema": {
+        "$defs": {
+          "CapabilityKey": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "version": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "version"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "arguments": true,
+          "capability": {
+            "$ref": "#/$defs/CapabilityKey"
+          },
+          "preconditions": true,
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "capability",
+          "arguments",
+          "preconditions"
+        ],
+        "title": "PluginPreflightRequest",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "arguments": {
+            "cleanup_operation_id": "original-quarantine",
+            "expected_fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "capability": {
+            "id": "environment.purge_cleanup",
+            "version": 2
+          },
+          "preconditions": null,
+          "target": null
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "arguments": true,
+          "owner_context": true,
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "arguments",
+          "owner_context"
+        ],
+        "title": "PluginPreflightResult",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "type": "null"
+      },
+      "required_scopes": [
+        "environment.write",
+        "operation.read",
+        "plugins.read",
+        "project.read",
+        "project.references.read",
+        "resources.read",
+        "workspace.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
         "id": "environment.plan",
         "version": 2
       },
@@ -591,7 +2004,8 @@
               "realization",
               "verification",
               "reconciliation",
-              "configuration"
+              "configuration",
+              "material"
             ],
             "type": "string"
           },
@@ -926,7 +2340,8 @@
               "realization",
               "verification",
               "reconciliation",
-              "configuration"
+              "configuration",
+              "material"
             ],
             "type": "string"
           },
@@ -1262,7 +2677,8 @@
               "realization",
               "verification",
               "reconciliation",
-              "configuration"
+              "configuration",
+              "material"
             ],
             "type": "string"
           },
@@ -1598,7 +3014,8 @@
               "realization",
               "verification",
               "reconciliation",
-              "configuration"
+              "configuration",
+              "material"
             ],
             "type": "string"
           },
@@ -1921,7 +3338,8 @@
               "realization",
               "verification",
               "reconciliation",
-              "configuration"
+              "configuration",
+              "material"
             ],
             "type": "string"
           },
