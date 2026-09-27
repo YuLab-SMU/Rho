@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
 mod recent;
+mod project_coverage;
+pub use project_coverage::OperationProjectCoverageHandler;
 pub use recent::{RecentOperationsHandler, validate_recent_arguments};
 mod checkpoint;
 pub use checkpoint::OperationEventsCheckpointHandler;
@@ -401,6 +403,11 @@ pub struct OperationRecordFilter {
 
 #[async_trait]
 pub trait OperationJournal: Send + Sync {
+    /// Whether this principal can read every recorded operation in this project.
+    /// Missing support is unknown, never an empty/complete reference inventory.
+    async fn project_read_coverage(&self, _scope: &str, _principal: &CallerIdentity) -> Result<rho_contract::ProjectReadCoverage, OperationError> {
+        Err(OperationError::Unavailable("Project operation coverage is unavailable".into()))
+    }
     /// An owner's exact actor filter, in addition to the authenticated principal.
     async fn list_recent_for_caller(&self, _scope: &str, _principal: &CallerIdentity, _caller: &CallerIdentity, _args: &rho_contract::RecentOperationsArguments) -> Result<rho_contract::RecentOperations, OperationError> {
         Err(OperationError::Unavailable("Caller-filtered operation history is unavailable".into()))

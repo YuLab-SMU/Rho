@@ -20,6 +20,19 @@ commands to complete instead of polling them with sleep loops.
 
 ## Testing SOP
 
+Generic project read coverage is separate from scientific reference interpretation.
+`cargo test -p rho-sqlite --lib project_coverage --locked` and
+`cargo test -p rho-operation -p rho-plugins --lib project_coverage --locked` check
+principal/project boundaries, recorded lifecycle states and observation without
+mutation or recovery. A journal without coverage support remains unavailable;
+an empty visible page cannot stand in for that missing evidence.
+`cargo test -p rho-host --test plugin_optional_requirements project_coverage --locked`
+checks explicit grants and delegated visibility; the existing
+`official_host_ports_bind_revisions_visibility_commit_and_release_without_r`
+case in `--test plugins` checks direct Host access. Public protocol generation and
+the independent TypeScript consumer include the coverage DTO and empty-input schema.
+These checks establish metadata visibility, not Environment cleanup safety.
+
 Environment contracts, native execution and R helpers live in
 `plugins/environment/api` and `plugins/environment/backend/owner`. The retiring
 `rho-r-environment` adapter delegates to this owner. Iterate with

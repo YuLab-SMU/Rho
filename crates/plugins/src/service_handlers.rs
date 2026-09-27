@@ -54,6 +54,7 @@ pub(crate) fn register(
         "plugins.list",
         "plugins.inspect",
         "plugins.instances",
+        "plugins.project_coverage",
         "plugins.instance",
         "plugins.resolve",
         "plugins.branch_head",
@@ -173,6 +174,10 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
             false,
             PLUGINS_READ_SCOPE,
         ),
+        "plugins.project_coverage" => (
+            schema_for!(ProjectReadCoverageArguments).to_value(), schema_for!(ProjectReadCoverage).to_value(),
+            json!({}), "Check the coverage of visible project plugin instances", false, PLUGINS_READ_SCOPE,
+        ),
         "plugins.instance" => (
             schema_for!(PluginInstanceArguments).to_value(),
             schema_for!(PluginInstanceObservation).to_value(),
@@ -276,6 +281,11 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
         descriptor.documentation.effects = "Read configuration metadata only. No runtime, filesystem scan, recovery or Operation is started.".into();
         descriptor.documentation.related_capabilities = vec![];
     }
+    if id == "plugins.project_coverage" {
+        descriptor.required_scopes.insert("project.references.read".into());
+        descriptor.documentation.limitations = vec!["Returns only whether all recorded project instances are visible to this principal. It includes preparing, failed, released and historical instances; it exposes no foreign identities, counts, configuration or logs.".into(), "This is current visibility metadata, not a lease or native-process proof. Read owner-specific references separately; incomplete or unavailable coverage cannot establish absence. No provider is started, reconnected or recovered.".into()];
+        descriptor.documentation.related_capabilities = vec![key("plugins.instances"),key("operation.project_coverage")];
+    }
     if id == "plugins.activate" {
         descriptor.documentation.limitations.push("Optional capabilities must be declared by this exact manifest and explicitly selected in optional_capabilities. Selection cannot enlarge declared scopes or caller authority; it does not install or start another provider. The selected grants stay fixed for this instance and its views.".into());
     }
@@ -321,6 +331,7 @@ fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
         "resources.inspect" => normalize::<ResourceInspect>(value),
         "resources.read" => normalize::<ResourceRead>(value),
         "plugins.repository" | "workspace.paths" => normalize::<Empty>(value),
+        "plugins.project_coverage" => normalize::<ProjectReadCoverageArguments>(value),
         "plugins.list" => normalize::<PluginCatalogArguments>(value),
         "plugins.inspect" | "plugins.remove" => normalize::<PluginRevisionArguments>(value),
         "plugins.instances" => normalize::<PluginInstancesArguments>(value),
@@ -365,6 +376,7 @@ impl QueryHandler for Read {
     ) -> Result<host::QuerySnapshot, OperationError> {
         let service = &self.service;
         let data = match self.id {
+            "plugins.project_coverage" => json!(service.repository.lock().unwrap().instance_project_coverage(&service.project,&plugin_principal_id(context.principal())).map_err(error)?),
             "workspace.paths" => json!(service.workspace_paths),
             "windows.layout" => {
                 let args: PluginWindowArguments = decode(value)?;

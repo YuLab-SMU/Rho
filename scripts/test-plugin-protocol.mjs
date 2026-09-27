@@ -15,6 +15,11 @@ try {
   fs.mkdirSync(consumer);
   fs.writeFileSync(path.join(consumer, "consumer.mts"), `
 import type { ActivatePlugin, WorkspacePaths, PluginManifest, RpcFrame, VisualDocument, PluginRevisionPage, PendingCancellation, UpdatePluginWindowLayout, OpenPluginWindowView, ClosePluginView, PluginViewLifecycle, SaveDocumentDraft, StageDraftChunk, DocumentDraftChunk, ListDocumentDrafts, DocumentDraftPage, ContextSearch, ContextPage, PreviewContext, ContextPreview } from "../protocol/index.js";
+import type {ProjectReadCoverage,ProjectReadCoverageArguments} from "../protocol/index.js";
+const coverageInput:ProjectReadCoverageArguments={};
+const coverage:ProjectReadCoverage={all_visible:false};
+// @ts-expect-error Missing coverage cannot be treated as complete.
+const missingCoverage:ProjectReadCoverage={};
 const activation: ActivatePlugin = { revision: "revision", artifact: "artifact", target: "ui-web", alias: "editor", configuration: {} };
 const selected: ActivatePlugin = { ...activation, optional_capabilities: [{ id: "language.run", version: 1 }] };
 const none: Pick<PluginManifest, "optional_requires"> = {};
@@ -57,6 +62,13 @@ export function inspect(manifest: PluginManifest, visual: VisualDocument, page: 
     assert.ok(schema.$schema && schema.$defs, `missing standalone schema: ${name}`);
   }
   const contextSearch = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/context-search.json"), "utf8"));
+  const coverage = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/project-read-coverage.json"), "utf8"));
+  assert.deepEqual(coverage.required,["all_visible"]);
+  assert.equal(coverage.additionalProperties,false);
+  const coverageInput = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/project-read-coverage-arguments.json"), "utf8"));
+  assert.equal(coverageInput.type,"object");
+  assert.deepEqual(coverageInput.properties??{},{});
+  assert.equal(coverageInput.additionalProperties,false);
   assert.equal(contextSearch.additionalProperties, false);
   assert.equal(contextSearch.properties.limit.minimum, 1);
   assert.equal(contextSearch.properties.limit.maximum, 20);

@@ -92,6 +92,18 @@ and library binding. Failed or unconfirmed verification starts no session and is
 never automatically replayed. Ordinary material collection still needs complete
 live-library usage protection; unknown references cannot be treated as unused.
 
+`operation.project_coverage@1` and `plugins.project_coverage@1` expose one bit of
+current read coverage for the normalized project and authenticated principal.
+They require `project.references.read` plus the corresponding normal read scope;
+plugins must declare and receive those grants through the usual lifecycle.
+`all_visible:false` means the caller's record/instance pages cannot prove complete
+project coverage. Foreign identities, counts, configuration and content remain
+hidden. Recorded instance states include failed and released owners because their
+recovery references may remain relevant. These pure queries neither start nor
+recover providers. Coverage is not a lease, an atomic cross-owner snapshot or
+proof of unused material; scientific owners must still read and validate their
+own references and native preconditions before changes.
+
 The public `workspace.paths@1` query exposes the normalized Host project root and
 bounded protected storage paths under `project.read`. These boundaries come from
 Host composition, including future sidecars and the project lease; plugin

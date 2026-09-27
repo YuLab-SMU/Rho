@@ -234,6 +234,12 @@ impl SqliteOperationJournal {
 
 #[async_trait]
 impl OperationJournal for SqliteOperationJournal {
+    async fn project_read_coverage(&self, scope: &str, principal: &CallerIdentity) -> Result<rho_contract::ProjectReadCoverage, OperationError> {
+        let hidden: bool = self.connection()?.query_row(
+            "SELECT EXISTS(SELECT 1 FROM operations op WHERE json_extract(op.operation_json,'$.idempotency_scope')=?1 AND (COALESCE(json_extract(op.operation_json,'$.principal.kind'),op.caller_kind) IS NOT ?2 OR COALESCE(json_extract(op.operation_json,'$.principal.id'),op.caller_id) IS NOT ?3))",
+            params![scope,caller_kind(principal.kind),principal.id], |row| row.get(0)).map_err(storage)?;
+        Ok(rho_contract::ProjectReadCoverage { all_visible: !hidden })
+    }
     async fn events_checkpoint(
         &self,
         scope: &str,
@@ -1726,6 +1732,44 @@ mod tests {
             trace_parent: None,
             accepted_at_ms: 1,
         }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn project_coverage_keeps_foreign_data_hidden_and_never_recovers_work() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("coverage.sqlite");
+        let journal = SqliteOperationJournal::open(&path).unwrap();
+        let principal = operation("unused", "unused", "unused").caller;
+        assert!(journal.project_read_coverage("/project", &principal).await.unwrap().all_visible);
+        for (id, scope, delegated) in [("other-project", "/other", false), ("own", "/project", false), ("delegated", "/project", true)] {
+            let mut op = operation(id,id,id);
+            op.idempotency_scope = Some(scope.into());
+            if scope == "/other" { op.caller.id = "foreign".into(); }
+            if delegated {
+                op.principal = Some(principal.clone());
+                op.caller.kind = CallerKind::Plugin;
+                op.caller.id = "delegated-provider".into();
+            }
+            journal.admit(&op).await.unwrap();
+        }
+        let reader = SqliteOperationJournal::open_read_only(&path).unwrap();
+        assert!(reader.project_read_coverage("/project", &principal).await.unwrap().all_visible);
+        let checkpoint = journal.events_checkpoint("/project", &principal).await.unwrap();
+        // The same textual identity with another caller kind is a different principal.
+        let mut hidden = operation("hidden-original", "hidden-request", "hidden-digest");
+        hidden.idempotency_scope = Some("/project".into());
+        hidden.principal = Some(CallerIdentity { kind: CallerKind::Agent, id: principal.id.clone() });
+        journal.admit(&hidden).await.unwrap();
+        let coverage = reader.project_read_coverage("/project", &principal).await.unwrap();
+        assert_eq!(serde_json::to_value(coverage).unwrap(),json!({"all_visible":false}));
+        assert!(reader.project_read_coverage("/empty-project", &principal).await.unwrap().all_visible);
+        assert_eq!(reader.events_checkpoint("/project", &principal).await.unwrap(),checkpoint);
+        for id in ["own","delegated","hidden-original"] {
+            assert_eq!(journal.get(&OperationId::new(id).unwrap()).await.unwrap().unwrap().status,OperationStatus::Accepted);
+        }
+        let page=reader.list_recent("/project",&principal,&rho_contract::RecentOperationsArguments {before_cursor:None,client_request_id:None,operation_id:None,limit:100}).await.unwrap();
+        assert_eq!(page.operations.len(),2);
+        assert!(!serde_json::to_string(&page).unwrap().contains("hidden-"));
     }
 
     #[tokio::test(flavor = "current_thread")]

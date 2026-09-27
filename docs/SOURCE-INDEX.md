@@ -254,6 +254,7 @@ Checks:
 - `plugins.window-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-workspace.spec.ts"]`
 - `system.architecture`: `["node","scripts/check-architecture.mjs"]`
 - `system.client`: `["node","scripts/client.mjs","check"]`
+- `system.project-coverage`: `["cargo","test","-p","rho-sqlite","-p","rho-operation","-p","rho-plugins","--lib","project_coverage","--locked"]`
 
 ## `studio`
 
@@ -335,6 +336,7 @@ Checks:
 - `system.mcp-real-r`: `["node","scripts/test-mcp.mjs","--real-r"]`
 - `system.output-media`: `["node","scripts/test-output-media.mjs"]`
 - `system.process-recovery`: `["node","scripts/test-process-recovery.mjs"]`
+- `system.project-coverage`: `["cargo","test","-p","rho-sqlite","-p","rho-operation","-p","rho-plugins","--lib","project_coverage","--locked"]`
 - `system.r-checkpoints`: `["node","scripts/test-r-checkpoints.mjs"]`
 - `system.real-r`: `["node","scripts/test-real-r.mjs"]`
 - `system.remote-protocol`: `["node","scripts/test-remote-protocol.mjs"]`

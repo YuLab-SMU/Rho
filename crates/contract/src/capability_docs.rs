@@ -75,6 +75,11 @@ pub fn builtin_documentation(id: &str) -> CapabilityDocumentation {
             "Observe the visible journal's durable event checkpoint for a cold client before reading new events.",
             json!({}),
         ),
+        "operation.project_coverage" => (
+            "Check the coverage of visible project records",
+            "Requires operation.read and project.references.read. Returns only whether every current project operation is visible to this authenticated principal; foreign identities, counts and contents stay hidden. Coverage is not a lease, native usage observation or permission to delete materials. Read and validate owner-specific references separately; unknown coverage cannot prove absence.",
+            json!({}),
+        ),
         "workspace.run_r" => (
             "Execute captured R code",
             "Submit explicit R code to the native session's serial queue. Accepted means queued; running and terminal results are observed separately. Assignments and external effects are not rolled back on failure or cancellation.",

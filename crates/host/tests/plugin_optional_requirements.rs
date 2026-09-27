@@ -17,11 +17,48 @@ fn package(path: &Path, weak: bool) -> PluginArchive {
         "source":{"files":["index.html"],"lockfiles":["dependencies.lock"],"build_instructions":"BUILD.md","build":null},"dependencies":{},
         "requires":[{"capability":{"id":"operation.get","version":1},"scopes":["operation.read"]}],
         "optional_requires":[{"capability":{"id":"plugins.list","version":1},"scopes":if weak {json!([])} else {json!(["plugins.read"])}},
-            {"capability":{"id":"absent.optional","version":1},"scopes":[]}],
+            {"capability":{"id":"absent.optional","version":1},"scopes":[]},
+            {"capability":{"id":"plugins.project_coverage","version":1},"scopes":["plugins.read","project.references.read"]},
+            {"capability":{"id":"operation.project_coverage","version":1},"scopes":["operation.read","project.references.read"]}],
         "views":[{"id":"view","title":"Optional view","entrypoint":"dist/index.html","state_schema":{},"configuration_schema":{},"resource_kinds":[]}],
         "capabilities":[],"contexts":[],"backend":null,"configuration_schema":{},"default_configuration":{}
     })).unwrap()).unwrap();
     snapshot_directory(path, None, "ui-web").unwrap()
+}
+
+#[tokio::test]
+async fn project_coverage_delegates_only_explicit_metadata_grants_and_preserves_principal() {
+    let temp=tempfile::tempdir().unwrap();
+    let project=temp.path().join("project");fs::create_dir(&project).unwrap();
+    let db=temp.path().join("state.sqlite");
+    let archive=package(&temp.path().join("source"),false);
+    PluginRepository::open(&repository_path(&db)).unwrap().import(&archive).unwrap();
+    let host=NextHost::open_project(&db,&project).await.unwrap();
+    let context=NextHost::local_context();
+    let choices=json!([{"id":"plugins.project_coverage","version":1},{"id":"operation.project_coverage","version":1}]);
+    let activate=|id:&str,optional:Value|invoke(id,"plugins.activate",json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":"ui-web","alias":id,"configuration":{},"optional_capabilities":optional}));
+    let mut limited=context.clone();limited.scopes.remove("project.references.read");
+    assert!(host.invoke(&limited,activate("denied",choices.clone())).await.is_err());
+    let own=host.invoke(&context,activate("own",choices)).await.unwrap().output.unwrap()["instance"]["identity"].clone();
+    let view=host.invoke(&context,invoke("open","views.open",json!({"instance":own,"contribution":"view","window":"coverage-window","configuration":{},"state":{}}))).await.unwrap().output.unwrap();
+    let connected=connection(&host,&view).await;
+    let mut sequence=0;
+    for (foreign_present,expected) in [(false,true),(true,false)] {
+        if foreign_present {
+            let mut foreign=context.clone();foreign.caller.id="private-principal".into();
+            let other=host.invoke(&foreign,activate("private-instance",json!([]))).await.unwrap().output.unwrap()["instance"]["identity"].clone();
+            let released=host.invoke(&foreign,invoke("release-private","plugins.release",json!({"instance":other}))).await.unwrap();
+            assert_eq!(released.status,OperationStatus::Succeeded);
+        }
+        for id in ["plugins.project_coverage","operation.project_coverage"] {
+            sequence+=1;
+            let frame:PluginViewMessage=serde_json::from_value(json!({"protocol_version":1,"connection":connected.connection,"view":connected.view.view,"sequence":sequence,"request":format!("coverage-{sequence}"),"body":{"type":"query","capability":{"id":id,"version":1},"arguments":{}}})).unwrap();
+            let result=host.dispatch_plugin_view(&context,"coverage-window",&connected.call_token,frame).await.unwrap();
+            assert_eq!(result["data"],json!({"all_visible":expected}));
+            assert!(!result.to_string().contains("private-"));
+        }
+    }
+    host.drain().await;
 }
 fn invoke(id: &str, capability: &str, arguments: Value) -> Invocation {
     Invocation { client_request_id:id.into(), capability:CapabilityRef::new(capability,1).unwrap(), arguments, preconditions:vec![] }

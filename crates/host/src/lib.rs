@@ -710,6 +710,7 @@ impl NextHost {
             },
             scopes: std::collections::BTreeSet::from([
                 "operation.read".into(),
+                "project.references.read".into(),
                 "application.read".into(),
                 "application.control".into(),
                 "skill.read".into(),

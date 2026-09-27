@@ -56,6 +56,18 @@ instance. A stored `PluginInstanceObservation` does not establish process livene
 check `observed_in_this_host` together with its lifecycle state. Instance pages
 are scoped to the current project and original principal before pagination.
 
+`plugins.project_coverage@1` and `operation.project_coverage@1` accept
+`ProjectReadCoverageArguments` (`{}`) and return `ProjectReadCoverage` in the query
+envelope's `data`. They require `project.references.read` together with
+`plugins.read` or `operation.read`, respectively, through the same declared grants
+as other Host queries. The only field, `all_visible`, reports whether every
+recorded instance or operation in the Host's project is visible to the original
+principal. Failed and released instances still count. No foreign identity,
+configuration, content or count is returned. An unavailable response or
+`all_visible:false` means scoped pages cannot establish complete coverage. This
+metadata neither freezes records nor proves that a native resource is unused;
+owners must separately inspect their references and native preconditions.
+
 `manifest.requires` declares mandatory capability grants. `optional_requires`
 declares capabilities that an activation may explicitly select using
 `ActivatePlugin.optional_capabilities`. Omitting the selection grants none of

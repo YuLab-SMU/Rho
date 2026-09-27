@@ -5,6 +5,19 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
 
+/// Current metadata coverage, not a lease or a claim that materials are unused.
+/// Requires project.references.read in addition to the owner's normal read scope.
+/// No foreign identities, counts, configuration or scientific data are disclosed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectReadCoverage {
+    pub all_visible: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectReadCoverageArguments {}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct PluginCatalogArguments {

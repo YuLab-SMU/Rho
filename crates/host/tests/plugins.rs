@@ -398,6 +398,15 @@ async fn official_host_ports_bind_revisions_visibility_commit_and_release_withou
         query(&host, &context, "plugins.instances", json!({"limit":10})).await["total"],
         0
     );
+    for id in ["plugins.project_coverage","operation.project_coverage"] {
+        assert_eq!(query(&host,&context,id,json!({})).await,json!({"all_visible":true}));
+        let mut ungranted=context.clone();
+        ungranted.scopes.remove("project.references.read");
+        assert!(host.query_snapshot(&ungranted,QueryRequest {capability:CapabilityRef::new(id,1).unwrap(),arguments:json!({})}).await.is_err());
+        ungranted.scopes=std::collections::BTreeSet::from(["project.references.read".into()]);
+        assert!(host.query_snapshot(&ungranted,QueryRequest {capability:CapabilityRef::new(id,1).unwrap(),arguments:json!({})}).await.is_err());
+        assert!(host.query_snapshot(&context,QueryRequest {capability:CapabilityRef::new(id,1).unwrap(),arguments:json!({"project":"another-project"})}).await.is_err());
+    }
     assert!(
         !host
             .capabilities()
@@ -427,6 +436,14 @@ async fn official_host_ports_bind_revisions_visibility_commit_and_release_withou
     assert!(a.observed_in_this_host);
     let mut stranger = context.clone();
     stranger.caller.id = "another-principal".into();
+    for id in ["plugins.project_coverage","operation.project_coverage"] {
+        assert_eq!(query(&host,&context,id,json!({})).await,json!({"all_visible":true}));
+        assert_eq!(query(&host,&stranger,id,json!({})).await,json!({"all_visible":false}));
+        let mut delegated=context.clone();
+        delegated.principal=Some(context.caller.clone());
+        delegated.caller=CallerIdentity {kind:CallerKind::Plugin,id:"delegated-provider".into()};
+        assert_eq!(query(&host,&delegated,id,json!({})).await,json!({"all_visible":true}));
+    }
     assert_eq!(
         query(&host, &stranger, "plugins.instances", json!({"limit":1})).await["total"],
         0

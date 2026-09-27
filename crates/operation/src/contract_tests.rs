@@ -216,6 +216,21 @@ fn context() -> CallContext {
         trace_parent: None,
     }
 }
+
+#[tokio::test]
+async fn project_coverage_without_journal_support_stays_unknown() {
+    let journal = Arc::new(TestJournal::default());
+    let handler = OperationProjectCoverageHandler::new(journal.clone(), "/project".into());
+    let result = handler.query_for(&context(), &json!({})).await;
+    assert!(matches!(result, Err(OperationError::Unavailable(_))));
+    assert!(handler.query(&json!({})).await.is_err());
+    assert!(handler.normalize_arguments(&json!({"principal":"someone-else"})).is_err());
+    let state = journal.0.lock().unwrap();
+    assert!(state.records.is_empty());
+    assert!(state.plans.is_empty());
+    assert_eq!(state.recovery_reads, 0);
+}
+
 fn input_schema() -> Value {
     json!({"type":"object","properties":{"value":{"type":"integer"}},"required":["value"],"additionalProperties":false})
 }

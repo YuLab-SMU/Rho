@@ -196,6 +196,9 @@ pub(crate) fn register_record_queries(
     writable: bool,
 ) -> Result<RecordPorts, OperationError> {
     if let Some(project) = &project {
+        registry.register_query(Arc::new(rho_operation::OperationProjectCoverageHandler::new(
+            journal.clone(), project.clone(),
+        )))?;
         registry.register_query(Arc::new(
             rho_operation::OperationEventsCheckpointHandler::new(journal.clone(), project.clone()),
         ))?;

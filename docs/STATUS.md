@@ -329,6 +329,25 @@ manifest, client generation/build/check, architecture/package boundaries and
 documentation checks pass. These ordinary package changes require importing the
 new revisions, not rebuilding the verified Host; no running user session was changed.
 
+The generic core now implements `operation.project_coverage@1` and
+`plugins.project_coverage@1`. Both require an explicit `project.references.read`
+grant plus the normal owner read scope. They expose only whether the authenticated
+principal can see all recorded project operations or instances, including failed
+and released instances; foreign records and identities stay hidden. Unsupported
+journals remain unavailable. This closes a prerequisite for ordinary Environment
+reference inspection: an empty principal-filtered page cannot establish that no
+other references exist. Coverage neither starts nor recovers a provider and does
+not freeze references or authorize cleanup. All three focused storage/owner cases
+and eight Host cases pass, including explicit grants and original-principal
+delegation through an ordinary view. An initial plugin test fixture passed an owned
+path where a reference was required; it is corrected and the complete focused rerun
+passes. Public protocol generation, an independent strict TypeScript consumer,
+client build and generated/embedded-asset checks pass. Architecture, plugin-boundary
+and documentation checks pass; the focused cases are in the source/check index.
+These capabilities need a newly built Host; existing user Hosts and R memory have
+not been restarted. Ordinary material collection, recovery-reference protection
+and the full migration remain active.
+
 The ordinary `org.rho.files` backend now assembles outside the checkout from eight
 public/plugin packages, with no private core dependency or independent journal.
 Its nine capabilities expose bounded file/Git observations and explicit patches.

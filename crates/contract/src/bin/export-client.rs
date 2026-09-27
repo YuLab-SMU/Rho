@@ -105,6 +105,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     FilePage::export_all(&config)?;
     ProjectPatchResult::export_all(&config)?;
     RecentOperations::export_all(&config)?;
+    ProjectReadCoverage::export_all(&config)?;
+    ProjectReadCoverageArguments::export_all(&config)?;
     RecentOperationsArguments::export_all(&config)?;
     OperationEventsCheckpoint::export_all(&config)?;
     OperationEventsCheckpointArguments::export_all(&config)?;

@@ -216,6 +216,21 @@
         "--locked"
       ]
     },
+    "system.project-coverage": {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "rho-sqlite",
+        "-p",
+        "rho-operation",
+        "-p",
+        "rho-plugins",
+        "--lib",
+        "project_coverage",
+        "--locked"
+      ]
+    },
     "plugins.backend-sdk": {
       "command": [
         "cargo",
@@ -789,6 +804,7 @@
         "docs.tool",
         "system.architecture",
         "system.rust",
+        "system.project-coverage",
         "system.client",
         "system.real-r",
         "system.r-checkpoints",
@@ -964,6 +980,7 @@
         "system.client",
         "plugins.protocol",
         "plugins.repository",
+        "system.project-coverage",
         "plugins.backend-sdk",
         "plugins.external-backend",
         "plugins.boundaries",

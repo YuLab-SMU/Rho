@@ -91,6 +91,8 @@ export type * from "./types/PluginWindowNode.js";
 export type * from "./types/PreviewContext.js";
 export type * from "./types/PrincipalId.js";
 export type * from "./types/ProjectId.js";
+export type * from "./types/ProjectReadCoverage.js";
+export type * from "./types/ProjectReadCoverageArguments.js";
 export type * from "./types/ProposedFact.js";
 export type * from "./types/ProviderBinding.js";
 export type * from "./types/ReadDocumentDraft.js";

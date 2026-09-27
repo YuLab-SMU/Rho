@@ -17,6 +17,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     RevisionDifference::export_all(&types)?;
     PluginInstance::export_all(&types)?;
     WorkspacePaths::export_all(&types)?;
+    ProjectReadCoverage::export_all(&types)?;
+    ProjectReadCoverageArguments::export_all(&types)?;
     PluginInstancePage::export_all(&types)?;
     PluginRequest::export_all(&types)?;
     PluginPreflightRequest::export_all(&types)?;
@@ -71,6 +73,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     VisualDocument::export_all(&types)?;
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
+        ("project-read-coverage", schemars::schema_for!(ProjectReadCoverage)),
+        ("project-read-coverage-arguments", schemars::schema_for!(ProjectReadCoverageArguments)),
         ("manifest", schemars::schema_for!(PluginManifest)),
         ("archive", schemars::schema_for!(PluginArchive)),
         ("rpc", schemars::schema_for!(RpcFrame)),

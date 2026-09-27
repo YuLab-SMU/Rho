@@ -3,6 +3,14 @@ use rho_plugin_protocol::*;
 use rusqlite::{OptionalExtension, params};
 
 impl PluginRepository {
+    /// All recorded lifecycle states matter, including unavailable and released
+    /// owners whose scientific recovery references are interpreted elsewhere.
+    pub fn instance_project_coverage(&self, project: &ProjectId, principal: &PrincipalId) -> Result<ProjectReadCoverage, PluginError> {
+        let hidden: bool = self.connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM plugin_instances WHERE json_extract(document,'$.project')=?1 AND json_extract(document,'$.principal') IS NOT ?2)",
+            params![project.as_str(),principal.as_str()], |row|row.get(0))?;
+        Ok(ProjectReadCoverage { all_visible: !hidden })
+    }
     /// Generic lifecycle metadata, not a second scientific execution database.
     /// Register and retain in the same transaction before starting native code.
     pub(crate) fn register_instance(
@@ -142,5 +150,39 @@ impl PluginRepository {
             next,
             total,
         })
+    }
+}
+
+#[cfg(test)]
+mod coverage_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn project_coverage_includes_historical_states_without_disclosing_them() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository = PluginRepository::open(&directory.path().join("packages")).unwrap();
+        let project = ProjectId::new("project").unwrap();
+        let principal = PrincipalId::new("principal").unwrap();
+        assert!(repository.instance_project_coverage(&project,&principal).unwrap().all_visible);
+        for (id,owner_project,owner,state) in [
+            ("another-project","another-project","foreign","active"),
+            ("own-active","project","principal","active"),
+            ("own-failed","project","principal","failed"),
+            ("own-released","project","principal","released"),
+        ] {
+            repository.connection.execute("INSERT INTO plugin_instances VALUES(?,?)",params![id,json!({"project":owner_project,"principal":owner,"state":state}).to_string()]).unwrap();
+        }
+        assert!(repository.instance_project_coverage(&project,&principal).unwrap().all_visible);
+        for state in ["preparing","active","draining","failed","released"] {
+            repository.connection.execute("INSERT INTO plugin_instances VALUES(?,?)",params!["foreign",json!({"project":"project","principal":"foreign-principal","state":state,"configuration":{"private":"hidden"}}).to_string()]).unwrap();
+            let before:u64=repository.connection.query_row("SELECT total_changes()",[],|row|row.get(0)).unwrap();
+            let coverage=repository.instance_project_coverage(&project,&principal).unwrap();
+            assert_eq!(serde_json::to_value(coverage).unwrap(),json!({"all_visible":false}));
+            let after:u64=repository.connection.query_row("SELECT total_changes()",[],|row|row.get(0)).unwrap();
+            assert_eq!(before,after,"Coverage must not initialize or recover instances");
+            repository.connection.execute("DELETE FROM plugin_instances WHERE id='foreign'",[]).unwrap();
+        }
+        assert!(repository.instance_project_coverage(&project,&principal).unwrap().all_visible);
     }
 }
