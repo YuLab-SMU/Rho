@@ -11,6 +11,52 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
+`plugins/studio` is an ordinary, independently assembled UI package using only the
+public protocol and UI SDK. It selects immutable source or an existing development
+branch, creates branches, reads bounded source pages, and checks/saves source
+checkpoints through the native ports. Its authoring surface has a node tree,
+fixture canvas, declaration/source editor and properties inspector. Text,
+container/split/tabs, form/list/table, media placeholders and opaque custom
+components share the public declaration; bindings, conditions, tokens and events
+remain data. Canvas selection, drag and rendering cannot call scientific owners or
+execute custom source. Source/canvas/property edits share undo, including across
+checkpoints; invalid declaration text retains its last valid canvas.
+
+Studio stores its source bodies, selection, history and original request intent in
+the generic chunked document drafts. It keeps the branch's expected head and
+verifies original Operation identity and prepared source revision before accepting
+a receipt. Reopen does not replay source work. History compares immutable source
+with its parent and restores selected bytes as a new checkpoint. Editing is limited
+to UTF-8 files up to 128 KiB; larger/binary historical files restore by exact source
+copy. Source and undo bodies have a bounded draft budget, and native checkpoint
+quotas remain visible. The package's README records these limits. It has no build,
+activation, scenario mutation or scientific execution grants.
+
+The independent build and model checks pass with
+`node scripts/test-studio-plugin.mjs` (`target/plugin-refactor/studio-model-final.log`),
+including malformed declarations, cycles, shared undo, manifest inventory changes,
+UTF-8 split across pages, content verification, native rejection, conflict forks,
+mismatched receipts, lost acknowledgement and replacement-view inspection boundaries.
+The isolated Chrome run passes with
+`npm run test:browser --prefix ui -- studio-plugin.spec.ts --output
+../target/plugin-refactor/studio-browser-final`. It checks original save recovery
+after reload, continued input while an older draft receipt is delayed, shared IME
+undo, clipboard, drag, immutable checkpoint artifacts and restore, and absence of
+scientific calls. Canvas captures at 1440/1920 and 390/220 px, source/navigation
+and properties at 390/220 px, and history at 1440/390 px were inspected. The
+node/file switch keeps the node tree visible in canvas mode. Evidence is in
+`studio-browser-final.log` and `studio-browser-final/` in the same directory;
+unchanged layout observations from `studio-browser-v4/` remain valid. Initial
+fixture-ID and premature-read test failures are retained in `studio-browser-v1.log`
+and `studio-browser-v2.log`; neither was a passing run. `cargo build --locked
+--offline`, client build/check, all 507 client unit tests, plugin boundaries and
+architecture/governance checks pass (`studio-host-build.log`,
+`studio-client-build.log`, `studio-client-check.log`, `studio-client-unit.log`).
+These runs use test-owned projects and do not replace user Hosts or R sessions.
+Native build, isolated executable preview, archive UI, Agent integration, default
+delivery and remaining scientific migration are still unfinished; the inert
+editing canvas is not executable preview acceptance.
+
 Plugin source development now has public `plugins.source_tree/read_source`,
 `plugins.branches`, `plugins.check_source` and `plugins.checkpoint` ports.
 Reads page immutable file identities and return binary-safe byte slices after
@@ -44,8 +90,8 @@ in `source-protocol.log`. Independent strict NodeNext consumption and standalone
 schema-reference checks pass (`source-public-types-v3.log`). Public bindings and
 schemas are generated; `npm run generate --prefix ui`, `npm run build --prefix ui`
 and `npm run check --prefix ui` pass (`source-generate.log`, `source-client-build.log`
-and `source-client-check.log`). Studio editing, native build and preview still need
-to be connected through ordinary public capabilities. A running Host needs a rebuilt replacement
+and `source-client-check.log`). Native build and executable preview still need
+ordinary public capabilities. A running Host needs a rebuilt replacement
 to expose the new ports; a client refresh cannot add them. Existing user Hosts and
 R sessions have not been replaced during these isolated-project checks.
 

@@ -1,0 +1,223 @@
+{
+  "protocol_version": 1,
+  "id": "org.rho.studio",
+  "name": "Plugin Studio",
+  "version": "0.1.0",
+  "description": "Edit immutable plugin source on a development branch, inspect declarations and keep synchronized drafts.",
+  "license": "AGPL-3.0-only",
+  "source": {
+    "files": [
+      "src/main.ts",
+      "src/model.ts",
+      "src/document.ts",
+      "src/visual.ts",
+      "src/canvas.ts",
+      "src/operations.ts",
+      "src/draft-sync.ts",
+      "src/index.html",
+      "src/style.css",
+      "tsconfig.json",
+      "package.json",
+      "build.mjs",
+      "README.md"
+    ],
+    "lockfiles": [
+      "dependencies.lock"
+    ],
+    "build_instructions": "BUILD.md",
+    "build": {
+      "command": [
+        "node",
+        "build.mjs"
+      ]
+    }
+  },
+  "dependencies": {},
+  "requires": [
+    {
+      "capability": {
+        "id": "plugins.list",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.branches",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.branch_head",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.source_tree",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.read_source",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.check_source",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.compare",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.branch",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.checkpoint",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "windows.scenario",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "documents.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "documents.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "documents.read",
+        "version": 1
+      },
+      "scopes": [
+        "documents.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "documents.stage",
+        "version": 1
+      },
+      "scopes": [
+        "documents.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "documents.save",
+        "version": 1
+      },
+      "scopes": [
+        "documents.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.get",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.list_recent",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instances",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    }
+  ],
+  "views": [
+    {
+      "id": "studio",
+      "title": "Plugin Studio",
+      "entrypoint": "dist/src/index.html",
+      "state_schema": {
+        "type": "object"
+      },
+      "configuration_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "resource_kinds": []
+    }
+  ],
+  "capabilities": [],
+  "contexts": [],
+  "backend": null,
+  "configuration_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "default_configuration": {}
+}

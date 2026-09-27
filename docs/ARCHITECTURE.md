@@ -47,6 +47,13 @@ running instance. Invalid declaration drafts remain with the ordinary editor and
 are not accepted as validated source checkpoints. These capabilities require
 ordinary declared read/write grants and have no management-plugin exception.
 
+The ordinary Studio's editing canvas receives declaration data and fixtures, not
+a Host client or an action dispatcher. It treats custom components as opaque
+source references and renders text without executing code or fetching media.
+Declaration errors retain both the raw draft and last valid structure. Shared
+source/canvas undo belongs to its synchronized document draft; native revision
+history remains immutable. An executable preview is a separate, explicit lifecycle.
+
 The same repository owns immutable project/principal-scoped scenario checkpoints
 and named heads through `scenarios.list/get/checkpoint`. Saving is a native
 compare-and-swap transaction: content identity, head and all referenced plugin

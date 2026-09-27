@@ -43,6 +43,16 @@ Public DTO changes also require client generation and
 `node scripts/test-plugin-protocol.mjs`. These tests do not establish the Studio
 editor, build/preview, scene application or real-R continuity.
 
+The ordinary Studio package uses `node scripts/test-studio-plugin.mjs` for an
+independent build outside the core checkout and focused source/canvas history,
+draft, receipt and recovery checks. After building the current client and Host,
+`npm run test:browser --prefix ui -- studio-plugin.spec.ts` runs its ordinary view
+against a disposable project. It covers fixture-only editing, declaration errors,
+source composition, drag, checkpoints, lost receipt recovery and historical source
+restoration. Inspect the captured normal, wide and constrained screenshots before
+claiming visual completion. The editing canvas does not execute plugin code;
+these checks do not establish native builds or isolated executable preview.
+
 Scenario application uses `cargo test -p rho-host --test plugin_scenarios --locked`.
 The fixtures construct ordinary packages outside the checkout and exercise scoped
 checkpoint/application ports, exact dependency/grant validation, delegated view

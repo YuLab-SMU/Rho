@@ -822,6 +822,15 @@ compare-and-swap and requires NEXT's parent to be EXPECTED. This changes a branc
 pointer, not a running instance or selected scenario. Builds, scenario application
 and full Plugin Studio integration are tracked separately in Status.
 
+The ordinary source editor lives in `plugins/studio`. Assemble it with
+`node scripts/build-studio-plugin.mjs /absolute/new/directory`, using the existing
+client TypeScript compiler; the directory must be outside the core checkout.
+Snapshot that package and open its `studio` contribution with `{}` configuration
+through the same activation/view ports as any UI plugin. It can inspect its own
+source and create development branches. Source editing and checkpoint history use
+the ports below. This package currently has an inert fixture canvas; native build,
+executable preview, archive controls and Agent integration remain unfinished.
+
 Active Hosts expose `plugins.repository`, `plugins.list`, `plugins.inspect`,
 `plugins.instances`, `plugins.instance`, `plugins.resolve`, `plugins.branch_head`
 and `plugins.compare` as bounded queries. The repository query reports the exact

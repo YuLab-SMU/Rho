@@ -105,6 +105,7 @@ Sources:
 - `scripts/build-process-plugin.mjs`
 - `scripts/build-r-plugin.mjs`
 - `scripts/build-remote-plugin.mjs`
+- `scripts/build-studio-plugin.mjs`
 - `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
 - `scripts/fixtures/editor-code.mjs`
@@ -155,6 +156,7 @@ Sources:
 - `scripts/test-remote-plugin-owner.mjs`
 - `scripts/test-remote-plugin-types.mjs`
 - `scripts/test-remote-plugin.mjs`
+- `scripts/test-studio-plugin.mjs`
 - `scripts/test-viewer-plugin.mjs`
 - `sdk/**`
 - `ui/e2e/console-editor.spec.ts`
@@ -176,6 +178,7 @@ Sources:
 - `ui/e2e/r-plugin-objects.spec.ts`
 - `ui/e2e/r-plugin-packages.spec.ts`
 - `ui/e2e/r-plugin-plots.spec.ts`
+- `ui/e2e/studio-plugin.spec.ts`
 
 Checks:
 
@@ -262,6 +265,8 @@ Checks:
 - `plugins.resource-download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts"]`
 - `plugins.scenario-ports`: `["cargo","test","-p","rho-host","--test","plugin_scenarios","--locked"]`
 - `plugins.self-requirements`: `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"]`
+- `plugins.studio-browser`: `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts"]`
+- `plugins.studio-model`: `["node","scripts/test-studio-plugin.mjs"]`
 - `plugins.ui-sdk`: `["node","scripts/test-plugin-ui.mjs"]`
 - `plugins.view-delegation`: `["cargo","test","-p","rho-host","--test","plugin_view_delegation","--locked"]`
 - `plugins.viewer`: `["node","scripts/test-viewer-plugin.mjs"]`
