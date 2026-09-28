@@ -15,6 +15,8 @@ use tokio::sync::Notify;
 
 #[path = "native_science.rs"]
 mod science;
+#[path = "native_assets.rs"]
+mod assets;
 
 #[derive(Default)]
 struct Factory {

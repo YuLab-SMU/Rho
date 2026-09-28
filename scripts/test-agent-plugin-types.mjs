@@ -9,6 +9,13 @@ try {
   fs.cpSync(path.join(root, 'plugins/agent/sdk'), path.join(directory, 'sdk'), {recursive: true});
   fs.writeFileSync(path.join(directory, 'package.json'), '{"type":"module"}');
   fs.writeFileSync(path.join(directory, 'consumer.ts'), `import type {AgentHandoffCommand, AgentHandoffQueryResult, AgentHandoffReceipt, ComponentAgentStart,ComponentAgentRun,ComponentAgentEventPage,ComponentToolReceipt,ApplicationCommandRequest,ApplicationCommandReceipt,AgentModelRun,ComponentModelSettings,ComponentToolSpec,AgentTaskRequest,AgentTaskDetail,AgentTaskEventPage,ProjectAgentTaskPage,AgentControllerRef,AgentProvider,AgentClientSession,AgentNativeCapabilities,AgentUsageObservation,LocalAgent} from './sdk/index.js';
+import type {AgentResourceAssetUpload} from './sdk/index.js';
+function resourceAttachment(input:AgentResourceAssetUpload){return [input.reference.owner.instance,input.reference.digest,input.reference.bytes,input.control.generation];}
+// @ts-expect-error Resource imports do not carry a filesystem path.
+function attachmentPath(input:AgentResourceAssetUpload){return input.path;}
+// @ts-expect-error Resource imports do not carry raw file bytes.
+function attachmentBytes(input:AgentResourceAssetUpload){return input.data;}
+void [resourceAttachment,attachmentPath,attachmentBytes];
 const controller:AgentControllerRef={window_id:'window',incarnation:'incarnation'};
 import type {AgentNativeToolGrant,AgentNativeToolInvocation,AgentNativeToolReceipt,AgentNativeToolPhase,AgentNativeToolTarget,AgentNativeToolRequest} from './sdk/index.js';
 function nativeTools(grant:AgentNativeToolGrant,call:AgentNativeToolInvocation,receipt:AgentNativeToolReceipt){return [grant.selection.target,grant.kind,call.send_request,call.tool_request,receipt.request,receipt.operation,receipt.phase,receipt.result];}

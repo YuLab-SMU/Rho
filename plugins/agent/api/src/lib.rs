@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 //! Public Agent transport observations and task contracts. These values confer no scientific or
 //! application authority. Native missing observations remain unknown.
+mod assets;
+pub use assets::*;
 mod tasks;
 pub use tasks::*;
 mod project_tasks;

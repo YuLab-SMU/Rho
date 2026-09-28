@@ -918,3 +918,6 @@ fn native_host_tools_retain_captured_branch_and_refuse_model_scope_replacement()
         Some(receipt)
     );
 }
+
+#[path = "asset_import_tests.rs"]
+mod asset_import_tests;

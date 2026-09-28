@@ -174,7 +174,7 @@ pub(crate) fn require(
     {
         return Err(Failure {
             code: "access_denied",
-            message: format!("The original Send lacks the selected grant for {}", key.id),
+            message: format!("The original request lacks the selected grant for {}", key.id),
         });
     }
     Ok(())

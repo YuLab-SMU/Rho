@@ -631,6 +631,17 @@ owner's explicit versioned takeover. A result candidate retains its original
 Operation until Host settlement. This metadata path does not start model, native
 Agent or scientific work and never opens the core journal.
 
+Native task resource attachments use a separate scoped Control. An exact public
+resource reference and optional `resources.read` grant permit bounded reads under
+the original project/principal. The Agent backend verifies complete ready chunks,
+exact references/ranges, total length and digest before revalidating the live
+caller and task control. The task owner atomically retains resource input and
+controller correlation with the original receipt; raw bytes live only in the
+existing Agent asset store. Repeated admissions read their original result without
+another resource read or native launch. Interrupted admissions remain unconfirmed,
+including after backend reopen; a reference is never a replay credential. This
+path neither puts attachments into scientific Operations nor raises RPC limits.
+
 Explicit ordinary model runs use that same owner/store plus the public Rig engine.
 The containing backend captures the original native Operation, request and exact
 provider binding in the run's admission transaction. Those fields are immutable

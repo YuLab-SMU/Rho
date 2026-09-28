@@ -4,7 +4,8 @@ use rho_agent_api::*;
 use rho_agent_owner::{
     AgentTaskError, AgentTaskRepository, AgentTaskScope, AgentTaskWrite, MAX_AGENT_EVENT_BYTES,
     MAX_AGENT_EVENTS, MAX_AGENT_TASKS, MAX_PROJECT_AGENT_EVENT_BYTES,
-    MAX_PROJECT_NATIVE_ADMISSION_BYTES, StoredAgentNativeAdmission, StoredAgentTask,
+    MAX_PROJECT_NATIVE_ADMISSION_BYTES, StoredAgentAssetImport, StoredAgentNativeAdmission,
+    StoredAgentTask,
 };
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
@@ -34,6 +35,10 @@ pub(crate) fn initialize(c: &Connection) -> Result<(), String> {
         bytes INTEGER NOT NULL, value TEXT NOT NULL CHECK(json_valid(value)),
         PRIMARY KEY(project,principal,request_id),
         UNIQUE(project,principal,native_operation), UNIQUE(project,principal,native_request));
+      CREATE TABLE IF NOT EXISTS agent_asset_imports (
+        project TEXT NOT NULL, principal TEXT NOT NULL, request_id TEXT NOT NULL,
+        bytes INTEGER NOT NULL, value TEXT NOT NULL CHECK(json_valid(value)),
+        PRIMARY KEY(project,principal,request_id));
       CREATE TABLE IF NOT EXISTS agent_task_events (
         project TEXT NOT NULL, principal TEXT NOT NULL, task_id TEXT NOT NULL,
         sequence INTEGER NOT NULL, event_id TEXT NOT NULL, bytes INTEGER NOT NULL,
@@ -51,7 +56,28 @@ fn decode_task(value: String, cursor: u64, gap: bool) -> Result<StoredAgentTask,
     task.history_gap |= gap;
     Ok(task)
 }
+mod asset_imports;
 impl AgentTaskRepository for AgentStore {
+    fn agent_asset_import(
+        &self,
+        scope: &AgentTaskScope,
+        request: &str,
+    ) -> Result<Option<StoredAgentAssetImport>, AgentTaskError> {
+        asset_imports::read(self, scope, request)
+    }
+    fn commit_agent_asset_import(
+        &self,
+        scope: &AgentTaskScope,
+        write: AgentTaskWrite<'_>,
+        capture: &StoredAgentAssetImport,
+    ) -> Result<(), AgentTaskError> {
+        if write.receipts.len() != 1 {
+            return Err(AgentTaskError::RequestConflict);
+        }
+        capture.validate(scope, &write.receipts[0])?;
+        self.commit_task(scope, write, None, Some(capture))
+    }
+
     fn agent_native_tool(
         &self,
         scope: &AgentTaskScope,
@@ -309,14 +335,14 @@ impl AgentTaskRepository for AgentStore {
             return Err(AgentTaskError::RequestConflict);
         }
         admission.validate(scope, &write.receipts[0])?;
-        self.commit_task(scope, write, Some(admission))
+        self.commit_task(scope, write, Some(admission), None)
     }
     fn commit_agent_task(
         &self,
         scope: &AgentTaskScope,
         write: AgentTaskWrite<'_>,
     ) -> Result<(), AgentTaskError> {
-        self.commit_task(scope, write, None)
+        self.commit_task(scope, write, None, None)
     }
 }
 impl AgentStore {
@@ -325,6 +351,7 @@ impl AgentStore {
         scope: &AgentTaskScope,
         write: AgentTaskWrite<'_>,
         admission: Option<&StoredAgentNativeAdmission>,
+        asset_import: Option<&StoredAgentAssetImport>,
     ) -> Result<(), AgentTaskError> {
         let record = write.task;
         let id = &record.task.task_id;
@@ -397,6 +424,7 @@ impl AgentStore {
                 }
                 tx.execute("INSERT INTO agent_native_admissions(project,principal,request_id,task_id,native_operation,native_request,bytes,value) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",params![scope.project,scope.principal,receipt.request_id,id,admission.origin.operation.as_str(),admission.origin.request.as_str(),value.len(),value]).map_err(error)?;
             }
+            asset_imports::retain(&tx, scope, receipt, asset_import)?;
             let prior:Option<String>=tx.query_row("SELECT digest FROM agent_task_receipts WHERE project=?1 AND principal=?2 AND request_id=?3",params![scope.project,scope.principal,receipt.request_id],|r|r.get(0)).optional().map_err(error)?;
             if prior.as_ref().is_some_and(|s| *s != receipt.request_digest) {
                 return Err(AgentTaskError::RequestConflict);

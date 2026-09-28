@@ -179,7 +179,7 @@ pub struct AgentNativeHistoryPage {
     pub partial: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct AgentTaskControl {
     pub task_id: String,

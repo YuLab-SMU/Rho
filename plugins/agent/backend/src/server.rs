@@ -266,7 +266,7 @@ where
                                 let original = request.clone();
                                 jobs.spawn(async move {
                                     let result = match caller(pending.receive().await) {
-                                        Ok(origin) => metadata.control(&call, origin).await,
+                                        Ok(origin) => metadata.control(&call, origin, host).await,
                                         Err(error) => Err(error),
                                     };
                                     Completed::Control(original, result)

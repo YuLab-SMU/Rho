@@ -5947,6 +5947,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum",
+ "base64 0.22.1",
  "reqwest 0.13.5",
  "rho-agent-api",
  "rho-agent-client",
@@ -6027,6 +6028,7 @@ dependencies = [
 name = "rho-agent-owner"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "rho-agent-api",
  "serde",
  "serde_json",
@@ -6046,6 +6048,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "uuid",
 ]

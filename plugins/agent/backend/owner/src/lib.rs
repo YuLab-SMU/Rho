@@ -2,6 +2,8 @@
 //! One writer for persistent Agent application metadata. Native actions are
 //! admitted here before the Host adapter touches a process or transport.
 use rho_agent_api::*;
+mod asset_import;
+pub use asset_import::*;
 mod native_admission;
 pub use native_admission::*;
 mod native_host;
@@ -129,6 +131,25 @@ pub trait AgentTaskRepository: Send + Sync {
         asset: &AgentAsset,
         bytes: &[u8],
     ) -> Result<(), AgentTaskError>;
+    fn agent_asset_import(
+        &self,
+        _scope: &AgentTaskScope,
+        _request: &str,
+    ) -> Result<Option<StoredAgentAssetImport>, AgentTaskError> {
+        Err(AgentTaskError::Storage(
+            "Attachment import observations are unavailable".into(),
+        ))
+    }
+    fn commit_agent_asset_import(
+        &self,
+        _scope: &AgentTaskScope,
+        _write: AgentTaskWrite<'_>,
+        _capture: &StoredAgentAssetImport,
+    ) -> Result<(), AgentTaskError> {
+        Err(AgentTaskError::Storage(
+            "Atomic attachment import is unavailable".into(),
+        ))
+    }
     fn agent_native_admission(
         &self,
         _scope: &AgentTaskScope,
@@ -332,7 +353,7 @@ impl AgentTaskOwner {
         request: &AgentTaskRequest,
         now: u64,
     ) -> Result<AgentTaskAdmission, AgentTaskError> {
-        self.admit_inner(scope, request, now, None)
+        self.admit_inner(scope, request, now, None, None)
     }
     /// The containing backend validates live caller/instance identity before this
     /// admission. Retained origin records support inspection, never later dispatch.
@@ -344,7 +365,7 @@ impl AgentTaskOwner {
         now: u64,
     ) -> Result<AgentTaskAdmission, AgentTaskError> {
         origin.validate(scope)?;
-        self.admit_inner(scope, request, now, Some(origin))
+        self.admit_inner(scope, request, now, Some(origin), None)
     }
     fn admit_inner(
         &self,
@@ -352,6 +373,7 @@ impl AgentTaskOwner {
         request: &AgentTaskRequest,
         now: u64,
         origin: Option<AgentNativeCommandOrigin>,
+        asset_import: Option<StoredAgentAssetImport>,
     ) -> Result<AgentTaskAdmission, AgentTaskError> {
         let _gate = self
             .gate
@@ -365,6 +387,16 @@ impl AgentTaskOwner {
         if let Some(receipt) = self.store.agent_receipt(scope, &request.request_id)? {
             if receipt.request_digest != digest {
                 return Err(AgentTaskError::RequestConflict);
+            }
+            if let Some(capture) = &asset_import {
+                let original = self
+                    .store
+                    .agent_asset_import(scope, &request.request_id)?
+                    .ok_or(AgentTaskError::RequestConflict)?;
+                original.validate(scope, &receipt)?;
+                if original.input != capture.input || original.controller != capture.controller {
+                    return Err(AgentTaskError::RequestConflict);
+                }
             }
             if let Some(origin) = &origin {
                 let original = self
@@ -725,6 +757,12 @@ impl AgentTaskOwner {
             capture.validate(scope, &receipt)?;
             self.store
                 .commit_agent_native_admission(scope, write, &capture)?;
+        } else if let Some(mut capture) = asset_import {
+            capture.request_digest = receipt.request_digest.clone();
+            capture.input_digest = receipt.input_digest.clone();
+            capture.validate(scope, &receipt)?;
+            self.store
+                .commit_agent_asset_import(scope, write, &capture)?;
         } else {
             self.store.commit_agent_task(scope, write)?;
         }

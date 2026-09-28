@@ -11,7 +11,8 @@ const key = capability => `${capability.id}@${capability.version}`;
 const agent = read('agent');
 const grants = new Map(agent.optional_requires.map(grant => [key(grant.capability), grant]));
 assert.equal(grants.size, agent.optional_requires.length, 'Optional grants must be unique');
-const expected = new Set(['plugins.inspect@1', 'operation.get@1', 'plugins.delegated_operation@1']);
+const expected = new Set(['plugins.inspect@1', 'operation.get@1', 'plugins.delegated_operation@1', 'resources.read@1']);
+assert.deepEqual(grants.get('resources.read@1')?.scopes, ['resources.read']);
 const studio = new Map(read('studio').requires.map(grant => [key(grant.capability), grant]));
 const core = [
   'host.core_contract', 'plugins.list', 'plugins.branches', 'plugins.branch_head', 'plugins.source_tree',

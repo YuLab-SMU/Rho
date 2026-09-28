@@ -49,9 +49,22 @@ credentials. Cross-window stop/takeover observes the old controller through
 is followed by a fresh `views.caller` check, then the same generation and native
 quiet checks. Unknown presence never authorizes takeover, and retries only observe
 the original admitted command. Upload stores an asset without changing a draft or opening a native
-Agent. A subsequent versioned draft write selects the asset. The current upload
-accepts at most 524288 encoded bytes; larger assets still need controlled resource
-transfer. Contributed context input is still refused before native submission.
+Agent. A subsequent versioned draft write selects the asset. Inline upload accepts
+at most 524288 encoded bytes. `agent.native.assets.import` accepts a controlled
+`ResourceReference` up to 8 MiB under an explicit optional `resources.read@1` grant.
+It reads at most 256 KiB per granted Query, checks exact owner/reference/ranges,
+requires complete ready observations, and verifies all bytes against the original
+length and SHA-256. Caller identity and task generation are rechecked after reading.
+
+`AgentTaskOwner::admit_asset_import` atomically records the exact resource input,
+controller and receipt in Agent storage without copying bytes into that capture or
+core Operation. Captures are limited to 16 KiB each and 16 MiB per project/principal.
+Identical retries inspect the original receipt without re-reading the source or
+launching native work, including after backend reopen. Unconfirmed original receipts
+remain uncertain; changed resources or controllers are refused. Asset bytes retain
+the existing 8 MiB/file and 32 MiB/task limits. Resource import does not provide a
+browser file picker or stage local files; ordinary Agent view capture remains to be
+composed. Contributed context input is still refused before native submission.
 
 Send can explicitly select up to 16 Query/Operation tools. Provider targets retain
 an exact ordinary-plugin binding and immutable public manifest; Host targets retain
@@ -153,8 +166,8 @@ task metadata, instance separation and attachment journal exclusion.
 an independent source assembly with the public owner/store/client dependencies.
 The temporary Host adapter delegates to this runtime while continuing to supply
 caller validation, scientific context capture and the scoped MCP lease. This
-temporary adapter remains until the remaining context, tool grants, attachment
-transfer and ordinary Agent views replace the fixed composition. Release checks persisted native process
+temporary adapter remains until the remaining context, ordinary-view attachment
+capture and Agent views replace the fixed composition. Release checks persisted native process
 quiet as well as live handles, including after a failed explicit disconnect.
 
 `node scripts/test-agent-plugin-owner.mjs` builds the task owner and public API
@@ -216,7 +229,7 @@ queries never replay it. The build instructions distinguish framed fixtures from
 the separate independent-package real-R acceptance.
 
 Native Agent connections and explicitly selected native tools are composed as
-described above. General context providers, full-size attachment transfer,
+described above. General context providers, ordinary-view attachment capture,
 component-model continuation and Agent views still require integration. Synthetic diagnostics and
 submitted-text runs alone do not establish scientific execution or real-provider quality. Default
 delivery remains unfinished.

@@ -22,6 +22,8 @@ use std::{
     time::Duration,
 };
 
+mod assets;
+
 type Endpoints = Arc<Mutex<BTreeMap<String, Arc<NativeMcpLease>>>>;
 pub struct NativeTasks {
     pub owner: Arc<AgentTaskOwner>,
@@ -284,32 +286,7 @@ impl NativeTasks {
             return Err(Failure::invalid("This native Agent instance is closing"));
         }
         let admission = self.owner.admit(&metadata.scope, &request, at)?;
-        let task_id = admission.task.task.task_id.clone();
-        let port = Arc::new(InputPort {
-            owner: self.owner.clone(),
-            endpoints: self.endpoints.clone(),
-            tools: self.tools.clone(),
-        });
-        if let Some(work) =
-            self.runtime
-                .launch(metadata.scope.clone(), request.clone(), admission, port)
-        {
-            work.await.map_err(|_| Failure {
-                code: "native_outcome_uncertain",
-                message: "Original attachment outcome is unconfirmed".into(),
-            })?;
-        }
-        let receipt = self.receipt(&metadata.scope, &request.request_id)?;
-        if receipt.status != "succeeded" {
-            return Err(Failure {
-                code: if receipt.status == "failed" { "native_command_failed" } else { "native_outcome_uncertain" },
-                message: "The original attachment has no successful receipt; inspect its retained outcome".into(),
-            });
-        }
-        encoded(AgentTaskCommandResult {
-            receipt,
-            detail: self.owner.detail(&metadata.scope, &task_id)?,
-        })
+        self.finish_upload(metadata, request, admission).await
     }
 
     pub async fn close(&self, scope: &AgentTaskScope) -> Result<(), Failure> {

@@ -817,3 +817,8 @@ async fn ordinary_native_tasks_isolate_uploads_and_never_journal_attachment_byte
     host.drain().await;
     assert!(!root.join(".Rhistory").exists());
 }
+
+#[path = "fixtures/plugins.rs"]
+mod resource_provider;
+#[path = "fixtures/agent_assets.rs"]
+mod resource_assets;

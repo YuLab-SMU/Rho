@@ -1,8 +1,8 @@
 use crate::{arguments::*, native_arguments::*};
 use rho_agent_api::{
-    AgentCommandReceipt, AgentNativeHistoryPage, AgentNativeToolReceipt, AgentTaskCommandResult,
-    AgentTaskDetail, AgentTaskEventPage, ComponentCredentialRef, ComponentCredentialStatus,
-    ComponentModelSettings, ProjectAgentTaskPage,
+    AgentCommandReceipt, AgentNativeHistoryPage, AgentNativeToolReceipt, AgentResourceAssetUpload,
+    AgentTaskCommandResult, AgentTaskDetail, AgentTaskEventPage, ComponentCredentialRef,
+    ComponentCredentialStatus, ComponentModelSettings, ProjectAgentTaskPage,
     component::{
         ComponentAgentConversation, ComponentAgentEventPage, ComponentAgentRun,
         ComponentModelDiagnostic, ComponentToolReceipt,
@@ -34,7 +34,10 @@ pub fn is_mutation(id: &str) -> bool {
     )
 }
 pub fn kind(id: &str) -> CapabilityKind {
-    if matches!(id, "agent.model.key.store" | "agent.native.assets.upload") {
+    if matches!(
+        id,
+        "agent.model.key.store" | "agent.native.assets.upload" | "agent.native.assets.import"
+    ) {
         CapabilityKind::Control
     } else if is_mutation(id) {
         CapabilityKind::Operation
@@ -57,6 +60,8 @@ fn capability(
         title: title.into(),
         description: if id == "agent.native.command" {
             "Admit a native Agent command with the original caller and task generation. Send may select exact ordinary-plugin query/Operation tools under existing grants; immutable manifests supply their contracts. Retains the original parent until the native turn and accepted scientific children settle. Identical requests only observe original receipts. Tool retries require the same Send and semantic request identity. Does not install an Agent. Attachment bytes are excluded and contributed context is not yet composed."
+        } else if id == "agent.native.assets.import" {
+            "Import an exact controlled resource up to 8 MiB into a native task under its current controller. Reads bounded granted chunks and verifies the complete digest before admission. Retains the original resource identity atomically with its receipt; retries only observe that receipt without reading or importing again. Does not start an Agent or journal attachment bytes."
         } else if id == "agent.native.assets.upload" {
             "Store a bounded native task attachment through ephemeral input, the same task owner and runtime, without journaling its bytes or starting a native Agent. Inspect its original task receipt after a lost reply. This capability currently accepts only bounded single-message attachments."
         } else if id == "agent.model.run" {
@@ -78,8 +83,8 @@ fn capability(
         }.into(),
         input_schema: input, output_schema: output, examples: vec![example],
         recovery_schema: json!({"type":"object","additionalProperties":false,"properties":{"code":{"type":"string"}},"required":["code"]}),
-        required_scopes: if operation || control { ["application.control".into(), "plugins.read".into()].into() } else if matches!(id, "agent.model.tool.operation" | "agent.native.tool.operation") { ["application.read".into(), "operation.read".into()].into() } else { ["application.read".into()].into() },
-        effects: if id == "agent.native.command" { ["agent.native.command".into()].into() } else if id == "agent.native.assets.upload" { ["agent.assets".into()].into() } else if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
+        required_scopes: if id == "agent.native.assets.import" { ["application.control".into(), "plugins.read".into(), "resources.read".into()].into() } else if operation || control { ["application.control".into(), "plugins.read".into()].into() } else if matches!(id, "agent.model.tool.operation" | "agent.native.tool.operation") { ["application.read".into(), "operation.read".into()].into() } else { ["application.read".into()].into() },
+        effects: if id == "agent.native.command" { ["agent.native.command".into()].into() } else if matches!(id, "agent.native.assets.upload" | "agent.native.assets.import") { ["agent.assets".into()].into() } else if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
         cancellation: CancellationSupport::Unsupported, preflight: None,
     }
 }
@@ -117,6 +122,10 @@ pub fn manifest() -> PluginManifest {
             let mut grants = crate::native_grants::scientific_requirements();
             grants.extend(crate::native_core_grants::requirements());
             grants.extend([
+                CapabilityRequirement {
+                    capability: key("resources.read"),
+                    scopes: ["resources.read".into()].into(),
+                },
                 CapabilityRequirement {
                     capability: key("plugins.inspect"),
                     scopes: ["plugins.read".into()].into(),
@@ -181,6 +190,13 @@ pub fn manifest() -> PluginManifest {
                 schema_for!(NativeHistory).to_value(),
                 schema_for!(AgentNativeHistoryPage).to_value(),
                 json!({"task_id":"task-example","cursor":null,"limit":50}),
+            ),
+            capability(
+                "agent.native.assets.import",
+                "Import a controlled resource as a native task attachment",
+                schema_for!(AgentResourceAssetUpload).to_value(),
+                schema_for!(AgentTaskCommandResult).to_value(),
+                json!({"request_id":"11111111-1111-4111-8111-111111111111","control":{"task_id":"task-example","generation":1},"name":"notes.txt","reference":{"owner":{"plugin":"org.example.files","instance":"files-one","revision":format!("sha256:{}","a".repeat(64)),"artifact":format!("sha256:{}","b".repeat(64))},"resource":"notes-resource","digest":format!("sha256:{}","c".repeat(64)),"media_type":"text/plain","bytes":5}}),
             ),
             capability(
                 "agent.native.assets.upload",

@@ -60,8 +60,14 @@ The public SDK's reverse-call pump and `views.caller`, `views.presence` and
 `plugins.delegated_operation` supply bounded native correlation without exposing
 Host credentials. The latter resolves only the original child under its retained
 parent admission and exact project/principal/instance. Absent evidence never
-authorizes a replay. Scoped attachment uploads currently accept at most 524288
-encoded bytes in one Control frame; full 8 MiB resource transport remains pending.
+authorizes a replay. Small inline attachments remain bounded to 524288 encoded
+bytes per Control. `agent.native.assets.import` now reads a complete controlled
+resource up to 8 MiB through an explicit optional `resources.read` grant. Exact
+references/ranges, total length and digest are checked before fresh caller/task
+admission. The Agent owner atomically retains the resource input and original
+receipt without putting bytes in Operation. Repeated imports only observe the
+original receipt, including after backend reopen; uncertainty never authorizes
+another upload. Browser file capture/staging still needs ordinary Agent UI work.
 
 Current Agent verification is layered by source; earlier results do not establish
 acceptance of later changes. Evidence below lives under `target/plugin-refactor/`.
@@ -107,9 +113,35 @@ Its corrected correlated invalid-params assertion passes with unchanged Host and
 Agent binaries; the failed run remains recorded. Both component and native real-R
 Agent cases also pass with the same frozen Host and independent Agent/R packages,
 including normal execution, Stop, original result retention and no replay.
-Exact-branch Studio assistance, full-size attachments, contributed context, ordinary
+Exact-branch Studio assistance, browser attachment capture, contributed context, ordinary
 Agent views, component input/continuation, actual generic Host restart and removal
 of fixed composition/default delivery remain unfinished.
+
+Current attachment checks pass 20 owner and 35 store cases. The independently
+built backend passes its result unit and all 42 framed cases, including full
+8 MiB/empty resources, changed caller/control, partial/malformed content and
+unconfirmed original admissions after reopen. All five frozen-Host cases pass:
+a separate Python plugin supplies actual resource-channel bytes, stops, and the
+Agent imports the complete retained 8 MiB under native grants. Length/digest,
+original asset/request identity, scope refusals, unchanged journal counts and
+retries without duplicate assets are verified. Existing model/task lifetime and
+instance-isolation cases also pass. These are disposable fixtures, not real-model
+quality or ordinary-view file-picker acceptance.
+
+SDK/manifest/client generation, the independent TypeScript consumer, optional
+grants, client build/consistency and architecture/boundary/governance checks pass.
+Root evidence is in `agent-assets-results-v1.json`, `v2.json` and `v3.json`;
+independent package and frozen-Host evidence is `agent-assets-combined-v1.json`.
+Source parity covers 333 files and the 335-entry inventory in
+`agent-assets-source-parity-v1.json`. Initial compile errors are retained. The
+first full root backend run passed 41 behavioral cases but failed the fixture's
+old 29-capability count; its corrected 30-capability assertion passes separately
+and in the full independent run. An unfiltered offline metadata command failed
+on an uncached dependency and is not counted as a pass (`agent-assets-initial.json`).
+Existing Hosts/R sessions have not been replaced; the new capability requires an
+explicit Agent package snapshot and activation, not a client refresh. No new
+browser, real-R, full-workspace, installation or publication check ran for this
+backend-only attachment change.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,

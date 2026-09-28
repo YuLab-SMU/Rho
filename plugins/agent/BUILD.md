@@ -65,7 +65,13 @@ must hold its scopes. The private `rho_call` method requires the original Send a
 a semantic tool UUID, with no provider selector in its arguments. Accepted children
 survive Stop and dropped reply observers. `agent.native.tool` and
 `agent.native.tool.operation` inspect retained evidence without replay. General
-contributed context and the full-size attachment resource transfer remain unfinished.
+contributed context remains unfinished. Full 8 MiB resource attachments use the
+separate `agent.native.assets.import` Control with an exact resource reference and
+an explicit `resources.read@1` optional grant. Only small inline uploads use
+`agent.native.assets.upload`. Neither path starts a native Agent or journals bytes;
+select the resulting asset with a separate versioned draft write. Import retries
+observe the original receipt without another resource read. Browser local-file
+capture/staging remains separate implementation work.
 Importing the package does not activate it. Installing or activating a development
 package is an explicit plugin lifecycle operation.
 

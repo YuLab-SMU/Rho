@@ -14,6 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_large_int("number");
     macro_rules! export { ($($ty:ty),+ $(,)?) => { $(<$ty>::export_all(&types)?;)+ }; }
     export!(
+        AgentResourceAssetUpload,
         AgentNativeToolTarget,
         AgentNativeToolRequest,
         AgentNativeToolSelection,
@@ -125,6 +126,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
+        (
+            "resource-asset-upload",
+            schemars::schema_for!(AgentResourceAssetUpload),
+        ),
         (
             "native-tool-selection",
             schemars::schema_for!(AgentNativeToolSelection),
