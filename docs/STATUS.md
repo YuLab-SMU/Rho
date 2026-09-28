@@ -280,10 +280,13 @@ runtime tests were removed. The package adds endpoint-open and post-open storage
 failure cases, plus an independent source assembly. Failed registration now closes
 the opened connection, revokes its endpoint and retains process evidence; lack of
 confirmed quiet stays uncertain and prevents replacement. Publication and shutdown
-share the live-map lock. Cargo has validated the new local dependency lock; the
-seven-case native runtime suite is now compiling. Host task, handoff, independent
-assembly and disposable crash/resume checks follow serially. These are not yet
-passes. The completed scientific Host/R acceptance froze its harness and both
+share the live-map lock. Cargo has validated the new local dependency lock. All
+seven native runtime cases, 13 Host task cases and six SQLite handoff cases pass;
+the same seven runtime cases also pass in a source assembly outside the checkout.
+The current binary build and disposable ACP crash/resume check also pass. The
+fixture preserves the exact native session and later draft, keeps interrupted
+outcomes uncertain and sends no replayed input. Exact serial results are in
+`target/plugin-refactor/agent-native-runtime-results-v1.json`. The completed scientific Host/R acceptance froze its harness and both
 external source packages before this extraction; its results cannot establish
 native-runtime acceptance. Architecture and private-import checks do cover the
 new source. The recovery fixture now hashes only its temporary
