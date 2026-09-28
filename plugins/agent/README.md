@@ -46,6 +46,14 @@ both project and principal. Missing-file observations do not create a directory.
 The temporary Host adapter supplies the existing user configuration location. Raw
 keys are never included in task metadata, source revisions, diagnostics or archives.
 
+`CredentialFile::put_for_request` atomically stores the secret and its scoped
+original request reference in that same credential file. Repeating identical
+input returns the original reference; changed reuse is refused. Read-only
+`reference_for_request` resolves a lost acknowledgement after reopen without
+returning secret bytes. Explicit removal retains the non-secret receipt and
+prevents replay from recreating that key. These are storage primitives for the
+future ephemeral key Control; the metadata backend does not yet expose key input.
+
 Generate declarations with `node plugins/agent/generate-sdk.mjs`; add `--check` to
 verify freshness. `node scripts/test-agent-plugin-types.mjs` checks an independent
 TypeScript consumer. Run `node scripts/test-agent-plugin-client.mjs` from the checkout

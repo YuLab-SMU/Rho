@@ -1,7 +1,7 @@
 //! Agent-owned credential file. Task metadata contains immutable references only.
 //! The containing owner supplies the location; keys never enter package revisions.
 use fs4::FileExt;
-use rho_agent_api::ComponentCredentialRef;
+use rho_agent_api::{ComponentCredentialRef, ComponentCredentialStatus};
 use rho_agent_owner::{AgentTaskError, AgentTaskScope, ComponentModelKey};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -18,6 +18,25 @@ pub struct CredentialFile {
 struct StoredCredentials {
     version: u32,
     entries: BTreeMap<String, StoredKey>,
+    /// Optional request receipts in this same current credential format. Ordinary
+    /// anonymous writes keep their original representation. Receipts survive key
+    /// removal so retrying an old request cannot recreate a removed secret.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    requests: BTreeMap<String, StoredCredentialRequest>,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StoredCredentialRequest {
+    project: String,
+    principal: String,
+    request: String,
+}
+impl StoredCredentialRequest {
+    fn matches(&self, scope: &AgentTaskScope, request: &str) -> bool {
+        self.project == scope.project
+            && self.principal == scope.principal
+            && self.request == request
+    }
 }
 #[derive(Serialize, Deserialize)]
 struct StoredKey {
@@ -34,6 +53,19 @@ fn unavailable() -> AgentTaskError {
     AgentTaskError::InvalidInput(
         "The saved model API key is unavailable; enter a key in Rho settings".into(),
     )
+}
+fn request_id(request: &str) -> Result<(), AgentTaskError> {
+    if request.is_empty()
+        || request.len() > 160
+        || !request
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"._:-".contains(&b))
+    {
+        return Err(AgentTaskError::InvalidInput(
+            "Invalid credential request identity".into(),
+        ));
+    }
+    Ok(())
 }
 impl CredentialFile {
     /// The containing instance supplies its credential path. No default location,
@@ -78,6 +110,7 @@ impl CredentialFile {
                 return Ok(StoredCredentials {
                     version: 1,
                     entries: BTreeMap::new(),
+                    requests: BTreeMap::new(),
                 });
             }
             Err(error) => return Err(storage(error)),
@@ -93,6 +126,18 @@ impl CredentialFile {
         if stored.version != 1 {
             return Err(storage("unsupported credential version"));
         }
+        let mut identities = std::collections::BTreeSet::new();
+        for (key_id, request) in &stored.requests {
+            request_id(&request.request).map_err(storage)?;
+            if !identities.insert((&request.project, &request.principal, &request.request))
+                || stored.entries.get(key_id).is_some_and(|entry| {
+                    entry.project != request.project || entry.principal != request.principal
+                })
+            {
+                return Err(storage("invalid original credential request"));
+            }
+        }
+        drop(identities);
         Ok(stored)
     }
     fn write(&self, stored: &StoredCredentials) -> Result<(), AgentTaskError> {
@@ -133,9 +178,45 @@ impl CredentialFile {
         scope: &AgentTaskScope,
         value: String,
     ) -> Result<ComponentCredentialRef, AgentTaskError> {
+        self.put_recorded(scope, None, value)
+    }
+    /// Persist a secret and its original request receipt in one atomic replacement.
+    /// The containing backend uses ephemeral Control transport, never an Operation
+    /// argument. Changed reuse and recreation after explicit removal are refused.
+    pub fn put_for_request(
+        &self,
+        scope: &AgentTaskScope,
+        request: &str,
+        value: String,
+    ) -> Result<ComponentCredentialRef, AgentTaskError> {
+        request_id(request)?;
+        self.put_recorded(scope, Some(request), value)
+    }
+    fn put_recorded(
+        &self,
+        scope: &AgentTaskScope,
+        request: Option<&str>,
+        value: String,
+    ) -> Result<ComponentCredentialRef, AgentTaskError> {
         let key = ComponentModelKey::new(value)?;
         let _lock = self.open_lock(true)?;
         let mut stored = self.read()?;
+        if let Some(request) = request
+            && let Some((key_id, _)) = stored
+                .requests
+                .iter()
+                .find(|(_, original)| original.matches(scope, request))
+        {
+            let Some(entry) = stored.entries.get(key_id) else {
+                return Err(AgentTaskError::Conflict);
+            };
+            if entry.key != key.expose() {
+                return Err(AgentTaskError::RequestConflict);
+            }
+            return Ok(ComponentCredentialRef::LocalFile {
+                key_id: key_id.clone(),
+            });
+        }
         let key_id = uuid::Uuid::new_v4().to_string();
         stored.entries.insert(
             key_id.clone(),
@@ -145,8 +226,45 @@ impl CredentialFile {
                 key: key.expose().into(),
             },
         );
+        if let Some(request) = request {
+            stored.requests.insert(
+                key_id.clone(),
+                StoredCredentialRequest {
+                    project: scope.project.clone(),
+                    principal: scope.principal.clone(),
+                    request: request.into(),
+                },
+            );
+        }
         self.write(&stored)?;
         Ok(ComponentCredentialRef::LocalFile { key_id })
+    }
+    /// Observe only the scoped original reference and its current availability.
+    /// None is an absent observation, not proof that a concurrent write cannot
+    /// still finish. Reading never creates a credential file or retries the write.
+    pub fn reference_for_request(
+        &self,
+        scope: &AgentTaskScope,
+        request: &str,
+    ) -> Result<Option<ComponentCredentialStatus>, AgentTaskError> {
+        request_id(request)?;
+        let Some(_lock) = self.open_lock(false)? else {
+            return Ok(None);
+        };
+        let stored = self.read()?;
+        Ok(stored
+            .requests
+            .iter()
+            .find(|(_, original)| original.matches(scope, request))
+            .map(|(key_id, _)| ComponentCredentialStatus {
+                credential: Some(ComponentCredentialRef::LocalFile {
+                    key_id: key_id.clone(),
+                }),
+                available: stored
+                    .entries
+                    .get(key_id)
+                    .is_some_and(|entry| ComponentModelKey::new(entry.key.clone()).is_ok()),
+            }))
     }
     pub fn key(
         &self,
@@ -373,5 +491,187 @@ mod location_tests {
         assert!(relative.key(&alice, &key_id).is_err());
         assert!(relative.put(&alice, "new-key".into()).is_err());
         assert!(relative.remove(&alice, &key_id).is_err());
+    }
+}
+
+#[cfg(test)]
+mod request_tests {
+    use super::*;
+    fn scope() -> AgentTaskScope {
+        AgentTaskScope {
+            project: "/study".into(),
+            principal: "alice".into(),
+        }
+    }
+    #[test]
+    fn original_credential_request_survives_lost_reply_and_reopen_without_replacement() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("keys.json");
+        let file = CredentialFile::at(path.clone());
+        let original = file
+            .put_for_request(&scope(), "save-key", "original-secret".into())
+            .unwrap();
+        let before = fs::read(&path).unwrap();
+        let reopened = CredentialFile::at(path.clone());
+        let observed = reopened
+            .reference_for_request(&scope(), "save-key")
+            .unwrap()
+            .unwrap();
+        assert_eq!(observed.credential, Some(original.clone()));
+        assert!(observed.available);
+        assert!(
+            !serde_json::to_string(&observed)
+                .unwrap()
+                .contains("original-secret")
+        );
+        assert_eq!(
+            reopened
+                .put_for_request(&scope(), "save-key", "original-secret".into())
+                .unwrap(),
+            original
+        );
+        assert_eq!(
+            reopened
+                .put_for_request(&scope(), "save-key", "changed-secret".into())
+                .unwrap_err(),
+            AgentTaskError::RequestConflict
+        );
+        assert_eq!(fs::read(&path).unwrap(), before);
+        for other in [
+            AgentTaskScope {
+                principal: "bob".into(),
+                ..scope()
+            },
+            AgentTaskScope {
+                project: "/other".into(),
+                ..scope()
+            },
+        ] {
+            assert!(
+                reopened
+                    .reference_for_request(&other, "save-key")
+                    .unwrap()
+                    .is_none()
+            );
+            assert_ne!(
+                reopened
+                    .put_for_request(&other, "save-key", "other-secret".into())
+                    .unwrap(),
+                original
+            );
+        }
+    }
+    #[test]
+    fn removing_a_requested_key_keeps_its_original_receipt_and_refuses_recreation() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("keys.json");
+        let file = CredentialFile::at(path.clone());
+        let original = file
+            .put_for_request(&scope(), "original", "removed-secret".into())
+            .unwrap();
+        let ComponentCredentialRef::LocalFile { ref key_id } = original else {
+            panic!()
+        };
+        file.remove(&scope(), key_id).unwrap();
+        let before = fs::read(&path).unwrap();
+        assert!(
+            !String::from_utf8(before.clone())
+                .unwrap()
+                .contains("removed-secret")
+        );
+        let reopened = CredentialFile::at(path.clone());
+        let observed = reopened
+            .reference_for_request(&scope(), "original")
+            .unwrap()
+            .unwrap();
+        assert_eq!(observed.credential, Some(original.clone()));
+        assert!(!observed.available);
+        assert_eq!(
+            reopened
+                .put_for_request(&scope(), "original", "removed-secret".into())
+                .unwrap_err(),
+            AgentTaskError::Conflict
+        );
+        assert_eq!(fs::read(&path).unwrap(), before);
+        assert_ne!(
+            reopened
+                .put_for_request(&scope(), "replacement", "new-secret".into())
+                .unwrap(),
+            original
+        );
+    }
+    #[test]
+    fn concurrent_original_key_writes_retain_one_reference_and_do_not_lose_other_keys() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("keys.json");
+        let anonymous = CredentialFile::at(path.clone())
+            .put(&scope(), "existing-secret".into())
+            .unwrap();
+        let workers: Vec<_> = (0..8)
+            .map(|_| {
+                let path = path.clone();
+                std::thread::spawn(move || {
+                    CredentialFile::at(path)
+                        .put_for_request(&scope(), "shared-request", "same-secret".into())
+                        .unwrap()
+                })
+            })
+            .collect();
+        let refs: Vec<_> = workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect();
+        assert!(refs.iter().all(|reference| reference == &refs[0]));
+        let file = CredentialFile::at(path.clone());
+        let ComponentCredentialRef::LocalFile { key_id } = anonymous else {
+            panic!()
+        };
+        assert_eq!(
+            file.key(&scope(), &key_id).unwrap().expose(),
+            "existing-secret"
+        );
+        let stored: StoredCredentials = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        assert_eq!(stored.entries.len(), 2);
+        assert_eq!(stored.requests.len(), 1);
+    }
+    #[test]
+    fn original_key_observation_and_invalid_requests_never_create_or_repair_storage() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("absent/keys.json");
+        let file = CredentialFile::at(path.clone());
+        assert!(
+            file.reference_for_request(&scope(), "unconfirmed")
+                .unwrap()
+                .is_none()
+        );
+        for request in ["", "bad request", &"x".repeat(161)] {
+            assert!(
+                file.put_for_request(&scope(), request, "secret".into())
+                    .is_err()
+            );
+            assert!(file.reference_for_request(&scope(), request).is_err());
+        }
+        assert!(
+            file.put_for_request(&scope(), "invalid-key", "bad key".into())
+                .is_err()
+        );
+        assert!(!path.parent().unwrap().exists());
+        let original = file
+            .put_for_request(&scope(), "first", "retained-secret".into())
+            .unwrap();
+        let ComponentCredentialRef::LocalFile { key_id } = original else {
+            panic!()
+        };
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        value["requests"]["forged-key"] = value["requests"][&key_id].clone();
+        fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+        let before = fs::read(&path).unwrap();
+        let error = file
+            .put_for_request(&scope(), "second", "new-secret".into())
+            .unwrap_err();
+        assert!(!error.to_string().contains("retained-secret"));
+        assert!(file.reference_for_request(&scope(), "first").is_err());
+        assert_eq!(fs::read(path).unwrap(), before);
     }
 }

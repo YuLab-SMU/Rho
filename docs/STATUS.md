@@ -195,6 +195,15 @@ configuration/isolation fixture and generic Host case remain pending. The earlie
 five-case metadata result predates this addition. No model or actual credential
 is accessed by these checks.
 
+The Agent credential store now has atomic original-request persistence in source:
+a secret and its scoped reference receipt share one file replacement. Identical
+retries return that reference; changed reuse is rejected. Read-only lookup survives
+reopen, and removal retains the non-secret receipt so an old request cannot
+recreate the secret. Four new store cases cover those boundaries, concurrent
+duplicates, missing storage and corrupt receipt refusal. These cases and the
+updated independent store assembly have not run yet; the existing credential
+evidence predates this addition. The raw-key ephemeral Control is still pending.
+
 This remains incomplete Agent migration. Model execution and native Agent transport
 composition, context providers, Agent views, Studio Agent assistance and final
 composition/default delivery remain active work. The metadata process does not

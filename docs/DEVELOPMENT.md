@@ -263,7 +263,8 @@ composition only; model/scientific execution and Agent view acceptance are separ
 Independent assemblies include the public plugin protocol and R media API, with
 all source/dependency paths checked to stay inside the assembly. Agent-owned storage
 includes scoped credential-file locking, replacement, redaction and explicit-path
-fixtures and uses `cargo test -p rho-agent-store --lib --locked`; `node
+fixtures, atomic original-request receipts, concurrent duplicate writes and
+post-removal replay refusal, and uses `cargo test -p rho-agent-store --lib --locked`; `node
 scripts/test-agent-plugin-store.mjs` repeats store and owner tests in an independent
 source assembly. Format isolation tests reject unrelated/unsupported databases
 without modifying them. The temporary core storage adapter and manual handoff use
