@@ -338,7 +338,6 @@ impl NativeTaskRuntime {
                 receipts.push(receipt);
                 Ok(())
             })
-            .map_err(Into::into)
     }
     fn receipt(
         &self,

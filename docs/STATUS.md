@@ -235,7 +235,8 @@ and independent backend both compiled, but all three Host cases failed before
 activation: the formatted manifest exceeded the 256 KiB raw-file limit. Its compact
 content was 124,058 bytes. The exporter and package builder now write compact JSON
 and check the encoded size; the public limit is unchanged. The failed v1 evidence
-is retained. A fresh combined ordinary/scientific Host run remains pending.
+is retained. The fresh independent ordinary Host run passes all three cases, and
+the combined scientific real-R case also passes.
 This initial run input carries submitted text only, without scientific tools,
 context capture, attachments or continuation.
 
@@ -251,19 +252,25 @@ authorization cases. The first 23-case framed run passed 18 and timed out in fiv
 scientific cases: the server disabled its outgoing listener while the queue was
 empty, so an async job's subsequent Host request could not wake it. The listener
 now stays active; all 23 framed cases pass in v2, including those five cases. The
-v1 failures remain recorded. Native real-R acceptance remains pending. Explain can
+v1 failures remain recorded. Native real-R acceptance now passes below. Explain can
 select a read-only `r.session@1` binding with only its read grant/scope; the focused
 fixtures also refuse using that binding for Run. Manifest regeneration passes with
 21 capabilities, including original-admission and tool inspection queries; its
 encoded file is 124,059 bytes. The serial science verifier has completed owner/store,
 framed and manifest checks; all three core boundary and 40 core component-storage
-regressions also pass. Independent ordinary/real-R Host acceptance is now running.
-End-to-end native
-scope and late-result claims remain unverified for this source until those checks
-complete. Native stdin is excluded from model context.
+regressions also pass. Independent Agent and R builds both succeeded, and all
+three ordinary Host cases and the real-R case now pass against those same external
+packages. The real-R fixture covers normal completion and stopping the model while
+R is active: the original native parent, child causation, exact R provider/session,
+late report and counter effect are retained, without replay on repeated requests.
+Architecture, boundary and governance checks also pass. Exact results are in
+`target/plugin-refactor/agent-science-results-v2.json`; the preceding owner/store
+result remains in v1. Both independent packages and frozen harnesses were retained
+with per-file hashes in `agent-science-packages-v2.json`. Native stdin is excluded
+from model context.
 
-This remains incomplete Agent migration. Scientific execution acceptance and native
-Agent transport composition, context providers, Agent views, Studio Agent
+This remains incomplete Agent migration. Native Agent transport composition,
+context providers, Agent views, Studio Agent
 assistance and final composition/default delivery remain active work. Synthetic
 diagnostics do not establish those features or real-provider quality.
 The next source change extracts native task scheduling, connection slots, event
@@ -273,10 +280,13 @@ runtime tests were removed. The package adds endpoint-open and post-open storage
 failure cases, plus an independent source assembly. Failed registration now closes
 the opened connection, revokes its endpoint and retains process evidence; lack of
 confirmed quiet stays uncertain and prevents replacement. Publication and shutdown
-share the live-map lock. These changes are applied but not yet compiled
-or verified. The running scientific Host/R acceptance froze its harness and both
+share the live-map lock. Cargo has validated the new local dependency lock; the
+seven-case native runtime suite is now compiling. Host task, handoff, independent
+assembly and disposable crash/resume checks follow serially. These are not yet
+passes. The completed scientific Host/R acceptance froze its harness and both
 external source packages before this extraction; its results cannot establish
-native-runtime acceptance. The recovery fixture now hashes only its temporary
+native-runtime acceptance. Architecture and private-import checks do cover the
+new source. The recovery fixture now hashes only its temporary
 configuration by default, without opening native user credential files.
 Initial import warnings were corrected. Existing user Hosts and R sessions have
 not been replaced; runtime acceptance uses disposable projects. No full-workspace
