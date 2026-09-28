@@ -191,14 +191,21 @@ where
                             // validation. Only matching terminal success can retire a
                             // success candidate; other outcomes preserve uncertainty.
                             if entry.binding != settlement.binding || entry.outcome.is_none()
-                                || (settlement.outcome == PluginOutcome::Succeeded && entry.outcome != Some(PluginOutcome::Succeeded)) {
+                                || (settlement.outcome == PluginOutcome::Succeeded && entry.outcome != Some(PluginOutcome::Succeeded))
+                                || (settlement.outcome == PluginOutcome::Cancelled && entry.outcome != Some(PluginOutcome::Cancelled)) {
                                 break Err("Agent settlement differs from its original submitted result".into());
                             }
                             retained.remove(&settlement.operation_id);
+                        } else if let Some(previous) = settled.iter().find(|entry| entry.operation_id == settlement.operation_id) {
+                            if previous != &settlement { break Err("Repeated Agent settlement changed its original result".into()); }
+                        }
+                        // Core can settle work rejected before native admission (for
+                        // example capacity) or cancelled before dispatch. No owner
+                        // scheduler state exists to advance in that case. This exact
+                        // Host-only notification never commits a result or replays it.
+                        if !settled.contains(&settlement) {
                             settled.push_back(settlement.clone());
                             if settled.len() > HISTORY { settled.pop_front(); }
-                        } else if !settled.contains(&settlement) {
-                            break Err("Agent settlement has no retained original operation".into());
                         }
                         Some(RpcBody::SettlementAcknowledged(settlement))
                     },

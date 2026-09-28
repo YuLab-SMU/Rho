@@ -422,10 +422,12 @@ async fn bounded_concurrent_calls_keep_each_origin_and_refuse_original_operation
         true,
     );
     f.writer
-        .send(excess.request.clone(), RpcBody::Invoke(excess))
+        .send(excess.request.clone(), RpcBody::Invoke(excess.clone()))
         .await
         .unwrap();
     assert!(matches!(f.read().await.body, RpcBody::Error { code, .. } if code == "busy"));
+    // Even a rejected native admission has an original terminal Host record.
+    f.settle(&excess, PluginOutcome::Failed).await;
     let duplicate = pending[0].0.clone();
     for (call, reverse) in pending.into_iter().rev() {
         let name = call.request.to_string();
