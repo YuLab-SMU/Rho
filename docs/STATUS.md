@@ -174,7 +174,8 @@ one atomic replacement. Identical retries return the original reference; changed
 reuse is refused. Read-only lookup survives reopen, and removal retains the
 non-secret receipt so an old request cannot recreate the secret. All ten credential store cases now pass, including the four new cases for
 original-request recovery, concurrent duplicates, missing storage and corrupt
-receipt refusal. The independent assembly remains a separate pending check.
+receipt refusal. The independent assembly has also passed all 14 owner and 19
+store cases; its schema freshness stage is still running.
 
 The backend now exposes `agent.model.key.store` as ephemeral Control, with original
 caller observation and instance-owned credential storage, plus the read-only

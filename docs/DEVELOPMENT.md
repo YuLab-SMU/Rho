@@ -250,13 +250,17 @@ Public declarations and standalone schemas are covered by the protocol consumer.
 The ordinary Agent metadata process uses `cargo test -p rho-agent-backend --test
 metadata --locked` for framed Host exchanges, original caller identity, task/draft
 CAS, explicit controller takeover, bounded concurrency, disconnect and settlement.
+The same target covers ephemeral key Controls, original-key receipt reads,
+wrong-port/identity refusal, lost replies/reopen and combined capacity without
+fabricated Control settlement.
 `node plugins/agent/generate-manifest.mjs` updates its contributed schemas; use
 `--check` for freshness. `node scripts/test-agent-plugin-backend.mjs` assembles and
 builds the source outside the checkout, checks public dependency containment and
 repeats those transport fixtures. `node scripts/test-agent-plugin.mjs` first builds
 the generic Host harness, then loads an independently built package without
 changing that harness. Its explicitly selected ignored case checks scopes, two
-instances, durable request deduplication and retained journal reads after removal.
+instances, durable request deduplication, key-Control journal exclusion and retained
+journal reads after removal.
 No check contacts models or replaces user sessions. These establish metadata
 composition only; model/scientific execution and Agent view acceptance are separate.
 
