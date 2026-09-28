@@ -183,7 +183,7 @@ export class ConsoleModel {
       canonical(operation.normalized_arguments) !== canonical(expected) || canonical(operation.preconditions) !== "[]" ||
       !["accepted", "running", "reconciling", "succeeded", "failed", "cancelled", "uncertain"].includes(record!.status))
       throw new Error("The observed Operation does not match the original Console submission.");
-    const run = runFrom(record, this.source);
+    const run = runFrom(record, this.source, this.runs.get(id));
     if (!run) throw new Error("The original R provider differs from this Console.");
     await this.acceptSubmission(captured, run);
     return run;

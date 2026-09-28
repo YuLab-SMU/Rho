@@ -69,8 +69,11 @@ try {
       return {status:'ready',completeness:'complete',data:{record:observed}};
     },setState:async state=>{if(failRecoverySave)throw new Error('Recovery state not saved');recoverySaves.push(structuredClone(state));return state;}};
   const recovery=new ConsoleModel(recoveryClient,owner);
+  const priorRun=runFrom(recoveredRecord,owner);mergeEvents(priorRun,page([event(1,'already observed original output\n')]));
+  recovery.runs.set(priorRun.id,priorRun);
   assert.equal(recovery.liveAvailable,false,'original admission inspection does not need a live R session');
   const found=await recovery.recoverSubmission();assert.equal(found.id,'original-run');
+  assert.equal(found.events,priorRun.events,'confirming admission preserves already observed original output');
   assert.equal(recovery.state.submission,null);assert.equal(recovery.state.input,'new draft after reopening');
   assert.deepEqual(recovery.state.history,['11;22']);assert.equal(recoverySaves.at(-1).submission,null);
   assert.deepEqual(observations.map(item=>item.cap.id),['operation.list_recent','operation.get']);

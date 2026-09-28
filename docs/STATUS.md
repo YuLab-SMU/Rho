@@ -1722,7 +1722,9 @@ the recovery identity. The independent package build/model check passes, includi
 eleven mismatched-record cases, edits during observation and stale-response refusal.
 The first added concurrency test used an incorrect test-side scheduling assumption;
 its failure is retained in `console-submission-recovery-v3.log`. An explicit query
-arrival signal fixes that fixture, and `console-submission-recovery-v4.log` passes.
+arrival signal fixes that fixture. The latest `console-submission-recovery-v5.log`
+also verifies that acknowledging the original submission preserves already
+observed output and its cursor; the independent build/model check passes.
 Updated isolated Chrome and lost-acknowledgement real-R cases are written but not
 yet run; prior browser evidence below remains a separate baseline.
 
