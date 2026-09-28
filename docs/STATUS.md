@@ -395,12 +395,26 @@ The first complete backend run passed 31 cases and found a stale manifest count
 its read scope. Both fixture expectations are corrected, and all 33 backend cases
 now pass (including the six result/observation variants in the fourth native-science
 case). All 18 owner, 31 store and 12 native runtime cases also pass on this source.
-A real ACP/private-MCP/generic-Host/R fixture has been added but has not yet run.
+The real ACP/private-MCP/generic-Host/R fixture now passes its normal and Stop
+branches: R executes once, accepted children survive Agent Stop, identical requests
+only observe, and original scientific results remain readable after package removal.
 Agent public declarations/schemas and its 29-capability manifest are generated.
 Public client generation, the independent strict TypeScript consumer, client build
 and consistency checks pass. Architecture, private boundaries, governance and diff
 checks also pass. Commands/results are in `agent-native-tools-results-v1.json`.
-Independent package and actual native-R acceptance for this addition remain pending.
+The independently built Agent package passes all 33 framed cases. All four generic
+Host cases and both real-R fixtures now pass across the recorded runs; the component
+fixture and native fixture each cover normal completion and stopping. The first
+native attempt failed because its local ACP test peer parsed an empty SSE data
+event as JSON. Correcting that peer's event parser resolves it; the same frozen
+Host executable and independent Agent/R packages were reused, without a product
+change or relaxed assertion. The initial failure remains in
+`agent-native-tools-combined-v1.log`; the native rerun is in
+`agent-native-tools-native-rerun-v2.json`. Independent package/source parity covers
+`cf525960` (312 compared source files and the exact expanded source inventory), and
+both Host harness hashes remain unchanged. These fixtures use no actual native
+provider, real model, user credentials or user R sessions. Full generic Host restart
+and ordinary Agent view acceptance remain unfinished.
 Logs are retained under `target/plugin-refactor/agent-native-tools-*`; no failed
 check is recorded as a pass.
 

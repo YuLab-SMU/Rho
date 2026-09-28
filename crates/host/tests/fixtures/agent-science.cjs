@@ -25,9 +25,19 @@ async function rpc(method, params, id = randomUUID()) {
   const text = await response.text();
   if (id === null) return;
   let value;
-  try { value = JSON.parse(text); } catch { value = text.split('\n').filter(line => line.startsWith('data:')).map(line => JSON.parse(line.slice(5))).find(item => item.id === id); }
-  assert.equal(value.id, id);
-  assert.equal(value.error, undefined);
+  if (response.headers.get('content-type')?.startsWith('text/event-stream')) {
+    // Stream initialization/keepalive events can contain an empty data field.
+    // Parse complete SSE events, preserving multiline JSON and ignoring only
+    // events with no payload; malformed nonempty events remain fixture failures.
+    const messages = text.split(/\r?\n\r?\n/).flatMap(event => {
+      const data = event.split(/\r?\n/).filter(line => line.startsWith('data:'))
+        .map(line => line.slice(5).replace(/^ /, '')).join('\n');
+      return data.trim() ? [JSON.parse(data)] : [];
+    });
+    value = messages.find(item => item.id === id);
+  } else if (text.trim()) value = JSON.parse(text);
+  assert.equal(value?.id, id, `${method}: missing correlated MCP response (HTTP ${response.status})`);
+  assert.equal(value.error, undefined, `${method}: MCP returned an error`);
   return value.result;
 }
 async function prompt(message) {
