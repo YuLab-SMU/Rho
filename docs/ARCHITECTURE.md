@@ -814,9 +814,10 @@ not import other products' profiles or implement a credential migration itself.
 
 ## Component assistant records and authority
 
-Application owns component conversations, CAS drafts/controllers, fixed run inputs,
-model configuration references, tool intents and bounded events. They use additive
-ApplicationStore tables separate from native Agent tasks and the science journal.
+The public Agent task owner owns component conversations, CAS drafts/controllers,
+fixed run inputs, model configuration references, tool intents and bounded events.
+Its AgentStore keeps separate native/component records in one Agent-owned database,
+outside the science journal. Application currently provides typed forwarding.
 The engine never opens SQLite or calls an R adapter. Host composes the engine and
 its narrow tool access port; all scientific reads/writes still use their real owner.
 Current implementation and unimplemented integration stages are in Status.
@@ -1789,6 +1790,7 @@ package inspection.
 | `crates/host` | Concrete composition and runtime configuration |
 | `plugins/agent/api`, `plugins/agent/backend/client` | Public native Agent observations and bounded Codex app-server / Kimi and DeepSeek ACP clients; no private core imports, scientific handlers or Agent behavior loop |
 | `plugins/agent/backend/owner` | Sole native and component task admission/recovery state machines and repository ports; captured drafts, receipts, generation fences and pure restart observations |
+| `plugins/agent/backend/store` | Sole task/asset/handoff SQL and scoped credential-file persistence; explicit storage paths, immutable key references and no scientific journal connection |
 | `plugins/agent/backend/engine` | Public Rig execution/diagnostics, captured model input and owner callback ports; the sole direct Rig dependency, with no private core imports |
 | `crates/agents` | Transitional admitted-record, image citation and tool-ticket adapters to the public model engine; no model/provider implementation |
 | `crates/cli`, `mcp`, `workbench` | Transport and application entry points |
@@ -1867,8 +1869,12 @@ evidence, same-family uncertainty and positive ownership conflicts remain explic
 failures. This proof covers managed helpers, not independently delegated service
 manager jobs or rollback of external effects.
 Native CLI credentials remain with their provider. Rho model keys saved through
-Studio persist in its user-local configuration file; Application records contain
-LocalFile references. Raw keys remain outside conversation, draft-sync, log and
+Studio persist through the Agent-owned `CredentialFile`; task records contain
+LocalFile references. The public store accepts an explicit absolute path, with no
+default-location discovery or credential import. The temporary Host composition
+supplies its existing user-local configuration path. Atomic replacement and file
+locking preserve immutable keys for accepted work and isolate project/principal
+reads and removals. Missing-file observations do not create a credential directory. Raw keys remain outside conversation, draft-sync, log and
 evidence records. Optional environment and existing Host-memory references do not
 change the default persistence behavior.
 See [PRIVACY.md](../PRIVACY.md) and

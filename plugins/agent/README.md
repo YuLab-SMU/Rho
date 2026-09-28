@@ -9,7 +9,7 @@ DeepSeek ACP communication, bounded observations and owned-process recovery.
 generation, observation-only restart handling, model-setting/credential validation,
 manual draft handoff and the repository ports. `backend/store/` owns the sole SQLite
 implementation for native/component tasks, assets, task-list projections and atomic
-handoff receipts. `backend/engine/` owns the sole Rig driver, provider
+handoff receipts, plus scoped local credential-file persistence. `backend/engine/` owns the sole Rig driver, provider
 protocols, synthetic diagnostics and deterministic permission rules. These
 libraries do not depend on private Rho core crates. The transport and task owner
 have no model-engine dependency.
@@ -39,6 +39,12 @@ Application task tables. The temporary core composition uses a separate
 `agent-v1.sqlite` suffix, keeps one store for both task owners and only forwards
 repository calls. Existing files are not imported or deleted. Ordinary backend
 instances must eventually supply their own managed plugin storage location.
+`CredentialFile::at` likewise takes an explicit absolute path, never searches for
+keys and performs no I/O at construction. Its locking, atomic writes and immutable
+references preserve accepted requests across replacement; reads/removals validate
+both project and principal. Missing-file observations do not create a directory.
+The temporary Host adapter supplies the existing user configuration location. Raw
+keys are never included in task metadata, source revisions, diagnostics or archives.
 
 Generate declarations with `node plugins/agent/generate-sdk.mjs`; add `--check` to
 verify freshness. `node scripts/test-agent-plugin-types.mjs` checks an independent

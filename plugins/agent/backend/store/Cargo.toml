@@ -7,6 +7,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/YuLab-SMU/Rho"
 
 [dependencies]
+fs4 = { version = "1", default-features = false, features = ["sync"] }
 rho-agent-api = { path = "../../api" }
 rho-agent-owner = { path = "../owner" }
 rusqlite = { version = "0.37", features = ["bundled"] }

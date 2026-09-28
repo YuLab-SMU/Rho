@@ -43,19 +43,32 @@ was removed. Its temporary adapter keeps one Agent store for both task owners at
 new `agent-v1.sqlite` sibling path, preserving the original transactional checks.
 It does not read/import previous Application task tables or delete their files.
 The package verifies its format and refuses unrelated/unsupported databases before
-schema changes. Nine public store cases (seven moved, two new) and two core
-composition cases are present; their execution remains pending. Public dependency
+schema changes. All nine public store cases (seven moved, two new) pass; the two
+new core composition cases remain pending in the active cross-boundary run. Public dependency
 containment, native-target metadata and architecture checks pass. The current
-binary builds and its help/startup check passes with the new store; browser and
-storage acceptance remain pending. An initial
+binary builds and its help/startup check passes with the new store. All 13 selected
+component Chrome flows pass; two opt-in real-model cases were excluded. All nine
+current normal/narrow/wide, settings and scientific-state captures were inspected
+without visible clipping, missing glyphs or overlapping controls. Focused and
+cross-boundary storage acceptance remains in progress. An initial
 all-platform offline metadata query failed on an uncached non-host dependency;
 the Apple Silicon filtered query passed without downloads.
+
+Credential file persistence now also lives in `backend/store`, with the original
+locking, atomic replacement, immutable key references, caller/project filtering and
+redacted diagnostics. The Host keeps only temporary path selection and typed
+forwarding. The public owner requires an explicit absolute path; missing-key reads
+and removals do not create a credential directory. Four credential cases moved with
+the implementation and two location/read-isolation cases were added. Their tests
+have not yet run: the active verifier compiled its first owner/store binaries before
+this credential change, while the later independent assembly will use the new source.
+No actual user credential files were opened or changed by development checks.
 
 Manual handoff policy and contracts have now moved into the public Agent package;
 the Application implementation is a typed forwarding adapter to the same atomic
 repository. The original caller validator and target writer gates are retained.
-Five independent owner cases and one serialization/digest boundary case are added;
-their execution and public handoff SDK generation remain pending. All six existing
+All 14 public owner cases now pass, including the five new handoff cases. The
+serialization/digest boundary case and public handoff SDK generation remain pending. All six existing
 SQLite handoff cases pass before the subsequent storage split, including write-failure
 rollback, durable idempotency, stale material, scoped controllers and asset separation. This change
 does not create a model turn, transfer uploads or move grants between tasks.
@@ -76,7 +89,7 @@ baseline. On the handoff source before the storage split, all six SQLite handoff
 cases, eight Host model-unit cases and 18 fixture-engine real-R cases pass. Ten
 live-model cases were excluded. Client build and generated-type/embedded-asset
 consistency and all 98 Agent client cases pass. The subsequent binary/browser checks use the new store;
-its focused and cross-boundary acceptance is still pending.
+the component browser result is recorded above and focused/cross-boundary storage acceptance is running.
 Tool processes repeatedly remained inactive
 without a compiler diagnostic; the cause is not established. A completed earlier
 startup sample was predominantly `_dyld_start` before the harness, while later
@@ -87,7 +100,7 @@ current end-to-end acceptance from it. Details and commands are in
 `target/plugin-refactor/agent-component-verification.txt` and the versioned logs
 and interruption records alongside it. Inspect live verification processes before
 starting another Cargo invocation.
-After that serial run completes, the prepared
+That serial run completed successfully. The now-running
 `target/plugin-refactor/agent-storage-verify.py` runs the new owner/store and core
 storage cases, regenerates the public SDK, checks an independent store/owner
 assembly, repeats real R with the new storage and exercises the existing
@@ -1722,9 +1735,10 @@ continuation and optional real-model/alternate-R cases remain unexecuted.
 
 ### Remaining work and restart boundary
 
-Finish validating the component-task extraction, then the ordinary Agent backend: storage composition,
-context providers, manual handoff and Agent views. The extracted native client,
-task owner and model engine are prerequisites, not a loadable package. Studio's
+Finish current storage/credential and handoff boundary acceptance, then compose
+the ordinary Agent backend through public context, document and scientific ports,
+and migrate Agent views. Native transport, task/handoff policy, metadata, credentials
+and model engine are package-owned prerequisites, not yet a loadable package. Studio's
 Agent workflow must capture an exact development branch and preserve the separate
 checkpoint, build, preview and scenario-application actions. Remaining annotation
 and Agent context sources must register through public contributions.

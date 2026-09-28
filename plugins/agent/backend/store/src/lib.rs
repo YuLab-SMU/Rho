@@ -3,6 +3,8 @@
 //! No scientific journal connection, legacy lookup, runtime startup or replay.
 use rusqlite::{Connection, OptionalExtension};
 use std::{path::Path, sync::Mutex, time::Duration};
+mod credentials;
+pub use credentials::CredentialFile;
 mod agent_assets;
 mod agent_handoffs;
 mod agent_tasks;

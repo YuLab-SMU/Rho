@@ -5994,6 +5994,7 @@ dependencies = [
 name = "rho-agent-store"
 version = "0.1.0"
 dependencies = [
+ "fs4",
  "rho-agent-api",
  "rho-agent-owner",
  "rusqlite",
@@ -6220,6 +6221,7 @@ dependencies = [
  "jsonschema",
  "rho-adapter-skills",
  "rho-agent-client",
+ "rho-agent-store",
  "rho-agents",
  "rho-application",
  "rho-contract",

@@ -227,7 +227,8 @@ target budgets and atomic commit faults. The boundary fixture checks exact
 serialized bytes, digests and the structured observation-expired diagnostic.
 Independent assemblies include the public plugin protocol and R media API, with
 all source/dependency paths checked to stay inside the assembly. Agent-owned storage
-uses `cargo test -p rho-agent-store --lib --locked`; `node
+includes scoped credential-file locking, replacement, redaction and explicit-path
+fixtures and uses `cargo test -p rho-agent-store --lib --locked`; `node
 scripts/test-agent-plugin-store.mjs` repeats store and owner tests in an independent
 source assembly. Format isolation tests reject unrelated/unsupported databases
 without modifying them. The temporary core storage adapter and manual handoff use
