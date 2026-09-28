@@ -1,0 +1,2725 @@
+{
+  "protocol_version": 1,
+  "id": "org.rho.agent",
+  "name": "Agent",
+  "version": "0.1.0",
+  "description": "Scoped Agent task metadata and original-controller drafts",
+  "license": "AGPL-3.0-only",
+  "source": {
+    "files": [
+      "backend/src/main.rs",
+      "build.mjs"
+    ],
+    "lockfiles": [
+      "Cargo.lock"
+    ],
+    "build_instructions": "BUILD.md",
+    "build": {
+      "command": [
+        "node",
+        "build.mjs"
+      ]
+    }
+  },
+  "dependencies": {},
+  "requires": [
+    {
+      "capability": {
+        "id": "views.caller",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    }
+  ],
+  "views": [],
+  "capabilities": [
+    {
+      "capability": {
+        "id": "agent.tasks",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Read Agent tasks",
+      "description": "Read scoped Agent-owned metadata without starting a model, reconnecting a native Agent or recovering work.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "archived": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "before": {
+            "maxLength": 512,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "format": "uint32",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "limit"
+        ],
+        "title": "TaskList",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "archived": false,
+          "before": null,
+          "limit": 20
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AgentProvider": {
+            "enum": [
+              "codex",
+              "kimi",
+              "deepseek"
+            ],
+            "type": "string"
+          },
+          "ProjectAgentTaskRef": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "native",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "task_id"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "conversation_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "rho",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "conversation_id"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "ProjectAgentTaskSummary": {
+            "properties": {
+              "archived": {
+                "type": "boolean"
+              },
+              "attention_reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "created_at_ms": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "has_draft": {
+                "type": "boolean"
+              },
+              "history_gap": {
+                "type": "boolean"
+              },
+              "permissions": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "provider": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/AgentProvider"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "None denotes Rho; native transport identity remains unchanged."
+              },
+              "reference": {
+                "$ref": "#/$defs/ProjectAgentTaskRef"
+              },
+              "state": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "updated_at_ms": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "reference",
+              "title",
+              "created_at_ms",
+              "updated_at_ms",
+              "archived",
+              "state",
+              "has_draft",
+              "permissions",
+              "history_gap"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "attention": {
+            "items": {
+              "$ref": "#/$defs/ProjectAgentTaskSummary"
+            },
+            "type": "array"
+          },
+          "attention_count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "permissions": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "running": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/$defs/ProjectAgentTaskSummary"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "attention_count",
+          "tasks",
+          "attention",
+          "running",
+          "permissions"
+        ],
+        "title": "ProjectAgentTaskPage",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "required_scopes": [
+        "application.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "agent.model.conversation",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Read a model task",
+      "description": "Read scoped Agent-owned metadata without starting a model, reconnecting a native Agent or recovering work.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id"
+        ],
+        "title": "Conversation",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "conversation_id": "task-example"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AgentContextSelection": {
+            "additionalProperties": false,
+            "properties": {
+              "inclusion": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "reference": {
+                "description": "Owner-specific reference/observation, validated by the registered source."
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "label",
+              "reference",
+              "inclusion"
+            ],
+            "type": "object"
+          },
+          "AgentControllerRef": {
+            "additionalProperties": false,
+            "description": "Correlation identity supplied by the Agent owner after admission. This value\nis not an authorization credential and cannot grant access to a Host window.",
+            "properties": {
+              "incarnation": {
+                "type": "string"
+              },
+              "window_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "window_id",
+              "incarnation"
+            ],
+            "type": "object"
+          },
+          "AgentDraftContent": {
+            "additionalProperties": false,
+            "properties": {
+              "assets": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "context": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/AgentContextSelection"
+                },
+                "type": "array"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          },
+          "ComponentAgentGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "documents": {
+                "items": {
+                  "$ref": "#/$defs/ComponentDocumentGrant"
+                },
+                "type": "array"
+              },
+              "files": {
+                "items": {
+                  "$ref": "#/$defs/ComponentFileGrant"
+                },
+                "type": "array"
+              },
+              "mode": {
+                "$ref": "#/$defs/ComponentAgentMode"
+              },
+              "permission_policy": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ComponentPermissionPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Absent only in already recorded requests using the former work modes."
+              },
+              "session": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ComponentAgentSession"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "mode",
+              "documents",
+              "files"
+            ],
+            "type": "object"
+          },
+          "ComponentAgentMode": {
+            "enum": [
+              "explain",
+              "edit",
+              "run"
+            ],
+            "type": "string"
+          },
+          "ComponentAgentProfile": {
+            "enum": [
+              "objects",
+              "packages",
+              "plots",
+              "documents",
+              "workspace",
+              "project",
+              "environment"
+            ],
+            "type": "string"
+          },
+          "ComponentAgentSession": {
+            "additionalProperties": false,
+            "properties": {
+              "session_id": {
+                "type": "string"
+              },
+              "workspace_instance_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "workspace_instance_id",
+              "session_id"
+            ],
+            "type": "object"
+          },
+          "ComponentDocumentGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "allow_save": {
+                "type": "boolean"
+              },
+              "document": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_id": {
+                    "type": "string"
+                  },
+                  "document_version": {
+                    "type": "string"
+                  },
+                  "selection_version": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "document_id",
+                  "document_version",
+                  "selection_version"
+                ],
+                "type": "object"
+              },
+              "path": {
+                "description": "Exact project-relative destination; Save As cannot expand this scope.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "document",
+              "allow_save"
+            ],
+            "type": "object"
+          },
+          "ComponentFileGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "ComponentPermissionPolicy": {
+            "description": "Approval policy is independent of the work selected by the Agent.",
+            "enum": [
+              "ask",
+              "auto_approval",
+              "full_access"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "active_run_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
+            "default": false,
+            "type": "boolean"
+          },
+          "controller": {
+            "$ref": "#/$defs/AgentControllerRef"
+          },
+          "conversation_id": {
+            "type": "string"
+          },
+          "created_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "draft": {
+            "type": "string"
+          },
+          "draft_content": {
+            "$ref": "#/$defs/AgentDraftContent",
+            "default": {
+              "assets": [],
+              "context": [],
+              "text": ""
+            }
+          },
+          "draft_grant": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ComponentAgentGrant"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "draft_version": {
+            "description": "User draft CAS is independent of streaming run/event updates.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "profile": {
+            "$ref": "#/$defs/ComponentAgentProfile"
+          },
+          "title": {
+            "default": "",
+            "type": "string"
+          },
+          "updated_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "version",
+          "draft_version",
+          "controller",
+          "profile",
+          "draft",
+          "created_at_ms",
+          "updated_at_ms"
+        ],
+        "title": "ComponentAgentConversation",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "required_scopes": [
+        "application.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "agent.model.settings",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Read Agent model settings",
+      "description": "Read scoped Agent-owned metadata without starting a model, reconnecting a native Agent or recovering work.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "title": "Empty",
+        "type": "object"
+      },
+      "examples": [
+        {}
+      ],
+      "output_schema": {
+        "$defs": {
+          "ComponentCredentialRef": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "environment",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Retained references from Hosts that used memory-only credentials.",
+                "properties": {
+                  "key_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "session",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key_id"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Immutable version in the user-local Rho configuration file.",
+                "properties": {
+                  "key_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "local_file",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key_id"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "ComponentModelConnection": {
+            "additionalProperties": false,
+            "properties": {
+              "base_url": {
+                "type": "string"
+              },
+              "credential": {
+                "$ref": "#/$defs/ComponentCredentialRef"
+              },
+              "model": {
+                "type": "string"
+              },
+              "protocol": {
+                "$ref": "#/$defs/ComponentModelProtocol"
+              }
+            },
+            "required": [
+              "protocol",
+              "base_url",
+              "model",
+              "credential"
+            ],
+            "type": "object"
+          },
+          "ComponentModelProtocol": {
+            "enum": [
+              "anthropic",
+              "openai_completions"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "connection": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ComponentModelConnection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "enabled"
+        ],
+        "title": "ComponentModelSettings",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "required_scopes": [
+        "application.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "agent.model.create",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Create a model task",
+      "description": "Change Agent-owned task metadata using the original native caller and expected task version. Does not start a model, execute scientific work or grant tools.",
+      "input_schema": {
+        "$defs": {
+          "ComponentAgentProfile": {
+            "enum": [
+              "objects",
+              "packages",
+              "plots",
+              "documents",
+              "workspace",
+              "project",
+              "environment"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "profile": {
+            "$ref": "#/$defs/ComponentAgentProfile"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "profile"
+        ],
+        "title": "CreateConversation",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "conversation_id": "task-example",
+          "profile": "project"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AgentContextSelection": {
+            "additionalProperties": false,
+            "properties": {
+              "inclusion": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "reference": {
+                "description": "Owner-specific reference/observation, validated by the registered source."
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "label",
+              "reference",
+              "inclusion"
+            ],
+            "type": "object"
+          },
+          "AgentControllerRef": {
+            "additionalProperties": false,
+            "description": "Correlation identity supplied by the Agent owner after admission. This value\nis not an authorization credential and cannot grant access to a Host window.",
+            "properties": {
+              "incarnation": {
+                "type": "string"
+              },
+              "window_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "window_id",
+              "incarnation"
+            ],
+            "type": "object"
+          },
+          "AgentDraftContent": {
+            "additionalProperties": false,
+            "properties": {
+              "assets": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "context": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/AgentContextSelection"
+                },
+                "type": "array"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          },
+          "ComponentAgentGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "documents": {
+                "items": {
+                  "$ref": "#/$defs/ComponentDocumentGrant"
+                },
+                "type": "array"
+              },
+              "files": {
+                "items": {
+                  "$ref": "#/$defs/ComponentFileGrant"
+                },
+                "type": "array"
+              },
+              "mode": {
+                "$ref": "#/$defs/ComponentAgentMode"
+              },
+              "permission_policy": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ComponentPermissionPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Absent only in already recorded requests using the former work modes."
+              },
+              "session": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ComponentAgentSession"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "mode",
+              "documents",
+              "files"
+            ],
+            "type": "object"
+          },
+          "ComponentAgentMode": {
+            "enum": [
+              "explain",
+              "edit",
+              "run"
+            ],
+            "type": "string"
+          },
+          "ComponentAgentProfile": {
+            "enum": [
+              "objects",
+              "packages",
+              "plots",
+              "documents",
+              "workspace",
+              "project",
+              "environment"
+            ],
+            "type": "string"
+          },
+          "ComponentAgentSession": {
+            "additionalProperties": false,
+            "properties": {
+              "session_id": {
+                "type": "string"
+              },
+              "workspace_instance_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "workspace_instance_id",
+              "session_id"
+            ],
+            "type": "object"
+          },
+          "ComponentDocumentGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "allow_save": {
+                "type": "boolean"
+              },
+              "document": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_id": {
+                    "type": "string"
+                  },
+                  "document_version": {
+                    "type": "string"
+                  },
+                  "selection_version": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "document_id",
+                  "document_version",
+                  "selection_version"
+                ],
+                "type": "object"
+              },
+              "path": {
+                "description": "Exact project-relative destination; Save As cannot expand this scope.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "document",
+              "allow_save"
+            ],
+            "type": "object"
+          },
+          "ComponentFileGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "ComponentPermissionPolicy": {
+            "description": "Approval policy is independent of the work selected by the Agent.",
+            "enum": [
+              "ask",
+              "auto_approval",
+              "full_access"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "active_run_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
+            "default": false,
+            "type": "boolean"
+          },
+          "controller": {
+            "$ref": "#/$defs/AgentControllerRef"
+          },
+          "conversation_id": {
+            "type": "string"
+          },
+          "created_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "draft": {
+            "type": "string"
+          },
+          "draft_content": {
+            "$ref": "#/$defs/AgentDraftContent",
+            "default": {
+              "assets": [],
+              "context": [],
+              "text": ""
+            }
+          },
+          "draft_grant": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ComponentAgentGrant"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "draft_version": {
+            "description": "User draft CAS is independent of streaming run/event updates.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "profile": {
+            "$ref": "#/$defs/ComponentAgentProfile"
+          },
+          "title": {
+            "default": "",
+            "type": "string"
+          },
+          "updated_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "version",
+          "draft_version",
+          "controller",
+          "profile",
+          "draft",
+          "created_at_ms",
+          "updated_at_ms"
+        ],
+        "title": "ComponentAgentConversation",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "required_scopes": [
+        "application.control",
+        "plugins.read"
+      ],
+      "effects": [
+        "agent.metadata"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "agent.model.configure",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Save Agent model settings",
+      "description": "Change Agent-owned task metadata using the original native caller and expected task version. Does not start a model, execute scientific work or grant tools.",
+      "input_schema": {
+        "$defs": {
+          "ComponentCredentialRef": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "environment",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Retained references from Hosts that used memory-only credentials.",
+                "properties": {
+                  "key_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "session",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key_id"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Immutable version in the user-local Rho configuration file.",
+                "properties": {
+                  "key_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "local_file",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key_id"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "ComponentModelConnection": {
+            "additionalProperties": false,
+            "properties": {
+              "base_url": {
+                "type": "string"
+              },
+              "credential": {
+                "$ref": "#/$defs/ComponentCredentialRef"
+              },
+              "model": {
+                "type": "string"
+              },
+              "protocol": {
+                "$ref": "#/$defs/ComponentModelProtocol"
+              }
+            },
+            "required": [
+              "protocol",
+              "base_url",
+              "model",
+              "credential"
+            ],
+            "type": "object"
+          },
+          "ComponentModelProtocol": {
+            "enum": [
+              "anthropic",
+              "openai_completions"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "connection": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ComponentModelConnection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "enabled"
+        ],
+        "title": "ComponentModelSettings",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "connection": null,
+          "enabled": false,
+          "version": 0
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "ComponentCredentialRef": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "environment",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Retained references from Hosts that used memory-only credentials.",
+                "properties": {
+                  "key_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "session",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key_id"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Immutable version in the user-local Rho configuration file.",
+                "properties": {
+                  "key_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "local_file",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key_id"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "ComponentModelConnection": {
+            "additionalProperties": false,
+            "properties": {
+              "base_url": {
+                "type": "string"
+              },
+              "credential": {
+                "$ref": "#/$defs/ComponentCredentialRef"
+              },
+              "model": {
+                "type": "string"
+              },
+              "protocol": {
+                "$ref": "#/$defs/ComponentModelProtocol"
+              }
+            },
+            "required": [
+              "protocol",
+              "base_url",
+              "model",
+              "credential"
+            ],
+            "type": "object"
+          },
+          "ComponentModelProtocol": {
+            "enum": [
+              "anthropic",
+              "openai_completions"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "connection": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ComponentModelConnection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "enabled"
+        ],
+        "title": "ComponentModelSettings",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "required_scopes": [
+        "application.control",
+        "plugins.read"
+      ],
+      "effects": [
+        "agent.metadata"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "agent.model.draft",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Save a model task draft",
+      "description": "Change Agent-owned task metadata using the original native caller and expected task version. Does not start a model, execute scientific work or grant tools.",
+      "input_schema": {
+        "$defs": {
+          "AgentContextSelection": {
+            "additionalProperties": false,
+            "properties": {
+              "inclusion": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "reference": {
+                "description": "Owner-specific reference/observation, validated by the registered source."
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "label",
+              "reference",
+              "inclusion"
+            ],
+            "type": "object"
+          },
+          "AgentDraftContent": {
+            "additionalProperties": false,
+            "properties": {
+              "assets": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "context": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/AgentContextSelection"
+                },
+                "type": "array"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          },
+          "ComponentAgentGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "documents": {
+                "items": {
+                  "$ref": "#/$defs/ComponentDocumentGrant"
+                },
+                "type": "array"
+              },
+              "files": {
+                "items": {
+                  "$ref": "#/$defs/ComponentFileGrant"
+                },
+                "type": "array"
+              },
+              "mode": {
+                "$ref": "#/$defs/ComponentAgentMode"
+              },
+              "permission_policy": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ComponentPermissionPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Absent only in already recorded requests using the former work modes."
+              },
+              "session": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ComponentAgentSession"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "mode",
+              "documents",
+              "files"
+            ],
+            "type": "object"
+          },
+          "ComponentAgentMode": {
+            "enum": [
+              "explain",
+              "edit",
+              "run"
+            ],
+            "type": "string"
+          },
+          "ComponentAgentSession": {
+            "additionalProperties": false,
+            "properties": {
+              "session_id": {
+                "type": "string"
+              },
+              "workspace_instance_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "workspace_instance_id",
+              "session_id"
+            ],
+            "type": "object"
+          },
+          "ComponentDocumentGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "allow_save": {
+                "type": "boolean"
+              },
+              "document": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_id": {
+                    "type": "string"
+                  },
+                  "document_version": {
+                    "type": "string"
+                  },
+                  "selection_version": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "document_id",
+                  "document_version",
+                  "selection_version"
+                ],
+                "type": "object"
+              },
+              "path": {
+                "description": "Exact project-relative destination; Save As cannot expand this scope.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "document",
+              "allow_save"
+            ],
+            "type": "object"
+          },
+          "ComponentFileGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "ComponentPermissionPolicy": {
+            "description": "Approval policy is independent of the work selected by the Agent.",
+            "enum": [
+              "ask",
+              "auto_approval",
+              "full_access"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "$ref": "#/$defs/AgentDraftContent"
+          },
+          "conversation_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "draft_version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "grant": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ComponentAgentGrant"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "conversation_id",
+          "draft_version",
+          "content"
+        ],
+        "title": "SaveDraft",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "content": {
+            "assets": [],
+            "context": [],
+            "text": "Review the selected source"
+          },
+          "conversation_id": "task-example",
+          "draft_version": 1,
+          "grant": null
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AgentContextSelection": {
+            "additionalProperties": false,
+            "properties": {
+              "inclusion": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "reference": {
+                "description": "Owner-specific reference/observation, validated by the registered source."
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "label",
+              "reference",
+              "inclusion"
+            ],
+            "type": "object"
+          },
+          "AgentControllerRef": {
+            "additionalProperties": false,
+            "description": "Correlation identity supplied by the Agent owner after admission. This value\nis not an authorization credential and cannot grant access to a Host window.",
+            "properties": {
+              "incarnation": {
+                "type": "string"
+              },
+              "window_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "window_id",
+              "incarnation"
+            ],
+            "type": "object"
+          },
+          "AgentDraftContent": {
+            "additionalProperties": false,
+            "properties": {
+              "assets": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "context": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/AgentContextSelection"
+                },
+                "type": "array"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          },
+          "ComponentAgentGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "documents": {
+                "items": {
+                  "$ref": "#/$defs/ComponentDocumentGrant"
+                },
+                "type": "array"
+              },
+              "files": {
+                "items": {
+                  "$ref": "#/$defs/ComponentFileGrant"
+                },
+                "type": "array"
+              },
+              "mode": {
+                "$ref": "#/$defs/ComponentAgentMode"
+              },
+              "permission_policy": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ComponentPermissionPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Absent only in already recorded requests using the former work modes."
+              },
+              "session": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ComponentAgentSession"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "mode",
+              "documents",
+              "files"
+            ],
+            "type": "object"
+          },
+          "ComponentAgentMode": {
+            "enum": [
+              "explain",
+              "edit",
+              "run"
+            ],
+            "type": "string"
+          },
+          "ComponentAgentProfile": {
+            "enum": [
+              "objects",
+              "packages",
+              "plots",
+              "documents",
+              "workspace",
+              "project",
+              "environment"
+            ],
+            "type": "string"
+          },
+          "ComponentAgentSession": {
+            "additionalProperties": false,
+            "properties": {
+              "session_id": {
+                "type": "string"
+              },
+              "workspace_instance_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "workspace_instance_id",
+              "session_id"
+            ],
+            "type": "object"
+          },
+          "ComponentDocumentGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "allow_save": {
+                "type": "boolean"
+              },
+              "document": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_id": {
+                    "type": "string"
+                  },
+                  "document_version": {
+                    "type": "string"
+                  },
+                  "selection_version": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "document_id",
+                  "document_version",
+                  "selection_version"
+                ],
+                "type": "object"
+              },
+              "path": {
+                "description": "Exact project-relative destination; Save As cannot expand this scope.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "document",
+              "allow_save"
+            ],
+            "type": "object"
+          },
+          "ComponentFileGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "ComponentPermissionPolicy": {
+            "description": "Approval policy is independent of the work selected by the Agent.",
+            "enum": [
+              "ask",
+              "auto_approval",
+              "full_access"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "active_run_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
+            "default": false,
+            "type": "boolean"
+          },
+          "controller": {
+            "$ref": "#/$defs/AgentControllerRef"
+          },
+          "conversation_id": {
+            "type": "string"
+          },
+          "created_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "draft": {
+            "type": "string"
+          },
+          "draft_content": {
+            "$ref": "#/$defs/AgentDraftContent",
+            "default": {
+              "assets": [],
+              "context": [],
+              "text": ""
+            }
+          },
+          "draft_grant": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ComponentAgentGrant"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "draft_version": {
+            "description": "User draft CAS is independent of streaming run/event updates.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "profile": {
+            "$ref": "#/$defs/ComponentAgentProfile"
+          },
+          "title": {
+            "default": "",
+            "type": "string"
+          },
+          "updated_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "version",
+          "draft_version",
+          "controller",
+          "profile",
+          "draft",
+          "created_at_ms",
+          "updated_at_ms"
+        ],
+        "title": "ComponentAgentConversation",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "required_scopes": [
+        "application.control",
+        "plugins.read"
+      ],
+      "effects": [
+        "agent.metadata"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "agent.model.update",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Update task title or archive state",
+      "description": "Change Agent-owned task metadata using the original native caller and expected task version. Does not start a model, execute scientific work or grant tools.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "archived": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "conversation_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "expected_version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "conversation_id",
+          "expected_version"
+        ],
+        "title": "UpdateConversation",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "archived": null,
+          "conversation_id": "task-example",
+          "expected_version": 1,
+          "title": "Source review"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AgentContextSelection": {
+            "additionalProperties": false,
+            "properties": {
+              "inclusion": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "reference": {
+                "description": "Owner-specific reference/observation, validated by the registered source."
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "label",
+              "reference",
+              "inclusion"
+            ],
+            "type": "object"
+          },
+          "AgentControllerRef": {
+            "additionalProperties": false,
+            "description": "Correlation identity supplied by the Agent owner after admission. This value\nis not an authorization credential and cannot grant access to a Host window.",
+            "properties": {
+              "incarnation": {
+                "type": "string"
+              },
+              "window_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "window_id",
+              "incarnation"
+            ],
+            "type": "object"
+          },
+          "AgentDraftContent": {
+            "additionalProperties": false,
+            "properties": {
+              "assets": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "context": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/AgentContextSelection"
+                },
+                "type": "array"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          },
+          "ComponentAgentGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "documents": {
+                "items": {
+                  "$ref": "#/$defs/ComponentDocumentGrant"
+                },
+                "type": "array"
+              },
+              "files": {
+                "items": {
+                  "$ref": "#/$defs/ComponentFileGrant"
+                },
+                "type": "array"
+              },
+              "mode": {
+                "$ref": "#/$defs/ComponentAgentMode"
+              },
+              "permission_policy": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ComponentPermissionPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Absent only in already recorded requests using the former work modes."
+              },
+              "session": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ComponentAgentSession"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "mode",
+              "documents",
+              "files"
+            ],
+            "type": "object"
+          },
+          "ComponentAgentMode": {
+            "enum": [
+              "explain",
+              "edit",
+              "run"
+            ],
+            "type": "string"
+          },
+          "ComponentAgentProfile": {
+            "enum": [
+              "objects",
+              "packages",
+              "plots",
+              "documents",
+              "workspace",
+              "project",
+              "environment"
+            ],
+            "type": "string"
+          },
+          "ComponentAgentSession": {
+            "additionalProperties": false,
+            "properties": {
+              "session_id": {
+                "type": "string"
+              },
+              "workspace_instance_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "workspace_instance_id",
+              "session_id"
+            ],
+            "type": "object"
+          },
+          "ComponentDocumentGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "allow_save": {
+                "type": "boolean"
+              },
+              "document": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_id": {
+                    "type": "string"
+                  },
+                  "document_version": {
+                    "type": "string"
+                  },
+                  "selection_version": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "document_id",
+                  "document_version",
+                  "selection_version"
+                ],
+                "type": "object"
+              },
+              "path": {
+                "description": "Exact project-relative destination; Save As cannot expand this scope.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "document",
+              "allow_save"
+            ],
+            "type": "object"
+          },
+          "ComponentFileGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "ComponentPermissionPolicy": {
+            "description": "Approval policy is independent of the work selected by the Agent.",
+            "enum": [
+              "ask",
+              "auto_approval",
+              "full_access"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "active_run_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
+            "default": false,
+            "type": "boolean"
+          },
+          "controller": {
+            "$ref": "#/$defs/AgentControllerRef"
+          },
+          "conversation_id": {
+            "type": "string"
+          },
+          "created_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "draft": {
+            "type": "string"
+          },
+          "draft_content": {
+            "$ref": "#/$defs/AgentDraftContent",
+            "default": {
+              "assets": [],
+              "context": [],
+              "text": ""
+            }
+          },
+          "draft_grant": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ComponentAgentGrant"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "draft_version": {
+            "description": "User draft CAS is independent of streaming run/event updates.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "profile": {
+            "$ref": "#/$defs/ComponentAgentProfile"
+          },
+          "title": {
+            "default": "",
+            "type": "string"
+          },
+          "updated_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "version",
+          "draft_version",
+          "controller",
+          "profile",
+          "draft",
+          "created_at_ms",
+          "updated_at_ms"
+        ],
+        "title": "ComponentAgentConversation",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "required_scopes": [
+        "application.control",
+        "plugins.read"
+      ],
+      "effects": [
+        "agent.metadata"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "agent.model.take_control",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Take control of a model task",
+      "description": "Change Agent-owned task metadata using the original native caller and expected task version. Does not start a model, execute scientific work or grant tools.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "expected_version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "expected_version"
+        ],
+        "title": "TakeControl",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "conversation_id": "task-example",
+          "expected_version": 1
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AgentContextSelection": {
+            "additionalProperties": false,
+            "properties": {
+              "inclusion": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "reference": {
+                "description": "Owner-specific reference/observation, validated by the registered source."
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "label",
+              "reference",
+              "inclusion"
+            ],
+            "type": "object"
+          },
+          "AgentControllerRef": {
+            "additionalProperties": false,
+            "description": "Correlation identity supplied by the Agent owner after admission. This value\nis not an authorization credential and cannot grant access to a Host window.",
+            "properties": {
+              "incarnation": {
+                "type": "string"
+              },
+              "window_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "window_id",
+              "incarnation"
+            ],
+            "type": "object"
+          },
+          "AgentDraftContent": {
+            "additionalProperties": false,
+            "properties": {
+              "assets": {
+                "default": [],
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "context": {
+                "default": [],
+                "items": {
+                  "$ref": "#/$defs/AgentContextSelection"
+                },
+                "type": "array"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "type": "object"
+          },
+          "ComponentAgentGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "documents": {
+                "items": {
+                  "$ref": "#/$defs/ComponentDocumentGrant"
+                },
+                "type": "array"
+              },
+              "files": {
+                "items": {
+                  "$ref": "#/$defs/ComponentFileGrant"
+                },
+                "type": "array"
+              },
+              "mode": {
+                "$ref": "#/$defs/ComponentAgentMode"
+              },
+              "permission_policy": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ComponentPermissionPolicy"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Absent only in already recorded requests using the former work modes."
+              },
+              "session": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ComponentAgentSession"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "mode",
+              "documents",
+              "files"
+            ],
+            "type": "object"
+          },
+          "ComponentAgentMode": {
+            "enum": [
+              "explain",
+              "edit",
+              "run"
+            ],
+            "type": "string"
+          },
+          "ComponentAgentProfile": {
+            "enum": [
+              "objects",
+              "packages",
+              "plots",
+              "documents",
+              "workspace",
+              "project",
+              "environment"
+            ],
+            "type": "string"
+          },
+          "ComponentAgentSession": {
+            "additionalProperties": false,
+            "properties": {
+              "session_id": {
+                "type": "string"
+              },
+              "workspace_instance_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "workspace_instance_id",
+              "session_id"
+            ],
+            "type": "object"
+          },
+          "ComponentDocumentGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "allow_save": {
+                "type": "boolean"
+              },
+              "document": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_id": {
+                    "type": "string"
+                  },
+                  "document_version": {
+                    "type": "string"
+                  },
+                  "selection_version": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "document_id",
+                  "document_version",
+                  "selection_version"
+                ],
+                "type": "object"
+              },
+              "path": {
+                "description": "Exact project-relative destination; Save As cannot expand this scope.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "document",
+              "allow_save"
+            ],
+            "type": "object"
+          },
+          "ComponentFileGrant": {
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "ComponentPermissionPolicy": {
+            "description": "Approval policy is independent of the work selected by the Agent.",
+            "enum": [
+              "ask",
+              "auto_approval",
+              "full_access"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "active_run_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
+            "default": false,
+            "type": "boolean"
+          },
+          "controller": {
+            "$ref": "#/$defs/AgentControllerRef"
+          },
+          "conversation_id": {
+            "type": "string"
+          },
+          "created_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "draft": {
+            "type": "string"
+          },
+          "draft_content": {
+            "$ref": "#/$defs/AgentDraftContent",
+            "default": {
+              "assets": [],
+              "context": [],
+              "text": ""
+            }
+          },
+          "draft_grant": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ComponentAgentGrant"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "draft_version": {
+            "description": "User draft CAS is independent of streaming run/event updates.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "profile": {
+            "$ref": "#/$defs/ComponentAgentProfile"
+          },
+          "title": {
+            "default": "",
+            "type": "string"
+          },
+          "updated_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "version",
+          "draft_version",
+          "controller",
+          "profile",
+          "draft",
+          "created_at_ms",
+          "updated_at_ms"
+        ],
+        "title": "ComponentAgentConversation",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "required_scopes": [
+        "application.control",
+        "plugins.read"
+      ],
+      "effects": [
+        "agent.metadata"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
+    }
+  ],
+  "contexts": [],
+  "backend": {
+    "executable": "dist/rho-agent-backend",
+    "arguments": []
+  },
+  "configuration_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "title": "Empty",
+    "type": "object"
+  },
+  "default_configuration": {}
+}
