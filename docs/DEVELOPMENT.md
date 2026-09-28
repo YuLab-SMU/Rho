@@ -247,6 +247,20 @@ checks absent-record uncertainty, argument forgery, sibling-instance denial,
 principal/project/read-scope boundaries and journal reads after release/reopen.
 Public declarations and standalone schemas are covered by the protocol consumer.
 
+The ordinary Agent scientific port adds scoped R observation/execution fixtures to
+`cargo test -p rho-agent-backend --test metadata --locked --offline`. Owner/store
+checks cover immutable native captures, Explain/Run admission, original tool IDs,
+stop fences and late receipts. The framed suite also covers omitted grants, foreign
+binding parameters, actual loopback Rig tool calls, parent retention while stopped,
+and read-only delegated-result recovery after disconnect. These use simulated
+native replies; they do not establish real scientific execution.
+With existing `RHO_ARK` and `RHO_R_HOME`, run
+`node scripts/test-agent-plugin-real-r.mjs` for two independently built packages in
+a plugin-only Host. The frozen Host harness exercises real R effects, late results
+after model stop, original causation, no duplicate execution and retained native
+reports after package removal. All sessions, projects and model keys are disposable.
+Neither this nor the framed suite establishes real-provider quality or Agent views.
+
 The ordinary Agent metadata process uses `cargo test -p rho-agent-backend --test
 metadata --locked` for framed Host exchanges, original caller identity, task/draft
 CAS, explicit controller takeover, bounded concurrency, disconnect and settlement.

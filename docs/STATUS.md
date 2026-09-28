@@ -226,13 +226,27 @@ including four new parent-admission/storage cases. All 17 framed backend cases
 also pass, including the four new model-task cases for actual loopback Rig output,
 retained native parents/events, stop/disable/takeover, refusal of uncaptured grants,
 missing-key admission and observation-only reopen. Manifest generation also passes
-with all 18 capabilities. Independent owner/store/schema and backend builds, the
-temporary core boundary regression and generic Host acceptance remain in the serial
-`target/plugin-refactor/agent-model-run-verify.py`; pending stages are not passes.
+with all 18 capabilities. The independent assembly now passes all 16 owner and
+21 store cases and schema freshness; all three temporary core boundary cases also
+pass. The frozen independent backend build and all 17 framed cases now also pass
+in `target/plugin-refactor/agent-model-run-verify.py`. That external source predates
+the following scientific integration. The subsequent ordinary generic Host cases
+use the new source and remain pending; pending stages are not passes.
 This initial run input carries submitted text only, without scientific tools,
 context capture, attachments or continuation.
 
-This remains incomplete Agent migration. Scientific model-tool execution and native
+Scientific model-tool source now captures an optional exact R provider/session,
+validates Explain/Run and original optional grants, and dispatches through public
+Host calls using durable tool request IDs. Native replies must match the original
+binding, parent and project. Stop retains already dispatched R work until its real
+reply; disconnect recovery only reads the original delegated Operation. Six new
+framed fixtures, two owner cases, one additional store case and a separate
+two-package real-R Host harness are implemented but have not yet run. Manifest
+regeneration is also pending; the current source adds original-admission and tool
+inspection queries. The new serial science verifier is prepared but not started. Native scope and late-result claims remain unverified for this
+source until those checks complete. Native stdin is excluded from model context.
+
+This remains incomplete Agent migration. Scientific execution acceptance and native
 Agent transport composition, context providers, Agent views, Studio Agent
 assistance and final composition/default delivery remain active work. Synthetic
 diagnostics do not establish those features or real-provider quality.

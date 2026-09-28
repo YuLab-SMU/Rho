@@ -36,8 +36,19 @@ scientific tools or project context.
 model engine, retained native admission and task events. Its original-request/run
 queries and event pages are read-only. Explicit stop, disable and controller
 takeover fence the same live loop. Repeated requests and reopen never restart it.
-The current run input has no native tools, scientific context, attachments or
-continuation; those and native Agent transports and views remain implementation
+An optional exact R binding and Explain/Run mode select scientific access. Activate
+only the desired optional capabilities: `r.session@1` for observation, and
+`r.execute@2`, `operation.get@1` and `plugins.delegated_operation@1` for execution
+and original-result inspection. The original caller must also hold each selected
+scope. Model arguments carry only code; they cannot replace the selected provider,
+revision, native session or request identity. Querying never creates an R session.
+`agent.model.run.admission` exposes the original parent and exact provider bindings
+for scoped inspection. Tool receipts retain the original reverse request before dispatch. Stopping the
+model does not cancel or roll back R: its containing Operation waits for already
+issued native work, retaining late results. After disconnect, `agent.model.run.tools`
+and `agent.model.tool.operation` observe original evidence without replay or task
+store updates. Missing evidence remains partial. General context contributions,
+attachments, continuation, native Agent transports and views remain implementation
 work.
 Importing the package does not activate it. Installing or activating a development
 package is an explicit plugin lifecycle operation.
@@ -46,10 +57,19 @@ Run `cargo test -p rho-agent-backend --test metadata --locked --offline` for pub
 framed transport, calling-origin, metadata version, controller and restart checks.
 The fixtures use local synthetic Host exchanges and a loopback HTTP/SSE model,
 never real user keys or remote models. They cover model/task lifetime, original
-native identity, text, stopping, takeover and interrupted reopen; scientific-tool
-execution and provider quality require separate acceptance.
+native identity, text, stopping, takeover, interrupted reopen, scientific reverse
+requests, late native results, scoped Explain/Run and read-only original recovery.
+Real R and provider quality require separate acceptance.
 `node scripts/test-agent-plugin-backend.mjs` independently builds the package and
 runs these framed cases. `node scripts/test-agent-plugin.mjs` freezes the generic
 Host harness before building and loading the external package, then exercises
 metadata, key Controls, diagnostics and ordinary model-task lifetime through the
 same native ports. All projects, instance storage and keys are disposable.
+
+`RHO_ARK=/absolute/existing/ark RHO_R_HOME=/absolute/existing/R/home node
+scripts/test-agent-plugin-real-r.mjs` freezes a generic plugin-only Host harness
+and builds both packages outside the checkout. It runs a disposable native R
+counter through the loopback model, checks native causation and retained reports,
+stops model waiting while R is executing, and verifies repeated task requests do
+not repeat scientific effects. It does not contact external models or use existing
+user sessions. Required runtimes must already be installed.

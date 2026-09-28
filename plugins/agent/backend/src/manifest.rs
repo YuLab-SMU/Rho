@@ -4,7 +4,7 @@ use rho_agent_api::{
     ProjectAgentTaskPage,
     component::{
         ComponentAgentConversation, ComponentAgentEventPage, ComponentAgentRun,
-        ComponentModelDiagnostic,
+        ComponentModelDiagnostic, ComponentToolReceipt,
     },
 };
 use rho_plugin_sdk::protocol::*;
@@ -54,9 +54,9 @@ fn capability(
         capability: key(id), kind,
         title: title.into(),
         description: if id == "agent.model.run" {
-            "Run the submitted text using captured model settings and the original native controller. Retains the native Operation until the model ends and records text and usage in its original task. This composition has no scientific context, native tools or attachments. Identical original requests only observe the existing run."
+            "Run the submitted text using captured model settings and the original native controller. Retains the native Operation until the model and dispatched native tools settle and records text and usage in its original task. An optional exact R binding permits bounded observation in Explain and execution only in Run, subject to original scopes and granted native capabilities. Attachments and continuation are not yet composed. Identical original requests only observe the existing run."
         } else if id == "agent.model.run.stop" {
-            "Request stopping the original model task under its current controller. Original execution remains retained until the model loop ends; a stop request is not proof of completion."
+            "Request stopping the original model task under its current controller. Dispatched native work remains retained after the model loop ends; a stop request does not cancel or roll back scientific execution."
         } else if id == "agent.model.test" {
             "Explicitly run a bounded synthetic model test with the captured settings and scoped key. Retains the original Operation until completion; it has no project context or scientific tools. Repeated original requests only observe their retained diagnostic."
         } else if id == "agent.model.test.stop" {
@@ -72,7 +72,7 @@ fn capability(
         }.into(),
         input_schema: input, output_schema: output, examples: vec![example],
         recovery_schema: json!({"type":"object","additionalProperties":false,"properties":{"code":{"type":"string"}},"required":["code"]}),
-        required_scopes: if operation || control { ["application.control".into(), "plugins.read".into()].into() } else { ["application.read".into()].into() },
+        required_scopes: if operation || control { ["application.control".into(), "plugins.read".into()].into() } else if id == "agent.model.tool.operation" { ["application.read".into(), "operation.read".into()].into() } else { ["application.read".into()].into() },
         effects: if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
         cancellation: CancellationSupport::Unsupported, preflight: None,
     }
@@ -104,8 +104,52 @@ pub fn manifest() -> PluginManifest {
             capability: key("views.caller"),
             scopes: ["plugins.read".into()].into(),
         }],
-        optional_requires: vec![],
+        optional_requires: vec![
+            CapabilityRequirement {
+                capability: CapabilityKey {
+                    id: ContributionId::new("r.execute").unwrap(),
+                    version: 2,
+                },
+                scopes: ["workspace.run_r".into()].into(),
+            },
+            CapabilityRequirement {
+                capability: key("r.session"),
+                scopes: ["workspace.read".into()].into(),
+            },
+            CapabilityRequirement {
+                capability: key("operation.get"),
+                scopes: ["operation.read".into()].into(),
+            },
+            CapabilityRequirement {
+                capability: key("plugins.delegated_operation"),
+                scopes: ["operation.read".into()].into(),
+            },
+        ],
         capabilities: vec![
+            capability(
+                "agent.model.run.admission",
+                "Read the original native model admission",
+                schema_for!(ModelRun).to_value(),
+                schema_for!(ModelAdmission).to_value(),
+                json!({"run_id":"run-example"}),
+            ),
+            capability(
+                "agent.model.run.tools",
+                "Read original model tool receipts",
+                schema_for!(ModelRun).to_value(),
+                schema_for!(Vec<ComponentToolReceipt>).to_value(),
+                json!({"run_id":"run-example"}),
+            ),
+            capability(
+                "agent.model.tool.operation",
+                "Observe an original delegated tool Operation",
+                schema_for!(ModelTool).to_value(),
+                json!({"type":"object","additionalProperties":false,"properties":{
+                    "run_id":{"type":"string"},"receipt_id":{"type":"string"},"completeness":{"enum":["complete","partial"]},
+                    "request":{"type":"string"},"operation":{"type":["object","null"]}},
+                    "required":["run_id","receipt_id","completeness","request","operation"]}),
+                json!({"run_id":"run-example","receipt_id":"tool-example"}),
+            ),
             capability(
                 "agent.model.run",
                 "Run a model task",

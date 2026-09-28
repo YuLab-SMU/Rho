@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
 mod continuation;
+mod native_tools;
 mod permissions;
 mod policy;
 mod recovery;
@@ -84,6 +85,10 @@ pub struct ComponentNativeRunOrigin {
     pub operation: OperationId,
     pub request: RequestId,
     pub binding: ProviderBinding,
+    /// Exact selected R provider and session. Capability is r.execute@2 even
+    /// for Explain; the task's captured mode separately controls execution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r: Option<ProviderBinding>,
 }
 impl ComponentNativeRunOrigin {
     pub fn validate(&self) -> Result<(), ComponentTaskError> {
@@ -92,6 +97,15 @@ impl ComponentNativeRunOrigin {
             || self.binding.target.is_some()
         {
             return Err(invalid("Invalid native model run admission"));
+        }
+        if let Some(r) = &self.r {
+            if r.capability.id.as_str() != "r.execute"
+                || r.capability.version != 2
+                || r.project != self.binding.project
+                || r.target.as_deref().is_none_or(str::is_empty)
+            {
+                return Err(invalid("Invalid captured R provider and native session"));
+            }
         }
         Ok(())
     }
@@ -102,6 +116,10 @@ impl ComponentNativeRunOrigin {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "request", rename_all = "snake_case")]
 pub enum ComponentToolAction {
+    /// Fixed provider, session and capability supplied by the native tool
+    /// adapter. The original reverse ID is the durable receipt's request ID.
+    PluginQuery(PluginRequest),
+    PluginInvoke(PluginRequest),
     TaskIntent(ComponentAgentTaskIntent),
     Query(QueryRequest),
     PreviousResult {
@@ -122,6 +140,9 @@ impl ComponentToolAction {
     pub fn capability(&self) -> &str {
         match self {
             Self::TaskIntent(_) => "agent.task_intent",
+            Self::PluginQuery(request) | Self::PluginInvoke(request) => {
+                request.binding.capability.id.as_str()
+            }
             Self::Query(q) => &q.capability.id,
             Self::Invoke(i) => &i.capability.id,
             Self::Control(_) => "application.control",
@@ -131,7 +152,10 @@ impl ComponentToolAction {
         }
     }
     pub fn mutation(&self) -> bool {
-        matches!(self, Self::Invoke(_) | Self::Control(_))
+        matches!(
+            self,
+            Self::Invoke(_) | Self::Control(_) | Self::PluginInvoke(_)
+        )
     }
     pub fn requires_permission(&self) -> bool {
         self.mutation()
@@ -143,6 +167,8 @@ impl ComponentToolAction {
             Self::Invoke(i) => i.client_request_id = id.into(),
             Self::Control(c) => c.request_id = id.into(),
             Self::TaskIntent(_)
+            | Self::PluginQuery(_)
+            | Self::PluginInvoke(_)
             | Self::Query(_)
             | Self::Rejected { .. }
             | Self::PreviousResult { .. } => {}
@@ -857,6 +883,7 @@ impl ComponentAgentOwner {
         now: u64,
     ) -> Result<ComponentRunAdmission, ApplicationError> {
         origin.validate()?;
+        native_tools::validate_targets(&request, &origin)?;
         self.start_with_origin(actor, request, Some(origin), now)
     }
     fn start_with_origin(
@@ -882,6 +909,8 @@ impl ComponentAgentOwner {
             if existing.request_digest != digest
                 || existing.native_origin.as_ref().map(|o| &o.binding)
                     != origin.as_ref().map(|o| &o.binding)
+                || existing.native_origin.as_ref().and_then(|o| o.r.as_ref())
+                    != origin.as_ref().and_then(|o| o.r.as_ref())
             {
                 return Err(ApplicationError::RequestConflict);
             }
@@ -1099,7 +1128,21 @@ impl ComponentAgentOwner {
                 _ => {}
             }
         }
-        policy::authorize_tool(&run.run, &action)?;
+        match &action {
+            ComponentToolAction::PluginQuery(_) | ComponentToolAction::PluginInvoke(_) => {
+                native_tools::authorize(&run, &action)?
+            }
+            ComponentToolAction::Query(_)
+            | ComponentToolAction::Invoke(_)
+            | ComponentToolAction::Control(_)
+                if run.native_origin.is_some() =>
+            {
+                return Err(invalid(
+                    "Native plugin tasks cannot dispatch transitional core actions",
+                ));
+            }
+            _ => policy::authorize_tool(&run.run, &action)?,
+        }
         if serde_json::to_vec(&action).map_err(storage)?.len() > 64 * 1024 {
             return Err(ApplicationError::Budget(
                 "Tool arguments exceed 64 KiB".into(),
@@ -1748,9 +1791,15 @@ impl ComponentAgentOwner {
         {
             return Err(invalid("This action has no recorded permission"));
         }
-        if tools.iter().any(|t| {
+        if let Some(tool) = tools.iter().find(|t| {
             t.receipt.receipt_id == receipt_id && t.receipt.phase == ComponentToolPhase::Intent
         }) {
+            if matches!(
+                tool.action,
+                ComponentToolAction::PluginQuery(_) | ComponentToolAction::PluginInvoke(_)
+            ) {
+                native_tools::authorize(&run, &tool.action)?;
+            }
             Ok(())
         } else {
             Err(ApplicationError::Conflict)

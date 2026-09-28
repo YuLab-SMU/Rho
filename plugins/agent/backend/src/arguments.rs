@@ -102,6 +102,21 @@ pub struct StopModelDiagnostic {
 }
 
 #[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RunMode {
+    Explain,
+    Run,
+}
+impl From<RunMode> for rho_agent_api::component::ComponentAgentMode {
+    fn from(mode: RunMode) -> Self {
+        match mode {
+            RunMode::Explain => Self::Explain,
+            RunMode::Run => Self::Run,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RunModel {
     #[schemars(length(min = 1, max = 160))]
@@ -112,6 +127,12 @@ pub struct RunModel {
     pub model_settings_version: u64,
     #[schemars(length(min = 1, max = 32768))]
     pub text: String,
+    /// Optional exact R provider/session selection, supplied by the caller.
+    /// Explain is read-only; Run authorizes execution in this selected session.
+    #[serde(default)]
+    pub r: Option<rho_plugin_sdk::protocol::ProviderBinding>,
+    #[serde(default)]
+    pub mode: Option<RunMode>,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -127,4 +148,22 @@ pub struct ModelEvents {
     pub after: u64,
     #[schemars(range(min = 1, max = 100))]
     pub limit: u32,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ModelTool {
+    #[schemars(length(min = 1, max = 160))]
+    pub run_id: String,
+    #[schemars(length(min = 1, max = 160))]
+    pub receipt_id: String,
+}
+
+/// Read-only projection of the original admission; no caller can supply it.
+#[derive(Serialize, JsonSchema)]
+pub struct ModelAdmission {
+    pub operation: rho_plugin_sdk::protocol::OperationId,
+    pub request: rho_plugin_sdk::protocol::RequestId,
+    pub binding: rho_plugin_sdk::protocol::ProviderBinding,
+    pub r: Option<rho_plugin_sdk::protocol::ProviderBinding>,
 }

@@ -24,6 +24,7 @@ pub struct Metadata {
     runs: crate::runs::Runs,
     instance: PluginInstance,
     pub(crate) scope: AgentTaskScope,
+    pub(crate) grants: Vec<CapabilityRequirement>,
 }
 
 pub fn now() -> u64 {
@@ -124,7 +125,11 @@ impl Metadata {
             )),
         }
     }
-    pub fn new(instance: PluginInstance, environment: BackendEnvironment) -> Result<Self, String> {
+    pub fn new(
+        instance: PluginInstance,
+        environment: BackendEnvironment,
+        grants: Vec<CapabilityRequirement>,
+    ) -> Result<Self, String> {
         decode::<Empty>(&instance.configuration).map_err(|e| e.message)?;
         for directory in [&environment.project_root, &environment.data_root] {
             let path = Path::new(directory);
@@ -157,6 +162,7 @@ impl Metadata {
             ),
             instance,
             scope,
+            grants,
         })
     }
     pub fn validate(
@@ -199,11 +205,23 @@ impl Metadata {
         }
         Ok(())
     }
+    pub async fn query(
+        &self,
+        call: &PluginCall,
+        host: rho_plugin_sdk::HostCallClient,
+    ) -> Result<Value, Failure> {
+        if call.binding.capability.id.as_str() == "agent.model.tool.operation" {
+            return crate::tools::inspect_original(self, call, host).await;
+        }
+        self.read(call)
+    }
     pub fn read(&self, call: &PluginCall) -> Result<Value, Failure> {
         match call.binding.capability.id.as_str() {
-            "agent.model.run.get" | "agent.model.run.request" | "agent.model.run.events" => {
-                self.runs.read(self, call)
-            }
+            "agent.model.run.get"
+            | "agent.model.run.request"
+            | "agent.model.run.events"
+            | "agent.model.run.admission"
+            | "agent.model.run.tools" => self.runs.read(self, call),
             "agent.model.diagnostic" => self.diagnostics.read(self, &call.arguments),
             "agent.model.key.receipt" => {
                 let args: CredentialRequest = decode(&call.arguments)?;
@@ -300,9 +318,10 @@ impl Metadata {
         self: &Arc<Self>,
         call: &PluginCall,
         caller: PluginViewCaller,
+        host: rho_plugin_sdk::HostCallClient,
     ) -> Result<Value, Failure> {
         match call.binding.capability.id.as_str() {
-            "agent.model.run" => self.runs.start(self, call, caller).await,
+            "agent.model.run" => self.runs.start(self, call, caller, host).await,
             "agent.model.run.stop" => self.runs.stop(self, call, caller),
             "agent.model.test" => self.diagnostics.start(self, call, caller).await,
             "agent.model.test.stop" => self.diagnostics.stop(self, call, caller),

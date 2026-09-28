@@ -643,7 +643,11 @@ fn native_origin() -> ComponentNativeRunOrigin {
         "binding":{"capability":{"id":"agent.model.run","version":1},
             "provider":{"instance":"agent-one","plugin":"org.rho.agent",
                 "revision":format!("sha256:{}", "a".repeat(64)),"artifact":format!("sha256:{}", "b".repeat(64))},
-            "project":"project-one","target":null}
+            "project":"project-one","target":null},
+        "r":{"capability":{"id":"r.execute","version":2},
+            "provider":{"instance":"main","plugin":"org.fixture.runtime",
+                "revision":format!("sha256:{}", "c".repeat(64)),"artifact":format!("sha256:{}", "d".repeat(64))},
+            "project":"project-one","target":"native-one"}
     })).unwrap()
 }
 
@@ -747,4 +751,177 @@ fn native_run_admission_failure_leaves_no_parent_or_active_task() {
         .unwrap();
     assert!(!admitted.repeated);
     assert_eq!(admitted.run.native_origin, Some(origin));
+}
+
+fn native_execution(origin: &ComponentNativeRunOrigin) -> ComponentToolAction {
+    ComponentToolAction::PluginInvoke(PluginRequest {
+        binding: origin.r.clone().unwrap(),
+        arguments: serde_json::json!({"expected_session":"native-one","run":{"code":"counter <- counter + 1"}}),
+        preconditions: Value::Null,
+    })
+}
+
+#[test]
+fn native_plugin_tool_binds_revision_target_mode_and_original_request_before_dispatch() {
+    let f = Fixture::new();
+    let origin = native_origin();
+    let run = f
+        .owner
+        .start_native(&f.actor, f.request(), origin.clone(), 3)
+        .unwrap()
+        .run
+        .run;
+    f.owner.claim(f.actor.scope(), &run.run_id, 4).unwrap();
+    f.owner
+        .begin_model_call(f.actor.scope(), &run.run_id, 5)
+        .unwrap();
+    let action = native_execution(&origin);
+    for index in 0..7 {
+        let ComponentToolAction::PluginInvoke(mut request) = action.clone() else {
+            panic!()
+        };
+        match index {
+            0 => {
+                request.binding.provider.revision =
+                    serde_json::from_value(serde_json::json!(format!("sha256:{}", "e".repeat(64))))
+                        .unwrap()
+            }
+            1 => {
+                request.binding.project =
+                    serde_json::from_value(serde_json::json!("another-project")).unwrap()
+            }
+            2 => request.binding.target = Some("another-session".into()),
+            3 => request.arguments["expected_session"] = serde_json::json!("another-session"),
+            4 => request.preconditions = serde_json::json!({"caller_override":true}),
+            5 => request.arguments["run"]["source"] = serde_json::json!({"document_id":"invented"}),
+            _ => request.binding.capability.version = 1,
+        }
+        assert!(
+            f.owner
+                .admit_tool(
+                    f.actor.scope(),
+                    &run.run_id,
+                    1,
+                    "forged",
+                    ComponentToolAction::PluginInvoke(request),
+                    6
+                )
+                .is_err()
+        );
+    }
+    assert!(
+        f.store
+            .component_tools(f.actor.scope(), &run.run_id)
+            .unwrap()
+            .is_empty()
+    );
+    let first = f
+        .owner
+        .admit_tool(
+            f.actor.scope(),
+            &run.run_id,
+            1,
+            "native-call",
+            action.clone(),
+            6,
+        )
+        .unwrap();
+    assert!(RequestId::new(&first.tool.receipt.client_request_id).is_ok());
+    f.owner
+        .check_tool_dispatch(
+            f.actor.scope(),
+            &run.run_id,
+            &first.tool.receipt.receipt_id,
+            7,
+        )
+        .unwrap();
+    let repeat = f
+        .owner
+        .admit_tool(
+            f.actor.scope(),
+            &run.run_id,
+            1,
+            "same-code-again",
+            action,
+            8,
+        )
+        .unwrap();
+    assert!(repeat.repeated);
+    assert_eq!(
+        repeat.tool.receipt.receipt_id,
+        first.tool.receipt.receipt_id
+    );
+    assert_eq!(
+        repeat.tool.receipt.client_request_id,
+        first.tool.receipt.client_request_id
+    );
+    f.owner.stop(&f.actor, &run.run_id, 9).unwrap();
+    assert!(
+        f.owner
+            .check_tool_dispatch(
+                f.actor.scope(),
+                &run.run_id,
+                &first.tool.receipt.receipt_id,
+                10
+            )
+            .is_err()
+    );
+}
+
+#[test]
+fn native_explain_reads_only_captured_r_and_cannot_acquire_execution_or_change_provider_on_retry() {
+    let f = Fixture::new();
+    let origin = native_origin();
+    let mut input = f.request();
+    input.grant.mode = ComponentAgentMode::Explain;
+    let run = f
+        .owner
+        .start_native(&f.actor, input.clone(), origin.clone(), 3)
+        .unwrap()
+        .run
+        .run;
+    let mut changed = origin.clone();
+    changed.r.as_mut().unwrap().provider.artifact =
+        serde_json::from_value(serde_json::json!(format!("sha256:{}", "e".repeat(64)))).unwrap();
+    assert!(matches!(
+        f.owner.start_native(&f.actor, input, changed, 4),
+        Err(ApplicationError::RequestConflict)
+    ));
+    f.owner.claim(f.actor.scope(), &run.run_id, 4).unwrap();
+    f.owner
+        .begin_model_call(f.actor.scope(), &run.run_id, 5)
+        .unwrap();
+    assert!(
+        f.owner
+            .admit_tool(
+                f.actor.scope(),
+                &run.run_id,
+                1,
+                "execute",
+                native_execution(&origin),
+                6
+            )
+            .is_err()
+    );
+    let mut binding = origin.r.unwrap();
+    binding.capability =
+        serde_json::from_value(serde_json::json!({"id":"r.session","version":1})).unwrap();
+    let query = ComponentToolAction::PluginQuery(PluginRequest {
+        binding,
+        arguments: serde_json::json!({}),
+        preconditions: Value::Null,
+    });
+    let admitted = f
+        .owner
+        .admit_tool(f.actor.scope(), &run.run_id, 1, "read", query, 6)
+        .unwrap();
+    assert!(!admitted.tool.receipt.mutation);
+    f.owner
+        .check_tool_dispatch(
+            f.actor.scope(),
+            &run.run_id,
+            &admitted.tool.receipt.receipt_id,
+            7,
+        )
+        .unwrap();
 }

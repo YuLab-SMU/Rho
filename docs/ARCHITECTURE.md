@@ -622,8 +622,23 @@ before dispatch, which is the identity for original reverse-call observation;
 there is no second dispatch database. The parent remains active through the model
 loop and then retains its result candidate until native settlement. Stop/disable
 and explicit takeover fence the original loop. Reads project interrupted ownership
-without changing stored state or contacting a model. The current submitted-text
-composition has no scientific tools, captured context, attachments or continuation.
+without changing stored state or contacting a model.
+
+Optional scientific tools capture the caller-selected exact R binding with the
+original native admission. Explain permits only a read of that session; Run also
+permits `r.execute@2`. Initialization grants and original caller scopes must both
+cover the selected capabilities. Model arguments cannot choose a provider,
+revision, session, source provenance or native request identity. The owner validates
+and persists each bounded tool intent before the public reverse-call pump dispatches
+it. The real R owner still performs its preflight and the core commits its result.
+Returned scientific records must agree with the captured binding, original parent,
+plugin caller and normalized project. Native stdin is excluded from model context.
+Stopping a model wait does not cancel R. The containing Operation retains pending
+native children until their correlated replies return; late receipts remain on the
+original task. Disconnect retains uncertainty. `agent.model.tool.operation` reads
+the original delegated request and Operation through public queries, without
+restarting work or rewriting task storage. An absent match is partial evidence.
+General context contributions, attachments and continuation remain uncomposed.
 
 `views.caller` exposes only the original native view/window/connection identity
 captured at authenticated ingress. Backend delegation retains that private capture;

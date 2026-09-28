@@ -25,6 +25,7 @@ struct Retained {
     outcome: Option<PluginOutcome>,
 }
 enum Completed {
+    Query(RequestId, String, Result<Value, Failure>),
     Operation(OperationId, PluginCommitPlan),
     Control(RequestId, Result<Value, Failure>),
 }
@@ -100,6 +101,7 @@ where
             .environment
             .clone()
             .ok_or("Agent requires native instance storage")?,
+        connection.grants.clone(),
     )?);
     let (host, mut pump) = host_call_channel(CAPACITY).map_err(|e| e.to_string())?;
     connection.ready().await.map_err(|e| e.to_string())?;
@@ -118,6 +120,7 @@ where
     let mut jobs = JoinSet::new();
     let mut retained: BTreeMap<OperationId, Retained> = BTreeMap::new();
     let mut controls: BTreeSet<RequestId> = BTreeSet::new();
+    let mut queries: BTreeSet<RequestId> = BTreeSet::new();
     let mut settled: VecDeque<OperationSettlement> = VecDeque::new();
     let result = loop {
         tokio::select! {
@@ -132,6 +135,18 @@ where
                         };
                         entry.outcome = Some(output.outcome);
                         (entry.request.clone(), RpcBody::CommitPlan(output))
+                    },
+                    Completed::Query(request, capability, result) => {
+                        if !queries.remove(&request) { break Err("Agent query lost its original request".into()); }
+                        let body = match result {
+                            Ok(data) => {
+                                let incomplete = (capability == "agent.model.key.receipt" && data["credential"].is_null())
+                                    || (capability == "agent.model.tool.operation" && data["completeness"] != "complete");
+                                RpcBody::QueryResult { data, completeness: if incomplete { ObservationCompleteness::Partial } else { ObservationCompleteness::Complete }, source: None }
+                            },
+                            Err(error) => error.body(),
+                        };
+                        (request, body)
                     },
                     Completed::Control(request, output) => {
                         if !controls.remove(&request) { break Err("Agent control lost its original request".into()); }
@@ -149,7 +164,7 @@ where
             outgoing = pump.next(), if pump.pending() > 0 => {
                 let Some(outgoing) = outgoing else { break Err("Agent Host call pump ended".into()); };
                 let RpcBody::HostCall { parent_request, .. } = &outgoing.body else { unreachable!() };
-                if !controls.contains(parent_request) && !retained.values().any(|entry| &entry.request == parent_request && entry.outcome.is_none()) {
+                if !queries.contains(parent_request) && !controls.contains(parent_request) && !retained.values().any(|entry| &entry.request == parent_request && entry.outcome.is_none()) {
                     break Err("Agent Host call has no active original parent".into());
                 }
                 if let Err(error) = writer.send(outgoing.request, outgoing.body).await { break Err(error.to_string()); }
@@ -170,18 +185,21 @@ where
                     RpcBody::Query(call) | RpcBody::Invoke(call) | RpcBody::Control(call) => {
                         if let Err(failure) = metadata.validate(&request, &call, kind) {
                             Some(failure.body())
-                        } else if controls.contains(&request) || retained.values().any(|entry| entry.request == request) {
+                        } else if queries.contains(&request) || controls.contains(&request) || retained.values().any(|entry| entry.request == request) {
                             break Err("Original Agent request is still retained".into());
                         } else if kind == CapabilityKind::Query {
-                            Some(match metadata.read(&call) {
-                                Ok(data) => {
-                                    let completeness = if call.binding.capability.id.as_str() == "agent.model.key.receipt" && data["credential"].is_null() {
-                                        ObservationCompleteness::Partial
-                                    } else { ObservationCompleteness::Complete };
-                                    RpcBody::QueryResult { data, completeness, source: None }
-                                },
-                                Err(failure) => failure.body(),
-                            })
+                            if queries.len() >= CAPACITY { Some(error("busy", "Agent observation capacity reached")) }
+                            else {
+                                queries.insert(request.clone());
+                                let metadata = metadata.clone();
+                                let host = host.clone();
+                                let original = request.clone();
+                                jobs.spawn(async move {
+                                    let result = metadata.query(&call, host).await;
+                                    Completed::Query(original, call.binding.capability.id.to_string(), result)
+                                });
+                                None
+                            }
                         } else if retained.len() + controls.len() >= CAPACITY {
                             Some(error("busy", "Agent capacity reached; inspect original operations"))
                         } else {
@@ -196,18 +214,27 @@ where
                             } else { None };
                             let reverse = loop {
                                 let candidate = RequestId::new(format!("agent-caller-{}", uuid::Uuid::new_v4())).unwrap();
-                                if candidate != request && !pump.contains(&candidate) && !controls.contains(&candidate)
+                                if candidate != request && !pump.contains(&candidate) && !queries.contains(&candidate) && !controls.contains(&candidate)
                                     && !retained.values().any(|entry| entry.request == candidate) { break candidate; }
                             };
                             let pending = match host.begin(reverse, request.clone(), manifest::key("views.caller"), json!({})) {
-                                Ok(pending) => pending, Err(error) => break Err(error.to_string()),
+                                Ok(pending) => pending,
+                                Err(_) => {
+                                    // Concurrent bounded observations can occupy the reverse
+                                    // channel. Refuse only this admission, preserving active work.
+                                    if let Err(error) = writer.send(request, error("busy", "Agent native observation capacity reached")).await {
+                                        break Err(error.to_string());
+                                    }
+                                    continue;
+                                },
                             };
                             let metadata = metadata.clone();
+                            let host = host.clone();
                             if let Some(id) = operation {
                                 retained.insert(id.clone(), Retained { request: request.clone(), binding: call.binding.clone(), outcome: None });
                                 jobs.spawn(async move {
                                     let result = match caller(pending.receive().await) {
-                                        Ok(origin) => metadata.dispatch(&call, origin).await,
+                                        Ok(origin) => metadata.dispatch(&call, origin, host).await,
                                         Err(error) => Err(error),
                                     };
                                     Completed::Operation(id, plan(result))
@@ -248,7 +275,7 @@ where
                         }
                         Some(RpcBody::SettlementAcknowledged(settlement))
                     },
-                    RpcBody::Release if retained.is_empty() && controls.is_empty() && jobs.is_empty() && pump.pending() == 0 => {
+                    RpcBody::Release if retained.is_empty() && controls.is_empty() && queries.is_empty() && jobs.is_empty() && pump.pending() == 0 => {
                         if let Err(error) = writer.send(request, RpcBody::Released).await { break Err(error.to_string()); }
                         break Ok(());
                     },

@@ -176,6 +176,10 @@ pub(super) fn authorize_tool(
 ) -> Result<(), ApplicationError> {
     let denied = || invalid("Tool action exceeds the component request's authorization");
     match action {
+        // Plugin actions require a stored native origin and the separate exact-binding validator.
+        ComponentToolAction::PluginQuery(_) | ComponentToolAction::PluginInvoke(_) => {
+            return Err(denied());
+        }
         ComponentToolAction::TaskIntent(intent) => {
             validate_task_intent(run, intent)?;
         }

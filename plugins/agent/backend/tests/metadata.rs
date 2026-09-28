@@ -48,6 +48,9 @@ struct Fixture {
 }
 impl Fixture {
     async fn start() -> Self {
+        Self::start_with_grants(false).await
+    }
+    async fn start_with_grants(scientific: bool) -> Self {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path().canonicalize().unwrap();
         let project = root.join("project");
@@ -58,9 +61,16 @@ impl Fixture {
             project_root: project.to_str().unwrap().into(),
             data_root: data.to_str().unwrap().into(),
         };
-        Self::open(directory, environment).await
+        Self::open_with_grants(directory, environment, scientific).await
     }
     async fn open(directory: tempfile::TempDir, environment: BackendEnvironment) -> Self {
+        Self::open_with_grants(directory, environment, false).await
+    }
+    async fn open_with_grants(
+        directory: tempfile::TempDir,
+        environment: BackendEnvironment,
+        scientific: bool,
+    ) -> Self {
         let (host, backend) = tokio::io::duplex(65536);
         let (input, output) = tokio::io::split(backend);
         let task = tokio::spawn(async move {
@@ -83,7 +93,14 @@ impl Fixture {
                 RpcBody::Initialize {
                     instance: native,
                     environment: Some(environment.clone()),
-                    grants: manifest::manifest().requires,
+                    grants: {
+                        let manifest = manifest::manifest();
+                        let mut grants = manifest.requires;
+                        if scientific {
+                            grants.extend(manifest.optional_requires);
+                        }
+                        grants
+                    },
                     resource_channel: None,
                 },
             )
@@ -194,7 +211,7 @@ impl Fixture {
 fn manifest_contains_public_bounded_agent_capabilities() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 18);
+    assert_eq!(manifest.capabilities.len(), 21);
     assert_eq!(
         manifest.requires[0].capability,
         manifest::key("views.caller")
@@ -909,6 +926,8 @@ struct SyntheticModelState {
     requests: std::sync::Arc<std::sync::atomic::AtomicUsize>,
     entered: std::sync::Arc<tokio::sync::Notify>,
     resume: std::sync::Arc<tokio::sync::Notify>,
+    tool: Option<(String, Value)>,
+    bodies: std::sync::Arc<std::sync::Mutex<Vec<Value>>>,
 }
 struct SyntheticModel {
     state: SyntheticModelState,
@@ -922,7 +941,13 @@ impl Drop for SyntheticModel {
 }
 impl SyntheticModel {
     async fn start() -> Self {
-        let state = SyntheticModelState::default();
+        Self::with_tool(None).await
+    }
+    async fn with_tool(tool: Option<(String, Value)>) -> Self {
+        let state = SyntheticModelState {
+            tool,
+            ..Default::default()
+        };
         let app = axum::Router::new()
             .route(
                 "/v1/chat/completions",
@@ -956,6 +981,7 @@ async fn synthetic_completion(
     axum::Json(body): axum::Json<Value>,
 ) -> impl axum::response::IntoResponse {
     assert_eq!(headers["authorization"], "Bearer diagnostic-fixture-key");
+    state.bodies.lock().unwrap().push(body.clone());
     let index = state
         .requests
         .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
@@ -984,6 +1010,17 @@ async fn synthetic_completion(
             Value::Null,
         ));
         sse.push_str(&chunk(json!({}), json!("stop")));
+    } else if let Some((name, arguments)) = &state.tool {
+        if index == 0 {
+            sse.push_str(&chunk(json!({"tool_calls":[{"index":0,"id":"science-original","type":"function","function":{"name":name,"arguments":arguments.to_string()}}]}), Value::Null));
+            sse.push_str(&chunk(json!({}), json!("tool_calls")));
+        } else {
+            sse.push_str(&chunk(
+                json!({"content":"Native result observed 中文"}),
+                Value::Null,
+            ));
+            sse.push_str(&chunk(json!({}), json!("stop")));
+        }
     } else if index == 0 {
         assert_eq!(body["tools"].as_array().unwrap().len(), 1);
         assert_eq!(body["tools"][0]["function"]["name"], "component_verify");
@@ -1010,6 +1047,8 @@ async fn synthetic_completion(
 
 #[path = "support/model_runs.rs"]
 mod model_runs;
+#[path = "support/scientific_runs.rs"]
+mod scientific_runs;
 impl Fixture {
     async fn model_settings(&mut self, model: &SyntheticModel) -> Value {
         let reverse = self

@@ -3,7 +3,7 @@ use rho_agent_owner::{AgentTaskScope, component::ComponentAgentRepository};
 use rho_agent_store::AgentStore;
 
 impl Fixture {
-    async fn run_input(&mut self) -> Value {
+    pub(super) async fn run_input(&mut self) -> Value {
         let (native, reverse) = self
             .begin(
                 "create-model-task",
@@ -22,7 +22,7 @@ impl Fixture {
         self.writer.send(reverse.request, RpcBody::HostResult { result: json!({"status":"ready","completeness":"complete","data":origin("view-one")}) }).await.unwrap();
         native
     }
-    async fn original_run(&mut self) -> Value {
+    pub(super) async fn original_run(&mut self) -> Value {
         self.query(
             "agent.model.run.request",
             json!({"request_id":"original-model-run"}),

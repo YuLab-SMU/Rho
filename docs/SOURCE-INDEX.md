@@ -143,6 +143,7 @@ Sources:
 - `scripts/test-agent-plugin-client.mjs`
 - `scripts/test-agent-plugin-engine.mjs`
 - `scripts/test-agent-plugin-owner.mjs`
+- `scripts/test-agent-plugin-real-r.mjs`
 - `scripts/test-agent-plugin-store.mjs`
 - `scripts/test-agent-plugin-types.mjs`
 - `scripts/test-agent-plugin.mjs`
@@ -227,6 +228,7 @@ Checks:
 - `plugins.agent-manifest`: `["node","plugins/agent/generate-manifest.mjs","--check"]`
 - `plugins.agent-model-host`: `["cargo","test","-p","rho-host","--test","component_agents","--test","component_recovery","--locked"]`
 - `plugins.agent-native`: `["cargo","test","-p","rho-agent-client","--lib","--locked"]`
+- `plugins.agent-native-real-r`: `["node","scripts/test-agent-plugin-real-r.mjs"]`
 - `plugins.agent-owner`: `["cargo","test","-p","rho-agent-owner","--lib","--locked"]`
 - `plugins.agent-owner-independent`: `["node","scripts/test-agent-plugin-owner.mjs"]`
 - `plugins.agent-protocol`: `["node","plugins/agent/generate-sdk.mjs","--check"]`

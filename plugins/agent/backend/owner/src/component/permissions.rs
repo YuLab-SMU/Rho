@@ -21,6 +21,7 @@ fn action_title(run: &ComponentAgentRun, action: &ComponentToolAction) -> String
         None => "the selected R session".to_owned(),
     };
     match action {
+        ComponentToolAction::PluginInvoke(request) => format!("Run R code in {}", request.binding.provider.instance),
         ComponentToolAction::Control(command) => {
             let session = || {
                 session_name(

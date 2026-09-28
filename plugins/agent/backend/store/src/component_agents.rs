@@ -417,6 +417,9 @@ impl ComponentAgentRepository for AgentStore {
             }
         }
         if let Some(run) = write.run {
+            if component_digest(&run.run.request)? != run.request_digest {
+                return Err(ApplicationError::RequestConflict);
+            }
             if let Some(origin) = &run.native_origin {
                 origin.validate()?;
             }

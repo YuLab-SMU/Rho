@@ -13,7 +13,11 @@ fn origin() -> ComponentNativeRunOrigin {
         "binding":{"capability":{"id":"agent.model.run","version":1},
             "provider":{"instance":"agent-one","plugin":"org.rho.agent",
                 "revision":format!("sha256:{}", "a".repeat(64)),"artifact":format!("sha256:{}", "b".repeat(64))},
-            "project":"native-project","target":null}
+            "project":"native-project","target":null},
+        "r":{"capability":{"id":"r.execute","version":2},
+            "provider":{"instance":"r-instance","plugin":"org.fixture.runtime",
+                "revision":format!("sha256:{}", "c".repeat(64)),"artifact":format!("sha256:{}", "d".repeat(64))},
+            "project":"native-project","target":"r-session"}
     })).unwrap()
 }
 fn setup(store: Arc<AgentStore>) -> (ComponentAgentOwner, ComponentActor, StoredComponentRun) {
@@ -87,11 +91,10 @@ fn native_parent_and_original_tool_request_survive_stop_late_receipt_and_reopen(
     let id = &run.run.run_id;
     owner.claim(actor.scope(), id, 4).unwrap();
     owner.begin_model_call(actor.scope(), id, 5).unwrap();
-    let tool = owner.admit_tool(actor.scope(), id, 1, "model-tool-call", ComponentToolAction::Invoke(Invocation {
-        client_request_id: "model-cannot-choose-this".into(),
-        capability: CapabilityRef::new("workspace.run_r", 1).unwrap(),
-        arguments: serde_json::json!({"workspace_instance_id":"r-instance","code":"counter <- counter + 1"}),
-        preconditions: vec![Precondition { kind:"workspace.session".into(), subject:"active".into(), expected:serde_json::json!("r-session") }],
+    let tool = owner.admit_tool(actor.scope(), id, 1, "model-tool-call", ComponentToolAction::PluginInvoke(PluginRequest {
+        binding: origin().r.unwrap(),
+        arguments: serde_json::json!({"expected_session":"r-session","run":{"code":"counter <- counter + 1"}}),
+        preconditions: serde_json::Value::Null,
     }), 6).unwrap().tool;
     let reverse = RequestId::new(&tool.receipt.client_request_id).unwrap();
     assert_ne!(reverse.as_str(), "model-cannot-choose-this");
@@ -205,4 +208,59 @@ fn native_parent_cannot_be_replaced_or_removed_by_later_transaction() {
             encode(&run).unwrap()
         );
     }
+}
+
+#[test]
+fn native_capture_cannot_change_with_a_retained_request_digest() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = Arc::new(AgentStore::open(&directory.path().join("agent.sqlite")).unwrap());
+    let (_owner, actor, run) = setup(store.clone());
+    let before = store
+        .component_conversation(actor.scope(), "task")
+        .unwrap()
+        .unwrap();
+    let mut conversation = before.clone();
+    conversation.version += 1;
+    let mut changed = run.clone();
+    changed
+        .run
+        .request
+        .grant
+        .session
+        .as_mut()
+        .unwrap()
+        .session_id = "replacement-session".into();
+    assert!(matches!(
+        store.commit_component(
+            actor.scope(),
+            ComponentWrite {
+                expected_version: Some(before.version),
+                conversation: &conversation,
+                run: Some(&changed),
+                tools: &[],
+                events: &[],
+            }
+        ),
+        Err(ApplicationError::RequestConflict)
+    ));
+    assert_eq!(
+        encode(
+            &store
+                .component_run(actor.scope(), &run.run.run_id)
+                .unwrap()
+                .unwrap()
+        )
+        .unwrap(),
+        encode(&run).unwrap()
+    );
+    assert_eq!(
+        encode(
+            &store
+                .component_conversation(actor.scope(), "task")
+                .unwrap()
+                .unwrap()
+        )
+        .unwrap(),
+        encode(&before).unwrap()
+    );
 }

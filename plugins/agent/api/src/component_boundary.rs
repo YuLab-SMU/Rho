@@ -3,8 +3,8 @@
 //! and receipt verification stay with the containing owner; no private core types
 //! are imported. Unknown document actions are refused by task admission.
 pub use crate::AgentControllerRef as ApplicationWindowRef;
-pub use rho_plugin_protocol::{OperationId, ProviderBinding, RequestId};
-pub use rho_r_api::MediaReference;
+pub use rho_plugin_protocol::{OperationId, PluginRequest, ProviderBinding, RequestId};
+pub use rho_r_api::{ExecuteR, MediaReference};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
