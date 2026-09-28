@@ -439,9 +439,13 @@ delegation observations as explicitly partial results. It leaves the original
 uncertain receipt unchanged and reads only the original operation when complete
 evidence later appears. Admission still requires a complete observation. The
 expanded disconnect/reopen case passes, as do all 35 backend cases and architecture,
-private-boundary and diff checks. The independent package repeat is running in
-`agent-native-partial-verify-v1.log`; its source is separate from the completed
-`c26976a4` package acceptance above.
+private-boundary and diff checks. The independent package rebuild and all 35 framed
+cases also pass. The three changed files match the root recovery source; the
+remaining package source retains the preceding independent baseline. Commands,
+source hashes and backend hash are in `agent-native-partial-results-v1.json`;
+its recovery source is `ed1a6edf`, separate from the completed `c26976a4` acceptance
+above. These results do not establish full generic Host restart or ordinary Agent
+view acceptance.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,
