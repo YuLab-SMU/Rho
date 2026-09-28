@@ -38,7 +38,17 @@ records are recovery observations, not reusable dispatch credentials. The backen
 must still validate the current native caller and instance before admission.
 Captures are bounded to 128 KiB each and 64 MiB per project/principal. Binary
 attachment input is excluded; it requires a separate scoped ephemeral Control.
-Ordinary native connection/MCP composition is still separate work.
+The ordinary backend now composes the same native owner, store and scheduler for
+`agent.native.command`, task/receipt/event/history observations and ephemeral
+`agent.native.assets.upload`. It captures a freshly observed caller before writes,
+retains Send until the original native receipt settles, and only observes repeated
+requests. Persisted controller labels use view/window or instance identity so
+renderer reconnection does not change the original input digest; they are not
+credentials. Upload stores an asset without changing a draft or opening a native
+Agent. A subsequent versioned draft write selects the asset. The current upload
+accepts at most 524288 encoded bytes; larger assets still need controlled resource
+transfer. Contributed context and scientific tool dispatch remain unfinished and
+are not silently enabled. The private endpoint currently advertises no tools.
 
 `backend/native::mcp` supplies the private transport for an explicitly opened
 connection: its own loopback listener, bearer and session manager. It never
@@ -97,11 +107,20 @@ DeepSeek setup entry point is retained but is not invoked by these checks.
 
 `cargo test -p rho-agent-native --lib --locked` checks native scheduling, receipt
 recovery and private MCP HTTP isolation. Use the `mcp` filter for transport changes.
-`node scripts/test-agent-plugin-native.mjs` repeats the cases in
+The `native_tasks` filter on `cargo test -p rho-agent-backend --test metadata
+--locked` exercises ordinary framed task composition with an injected native
+factory: retained Send/Stop outcomes, uploaded input, next-draft preservation,
+reopen idempotency and unconfirmed process cleanup. It reads no user configuration
+and starts no installed model. `node scripts/test-agent-plugin.mjs` checks the
+independent package through a previously compiled generic Host, including native
+task metadata, instance separation and attachment journal exclusion.
+`node scripts/test-agent-plugin-native.mjs` repeats the runtime cases in
 an independent source assembly with the public owner/store/client dependencies.
 The temporary Host adapter delegates to this runtime while continuing to supply
 caller validation, scientific context capture and the scoped MCP lease. This
-extraction does not yet provide ordinary native-Agent process composition.
+temporary adapter remains until contributed context, scientific tools and ordinary
+Agent views replace the fixed composition. Release checks persisted native process
+quiet as well as live handles, including after a failed explicit disconnect.
 
 `node scripts/test-agent-plugin-owner.mjs` builds the task owner and public API
 outside the checkout. Its focused fixtures cover original-request deduplication,

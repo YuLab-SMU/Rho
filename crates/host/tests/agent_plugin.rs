@@ -560,3 +560,220 @@ async fn assert_model_retention(model_task: bool) {
     provider_task.abort();
     let _ = provider_task.await;
 }
+
+#[tokio::test]
+#[ignore = "requires an independently built package; run scripts/test-agent-plugin.mjs"]
+async fn ordinary_native_tasks_isolate_uploads_and_never_journal_attachment_bytes() {
+    let package =
+        PathBuf::from(std::env::var_os("RHO_AGENT_PLUGIN_PACKAGE").expect("independent package"));
+    assert!(!package.starts_with(
+        std::fs::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/../..")).unwrap()
+    ));
+    let archive = snapshot_directory(&package, None, &backend_target()).unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("project");
+    std::fs::create_dir(&root).unwrap();
+    let db = directory.path().join("host.sqlite");
+    PluginRepository::open(&repository_path(&db))
+        .unwrap()
+        .import(&archive)
+        .unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &root).await.unwrap();
+    let first = succeeded(&host, "native-activate", "plugins.activate", json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":backend_target(),"alias":"native-agent","configuration":{}})).await.output.unwrap()["instance"]["identity"].clone();
+    let command = binding(&host, &first, "agent.native.command").await;
+    let create_id = uuid::Uuid::new_v4().to_string();
+    let input = json!({"binding":command,"arguments":{"request_id":create_id,"command":{"kind":"create","provider":"kimi","model":"fixture-not-opened","effort":null}}});
+    let original = succeeded(
+        &host,
+        "native-create",
+        "agent.native.command",
+        input.clone(),
+    )
+    .await;
+    let repeated = succeeded(&host, "native-create", "agent.native.command", input).await;
+    assert_eq!(
+        original.operation.operation_id,
+        repeated.operation.operation_id
+    );
+    assert_eq!(original.output, repeated.output);
+    let created = original.output.as_ref().unwrap();
+    let task = created["detail"]["summary"]["task"]["task_id"].clone();
+    let control = json!({"task_id":task,"generation":created["detail"]["summary"]["attachment"]["generation"]});
+    let read = binding(&host, &first, "agent.native.task").await;
+    let upload = binding(&host, &first, "agent.native.assets.upload").await;
+    let receipt = binding(&host, &first, "agent.native.receipt").await;
+    let upload_id = uuid::Uuid::new_v4().to_string();
+    // Bytes are deliberately unique, so accidental journal persistence is visible.
+    let bytes = "TmF0aXZlIHVwbG9hZCBqb3VybmFsIGV4Y2x1c2lvbiAwNmY0OTY=";
+    let arguments = json!({"binding":upload,"arguments":{"request_id":upload_id,"control":control,"name":"notes.txt","mime_type":"text/plain","data":bytes}});
+    let upload_request = || {
+        HostRequest::Control(ControlRequest {
+            capability: CapabilityRef::new("agent.native.assets.upload", 1).unwrap(),
+            arguments: arguments.clone(),
+        })
+    };
+    let counts = || {
+        let connection = rusqlite::Connection::open(&db).unwrap();
+        [
+            "operations",
+            "operation_events",
+            "domain_facts",
+            "outbox",
+            "operation_commit_candidates",
+            "operation_uncommitted_evidence",
+        ]
+        .map(|table| {
+            connection
+                .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .unwrap()
+        })
+    };
+    // Wait for the preceding Operation's settlement before comparing journals.
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let state = query(&host, "plugins.instance", json!({"instance":first})).await;
+            if state["retained_calls"] == 0 && state["pending_messages"] == 0 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let before = counts();
+    let uploaded = host
+        .dispatch(&NextHost::local_context(), upload_request())
+        .await
+        .unwrap();
+    assert_eq!(uploaded["receipt"]["status"], "succeeded");
+    assert_eq!(uploaded["detail"]["assets"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        host.dispatch(&NextHost::local_context(), upload_request())
+            .await
+            .unwrap(),
+        uploaded
+    );
+    let observed = query(
+        &host,
+        "agent.native.receipt",
+        json!({"binding":receipt,"arguments":{"request_id":upload_id}}),
+    )
+    .await;
+    assert_eq!(observed, uploaded["receipt"]);
+    assert!(!uploaded.to_string().contains(bytes));
+    assert_eq!(counts(), before);
+    let mut weak = NextHost::local_context();
+    weak.scopes.remove("application.control");
+    assert!(host.dispatch(&weak, upload_request()).await.is_err());
+    let mut foreign = NextHost::local_context();
+    foreign.caller.id = "foreign-native-principal".into();
+    assert!(host.dispatch(&foreign, upload_request()).await.is_err());
+    assert!(
+        host.invoke(
+            &NextHost::local_context(),
+            Invocation {
+                client_request_id: "wrong-upload-port".into(),
+                capability: CapabilityRef::new("agent.native.assets.upload", 1).unwrap(),
+                arguments: arguments.clone(),
+                preconditions: vec![]
+            }
+        )
+        .await
+        .is_err()
+    );
+    assert!(host.invoke(&NextHost::local_context(), Invocation { client_request_id:"binary-command".into(), capability:CapabilityRef::new("agent.native.command",1).unwrap(), arguments:json!({"binding":command,"arguments":{"request_id":uuid::Uuid::new_v4().to_string(),"command":{"kind":"add_asset","control":control,"name":"notes.txt","mime_type":"text/plain","data":bytes}}}), preconditions:vec![] }).await.is_err());
+    assert_eq!(counts(), before);
+    assert!(
+        !serde_json::to_string(
+            &host
+                .outbox(&NextHost::local_context(), 0, 100)
+                .await
+                .unwrap()
+        )
+        .unwrap()
+        .contains(bytes)
+    );
+    let saved = succeeded(&host,"native-save","agent.native.command",json!({"binding":command,"arguments":{"request_id":uuid::Uuid::new_v4().to_string(),"command":{"kind":"save_draft","control":control,"version":uploaded["detail"]["draft"]["version"],"content":{"text":"保留草稿 🙂","context":[],"assets":[uploaded["detail"]["assets"][0]["asset_id"]]}}}})).await;
+    let current = query(
+        &host,
+        "agent.native.task",
+        json!({"binding":read,"arguments":{"task_id":task}}),
+    )
+    .await;
+    assert_eq!(current, saved.output.as_ref().unwrap()["detail"]);
+    assert_eq!(current["draft"]["content"]["text"], "保留草稿 🙂");
+    assert_eq!(current["assets"].as_array().unwrap().len(), 1);
+    let second = succeeded(&host,"native-second","plugins.activate",json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":backend_target(),"alias":"native-agent-two","configuration":{}})).await.output.unwrap()["instance"]["identity"].clone();
+    let second_list = binding(&host, &second, "agent.tasks").await;
+    assert_eq!(
+        query(
+            &host,
+            "agent.tasks",
+            json!({"binding":second_list,"arguments":{"limit":20}})
+        )
+        .await["tasks"],
+        json!([])
+    );
+    let second_read = binding(&host, &second, "agent.native.task").await;
+    assert!(
+        host.query_snapshot(
+            &NextHost::local_context(),
+            QueryRequest {
+                capability: CapabilityRef::new("agent.native.task", 1).unwrap(),
+                arguments: json!({"binding":second_read,"arguments":{"task_id":task}})
+            }
+        )
+        .await
+        .is_err()
+    );
+    let second_receipt = binding(&host, &second, "agent.native.receipt").await;
+    assert!(
+        host.query_snapshot(
+            &NextHost::local_context(),
+            QueryRequest {
+                capability: CapabilityRef::new("agent.native.receipt", 1).unwrap(),
+                arguments: json!({"binding":second_receipt,"arguments":{"request_id":upload_id}})
+            }
+        )
+        .await
+        .is_err()
+    );
+    for (index, instance) in [&first, &second].into_iter().enumerate() {
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let state = query(&host, "plugins.instance", json!({"instance":instance})).await;
+                if state["retained_calls"] == 0 && state["pending_messages"] == 0 {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        succeeded(
+            &host,
+            &format!("native-release-{index}"),
+            "plugins.release",
+            json!({"instance":instance}),
+        )
+        .await;
+    }
+    succeeded(
+        &host,
+        "native-remove",
+        "plugins.remove",
+        json!({"revision":archive.revision.id}),
+    )
+    .await;
+    let retained = host
+        .get_operation(&NextHost::local_context(), &original.operation.operation_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(retained.output, original.output);
+    assert_eq!(retained.status, OperationStatus::Succeeded);
+    host.drain().await;
+    assert!(!root.join(".Rhistory").exists());
+}

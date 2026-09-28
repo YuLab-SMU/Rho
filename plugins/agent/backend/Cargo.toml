@@ -12,6 +12,9 @@ rho-agent-api = { path = "../api" }
 rho-agent-owner = { path = "owner" }
 rho-agent-store = { path = "store" }
 rho-agent-engine = { path = "engine" }
+rho-agent-client = { path = "client" }
+rho-agent-native = { path = "native" }
+sha2 = "0.10"
 tokio-util = { version = "0.7", features = ["rt"] }
 rho-plugin-sdk = { path = "../../../crates/plugin-sdk" }
 schemars = "1.0"

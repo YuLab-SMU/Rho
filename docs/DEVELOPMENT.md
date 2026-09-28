@@ -208,7 +208,16 @@ sessions and a disposable Agent database. After building the current binary,
 `node scripts/test-agent-task-recovery.mjs` exercises the local ACP fixture across
 a disposable Host crash and explicit resume. Its default fixture run observes
 only temporary configuration; native user settings are inspected only by explicit
-`--real-*` runs. Ordinary native-plugin composition remains a separate acceptance.
+`--real-*` runs. Ordinary native-plugin composition has separate framed and Host
+acceptance: `cargo test -p rho-agent-backend --test metadata native_tasks --locked`
+uses an injected native factory and real package storage/loopback endpoints.
+It covers original Send retention, explicit Stop, next drafts, attachment input,
+reopen deduplication and refusal to forget unconfirmed native cleanup.
+`node scripts/test-agent-plugin-backend.mjs` repeats all framed cases in an
+independent assembly. `node scripts/test-agent-plugin.mjs` checks task metadata,
+attachment Control journal exclusion and instance separation through a generic
+Host compiled before that external package. These do not establish scientific
+native-tool dispatch, real provider performance or plugin view acceptance.
 
 Use `cargo test -p rho-agent-native --lib mcp --locked` for private native MCP
 transport changes. These real loopback HTTP fixtures cover connection/session

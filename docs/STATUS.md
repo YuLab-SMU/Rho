@@ -324,8 +324,32 @@ assembly. All 13 Host task cases and the architecture, private-boundary and
 governance checks also pass. Exact commands and results are retained in
 `target/plugin-refactor/agent-native-mcp-results-v2.json`; the initial failed
 fixture remains in the v1 log. This is a
-transport primitive; ordinary native backend and scientific-tool composition remain
-unfinished. No actual model, user credentials or user sessions are used.
+transport primitive; scientific-tool composition remains unfinished. No actual
+model, user credentials or user sessions are used.
+
+The ordinary Agent backend now composes native task commands, observations and
+attachment Control using the same public owner/store/runtime. Fresh writes observe
+the current native caller; Send retains its original Operation until the native
+receipt settles, while identical retries only observe it. Saved attachments require
+an explicit versioned draft selection. Persisted controller correlation survives
+renderer reconnection. Release verifies both HTTP cleanup and saved native process
+quiet, including failed disconnects whose live entry was already removed.
+The initial framed run passed three of four new cases; the fourth fixture omitted
+attachment selection in its draft. After correcting that fixture, all four cases
+and all 27 framed cases pass, as do the independent package build and its 27 cases.
+That v2 acceptance predates the added failed-disconnect release check. The subsequent
+architecture check found the new package-internal composition edges were missing
+from its declared map; the map now names the public native/client libraries without
+allowing private core imports. Final focused, framed, independent/generic-Host and
+boundary acceptance is running in the serial v3 verifier. Its Host fixture checks
+native task metadata, attachment journal exclusion, original request identity and
+separate instance storage. Logs/results are in
+`target/plugin-refactor/agent-native-backend-*-v3.*`; earlier failure logs remain.
+The endpoint still advertises no scientific tools; contributed context, public
+foreign-controller presence, full-size resource transfer and ordinary Agent views
+remain unfinished. Current uploads are bounded to 524288 encoded bytes. No installed
+native Agent, real model or user credential is used by these checks. Existing Hosts
+and R sessions have not been restarted. The fixed core composition remains in place.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,

@@ -1,6 +1,7 @@
-use crate::arguments::*;
+use crate::{arguments::*, native_arguments::*};
 use rho_agent_api::{
-    ComponentCredentialRef, ComponentCredentialStatus, ComponentModelSettings,
+    AgentCommandReceipt, AgentNativeHistoryPage, AgentTaskCommandResult, AgentTaskDetail,
+    AgentTaskEventPage, ComponentCredentialRef, ComponentCredentialStatus, ComponentModelSettings,
     ProjectAgentTaskPage,
     component::{
         ComponentAgentConversation, ComponentAgentEventPage, ComponentAgentRun,
@@ -20,7 +21,8 @@ pub fn key(id: &str) -> CapabilityKey {
 pub fn is_mutation(id: &str) -> bool {
     matches!(
         id,
-        "agent.model.create"
+        "agent.native.command"
+            | "agent.model.create"
             | "agent.model.draft"
             | "agent.model.update"
             | "agent.model.take_control"
@@ -32,7 +34,7 @@ pub fn is_mutation(id: &str) -> bool {
     )
 }
 pub fn kind(id: &str) -> CapabilityKind {
-    if id == "agent.model.key.store" {
+    if matches!(id, "agent.model.key.store" | "agent.native.assets.upload") {
         CapabilityKind::Control
     } else if is_mutation(id) {
         CapabilityKind::Operation
@@ -53,7 +55,11 @@ fn capability(
     CapabilityContribution {
         capability: key(id), kind,
         title: title.into(),
-        description: if id == "agent.model.run" {
+        description: if id == "agent.native.command" {
+            "Admit a native Agent command with the original native caller and task generation. Fresh native work retains its containing Operation until its original receipt is observed; identical requests only observe their original receipt. Does not install an Agent or compose scientific tools/context yet. Attachment bytes are excluded from this Operation contract."
+        } else if id == "agent.native.assets.upload" {
+            "Store a bounded native task attachment through ephemeral input, the same task owner and runtime, without journaling its bytes or starting a native Agent. Inspect its original task receipt after a lost reply. This capability currently accepts only bounded single-message attachments."
+        } else if id == "agent.model.run" {
             "Run the submitted text using captured model settings and the original native controller. Retains the native Operation until the model and dispatched native tools settle and records text and usage in its original task. An optional exact R binding permits bounded observation in Explain and execution only in Run, subject to original scopes and granted native capabilities. Attachments and continuation are not yet composed. Identical original requests only observe the existing run."
         } else if id == "agent.model.run.stop" {
             "Request stopping the original model task under its current controller. Dispatched native work remains retained after the model loop ends; a stop request does not cancel or roll back scientific execution."
@@ -73,7 +79,7 @@ fn capability(
         input_schema: input, output_schema: output, examples: vec![example],
         recovery_schema: json!({"type":"object","additionalProperties":false,"properties":{"code":{"type":"string"}},"required":["code"]}),
         required_scopes: if operation || control { ["application.control".into(), "plugins.read".into()].into() } else if id == "agent.model.tool.operation" { ["application.read".into(), "operation.read".into()].into() } else { ["application.read".into()].into() },
-        effects: if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
+        effects: if id == "agent.native.command" { ["agent.native.command".into()].into() } else if id == "agent.native.assets.upload" { ["agent.assets".into()].into() } else if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
         cancellation: CancellationSupport::Unsupported, preflight: None,
     }
 }
@@ -126,6 +132,48 @@ pub fn manifest() -> PluginManifest {
             },
         ],
         capabilities: vec![
+            capability(
+                "agent.native.command",
+                "Change a native Agent task",
+                schema_for!(NativeAction).to_value(),
+                schema_for!(AgentTaskCommandResult).to_value(),
+                json!({"request_id":"11111111-1111-4111-8111-111111111111","command":{"kind":"create","provider":"kimi","model":"selected-native-model","effort":null}}),
+            ),
+            capability(
+                "agent.native.task",
+                "Read a native Agent task",
+                schema_for!(NativeTask).to_value(),
+                schema_for!(AgentTaskDetail).to_value(),
+                json!({"task_id":"task-example"}),
+            ),
+            capability(
+                "agent.native.receipt",
+                "Read an original native task receipt",
+                schema_for!(NativeReceipt).to_value(),
+                schema_for!(AgentCommandReceipt).to_value(),
+                json!({"request_id":"11111111-1111-4111-8111-111111111111"}),
+            ),
+            capability(
+                "agent.native.events",
+                "Read retained native task events",
+                schema_for!(NativeEvents).to_value(),
+                schema_for!(AgentTaskEventPage).to_value(),
+                json!({"task_id":"task-example","after":0,"before":null,"limit":50}),
+            ),
+            capability(
+                "agent.native.history",
+                "Read live native history without reconnecting",
+                schema_for!(NativeHistory).to_value(),
+                schema_for!(AgentNativeHistoryPage).to_value(),
+                json!({"task_id":"task-example","cursor":null,"limit":50}),
+            ),
+            capability(
+                "agent.native.assets.upload",
+                "Store a native task attachment",
+                schema_for!(NativeUpload).to_value(),
+                schema_for!(AgentTaskCommandResult).to_value(),
+                json!({"request_id":"11111111-1111-4111-8111-111111111111","control":{"task_id":"task-example","generation":1},"name":"notes.txt","mime_type":"text/plain","data":"Tm90ZXM="}),
+            ),
             capability(
                 "agent.model.run.admission",
                 "Read the original native model admission",

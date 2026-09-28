@@ -18,11 +18,12 @@ use std::{
 
 pub struct Metadata {
     pub owner: ComponentAgentOwner,
+    pub(crate) native: crate::native_tasks::NativeTasks,
     store: Arc<AgentStore>,
     pub(crate) credentials: CredentialFile,
     diagnostics: crate::diagnostics::Diagnostics,
     runs: crate::runs::Runs,
-    instance: PluginInstance,
+    pub(crate) instance: PluginInstance,
     pub(crate) scope: AgentTaskScope,
     pub(crate) grants: Vec<CapabilityRequirement>,
 }
@@ -129,6 +130,7 @@ impl Metadata {
         instance: PluginInstance,
         environment: BackendEnvironment,
         grants: Vec<CapabilityRequirement>,
+        factory: Arc<dyn rho_agent_client::NativeAgentFactory>,
     ) -> Result<Self, String> {
         decode::<Empty>(&instance.configuration).map_err(|e| e.message)?;
         for directory in [&environment.project_root, &environment.data_root] {
@@ -152,8 +154,13 @@ impl Metadata {
             principal: instance.principal.to_string(),
         };
         let owner = ComponentAgentOwner::new(store.clone(), uuid::Uuid::new_v4().to_string());
+        let native = crate::native_tasks::NativeTasks::new(
+            Arc::new(rho_agent_owner::AgentTaskOwner::new(store.clone())),
+            factory,
+        );
         Ok(Self {
             owner,
+            native,
             store,
             diagnostics: Default::default(),
             runs: Default::default(),
@@ -210,6 +217,15 @@ impl Metadata {
         call: &PluginCall,
         host: rho_plugin_sdk::HostCallClient,
     ) -> Result<Value, Failure> {
+        if call
+            .binding
+            .capability
+            .id
+            .as_str()
+            .starts_with("agent.native.")
+        {
+            return self.native.query(self, call).await;
+        }
         if call.binding.capability.id.as_str() == "agent.model.tool.operation" {
             return crate::tools::inspect_original(self, call, host).await;
         }
@@ -250,7 +266,7 @@ impl Metadata {
                             args.archived,
                             args.before.as_deref(),
                             args.limit as usize,
-                            &self.owner.host_incarnation,
+                            &self.native.owner.host_incarnation,
                             &self.owner.host_incarnation,
                             &live,
                         )
@@ -270,7 +286,14 @@ impl Metadata {
     }
     /// Invoked only after this Control's original native caller query succeeds.
     /// Caller observations are consumed here, never retained for future writes.
-    pub fn control(&self, call: &PluginCall, caller: PluginViewCaller) -> Result<Value, Failure> {
+    pub async fn control(
+        &self,
+        call: &PluginCall,
+        caller: PluginViewCaller,
+    ) -> Result<Value, Failure> {
+        if call.binding.capability.id.as_str() == "agent.native.assets.upload" {
+            return self.native.upload(self, call, caller).await;
+        }
         if call.binding.capability.id.as_str() != "agent.model.key.store" {
             return Err(Failure::invalid("Agent control is not implemented"));
         }
@@ -321,12 +344,18 @@ impl Metadata {
         host: rho_plugin_sdk::HostCallClient,
     ) -> Result<Value, Failure> {
         match call.binding.capability.id.as_str() {
+            "agent.native.command" => self.native.command(self, call, caller).await,
             "agent.model.run" => self.runs.start(self, call, caller, host).await,
             "agent.model.run.stop" => self.runs.stop(self, call, caller),
             "agent.model.test" => self.diagnostics.start(self, call, caller).await,
             "agent.model.test.stop" => self.diagnostics.stop(self, call, caller),
             _ => self.mutate(call, caller),
         }
+    }
+    pub async fn close(&self) -> Result<(), Failure> {
+        self.diagnostics.cancel_all();
+        self.runs.cancel_all();
+        self.native.close(&self.scope).await
     }
     pub fn mutate(&self, call: &PluginCall, caller: PluginViewCaller) -> Result<Value, Failure> {
         let now = now();

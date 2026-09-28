@@ -1177,7 +1177,10 @@ bytes. They are inspection evidence, never reusable authority: the containing
 backend must validate live caller/instance identity before accepting a command,
 and native tools must retain the active original parent rather than reconstruct
 permissions from stored observations. This substrate does not itself compose the
-ordinary native backend or its scoped MCP endpoint.
+ordinary native scientific-tool dispatch. The ordinary backend now consumes this
+admission for native commands and retains the original Send until its receipt
+leaves prepared/submitted state. Attachment bytes enter only through ephemeral
+Control; saving an asset does not select it in an editable draft.
 
 Every active task owns a native process; at most eight connections share a Host.
 Host restart leaves attachments disconnected until explicit Resume. Codex uses the
@@ -1888,8 +1891,13 @@ The lease is revoked on close, disconnect and failed native opening. A connectio
 whose metadata cannot be retained is closed before reporting the failure; its
 native identity and process proof remain recovery material, and unconfirmed quiet
 cannot authorize replacement. Publication shares shutdown's live-map lock. The temporary
-Host adapter supplies caller/window validation, context and MCP identity; ordinary
-backend composition still has to replace that adapter. The native scheduler has
+Host adapter still supplies context and scientific MCP integration. The ordinary
+backend now composes native command/observation and attachment operations using
+the same package libraries. Fresh public caller observation precedes each write;
+persisted native controller correlation remains stable across renderer reconnection.
+The ordinary endpoint currently advertises no scientific tools, and contributed
+context input is refused before native submission. Foreign active-controller
+takeover still requires a public controller-presence observation. The native scheduler has
 no private core dependency or scientific journal connection.
 Its private MCP constructor creates one loopback endpoint and session manager per
 native connection. The endpoint has no general Host credential. Revocation and
@@ -1900,6 +1908,9 @@ work quotas and wait for children before settling that parent. Transport identit
 and tool declarations do not grant authority. A confirmed endpoint close covers
 HTTP/session resources only. It cannot establish native process quiet or scientific
 cancellation. Failed initialization cannot accumulate unbounded session entries.
+The containing backend checks persisted task process-quiet evidence before release,
+including tasks already removed from the live map by a failed disconnect. A failed
+release remains unconfirmed on retry; losing a live handle is not cleanup proof.
 Application retains only its scope/error conversion at this boundary; the current
 SQLite adapter only forwards to `rho-agent-store`, the single package-owned SQL
 implementation. Native/component tasks, assets, task-list projections and handoff

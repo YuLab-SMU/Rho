@@ -9,4 +9,6 @@ pub mod server;
 mod diagnostics;
 mod runs;
 
+pub mod native_arguments;
+mod native_tasks;
 mod tools;

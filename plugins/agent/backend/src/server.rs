@@ -49,7 +49,10 @@ fn plan(result: Result<Value, Failure>) -> PluginCommitPlan {
             cancellation_confirmed: false,
         },
         Err(failure) => PluginCommitPlan {
-            outcome: if failure.code == "agent_storage_unavailable" {
+            outcome: if matches!(
+                failure.code,
+                "agent_storage_unavailable" | "native_outcome_uncertain"
+            ) {
                 PluginOutcome::Uncertain
             } else {
                 PluginOutcome::Failed
@@ -84,7 +87,19 @@ fn caller(result: Result<Value, HostCallError>) -> Result<PluginViewCaller, Fail
 /// One reader and writer own framed I/O. Metadata admission uses the same bounded
 /// reverse-call transport later used by model callbacks. Pending mutation replies
 /// and settlement acknowledgements remain distinct until the Host commits.
-pub async fn serve<R, W>(mut connection: BackendConnection<R, W>) -> Result<(), String>
+pub async fn serve<R, W>(connection: BackendConnection<R, W>) -> Result<(), String>
+where
+    R: AsyncRead + Unpin + Send + 'static,
+    W: AsyncWrite + Unpin + Send + 'static,
+{
+    serve_with_native_factory(connection, Arc::new(rho_agent_client::LocalNativeAgents)).await
+}
+/// The same production composition with an explicit native adapter, used by
+/// deterministic framed tests without invoking installed Agents or user keys.
+pub async fn serve_with_native_factory<R, W>(
+    mut connection: BackendConnection<R, W>,
+    factory: Arc<dyn rho_agent_client::NativeAgentFactory>,
+) -> Result<(), String>
 where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
@@ -102,6 +117,7 @@ where
             .clone()
             .ok_or("Agent requires native instance storage")?,
         connection.grants.clone(),
+        factory,
     )?);
     let (host, mut pump) = host_call_channel(CAPACITY).map_err(|e| e.to_string())?;
     connection.ready().await.map_err(|e| e.to_string())?;
@@ -245,7 +261,10 @@ where
                                 controls.insert(request.clone());
                                 let original = request.clone();
                                 jobs.spawn(async move {
-                                    let result = caller(pending.receive().await).and_then(|origin| metadata.control(&call, origin));
+                                    let result = match caller(pending.receive().await) {
+                                        Ok(origin) => metadata.control(&call, origin).await,
+                                        Err(error) => Err(error),
+                                    };
                                     Completed::Control(original, result)
                                 });
                             }
@@ -278,6 +297,10 @@ where
                         Some(RpcBody::SettlementAcknowledged(settlement))
                     },
                     RpcBody::Release if retained.is_empty() && controls.is_empty() && queries.is_empty() && jobs.is_empty() && pump.pending() == 0 => {
+                        if let Err(failure) = metadata.close().await {
+                            if let Err(error) = writer.send(request, failure.body()).await { break Err(error.to_string()); }
+                            continue;
+                        }
                         if let Err(error) = writer.send(request, RpcBody::Released).await { break Err(error.to_string()); }
                         break Ok(());
                     },
@@ -296,5 +319,6 @@ where
     while jobs.join_next().await.is_some() {}
     reader_task.abort();
     let _ = reader_task.await;
-    result
+    let cleanup = metadata.close().await.map_err(|e| e.message);
+    result.and(cleanup)
 }

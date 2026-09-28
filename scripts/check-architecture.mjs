@@ -61,7 +61,7 @@ const allowed = {
   "rho-host": ["rho-plugin-protocol", "rho-plugins", "rho-agents", "rho-agent-client", "rho-agent-native", "rho-agent-store", "rho-contract", "rho-operation", "rho-application", "rho-skills", "rho-adapter-skills", "rho-sqlite", "rho-workspace", "rho-r-runtime", "rho-project", "rho-git", "rho-environment", "rho-r-environment", "rho-execution", "rho-process", "rho-ssh"],
   "rho-mcp": ["rho-contract", "rho-host"],
   "rho-agent-api": ["rho-plugin-protocol", "rho-r-api"],
-  "rho-agent-backend": ["rho-plugin-sdk", "rho-agent-api", "rho-agent-owner", "rho-agent-store", "rho-agent-engine"],
+  "rho-agent-backend": ["rho-plugin-sdk", "rho-agent-api", "rho-agent-owner", "rho-agent-store", "rho-agent-engine", "rho-agent-client", "rho-agent-native"],
   "rho-agent-owner": ["rho-agent-api"],
   "rho-agent-store": ["rho-agent-api", "rho-agent-owner"],
   "rho-agent-engine": ["rho-agent-api", "rho-agent-owner"],

@@ -88,20 +88,37 @@ impl Fixture {
         )
         .await
     }
+    async fn open_with_factory(
+        directory: tempfile::TempDir,
+        environment: BackendEnvironment,
+        optional: &[&str],
+        factory: std::sync::Arc<dyn rho_agent_client::NativeAgentFactory>,
+    ) -> Self {
+        Self::open_internal(directory, environment, optional, Some(factory)).await
+    }
     async fn open_with_optional(
         directory: tempfile::TempDir,
         environment: BackendEnvironment,
         optional: &[&str],
     ) -> Self {
+        Self::open_internal(directory, environment, optional, None).await
+    }
+    async fn open_internal(
+        directory: tempfile::TempDir,
+        environment: BackendEnvironment,
+        optional: &[&str],
+        factory: Option<std::sync::Arc<dyn rho_agent_client::NativeAgentFactory>>,
+    ) -> Self {
         let (host, backend) = tokio::io::duplex(65536);
         let (input, output) = tokio::io::split(backend);
         let task = tokio::spawn(async move {
-            server::serve(
-                BackendConnection::accept(input, output)
-                    .await
-                    .map_err(|e| e.to_string())?,
-            )
-            .await
+            let connection = BackendConnection::accept(input, output)
+                .await
+                .map_err(|e| e.to_string())?;
+            match factory {
+                Some(factory) => server::serve_with_native_factory(connection, factory).await,
+                None => server::serve(connection).await,
+            }
         });
         let native = instance();
         let connection = ConnectionId::new("native-channel").unwrap();
@@ -236,7 +253,7 @@ impl Fixture {
 fn manifest_contains_public_bounded_agent_capabilities() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 21);
+    assert_eq!(manifest.capabilities.len(), 27);
     assert_eq!(
         manifest.requires[0].capability,
         manifest::key("views.caller")
@@ -1285,3 +1302,6 @@ async fn disconnect_during_model_test_keeps_original_diagnostic_interrupted_with
     assert_eq!(model.count(), 1);
     reopened.release().await;
 }
+
+#[path = "support/native_tasks.rs"]
+mod native_tasks;
