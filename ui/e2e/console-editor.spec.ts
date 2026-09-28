@@ -1,5 +1,6 @@
 /** Isolated ordinary-package editing checks. Native R acceptance is separate. */
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { createHash } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,15 +27,25 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (server) await new Promise<void>(done => server.close(() => done())); if (directory) rmSync(directory, { recursive: true, force: true }); });
 
-test("opaque Console package preserves editing, IME guards, queue controls and transient answers", async ({ page }, info) => {
+async function mountConsole(page: Page, recovery: { request: string; scoped: string } | null = null) {
   await page.goto(origin);
-  await page.evaluate(() => {
+  await page.evaluate(recovery => {
     const owner = { instance: "r-one", plugin: "org.rho.r", revision: "sha256:" + "a".repeat(64), artifact: "sha256:" + "b".repeat(64) };
     const ui = { ...owner, instance: "console-one", plugin: "org.rho.console" };
     const view = { view: "console-view", instance: ui, project: "project", principal: "principal", contribution: "console", window: "window",
-      configuration: { source: owner }, state: {}, state_version: 0, closed: false };
-    const fixture = { calls: [] as any[], runs: [] as any[], events: [] as any[], view,
+      configuration: { source: owner }, state: {} as any, state_version: 0, closed: false };
+    const fixture = { calls: [] as any[], runs: [] as any[], events: [] as any[], view, hideOriginal: false,
       queue: { console: { session_id: "native", current: null as any, pending: [] as any[], pause: null as any, input: null as any }, awaiting_commit: [], pending_cancellations: [], accepting: true, capacity: 33 } };
+    if (recovery) {
+      view.view = "replacement-console-view";
+      const submission = { view: "original-console-view", request: recovery.request, code: "original_code <- 42", session: "native" };
+      view.state = { input: "next draft 中文", submission };
+      fixture.runs.push({ operation: { operation_id: "original-run", caller: { kind: "plugin", id: submission.view },
+        client_request_id: recovery.scoped, capability: { id: "r.execute", version: 2 }, preconditions: [], accepted_at_ms: Date.now(),
+        normalized_arguments: { binding: { provider: owner, project: view.project, target: submission.session, capability: { id: "r.execute", version: 2 } },
+          arguments: { expected_session: submission.session, run: { code: submission.code, output_mode: "console",
+            source: { view_id: submission.view, label: "Console", kind: "console" } } }, preconditions: null } }, status: "accepted", output: null });
+    }
     (window as any).fixture = fixture;
     window.addEventListener("message", event => {
       if (event.data?.type !== "rho:view:ready") return;
@@ -44,8 +55,10 @@ test("opaque Console package preserves editing, IME guards, queue controls and t
         let result: any;
         if (request.type === "query") {
           switch (request.capability.id) {
-            case "operation.list_recent": result = { data: { operations: fixture.runs.map(run => ({ operation_id: run.operation.operation_id, capability: run.operation.capability })), next_cursor: null } }; break;
-            case "operation.get": result = { data: { record: fixture.runs.find(run => run.operation.operation_id === request.arguments.operation_id) } }; break;
+            case "operation.list_recent": result = { status: "ready", completeness: "complete", data: { operations: fixture.runs
+              .filter(run => !request.arguments.client_request_id || !fixture.hideOriginal && run.operation.client_request_id === request.arguments.client_request_id)
+              .map(run => ({ operation_id: run.operation.operation_id, capability: run.operation.capability })), next_cursor: null } }; break;
+            case "operation.get": result = { status: "ready", completeness: "complete", data: { record: fixture.runs.find(run => run.operation.operation_id === request.arguments.operation_id) } }; break;
             case "r.session": result = { data: { state: fixture.queue.console.current ? "busy" : "idle", session_id: "native", queue_target: "native" } }; break;
             case "r.console": result = { data: fixture.queue }; break;
             case "r.check_code": result = { data: { status: request.arguments.arguments.code.trimEnd().endsWith("{") ? "incomplete" : "complete", indent: "  " } }; break;
@@ -72,7 +85,11 @@ test("opaque Console package preserves editing, IME guards, queue controls and t
     });
     const frame = document.createElement("iframe"); frame.sandbox.add("allow-scripts"); frame.style.cssText = "width:100vw;height:100vh;border:0;display:block";
     frame.src = "/dist/index.html#rho-view-nonce=fixture"; document.body.append(frame);
-  });
+  }, recovery);
+}
+
+test("opaque Console package preserves editing, IME guards, queue controls and transient answers", async ({ page }, info) => {
+  await mountConsole(page);
   const frame = page.frameLocator("iframe"), input = frame.getByRole("textbox", { name: "Console Input", exact: true });
   await expect(frame.locator("#status")).toContainText("Ready");
   await input.fill("if (TRUE) {"); await input.press("Enter"); await expect(input).toContainText("if (TRUE) {");
@@ -149,4 +166,42 @@ test("opaque Console package preserves editing, IME guards, queue controls and t
   await frame.getByRole("button", { name: "Show History", exact: true }).click();
   await expect(frame.getByRole("textbox", { name: "Console Transcript", exact: true })).toContainText("中文 <- 42");
   expect(await page.evaluate(() => (window as any).fixture.runs.length)).toBe(1);
+});
+
+
+test("replacement Console inspects its original submission without resending or losing the next draft", async ({ page }, info) => {
+  const request = crypto.randomUUID();
+  const scoped = "sha256:" + createHash("sha256").update(`original-console-view:${request}`).digest("hex");
+  await mountConsole(page, { request, scoped });
+  const frame = page.frameLocator("iframe"), input = frame.getByRole("textbox", { name: "Console Input", exact: true });
+  await expect(frame.locator("#status")).toContainText("Ready");
+  await expect(input).toContainText("next draft 中文");
+  await expect(frame.getByRole("button", { name: "Retry Original Submission", exact: true })).toBeDisabled();
+  await expect(frame.getByRole("button", { name: "Run", exact: true })).toBeDisabled();
+  await page.evaluate(() => { (window as any).fixture.hideOriginal = true; });
+  await frame.getByRole("button", { name: "Inspect Original Submission", exact: true }).click();
+  await expect(frame.locator("#message")).toContainText("remains available for inspection");
+  expect(await page.evaluate(() => (window as any).fixture.view.state.submission.request)).toBe(request);
+  for (const width of [1440, 1920, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => page.frames()[1].evaluate(() => innerWidth)).toBe(width);
+    await expect(frame.getByRole("button", { name: "Inspect Original Submission", exact: true })).toBeInViewport();
+    expect(await page.frames()[1].evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+    await page.frames()[1].evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+    await page.screenshot({ path: info.outputPath(`console-recovery-${width}.png`) });
+  }
+  await page.evaluate(() => { (window as any).fixture.hideOriginal = false; });
+  await frame.getByRole("button", { name: "Inspect Original Submission", exact: true }).click();
+  await expect(frame.locator("#message")).toContainText("Original submission found: Queued");
+  await expect(frame.getByRole("button", { name: "Inspect Original Submission", exact: true })).toBeHidden();
+  await expect(frame.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
+  await expect(input).toContainText("next draft 中文");
+  expect(await page.evaluate(() => (window as any).fixture.view.state.submission)).toBeNull();
+  await page.locator("iframe").evaluate((element: HTMLIFrameElement) => { element.src = element.src; });
+  await expect(frame.locator("#status")).toContainText("Ready");
+  await expect(input).toContainText("next draft 中文");
+  await expect(frame.getByRole("button", { name: "Inspect Original Submission", exact: true })).toBeHidden();
+  expect(await page.evaluate(() => (window as any).fixture.calls.filter((call: any) => ["invoke", "control"].includes(call.type)))).toEqual([]);
+  expect(await page.evaluate(() => (window as any).fixture.runs.length)).toBe(1);
+  await page.screenshot({ path: info.outputPath("console-recovery-reopened.png") });
 });

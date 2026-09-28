@@ -1,7 +1,7 @@
 /** Console scientific semantics use public R messages and original Operations. */
 import type { InstanceRef, JsonValue, ProviderBinding } from "../public/plugin-protocol/index.js";
 import type { ConsoleState, OutputEvent, OutputEvents, REventsObservation, RunSource } from "../public/r-protocol/index.js";
-import { isResourceReference, readResource, sameResource, type PluginViewClient, type ResourceReference } from "../public/plugin-ui/index.js";
+import { isResourceReference, operationRequestId, readResource, sameResource, type PluginViewClient, type ResourceReference } from "../public/plugin-ui/index.js";
 
 export interface QueueObservation {
   console: ConsoleState; awaiting_commit: string[]; pending_cancellations?: string[]; accepting: boolean; capacity: number;
@@ -24,6 +24,8 @@ export const sameOwner = (a: InstanceRef, b: InstanceRef) => !!a && !!b &&
 export const terminal = (status: string) => ["succeeded", "failed", "cancelled", "uncertain"].includes(status);
 const object = (value: unknown): Record<string, any> | null => value !== null && typeof value === "object" && !Array.isArray(value) ? value : null;
 const bytes = (text: string) => new TextEncoder().encode(text).length;
+const canonical = (value: unknown): string => JSON.stringify(value, (_key, item: unknown) => object(item)
+  ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : item);
 export function validateCode(code: string) {
   if (!code.trim() || bytes(code) > 262144 || code.includes("\0")) throw new Error("Enter 1–262144 UTF-8 bytes of R code without NUL.");
 }
@@ -153,12 +155,52 @@ export class ConsoleModel {
     const run = runFrom(record, this.source);
     if (!run || run.code !== captured.code || run.session !== captured.session || run.source?.view_id !== captured.view)
       throw new Error("Submission acknowledgement is not the original R run.");
+    await this.acceptSubmission(captured, run);
+    return run;
+  }
+  /** Locate a retained admission under the original view/request without Invoke.
+   * A missing or partial observation never authorizes a replacement submission. */
+  async recoverSubmission() {
+    const captured = structuredClone(this.state.submission);
+    if (!captured) throw new Error("There is no unconfirmed Console submission.");
+    validateCode(captured.code);
+    const original = await operationRequestId(captured.view, captured.request);
+    const page = await this.client.query<{ status: string; completeness: string; data?: { operations?: { operation_id: string }[]; next_cursor: number | null } }>(
+      key("operation.list_recent"), { client_request_id: original, limit: 2 });
+    if (page.status !== "ready" || page.completeness !== "complete" || !Array.isArray(page.data?.operations) || page.data.operations.length !== 1 || page.data.next_cursor !== null)
+      throw new Error("No unique original run is confirmed. The saved submission remains available for inspection.");
+    const id = page.data.operations[0]!.operation_id;
+    if (typeof id !== "string" || !id) throw new Error("The original run identity is unavailable. The saved submission remains unconfirmed.");
+    const reply = await this.client.query<{ status: string; completeness: string; data?: { record?: unknown } }>(key("operation.get"), { operation_id: id });
+    if (reply.status !== "ready" || reply.completeness !== "complete" || !reply.data?.record)
+      throw new Error("The original run is unavailable. The saved submission remains unconfirmed.");
+    const record = object(reply.data.record), operation = object(record?.operation);
+    const expected = { binding: this.binding("r.execute", 2, captured.session), arguments: {
+      expected_session: captured.session, run: { code: captured.code, output_mode: "console",
+        source: { view_id: captured.view, label: "Console", kind: "console" } } }, preconditions: null };
+    if (!operation || operation.operation_id !== id || operation.caller?.kind !== "plugin" || operation.caller.id !== captured.view ||
+      operation.client_request_id !== original || canonical(operation.capability) !== canonical(key("r.execute", 2)) ||
+      canonical(operation.normalized_arguments) !== canonical(expected) || canonical(operation.preconditions) !== "[]" ||
+      !["accepted", "running", "reconciling", "succeeded", "failed", "cancelled", "uncertain"].includes(record!.status))
+      throw new Error("The observed Operation does not match the original Console submission.");
+    const run = runFrom(record, this.source);
+    if (!run) throw new Error("The original R provider differs from this Console.");
+    await this.acceptSubmission(captured, run);
+    return run;
+  }
+  private async acceptSubmission(captured: Submission, run: Run) {
+    if (canonical(this.state.submission) !== canonical(captured)) throw new Error("The saved submission changed while its original run was being inspected.");
     this.runs.set(run.id, run);
     this.state.history = addHistory(this.state.history, captured.code);
     if (this.state.input === captured.code) { this.state.input = ""; this.state.anchor = this.state.head = 0; }
     this.state.submission = null;
-    await this.save();
-    return run;
+    try { await this.save(); }
+    catch (error) {
+      // The original request must remain inspectable if acknowledgement state
+      // could not be saved. Preserve any newer input while keeping that identity.
+      if (this.state.submission === null) this.state.submission = captured;
+      throw error;
+    }
   }
   async cancel(id: string, pending: boolean) {
     return this.client.control(key("operation.request_cancellation"), { operation_id: id, only_if_pending: pending });

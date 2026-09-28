@@ -9,6 +9,7 @@ try {
   const plugin=buildConsolePlugin(path.join(directory,'console'));
   const {ConsoleModel,runFrom,mergeEvents,addHistory,validateCode,visibleRun}=await import(pathToFileURL(path.join(plugin,'compiled/src/model.js')));
   const {observedText}=await import(pathToFileURL(path.join(plugin,'compiled/src/terminal.js')));
+  const {operationRequestId}=await import(pathToFileURL(path.join(plugin,'compiled/public/plugin-ui/index.js')));
   const owner={instance:'r-instance',plugin:'org.rho.r',revision:'sha256:'+'a'.repeat(64),artifact:'sha256:'+'b'.repeat(64)};
   const reference={owner,resource:'events-resource',digest:'sha256:'+'c'.repeat(64),bytes:20,media_type:'application/json'};
   const source={view_id:'console-view',label:'Console',kind:'console'};
@@ -50,6 +51,76 @@ try {
   const another=new ConsoleModel({...client,view:{...client.view,view:'another-view',state:{...saved[0]}}},owner);
   await assert.rejects(()=>another.submit(true),/another view/);
   assert.equal(calls.filter(call=>call.cap.id==='r.execute').length,1,'copying state cannot replay an unconfirmed original through another caller');
+  const captured=structuredClone(saved[0].submission),lookup=await operationRequestId(captured.view,captured.request);
+  const recoveredRecord={...record,status:'accepted',output:null,operation:{...record.operation,
+    caller:{kind:'plugin',id:captured.view},client_request_id:lookup,preconditions:[],
+    normalized_arguments:{...structuredClone(calls[0].args),preconditions:null}}};
+  const observations=[],recoverySaves=[];
+  let observed=recoveredRecord,listed=[{operation_id:'original-run'}],completeness='complete',failRecoverySave=false;
+  const recoveryClient={...client,view:{...client.view,view:'replacement-view',state:{...saved[0],input:'new draft after reopening'}},
+    invoke:async()=>{throw new Error('Recovery must never invoke');},control:async()=>{throw new Error('Recovery must never control');},
+    query:async(cap,args)=>{
+      observations.push({cap,args});
+      if(cap.id==='operation.list_recent'){
+        assert.deepEqual(args,{client_request_id:lookup,limit:2});
+        return {status:'ready',completeness,data:{operations:listed,next_cursor:null}};
+      }
+      assert.equal(cap.id,'operation.get');assert.deepEqual(args,{operation_id:'original-run'});
+      return {status:'ready',completeness:'complete',data:{record:observed}};
+    },setState:async state=>{if(failRecoverySave)throw new Error('Recovery state not saved');recoverySaves.push(structuredClone(state));return state;}};
+  const recovery=new ConsoleModel(recoveryClient,owner);
+  assert.equal(recovery.liveAvailable,false,'original admission inspection does not need a live R session');
+  const found=await recovery.recoverSubmission();assert.equal(found.id,'original-run');
+  assert.equal(recovery.state.submission,null);assert.equal(recovery.state.input,'new draft after reopening');
+  assert.deepEqual(recovery.state.history,['11;22']);assert.equal(recoverySaves.at(-1).submission,null);
+  assert.deepEqual(observations.map(item=>item.cap.id),['operation.list_recent','operation.get']);
+  for(const mutate of [
+    value=>value.operation.caller.id='foreign-view',
+    value=>value.operation.client_request_id='another-request',
+    value=>value.operation.operation_id='another-operation',
+    value=>value.operation.capability.version=1,
+    value=>value.operation.normalized_arguments.binding.project='another-project',
+    value=>value.operation.normalized_arguments.binding.target='another-session',
+    value=>value.operation.normalized_arguments.arguments.run.code='different code',
+    value=>value.operation.normalized_arguments.arguments.run.output_mode='script',
+    value=>value.operation.normalized_arguments.arguments.run.source.view_id='another-view',
+    value=>value.operation.preconditions=[{forged:true}],
+    value=>value.status='unknown',
+  ]) {
+    observed=structuredClone(recoveredRecord);mutate(observed);
+    const refused=new ConsoleModel(recoveryClient,owner),before=structuredClone(refused.state);
+    await assert.rejects(()=>refused.recoverSubmission(),/original Console submission/);
+    assert.deepEqual(refused.state,before,'a foreign or malformed observation retains the original request and draft');
+  }
+  observed=recoveredRecord;
+  for(const result of [[],[{operation_id:'original-run'},{operation_id:'duplicate'}]]) {
+    listed=result;const missing=new ConsoleModel(recoveryClient,owner);
+    await assert.rejects(()=>missing.recoverSubmission(),/No unique original run/);
+    assert.deepEqual(missing.state.submission,captured);
+  }
+  listed=[{operation_id:'original-run'}];completeness='partial';
+  const partial=new ConsoleModel(recoveryClient,owner);await assert.rejects(()=>partial.recoverSubmission(),/No unique original run/);
+  assert.deepEqual(partial.state.submission,captured);completeness='complete';
+  failRecoverySave=true;const unsaved=new ConsoleModel(recoveryClient,owner);
+  await assert.rejects(()=>unsaved.recoverSubmission(),/Recovery state not saved/);
+  assert.deepEqual(unsaved.state.submission,captured);assert.equal(unsaved.state.input,'new draft after reopening');
+  failRecoverySave=false;await unsaved.recoverSubmission();assert.equal(unsaved.state.submission,null);
+  let releaseObservation,observationStarted;
+  let reachedObservation=new Promise(done=>observationStarted=done);
+  const delayedClient={...recoveryClient,query:async(cap,args)=>{
+    const value=await recoveryClient.query(cap,args);
+    if(cap.id==='operation.get')await new Promise(done=>{releaseObservation=done;observationStarted();});
+    return value;
+  }};
+  const editedDuringRead=new ConsoleModel(delayedClient,owner),reading=editedDuringRead.recoverSubmission();
+  await reachedObservation;editedDuringRead.state.input='typed while observing 原始结果';releaseObservation();await reading;
+  assert.equal(editedDuringRead.state.input,'typed while observing 原始结果');
+  assert.equal(recoverySaves.at(-1).input,'typed while observing 原始结果');
+  reachedObservation=new Promise(done=>observationStarted=done);
+  const replacedDuringRead=new ConsoleModel(delayedClient,owner),staleRead=replacedDuringRead.recoverSubmission();
+  await reachedObservation;replacedDuringRead.state.submission={...captured,request:crypto.randomUUID()};
+  releaseObservation();await assert.rejects(()=>staleRead,/saved submission changed/);
+  assert.notEqual(replacedDuringRead.state.submission.request,captured.request,'an old observation cannot clear a replacement request');
   const retryCalls=[];let failSave=true;
   const retryModel=new ConsoleModel({...client,setState:async state=>{retryCalls.push('save');if(failSave)throw new Error('storage unavailable');return state;},
     invoke:async()=>{retryCalls.push('invoke');return {...record,status:'accepted',output:null};}},owner);

@@ -1712,6 +1712,20 @@ replayed from a different view. Stdin is a separate transient field; buttons and
 Enter use the same explicit Control, with composition and duplicate-send guards.
 Password values never enter saved state or history.
 
+Console now has an explicit original-submission inspection action, including from
+a replacement view. It looks up the original view-scoped request and verifies the
+native caller, capability, complete arguments, provider, project, session and code
+before acknowledging admission. Missing, partial, ambiguous or mismatched records
+retain the saved request; inspection never invokes R. Foreign-view retry stays
+disabled. Newer input survives observation and a failed acknowledgement save keeps
+the recovery identity. The independent package build/model check passes, including
+eleven mismatched-record cases, edits during observation and stale-response refusal.
+The first added concurrency test used an incorrect test-side scheduling assumption;
+its failure is retained in `console-submission-recovery-v3.log`. An explicit query
+arrival signal fixes that fixture, and `console-submission-recovery-v4.log` passes.
+Updated isolated Chrome and lost-acknowledgement real-R cases are written but not
+yet run; prior browser evidence below remains a separate baseline.
+
 Console history scans bounded pages past unrelated view-state writes and retains
 100 completed runs plus active work. The limit is visible; exhausted pagination
 never restarts at the first page or drops recent work to display an older page.
@@ -2075,8 +2089,8 @@ R, Files/Git, Process, Remote, Environment, Editor, Console, Objects, Packages,
 Help, Plots, Viewer, Manager and Studio now have ordinary package sources and
 individual acceptance evidence above. Complete their final scenario integration
 and the outstanding cross-plugin workflows; source extraction alone does not
-establish the complete replacement. In particular, Console still needs recovery
-of an unconfirmed submission from a newly opened view, and Objects needs an
+establish the complete replacement. Console's new original-submission recovery
+still needs its current browser and real-R acceptance, and Objects needs an
 explicit way to set aside an unconfirmed request while retaining its recovery
 identity without claiming cancellation or non-acceptance. The older standalone
 frame pointer-routing failure remains separate from the passing generic-window

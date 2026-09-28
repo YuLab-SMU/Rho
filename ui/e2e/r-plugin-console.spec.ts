@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { spawn, execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -187,6 +188,47 @@ test("ordinary Console runs and cancels original R work while preserving drafts 
   await completedCode("Sys.sleep(5); cat('finished-after-close\\n')");
   view = await openView("console-reopened", saved.state); await show(page, view);
   await expect(input).toContainText("reopened draft 中文"); await expect(transcript).toContainText("finished-after-close");
+  await invoke("r.execute", { binding: fastBinding, arguments: { expected_session: session, code: "console_recovery_count <- 0L" } });
+  const recoveryCode = "console_recovery_count <- console_recovery_count + 1L; cat('original submission count', console_recovery_count)";
+  let releaseReply!: () => void, observeReply!: () => void, heldReply = false;
+  const replyGate = new Promise<void>(done => releaseReply = done), admitted = new Promise<void>(done => observeReply = done);
+  await page.route("**/api/plugin-view", async route => {
+    const body = route.request().postDataJSON()?.message?.body;
+    if (!heldReply && body?.type === "invoke" && body.capability?.id === "r.execute" && body.arguments?.arguments?.run?.code === recoveryCode) {
+      heldReply = true;
+      await route.fetch(); observeReply(); await replyGate;
+      await route.abort(); return;
+    }
+    await route.continue();
+  });
+  let uncertain: any;
+  try {
+    await input.fill(recoveryCode); await input.press("Meta+Enter"); await admitted;
+    await completedCode(recoveryCode);
+    await input.fill("next draft after lost acknowledgement 中文");
+    await expect.poll(async () => (await query("views.inspect", { view: view.view })).state.input).toBe("next draft after lost acknowledgement 中文");
+    uncertain = await query("views.inspect", { view: view.view });
+    expect(uncertain.state.submission).toMatchObject({ view: view.view, code: recoveryCode, session });
+    // Destroy the old observer after native acceptance. No cancellation, retry
+    // or inferred rollback is sent to R when that acknowledgement is lost.
+    await page.goto("about:blank");
+  } finally { releaseReply(); }
+  await page.unroute("**/api/plugin-view");
+  await invoke("views.close", { view: view.view, mode: { kind: "retain_acknowledged", expected_version: uncertain.state_version } });
+  view = await openView("console-original-recovery", uncertain.state); await show(page, view);
+  await expect(input).toContainText("next draft after lost acknowledgement 中文");
+  await expect(outer.getByRole("button", { name: "Retry Original Submission", exact: true })).toBeDisabled();
+  await outer.getByRole("button", { name: "Inspect Original Submission", exact: true }).click();
+  await expect(outer.locator("#message")).toContainText("Original submission found: Completed");
+  await expect(outer.getByRole("button", { name: "Inspect Original Submission", exact: true })).toBeHidden();
+  await expect(input).toContainText("next draft after lost acknowledgement 中文");
+  expect((await query("views.inspect", { view: view.view })).state.submission).toBeNull();
+  const originalRequest = "sha256:" + createHash("sha256").update(`${uncertain.state.submission.view}:${uncertain.state.submission.request}`).digest("hex");
+  expect((await query("operation.list_recent", { client_request_id: originalRequest, limit: 10 })).operations).toHaveLength(1);
+  const count = await query("r.observe_object", { binding: observe, arguments: { expected_session: session, name: "console_recovery_count" } });
+  const countValue = await query("r.read_object", { binding: readObject, arguments: { expected_session: session, object_ref: count.data.object_ref, kind: "values" } });
+  expect(countValue.data.values[0].number).toBe(1);
+  await page.screenshot({ path: info.outputPath("console-real-r-recovered.png") });
   await expect.poll(async () => (await query("plugins.instance", { instance: r })).retained_calls).toBe(0);
   await invoke("plugins.release", { instance: r }); await invoke("plugins.remove", { revision: rRevision });
   await page.reload(); await expect(transcript).toContainText("[1] 22"); await expect(transcript).toContainText("finished-after-close");

@@ -175,7 +175,9 @@ function render() {
   get<HTMLButtonElement>("start").disabled = !model.liveAvailable || !!queue?.console.current || !!queue?.console.pending.length;
   get<HTMLButtonElement>("run").disabled = submitting || !model.liveAvailable || !session?.session_id || state.submission !== null;
   get("retry").hidden = state.submission === null;
-  get<HTMLButtonElement>("retry").disabled = submitting;
+  get<HTMLButtonElement>("retry").disabled = submitting || state.submission?.view !== client.view.view;
+  get("inspect-submission").hidden = state.submission === null;
+  get<HTMLButtonElement>("inspect-submission").disabled = submitting;
   get<HTMLButtonElement>("pause").textContent = queue?.console.pause ? "Resume Queue" : "Pause Queue";
   get<HTMLButtonElement>("pause").disabled = !model.liveAvailable || !queue;
   get<HTMLButtonElement>("interrupt").disabled = !model.liveAvailable || !queue?.console.current || queue.awaiting_commit.includes(queue.console.current.operation_id);
@@ -243,6 +245,17 @@ get("show-all").onclick = () => { model.showHistory(); save(); renderTranscript(
 get("new-output").onclick = () => { state.follow = true; transcript.dispatch({ effects: EditorView.scrollIntoView(transcript.state.doc.length, { y: "end" }) }); get("new-output").hidden = true; save(); };
 get("run").onclick = () => { composingKey = false; void submit(true); };
 get("retry").onclick = () => { composingKey = false; void submit(true, true); };
+get("inspect-submission").onclick = () => {
+  if (closing || stopped || submitting) return;
+  submitting = true; render();
+  void action(async () => {
+    try {
+      const run = await model.recoverSubmission();
+      if (input.state.doc.toString() !== state.input) input.dispatch({ changes: { from: 0, to: input.state.doc.length, insert: state.input }, selection: { anchor: state.anchor, head: state.head } });
+      notice(`Original submission found: ${labels[run.status] ?? run.status}. No command was resubmitted.`);
+    } finally { submitting = false; }
+  });
+};
 get("start").onclick = () => { void action(() => model.startSession()); };
 get("pause").onclick = () => { void action(() => model.queueControl(!model.queue?.console.pause)); };
 get("interrupt").onclick = () => { const id = model.queue?.console.current?.operation_id; if (id) void action(() => model.cancel(id, false)); };
