@@ -9,28 +9,70 @@ fn action_title(run: &ComponentAgentRun, action: &ComponentToolAction) -> String
             .unwrap_or("the selected document")
             .to_owned()
     };
-    let session_name = |target: Option<&str>| {
-        match target.or_else(|| run.request.grant.session.as_ref().map(|session| session.workspace_instance_id.as_str())) {
-            Some("main") => "Main".to_owned(),
-            Some(id) => id.to_owned(),
-            None => "the selected R session".to_owned(),
-        }
+    let session_name = |target: Option<&str>| match target.or_else(|| {
+        run.request
+            .grant
+            .session
+            .as_ref()
+            .map(|session| session.workspace_instance_id.as_str())
+    }) {
+        Some("main") => "Main".to_owned(),
+        Some(id) => id.to_owned(),
+        None => "the selected R session".to_owned(),
     };
     match action {
         ComponentToolAction::Control(command) => {
-            let session = || session_name(command.execution_target.as_ref().map(|target| target.workspace_instance_id.as_str()));
+            let session = || {
+                session_name(
+                    command
+                        .execution_target
+                        .as_ref()
+                        .map(|target| target.workspace_instance_id.as_str()),
+                )
+            };
             match &command.action {
-                ApplicationAction::CreateDocument { path, .. } => format!("Create {}", path.as_deref().unwrap_or("an untitled document")),
+                ApplicationAction::CreateDocument { path, .. } => format!(
+                    "Create {}",
+                    path.as_deref().unwrap_or("an untitled document")
+                ),
                 ApplicationAction::OpenDocument { path, .. } => format!("Open {path}"),
-                ApplicationAction::EditDocument { document, .. } => format!("Edit {}", document_name(document)),
-                ApplicationAction::Save { document, target_path } => format!("Save {}", target_path.clone().unwrap_or_else(|| document_name(document))),
-                ApplicationAction::RunFile { document, target_path } => format!("Save and run {} in {}", target_path.clone().unwrap_or_else(|| document_name(document)), session()),
-                ApplicationAction::RunSelection { document } => format!("Run selection from {} in {}", document_name(document), session()),
+                ApplicationAction::EditDocument { document, .. } => {
+                    format!("Edit {}", document_name(document))
+                }
+                ApplicationAction::Save {
+                    document,
+                    target_path,
+                } => format!(
+                    "Save {}",
+                    target_path
+                        .clone()
+                        .unwrap_or_else(|| document_name(document))
+                ),
+                ApplicationAction::RunFile {
+                    document,
+                    target_path,
+                } => format!(
+                    "Save and run {} in {}",
+                    target_path
+                        .clone()
+                        .unwrap_or_else(|| document_name(document)),
+                    session()
+                ),
+                ApplicationAction::RunSelection { document } => format!(
+                    "Run selection from {} in {}",
+                    document_name(document),
+                    session()
+                ),
                 _ => "Update the workspace view".into(),
             }
         }
         ComponentToolAction::Invoke(invocation) => {
-            let session = session_name(invocation.arguments.get("workspace_instance_id").and_then(Value::as_str));
+            let session = session_name(
+                invocation
+                    .arguments
+                    .get("workspace_instance_id")
+                    .and_then(Value::as_str),
+            );
             match invocation.capability.id.as_str() {
                 "workspace.run_r" => format!("Run R code in {session}"),
                 "workspace.resume_queue" => format!("Continue queued R work in {session}"),

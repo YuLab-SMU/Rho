@@ -35,7 +35,7 @@ impl ComponentAgentService {
                 .store
                 .component_run(scope, &summary.run_id)?
                 .ok_or(ApplicationError::NotFound)?;
-            let run = self.owner.observed_run(stored);
+            let run = self.owner.observed_run(stored)?;
             let mut answer = String::new();
             let mut gap = false;
             let mut answer_truncated = false;

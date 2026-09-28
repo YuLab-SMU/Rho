@@ -209,6 +209,7 @@ Checks:
 
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `plugins.agent-adapter`: `["cargo","test","-p","rho-agents","--lib","--locked"]`
+- `plugins.agent-component-boundary`: `["cargo","test","-p","rho-application","--lib","component_boundary","--locked"]`
 - `plugins.agent-engine`: `["cargo","test","-p","rho-agent-engine","--locked"]`
 - `plugins.agent-engine-independent`: `["node","scripts/test-agent-plugin-engine.mjs"]`
 - `plugins.agent-independent`: `["node","scripts/test-agent-plugin-client.mjs"]`

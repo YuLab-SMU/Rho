@@ -1,0 +1,439 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApplicationCommandReceipt",
+  "type": "object",
+  "properties": {
+    "actor": {
+      "$ref": "#/$defs/CallerIdentity"
+    },
+    "applied_document_summaries": {
+      "description": "Exact acknowledged snapshots. Use sha256 to read this document version;\nneither document_version nor the saved base_hash is the draft checksum.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "$ref": "#/$defs/ApplicationDocumentSummary"
+      }
+    },
+    "applied_documents": {
+      "description": "Versions acknowledged by this exact local command, independent of later edits.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "document_id": {
+            "type": "string"
+          },
+          "document_version": {
+            "type": "string"
+          },
+          "selection_version": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "document_id",
+          "document_version",
+          "selection_version"
+        ]
+      }
+    },
+    "capture": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ApplicationCaptureSummary"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "claim_expires_at_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "claimed_at_ms": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "completed_at_ms": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "context_version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_at_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "diagnostic": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "run": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ApplicationStepReceipt"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "save": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ApplicationStepReceipt"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "save_synchronized": {
+      "description": "The resident editor acknowledged the successful save; a changed draft is not adopted.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "state": {
+      "$ref": "#/$defs/ApplicationCommandState"
+    },
+    "window": {
+      "$ref": "#/$defs/AgentControllerRef"
+    }
+  },
+  "required": [
+    "window",
+    "request_id",
+    "actor",
+    "state",
+    "created_at_ms",
+    "claim_expires_at_ms"
+  ],
+  "$defs": {
+    "AgentControllerRef": {
+      "description": "Correlation identity supplied by the Agent owner after admission. This value\nis not an authorization credential and cannot grant access to a Host window.",
+      "type": "object",
+      "properties": {
+        "incarnation": {
+          "type": "string"
+        },
+        "window_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "window_id",
+        "incarnation"
+      ]
+    },
+    "ApplicationCaptureSummary": {
+      "type": "object",
+      "properties": {
+        "base_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "document": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "document_version": {
+              "type": "string"
+            },
+            "selection_version": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "document_id",
+            "document_version",
+            "selection_version"
+          ]
+        },
+        "native_session_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "run_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selection": {
+          "$ref": "#/$defs/ApplicationSelection"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "utf8_bytes": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "workspace_instance_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "document",
+        "sha256",
+        "utf8_bytes",
+        "selection"
+      ]
+    },
+    "ApplicationCommandState": {
+      "type": "string",
+      "enum": [
+        "cancelled",
+        "pending",
+        "claimed",
+        "applied",
+        "awaiting_execution",
+        "locally_applied_unsynced",
+        "failed",
+        "expired",
+        "uncertain"
+      ]
+    },
+    "ApplicationDocumentSummary": {
+      "type": "object",
+      "properties": {
+        "base_hash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "base_text_present": {
+          "type": "boolean"
+        },
+        "dirty": {
+          "type": "boolean"
+        },
+        "document": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "document_version": {
+              "type": "string"
+            },
+            "selection_version": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "document_id",
+            "document_version",
+            "selection_version"
+          ]
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "readonly_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selection": {
+          "$ref": "#/$defs/ApplicationSelection"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "utf8_bytes": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "document",
+        "sha256",
+        "base_text_present",
+        "utf8_bytes",
+        "dirty",
+        "selection"
+      ]
+    },
+    "ApplicationSaveVerification": {
+      "type": "object",
+      "properties": {
+        "observed_at_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "source",
+        "observed_at_ms"
+      ]
+    },
+    "ApplicationSelection": {
+      "type": "object",
+      "properties": {
+        "anchor": {
+          "description": "Offsets in the normalized editor document: zero-based UTF-16, excluding BOM.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "head": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "anchor",
+        "head",
+        "version"
+      ]
+    },
+    "ApplicationStepReceipt": {
+      "type": "object",
+      "properties": {
+        "client_request_id": {
+          "type": "string"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "operation_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/ApplicationStepState"
+        },
+        "verification": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ApplicationSaveVerification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "state",
+        "client_request_id"
+      ]
+    },
+    "ApplicationStepState": {
+      "type": "string",
+      "enum": [
+        "not_submitted",
+        "submitting",
+        "accepted",
+        "running",
+        "succeeded",
+        "failed",
+        "cancelled",
+        "uncertain"
+      ]
+    },
+    "CallerIdentity": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/CallerKind"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "id"
+      ]
+    },
+    "CallerKind": {
+      "type": "string",
+      "enum": [
+        "human",
+        "agent",
+        "system",
+        "plugin"
+      ]
+    }
+  }
+}

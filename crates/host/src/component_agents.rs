@@ -566,6 +566,7 @@ impl ComponentAgentService {
             .store
             .component_run(&Self::scope(host, context, project)?, id)?
             .map(|r| self.owner.observed_run(r))
+            .transpose()?
             .ok_or(ApplicationError::NotFound)
     }
     pub fn run_by_request(
@@ -579,7 +580,7 @@ impl ComponentAgentService {
             .owner
             .store
             .component_run_by_request(&Self::scope(host, context, project)?, id)?
-            .map(|r| self.owner.observed_run(r)))
+            .map(|r| self.owner.observed_run(r)).transpose()?)
     }
     pub fn tools(
         &self,
@@ -628,7 +629,7 @@ impl ComponentAgentService {
             .is_some()
         {
             let original = self.owner.start(&actor, request, now())?.run;
-            let mut run = self.owner.observed_run(original);
+            let mut run = self.owner.observed_run(original)?;
             if !run.state.is_terminal() && !self.live.lock().await.contains_key(&run.run_id) {
                 run.state = ComponentAgentRunState::Interrupted;
                 run.reason = Some(

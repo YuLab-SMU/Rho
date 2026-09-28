@@ -1,7 +1,7 @@
 # Agent package source
 
 The public native transport, task state machine and Rig model engine are extracted
-parts of the Agent plugin.
+parts of the Agent plugin, including the component model-task state machine.
 `api/` owns its Rust DTOs; `sdk/` contains generated TypeScript declarations and
 JSON schemas. `backend/client/` owns deterministic Codex app-server, Kimi ACP and
 DeepSeek ACP communication, bounded observations and owned-process recovery.
@@ -14,9 +14,13 @@ have no model-engine dependency.
 
 `AgentControllerRef` is owner-supplied correlation data, not a credential. Admission,
 project scope, native MCP credentials and authorized scientific execution remain
-the responsibility of the containing owner. The task state machine uses one
-injected repository; the transitional application store implements that public
-port. The current Host converts its admitted scope/window identity at the boundary.
+the responsibility of the containing owner. The native and component task state machines each use their one injected
+repository. The transitional Application adapter revalidates its original live
+controller and converts captured component records into its existing atomic store
+transaction, sharing the same writer gate with manual handoff. Component public
+captures include complete native document receipts; fixed-view controls cannot be
+admitted. The public API depends only on the plugin protocol and R media API,
+which are included in the independent source assemblies. The current Host converts its admitted scope/window identity at the boundary.
 Moving DTO ownership does not change wire field names, replay input, authorize tools or transfer scientific
 truth to the transport.
 
@@ -44,5 +48,5 @@ verified bytes are supplied by the containing owner. The transitional core adapt
 preserves admitted actions and records owner diagnostics before returning errors.
 
 This source is not yet a loadable Agent plugin: ordinary backend/storage composition,
-component-task ownership, context/handoff and Agent views still require migration. No backend manifest,
+context/handoff and Agent views still require migration. No backend manifest,
 default activation or delivery claim is made until those owners use public ports.

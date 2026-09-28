@@ -8,7 +8,7 @@ const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-types-'));
 try {
   fs.cpSync(path.join(root, 'plugins/agent/sdk'), path.join(directory, 'sdk'), {recursive: true});
   fs.writeFileSync(path.join(directory, 'package.json'), '{"type":"module"}');
-  fs.writeFileSync(path.join(directory, 'consumer.ts'), `import type {AgentModelRun,ComponentModelSettings,ComponentToolSpec,AgentTaskRequest,AgentTaskDetail,AgentTaskEventPage,ProjectAgentTaskPage,AgentControllerRef,AgentProvider,AgentClientSession,AgentNativeCapabilities,AgentUsageObservation,LocalAgent} from './sdk/index.js';
+  fs.writeFileSync(path.join(directory, 'consumer.ts'), `import type {ComponentAgentStart,ComponentAgentRun,ComponentAgentEventPage,ComponentToolReceipt,ApplicationCommandRequest,ApplicationCommandReceipt,AgentModelRun,ComponentModelSettings,ComponentToolSpec,AgentTaskRequest,AgentTaskDetail,AgentTaskEventPage,ProjectAgentTaskPage,AgentControllerRef,AgentProvider,AgentClientSession,AgentNativeCapabilities,AgentUsageObservation,LocalAgent} from './sdk/index.js';
 const controller:AgentControllerRef={window_id:'window',incarnation:'incarnation'};
 const providers:AgentProvider[]=['codex','kimi','deepseek'];
 function session(value:AgentClientSession):AgentControllerRef{return value.window;}
@@ -30,7 +30,12 @@ const uncaptured:AgentTaskRequest['command']={kind:'send',control:{task_id:'task
 function modelCapture(run:AgentModelRun, settings:ComponentModelSettings, tool:ComponentToolSpec){return [run.task_intent?.request_excerpt,run.budget.context_bytes,settings.connection?.credential.kind,tool.parameters];}
 // @ts-expect-error A captured model run does not contain plaintext credentials.
 function secret(run:AgentModelRun){return run.key;}
-void [modelCapture,secret,captured,task,events,projection,uncaptured,controller,providers,session,discovery,modes,usage,incomplete,inventedUsage,fabricated];
+function componentRecords(start:ComponentAgentStart,run:ComponentAgentRun,events:ComponentAgentEventPage,tool:ComponentToolReceipt,call:ApplicationCommandRequest,receipt:ApplicationCommandReceipt){return [start.window.incarnation,run.recovery?.unresolved_mutations,events.history_gap,tool.operation_id,call.execution_target?.native_session_id,receipt.applied_document_summaries?.map(document=>document.sha256)];}
+// @ts-expect-error Public document captures do not carry fixed scientific view controls.
+const fixedView:ApplicationCommandRequest['action']={kind:'open_view',view_type:'objects',expected_context_version:'view'};
+// @ts-expect-error Durable component runs contain credential references, never plaintext keys.
+function componentSecret(run:ComponentAgentRun){return run.model.api_key;}
+void [componentRecords,componentSecret,fixedView,modelCapture,secret,captured,task,events,projection,uncaptured,controller,providers,session,discovery,modes,usage,incomplete,inventedUsage,fabricated];
 `);
   execFileSync(process.execPath, [path.join(root, 'ui/node_modules/typescript/bin/tsc'), '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--rootDir', directory, path.join(directory, 'consumer.ts')], {cwd: directory, stdio: 'inherit'});
   console.log('Independent Agent contract consumer compiled using only public declarations.');

@@ -655,3 +655,5 @@ mod tests;
 
 mod model;
 pub use model::{ComponentModelKey, validate_model_connection};
+
+pub mod component;

@@ -214,8 +214,14 @@ The public task state machine is `plugins/agent/backend/owner`. Iterate with
 `cargo test -p rho-agent-owner --lib --locked`; `node
 scripts/test-agent-plugin-owner.mjs` repeats its admission/recovery fixtures from
 an independent source assembly and verifies public contract freshness. The
-transitional request conversion is checked by `cargo test -p rho-contract --lib
-public_agent_request --locked`. Shared storage and manual handoff use
+transitional native request conversion is checked by `cargo test -p rho-contract
+--lib public_agent_request --locked`; component document/call/receipt byte parity,
+digests and structured errors use `cargo test -p rho-application --lib
+component_boundary --locked`. Public component-owner fixtures inject controller
+loss and atomic write failure, and check original admission, late native receipts,
+observation-only restart, unsupported control refusal and frozen permissions.
+Independent assemblies include the public plugin protocol and R media API, with
+all source/dependency paths checked to stay inside the assembly. Shared storage and manual handoff use
 `cargo test -p rho-sqlite --lib agent_tasks --locked` and `cargo test -p rho-sqlite
 --test agent_handoffs --test component_agents --locked`. These preserve one native
 task writer, original receipt/draft captures and component/native asset separation;

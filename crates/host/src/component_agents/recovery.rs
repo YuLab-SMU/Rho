@@ -41,7 +41,7 @@ impl ComponentAgentService {
             .store
             .component_run(&Self::scope(host, context, project)?, id)?
             .ok_or(ApplicationError::NotFound)?;
-        let mut run = self.owner.observed_run(stored);
+        let mut run = self.owner.observed_run(stored)?;
         if !run.state.is_terminal() && !self.live.lock().await.contains_key(id) {
             run.state = ComponentAgentRunState::Interrupted;
             run.reason = Some(

@@ -69,8 +69,10 @@ impl ComponentAgentOwner {
         if recovery.unresolved_mutations > 0
             || request.window != previous.run.request.window
             || next.permission_policy != old.permission_policy
-            || (next.permission_policy.is_none() && (old.mode == ComponentAgentMode::Explain
-            || (next.mode == ComponentAgentMode::Run && old.mode != ComponentAgentMode::Run)))
+            || (next.permission_policy.is_none()
+                && (old.mode == ComponentAgentMode::Explain
+                    || (next.mode == ComponentAgentMode::Run
+                        && old.mode != ComponentAgentMode::Run)))
             || next.session != old.session
         {
             return Err(invalid(
@@ -97,10 +99,24 @@ impl ComponentAgentOwner {
         }
         Ok(())
     }
-    pub(super) fn continued_authority(&self, scope: &ApplicationScope, request: &ComponentAgentStart)
-        -> Result<(Option<ComponentAgentTaskIntent>, Vec<ComponentDocumentGrant>), ApplicationError> {
-        let Some(reference) = &request.continuation else { return Ok((None, vec![])); };
-        let previous = self.store.component_run(scope, &reference.run_id)?.ok_or(ApplicationError::NotFound)?;
+    pub(super) fn continued_authority(
+        &self,
+        scope: &ApplicationScope,
+        request: &ComponentAgentStart,
+    ) -> Result<
+        (
+            Option<ComponentAgentTaskIntent>,
+            Vec<ComponentDocumentGrant>,
+        ),
+        ApplicationError,
+    > {
+        let Some(reference) = &request.continuation else {
+            return Ok((None, vec![]));
+        };
+        let previous = self
+            .store
+            .component_run(scope, &reference.run_id)?
+            .ok_or(ApplicationError::NotFound)?;
         let mut documents = previous.run.document_grants.clone();
         for grant in &mut documents {
             grant.document = self.confirmed_document(scope, &previous.run, &grant.document)?;

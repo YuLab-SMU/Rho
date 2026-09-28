@@ -1788,7 +1788,7 @@ package inspection.
 | `plugins/environment/api`, `plugins/environment/backend/owner` | Public Environment data and sole native execution, observation, staging and recovery implementation; transitional Host adapter preserves the core operation port |
 | `crates/host` | Concrete composition and runtime configuration |
 | `plugins/agent/api`, `plugins/agent/backend/client` | Public native Agent observations and bounded Codex app-server / Kimi and DeepSeek ACP clients; no private core imports, scientific handlers or Agent behavior loop |
-| `plugins/agent/backend/owner` | Sole native task admission/recovery state machine and repository port; captured drafts, receipts, generation fences and pure restart observations |
+| `plugins/agent/backend/owner` | Sole native and component task admission/recovery state machines and repository ports; captured drafts, receipts, generation fences and pure restart observations |
 | `plugins/agent/backend/engine` | Public Rig execution/diagnostics, captured model input and owner callback ports; the sole direct Rig dependency, with no private core imports |
 | `crates/agents` | Transitional admitted-record, image citation and tool-ticket adapters to the public model engine; no model/provider implementation |
 | `crates/cli`, `mcp`, `workbench` | Transport and application entry points |
@@ -1808,6 +1808,19 @@ composition replaces it. Both Host updates and manual handoff continue to use th
 same task writer gate. A public request conversion preserves captured wire bytes,
 so original request digests, draft versions and native session identities do not
 change merely because their Rust owner moved.
+The component model-task state machine also lives in `rho-agent-owner::component`.
+Its public captured task/document/call/receipt types are in `rho-agent-api::component`;
+only the public plugin protocol and R media API are dependencies. The native
+Application adapter revalidates the original live controller, converts records and
+injects its original atomic repository. It owns no second task state machine or
+writer gate. Full native receipt captures retain save/run steps, applied document
+versions, save acknowledgements and structured diagnostics; the document call
+boundary admits only the six supported document actions. Fixed-view controls
+remain unavailable. This is a transitional data conversion, not an old-store
+reader or a migration service. A conversion failure remains an error, never a
+successful empty result. Ordinary backend/storage composition still has to remove
+these temporary core DTO/repository adapters.
+
 Native protocol transport does not register capabilities, persist task truth or
 expand the caller's scientific authority.
 

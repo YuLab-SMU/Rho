@@ -5933,6 +5933,8 @@ dependencies = [
 name = "rho-agent-api"
 version = "0.1.0"
 dependencies = [
+ "rho-plugin-protocol",
+ "rho-r-api",
  "schemars 1.2.1",
  "serde",
  "serde_json",
@@ -6006,6 +6008,7 @@ name = "rho-application"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "rho-agent-api",
  "rho-agent-owner",
  "rho-contract",
  "serde",

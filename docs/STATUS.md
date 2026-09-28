@@ -1,6 +1,6 @@
 # Rho: current state and focus
 
-Updated: 2026-09-27. This is the single current status summary. Git retains history.
+Updated: 2026-09-28. This is the single current status summary. Git retains history.
 
 ## Unified plugin refactor — active implementation
 
@@ -11,72 +11,67 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
-Agent native transport, task state and the Rig model driver now live in
-`plugins/agent/backend/client`, `backend/owner` and `backend/engine`, with public
-DTOs, TypeScript declarations and JSON schemas in the same package. These
-libraries have no private core dependency. The task owner keeps its original
-repository port and single writer; the model driver receives captured public
-input, verified images and owner-offered tools through a callback port.
+Agent native transport, native and component task state machines, and the Rig
+model driver now live in `plugins/agent/backend/client`, `backend/owner` and
+`backend/engine`. Public DTOs, TypeScript declarations and JSON schemas are in
+the same package. These libraries have no private core dependency. The component
+API references only the public plugin protocol and R media API. The driver uses
+captured input and owner callback ports; scientific execution still uses the
+original owners and Operation path.
 
-`rho-agents` is now a transitional adapter without a model/provider implementation.
-It preserves owner-admitted tool requests in opaque, nonserializable tickets,
-rejects foreign/fabricated tickets, records owner diagnostics and returns the
-original ticket after interrupted execution. The model-setting validator and
-transient key type moved to the public owner; serialized records contain only
-credential references. Deterministic permission rules use saved intent and
-owner-classified actions. Existing Host admission and scientific execution still
-use the original owners and Operation path, without a second receipt database or
-an additional Agent approval flow.
+The component task owner now contains the sole admission, continuation,
+permission, recovery and budget implementation. The old Application implementations
+were removed. Its temporary core adapter translates typed captures, preserves
+structured errors and revalidates the original live controller for caller writes.
+It injects the original atomic repository and shares the same writer gate with
+manual handoff; there is no second task store or approval flow. Full document
+receipts retain native operation IDs, save/run steps, applied versions and save
+acknowledgements. Only the six supported document actions are admitted; fixed-view
+controls remain unavailable. Read-only restart projections preserve uncertainty
+without recovering or replaying work. This is not a legacy-store reader.
+
+The current component extraction passes 44 focused cases: nine public task-owner
+cases and 35 Application cases. These include atomic write failure, scoped original
+admission, live-controller loss, frozen permissions, late native receipts and
+observation-only restart. Three boundary cases check serialized bytes/digests,
+complete native document receipts, recovery states and structured errors. Public
+SDK generation and an independent strict TypeScript consumer also pass.
+
+An independent source assembly, containing the Agent libraries plus the two public
+API dependencies, passed all 29 execution/recovery cases (three model policy/error,
+17 Rig HTTP/SSE/production-driver, nine task-owner). Its aggregate check was then
+interrupted during an inactive doc-test stage with no executable documentation
+examples. A repeat using explicit library/protocol targets was interrupted during
+prolonged compilation before new tests ran. Both interruptions are retained as
+incomplete checks, not passes. No business logic changed between those attempts.
+The script now selects the actual library and protocol targets explicitly.
+
+Client generation and affected Host/storage, handoff, real-R and browser acceptance
+for this extraction have not completed. Tool processes repeatedly remained inactive
+without a compiler diagnostic; the cause is not established. A completed earlier
+startup sample was predominantly `_dyld_start` before the harness, while later
+compiler/debugger sampling produced no usable stack. A privileged system sampler
+was unavailable and no privileges or system settings were changed. Preserve the
+existing passing evidence while completing these affected checks; do not infer
+current end-to-end acceptance from it. Details and commands are in
+`target/plugin-refactor/agent-component-verification.txt` and the versioned logs
+and interruption records alongside it. Inspect live verification processes before
+starting another Cargo invocation.
+
+The preceding engine baseline at `1c871a8e` remains separate: 75 Host/storage cases,
+18 real-R fixture-engine cases, 98 Agent client cases and 13 selected Chrome flows
+passed; nine captures were inspected. Its ten real-model R cases and two opt-in
+real-model browser cases were excluded. See
+`target/plugin-refactor/agent-engine-verification.txt`. Unchanged native transport
+fixtures remain in `target/plugin-refactor/agent-native-verification.txt`; they
+have not been rerun for the current component extraction.
 
 This remains a migration foundation, not an ordinary loadable Agent runtime/view.
-Component-task ownership, backend/storage composition, context providers and
-handoff, Agent views, Studio Agent assistance and final composition/default
-delivery remain active work.
-
-All 28 focused checkout cases pass: three model policy/error cases, 17 real Rig
-HTTP/SSE protocol and production-driver fixtures, four task-owner cases and four
-transitional-adapter cases. An independent assembly containing only the three
-public Agent libraries also passes its 24 execution/recovery cases. Synthetic
-providers verify original tool admission, sequential dispatch, rejection feedback,
-stop/failure handling, usage and both protocols' labelled images; they establish
-no real-provider/model quality result. SDK freshness and an independent strict
-TypeScript consumer pass. All 75 affected Host/storage cases pass (23 model
-integration, four recovery, 40 storage and eight Host internal cases). All 18
-focused real-R cases pass with fixture engines; ten real-model cases are explicitly
-filtered out. Client generation, build/consistency and all 98 Agent client tests pass.
-
-The rebuilt application passes all 13 selected Chrome flows with a local model
-protocol fixture. The production Rig driver performs the original authorized R
-operation, retains its identity and opens its real plot. Drafts, takeover, diagnostic
-buttons, native preedit, stream latency/scrolling and attachments also pass. Two
-opt-in real-model browser cases are excluded. Nine captures were inspected: normal
-workspace, 320-pixel panel, 600/1024/1440/1920-pixel windows, model diagnostics and
-running/completed scientific work. Controls and Unicode input remain visible
-without overlap or horizontal overflow. This is regression evidence for the
-transitional Agent interface, not acceptance of the ordinary Agent view.
-
-Architecture, package import boundaries and governance checks pass. Commands,
-counts, filtered cases and current binary hash are retained in
-`target/plugin-refactor/agent-engine-verification.txt`; screenshots are in
-`target/plugin-refactor/agent-engine-captures`. The rebuilt Host is required to use
-the extracted driver; running Hosts were not replaced.
-
-The preceding task-owner boundary remains verified in
-`target/plugin-refactor/agent-owner-verification.txt`: 112 affected library cases,
-46 storage/handoff cases, 27 Host component/recovery cases, 98 client cases, 18
-real-R cases with fixture engines, native crash/resume and six Chrome flows. Its
-two ignored Host cases and excluded real-model checks were not counted as passes.
-Ten normal/wide/constrained screenshots were inspected. This earlier evidence
-remains separate from the current model-driver verification. Native transport's
-unchanged 31 protocol/recovery fixtures are recorded in
-`target/plugin-refactor/agent-native-verification.txt`.
-
-The initial compile of this extraction passed with unused imports and an ambiguous
-reexport warning; both are resolved, and the focused tests compile without warnings.
-A slow owner-test startup was sampled at `_dyld_start` before test code; all cases
-subsequently completed. The cause of that launch delay is not established.
-Existing user Hosts and R sessions have not been replaced; new runtime acceptance
-uses disposable projects. No full-workspace audit, installation or publication ran.
+Backend/storage composition, context providers and handoff, Agent views, Studio
+Agent assistance and final composition/default delivery remain active work.
+Initial import warnings were corrected. Existing user Hosts and R sessions have
+not been replaced; runtime acceptance uses disposable projects. No full-workspace
+audit, installation or publication ran.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,
@@ -1691,7 +1686,7 @@ continuation and optional real-model/alternate-R cases remain unexecuted.
 
 ### Remaining work and restart boundary
 
-Finish the ordinary Agent backend: component-task ownership, storage composition,
+Finish validating the component-task extraction, then the ordinary Agent backend: storage composition,
 context providers, manual handoff and Agent views. The extracted native client,
 task owner and model engine are prerequisites, not a loadable package. Studio's
 Agent workflow must capture an exact development branch and preserve the separate

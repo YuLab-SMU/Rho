@@ -117,3 +117,6 @@ pub struct AgentUsageObservation {
 
 mod model;
 pub use model::*;
+
+pub mod component;
+pub mod component_boundary;

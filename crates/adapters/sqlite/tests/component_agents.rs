@@ -1213,7 +1213,7 @@ fn orphan_takeover_is_atomic_preserves_drafts_and_fences_old_model_output() {
         .unwrap()
         .unwrap();
     assert_eq!(
-        owner.observed_run(stored).state,
+        owner.observed_run(stored).unwrap().state,
         ComponentAgentRunState::Interrupted
     );
     assert_eq!(
