@@ -311,6 +311,19 @@ in `target/plugin-refactor/agent-native-admission-results-v1.json`. Ordinary nat
 backend/MCP composition remains unfinished. The preceding complete
 runtime/binary/recovery run froze its source before this admission addition.
 
+The native package now includes a private per-connection MCP endpoint with its own
+loopback listener, bearer and session manager. Owner admission and revocation share
+a gate; cancelled observation waits leave accepted work with its original owner.
+Requests, streaming responses, sessions, catalogs and results are bounded. Explicit
+shutdown confirms HTTP/session cleanup only. The first four loopback tests compiled;
+three passed and one exposed the SDK's successful response for deleting a foreign
+session. The boundary now refuses unknown sessions before SDK dispatch, and a fifth
+fixture checks streaming-response capacity. The corrected run and affected native,
+independent-package and Host checks are running, not yet passes. Logs are retained
+under `target/plugin-refactor/agent-native-mcp-*-v1.log` and `*-v2.log`. This is a
+transport primitive; ordinary native backend and scientific-tool composition remain
+unfinished. No actual model, user credentials or user sessions are used.
+
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,
 validates the complete archive and rechecks native read authority before requesting

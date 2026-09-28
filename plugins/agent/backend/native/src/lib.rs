@@ -1049,3 +1049,5 @@ fn to_event(e: NativeEvent, sequence: u64, generation: u64) -> AgentTaskEvent {
 
 #[cfg(test)]
 mod tests;
+
+pub mod mcp;

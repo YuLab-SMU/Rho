@@ -210,6 +210,14 @@ a disposable Host crash and explicit resume. Its default fixture run observes
 only temporary configuration; native user settings are inspected only by explicit
 `--real-*` runs. Ordinary native-plugin composition remains a separate acceptance.
 
+Use `cargo test -p rho-agent-native --lib mcp --locked` for private native MCP
+transport changes. These real loopback HTTP fixtures cover connection/session
+identity, bearer/Host/Origin refusal, numeric/text request correlation, failed
+initialization cleanup, bounded input/output, streaming-response capacity,
+cancellation and endpoint shutdown while accepted owner work remains pending.
+They use no model or user credentials.
+The independent native assembly runs the same fixtures without private core source.
+
 Native command admission uses `cargo test -p rho-agent-store --lib
 native_admission --locked`. Its real-store fixtures cover pre-command captures,
 concurrent duplicates, original-parent retention, atomic write rollback, later

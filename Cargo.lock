@@ -6002,15 +6002,20 @@ name = "rho-agent-native"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "axum",
  "base64 0.22.1",
+ "http-body",
+ "reqwest 0.13.5",
  "rho-agent-api",
  "rho-agent-client",
  "rho-agent-owner",
  "rho-agent-store",
+ "rmcp",
  "serde_json",
  "sha2",
  "tempfile",
  "tokio",
+ "tokio-util",
  "uuid",
 ]
 

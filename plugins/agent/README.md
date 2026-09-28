@@ -40,6 +40,21 @@ Captures are bounded to 128 KiB each and 64 MiB per project/principal. Binary
 attachment input is excluded; it requires a separate scoped ephemeral Control.
 Ordinary native connection/MCP composition is still separate work.
 
+`backend/native::mcp` supplies the private transport for an explicitly opened
+connection: its own loopback listener, bearer and session manager. It never
+receives a general Host credential. `NativeMcpPort::begin` synchronously admits
+and retains work; the returned receiver observes it. The containing owner must
+check the original active task, scope, tool budget and durable request identity,
+and await accepted children before settling their parent. A descriptor or an
+MCP session/request ID alone cannot authorize or deduplicate a scientific write.
+Endpoint revocation fences new calls without cancelling accepted work. Explicit
+`close` confirms HTTP/session cleanup only, never native process quiet or
+scientific cancellation. Invalid initialization sessions are reclaimed; requests,
+sessions, tool waits, catalogs and results are bounded. HTTP capacity remains
+leased until a streaming response closes. Foreign session deletion is refused
+before reaching the SDK's idempotent deletion handler. No endpoint is created by
+an observation query.
+
 `api::handoff` and `owner::handoff` own the handoff contract and policy. The
 containing owner supplies readable scientific references and the original live
 controller. The target writer gate and injected repository retain one atomic
@@ -80,8 +95,9 @@ native protocol/recovery fixtures. Those fixtures use local fake processes, neve
 real providers, model requests or user sessions. The native transport's explicit
 DeepSeek setup entry point is retained but is not invoked by these checks.
 
-`cargo test -p rho-agent-native --lib --locked` checks native scheduling and
-receipt recovery. `node scripts/test-agent-plugin-native.mjs` repeats the cases in
+`cargo test -p rho-agent-native --lib --locked` checks native scheduling, receipt
+recovery and private MCP HTTP isolation. Use the `mcp` filter for transport changes.
+`node scripts/test-agent-plugin-native.mjs` repeats the cases in
 an independent source assembly with the public owner/store/client dependencies.
 The temporary Host adapter delegates to this runtime while continuing to supply
 caller validation, scientific context capture and the scoped MCP lease. This

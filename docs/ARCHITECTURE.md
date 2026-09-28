@@ -1891,6 +1891,15 @@ cannot authorize replacement. Publication shares shutdown's live-map lock. The t
 Host adapter supplies caller/window validation, context and MCP identity; ordinary
 backend composition still has to replace that adapter. The native scheduler has
 no private core dependency or scientific journal connection.
+Its private MCP constructor creates one loopback endpoint and session manager per
+native connection. The endpoint has no general Host credential. Revocation and
+synchronous owner admission share a gate; the owner retains accepted child work
+independently of an MCP/HTTP observation wait. The containing backend must validate
+the active original parent and scopes, retain semantic request identity, enforce
+work quotas and wait for children before settling that parent. Transport identities
+and tool declarations do not grant authority. A confirmed endpoint close covers
+HTTP/session resources only. It cannot establish native process quiet or scientific
+cancellation. Failed initialization cannot accumulate unbounded session entries.
 Application retains only its scope/error conversion at this boundary; the current
 SQLite adapter only forwards to `rho-agent-store`, the single package-owned SQL
 implementation. Native/component tasks, assets, task-list projections and handoff
