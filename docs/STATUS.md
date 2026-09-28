@@ -189,10 +189,13 @@ Its first run reached the final cross-project setup but correctly encountered
 the single-Host journal lock. The fixture now closes the disposable original Host
 before rebinding that same journal to another project; the complete v5 case passes.
 Public declarations, schemas and consumer checks are included; their generation
-and independent checks remain in the serial run. Ordinary Agent model configuration is also
-composed through the existing owner's versioned settings admission; its new
-configuration/isolation fixture and generic Host case remain pending. The earlier
-five-case metadata result predates this addition. No model or actual credential
+and independent checks remain in the serial run. The scoped backend delegation
+runtime case also passes. Ordinary Agent model configuration is composed through
+the existing owner's versioned settings admission. All six framed metadata cases
+now pass, including configuration persistence, version conflicts, rejection of
+plaintext/embedded credentials and independent instance settings. The earlier
+five-case result is superseded for this metadata source. Independent packaging
+and the generic Host Agent case remain pending. No model or actual user credential
 is accessed by these checks.
 
 The Agent credential store now has atomic original-request persistence in source:
