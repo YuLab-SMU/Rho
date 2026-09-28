@@ -303,9 +303,13 @@ immutable original remains readable. Binary attachment input requires a separate
 scoped Control; these records do not reconstruct authority or start a connection.
 All seven new real-store fixtures pass, covering concurrency, immutable capture,
 rollback, reopen, scope/parent reuse refusal and storage budgets. All 18 owner and
-29 store cases also pass. Native runtime, core storage, Host and independent
-assembly checks are still running; they are not yet passes. Ordinary native backend/MCP composition remains unfinished. The preceding complete runtime/binary/recovery run froze its
-source before this admission addition.
+29 store cases also pass. The seven native runtime, two core storage and 13 Host
+task cases pass on this admission source. An independent assembly passes all 18
+owner and 29 store cases plus public schema freshness. Architecture, private
+dependency boundaries and governance checks pass; exact commands and results are
+in `target/plugin-refactor/agent-native-admission-results-v1.json`. Ordinary native
+backend/MCP composition remains unfinished. The preceding complete
+runtime/binary/recovery run froze its source before this admission addition.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,
