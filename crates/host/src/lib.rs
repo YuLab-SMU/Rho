@@ -956,7 +956,12 @@ impl NextHost {
         } else {
             None
         };
-        for id in ["host.overview", "host.catalog", "host.describe"] {
+        for id in [
+            "host.overview",
+            "host.catalog",
+            "host.describe",
+            "host.core_contract",
+        ] {
             registry.register_query(Arc::new(discovery::DiscoveryHandler::new(
                 discovery.clone(),
                 id,

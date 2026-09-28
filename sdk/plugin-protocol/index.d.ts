@@ -41,6 +41,8 @@ export type * from "./types/DraftContent.js";
 export type * from "./types/DraftId.js";
 export type * from "./types/DraftSource.js";
 export type * from "./types/ExportPluginArchive.js";
+export type * from "./types/HostCapabilityArguments.js";
+export type * from "./types/HostCapabilityContract.js";
 export type * from "./types/InstalledPluginRevision.js";
 export type * from "./types/InstanceAlias.js";
 export type * from "./types/InstanceRef.js";

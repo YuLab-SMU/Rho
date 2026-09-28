@@ -86,8 +86,16 @@ audit ran.
 
 Native core management/Studio tools are the current integration focus. The new
 `host.core_contract` metadata port is implemented; its registry test and all 19
-public protocol cases pass. Affected Host checks, generated SDK consumption and
-client checks are still running. Agent Host-target/fixed-argument/result-correlation
+public protocol cases and all six affected Host discovery/workspace cases pass.
+The first discovery run and diagnostic repeat exposed an obsolete empty-module
+expectation: the existing original-commit reconciliation port remains discoverable
+without granting execution. The corrected test asserts the exact four visible ports,
+the recovery-only module and absent scientific targets/observations. Permission
+rules are unchanged; both failed runs remain in the versioned core-contract logs.
+Public SDK generation/independent consumption, client build/consistency and
+architecture, plugin-boundary and governance checks also pass. Results are in
+`host-core-contract-results-v1.json` and `host-core-contract-results-v2.json`.
+Agent Host-target/fixed-argument/result-correlation
 modules are drafted but not connected or tested. Core tool dispatch, exact-branch
 Studio assistance, full-size attachments, contributed context, ordinary Agent views,
 component input/continuation, actual generic Host restart and removal of fixed

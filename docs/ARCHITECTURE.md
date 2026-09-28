@@ -601,6 +601,15 @@ proof of no dispatch or permission to replay. The bounded journal read requires
 no live provider, reconnect, activation or recovery, and keeps the native request
 key derivation in the same core owner as dispatch.
 
+`host.core_contract` exposes a native startup port's exact kind, input schema,
+description and required scopes through public, language-neutral DTOs. It requires
+`plugins.read` for metadata; it does not confer the described port's scopes or
+dispatch it. Project identity comes from the Host. Registry ownership and the
+descriptor are observed together, excluding dynamic contributions even when their
+names or domains resemble core ports. Ordinary contributed tools instead inspect
+their exact immutable manifest and retain the selected provider binding. Neither
+inspection path starts a runtime or recovers an Operation.
+
 Agent metadata composition uses its package-owned task/store libraries behind an
 ordinary native backend. Native initialization supplies its normalized project and
 per-instance store directory; task arguments cannot choose a database, principal

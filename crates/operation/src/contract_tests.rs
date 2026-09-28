@@ -312,6 +312,55 @@ fn dynamic_registration_is_atomic_owned_and_compare_and_swap() {
     assert_eq!(before.descriptors(), registry.descriptors());
 }
 
+#[test]
+fn native_contract_inspection_never_promotes_dynamic_or_retired_contributions() {
+    let mut registry = CapabilityRegistry::new();
+    let native = Arc::new(TestQuery::new("test.native"));
+    let key = native.descriptor.capability.clone();
+    registry.register_query(native.clone()).unwrap();
+    assert_eq!(
+        registry.host_descriptor(&key),
+        Some(native.descriptor.clone())
+    );
+    let mut contributed = TestQuery::new("test.contributed");
+    // A descriptive label cannot impersonate registry ownership.
+    contributed.descriptor.domain = "host".into();
+    let dynamic_key = contributed.descriptor.capability.clone();
+    let registration = registry
+        .replace_batch(
+            "external",
+            None,
+            ContributionBatch {
+                controls: vec![],
+                operations: vec![],
+                queries: vec![Arc::new(contributed)],
+            },
+        )
+        .unwrap();
+    assert!(registry.descriptor(&dynamic_key).is_some());
+    assert!(registry.host_descriptor(&dynamic_key).is_none());
+    assert_eq!(native.calls.load(Ordering::SeqCst), 0);
+    let retired = registry.remove_batch(&registration).unwrap();
+    assert!(registry.host_descriptor(&dynamic_key).is_none());
+    assert!(
+        registry
+            .replace_batch(
+                "external",
+                Some(&retired),
+                ContributionBatch {
+                    controls: vec![],
+                    operations: vec![],
+                    queries: vec![Arc::new(TestQuery::new("test.native"))],
+                }
+            )
+            .is_err()
+    );
+    assert_eq!(
+        registry.host_descriptor(&key),
+        Some(native.descriptor.clone())
+    );
+}
+
 #[tokio::test]
 async fn accepted_operation_retains_handler_contract_and_cancellation_after_unregistration() {
     let started = Arc::new(tokio::sync::Notify::new());

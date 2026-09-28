@@ -310,6 +310,19 @@ checks absent-record uncertainty, argument forgery, sibling-instance denial,
 principal/project/read-scope boundaries and journal reads after release/reopen.
 Public declarations and standalone schemas are covered by the protocol consumer.
 
+Native contract metadata uses `cargo test -p rho-operation --lib
+native_contract_inspection --locked` and `cargo test -p rho-host --test
+plugin_workspace native_contract_metadata --locked`. The registry test rejects
+dynamic/retired contributions and attempted replacement of a startup port. The
+generic Host fixture compares exact descriptors, denies metadata reads without
+`plugins.read`, rejects contributed or missing ports, and verifies that reading
+write schemas grants no write authority and creates no Operations or branches.
+Its external backend also reads a write contract through the scoped reverse Query
+port while the original caller holds only `plugins.read`.
+Run the affected discovery and generic workspace targets once this behavior
+settles. Public declarations and schemas use client generation and the independent
+`node scripts/test-plugin-protocol.mjs` consumer.
+
 The ordinary Agent scientific port adds scoped R observation/execution fixtures to
 `cargo test -p rho-agent-backend --test metadata --locked --offline`. Owner/store
 checks cover immutable native captures, Explain/Run admission, original tool IDs,
@@ -524,6 +537,15 @@ checkout, exercises the current Host, and checks that those package builds did n
 change the Host binary. Synthetic composition events cover submission guards;
 they do not establish native input-method acceptance.
 
+The Console model check also covers read-only original-submission recovery from a
+replacement view, exact view/request/provider/session/code matching, partial or
+ambiguous reads, failed acknowledgement persistence and edits during observation.
+`console-editor.spec.ts` exercises the explicit inspection action, disabled foreign
+retry, preserved uncertainty and recovered drafts across reload at normal, wide
+and constrained sizes. `r-plugin-console.spec.ts` drops a native submission reply,
+replaces its view and verifies one original Operation and one real R increment.
+Neither recovery path invokes the saved submission or restarts R.
+
 The ordinary Objects package is assembled outside the checkout with
 `node scripts/build-objects-plugin.mjs /absolute/new/directory`; model, action
 capture and component checks run with `node scripts/test-objects-plugin.mjs`.
@@ -531,6 +553,12 @@ After building the current client and Host, use
 `npm run test:browser --prefix ui -- objects-plugin.spec.ts` for its opaque-frame
 presentation and explicit-action fixture. This fixture uses public SDK messages;
 it does not establish native R behavior or production window lifecycle integration.
+The action model covers explicit set-aside persistence, bounded retention without
+eviction, later original-request inspection from another view, refused partial or
+foreign records, and failed saves that cannot clear the active request. The isolated
+browser case retains a lost reply, permits a separate new action and reopens the
+saved request for read-only recovery. Check its retained-request layouts as well
+as the ordinary object views at normal, wide and constrained sizes.
 The native path uses explicit existing Ark/R and ggplot2 in a disposable project:
 `RHO_ARK=/absolute/existing/ark RHO_R_HOME=/absolute/existing/R/home node
 scripts/test-r-objects-plugin.mjs`. The wrapper builds both packages outside the

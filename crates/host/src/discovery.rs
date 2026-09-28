@@ -52,6 +52,34 @@ impl DiscoveryOwner {
         descriptors.sort_by(|a, b| a.capability.cmp(&b.capability));
         Ok(descriptors)
     }
+    fn core_contract(
+        &self,
+        args: rho_plugin_protocol::HostCapabilityArguments,
+    ) -> Result<rho_plugin_protocol::HostCapabilityContract, OperationError> {
+        use rho_plugin_protocol as public;
+        let key = CapabilityRef::new(
+            args.capability.id.as_str(),
+            args.capability.version.try_into().map_err(invalid)?,
+        )?;
+        let descriptor = self.registry()?.host_descriptor(&key).ok_or_else(|| {
+            OperationError::NotFound("capability is not a registered native Host port".into())
+        })?;
+        let project = self.project.as_deref().ok_or_else(|| {
+            OperationError::Unavailable("Host contract observation requires a project".into())
+        })?;
+        Ok(public::HostCapabilityContract {
+            project: rho_plugins::plugin_project_id(project),
+            capability: args.capability,
+            kind: match descriptor.kind {
+                CapabilityKind::Query => public::CapabilityKind::Query,
+                CapabilityKind::Operation => public::CapabilityKind::Operation,
+                CapabilityKind::Control => public::CapabilityKind::Control,
+            },
+            description: descriptor.documentation.purpose,
+            input_schema: descriptor.input_schema,
+            required_scopes: descriptor.required_scopes,
+        })
+    }
     fn modules(
         &self,
         descriptors: &[CapabilityDescriptor],
@@ -538,6 +566,10 @@ impl DiscoveryHandler {
                 schema_for!(HostDescribeArguments).to_value(),
                 schema_for!(HostDescription).to_value(),
             ),
+            "host.core_contract" => (
+                schema_for!(rho_plugin_protocol::HostCapabilityArguments).to_value(),
+                schema_for!(rho_plugin_protocol::HostCapabilityContract).to_value(),
+            ),
             "host.overview" => (
                 json!({"type":"object","properties":{},"additionalProperties":false}),
                 schema_for!(HostOverview).to_value(),
@@ -554,7 +586,11 @@ impl DiscoveryHandler {
                 output_schema,
                 recovery_schema: json!({"type":"null"}),
                 documentation: builtin_documentation(id),
-                required_scopes: BTreeSet::new(),
+                required_scopes: if id == "host.core_contract" {
+                    ["plugins.read".into()].into()
+                } else {
+                    BTreeSet::new()
+                },
                 potential_effects: BTreeSet::new(),
                 idempotency: IdempotencyClass::Pure,
                 retry: RetryClass::Safe,
@@ -584,6 +620,11 @@ impl QueryHandler for DiscoveryHandler {
             }
             "host.describe" => serde_json::to_value(
                 serde_json::from_value::<HostDescribeArguments>(args.clone()).map_err(invalid)?,
+            )
+            .map_err(invalid),
+            "host.core_contract" => serde_json::to_value(
+                serde_json::from_value::<rho_plugin_protocol::HostCapabilityArguments>(args.clone())
+                    .map_err(invalid)?,
             )
             .map_err(invalid),
             _ => {
@@ -626,6 +667,12 @@ impl QueryHandler for DiscoveryHandler {
             "host.describe" => (
                 serde_json::to_value(self.owner.describe(
                     context,
+                    serde_json::from_value(args.clone()).map_err(invalid)?,
+                )?),
+                DESCRIPTION_BYTES,
+            ),
+            "host.core_contract" => (
+                serde_json::to_value(self.owner.core_contract(
                     serde_json::from_value(args.clone()).map_err(invalid)?,
                 )?),
                 DESCRIPTION_BYTES,

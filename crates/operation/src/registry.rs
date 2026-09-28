@@ -239,6 +239,20 @@ impl CapabilityRegistry {
     pub fn descriptor(&self, capability: &CapabilityRef) -> Option<CapabilityDescriptor> {
         self.snapshot().descriptor(capability).cloned()
     }
+    /// Read a startup port without confusing a dynamic contribution with native
+    /// Host dispatch. Ownership and descriptor come from the same registry read.
+    /// This observes registration only; it starts or recovers no owner.
+    pub fn host_descriptor(&self, capability: &CapabilityRef) -> Option<CapabilityDescriptor> {
+        let state = self.state.read().unwrap();
+        if state
+            .groups
+            .values()
+            .any(|(_, keys)| keys.contains(capability))
+        {
+            return None;
+        }
+        state.current.descriptor(capability).cloned()
+    }
     pub fn validate_control_input(
         &self,
         context: &CallContext,

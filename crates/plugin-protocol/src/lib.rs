@@ -16,6 +16,8 @@ mod manifest;
 mod management;
 pub use management::*;
 mod runtime;
+mod host_capability;
+pub use host_capability::*;
 mod resources;
 pub use resources::*;
 mod scenario;

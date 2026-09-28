@@ -272,6 +272,7 @@ async fn native_control_visibility_is_shared_and_executor_only_context_keeps_con
         }
         for (id, visible) in [
             ("operation.request_cancellation", cancel),
+            ("operation.reconcile_commit", true),
             ("workspace.respond_input", input),
             ("operation.events", events),
         ] {
@@ -330,7 +331,28 @@ async fn native_control_visibility_is_shared_and_executor_only_context_keeps_con
             );
         }
         if scopes.is_empty() {
-            assert!(overview.modules.is_empty());
+            // Reconciliation is discoverable after a provider has disappeared.
+            // Its admission checks the original record's captured authority;
+            // discovery grants no execution, metadata inspection or data reads.
+            assert_eq!(
+                ids,
+                [
+                    "host.catalog",
+                    "host.describe",
+                    "host.overview",
+                    "operation.reconcile_commit",
+                ]
+                .map(String::from)
+                .into()
+            );
+            assert_eq!(
+                overview
+                    .modules
+                    .iter()
+                    .map(|module| (module.module.as_str(), module.available))
+                    .collect::<Vec<_>>(),
+                vec![("operations", true)]
+            );
             assert!(overview.targets.is_empty());
             assert!(overview.observations.is_empty());
         }

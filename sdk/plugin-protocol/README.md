@@ -230,6 +230,15 @@ opening a view and later provider installation cannot change these frozen grants
 A view receives its instance's selected grants only when its opening caller can
 delegate all of them; each subsequent call still intersects current parent scopes.
 
+`host.core_contract@1` accepts `HostCapabilityArguments` with an exact capability
+key and returns `HostCapabilityContract` in the ordinary query envelope. Declare
+`plugins.read` to inspect the native Host port's project, kind, description, input
+schema and required scopes. Metadata inspection does not grant execution scopes,
+start a provider or create an Operation. Missing ports and dynamically contributed
+plugin capabilities are refused. Inspect contributed capabilities through their
+immutable package manifest and retain their exact `ProviderBinding`; a plugin
+cannot become a native port by choosing a similar name or domain.
+
 The recovery CLI and active Host use `plugins-v1` beside the configured database,
 with an explicit CLI `--store` override. Importing or observing a revision never
 activates it. Lifecycle operations use stable caller request identities and the

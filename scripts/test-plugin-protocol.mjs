@@ -34,6 +34,14 @@ const guessedArchive:ExportPluginArchive={revision:"revision"};
 const archiveOwner:PluginArchiveReference={...archiveReference,owner:{instance:"fake"}};
 void [archiveDiscarded,archiveStage,archiveRead,archiveChunk,archiveProgress,archiveImport,archiveExport,archiveOperation,archiveEvidence,archivePath,guessedArchive,archiveOwner];
 import type {ProjectReadCoverage,ProjectReadCoverageArguments} from "../protocol/index.js";
+import type {HostCapabilityArguments,HostCapabilityContract} from "../protocol/index.js";
+const coreRead:HostCapabilityArguments={capability:{id:"plugins.branch",version:1}};
+const coreContract:HostCapabilityContract={project:"project",capability:coreRead.capability,kind:"operation",description:"Create an explicit branch",input_schema:{type:"object"},required_scopes:["plugins.write"]};
+// @ts-expect-error Contract inspection cannot select a different project.
+const foreignCore:HostCapabilityArguments={...coreRead,project:"another-project"};
+// @ts-expect-error Native contract metadata does not confer authority.
+const coreGrant:HostCapabilityContract={...coreContract,granted:true};
+void [coreRead,coreContract,foreignCore,coreGrant];
 import type {PluginViewCaller,PluginViewOrigin,PluginViewPresence} from "../protocol/index.js";
 const originatingView:PluginViewOrigin={view:"view",window:"window",connection:"connection"};
 const viewCaller:PluginViewCaller={view:originatingView};
@@ -160,7 +168,7 @@ export function inspect(manifest: PluginManifest, visual: VisualDocument, page: 
   execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"),
     "--noEmit", "--strict", "--module", "NodeNext", "--moduleResolution", "NodeNext",
     "--target", "ES2022", "--rootDir", consumer, path.join(consumer, "consumer.mts")], { stdio: "inherit" });
-  for (const name of ["delegated-operation-arguments", "delegated-operation", "stage-archive", "read-archive", "export-archive", "archive-reference", "archive-arguments", "archive-progress", "archive-discarded", "archive-chunk", "archive-receipt", "archive-inspection", "archive-operation-arguments", "release-view-renderer", "view-renderer-release", "create-plugin-test-project", "plugin-test-project-observation", "plugin-test-project-arguments", "plugin-test-operation-arguments", "stop-plugin-test-project", "list-plugin-test-projects", "plugin-test-project-page", "list-plugin-source", "plugin-source-page", "read-plugin-source", "plugin-source-chunk", "list-plugin-branches", "plugin-branch-page", "checkpoint-plugin", "plugin-checkpoint", "manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "view-close", "window-layout", "window-open-view", "context-page", "preview-context", "context-preview", "document-draft", "list-document-drafts", "document-draft-page", "save-document-draft", "scenario", "save-scenario", "scenario-page", "apply-scenario", "window-scenario-snapshot", "resolve-window-provider", "visual-document"]) {
+  for (const name of ["host-capability-arguments", "host-capability-contract", "delegated-operation-arguments", "delegated-operation", "stage-archive", "read-archive", "export-archive", "archive-reference", "archive-arguments", "archive-progress", "archive-discarded", "archive-chunk", "archive-receipt", "archive-inspection", "archive-operation-arguments", "release-view-renderer", "view-renderer-release", "create-plugin-test-project", "plugin-test-project-observation", "plugin-test-project-arguments", "plugin-test-operation-arguments", "stop-plugin-test-project", "list-plugin-test-projects", "plugin-test-project-page", "list-plugin-source", "plugin-source-page", "read-plugin-source", "plugin-source-chunk", "list-plugin-branches", "plugin-branch-page", "checkpoint-plugin", "plugin-checkpoint", "manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "view-close", "window-layout", "window-open-view", "context-page", "preview-context", "context-preview", "document-draft", "list-document-drafts", "document-draft-page", "save-document-draft", "scenario", "save-scenario", "scenario-page", "apply-scenario", "window-scenario-snapshot", "resolve-window-provider", "visual-document"]) {
     const schema = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema", `${name}.json`), "utf8"));
     assert.ok(schema.$schema && schema.title, `missing standalone schema: ${name}`);
     const visit = value => {

@@ -125,6 +125,178 @@ fn no_scientific_stores(root: &Path) {
 }
 
 #[tokio::test]
+async fn native_contract_metadata_is_exact_readonly_scoped_and_excludes_plugins() {
+    let temp = tempfile::tempdir().unwrap();
+    let project = temp.path().join("project");
+    fs::create_dir(&project).unwrap();
+    let database = temp.path().join("state/records.sqlite");
+    let source = temp.path().join("external-source");
+    fixture::package(&source, "1", false);
+    // An ordinary backend declares only metadata read authority for this reverse
+    // call. It does not borrow the queried mutation's execution scopes.
+    for file in ["backend.py", "dist/backend"] {
+        let path = source.join(file);
+        let code = fs::read_to_string(&path)
+            .unwrap()
+            .replace("\"plugins.list\"", "\"host.core_contract\"");
+        fs::write(path, code).unwrap();
+    }
+    let manifest_path = source.join("plugin.json");
+    let mut manifest: Value = serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["requires"].as_array_mut().unwrap().push(json!({
+        "capability":{"id":"host.core_contract","version":1},"scopes":["plugins.read"]
+    }));
+    fs::write(manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let package = rho_plugins::snapshot_directory(&source, None, &backend_target()).unwrap();
+    PluginRepository::open(&repository_path(&database))
+        .unwrap()
+        .import(&package)
+        .unwrap();
+    let host = NextHost::open_plugin_workspace(&database, &project)
+        .await
+        .unwrap();
+    let admin = NextHost::local_context();
+    let mut reader = admin.clone();
+    reader.scopes = BTreeSet::from(["plugins.read".into()]);
+    let before = query(&host, &admin, "operation.list_recent", json!({"limit":100})).await;
+    for id in [
+        "plugins.list",
+        "plugins.branch",
+        "plugins.build",
+        "plugins.preview",
+        "scenarios.apply",
+    ] {
+        let key = CapabilityRef::new(id, 1).unwrap();
+        let expected = host
+            .capabilities()
+            .into_iter()
+            .find(|d| d.capability == key)
+            .unwrap();
+        let observation = host
+            .query_snapshot(
+                &reader,
+                QueryRequest {
+                    capability: CapabilityRef::new("host.core_contract", 1).unwrap(),
+                    arguments: json!({"capability":key}),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(observation.status, QueryStatus::Ready);
+        assert_eq!(observation.completeness, ObservationCompleteness::Complete);
+        assert!(serde_json::to_vec(&observation).unwrap().len() <= DESCRIPTION_BYTES);
+        let contract: rho_plugin_protocol::HostCapabilityContract =
+            serde_json::from_value(observation.data.unwrap()).unwrap();
+        assert_eq!(
+            contract.project,
+            rho_plugins::plugin_project_id(project.canonicalize().unwrap().to_str().unwrap())
+        );
+        assert_eq!(contract.capability.id.as_str(), id);
+        assert_eq!(contract.capability.version, 1);
+        assert_eq!(
+            serde_json::to_value(contract.kind).unwrap(),
+            serde_json::to_value(expected.kind).unwrap()
+        );
+        assert_eq!(contract.description, expected.documentation.purpose);
+        assert_eq!(contract.input_schema, expected.input_schema);
+        assert_eq!(contract.required_scopes, expected.required_scopes);
+        if expected.kind == CapabilityKind::Operation {
+            let args = expected.documentation.examples[0].arguments.clone();
+            assert!(matches!(
+                host.invoke(&reader, invocation(id, id, args)).await,
+                Err(OperationError::AccessDenied { .. })
+            ));
+        }
+    }
+    assert_eq!(
+        query(&host, &admin, "operation.list_recent", json!({"limit":100})).await,
+        before
+    );
+    let mut denied = reader.clone();
+    denied.scopes.clear();
+    assert!(matches!(
+        host.query_snapshot(
+            &denied,
+            QueryRequest {
+                capability: CapabilityRef::new("host.core_contract", 1).unwrap(),
+                arguments: json!({"capability":{"id":"plugins.branch","version":1}}),
+            }
+        )
+        .await,
+        Err(OperationError::AccessDenied { .. })
+    ));
+    for arguments in [
+        json!({"capability":{"id":"plugins.branch","version":1},"project":"foreign"}),
+        json!({"capability":{"id":"plugins.branch","version":65536}}),
+    ] {
+        assert!(
+            host.query_snapshot(
+                &reader,
+                QueryRequest {
+                    capability: CapabilityRef::new("host.core_contract", 1).unwrap(),
+                    arguments,
+                }
+            )
+            .await
+            .is_err()
+        );
+    }
+    let instance = activate(&host, &admin, &package, "ordinary-provider").await;
+    for (id, version) in [
+        ("fixture.read", 1),
+        ("fixture.run", 1),
+        ("fixture.answer", 2),
+        ("missing.port", 1),
+        ("plugins.branch", 2),
+    ] {
+        assert!(
+            matches!(
+                host.query_snapshot(
+                    &reader,
+                    QueryRequest {
+                        capability: CapabilityRef::new("host.core_contract", 1).unwrap(),
+                        arguments: json!({"capability":{"id":id,"version":version}}),
+                    }
+                )
+                .await,
+                Err(OperationError::NotFound(_))
+            ),
+            "{id}@{version}"
+        );
+    }
+    let read = binding(&host, &reader, &instance, "fixture.read").await;
+    let before_read = query(&host, &admin, "operation.list_recent", json!({"limit":100})).await;
+    let delegated = query(&host, &reader, "fixture.read", json!({
+        "binding":read,"arguments":{"action":"delegate","host_arguments":{"capability":{"id":"plugins.branch","version":1}}}
+    })).await;
+    assert_eq!(delegated["delegated"]["result"]["status"], "ready");
+    assert_eq!(
+        delegated["delegated"]["result"]["data"]["capability"],
+        json!({"id":"plugins.branch","version":1})
+    );
+    assert_eq!(
+        delegated["delegated"]["result"]["data"]["required_scopes"],
+        json!(["plugins.write"])
+    );
+    assert_eq!(
+        query(&host, &admin, "operation.list_recent", json!({"limit":100})).await,
+        before_read
+    );
+    assert_eq!(
+        query(
+            &host,
+            &admin,
+            "plugins.branches",
+            json!({"plugin":package.revision.manifest.id,"after":null,"limit":20})
+        )
+        .await["branches"],
+        json!([])
+    );
+    no_scientific_stores(database.parent().unwrap());
+    host.drain().await;
+}
+
+#[tokio::test]
 async fn empty_plugin_workspace_retains_canonical_scope_and_native_lease_without_scientific_owners()
 {
     let temp = tempfile::tempdir().unwrap();

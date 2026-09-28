@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HostCapabilityContract",
+  "description": "The exact current startup contract in this project. Dynamic contributions\ncannot acquire a Host identity by using this query. Reading a write contract\ndoes not grant its scopes or invoke it.",
+  "type": "object",
+  "properties": {
+    "capability": {
+      "$ref": "#/$defs/CapabilityKey"
+    },
+    "description": {
+      "type": "string"
+    },
+    "input_schema": true,
+    "kind": {
+      "$ref": "#/$defs/CapabilityKind"
+    },
+    "project": {
+      "type": "string"
+    },
+    "required_scopes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "project",
+    "capability",
+    "kind",
+    "description",
+    "input_schema",
+    "required_scopes"
+  ],
+  "$defs": {
+    "CapabilityKey": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "CapabilityKind": {
+      "type": "string",
+      "enum": [
+        "query",
+        "control",
+        "operation",
+        "runtime"
+      ]
+    }
+  }
+}

@@ -33,6 +33,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     PluginRequest::export_all(&types)?;
     PluginDelegatedOperationArguments::export_all(&types)?;
     PluginDelegatedOperation::export_all(&types)?;
+    HostCapabilityArguments::export_all(&types)?;
+    HostCapabilityContract::export_all(&types)?;
     PluginPreflightRequest::export_all(&types)?;
     PluginPreflightResult::export_all(&types)?;
     PluginCatalogArguments::export_all(&types)?;
@@ -150,6 +152,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("rpc", schemars::schema_for!(RpcFrame)),
         ("delegated-operation-arguments", schemars::schema_for!(PluginDelegatedOperationArguments)),
         ("delegated-operation", schemars::schema_for!(PluginDelegatedOperation)),
+        ("host-capability-arguments", schemars::schema_for!(HostCapabilityArguments)),
+        ("host-capability-contract", schemars::schema_for!(HostCapabilityContract)),
         ("workspace-paths", schemars::schema_for!(WorkspacePaths)),
         ("view-message", schemars::schema_for!(PluginViewMessage)),
         ("view-caller", schemars::schema_for!(PluginViewCaller)),
