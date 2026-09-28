@@ -6,8 +6,11 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {buildAgentPlugin} from './build-agent-plugin.mjs';
+import {prepareAgentAcceptance} from './build-agent-plugin.mjs';
+import {agentAcceptanceOptions, verifyAgentBuild} from './agent-plugin-artifact.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const options = agentAcceptanceOptions(process.argv.slice(2));
+if (!options.build) verifyAgentBuild(options.packagePath);
 const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-core-')));
 const env = {...process.env, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '2', RHO_AGENT_NATIVE_CORE_FIXTURE:'1'};
 const nativeBin = path.join(directory, 'native-bin');
@@ -29,7 +32,7 @@ try {
     assert.ok(executable, `Cargo must identify ${name}`);
     return {executable,original:digest(executable),name};
   });
-  const agent = process.env.RHO_AGENT_PLUGIN_PACKAGE ? fs.realpathSync(process.env.RHO_AGENT_PLUGIN_PACKAGE) : buildAgentPlugin(path.join(directory,'agent'));
+  const agent = prepareAgentAcceptance(options);
   assert.ok(!agent.startsWith(root+path.sep), 'Use an independently assembled Agent package');
   for (const {name,executable,original} of harnesses) {
     assert.equal(digest(executable),original);

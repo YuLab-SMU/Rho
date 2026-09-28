@@ -28,9 +28,9 @@ function fixture() {
   const sourceMap = {
     schema_version: 1,
     checks: {
-      "check-core": { command: ["node", "scripts/check core.mjs"] },
-      "check-shared": { command: ["node", "scripts/check-shared.mjs"] },
-      "check-ui": { command: ["npm", "test", "--", "ui"] },
+      "check-core": { command: ["node", "scripts/check core.mjs"], tier: "L1" },
+      "check-shared": { command: ["node", "scripts/check-shared.mjs"], tier: "L0" },
+      "check-ui": { command: ["npm", "test", "--", "ui"], tier: "L1" },
     },
     areas: {
       core: { sources: ["src/core/**", "Cargo.toml"], checks: ["check-core", "check-shared"] },
@@ -92,6 +92,11 @@ for (const [mutate, pattern] of [
   [(value) => { value.registry.pages[0].max_lines = 1; value.write(value.registry.pages[0].document, "a\nb\n"); }, /exceeds max_lines 1/u],
   [(value) => { value.registry.pages[0].max_lines = 1; value.write(value.registry.pages[0].document, "a\nb"); }, /exceeds max_lines 1/u],
   [(value) => { value.sourceMap.areas.core.checks.push("missing"); }, /references unknown check missing/u],
+  [(value) => { delete value.sourceMap.checks["check-core"].tier; }, /missing field tier/u],
+  [(value) => { value.sourceMap.checks["check-core"].tier = "fast"; }, /tier must be L0, L1, L2 or L3/u],
+  [(value) => { value.sourceMap.checks["check-core"].sources = []; }, /sources must not be empty/u],
+  [(value) => { value.sourceMap.checks["check-core"].sources = ["../outside/**"]; }, /invalid path/u],
+  [(value) => { value.sourceMap.checks["check-core"].sources = ["removed/**"]; }, /pattern matches no file/u],
   [(value) => { value.sourceMap.areas.core.sources.push("removed/**"); }, /pattern matches no file/u],
   [(value) => { value.sourceMap.areas.core.sources.push("Cargo.toml"); }, /duplicate value Cargo\.toml/u],
 ]) withFixture((value) => {
@@ -114,6 +119,22 @@ withFixture((value) => {
 });
 
 withFixture((value) => {
+  value.sourceMap.checks["check-core"].sources = ["src/core/**"];
+  value.sourceMap.checks["check-shared"].tier = "L2";
+  value.sourceMap.checks["check-ui"].tier = "L3";
+  rewrite(value, "governance/source-map.json", value.sourceMap);
+  const context = validateDocumentationMap(value.root);
+  const iteration = documentationImpact(context, ["src/core/lib.rs", "Cargo.toml"]);
+  assert.deepEqual(iteration.checks.map(c => c.id), ["check-core"]);
+  assert.deepEqual(iteration.deferred, [{id: "check-shared", tier: "L2"}, {id: "check-ui", tier: "L3"}]);
+  assert.ok(iteration.deferred.every(c => !Object.hasOwn(c, "command")));
+  assert.deepEqual(documentationImpact(context, ["Cargo.toml"]).checks, []);
+  assert.deepEqual(documentationImpact(context, ["src/core/lib.rs", "Cargo.toml"], "milestone").checks.map(c => c.id), ["check-core", "check-shared"]);
+  assert.deepEqual(documentationImpact(context, ["src/core/lib.rs", "Cargo.toml"], "audit").checks.map(c => c.id), ["check-core", "check-shared", "check-ui"]);
+  mapError(() => documentationImpact(context, [], "everything"), /Unknown phase/u);
+});
+
+withFixture((value) => {
   const run = (args) => spawnSync(process.execPath, [SCRIPT, ...args], { cwd: value.root, encoding: "utf8" });
   let result = run(["generate", "--json"]);
   assert.equal(result.status, 0, result.stderr);
@@ -124,6 +145,13 @@ withFixture((value) => {
   result = run(["impact", "--changed", "src/core/lib.rs", "Cargo.toml", "--json"]);
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout).areas, ["core", "ui"]);
+  assert.equal(JSON.parse(result.stdout).phase, "iteration");
+  result = run(["impact", "--changed", "src/core/lib.rs", "--phase", "milestone", "--json"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).phase, "milestone");
+  for (const args of [["check", "--phase", "audit"], ["impact", "--changed", "src/core/lib.rs", "--phase", "typo"]]) {
+    assert.notEqual(run(args).status, 0);
+  }
 
   fs.rmSync(path.join(value.root, ".git"), { recursive: true, force: true });
   for (const args of [["init", "-q"], ["config", "user.email", "docs@example.invalid"],
@@ -138,4 +166,24 @@ withFixture((value) => {
   assert.deepEqual(JSON.parse(result.stdout).unmapped, ["unmapped/new.txt"]);
 });
 
-console.log("Documentation indexes, source integrity, and impact mapping passed");
+// Regression for the real map: a local Agent edit formerly listed every plugin
+// suite, including independent builds and the workspace audit.
+{
+  const context = validateDocumentationMap(path.resolve(path.dirname(SCRIPT), '..'));
+  const agent = documentationImpact(context, ['plugins/agent/backend/src/server.rs']);
+  assert.ok(agent.checks.some(c => c.id === 'plugins.agent-backend'));
+  assert.ok(!agent.checks.some(c => ['plugins.agent-owner', 'plugins.agent-store', 'plugins.agent-engine'].includes(c.id)));
+  assert.ok(agent.checks.every(c => ['L0', 'L1'].includes(c.tier)));
+  assert.ok(!agent.checks.some(c => c.id.startsWith('plugins.files-') || c.command.includes('--workspace')));
+  assert.ok(agent.deferred.some(c => c.id === 'plugins.agent-host'));
+  const milestone = documentationImpact(context, ['plugins/agent/backend/src/server.rs'], 'milestone');
+  assert.ok(milestone.checks.some(c => c.id === 'plugins.agent-host'));
+  assert.ok(!milestone.checks.some(c => c.command.includes('--workspace')));
+  const files = documentationImpact(context, ['plugins/files/backend/src/lib.rs']);
+  assert.ok(!files.checks.some(c => c.id === 'plugins.agent-backend'));
+  const tooling = documentationImpact(context, ['scripts/test-governance.mjs']);
+  assert.deepEqual(tooling.checks.map(c => c.id), ['docs.tool']);
+  const runner = documentationImpact(context, ['scripts/test-agent-plugin.mjs']);
+  assert.deepEqual(runner.checks.map(c => c.id), ['plugins.agent-workflow']);
+}
+console.log("Documentation indexes, source integrity, phase separation, and scoped impact mapping passed");

@@ -159,7 +159,7 @@ The `native_tasks` filter on `cargo test -p rho-agent-backend --test metadata
 --locked` exercises ordinary framed task composition with an injected native
 factory: retained Send/Stop outcomes, uploaded input, next-draft preservation,
 reopen idempotency and unconfirmed process cleanup. It reads no user configuration
-and starts no installed model. `node scripts/test-agent-plugin.mjs` checks the
+and starts no installed model. `node scripts/test-agent-plugin.mjs --build` checks the
 independent package through a previously compiled generic Host, including native
 task metadata, instance separation and attachment journal exclusion.
 `node scripts/test-agent-plugin-native.mjs` repeats the runtime cases in

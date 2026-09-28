@@ -26,8 +26,10 @@ Sources:
 
 Checks:
 
-- `docs.index`: `["node","scripts/governance.mjs","check"]`
-- `system.architecture`: `["node","scripts/check-architecture.mjs"]`
+- `docs.index` (L0): `["node","scripts/governance.mjs","check"]`
+  Applies to: `AGENTS.md`, `README.md`, `docs/**`, `governance/**`, `scripts/governance.mjs`.
+- `system.architecture` (L0): `["node","scripts/check-architecture.mjs"]`
+  Applies to: `Cargo.toml`, `crates/**`, `plugins/**`, `r/**`, `scripts/check-architecture.mjs`, `ui/src/**`.
 
 ## `development-tools`
 
@@ -37,14 +39,20 @@ Documentation:
 
 Sources:
 
+- `scripts/agent-plugin-artifact.mjs`
 - `scripts/dev-lanes.mjs`
 - `scripts/path-ownership.mjs`
+- `scripts/test-agent-workflow.mjs`
 - `scripts/test-dev-lanes.mjs`
 
 Checks:
 
-- `docs.index`: `["node","scripts/governance.mjs","check"]`
-- `docs.tool`: `["node","scripts/test-governance.mjs"]`
+- `docs.index` (L0): `["node","scripts/governance.mjs","check"]`
+  Applies to: `AGENTS.md`, `README.md`, `docs/**`, `governance/**`, `scripts/governance.mjs`.
+- `docs.tool` (L0): `["node","scripts/test-governance.mjs"]`
+  Applies to: `governance/**`, `scripts/governance.mjs`, `scripts/test-governance.mjs`.
+- `plugins.agent-workflow` (L1): `["node","scripts/test-agent-workflow.mjs"]`
+  Applies to: `scripts/agent-plugin-artifact.mjs`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-core-tools.mjs`, `scripts/test-agent-plugin-real-r.mjs`, `scripts/test-agent-plugin.mjs`, `scripts/test-agent-workflow.mjs`.
 
 ## `documentation`
 
@@ -70,8 +78,10 @@ Sources:
 
 Checks:
 
-- `docs.index`: `["node","scripts/governance.mjs","check"]`
-- `docs.tool`: `["node","scripts/test-governance.mjs"]`
+- `docs.index` (L0): `["node","scripts/governance.mjs","check"]`
+  Applies to: `AGENTS.md`, `README.md`, `docs/**`, `governance/**`, `scripts/governance.mjs`.
+- `docs.tool` (L0): `["node","scripts/test-governance.mjs"]`
+  Applies to: `governance/**`, `scripts/governance.mjs`, `scripts/test-governance.mjs`.
 
 ## `plugins`
 
@@ -216,139 +226,272 @@ Sources:
 
 Checks:
 
-- `docs.index`: `["node","scripts/governance.mjs","check"]`
-- `plugins.agent-adapter`: `["cargo","test","-p","rho-agents","--lib","--locked"]`
-- `plugins.agent-backend`: `["cargo","test","-p","rho-agent-backend","--test","metadata","--locked"]`
-- `plugins.agent-component-boundary`: `["cargo","test","-p","rho-application","--lib","component_boundary","--locked"]`
-- `plugins.agent-core-tools`: `["node","scripts/test-agent-core-tools.mjs"]`
-- `plugins.agent-engine`: `["cargo","test","-p","rho-agent-engine","--locked"]`
-- `plugins.agent-engine-independent`: `["node","scripts/test-agent-plugin-engine.mjs"]`
-- `plugins.agent-handoff`: `["cargo","test","-p","rho-agent-owner","-p","rho-application","--lib","handoff","--locked"]`
-- `plugins.agent-handoff-store`: `["cargo","test","-p","rho-sqlite","--test","agent_handoffs","--locked"]`
-- `plugins.agent-host`: `["node","scripts/test-agent-plugin.mjs"]`
-- `plugins.agent-independent`: `["node","scripts/test-agent-plugin-client.mjs"]`
-- `plugins.agent-manifest`: `["node","plugins/agent/generate-manifest.mjs","--check"]`
-- `plugins.agent-model-host`: `["cargo","test","-p","rho-host","--test","component_agents","--test","component_recovery","--locked"]`
-- `plugins.agent-native`: `["cargo","test","-p","rho-agent-client","--lib","--locked"]`
-- `plugins.agent-native-real-r`: `["node","scripts/test-agent-plugin-real-r.mjs"]`
-- `plugins.agent-native-runtime`: `["cargo","test","-p","rho-agent-native","--lib","--locked"]`
-- `plugins.agent-native-runtime-host`: `["cargo","test","-p","rho-host","--lib","agent_tasks","--locked"]`
-- `plugins.agent-native-runtime-independent`: `["node","scripts/test-agent-plugin-native.mjs"]`
-- `plugins.agent-owner`: `["cargo","test","-p","rho-agent-owner","--lib","--locked"]`
-- `plugins.agent-owner-independent`: `["node","scripts/test-agent-plugin-owner.mjs"]`
-- `plugins.agent-protocol`: `["node","plugins/agent/generate-sdk.mjs","--check"]`
-- `plugins.agent-real-r`: `["node","scripts/test-real-r.mjs","--agent"]`
-- `plugins.agent-request`: `["cargo","test","-p","rho-contract","--lib","public_agent_request","--locked"]`
-- `plugins.agent-store`: `["cargo","test","-p","rho-agent-store","--lib","--locked"]`
-- `plugins.agent-store-independent`: `["node","scripts/test-agent-plugin-store.mjs"]`
-- `plugins.agent-tool-grants`: `["node","scripts/test-agent-tool-grants.mjs"]`
-- `plugins.agent-types`: `["node","scripts/test-agent-plugin-types.mjs"]`
-- `plugins.archive-owner`: `["cargo","test","-p","rho-plugins","--test","archive_transfers","--locked"]`
-- `plugins.archive-ports`: `["cargo","test","-p","rho-host","--test","plugin_archives","--locked"]`
-- `plugins.backend-sdk`: `["cargo","test","-p","rho-plugin-sdk","--locked"]`
-- `plugins.boundaries`: `["node","scripts/check-plugin-boundaries.mjs"]`
-- `plugins.boundary-tests`: `["node","scripts/check-plugin-boundaries.mjs","--self-test"]`
-- `plugins.build-owner`: `["cargo","test","-p","rho-plugins","--test","build_operations","--locked"]`
-- `plugins.console`: `["node","scripts/test-console-plugin.mjs"]`
-- `plugins.console-editor`: `["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"]`
-- `plugins.delegated-operation`: `["cargo","test","-p","rho-host","--test","plugin_delegated_operations","--locked"]`
-- `plugins.development-host`: `["cargo","test","-p","rho-host","--test","plugin_development","--locked"]`
-- `plugins.development-owner`: `["cargo","test","-p","rho-plugins","--test","source_development","--locked"]`
-- `plugins.download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-download.spec.ts"]`
-- `plugins.draft-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-drafts.spec.ts"]`
-- `plugins.draft-ports`: `["cargo","test","-p","rho-host","--test","plugin_drafts","--locked"]`
-- `plugins.drafts`: `["cargo","test","-p","rho-plugins","-p","rho-plugin-protocol","--lib","draft","--locked"]`
-- `plugins.editor-browser`: `["npm","run","test:browser","--prefix","ui","--","editor-plugin.spec.ts"]`
-- `plugins.editor-code-browser`: `["npm","run","test:browser","--prefix","ui","--","editor-code.spec.ts"]`
-- `plugins.editor-context`: `["cargo","test","-p","rho-editor-backend","--lib","--locked"]`
-- `plugins.editor-context-manifest`: `["node","scripts/generate-editor-context.mjs","--check"]`
-- `plugins.editor-model`: `["node","scripts/test-editor-plugin.mjs"]`
-- `plugins.environment-backend`: `["cargo","test","-p","rho-environment-backend","--lib","--locked"]`
-- `plugins.environment-checkpoint-references`: `["node","scripts/test-environment-plugin.mjs","--checkpoint-references"]`
-- `plugins.environment-independent`: `["node","scripts/test-environment-plugin-owner.mjs"]`
-- `plugins.environment-manifest`: `["node","plugins/environment/generate-manifest.mjs","--check"]`
-- `plugins.environment-native`: `["node","scripts/test-environment-plugin.mjs"]`
-- `plugins.environment-owner`: `["cargo","test","-p","rho-environment-api","-p","rho-environment-owner","--lib","--locked"]`
-- `plugins.environment-protocol`: `["node","plugins/environment/generate-sdk.mjs","--check"]`
-- `plugins.environment-r-references`: `["node","scripts/test-environment-plugin.mjs","--r-references"]`
-- `plugins.environment-types`: `["node","scripts/test-environment-plugin-types.mjs"]`
-- `plugins.environment-visibility`: `["cargo","test","-p","rho-environment","visibility","--locked"]`
-- `plugins.external-backend`: `["node","scripts/test-plugin-backend.mjs"]`
-- `plugins.files-backend`: `["cargo","test","-p","rho-files-backend","--lib","--locked"]`
-- `plugins.files-browser`: `["npm","run","test:browser","--prefix","ui","--","files-plugin.spec.ts"]`
-- `plugins.files-engine`: `["cargo","test","-p","rho-files-engine","-p","rho-files-owner","-p","rho-process-engine","--lib","--tests","--locked"]`
-- `plugins.files-independent`: `["node","scripts/test-files-plugin-engine.mjs"]`
-- `plugins.files-manifest`: `["node","plugins/files/generate-manifest.mjs","--check"]`
-- `plugins.files-native`: `["node","scripts/test-files-plugin.mjs"]`
-- `plugins.files-protocol`: `["node","plugins/files/generate-sdk.mjs","--check"]`
-- `plugins.files-public-types`: `["node","scripts/test-files-protocol.mjs"]`
-- `plugins.files-ui`: `["node","scripts/test-files-ui.mjs"]`
-- `plugins.help`: `["node","scripts/test-help-plugin.mjs"]`
-- `plugins.help-browser`: `["npm","run","test:browser","--prefix","ui","--","help-plugin.spec.ts"]`
-- `plugins.manager-browser`: `["npm","run","test:browser","--prefix","ui","--","manager-plugin.spec.ts","manager-archive.spec.ts"]`
-- `plugins.manager-model`: `["node","scripts/test-manager-plugin.mjs"]`
-- `plugins.objects`: `["node","scripts/test-objects-plugin.mjs"]`
-- `plugins.objects-browser`: `["npm","run","test:browser","--prefix","ui","--","objects-plugin.spec.ts"]`
-- `plugins.packages`: `["node","scripts/test-packages-plugin.mjs"]`
-- `plugins.packages-browser`: `["npm","run","test:browser","--prefix","ui","--","packages-plugin.spec.ts"]`
-- `plugins.plots`: `["node","scripts/test-plots-plugin.mjs"]`
-- `plugins.plots-browser`: `["npm","run","test:browser","--prefix","ui","--","plots-plugin.spec.ts"]`
-- `plugins.preview-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-preview.spec.ts"]`
-- `plugins.preview-host`: `["cargo","test","-p","rho-host","--test","plugin_preview","--locked"]`
-- `plugins.process-backend`: `["cargo","test","-p","rho-process-backend","--lib","--locked"]`
-- `plugins.process-engine`: `["cargo","test","-p","rho-process-engine","--locked"]`
-- `plugins.process-independent`: `["node","scripts/test-process-plugin-owner.mjs"]`
-- `plugins.process-manifest`: `["node","plugins/process/generate-manifest.mjs","--check"]`
-- `plugins.process-native`: `["node","scripts/test-process-plugin.mjs"]`
-- `plugins.process-owner`: `["cargo","test","-p","rho-process-owner","--lib","--locked"]`
-- `plugins.process-protocol`: `["node","plugins/process/generate-sdk.mjs","--check"]`
-- `plugins.process-public-types`: `["node","scripts/test-process-protocol.mjs"]`
-- `plugins.protocol`: `["cargo","test","-p","rho-plugin-protocol","--locked"]`
-- `plugins.public-types`: `["node","scripts/test-plugin-protocol.mjs"]`
-- `plugins.r-console`: `["node","scripts/test-r-console.mjs"]`
-- `plugins.r-engine`: `["cargo","test","-p","rho-r-engine","--locked"]`
-- `plugins.r-environment`: `["node","scripts/test-r-environment.mjs"]`
-- `plugins.r-format`: `["node","scripts/test-r-format.mjs"]`
-- `plugins.r-help`: `["node","scripts/test-r-help.mjs"]`
-- `plugins.r-independent`: `["node","scripts/test-r-plugin-engine.mjs"]`
-- `plugins.r-native`: `["node","scripts/test-r-plugin.mjs"]`
-- `plugins.r-objects`: `["node","scripts/test-r-objects-plugin.mjs"]`
-- `plugins.r-packages`: `["node","scripts/test-r-packages.mjs"]`
-- `plugins.r-plots`: `["node","scripts/test-r-plots.mjs"]`
-- `plugins.r-protocol`: `["node","plugins/r/generate-sdk.mjs","--check"]`
-- `plugins.r-public-recovery`: `["node","scripts/test-r-recovery.mjs"]`
-- `plugins.r-public-types`: `["node","scripts/test-r-protocol.mjs"]`
-- `plugins.r-recovery`: `["node","scripts/test-real-r.mjs","--plugin-recovery"]`
-- `plugins.r-viewer`: `["node","scripts/test-r-viewer.mjs"]`
-- `plugins.remote-backend`: `["cargo","test","-p","rho-remote-backend","--lib","--locked"]`
-- `plugins.remote-independent`: `["node","scripts/test-remote-plugin-owner.mjs"]`
-- `plugins.remote-manifest`: `["node","plugins/remote/generate-manifest.mjs","--check"]`
-- `plugins.remote-native`: `["node","scripts/test-remote-plugin.mjs"]`
-- `plugins.remote-owner`: `["cargo","test","-p","rho-remote-api","-p","rho-remote-owner","--lib","--locked"]`
-- `plugins.remote-protocol`: `["node","plugins/remote/generate-sdk.mjs","--check"]`
-- `plugins.remote-public-types`: `["node","scripts/test-remote-plugin-types.mjs"]`
-- `plugins.remote-visibility`: `["cargo","test","-p","rho-execution","slurm","--locked"]`
-- `plugins.repository`: `["cargo","test","-p","rho-plugins","--locked"]`
-- `plugins.resource-download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts","plugin-archive-download.spec.ts"]`
-- `plugins.scenario-ports`: `["cargo","test","-p","rho-host","--test","plugin_scenarios","--locked"]`
-- `plugins.self-requirements`: `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"]`
-- `plugins.studio-browser`: `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts","studio-backend-test.spec.ts","studio-scenario.spec.ts","studio-archive.spec.ts"]`
-- `plugins.studio-model`: `["node","scripts/test-studio-plugin.mjs"]`
-- `plugins.test-project-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-test-project.spec.ts"]`
-- `plugins.test-project-edges`: `["cargo","test","-p","rho-workbench","--lib","plugin_test_","--locked"]`
-- `plugins.test-project-host`: `["cargo","test","-p","rho-host","--test","plugin_test_projects","--locked"]`
-- `plugins.test-project-owner`: `["cargo","test","-p","rho-plugins","--test","test_projects","--locked"]`
-- `plugins.test-project-session`: `["cargo","test","-p","rho-cli","--test","session_test_project","--locked"]`
-- `plugins.ui-sdk`: `["node","scripts/test-plugin-ui.mjs"]`
-- `plugins.view-delegation`: `["cargo","test","-p","rho-host","--test","plugin_view_delegation","--locked"]`
-- `plugins.viewer`: `["node","scripts/test-viewer-plugin.mjs"]`
-- `plugins.window-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-workspace.spec.ts"]`
-- `plugins.workspace-cli`: `["cargo","test","-p","rho-cli","--bin","rho","plugin_workspace","--locked"]`
-- `plugins.workspace-host`: `["cargo","test","-p","rho-host","--test","plugin_workspace","--locked"]`
-- `plugins.workspace-http`: `["cargo","test","-p","rho-workbench","--lib","plugin_workspace","--locked"]`
-- `system.architecture`: `["node","scripts/check-architecture.mjs"]`
-- `system.client`: `["node","scripts/client.mjs","check"]`
-- `system.project-coverage`: `["cargo","test","-p","rho-sqlite","-p","rho-operation","-p","rho-plugins","--lib","project_coverage","--locked"]`
+- `docs.index` (L0): `["node","scripts/governance.mjs","check"]`
+  Applies to: `AGENTS.md`, `README.md`, `docs/**`, `governance/**`, `scripts/governance.mjs`.
+- `plugins.agent-adapter` (L1): `["cargo","test","-p","rho-agents","--lib","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/agents/**`, `crates/application/**`, `crates/contract/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/engine/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-backend` (L1): `["cargo","test","-p","rho-agent-backend","--test","metadata","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/api/**`, `plugins/agent/backend/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-component-boundary` (L1): `["cargo","test","-p","rho-application","--lib","component_boundary","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/application/**`, `crates/contract/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-core-tools` (L2): `["node","scripts/test-agent-core-tools.mjs","--build"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/host/**`, `crates/operation/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-core-tools.mjs`, `sdk/**`.
+- `plugins.agent-engine` (L1): `["cargo","test","-p","rho-agent-engine","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/engine/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-engine-independent` (L2): `["node","scripts/test-agent-plugin-engine.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-engine.mjs`, `sdk/**`.
+- `plugins.agent-handoff` (L1): `["cargo","test","-p","rho-agent-owner","-p","rho-application","--lib","handoff","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/application/**`, `crates/contract/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-handoff-store` (L1): `["cargo","test","-p","rho-sqlite","--test","agent_handoffs","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/adapters/sqlite/**`, `crates/contract/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-host` (L2): `["node","scripts/test-agent-plugin.mjs","--build"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/host/**`, `crates/operation/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin.mjs`, `sdk/**`.
+- `plugins.agent-independent` (L2): `["node","scripts/test-agent-plugin-client.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-client.mjs`, `sdk/**`.
+- `plugins.agent-manifest` (L1): `["node","plugins/agent/generate-manifest.mjs","--check"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/src/arguments.rs`, `plugins/agent/backend/src/bin/export-agent-manifest.rs`, `plugins/agent/backend/src/manifest.rs`, `plugins/agent/backend/src/native_arguments.rs`, `plugins/agent/backend/src/native_core_grants.rs`, `plugins/agent/backend/src/native_grants.rs`, `plugins/agent/generate-manifest.mjs`, `plugins/agent/plugin.json`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-model-host` (L2): `["cargo","test","-p","rho-host","--test","component_agents","--test","component_recovery","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `sdk/**`.
+- `plugins.agent-native` (L1): `["cargo","test","-p","rho-agent-client","--lib","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/client/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-native-real-r` (L2): `["node","scripts/test-agent-plugin-real-r.mjs","--build"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/host/**`, `crates/operation/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-real-r.mjs`, `sdk/**`.
+- `plugins.agent-native-runtime` (L1): `["cargo","test","-p","rho-agent-native","--lib","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/client/**`, `plugins/agent/backend/native/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-native-runtime-host` (L1): `["cargo","test","-p","rho-host","--lib","agent_tasks","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/application/**`, `crates/contract/**`, `crates/host/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/client/**`, `plugins/agent/backend/native/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-native-runtime-independent` (L2): `["node","scripts/test-agent-plugin-native.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-native.mjs`, `sdk/**`.
+- `plugins.agent-owner` (L1): `["cargo","test","-p","rho-agent-owner","--lib","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-owner-independent` (L2): `["node","scripts/test-agent-plugin-owner.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-owner.mjs`, `sdk/**`.
+- `plugins.agent-protocol` (L1): `["node","plugins/agent/generate-sdk.mjs","--check"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/generate-sdk.mjs`, `plugins/agent/sdk/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-real-r` (L2): `["node","scripts/test-real-r.mjs","--agent"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `scripts/test-real-r.mjs`, `sdk/**`.
+- `plugins.agent-request` (L1): `["cargo","test","-p","rho-contract","--lib","public_agent_request","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/contract/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-store` (L1): `["cargo","test","-p","rho-agent-store","--lib","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/owner/**`, `plugins/agent/backend/store/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-store-independent` (L2): `["node","scripts/test-agent-plugin-store.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-store.mjs`, `sdk/**`.
+- `plugins.agent-tool-grants` (L1): `["node","scripts/test-agent-tool-grants.mjs"]`
+  Applies to: `plugins/*/plugin.json`, `plugins/agent/backend/src/native_core_grants.rs`, `plugins/agent/backend/src/native_grants.rs`, `scripts/test-agent-tool-grants.mjs`.
+- `plugins.agent-types` (L1): `["node","scripts/test-agent-plugin-types.mjs"]`
+  Applies to: `plugins/agent/sdk/**`, `scripts/test-agent-plugin-types.mjs`, `sdk/plugin-protocol/**`.
+- `plugins.archive-owner` (L1): `["cargo","test","-p","rho-plugins","--test","archive_transfers","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.archive-ports` (L2): `["cargo","test","-p","rho-host","--test","plugin_archives","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.backend-sdk` (L1): `["cargo","test","-p","rho-plugin-sdk","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`.
+- `plugins.boundaries` (L0): `["node","scripts/check-plugin-boundaries.mjs"]`
+  Applies to: `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/**`, `scripts/check-plugin-boundaries.mjs`.
+- `plugins.boundary-tests` (L0): `["node","scripts/check-plugin-boundaries.mjs","--self-test"]`
+  Applies to: `scripts/check-plugin-boundaries.mjs`.
+- `plugins.build-owner` (L1): `["cargo","test","-p","rho-plugins","--test","build_operations","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.console` (L2): `["node","scripts/test-console-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/console/**`, `rust-toolchain.toml`, `scripts/build-console-plugin.mjs`, `scripts/test-console-plugin.mjs`, `sdk/**`.
+- `plugins.console-editor` (L2): `["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/console/**`, `rust-toolchain.toml`, `scripts/build-console-plugin.mjs`, `sdk/**`, `ui/e2e/console-editor.spec.ts`.
+- `plugins.delegated-operation` (L2): `["cargo","test","-p","rho-host","--test","plugin_delegated_operations","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.development-host` (L2): `["cargo","test","-p","rho-host","--test","plugin_development","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.development-owner` (L1): `["cargo","test","-p","rho-plugins","--test","source_development","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.download-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-download.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/e2e/plugin-download.spec.ts`, `ui/src/**`.
+- `plugins.draft-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-drafts.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/e2e/plugin-drafts.spec.ts`, `ui/src/**`.
+- `plugins.draft-ports` (L2): `["cargo","test","-p","rho-host","--test","plugin_drafts","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.drafts` (L1): `["cargo","test","-p","rho-plugins","-p","rho-plugin-protocol","--lib","draft","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.editor-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","editor-plugin.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/editor/**`, `rust-toolchain.toml`, `scripts/build-editor-plugin.mjs`, `sdk/**`, `ui/e2e/editor-plugin.spec.ts`.
+- `plugins.editor-code-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","editor-code.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/editor/**`, `rust-toolchain.toml`, `scripts/build-editor-plugin.mjs`, `sdk/**`, `ui/e2e/editor-code.spec.ts`.
+- `plugins.editor-context` (L1): `["cargo","test","-p","rho-editor-backend","--lib","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/editor/**`, `rust-toolchain.toml`, `scripts/build-editor-plugin.mjs`, `sdk/**`.
+- `plugins.editor-context-manifest` (L1): `["node","scripts/generate-editor-context.mjs","--check"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/editor/**`, `rust-toolchain.toml`, `scripts/build-editor-plugin.mjs`, `scripts/generate-editor-context.mjs`, `sdk/**`.
+- `plugins.editor-model` (L2): `["node","scripts/test-editor-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/editor/**`, `rust-toolchain.toml`, `scripts/build-editor-plugin.mjs`, `scripts/test-editor-plugin.mjs`, `sdk/**`.
+- `plugins.environment-backend` (L1): `["cargo","test","-p","rho-environment-backend","--lib","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `sdk/**`.
+- `plugins.environment-checkpoint-references` (L2): `["node","scripts/test-environment-plugin.mjs","--checkpoint-references"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `scripts/test-environment-plugin.mjs`, `sdk/**`.
+- `plugins.environment-independent` (L2): `["node","scripts/test-environment-plugin-owner.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `scripts/test-environment-plugin-owner.mjs`, `sdk/**`.
+- `plugins.environment-manifest` (L1): `["node","plugins/environment/generate-manifest.mjs","--check"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `plugins/environment/generate-manifest.mjs`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `sdk/**`.
+- `plugins.environment-native` (L2): `["node","scripts/test-environment-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `scripts/test-environment-plugin.mjs`, `sdk/**`.
+- `plugins.environment-owner` (L1): `["cargo","test","-p","rho-environment-api","-p","rho-environment-owner","--lib","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `sdk/**`.
+- `plugins.environment-protocol` (L1): `["node","plugins/environment/generate-sdk.mjs","--check"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `plugins/environment/generate-sdk.mjs`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `sdk/**`.
+- `plugins.environment-r-references` (L2): `["node","scripts/test-environment-plugin.mjs","--r-references"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `scripts/test-environment-plugin.mjs`, `sdk/**`.
+- `plugins.environment-types` (L1): `["node","scripts/test-environment-plugin-types.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `scripts/test-environment-plugin-types.mjs`, `sdk/**`.
+- `plugins.environment-visibility` (L1): `["cargo","test","-p","rho-environment","visibility","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/environment/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `sdk/**`.
+- `plugins.external-backend` (L2): `["node","scripts/test-plugin-backend.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `scripts/test-plugin-backend.mjs`, `sdk/**`, `ui/src/**`.
+- `plugins.files-backend` (L1): `["cargo","test","-p","rho-files-backend","--lib","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/files/**`, `rust-toolchain.toml`, `scripts/build-files-plugin.mjs`, `sdk/**`.
+- `plugins.files-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","files-plugin.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/files/**`, `rust-toolchain.toml`, `scripts/build-files-plugin.mjs`, `sdk/**`, `ui/e2e/files-plugin.spec.ts`.
+- `plugins.files-engine` (L1): `["cargo","test","-p","rho-files-engine","-p","rho-files-owner","-p","rho-process-engine","--lib","--tests","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/process-engine/**`, `plugins/files/**`, `rust-toolchain.toml`, `scripts/build-files-plugin.mjs`, `sdk/**`.
+- `plugins.files-independent` (L2): `["node","scripts/test-files-plugin-engine.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/files/**`, `rust-toolchain.toml`, `scripts/build-files-plugin.mjs`, `scripts/test-files-plugin-engine.mjs`, `sdk/**`.
+- `plugins.files-manifest` (L1): `["node","plugins/files/generate-manifest.mjs","--check"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/files/**`, `plugins/files/generate-manifest.mjs`, `rust-toolchain.toml`, `scripts/build-files-plugin.mjs`, `sdk/**`.
+- `plugins.files-native` (L2): `["node","scripts/test-files-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/files/**`, `rust-toolchain.toml`, `scripts/build-files-plugin.mjs`, `scripts/test-files-plugin.mjs`, `sdk/**`.
+- `plugins.files-protocol` (L1): `["node","plugins/files/generate-sdk.mjs","--check"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/files/**`, `plugins/files/generate-sdk.mjs`, `rust-toolchain.toml`, `scripts/build-files-plugin.mjs`, `sdk/**`.
+- `plugins.files-public-types` (L1): `["node","scripts/test-files-protocol.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/files/**`, `rust-toolchain.toml`, `scripts/build-files-plugin.mjs`, `scripts/test-files-protocol.mjs`, `sdk/**`.
+- `plugins.files-ui` (L2): `["node","scripts/test-files-ui.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/files/**`, `rust-toolchain.toml`, `scripts/build-files-plugin.mjs`, `scripts/test-files-ui.mjs`, `sdk/**`.
+- `plugins.help` (L2): `["node","scripts/test-help-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/help/**`, `rust-toolchain.toml`, `scripts/build-help-plugin.mjs`, `scripts/test-help-plugin.mjs`, `sdk/**`.
+- `plugins.help-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","help-plugin.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/help/**`, `rust-toolchain.toml`, `scripts/build-help-plugin.mjs`, `sdk/**`, `ui/e2e/help-plugin.spec.ts`.
+- `plugins.manager-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","manager-plugin.spec.ts","manager-archive.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/manager/**`, `rust-toolchain.toml`, `scripts/build-manager-plugin.mjs`, `sdk/**`, `ui/e2e/manager-archive.spec.ts`, `ui/e2e/manager-plugin.spec.ts`.
+- `plugins.manager-model` (L2): `["node","scripts/test-manager-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/manager/**`, `rust-toolchain.toml`, `scripts/build-manager-plugin.mjs`, `scripts/test-manager-plugin.mjs`, `sdk/**`.
+- `plugins.objects` (L2): `["node","scripts/test-objects-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/objects/**`, `rust-toolchain.toml`, `scripts/build-objects-plugin.mjs`, `scripts/test-objects-plugin.mjs`, `sdk/**`.
+- `plugins.objects-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","objects-plugin.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/objects/**`, `rust-toolchain.toml`, `scripts/build-objects-plugin.mjs`, `sdk/**`, `ui/e2e/objects-plugin.spec.ts`.
+- `plugins.packages` (L2): `["node","scripts/test-packages-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/packages/**`, `rust-toolchain.toml`, `scripts/build-packages-plugin.mjs`, `scripts/test-packages-plugin.mjs`, `sdk/**`.
+- `plugins.packages-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","packages-plugin.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/packages/**`, `rust-toolchain.toml`, `scripts/build-packages-plugin.mjs`, `sdk/**`, `ui/e2e/packages-plugin.spec.ts`.
+- `plugins.plots` (L2): `["node","scripts/test-plots-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/plots/**`, `rust-toolchain.toml`, `scripts/build-plots-plugin.mjs`, `scripts/test-plots-plugin.mjs`, `sdk/**`.
+- `plugins.plots-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plots-plugin.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/plots/**`, `rust-toolchain.toml`, `scripts/build-plots-plugin.mjs`, `sdk/**`, `ui/e2e/plots-plugin.spec.ts`.
+- `plugins.preview-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-preview.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/e2e/plugin-preview.spec.ts`, `ui/src/**`.
+- `plugins.preview-host` (L2): `["cargo","test","-p","rho-host","--test","plugin_preview","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.process-backend` (L1): `["cargo","test","-p","rho-process-backend","--lib","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/process-engine/**`, `plugins/process/**`, `rust-toolchain.toml`, `scripts/build-process-plugin.mjs`, `sdk/**`.
+- `plugins.process-engine` (L1): `["cargo","test","-p","rho-process-engine","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/process-engine/**`, `plugins/process/**`, `rust-toolchain.toml`, `scripts/build-process-plugin.mjs`, `sdk/**`.
+- `plugins.process-independent` (L2): `["node","scripts/test-process-plugin-owner.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/process-engine/**`, `plugins/process/**`, `rust-toolchain.toml`, `scripts/build-process-plugin.mjs`, `scripts/test-process-plugin-owner.mjs`, `sdk/**`.
+- `plugins.process-manifest` (L1): `["node","plugins/process/generate-manifest.mjs","--check"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/process-engine/**`, `plugins/process/**`, `plugins/process/generate-manifest.mjs`, `rust-toolchain.toml`, `scripts/build-process-plugin.mjs`, `sdk/**`.
+- `plugins.process-native` (L2): `["node","scripts/test-process-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/process-engine/**`, `plugins/process/**`, `rust-toolchain.toml`, `scripts/build-process-plugin.mjs`, `scripts/test-process-plugin.mjs`, `sdk/**`.
+- `plugins.process-owner` (L1): `["cargo","test","-p","rho-process-owner","--lib","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/process-engine/**`, `plugins/process/**`, `rust-toolchain.toml`, `scripts/build-process-plugin.mjs`, `sdk/**`.
+- `plugins.process-protocol` (L1): `["node","plugins/process/generate-sdk.mjs","--check"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/process-engine/**`, `plugins/process/**`, `plugins/process/generate-sdk.mjs`, `rust-toolchain.toml`, `scripts/build-process-plugin.mjs`, `sdk/**`.
+- `plugins.process-public-types` (L1): `["node","scripts/test-process-protocol.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/process-engine/**`, `plugins/process/**`, `rust-toolchain.toml`, `scripts/build-process-plugin.mjs`, `scripts/test-process-protocol.mjs`, `sdk/**`.
+- `plugins.protocol` (L1): `["cargo","test","-p","rho-plugin-protocol","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`.
+- `plugins.public-types` (L1): `["node","scripts/test-plugin-protocol.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `scripts/test-plugin-protocol.mjs`, `sdk/**`, `ui/src/**`.
+- `plugins.r-console` (L2): `["node","scripts/test-r-console.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/console/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-console-plugin.mjs`, `scripts/build-r-plugin.mjs`, `scripts/test-r-console.mjs`, `sdk/**`.
+- `plugins.r-engine` (L1): `["cargo","test","-p","rho-r-engine","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-r-plugin.mjs`, `sdk/**`.
+- `plugins.r-environment` (L2): `["node","scripts/test-r-environment.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `scripts/build-r-plugin.mjs`, `scripts/test-r-environment.mjs`, `sdk/**`.
+- `plugins.r-format` (L2): `["node","scripts/test-r-format.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-r-plugin.mjs`, `scripts/test-r-format.mjs`, `sdk/**`.
+- `plugins.r-help` (L2): `["node","scripts/test-r-help.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/help/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-help-plugin.mjs`, `scripts/build-r-plugin.mjs`, `scripts/test-r-help.mjs`, `sdk/**`.
+- `plugins.r-independent` (L2): `["node","scripts/test-r-plugin-engine.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-r-plugin.mjs`, `scripts/test-r-plugin-engine.mjs`, `sdk/**`.
+- `plugins.r-native` (L2): `["node","scripts/test-r-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-r-plugin.mjs`, `scripts/test-r-plugin.mjs`, `sdk/**`.
+- `plugins.r-objects` (L2): `["node","scripts/test-r-objects-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/objects/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-objects-plugin.mjs`, `scripts/build-r-plugin.mjs`, `scripts/test-r-objects-plugin.mjs`, `sdk/**`.
+- `plugins.r-packages` (L2): `["node","scripts/test-r-packages.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/packages/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-packages-plugin.mjs`, `scripts/build-r-plugin.mjs`, `scripts/test-r-packages.mjs`, `sdk/**`.
+- `plugins.r-plots` (L2): `["node","scripts/test-r-plots.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/plots/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-plots-plugin.mjs`, `scripts/build-r-plugin.mjs`, `scripts/test-r-plots.mjs`, `sdk/**`.
+- `plugins.r-protocol` (L1): `["node","plugins/r/generate-sdk.mjs","--check"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/r/**`, `plugins/r/generate-sdk.mjs`, `rust-toolchain.toml`, `scripts/build-r-plugin.mjs`, `sdk/**`.
+- `plugins.r-public-recovery` (L2): `["node","scripts/test-r-recovery.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-r-plugin.mjs`, `scripts/test-r-recovery.mjs`, `sdk/**`.
+- `plugins.r-public-types` (L1): `["node","scripts/test-r-protocol.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-r-plugin.mjs`, `scripts/test-r-protocol.mjs`, `sdk/**`.
+- `plugins.r-recovery` (L2): `["node","scripts/test-real-r.mjs","--plugin-recovery"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-r-plugin.mjs`, `scripts/test-real-r.mjs`, `sdk/**`.
+- `plugins.r-viewer` (L2): `["node","scripts/test-r-viewer.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/r/**`, `plugins/viewer/**`, `rust-toolchain.toml`, `scripts/build-r-plugin.mjs`, `scripts/build-viewer-plugin.mjs`, `scripts/test-r-viewer.mjs`, `sdk/**`.
+- `plugins.remote-backend` (L1): `["cargo","test","-p","rho-remote-backend","--lib","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/remote/**`, `rust-toolchain.toml`, `scripts/build-remote-plugin.mjs`, `sdk/**`.
+- `plugins.remote-independent` (L2): `["node","scripts/test-remote-plugin-owner.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/remote/**`, `rust-toolchain.toml`, `scripts/build-remote-plugin.mjs`, `scripts/test-remote-plugin-owner.mjs`, `sdk/**`.
+- `plugins.remote-manifest` (L1): `["node","plugins/remote/generate-manifest.mjs","--check"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/remote/**`, `plugins/remote/generate-manifest.mjs`, `rust-toolchain.toml`, `scripts/build-remote-plugin.mjs`, `sdk/**`.
+- `plugins.remote-native` (L2): `["node","scripts/test-remote-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/remote/**`, `rust-toolchain.toml`, `scripts/build-remote-plugin.mjs`, `scripts/test-remote-plugin.mjs`, `sdk/**`.
+- `plugins.remote-owner` (L1): `["cargo","test","-p","rho-remote-api","-p","rho-remote-owner","--lib","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/remote/**`, `rust-toolchain.toml`, `scripts/build-remote-plugin.mjs`, `sdk/**`.
+- `plugins.remote-protocol` (L1): `["node","plugins/remote/generate-sdk.mjs","--check"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/remote/**`, `plugins/remote/generate-sdk.mjs`, `rust-toolchain.toml`, `scripts/build-remote-plugin.mjs`, `sdk/**`.
+- `plugins.remote-public-types` (L1): `["node","scripts/test-remote-plugin-types.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/remote/**`, `rust-toolchain.toml`, `scripts/build-remote-plugin.mjs`, `scripts/test-remote-plugin-types.mjs`, `sdk/**`.
+- `plugins.remote-visibility` (L1): `["cargo","test","-p","rho-execution","slurm","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/execution/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/remote/**`, `rust-toolchain.toml`, `scripts/build-remote-plugin.mjs`, `sdk/**`.
+- `plugins.repository` (L1): `["cargo","test","-p","rho-plugins","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `rust-toolchain.toml`, `sdk/**`.
+- `plugins.resource-download-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts","plugin-archive-download.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/e2e/plugin-archive-download.spec.ts`, `ui/e2e/plugin-resource-download.spec.ts`, `ui/src/**`.
+- `plugins.scenario-ports` (L2): `["cargo","test","-p","rho-host","--test","plugin_scenarios","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.self-requirements` (L2): `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.studio-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts","studio-backend-test.spec.ts","studio-scenario.spec.ts","studio-archive.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/studio/**`, `rust-toolchain.toml`, `scripts/build-studio-plugin.mjs`, `sdk/**`, `ui/e2e/studio-archive.spec.ts`, `ui/e2e/studio-backend-test.spec.ts`, `ui/e2e/studio-plugin.spec.ts`, `ui/e2e/studio-scenario.spec.ts`.
+- `plugins.studio-model` (L2): `["node","scripts/test-studio-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/studio/**`, `rust-toolchain.toml`, `scripts/build-studio-plugin.mjs`, `scripts/test-studio-plugin.mjs`, `sdk/**`.
+- `plugins.test-project-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-test-project.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/e2e/plugin-test-project.spec.ts`, `ui/src/**`.
+- `plugins.test-project-edges` (L1): `["cargo","test","-p","rho-workbench","--lib","plugin_test_","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.test-project-host` (L2): `["cargo","test","-p","rho-host","--test","plugin_test_projects","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.test-project-owner` (L1): `["cargo","test","-p","rho-plugins","--test","test_projects","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.test-project-session` (L2): `["cargo","test","-p","rho-cli","--test","session_test_project","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.ui-sdk` (L1): `["node","scripts/test-plugin-ui.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `scripts/test-plugin-ui.mjs`, `sdk/**`, `ui/src/**`.
+- `plugins.view-delegation` (L2): `["cargo","test","-p","rho-host","--test","plugin_view_delegation","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.viewer` (L2): `["node","scripts/test-viewer-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/viewer/**`, `rust-toolchain.toml`, `scripts/build-viewer-plugin.mjs`, `scripts/test-viewer-plugin.mjs`, `sdk/**`.
+- `plugins.window-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-workspace.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/e2e/plugin-workspace.spec.ts`, `ui/src/**`.
+- `plugins.workspace-cli` (L1): `["cargo","test","-p","rho-cli","--bin","rho","plugin_workspace","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.workspace-host` (L2): `["cargo","test","-p","rho-host","--test","plugin_workspace","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.workspace-http` (L1): `["cargo","test","-p","rho-workbench","--lib","plugin_workspace","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `system.architecture` (L0): `["node","scripts/check-architecture.mjs"]`
+  Applies to: `Cargo.toml`, `crates/**`, `plugins/**`, `r/**`, `scripts/check-architecture.mjs`, `ui/src/**`.
+- `system.client` (L1): `["node","scripts/client.mjs","check"]`
+  Applies to: `crates/contract/**`, `scripts/client.mjs`, `ui/**`.
+- `system.project-coverage` (L1): `["cargo","test","-p","rho-sqlite","-p","rho-operation","-p","rho-plugins","--lib","project_coverage","--locked"]`
+  Applies to: `crates/adapters/sqlite/**`, `crates/operation/**`, `crates/plugins/**`.
 
 ## `studio`
 
@@ -369,18 +512,30 @@ Sources:
 
 Checks:
 
-- `docs.index`: `["node","scripts/governance.mjs","check"]`
-- `docs.tool`: `["node","scripts/test-governance.mjs"]`
-- `studio.boundaries`: `["node","scripts/check-frontend-boundaries.mjs"]`
-- `studio.boundary-tests`: `["node","scripts/test-frontend-boundaries.mjs"]`
-- `studio.browser`: `["npm","run","test:browser","--prefix","ui"]`
-- `studio.types`: `["npm","run","typecheck","--prefix","ui"]`
-- `studio.unit`: `["npm","run","test","--prefix","ui"]`
-- `system.client`: `["node","scripts/client.mjs","check"]`
-- `system.mcp`: `["node","scripts/test-mcp.mjs"]`
-- `system.mcp-real-r`: `["node","scripts/test-mcp.mjs","--real-r"]`
-- `system.workbench`: `["node","scripts/test-workbench.mjs"]`
-- `system.workbench-real-r`: `["node","scripts/test-workbench.mjs","--real-r"]`
+- `docs.index` (L0): `["node","scripts/governance.mjs","check"]`
+  Applies to: `AGENTS.md`, `README.md`, `docs/**`, `governance/**`, `scripts/governance.mjs`.
+- `docs.tool` (L0): `["node","scripts/test-governance.mjs"]`
+  Applies to: `governance/**`, `scripts/governance.mjs`, `scripts/test-governance.mjs`.
+- `studio.boundaries` (L0): `["node","scripts/check-frontend-boundaries.mjs"]`
+  Applies to: `crates/contract/**`, `scripts/check-frontend-boundaries.mjs`, `sdk/**`, `ui/**`.
+- `studio.boundary-tests` (L0): `["node","scripts/test-frontend-boundaries.mjs"]`
+  Applies to: `crates/contract/**`, `scripts/test-frontend-boundaries.mjs`, `sdk/**`, `ui/**`.
+- `studio.browser` (L2): `["npm","run","test:browser","--prefix","ui"]`
+  Applies to: `crates/contract/**`, `sdk/**`, `ui/**`.
+- `studio.types` (L1): `["npm","run","typecheck","--prefix","ui"]`
+  Applies to: `crates/contract/**`, `sdk/**`, `ui/**`.
+- `studio.unit` (L1): `["npm","run","test","--prefix","ui"]`
+  Applies to: `crates/contract/**`, `sdk/**`, `ui/**`.
+- `system.client` (L1): `["node","scripts/client.mjs","check"]`
+  Applies to: `crates/contract/**`, `scripts/client.mjs`, `ui/**`.
+- `system.mcp` (L2): `["node","scripts/test-mcp.mjs"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-mcp.mjs`.
+- `system.mcp-real-r` (L2): `["node","scripts/test-mcp.mjs","--real-r"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-mcp.mjs`.
+- `system.workbench` (L2): `["node","scripts/test-workbench.mjs"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-workbench.mjs`.
+- `system.workbench-real-r` (L2): `["node","scripts/test-workbench.mjs","--real-r"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-workbench.mjs`.
 
 ## `system`
 
@@ -416,26 +571,49 @@ Sources:
 
 Checks:
 
-- `docs.index`: `["node","scripts/governance.mjs","check"]`
-- `docs.tool`: `["node","scripts/test-governance.mjs"]`
-- `system.agent-harness`: `["node","scripts/test-agent-interface.mjs","--self-test"]`
-- `system.agent-tasks`: `["node","scripts/test-agent-task-recovery.mjs"]`
-- `system.architecture`: `["node","scripts/check-architecture.mjs"]`
-- `system.architecture-tests`: `["node","scripts/test-architecture.mjs"]`
-- `system.client`: `["node","scripts/client.mjs","check"]`
-- `system.component-agents`: `["node","scripts/test-component-agents.mjs"]`
-- `system.environment`: `["node","scripts/test-environment.mjs"]`
-- `system.evidence-pack`: `["python3","scripts/test-pack-agent-evidence.py"]`
-- `system.mcp`: `["node","scripts/test-mcp.mjs"]`
-- `system.mcp-real-r`: `["node","scripts/test-mcp.mjs","--real-r"]`
-- `system.output-media`: `["node","scripts/test-output-media.mjs"]`
-- `system.process-recovery`: `["node","scripts/test-process-recovery.mjs"]`
-- `system.project-coverage`: `["cargo","test","-p","rho-sqlite","-p","rho-operation","-p","rho-plugins","--lib","project_coverage","--locked"]`
-- `system.r-checkpoints`: `["node","scripts/test-r-checkpoints.mjs"]`
-- `system.real-r`: `["node","scripts/test-real-r.mjs"]`
-- `system.remote-protocol`: `["node","scripts/test-remote-protocol.mjs"]`
-- `system.rust`: `["cargo","test","--workspace","--locked","--","--test-threads=1"]`
-- `system.vendor`: `["node","scripts/vendor-jet.mjs","check"]`
-- `system.vendor-tests`: `["node","scripts/test-vendor-jet.mjs"]`
-- `system.workbench`: `["node","scripts/test-workbench.mjs"]`
-- `system.workbench-real-r`: `["node","scripts/test-workbench.mjs","--real-r"]`
+- `docs.index` (L0): `["node","scripts/governance.mjs","check"]`
+  Applies to: `AGENTS.md`, `README.md`, `docs/**`, `governance/**`, `scripts/governance.mjs`.
+- `docs.tool` (L0): `["node","scripts/test-governance.mjs"]`
+  Applies to: `governance/**`, `scripts/governance.mjs`, `scripts/test-governance.mjs`.
+- `system.agent-harness` (L1): `["node","scripts/test-agent-interface.mjs","--self-test"]`
+  Applies to: `scripts/agent-interface/**`, `scripts/test-agent-interface.mjs`.
+- `system.agent-tasks` (L2): `["node","scripts/test-agent-task-recovery.mjs"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-agent-task-recovery.mjs`.
+- `system.architecture` (L0): `["node","scripts/check-architecture.mjs"]`
+  Applies to: `Cargo.toml`, `crates/**`, `plugins/**`, `r/**`, `scripts/check-architecture.mjs`, `ui/src/**`.
+- `system.architecture-tests` (L0): `["node","scripts/test-architecture.mjs"]`
+  Applies to: `scripts/check-architecture.mjs`, `scripts/test-architecture.mjs`.
+- `system.client` (L1): `["node","scripts/client.mjs","check"]`
+  Applies to: `crates/contract/**`, `scripts/client.mjs`, `ui/**`.
+- `system.component-agents` (L2): `["node","scripts/test-component-agents.mjs"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-component-agents.mjs`.
+- `system.environment` (L2): `["node","scripts/test-environment.mjs"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-environment.mjs`.
+- `system.evidence-pack` (L1): `["python3","scripts/test-pack-agent-evidence.py"]`
+  Applies to: `scripts/pack-agent-evidence.py`, `scripts/test-pack-agent-evidence.py`.
+- `system.mcp` (L2): `["node","scripts/test-mcp.mjs"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-mcp.mjs`.
+- `system.mcp-real-r` (L2): `["node","scripts/test-mcp.mjs","--real-r"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-mcp.mjs`.
+- `system.output-media` (L2): `["node","scripts/test-output-media.mjs"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-output-media.mjs`.
+- `system.process-recovery` (L2): `["node","scripts/test-process-recovery.mjs"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-process-recovery.mjs`.
+- `system.project-coverage` (L1): `["cargo","test","-p","rho-sqlite","-p","rho-operation","-p","rho-plugins","--lib","project_coverage","--locked"]`
+  Applies to: `crates/adapters/sqlite/**`, `crates/operation/**`, `crates/plugins/**`.
+- `system.r-checkpoints` (L2): `["node","scripts/test-r-checkpoints.mjs"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-r-checkpoints.mjs`.
+- `system.real-r` (L2): `["node","scripts/test-real-r.mjs"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-real-r.mjs`.
+- `system.remote-protocol` (L2): `["node","scripts/test-remote-protocol.mjs"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-remote-protocol.mjs`.
+- `system.rust` (L3): `["cargo","test","--workspace","--locked","--","--test-threads=1"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/**`, `plugins/**`, `rust-toolchain.toml`.
+- `system.vendor` (L0): `["node","scripts/vendor-jet.mjs","check"]`
+  Applies to: `patches/jet/**`, `scripts/vendor-jet.mjs`, `vendor/**`.
+- `system.vendor-tests` (L0): `["node","scripts/test-vendor-jet.mjs"]`
+  Applies to: `patches/jet/**`, `scripts/test-vendor-jet.mjs`, `scripts/vendor-jet.mjs`, `vendor/**`.
+- `system.workbench` (L2): `["node","scripts/test-workbench.mjs"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-workbench.mjs`.
+- `system.workbench-real-r` (L2): `["node","scripts/test-workbench.mjs","--real-r"]`
+  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-workbench.mjs`.

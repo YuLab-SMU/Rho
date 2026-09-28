@@ -5,18 +5,17 @@
 // `--skip-framed` reuses a framed result already covered by the current source.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {agentPluginBuildEnvironment, buildAgentPlugin} from './build-agent-plugin.mjs';
+import {agentPluginBuildEnvironment, prepareAgentAcceptance} from './build-agent-plugin.mjs';
+import {agentAcceptanceOptions, verifyAgentBuild} from './agent-plugin-artifact.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const argv = process.argv.slice(2);
-const evidenceIndex = argv.indexOf('--evidence');
-const evidence = evidenceIndex >= 0 ? path.resolve(argv[evidenceIndex + 1]) : null;
-const skipFramed = argv.includes('--skip-framed');
-const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-native-')));
+const options = agentAcceptanceOptions(process.argv.slice(2), {framed: true, evidence: true});
+const {evidence, skipFramed} = options;
+// Reject a stale reused package before starting Cargo or a Host harness.
+if (!options.build) verifyAgentBuild(options.packagePath);
 const env = {...process.env, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '2'};
 const digest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const record = {source: execFileSync('git', ['rev-parse', 'HEAD'], {cwd: root, encoding: 'utf8'}).trim(), stages: [], completed: false};
@@ -37,9 +36,8 @@ try {
   assert.ok(executable, 'Cargo did not identify the generic Host harness');
   const original = digest(executable);
   record.host_sha256 = original;
-  const source = process.env.RHO_AGENT_PLUGIN_PACKAGE
-    ? fs.realpathSync(process.env.RHO_AGENT_PLUGIN_PACKAGE)
-    : stage('independent-build', () => buildAgentPlugin(path.join(directory, 'package')));
+  const source = stage(options.build ? 'independent-build' : 'reuse-package', () => prepareAgentAcceptance(options));
+  record.package = source; save();
   assert.ok(!source.startsWith(root + path.sep), 'Use an independent package');
   const manifest = JSON.parse(fs.readFileSync(path.join(source, 'plugin.json'), 'utf8'));
   assert.ok(manifest.source.files.includes('backend/src/server.rs'));
@@ -56,4 +54,4 @@ try {
   assert.equal(digest(executable), original);
   record.completed = true; save();
   console.log(`Independent Agent package passed${skipFramed ? '' : ' its framed tests and'} the frozen generic Host cases. Host harness SHA256 ${original}`);
-} finally { fs.rmSync(directory, {recursive: true, force: true}); }
+} catch (error) { save(); throw error; }

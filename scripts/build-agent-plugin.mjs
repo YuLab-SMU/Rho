@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {agentSourceCopies, excludedAgentSource, agentBuildInputDigest, recordAgentBuild, verifyAgentBuild} from './agent-plugin-artifact.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Resolve in the checkout before entering a temporary independent package, where
 // rustup otherwise selects the user's unrelated default toolchain.
@@ -15,11 +17,12 @@ export function buildAgentPlugin(destination) {
   assert.ok(destination, 'Specify a new package directory outside the checkout');
   const output = path.join(fs.realpathSync(path.dirname(path.resolve(destination))), path.basename(destination));
   assert.ok(output !== root && !output.startsWith(root + path.sep), 'Use an independent source directory');
+  const inputs = agentBuildInputDigest();
   fs.mkdirSync(output);
-  for (const [from, to] of [['plugins/agent', '.'], ['crates/plugin-protocol', 'public/plugin-protocol'], ['crates/plugin-sdk', 'public/plugin-sdk'], ['plugins/r/api', 'public/r-api']]) {
+  for (const [from, to] of agentSourceCopies) {
     fs.cpSync(path.join(root, from), path.join(output, to), {recursive: true, filter: source => {
       assert.ok(!fs.lstatSync(source).isSymbolicLink(), 'Package source must not contain symlinks');
-      return !/[\\/](?:target|dist|node_modules|\.git)(?:[\\/]|$)/.test(source);
+      return !excludedAgentSource(source);
     }});
   }
   fs.copyFileSync(path.join(root, 'LICENSE'), path.join(output, 'LICENSE'));
@@ -47,7 +50,17 @@ export function buildAgentPlugin(destination) {
       assert.ok(dependency.path.startsWith(output + path.sep), `${pkg.name}: dependency leaves the independent package`);
   }
   execFileSync(process.execPath, [path.join(output, 'build.mjs')], {cwd: output, env, stdio: 'inherit'});
+  recordAgentBuild(output, inputs);
   return output;
+}
+export function prepareAgentAcceptance(options) {
+  if (!options.build) return verifyAgentBuild(options.packagePath);
+  // Keep the package and receipt across harness success/failure. Other acceptance
+  // stages reuse these exact bytes; their disposable project state stays separate.
+  const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-build-')));
+  const output = path.join(directory, 'package');
+  console.log(`Retained Agent package: ${output}`);
+  return buildAgentPlugin(output);
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url))
   console.log(`Independent Agent package: ${buildAgentPlugin(process.argv[2])}`);

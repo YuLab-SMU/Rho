@@ -77,7 +77,10 @@ The following loop applies to tasks that change the repository. Read-only questi
 and reviews do not require edits, builds, status updates, or commits.
 
 1. Inspect `git status` and the relevant source/tests. Preserve unrelated changes.
-2. Run `node scripts/governance.mjs impact --changed-auto` for mapped checks.
+2. Run `node scripts/governance.mjs impact --changed-auto` for scoped L0/L1
+   suggestions. Select the closest affected check; this is not a run-all list.
+   Use `--phase milestone` for L2 acceptance or `--phase audit` only when a full
+   audit is explicitly due. Deferred checks are not passes.
 3. Make a coherent change and iterate with the closest useful test. Follow the
    testing tiers and reporting rules in `docs/DEVELOPMENT.md` § Testing SOP; do not
    rerun the entire workspace for every small edit.
@@ -106,6 +109,15 @@ and reviews do not require edits, builds, status updates, or commits.
   runners tracked in `scripts/`, not as one-off files under `target/`. Incremental
   compilation does not limit `cargo test --workspace` to changed crates; that
   command still executes every workspace test target.
+- Iterate in the workspace with incremental builds. Independent packaging proves
+  the distribution boundary at a milestone; do not repeat it for each internal
+  module or commit. Agent acceptance requires explicit `--build` or `--package`;
+  reuse the retained package/receipt for subsequent stages. A stale receipt calls
+  for a new milestone build, not an automatic rebuild during iteration.
+- If a build or test waits before doing useful work, distinguish compilation,
+  executable startup and test-body time. Inspect the existing process/log once;
+  do not launch a second build, clear caches, or restart the Host to mask an
+  environment problem. Retain incomplete evidence and continue independent work.
 - A timed-out, ignored, skipped, or unavailable check is not a pass. Report the
   exact command and status separately, retain evidence, and do not hide a timeout
   behind a narrower rerun. An incomplete optional workspace audit does not block

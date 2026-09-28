@@ -89,15 +89,21 @@ The repository check `node scripts/test-agent-tool-grants.mjs` compares the
 published optional versions/scopes with all six public provider manifests and
 rejects accidental Control/Runtime grants. It does not execute those providers.
 Real R and provider quality require separate acceptance.
-`node scripts/test-agent-plugin.mjs` freezes the generic Host harness, builds one
+`node scripts/test-agent-plugin.mjs --build` freezes the generic Host harness, builds one
 external package and runs its framed cases, then exercises metadata, key Controls,
 diagnostics and ordinary model-task lifetime through the same native ports.
 This is the single combined milestone entry (`--evidence <file>` records stages and
 hashes; `--skip-framed` when a current framed result already covers the source).
-All projects, instance storage and keys are disposable.
+All projects, instance storage and keys are disposable. The external package and
+its adjacent `.build.json` receipt are retained. Subsequent acceptance uses
+`--package /absolute/retained/package` (or `RHO_AGENT_PLUGIN_PACKAGE`) instead of
+`--build`; the runner checks current source and artifact hashes before Cargo starts.
+With neither mode selected it exits without compiling. Reuse never silently
+rebuilds stale inputs and does not count as a passed test. During ordinary iteration
+use focused workspace Cargo tests; independent builds are a milestone check.
 
 `RHO_ARK=/absolute/existing/ark RHO_R_HOME=/absolute/existing/R/home node
-scripts/test-agent-plugin-real-r.mjs` freezes a generic plugin-only Host harness
+scripts/test-agent-plugin-real-r.mjs --build` freezes a generic plugin-only Host harness
 and builds both packages outside the checkout. It also freezes and reruns the
 ordinary metadata, key and model lifetime harness against that same Agent package.
 It runs separate disposable R counter fixtures through the loopback model and a

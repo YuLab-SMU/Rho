@@ -6,8 +6,13 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {buildAgentPlugin} from './build-agent-plugin.mjs';
+import {prepareAgentAcceptance} from './build-agent-plugin.mjs';
+import {agentAcceptanceOptions, verifyAgentBuild} from './agent-plugin-artifact.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const options = agentAcceptanceOptions(process.argv.slice(2));
+if (!options.build) verifyAgentBuild(options.packagePath);
+assert.ok(options.build || process.env.RHO_R_PLUGIN_PACKAGE,
+  'Reuse also requires RHO_R_PLUGIN_PACKAGE; use --build only when a new independent R package is due');
 assert.ok(process.env.RHO_ARK && process.env.RHO_R_HOME, 'Set RHO_ARK and RHO_R_HOME for disposable R acceptance');
 const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-science-')));
 const env = {...process.env, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '2'};
@@ -30,8 +35,10 @@ try {
     assert.ok(executable, `Cargo did not identify ${name}`);
     return {name, executable, original: digest(executable)};
   });
-  const agent = process.env.RHO_AGENT_PLUGIN_PACKAGE ? fs.realpathSync(process.env.RHO_AGENT_PLUGIN_PACKAGE) : buildAgentPlugin(path.join(directory,'agent'));
-  const r = process.env.RHO_R_PLUGIN_PACKAGE ? fs.realpathSync(process.env.RHO_R_PLUGIN_PACKAGE) : path.join(directory,'r');
+  const agent = prepareAgentAcceptance(options);
+  const r = process.env.RHO_R_PLUGIN_PACKAGE ? fs.realpathSync(process.env.RHO_R_PLUGIN_PACKAGE)
+    : path.join(fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-r-build-'))), 'r');
+  console.log(`Retained R package: ${r}`);
   if (!process.env.RHO_R_PLUGIN_PACKAGE) execFileSync(process.execPath,[path.join(root,'scripts/build-r-plugin.mjs'),r],{cwd:root,env,stdio:'inherit'});
   for (const {name, executable, original} of harnesses) {
     assert.equal(digest(executable),original);

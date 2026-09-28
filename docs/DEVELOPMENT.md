@@ -7,7 +7,8 @@ For Studio interaction work, also read [design principles](RHO-DESIGN.md) and
 ## Working loop
 
 1. Inspect `git status`, the relevant code and existing tests; preserve unrelated work.
-2. Run `node scripts/governance.mjs impact --changed-auto` for mapped areas and checks.
+2. Run `node scripts/governance.mjs impact --changed-auto` for scoped L0/L1
+   suggestions. Select the nearest useful check rather than running the list.
 3. Make a coherent change and iterate with the closest meaningful check.
 4. Once behavior settles, run affected checks, inspect the diff and record actual
    results. Compare a failing test with the pre-change baseline before attributing it.
@@ -42,6 +43,33 @@ Organize work as end-to-end user flows (the milestone table in
 - **Delete as you go.** When a milestone's flow passes, remove the fixed-composition
   path it replaces in the same milestone, or record the exact deletion condition
   in the Status table.
+
+The impact tool defaults to `--phase iteration` (L0/L1). It filters checks by
+their source scopes, so an Agent edit does not list unrelated plugin suites.
+`--phase milestone` adds affected L2 candidates; `--phase audit` also exposes L3.
+These are suggestions, never an automatic queue. A deferred check is not passed.
+New check registrations must declare a tier; use explicit `sources` where a
+documentation area covers more than one component. Check commands do not run as
+part of impact analysis.
+
+For Agent milestone acceptance, choose the build once and reuse its exact package:
+
+```sh
+node scripts/test-agent-plugin.mjs --build --evidence target/agent-acceptance.json
+# Use the external path printed above or recorded in the evidence file.
+node scripts/test-agent-core-tools.mjs --package /absolute/retained/package
+```
+
+`--build` retains the external package and adjacent `.build.json` receipt even if
+a later test stage fails. `--package` (or `RHO_AGENT_PLUGIN_PACKAGE`) verifies the
+current input-source digest and the entire retained package before starting Cargo.
+It never silently rebuilds a stale or modified package. Documentation outside the
+package does not invalidate it. This receipt proves artifact reuse, not that a
+test passed; subsequent tests still run. Use `--skip-framed` only with a passing
+framed result that covers the current source. Real-R reuse also requires
+`RHO_R_PLUGIN_PACKAGE`; a fresh R package is built only in explicit `--build` mode.
+Keep retained packages through milestone acceptance and remove them when their
+evidence is no longer needed. Older packages without receipts are not adopted.
 
 ### Status discipline
 
@@ -247,7 +275,7 @@ acceptance: `cargo test -p rho-agent-backend --test metadata native_tasks --lock
 uses an injected native factory and real package storage/loopback endpoints.
 It covers original Send retention, explicit Stop, next drafts, attachment input,
 reopen deduplication and refusal to forget unconfirmed native cleanup.
-`node scripts/test-agent-plugin.mjs` builds one independent assembly and repeats
+`node scripts/test-agent-plugin.mjs --build` builds one independent assembly and repeats
 all framed cases, then checks task metadata, attachment Control journal exclusion
 and instance separation through a generic Host compiled before that external
 package. The `native_foreign_takeover` framed
@@ -267,7 +295,7 @@ when either an activation grant or original caller scope is missing, and
 observation-only reopen. After manifest generation, run
 `node scripts/test-agent-tool-grants.mjs` to compare the exact optional versions
 and scopes against the public scientific-provider manifests. These framed tests do not
-establish actual R execution. `node scripts/test-agent-plugin-real-r.mjs` compiles
+establish actual R execution. `node scripts/test-agent-plugin-real-r.mjs --build` compiles
 generic Host harnesses before independently building the ordinary Agent/R packages.
 Its native ACP fixture runs only from an isolated PATH/home and calls the actual
 private MCP endpoint; the disposable R counter must execute once and retain its
@@ -365,7 +393,7 @@ binding parameters, actual loopback Rig tool calls, parent retention while stopp
 and read-only delegated-result recovery after disconnect. These use simulated
 native replies; they do not establish real scientific execution.
 With existing `RHO_ARK` and `RHO_R_HOME`, run
-`node scripts/test-agent-plugin-real-r.mjs` for two independently built packages in
+`node scripts/test-agent-plugin-real-r.mjs --build` for two independently built packages in
 a plugin-only Host. The frozen Host harness exercises real R effects, late results
 after model stop, original causation, no duplicate execution and retained native
 reports after package removal. All sessions, projects and model keys are disposable.
@@ -377,7 +405,7 @@ model-field override refusal, explicit optional grants, foreign project/version
 rejection, normalized result correlation and read-only tools without mutation
 observation grants. Run `node scripts/test-agent-tool-grants.mjs` after manifest
 generation to compare published scientific and management declarations.
-`node scripts/test-agent-core-tools.mjs` freezes the generic Host harness before
+`node scripts/test-agent-core-tools.mjs --build` freezes the generic Host harness before
 building an independent Agent package. Its isolated native ACP peer uses the real
 private MCP endpoint to read a chosen branch and checkpoint its source once,
 refuses another branch, observes identical retries, recovers the original journal
@@ -392,7 +420,7 @@ The same target covers ephemeral key Controls, original-key receipt reads,
 wrong-port/identity refusal, lost replies/reopen and combined capacity without
 fabricated Control settlement.
 `node plugins/agent/generate-manifest.mjs` updates its contributed schemas; use
-`--check` for freshness. `node scripts/test-agent-plugin.mjs` first builds the
+`--check` for freshness. `node scripts/test-agent-plugin.mjs --build` first builds the
 generic Host harness, then builds one external package, checks public dependency
 containment, repeats the framed fixtures and loads that same package without
 changing the Host harness. Its explicitly selected ignored cases check scopes, two
@@ -927,6 +955,13 @@ limit or an incomplete audit therefore does not block normal completion when the
 affected-module and cross-boundary checks have passed.
 
 ### Timeouts and reporting
+
+Treat a long idle compiler or a test stuck before its first output as a diagnostic
+event. Inspect its process state and existing log; distinguish compilation,
+executable startup, and test-body time before changing code. Do not start another
+build, clear Cargo caches, or restart a scientific Host to hide the delay. Preserve
+incomplete evidence, continue independent work, and resume only the affected stage
+with its retained artifact when appropriate.
 
 A test process that reaches its time budget is **incomplete**, not passed. Record the
 last completed target and retain its log. Do not turn an ignored, skipped,

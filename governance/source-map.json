@@ -1,835 +1,164 @@
 {
   "schema_version": 1,
   "checks": {
-    "plugins.agent-backend": {"command": ["cargo", "test", "-p", "rho-agent-backend", "--test", "metadata", "--locked"]},
-    "plugins.agent-manifest": {"command": ["node", "plugins/agent/generate-manifest.mjs", "--check"]},
-    "plugins.agent-tool-grants": {"command": ["node", "scripts/test-agent-tool-grants.mjs"]},
-    "plugins.agent-host": {"command": ["node", "scripts/test-agent-plugin.mjs"]},
-    "plugins.agent-core-tools": {"command": ["node", "scripts/test-agent-core-tools.mjs"]},
-    "plugins.agent-native-real-r": {"command": ["node", "scripts/test-agent-plugin-real-r.mjs"]},
-    "plugins.agent-store": {"command": ["cargo", "test", "-p", "rho-agent-store", "--lib", "--locked"]},
-    "plugins.agent-store-independent": {"command": ["node", "scripts/test-agent-plugin-store.mjs"]},
-    "plugins.agent-handoff": {"command": ["cargo", "test", "-p", "rho-agent-owner", "-p", "rho-application", "--lib", "handoff", "--locked"]},
-    "plugins.agent-handoff-store": {"command": ["cargo", "test", "-p", "rho-sqlite", "--test", "agent_handoffs", "--locked"]},
-    "plugins.agent-component-boundary": {"command": ["cargo", "test", "-p", "rho-application", "--lib", "component_boundary", "--locked"]},
-    "plugins.agent-engine": {"command": ["cargo", "test", "-p", "rho-agent-engine", "--locked"]},
-    "plugins.agent-engine-independent": {"command": ["node", "scripts/test-agent-plugin-engine.mjs"]},
-    "plugins.agent-adapter": {"command": ["cargo", "test", "-p", "rho-agents", "--lib", "--locked"]},
-    "plugins.agent-model-host": {"command": ["cargo", "test", "-p", "rho-host", "--test", "component_agents", "--test", "component_recovery", "--locked"]},
-    "plugins.agent-real-r": {"command": ["node", "scripts/test-real-r.mjs", "--agent"]},
-    "plugins.agent-owner": {"command": ["cargo", "test", "-p", "rho-agent-owner", "--lib", "--locked"]},
-    "plugins.agent-owner-independent": {"command": ["node", "scripts/test-agent-plugin-owner.mjs"]},
-    "plugins.agent-request": {"command": ["cargo", "test", "-p", "rho-contract", "--lib", "public_agent_request", "--locked"]},
-    "plugins.agent-types": {"command": ["node", "scripts/test-agent-plugin-types.mjs"]},
-    "plugins.agent-native-runtime": {"command": ["cargo", "test", "-p", "rho-agent-native", "--lib", "--locked"]},
-    "plugins.agent-native-runtime-host": {"command": ["cargo", "test", "-p", "rho-host", "--lib", "agent_tasks", "--locked"]},
-    "plugins.agent-native-runtime-independent": {"command": ["node", "scripts/test-agent-plugin-native.mjs"]},
-    "plugins.agent-native": {"command": ["cargo", "test", "-p", "rho-agent-client", "--lib", "--locked"]},
-    "plugins.agent-independent": {"command": ["node", "scripts/test-agent-plugin-client.mjs"]},
-    "plugins.agent-protocol": {"command": ["node", "plugins/agent/generate-sdk.mjs", "--check"]},
-    "plugins.test-project-session": {"command": ["cargo", "test", "-p", "rho-cli", "--test", "session_test_project", "--locked"]},
-    "plugins.test-project-edges": {"command": ["cargo", "test", "-p", "rho-workbench", "--lib", "plugin_test_", "--locked"]},
-    "plugins.test-project-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "plugin-test-project.spec.ts"]},
-    "plugins.test-project-host": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_test_projects", "--locked"]},
-    "plugins.test-project-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "test_projects", "--locked"]},
-    "plugins.workspace-http": {"command": ["cargo", "test", "-p", "rho-workbench", "--lib", "plugin_workspace", "--locked"]},
-    "plugins.workspace-cli": {"command": ["cargo", "test", "-p", "rho-cli", "--bin", "rho", "plugin_workspace", "--locked"]},
-    "plugins.workspace-host": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_workspace", "--locked"]},
-    "plugins.preview-host": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_preview", "--locked"]},
-    "plugins.preview-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "plugin-preview.spec.ts"]},
-    "plugins.studio-model": {"command": ["node", "scripts/test-studio-plugin.mjs"]},
-    "plugins.studio-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "studio-plugin.spec.ts", "studio-backend-test.spec.ts", "studio-scenario.spec.ts", "studio-archive.spec.ts"]},
-    "plugins.archive-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "archive_transfers", "--locked"]},
-    "plugins.archive-ports": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_archives", "--locked"]},
-    "plugins.build-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "build_operations", "--locked"]},
-    "plugins.process-engine": {"command": ["cargo", "test", "-p", "rho-process-engine", "--locked"]},
-    "plugins.development-owner": {"command": ["cargo", "test", "-p", "rho-plugins", "--test", "source_development", "--locked"]},
-    "plugins.development-host": {"command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_development", "--locked"]},
-    "plugins.manager-model": {"command": ["node", "scripts/test-manager-plugin.mjs"]},
-    "plugins.manager-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "manager-plugin.spec.ts", "manager-archive.spec.ts"]},
-    "plugins.process-owner": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-process-owner",
-        "--lib",
-        "--locked"
-      ]
-    },
-    "plugins.process-independent": {
-      "command": [
-        "node",
-        "scripts/test-process-plugin-owner.mjs"
-      ]
-    },
-    "system.architecture": {
-      "command": [
-        "node",
-        "scripts/check-architecture.mjs"
-      ]
-    },
-    "system.rust": {
-      "command": [
-        "cargo",
-        "test",
-        "--workspace",
-        "--locked",
-        "--",
-        "--test-threads=1"
-      ]
-    },
-    "system.client": {
-      "command": [
-        "node",
-        "scripts/client.mjs",
-        "check"
-      ]
-    },
-    "system.vendor": {
-      "command": [
-        "node",
-        "scripts/vendor-jet.mjs",
-        "check"
-      ]
-    },
-    "system.vendor-tests": {
-      "command": [
-        "node",
-        "scripts/test-vendor-jet.mjs"
-      ]
-    },
-    "system.real-r": {
-      "command": [
-        "node",
-        "scripts/test-real-r.mjs"
-      ]
-    },
-    "system.r-checkpoints": {
-      "command": [
-        "node",
-        "scripts/test-r-checkpoints.mjs"
-      ]
-    },
-    "system.environment": {
-      "command": [
-        "node",
-        "scripts/test-environment.mjs"
-      ]
-    },
-    "system.process-recovery": {
-      "command": [
-        "node",
-        "scripts/test-process-recovery.mjs"
-      ]
-    },
-    "system.remote-protocol": {
-      "command": [
-        "node",
-        "scripts/test-remote-protocol.mjs"
-      ]
-    },
-    "system.mcp": {
-      "command": [
-        "node",
-        "scripts/test-mcp.mjs"
-      ]
-    },
-    "system.mcp-real-r": {
-      "command": [
-        "node",
-        "scripts/test-mcp.mjs",
-        "--real-r"
-      ]
-    },
-    "system.workbench": {
-      "command": [
-        "node",
-        "scripts/test-workbench.mjs"
-      ]
-    },
-    "system.workbench-real-r": {
-      "command": [
-        "node",
-        "scripts/test-workbench.mjs",
-        "--real-r"
-      ]
-    },
-    "docs.index": {
-      "command": [
-        "node",
-        "scripts/governance.mjs",
-        "check"
-      ]
-    },
-    "docs.tool": {
-      "command": [
-        "node",
-        "scripts/test-governance.mjs"
-      ]
-    },
-    "studio.types": {
-      "command": [
-        "npm",
-        "run",
-        "typecheck",
-        "--prefix",
-        "ui"
-      ]
-    },
-    "studio.unit": {
-      "command": [
-        "npm",
-        "run",
-        "test",
-        "--prefix",
-        "ui"
-      ]
-    },
-    "studio.boundaries": {
-      "command": [
-        "node",
-        "scripts/check-frontend-boundaries.mjs"
-      ]
-    },
-    "studio.boundary-tests": {
-      "command": [
-        "node",
-        "scripts/test-frontend-boundaries.mjs"
-      ]
-    },
-    "studio.browser": {
-      "command": [
-        "npm",
-        "run",
-        "test:browser",
-        "--prefix",
-        "ui"
-      ]
-    },
-    "system.agent-harness": {
-      "command": [
-        "node",
-        "scripts/test-agent-interface.mjs",
-        "--self-test"
-      ]
-    },
-    "system.output-media": {
-      "command": [
-        "node",
-        "scripts/test-output-media.mjs"
-      ]
-    },
-    "system.evidence-pack": {
-      "command": [
-        "python3",
-        "scripts/test-pack-agent-evidence.py"
-      ]
-    },
-    "system.agent-tasks": {
-      "command": [
-        "node",
-        "scripts/test-agent-task-recovery.mjs"
-      ]
-    },
-    "system.component-agents": {
-      "command": [
-        "node",
-        "scripts/test-component-agents.mjs"
-      ]
-    },
-    "system.architecture-tests": {
-      "command": [
-        "node",
-        "scripts/test-architecture.mjs"
-      ]
-    },
-    "plugins.protocol": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-plugin-protocol",
-        "--locked"
-      ]
-    },
-    "plugins.repository": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-plugins",
-        "--locked"
-      ]
-    },
-    "system.project-coverage": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-sqlite",
-        "-p",
-        "rho-operation",
-        "-p",
-        "rho-plugins",
-        "--lib",
-        "project_coverage",
-        "--locked"
-      ]
-    },
-    "plugins.backend-sdk": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-plugin-sdk",
-        "--locked"
-      ]
-    },
-    "plugins.external-backend": {
-      "command": [
-        "node",
-        "scripts/test-plugin-backend.mjs"
-      ]
-    },
-    "plugins.boundaries": {
-      "command": [
-        "node",
-        "scripts/check-plugin-boundaries.mjs"
-      ]
-    },
-    "plugins.boundary-tests": {
-      "command": [
-        "node",
-        "scripts/check-plugin-boundaries.mjs",
-        "--self-test"
-      ]
-    },
-    "plugins.public-types": {
-      "command": [
-        "node",
-        "scripts/test-plugin-protocol.mjs"
-      ]
-    },
-    "plugins.ui-sdk": {
-      "command": [
-        "node",
-        "scripts/test-plugin-ui.mjs"
-      ]
-    },
-    "plugins.r-engine": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-r-engine",
-        "--locked"
-      ]
-    },
-    "plugins.r-independent": {
-      "command": [
-        "node",
-        "scripts/test-r-plugin-engine.mjs"
-      ]
-    },
-    "plugins.r-native": {
-      "command": [
-        "node",
-        "scripts/test-r-plugin.mjs"
-      ]
-    },
-    "plugins.r-recovery": {
-      "command": ["node", "scripts/test-real-r.mjs", "--plugin-recovery"]
-    },
-    "plugins.r-public-recovery": {
-      "command": ["node", "scripts/test-r-recovery.mjs"]
-    },
-    "plugins.r-format": {
-      "command": [
-        "node",
-        "scripts/test-r-format.mjs"
-      ]
-    },
-    "plugins.r-environment": {
-      "command": ["node", "scripts/test-r-environment.mjs"]
-    },
-    "plugins.viewer": {
-      "command": [
-        "node",
-        "scripts/test-viewer-plugin.mjs"
-      ]
-    },
-    "plugins.r-viewer": {
-      "command": [
-        "node",
-        "scripts/test-r-viewer.mjs"
-      ]
-    },
-    "plugins.r-protocol": {
-      "command": [
-        "node",
-        "plugins/r/generate-sdk.mjs",
-        "--check"
-      ]
-    },
-    "plugins.r-public-types": {
-      "command": [
-        "node",
-        "scripts/test-r-protocol.mjs"
-      ]
-    },
-    "plugins.console": {
-      "command": [
-        "node",
-        "scripts/test-console-plugin.mjs"
-      ]
-    },
-    "plugins.console-editor": {
-      "command": [
-        "npm",
-        "run",
-        "test:browser",
-        "--prefix",
-        "ui",
-        "--",
-        "console-editor.spec.ts"
-      ]
-    },
-    "plugins.r-console": {
-      "command": [
-        "node",
-        "scripts/test-r-console.mjs"
-      ]
-    },
-    "plugins.objects": {
-      "command": [
-        "node",
-        "scripts/test-objects-plugin.mjs"
-      ]
-    },
-    "plugins.packages": {
-      "command": [
-        "node",
-        "scripts/test-packages-plugin.mjs"
-      ]
-    },
-    "plugins.objects-browser": {
-      "command": [
-        "npm",
-        "run",
-        "test:browser",
-        "--prefix",
-        "ui",
-        "--",
-        "objects-plugin.spec.ts"
-      ]
-    },
-    "plugins.r-objects": {
-      "command": [
-        "node",
-        "scripts/test-r-objects-plugin.mjs"
-      ]
-    },
-    "plugins.help": {
-      "command": [
-        "node",
-        "scripts/test-help-plugin.mjs"
-      ]
-    },
-    "plugins.help-browser": {
-      "command": [
-        "npm",
-        "run",
-        "test:browser",
-        "--prefix",
-        "ui",
-        "--",
-        "help-plugin.spec.ts"
-      ]
-    },
-    "plugins.r-help": {
-      "command": [
-        "node",
-        "scripts/test-r-help.mjs"
-      ]
-    },
-    "plugins.packages-browser": {
-      "command": [
-        "npm",
-        "run",
-        "test:browser",
-        "--prefix",
-        "ui",
-        "--",
-        "packages-plugin.spec.ts"
-      ]
-    },
-    "plugins.r-packages": {
-      "command": [
-        "node",
-        "scripts/test-r-packages.mjs"
-      ]
-    },
-    "plugins.plots": {
-      "command": [
-        "node",
-        "scripts/test-plots-plugin.mjs"
-      ]
-    },
-    "plugins.plots-browser": {
-      "command": [
-        "npm",
-        "run",
-        "test:browser",
-        "--prefix",
-        "ui",
-        "--",
-        "plots-plugin.spec.ts"
-      ]
-    },
-    "plugins.r-plots": {
-      "command": [
-        "node",
-        "scripts/test-r-plots.mjs"
-      ]
-    },
-    "plugins.window-browser": {
-      "command": [
-        "npm",
-        "run",
-        "test:browser",
-        "--prefix",
-        "ui",
-        "--",
-        "plugin-workspace.spec.ts"
-      ]
-    },
-    "plugins.resource-download-browser": {
-      "command": [
-        "npm",
-        "run",
-        "test:browser",
-        "--prefix",
-        "ui",
-        "--",
-        "plugin-resource-download.spec.ts",
-        "plugin-archive-download.spec.ts"
-      ]
-    },
-    "plugins.download-browser": {
-      "command": [
-        "npm",
-        "run",
-        "test:browser",
-        "--prefix",
-        "ui",
-        "--",
-        "plugin-download.spec.ts"
-      ]
-    },
-    "plugins.files-engine": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-files-engine",
-        "-p",
-        "rho-files-owner",
-        "-p",
-        "rho-process-engine",
-        "--lib",
-        "--tests",
-        "--locked"
-      ]
-    },
-    "plugins.files-independent": {
-      "command": [
-        "node",
-        "scripts/test-files-plugin-engine.mjs"
-      ]
-    },
-    "plugins.files-protocol": {
-      "command": [
-        "node",
-        "plugins/files/generate-sdk.mjs",
-        "--check"
-      ]
-    },
-    "plugins.files-backend": {
-      "command": ["cargo", "test", "-p", "rho-files-backend", "--lib", "--locked"]
-    },
-    "plugins.files-manifest": {
-      "command": ["node", "plugins/files/generate-manifest.mjs", "--check"]
-    },
-    "plugins.files-native": {
-      "command": ["node", "scripts/test-files-plugin.mjs"]
-    },
-    "plugins.files-public-types": {
-      "command": [
-        "node",
-        "scripts/test-files-protocol.mjs"
-      ]
-    },
-    "plugins.files-ui": {
-      "command": [
-        "node",
-        "scripts/test-files-ui.mjs"
-      ]
-    },
-    "plugins.files-browser": {
-      "command": [
-        "npm",
-        "run",
-        "test:browser",
-        "--prefix",
-        "ui",
-        "--",
-        "files-plugin.spec.ts"
-      ]
-    },
-    "plugins.self-requirements": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-host",
-        "--test",
-        "plugin_self_requirements",
-        "--test",
-        "plugin_optional_requirements",
-        "--locked"
-      ]
-    },
-    "plugins.scenario-ports": {
-      "command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_scenarios", "--locked"]
-    },
-    "plugins.draft-ports": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-host",
-        "--test",
-        "plugin_drafts",
-        "--locked"
-      ]
-    },
-    "plugins.drafts": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-plugins",
-        "-p",
-        "rho-plugin-protocol",
-        "--lib",
-        "draft",
-        "--locked"
-      ]
-    },
-    "plugins.view-delegation": {
-      "command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_view_delegation", "--locked"]
-    },
-    "plugins.delegated-operation": {
-      "command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_delegated_operations", "--locked"]
-    },
-    "plugins.editor-context": {
-      "command": ["cargo", "test", "-p", "rho-editor-backend", "--lib", "--locked"]
-    },
-    "plugins.editor-context-manifest": {
-      "command": ["node", "scripts/generate-editor-context.mjs", "--check"]
-    },
-    "plugins.editor-model": {
-      "command": ["node", "scripts/test-editor-plugin.mjs"]
-    },
-    "plugins.editor-browser": {
-      "command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "editor-plugin.spec.ts"]
-    },
-    "plugins.editor-code-browser": {
-      "command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "editor-code.spec.ts"]
-    },
-    "plugins.draft-browser": {
-      "command": [
-        "npm",
-        "run",
-        "test:browser",
-        "--prefix",
-        "ui",
-        "--",
-        "plugin-drafts.spec.ts"
-      ]
-    },
-    "plugins.process-backend": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-process-backend",
-        "--lib",
-        "--locked"
-      ]
-    },
-    "plugins.process-native": {
-      "command": [
-        "node",
-        "scripts/test-process-plugin.mjs"
-      ]
-    },
-    "plugins.process-protocol": {
-      "command": [
-        "node",
-        "plugins/process/generate-sdk.mjs",
-        "--check"
-      ]
-    },
-    "plugins.process-manifest": {
-      "command": [
-        "node",
-        "plugins/process/generate-manifest.mjs",
-        "--check"
-      ]
-    },
-    "plugins.process-public-types": {
-      "command": [
-        "node",
-        "scripts/test-process-protocol.mjs"
-      ]
-    },
-    "plugins.remote-owner": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-remote-api",
-        "-p",
-        "rho-remote-owner",
-        "--lib",
-        "--locked"
-      ]
-    },
-    "plugins.remote-visibility": {
-      "command": ["cargo", "test", "-p", "rho-execution", "slurm", "--locked"]
-    },
-    "plugins.remote-independent": {
-      "command": [
-        "node",
-        "scripts/test-remote-plugin-owner.mjs"
-      ]
-    },
-    "plugins.remote-backend": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-remote-backend",
-        "--lib",
-        "--locked"
-      ]
-    },
-    "plugins.remote-native": {
-      "command": [
-        "node",
-        "scripts/test-remote-plugin.mjs"
-      ]
-    },
-    "plugins.remote-protocol": {
-      "command": [
-        "node",
-        "plugins/remote/generate-sdk.mjs",
-        "--check"
-      ]
-    },
-    "plugins.remote-manifest": {
-      "command": [
-        "node",
-        "plugins/remote/generate-manifest.mjs",
-        "--check"
-      ]
-    },
-    "plugins.remote-public-types": {
-      "command": [
-        "node",
-        "scripts/test-remote-plugin-types.mjs"
-      ]
-    },
-    "plugins.environment-owner": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-environment-api",
-        "-p",
-        "rho-environment-owner",
-        "--lib",
-        "--locked"
-      ]
-    },
-    "plugins.environment-independent": {
-      "command": [
-        "node",
-        "scripts/test-environment-plugin-owner.mjs"
-      ]
-    },
-    "plugins.environment-visibility": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-environment",
-        "visibility",
-        "--locked"
-      ]
-    },
-    "plugins.environment-backend": {
-      "command": [
-        "cargo",
-        "test",
-        "-p",
-        "rho-environment-backend",
-        "--lib",
-        "--locked"
-      ]
-    },
-    "plugins.environment-manifest": {
-      "command": [
-        "node",
-        "plugins/environment/generate-manifest.mjs",
-        "--check"
-      ]
-    },
-    "plugins.environment-protocol": {
-      "command": [
-        "node",
-        "plugins/environment/generate-sdk.mjs",
-        "--check"
-      ]
-    },
-    "plugins.environment-types": {
-      "command": [
-        "node",
-        "scripts/test-environment-plugin-types.mjs"
-      ]
-    },
-    "plugins.environment-native": {
-      "command": [
-        "node",
-        "scripts/test-environment-plugin.mjs"
-      ]
-    },
-    "plugins.environment-r-references": {
-      "command": [
-        "node",
-        "scripts/test-environment-plugin.mjs",
-        "--r-references"
-      ]
-    },
-    "plugins.environment-checkpoint-references": {
-      "command": [
-        "node",
-        "scripts/test-environment-plugin.mjs",
-        "--checkpoint-references"
-      ]
-    }
+    "plugins.agent-backend": {"command":["cargo","test","-p","rho-agent-backend","--test","metadata","--locked"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","plugins/agent/backend/**","crates/plugin-sdk/**"]},
+    "plugins.agent-manifest": {"command":["node","plugins/agent/generate-manifest.mjs","--check"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","plugins/agent/plugin.json","plugins/agent/generate-manifest.mjs","plugins/agent/backend/src/manifest.rs","plugins/agent/backend/src/arguments.rs","plugins/agent/backend/src/native_arguments.rs","plugins/agent/backend/src/native_grants.rs","plugins/agent/backend/src/native_core_grants.rs","plugins/agent/backend/src/bin/export-agent-manifest.rs"]},
+    "plugins.agent-tool-grants": {"command":["node","scripts/test-agent-tool-grants.mjs"],"tier":"L1","sources":["plugins/*/plugin.json","plugins/agent/backend/src/native_grants.rs","plugins/agent/backend/src/native_core_grants.rs","scripts/test-agent-tool-grants.mjs"]},
+    "plugins.agent-host": {"command":["node","scripts/test-agent-plugin.mjs","--build"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-agent-plugin.mjs","plugins/agent/**","scripts/build-agent-plugin.mjs","scripts/agent-plugin-artifact.mjs","plugins/r/api/**","crates/host/**","crates/operation/**"]},
+    "plugins.agent-core-tools": {"command":["node","scripts/test-agent-core-tools.mjs","--build"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-agent-core-tools.mjs","plugins/agent/**","scripts/build-agent-plugin.mjs","scripts/agent-plugin-artifact.mjs","plugins/r/api/**","crates/host/**","crates/operation/**"]},
+    "plugins.agent-native-real-r": {"command":["node","scripts/test-agent-plugin-real-r.mjs","--build"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-agent-plugin-real-r.mjs","plugins/agent/**","scripts/build-agent-plugin.mjs","scripts/agent-plugin-artifact.mjs","plugins/r/api/**","crates/host/**","crates/operation/**","plugins/r/**"]},
+    "plugins.agent-store": {"command":["cargo","test","-p","rho-agent-store","--lib","--locked"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","plugins/agent/backend/store/**","plugins/agent/backend/owner/**"]},
+    "plugins.agent-store-independent": {"command":["node","scripts/test-agent-plugin-store.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-agent-plugin-store.mjs","plugins/agent/**","scripts/build-agent-plugin.mjs","plugins/r/api/**"]},
+    "plugins.agent-handoff": {"command":["cargo","test","-p","rho-agent-owner","-p","rho-application","--lib","handoff","--locked"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","crates/application/**","crates/contract/**","plugins/agent/backend/owner/**"]},
+    "plugins.agent-handoff-store": {"command":["cargo","test","-p","rho-sqlite","--test","agent_handoffs","--locked"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","crates/adapters/sqlite/**","crates/contract/**","plugins/agent/backend/owner/**"]},
+    "plugins.agent-component-boundary": {"command":["cargo","test","-p","rho-application","--lib","component_boundary","--locked"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","crates/application/**","crates/contract/**","plugins/agent/backend/owner/**"]},
+    "plugins.agent-engine": {"command":["cargo","test","-p","rho-agent-engine","--locked"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","plugins/agent/backend/engine/**","plugins/agent/backend/owner/**"]},
+    "plugins.agent-engine-independent": {"command":["node","scripts/test-agent-plugin-engine.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-agent-plugin-engine.mjs","plugins/agent/**","scripts/build-agent-plugin.mjs","plugins/r/api/**"]},
+    "plugins.agent-adapter": {"command":["cargo","test","-p","rho-agents","--lib","--locked"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","crates/agents/**","crates/application/**","crates/contract/**","plugins/agent/backend/engine/**","plugins/agent/backend/owner/**"]},
+    "plugins.agent-model-host": {"command":["cargo","test","-p","rho-host","--test","component_agents","--test","component_recovery","--locked"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/**","scripts/build-agent-plugin.mjs","crates/host/**","plugins/r/api/**"]},
+    "plugins.agent-real-r": {"command":["node","scripts/test-real-r.mjs","--agent"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-real-r.mjs","plugins/agent/**","scripts/build-agent-plugin.mjs","plugins/r/api/**"]},
+    "plugins.agent-owner": {"command":["cargo","test","-p","rho-agent-owner","--lib","--locked"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","plugins/agent/backend/owner/**"]},
+    "plugins.agent-owner-independent": {"command":["node","scripts/test-agent-plugin-owner.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-agent-plugin-owner.mjs","plugins/agent/**","scripts/build-agent-plugin.mjs","plugins/r/api/**"]},
+    "plugins.agent-request": {"command":["cargo","test","-p","rho-contract","--lib","public_agent_request","--locked"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","crates/contract/**"]},
+    "plugins.agent-types": {"command":["node","scripts/test-agent-plugin-types.mjs"],"tier":"L1","sources":["plugins/agent/sdk/**","sdk/plugin-protocol/**","scripts/test-agent-plugin-types.mjs"]},
+    "plugins.agent-native-runtime": {"command":["cargo","test","-p","rho-agent-native","--lib","--locked"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","plugins/agent/backend/native/**","plugins/agent/backend/client/**"]},
+    "plugins.agent-native-runtime-host": {"command":["cargo","test","-p","rho-host","--lib","agent_tasks","--locked"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","crates/host/**","crates/application/**","crates/contract/**","plugins/agent/backend/native/**","plugins/agent/backend/client/**"]},
+    "plugins.agent-native-runtime-independent": {"command":["node","scripts/test-agent-plugin-native.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-agent-plugin-native.mjs","plugins/agent/**","scripts/build-agent-plugin.mjs","plugins/r/api/**"]},
+    "plugins.agent-native": {"command":["cargo","test","-p","rho-agent-client","--lib","--locked"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","plugins/agent/backend/client/**"]},
+    "plugins.agent-independent": {"command":["node","scripts/test-agent-plugin-client.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-agent-plugin-client.mjs","plugins/agent/**","scripts/build-agent-plugin.mjs","plugins/r/api/**"]},
+    "plugins.agent-protocol": {"command":["node","plugins/agent/generate-sdk.mjs","--check"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","plugins/agent/sdk/**","plugins/agent/generate-sdk.mjs"]},
+    "plugins.test-project-session": {"command":["cargo","test","-p","rho-cli","--test","session_test_project","--locked"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.test-project-edges": {"command":["cargo","test","-p","rho-workbench","--lib","plugin_test_","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.test-project-browser": {"command":["npm","run","test:browser","--prefix","ui","--","plugin-test-project.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**","ui/e2e/plugin-test-project.spec.ts"]},
+    "plugins.test-project-host": {"command":["cargo","test","-p","rho-host","--test","plugin_test_projects","--locked"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.test-project-owner": {"command":["cargo","test","-p","rho-plugins","--test","test_projects","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.workspace-http": {"command":["cargo","test","-p","rho-workbench","--lib","plugin_workspace","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.workspace-cli": {"command":["cargo","test","-p","rho-cli","--bin","rho","plugin_workspace","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.workspace-host": {"command":["cargo","test","-p","rho-host","--test","plugin_workspace","--locked"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.preview-host": {"command":["cargo","test","-p","rho-host","--test","plugin_preview","--locked"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.preview-browser": {"command":["npm","run","test:browser","--prefix","ui","--","plugin-preview.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**","ui/e2e/plugin-preview.spec.ts"]},
+    "plugins.studio-model": {"command":["node","scripts/test-studio-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-studio-plugin.mjs","plugins/studio/**","scripts/build-studio-plugin.mjs"]},
+    "plugins.studio-browser": {"command":["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts","studio-backend-test.spec.ts","studio-scenario.spec.ts","studio-archive.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/studio/**","scripts/build-studio-plugin.mjs","ui/e2e/studio-plugin.spec.ts","ui/e2e/studio-backend-test.spec.ts","ui/e2e/studio-scenario.spec.ts","ui/e2e/studio-archive.spec.ts"]},
+    "plugins.archive-owner": {"command":["cargo","test","-p","rho-plugins","--test","archive_transfers","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.archive-ports": {"command":["cargo","test","-p","rho-host","--test","plugin_archives","--locked"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.build-owner": {"command":["cargo","test","-p","rho-plugins","--test","build_operations","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.process-engine": {"command":["cargo","test","-p","rho-process-engine","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/process/**","scripts/build-process-plugin.mjs","crates/process-engine/**"]},
+    "plugins.development-owner": {"command":["cargo","test","-p","rho-plugins","--test","source_development","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.development-host": {"command":["cargo","test","-p","rho-host","--test","plugin_development","--locked"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.manager-model": {"command":["node","scripts/test-manager-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-manager-plugin.mjs","plugins/manager/**","scripts/build-manager-plugin.mjs"]},
+    "plugins.manager-browser": {"command":["npm","run","test:browser","--prefix","ui","--","manager-plugin.spec.ts","manager-archive.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/manager/**","scripts/build-manager-plugin.mjs","ui/e2e/manager-plugin.spec.ts","ui/e2e/manager-archive.spec.ts"]},
+    "plugins.process-owner": {"command":["cargo","test","-p","rho-process-owner","--lib","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/process/**","scripts/build-process-plugin.mjs","crates/process-engine/**"]},
+    "plugins.process-independent": {"command":["node","scripts/test-process-plugin-owner.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-process-plugin-owner.mjs","plugins/process/**","scripts/build-process-plugin.mjs","crates/process-engine/**"]},
+    "system.architecture": {"command":["node","scripts/check-architecture.mjs"],"tier":"L0","sources":["scripts/check-architecture.mjs","crates/**","plugins/**","r/**","ui/src/**","Cargo.toml"]},
+    "system.rust": {"command":["cargo","test","--workspace","--locked","--","--test-threads=1"],"tier":"L3","sources":["crates/**","plugins/**","Cargo.toml","Cargo.lock","rust-toolchain.toml"]},
+    "system.client": {"command":["node","scripts/client.mjs","check"],"tier":"L1","sources":["scripts/client.mjs","ui/**","crates/contract/**"]},
+    "system.vendor": {"command":["node","scripts/vendor-jet.mjs","check"],"tier":"L0","sources":["scripts/vendor-jet.mjs","vendor/**","patches/jet/**"]},
+    "system.vendor-tests": {"command":["node","scripts/test-vendor-jet.mjs"],"tier":"L0","sources":["scripts/test-vendor-jet.mjs","vendor/**","patches/jet/**","scripts/vendor-jet.mjs"]},
+    "system.real-r": {"command":["node","scripts/test-real-r.mjs"],"tier":"L2","sources":["scripts/test-real-r.mjs","crates/**","r/**","scripts/fixtures/**"]},
+    "system.r-checkpoints": {"command":["node","scripts/test-r-checkpoints.mjs"],"tier":"L2","sources":["scripts/test-r-checkpoints.mjs","crates/**","r/**","scripts/fixtures/**"]},
+    "system.environment": {"command":["node","scripts/test-environment.mjs"],"tier":"L2","sources":["scripts/test-environment.mjs","crates/**","r/**","scripts/fixtures/**"]},
+    "system.process-recovery": {"command":["node","scripts/test-process-recovery.mjs"],"tier":"L2","sources":["scripts/test-process-recovery.mjs","crates/**","r/**","scripts/fixtures/**"]},
+    "system.remote-protocol": {"command":["node","scripts/test-remote-protocol.mjs"],"tier":"L2","sources":["scripts/test-remote-protocol.mjs","crates/**","r/**","scripts/fixtures/**"]},
+    "system.mcp": {"command":["node","scripts/test-mcp.mjs"],"tier":"L2","sources":["scripts/test-mcp.mjs","crates/**","r/**","scripts/fixtures/**"]},
+    "system.mcp-real-r": {"command":["node","scripts/test-mcp.mjs","--real-r"],"tier":"L2","sources":["scripts/test-mcp.mjs","crates/**","r/**","scripts/fixtures/**"]},
+    "system.workbench": {"command":["node","scripts/test-workbench.mjs"],"tier":"L2","sources":["scripts/test-workbench.mjs","crates/**","r/**","scripts/fixtures/**"]},
+    "system.workbench-real-r": {"command":["node","scripts/test-workbench.mjs","--real-r"],"tier":"L2","sources":["scripts/test-workbench.mjs","crates/**","r/**","scripts/fixtures/**"]},
+    "docs.index": {"command":["node","scripts/governance.mjs","check"],"tier":"L0","sources":["docs/**","governance/**","AGENTS.md","README.md","scripts/governance.mjs"]},
+    "docs.tool": {"command":["node","scripts/test-governance.mjs"],"tier":"L0","sources":["scripts/governance.mjs","scripts/test-governance.mjs","governance/**"]},
+    "studio.types": {"command":["npm","run","typecheck","--prefix","ui"],"tier":"L1","sources":["ui/**","crates/contract/**","sdk/**"]},
+    "studio.unit": {"command":["npm","run","test","--prefix","ui"],"tier":"L1","sources":["ui/**","crates/contract/**","sdk/**"]},
+    "studio.boundaries": {"command":["node","scripts/check-frontend-boundaries.mjs"],"tier":"L0","sources":["ui/**","crates/contract/**","sdk/**","scripts/check-frontend-boundaries.mjs"]},
+    "studio.boundary-tests": {"command":["node","scripts/test-frontend-boundaries.mjs"],"tier":"L0","sources":["ui/**","crates/contract/**","sdk/**","scripts/test-frontend-boundaries.mjs"]},
+    "studio.browser": {"command":["npm","run","test:browser","--prefix","ui"],"tier":"L2","sources":["ui/**","crates/contract/**","sdk/**"]},
+    "system.agent-harness": {"command":["node","scripts/test-agent-interface.mjs","--self-test"],"tier":"L1","sources":["scripts/test-agent-interface.mjs","scripts/agent-interface/**"]},
+    "system.output-media": {"command":["node","scripts/test-output-media.mjs"],"tier":"L2","sources":["scripts/test-output-media.mjs","crates/**","r/**","scripts/fixtures/**"]},
+    "system.evidence-pack": {"command":["python3","scripts/test-pack-agent-evidence.py"],"tier":"L1","sources":["scripts/test-pack-agent-evidence.py","scripts/pack-agent-evidence.py"]},
+    "system.agent-tasks": {"command":["node","scripts/test-agent-task-recovery.mjs"],"tier":"L2","sources":["scripts/test-agent-task-recovery.mjs","crates/**","r/**","scripts/fixtures/**"]},
+    "system.component-agents": {"command":["node","scripts/test-component-agents.mjs"],"tier":"L2","sources":["scripts/test-component-agents.mjs","crates/**","r/**","scripts/fixtures/**"]},
+    "system.architecture-tests": {"command":["node","scripts/test-architecture.mjs"],"tier":"L0","sources":["scripts/test-architecture.mjs","scripts/check-architecture.mjs"]},
+    "plugins.protocol": {"command":["cargo","test","-p","rho-plugin-protocol","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","Cargo.toml","Cargo.lock"]},
+    "plugins.repository": {"command":["cargo","test","-p","rho-plugins","--locked"],"tier":"L1","sources":["crates/plugins/**","crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml"]},
+    "system.project-coverage": {"command":["cargo","test","-p","rho-sqlite","-p","rho-operation","-p","rho-plugins","--lib","project_coverage","--locked"],"tier":"L1","sources":["crates/adapters/sqlite/**","crates/operation/**","crates/plugins/**"]},
+    "plugins.backend-sdk": {"command":["cargo","test","-p","rho-plugin-sdk","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","Cargo.toml","Cargo.lock"]},
+    "plugins.external-backend": {"command":["node","scripts/test-plugin-backend.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-plugin-backend.mjs","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.boundaries": {"command":["node","scripts/check-plugin-boundaries.mjs"],"tier":"L0","sources":["plugins/**","crates/plugin-protocol/**","crates/plugin-sdk/**","scripts/check-plugin-boundaries.mjs"]},
+    "plugins.boundary-tests": {"command":["node","scripts/check-plugin-boundaries.mjs","--self-test"],"tier":"L0","sources":["scripts/check-plugin-boundaries.mjs"]},
+    "plugins.public-types": {"command":["node","scripts/test-plugin-protocol.mjs"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-plugin-protocol.mjs","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.ui-sdk": {"command":["node","scripts/test-plugin-ui.mjs"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-plugin-ui.mjs","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.r-engine": {"command":["cargo","test","-p","rho-r-engine","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/r/**","scripts/build-r-plugin.mjs"]},
+    "plugins.r-independent": {"command":["node","scripts/test-r-plugin-engine.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-r-plugin-engine.mjs","plugins/r/**","scripts/build-r-plugin.mjs"]},
+    "plugins.r-native": {"command":["node","scripts/test-r-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-r-plugin.mjs","plugins/r/**","scripts/build-r-plugin.mjs"]},
+    "plugins.r-recovery": {"command":["node","scripts/test-real-r.mjs","--plugin-recovery"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-real-r.mjs","plugins/r/**","scripts/build-r-plugin.mjs"]},
+    "plugins.r-public-recovery": {"command":["node","scripts/test-r-recovery.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-r-recovery.mjs","plugins/r/**","scripts/build-r-plugin.mjs"]},
+    "plugins.r-format": {"command":["node","scripts/test-r-format.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-r-format.mjs","plugins/r/**","scripts/build-r-plugin.mjs"]},
+    "plugins.r-environment": {"command":["node","scripts/test-r-environment.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-r-environment.mjs","plugins/r/**","scripts/build-r-plugin.mjs","plugins/environment/**","scripts/build-environment-plugin.mjs"]},
+    "plugins.viewer": {"command":["node","scripts/test-viewer-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-viewer-plugin.mjs","plugins/viewer/**","scripts/build-viewer-plugin.mjs"]},
+    "plugins.r-viewer": {"command":["node","scripts/test-r-viewer.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-r-viewer.mjs","plugins/r/**","scripts/build-r-plugin.mjs","plugins/viewer/**","scripts/build-viewer-plugin.mjs"]},
+    "plugins.r-protocol": {"command":["node","plugins/r/generate-sdk.mjs","--check"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/r/generate-sdk.mjs","plugins/r/**","scripts/build-r-plugin.mjs"]},
+    "plugins.r-public-types": {"command":["node","scripts/test-r-protocol.mjs"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-r-protocol.mjs","plugins/r/**","scripts/build-r-plugin.mjs"]},
+    "plugins.console": {"command":["node","scripts/test-console-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-console-plugin.mjs","plugins/console/**","scripts/build-console-plugin.mjs"]},
+    "plugins.console-editor": {"command":["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/console/**","scripts/build-console-plugin.mjs","ui/e2e/console-editor.spec.ts"]},
+    "plugins.r-console": {"command":["node","scripts/test-r-console.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-r-console.mjs","plugins/r/**","scripts/build-r-plugin.mjs","plugins/console/**","scripts/build-console-plugin.mjs"]},
+    "plugins.objects": {"command":["node","scripts/test-objects-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-objects-plugin.mjs","plugins/objects/**","scripts/build-objects-plugin.mjs"]},
+    "plugins.packages": {"command":["node","scripts/test-packages-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-packages-plugin.mjs","plugins/packages/**","scripts/build-packages-plugin.mjs"]},
+    "plugins.objects-browser": {"command":["npm","run","test:browser","--prefix","ui","--","objects-plugin.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/objects/**","scripts/build-objects-plugin.mjs","ui/e2e/objects-plugin.spec.ts"]},
+    "plugins.r-objects": {"command":["node","scripts/test-r-objects-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-r-objects-plugin.mjs","plugins/r/**","scripts/build-r-plugin.mjs","plugins/objects/**","scripts/build-objects-plugin.mjs"]},
+    "plugins.help": {"command":["node","scripts/test-help-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-help-plugin.mjs","plugins/help/**","scripts/build-help-plugin.mjs"]},
+    "plugins.help-browser": {"command":["npm","run","test:browser","--prefix","ui","--","help-plugin.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/help/**","scripts/build-help-plugin.mjs","ui/e2e/help-plugin.spec.ts"]},
+    "plugins.r-help": {"command":["node","scripts/test-r-help.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-r-help.mjs","plugins/r/**","scripts/build-r-plugin.mjs","plugins/help/**","scripts/build-help-plugin.mjs"]},
+    "plugins.packages-browser": {"command":["npm","run","test:browser","--prefix","ui","--","packages-plugin.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/packages/**","scripts/build-packages-plugin.mjs","ui/e2e/packages-plugin.spec.ts"]},
+    "plugins.r-packages": {"command":["node","scripts/test-r-packages.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-r-packages.mjs","plugins/r/**","scripts/build-r-plugin.mjs","plugins/packages/**","scripts/build-packages-plugin.mjs"]},
+    "plugins.plots": {"command":["node","scripts/test-plots-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-plots-plugin.mjs","plugins/plots/**","scripts/build-plots-plugin.mjs"]},
+    "plugins.plots-browser": {"command":["npm","run","test:browser","--prefix","ui","--","plots-plugin.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/plots/**","scripts/build-plots-plugin.mjs","ui/e2e/plots-plugin.spec.ts"]},
+    "plugins.r-plots": {"command":["node","scripts/test-r-plots.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-r-plots.mjs","plugins/r/**","scripts/build-r-plugin.mjs","plugins/plots/**","scripts/build-plots-plugin.mjs"]},
+    "plugins.window-browser": {"command":["npm","run","test:browser","--prefix","ui","--","plugin-workspace.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**","ui/e2e/plugin-workspace.spec.ts"]},
+    "plugins.resource-download-browser": {"command":["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts","plugin-archive-download.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**","ui/e2e/plugin-resource-download.spec.ts","ui/e2e/plugin-archive-download.spec.ts"]},
+    "plugins.download-browser": {"command":["npm","run","test:browser","--prefix","ui","--","plugin-download.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**","ui/e2e/plugin-download.spec.ts"]},
+    "plugins.files-engine": {"command":["cargo","test","-p","rho-files-engine","-p","rho-files-owner","-p","rho-process-engine","--lib","--tests","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/files/**","scripts/build-files-plugin.mjs","crates/process-engine/**"]},
+    "plugins.files-independent": {"command":["node","scripts/test-files-plugin-engine.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-files-plugin-engine.mjs","plugins/files/**","scripts/build-files-plugin.mjs"]},
+    "plugins.files-protocol": {"command":["node","plugins/files/generate-sdk.mjs","--check"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/files/generate-sdk.mjs","plugins/files/**","scripts/build-files-plugin.mjs"]},
+    "plugins.files-backend": {"command":["cargo","test","-p","rho-files-backend","--lib","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/files/**","scripts/build-files-plugin.mjs"]},
+    "plugins.files-manifest": {"command":["node","plugins/files/generate-manifest.mjs","--check"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/files/generate-manifest.mjs","plugins/files/**","scripts/build-files-plugin.mjs"]},
+    "plugins.files-native": {"command":["node","scripts/test-files-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-files-plugin.mjs","plugins/files/**","scripts/build-files-plugin.mjs"]},
+    "plugins.files-public-types": {"command":["node","scripts/test-files-protocol.mjs"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-files-protocol.mjs","plugins/files/**","scripts/build-files-plugin.mjs"]},
+    "plugins.files-ui": {"command":["node","scripts/test-files-ui.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-files-ui.mjs","plugins/files/**","scripts/build-files-plugin.mjs"]},
+    "plugins.files-browser": {"command":["npm","run","test:browser","--prefix","ui","--","files-plugin.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/files/**","scripts/build-files-plugin.mjs","ui/e2e/files-plugin.spec.ts"]},
+    "plugins.self-requirements": {"command":["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.scenario-ports": {"command":["cargo","test","-p","rho-host","--test","plugin_scenarios","--locked"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.draft-ports": {"command":["cargo","test","-p","rho-host","--test","plugin_drafts","--locked"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.drafts": {"command":["cargo","test","-p","rho-plugins","-p","rho-plugin-protocol","--lib","draft","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.view-delegation": {"command":["cargo","test","-p","rho-host","--test","plugin_view_delegation","--locked"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.delegated-operation": {"command":["cargo","test","-p","rho-host","--test","plugin_delegated_operations","--locked"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**"]},
+    "plugins.editor-context": {"command":["cargo","test","-p","rho-editor-backend","--lib","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/editor/**","scripts/build-editor-plugin.mjs"]},
+    "plugins.editor-context-manifest": {"command":["node","scripts/generate-editor-context.mjs","--check"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/generate-editor-context.mjs","plugins/editor/**","scripts/build-editor-plugin.mjs"]},
+    "plugins.editor-model": {"command":["node","scripts/test-editor-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-editor-plugin.mjs","plugins/editor/**","scripts/build-editor-plugin.mjs"]},
+    "plugins.editor-browser": {"command":["npm","run","test:browser","--prefix","ui","--","editor-plugin.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/editor/**","scripts/build-editor-plugin.mjs","ui/e2e/editor-plugin.spec.ts"]},
+    "plugins.editor-code-browser": {"command":["npm","run","test:browser","--prefix","ui","--","editor-code.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/editor/**","scripts/build-editor-plugin.mjs","ui/e2e/editor-code.spec.ts"]},
+    "plugins.draft-browser": {"command":["npm","run","test:browser","--prefix","ui","--","plugin-drafts.spec.ts"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","crates/plugins/**","crates/host/**","crates/workbench/**","crates/cli/**","ui/src/**","ui/e2e/plugin-drafts.spec.ts"]},
+    "plugins.process-backend": {"command":["cargo","test","-p","rho-process-backend","--lib","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/process/**","scripts/build-process-plugin.mjs","crates/process-engine/**"]},
+    "plugins.process-native": {"command":["node","scripts/test-process-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-process-plugin.mjs","plugins/process/**","scripts/build-process-plugin.mjs","crates/process-engine/**"]},
+    "plugins.process-protocol": {"command":["node","plugins/process/generate-sdk.mjs","--check"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/process/generate-sdk.mjs","plugins/process/**","scripts/build-process-plugin.mjs","crates/process-engine/**"]},
+    "plugins.process-manifest": {"command":["node","plugins/process/generate-manifest.mjs","--check"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/process/generate-manifest.mjs","plugins/process/**","scripts/build-process-plugin.mjs","crates/process-engine/**"]},
+    "plugins.process-public-types": {"command":["node","scripts/test-process-protocol.mjs"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-process-protocol.mjs","plugins/process/**","scripts/build-process-plugin.mjs","crates/process-engine/**"]},
+    "plugins.remote-owner": {"command":["cargo","test","-p","rho-remote-api","-p","rho-remote-owner","--lib","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/remote/**","scripts/build-remote-plugin.mjs"]},
+    "plugins.remote-visibility": {"command":["cargo","test","-p","rho-execution","slurm","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/remote/**","scripts/build-remote-plugin.mjs","crates/execution/**"]},
+    "plugins.remote-independent": {"command":["node","scripts/test-remote-plugin-owner.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-remote-plugin-owner.mjs","plugins/remote/**","scripts/build-remote-plugin.mjs"]},
+    "plugins.remote-backend": {"command":["cargo","test","-p","rho-remote-backend","--lib","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/remote/**","scripts/build-remote-plugin.mjs"]},
+    "plugins.remote-native": {"command":["node","scripts/test-remote-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-remote-plugin.mjs","plugins/remote/**","scripts/build-remote-plugin.mjs"]},
+    "plugins.remote-protocol": {"command":["node","plugins/remote/generate-sdk.mjs","--check"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/remote/generate-sdk.mjs","plugins/remote/**","scripts/build-remote-plugin.mjs"]},
+    "plugins.remote-manifest": {"command":["node","plugins/remote/generate-manifest.mjs","--check"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/remote/generate-manifest.mjs","plugins/remote/**","scripts/build-remote-plugin.mjs"]},
+    "plugins.remote-public-types": {"command":["node","scripts/test-remote-plugin-types.mjs"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-remote-plugin-types.mjs","plugins/remote/**","scripts/build-remote-plugin.mjs"]},
+    "plugins.environment-owner": {"command":["cargo","test","-p","rho-environment-api","-p","rho-environment-owner","--lib","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/environment/**","scripts/build-environment-plugin.mjs"]},
+    "plugins.environment-independent": {"command":["node","scripts/test-environment-plugin-owner.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-environment-plugin-owner.mjs","plugins/environment/**","scripts/build-environment-plugin.mjs"]},
+    "plugins.environment-visibility": {"command":["cargo","test","-p","rho-environment","visibility","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/environment/**","scripts/build-environment-plugin.mjs","crates/environment/**"]},
+    "plugins.environment-backend": {"command":["cargo","test","-p","rho-environment-backend","--lib","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/environment/**","scripts/build-environment-plugin.mjs"]},
+    "plugins.environment-manifest": {"command":["node","plugins/environment/generate-manifest.mjs","--check"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/environment/generate-manifest.mjs","plugins/environment/**","scripts/build-environment-plugin.mjs"]},
+    "plugins.environment-protocol": {"command":["node","plugins/environment/generate-sdk.mjs","--check"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/environment/generate-sdk.mjs","plugins/environment/**","scripts/build-environment-plugin.mjs"]},
+    "plugins.environment-types": {"command":["node","scripts/test-environment-plugin-types.mjs"],"tier":"L1","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-environment-plugin-types.mjs","plugins/environment/**","scripts/build-environment-plugin.mjs"]},
+    "plugins.environment-native": {"command":["node","scripts/test-environment-plugin.mjs"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-environment-plugin.mjs","plugins/environment/**","scripts/build-environment-plugin.mjs"]},
+    "plugins.environment-r-references": {"command":["node","scripts/test-environment-plugin.mjs","--r-references"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-environment-plugin.mjs","plugins/environment/**","scripts/build-environment-plugin.mjs"]},
+    "plugins.environment-checkpoint-references": {"command":["node","scripts/test-environment-plugin.mjs","--checkpoint-references"],"tier":"L2","sources":["crates/plugin-protocol/**","crates/plugin-sdk/**","sdk/**","Cargo.toml","Cargo.lock","rust-toolchain.toml","scripts/test-environment-plugin.mjs","plugins/environment/**","scripts/build-environment-plugin.mjs"]},
+    "plugins.agent-workflow": {"command":["node","scripts/test-agent-workflow.mjs"],"tier":"L1","sources":["scripts/build-agent-plugin.mjs","scripts/agent-plugin-artifact.mjs","scripts/test-agent-workflow.mjs","scripts/test-agent-plugin.mjs","scripts/test-agent-core-tools.mjs","scripts/test-agent-plugin-real-r.mjs"]}
   },
   "areas": {
     "documentation": {
@@ -902,11 +231,14 @@
       "sources": [
         "scripts/dev-lanes.mjs",
         "scripts/test-dev-lanes.mjs",
-        "scripts/path-ownership.mjs"
+        "scripts/path-ownership.mjs",
+        "scripts/agent-plugin-artifact.mjs",
+        "scripts/test-agent-workflow.mjs"
       ],
       "checks": [
         "docs.index",
-        "docs.tool"
+        "docs.tool",
+        "plugins.agent-workflow"
       ]
     },
     "delivery": {
@@ -1077,29 +409,56 @@
         "scripts/test-agent-plugin-owner.mjs",
         "scripts/test-agent-plugin-store.mjs",
         "scripts/build-agent-plugin.mjs",
-        "scripts/test-agent-plugin.mjs", "scripts/test-agent-core-tools.mjs", "scripts/test-agent-plugin-real-r.mjs",
+        "scripts/test-agent-plugin.mjs",
+        "scripts/test-agent-core-tools.mjs",
+        "scripts/test-agent-plugin-real-r.mjs",
         "scripts/test-agent-plugin-native.mjs",
-        "scripts/test-agent-plugin-client.mjs", "scripts/test-agent-plugin-types.mjs", "scripts/test-agent-tool-grants.mjs",
+        "scripts/test-agent-plugin-client.mjs",
+        "scripts/test-agent-plugin-types.mjs",
+        "scripts/test-agent-tool-grants.mjs",
         "scripts/test-environment-plugin-owner.mjs",
         "scripts/build-environment-plugin.mjs",
         "scripts/test-environment-plugin-types.mjs",
         "scripts/test-environment-plugin.mjs"
       ],
       "checks": [
-        "plugins.agent-engine", "plugins.agent-engine-independent", "plugins.agent-adapter", "plugins.agent-model-host",
+        "plugins.agent-engine",
+        "plugins.agent-engine-independent",
+        "plugins.agent-adapter",
+        "plugins.agent-model-host",
         "plugins.agent-real-r",
-        "plugins.agent-owner", "plugins.agent-owner-independent", "plugins.agent-request", "plugins.agent-component-boundary",
-        "plugins.agent-handoff", "plugins.agent-handoff-store",
-        "plugins.agent-store", "plugins.agent-store-independent",
-        "plugins.agent-backend", "plugins.agent-manifest", "plugins.agent-tool-grants",
-        "plugins.agent-host", "plugins.agent-core-tools", "plugins.agent-native-real-r",
-        "plugins.agent-native-runtime", "plugins.agent-native-runtime-host", "plugins.agent-native-runtime-independent",
-        "plugins.agent-native", "plugins.agent-independent", "plugins.agent-protocol", "plugins.agent-types",
+        "plugins.agent-owner",
+        "plugins.agent-owner-independent",
+        "plugins.agent-request",
+        "plugins.agent-component-boundary",
+        "plugins.agent-handoff",
+        "plugins.agent-handoff-store",
+        "plugins.agent-store",
+        "plugins.agent-store-independent",
+        "plugins.agent-backend",
+        "plugins.agent-manifest",
+        "plugins.agent-tool-grants",
+        "plugins.agent-host",
+        "plugins.agent-core-tools",
+        "plugins.agent-native-real-r",
+        "plugins.agent-native-runtime",
+        "plugins.agent-native-runtime-host",
+        "plugins.agent-native-runtime-independent",
+        "plugins.agent-native",
+        "plugins.agent-independent",
+        "plugins.agent-protocol",
+        "plugins.agent-types",
         "plugins.development-owner",
-        "plugins.build-owner", "plugins.archive-owner", "plugins.archive-ports",
+        "plugins.build-owner",
+        "plugins.archive-owner",
+        "plugins.archive-ports",
         "plugins.preview-host",
-        "plugins.workspace-host", "plugins.test-project-host", "plugins.test-project-owner",
-        "plugins.test-project-edges", "plugins.test-project-browser", "plugins.test-project-session",
+        "plugins.workspace-host",
+        "plugins.test-project-host",
+        "plugins.test-project-owner",
+        "plugins.test-project-edges",
+        "plugins.test-project-browser",
+        "plugins.test-project-session",
         "plugins.workspace-http",
         "plugins.workspace-cli",
         "plugins.preview-browser",
