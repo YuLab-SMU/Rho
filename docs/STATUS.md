@@ -11,9 +11,9 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
-Agent native transport, native and component task state machines, and the Rig
-model driver now live in `plugins/agent/backend/client`, `backend/owner` and
-`backend/engine`. Public DTOs, TypeScript declarations and JSON schemas are in
+Agent native transport, native and component task state machines, metadata storage
+and the Rig model driver now live in `plugins/agent/backend/client`, `backend/owner`,
+`backend/store` and `backend/engine`. Public DTOs, TypeScript declarations and JSON schemas are in
 the same package. These libraries have no private core dependency. The component
 API references only the public plugin protocol and R media API. The driver uses
 captured input and owner callback ports; scientific execution still uses the
@@ -23,26 +23,40 @@ The component task owner now contains the sole admission, continuation,
 permission, recovery and budget implementation. The old Application implementations
 were removed. Its temporary core adapter translates typed captures, preserves
 structured errors and revalidates the original live controller for caller writes.
-It injects the original atomic repository and shares the same writer gate with
+It injects the Agent-owned atomic repository and shares the same writer gate with
 manual handoff; there is no second task store or approval flow. Full document
 receipts retain native operation IDs, save/run steps, applied versions and save
 acknowledgements. Only the six supported document actions are admitted; fixed-view
 controls remain unavailable. Read-only restart projections preserve uncertainty
 without recovering or replaying work. This is not a legacy-store reader.
 
-The current component extraction passes 44 focused cases: nine public task-owner
+The component extraction baseline passes 44 focused cases: nine public task-owner
 cases and 35 Application cases. These include atomic write failure, scoped original
 admission, live-controller loss, frozen permissions, late native receipts and
 observation-only restart. Three boundary cases check serialized bytes/digests,
 complete native document receipts, recovery states and structured errors. Public
-SDK generation and an independent strict TypeScript consumer also pass.
+SDK generation and an independent strict TypeScript consumer also pass for that baseline.
+
+The sole Agent SQL implementation has now moved into `backend/store`. Core SQL for
+native/component tasks, assets, handoff receipts, quotas and task-list projections
+was removed. Its temporary adapter keeps one Agent store for both task owners at a
+new `agent-v1.sqlite` sibling path, preserving the original transactional checks.
+It does not read/import previous Application task tables or delete their files.
+The package verifies its format and refuses unrelated/unsupported databases before
+schema changes. Nine public store cases (seven moved, two new) and two core
+composition cases are present; their execution remains pending. Public dependency
+containment, native-target metadata and architecture checks pass. The current
+binary builds and its help/startup check passes with the new store; browser and
+storage acceptance remain pending. An initial
+all-platform offline metadata query failed on an uncached non-host dependency;
+the Apple Silicon filtered query passed without downloads.
 
 Manual handoff policy and contracts have now moved into the public Agent package;
 the Application implementation is a typed forwarding adapter to the same atomic
 repository. The original caller validator and target writer gates are retained.
 Five independent owner cases and one serialization/digest boundary case are added;
 their execution and public handoff SDK generation remain pending. All six existing
-SQLite handoff cases pass on the extracted implementation, including write-failure
+SQLite handoff cases pass before the subsequent storage split, including write-failure
 rollback, durable idempotency, stale material, scoped controllers and asset separation. This change
 does not create a model turn, transfer uploads or move grants between tasks.
 
@@ -58,8 +72,11 @@ The script now selects the actual library and protocol targets explicitly.
 Client generation and all 67 affected Host/storage cases for the component
 extraction pass (27 Host and 40 storage). That command compiled the component
 libraries before the subsequent handoff source change; its result is a separate
-baseline. The six SQLite handoff cases use the new source. Host model-unit,
-real-R and browser acceptance remain in progress on that source.
+baseline. On the handoff source before the storage split, all six SQLite handoff
+cases, eight Host model-unit cases and 18 fixture-engine real-R cases pass. Ten
+live-model cases were excluded. Client build and generated-type/embedded-asset
+consistency and all 98 Agent client cases pass. The subsequent binary/browser checks use the new store;
+its focused and cross-boundary acceptance is still pending.
 Tool processes repeatedly remained inactive
 without a compiler diagnostic; the cause is not established. A completed earlier
 startup sample was predominantly `_dyld_start` before the harness, while later
@@ -71,9 +88,11 @@ current end-to-end acceptance from it. Details and commands are in
 and interruption records alongside it. Inspect live verification processes before
 starting another Cargo invocation.
 After that serial run completes, the prepared
-`target/plugin-refactor/agent-handoff-verify.py` runs the new focused cases,
-regenerates the public SDK, checks the independent owner assembly and exercises
-the existing manual-handoff Chrome flow. Do not start it concurrently with Cargo.
+`target/plugin-refactor/agent-storage-verify.py` runs the new owner/store and core
+storage cases, regenerates the public SDK, checks an independent store/owner
+assembly, repeats real R with the new storage and exercises the existing
+manual-handoff Chrome flow. It supersedes the prepared handoff-only sequence.
+Do not start it concurrently with Cargo.
 
 The preceding engine baseline at `1c871a8e` remains separate: 75 Host/storage cases,
 18 real-R fixture-engine cases, 98 Agent client cases and 13 selected Chrome flows
@@ -84,7 +103,7 @@ fixtures remain in `target/plugin-refactor/agent-native-verification.txt`; they
 have not been rerun for the current component extraction.
 
 This remains a migration foundation, not an ordinary loadable Agent runtime/view.
-Backend/storage composition, context providers, Agent views, Studio
+Ordinary backend process composition, context providers, Agent views, Studio
 Agent assistance and final composition/default delivery remain active work.
 Initial import warnings were corrected. Existing user Hosts and R sessions have
 not been replaced; runtime acceptance uses disposable projects. No full-workspace

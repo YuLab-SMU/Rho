@@ -133,7 +133,7 @@ mod tests {
         let saved: StoredComponentRun = serde_json::from_value(value.clone()).unwrap();
         // Inject a contiguous oversized read fixture without going through event
         // pruning. The reader must report its own page limit, not assume a gap.
-        let mut connection = rusqlite::Connection::open(path).unwrap();
+        let mut connection = rusqlite::Connection::open(path.with_extension("agent-v1.sqlite")).unwrap();
         let tx = connection.transaction().unwrap();
         tx.execute("INSERT INTO component_agent_conversations(project,principal,conversation_id,version,active_run_id,updated_at,value) VALUES(?1,?2,'conversation',1,NULL,2,'{}')",rusqlite::params![scope.project,scope.principal]).unwrap();
         tx.execute("INSERT INTO component_agent_runs(project,principal,run_id,conversation_id,request_id,request_digest,host_incarnation,state,event_cursor,value) VALUES(?1,?2,'run','conversation','request','digest',?3,'completed',513,?4)",rusqlite::params![scope.project,scope.principal,service.host_incarnation(),value.to_string()]).unwrap();

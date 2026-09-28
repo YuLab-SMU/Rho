@@ -924,7 +924,7 @@ fn failed_intent_transaction_rolls_back_run_counter_and_conversation_version() {
         .unwrap()
         .unwrap()
         .version;
-    let connection = rusqlite::Connection::open(&f.path).unwrap();
+    let connection = rusqlite::Connection::open(f.path.with_extension("agent-v1.sqlite")).unwrap();
     connection.execute_batch("CREATE TRIGGER reject_component_intent BEFORE INSERT ON component_agent_tools BEGIN SELECT RAISE(ABORT,'fixture store failure'); END;").unwrap();
     assert!(matches!(
         f.owner
@@ -1744,7 +1744,7 @@ fn byte_pruning_preserves_unconfirmed_tool_identity_and_late_native_result() {
             .append_text(f.actor.scope(), &run, text.clone(), 8)
             .unwrap();
     }
-    let connection = rusqlite::Connection::open(&f.path).unwrap();
+    let connection = rusqlite::Connection::open(f.path.with_extension("agent-v1.sqlite")).unwrap();
     let (count, bytes): (usize, usize) = connection
         .query_row(
             "SELECT COUNT(*),SUM(bytes) FROM component_agent_events",
@@ -1873,7 +1873,7 @@ fn project_payload_quota_reserves_native_completion_and_rolls_back_new_intents()
             7,
         )
         .unwrap();
-    let mut connection = rusqlite::Connection::open(&f.path).unwrap();
+    let mut connection = rusqlite::Connection::open(f.path.with_extension("agent-v1.sqlite")).unwrap();
     let events: usize = connection
         .query_row(
             "SELECT COALESCE(SUM(bytes),0) FROM component_agent_events",
@@ -2016,7 +2016,7 @@ fn payload_ledger_bootstraps_current_records_and_counts_unicode_bytes() {
     f.owner
         .save_draft(&f.actor, "unicode", 1, "测😀".repeat(100), 4)
         .unwrap();
-    let connection = rusqlite::Connection::open(&f.path).unwrap();
+    let connection = rusqlite::Connection::open(f.path.with_extension("agent-v1.sqlite")).unwrap();
     for table in [
         "component_agent_conversations",
         "component_agent_runs",
@@ -2069,7 +2069,7 @@ fn an_existing_oversized_store_can_finish_reserved_work_and_disable_without_losi
             7,
         )
         .unwrap();
-    let mut connection = rusqlite::Connection::open(&f.path).unwrap();
+    let mut connection = rusqlite::Connection::open(f.path.with_extension("agent-v1.sqlite")).unwrap();
     seed_inactive_payload(
         &mut connection,
         &ApplicationScope {

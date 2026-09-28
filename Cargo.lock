@@ -5991,6 +5991,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-agent-store"
+version = "0.1.0"
+dependencies = [
+ "rho-agent-api",
+ "rho-agent-owner",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "uuid",
+]
+
+[[package]]
 name = "rho-agents"
 version = "0.1.0"
 dependencies = [
@@ -6532,6 +6545,8 @@ name = "rho-sqlite"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "rho-agent-owner",
+ "rho-agent-store",
  "rho-application",
  "rho-contract",
  "rho-operation",

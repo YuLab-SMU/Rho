@@ -226,8 +226,12 @@ original receipt recovery, scoped/live controllers, stale or unowned context,
 target budgets and atomic commit faults. The boundary fixture checks exact
 serialized bytes, digests and the structured observation-expired diagnostic.
 Independent assemblies include the public plugin protocol and R media API, with
-all source/dependency paths checked to stay inside the assembly. Shared storage and manual handoff use
-`cargo test -p rho-sqlite --lib agent_tasks --locked` and `cargo test -p rho-sqlite
+all source/dependency paths checked to stay inside the assembly. Agent-owned storage
+uses `cargo test -p rho-agent-store --lib --locked`; `node
+scripts/test-agent-plugin-store.mjs` repeats store and owner tests in an independent
+source assembly. Format isolation tests reject unrelated/unsupported databases
+without modifying them. The temporary core storage adapter and manual handoff use
+`cargo test -p rho-sqlite
 --test agent_handoffs --test component_agents --locked`. These preserve one native
 task writer, original receipt/draft captures and component/native asset separation;
 they do not prove an ordinary Agent backend or default delivery.

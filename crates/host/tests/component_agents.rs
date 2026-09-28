@@ -398,7 +398,7 @@ async fn failed_terminal_write_fences_late_model_callbacks_independently_of_save
     let retained=Arc::new(Mutex::new(None));
     f.service=ComponentAgentService::with_engine(Arc::new(ApplicationStore::open(&f._directory.path().join("components.sqlite")).unwrap()),Arc::new(RetainedPortEngine(retained.clone())));
     f.configure(&provider).await;
-    let database=rusqlite::Connection::open(f._directory.path().join("components.sqlite")).unwrap();
+    let database=rusqlite::Connection::open(f._directory.path().join("components.agent-v1.sqlite")).unwrap();
     database.execute_batch("CREATE TRIGGER fail_final BEFORE UPDATE ON component_agent_runs WHEN NEW.state='completed' BEGIN SELECT RAISE(ABORT,'injected terminal failure'); END;").unwrap();
     let run=f.start(f.request()).await;
     tokio::time::timeout(Duration::from_secs(3),async{loop{

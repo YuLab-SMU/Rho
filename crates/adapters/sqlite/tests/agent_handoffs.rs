@@ -326,7 +326,7 @@ fn receipt_write_failure_rolls_back_target_then_original_request_can_retry() {
             .unwrap();
         let source_before = f.handoff.source(f.actor.scope(), &source, &[]).unwrap();
         let connection =
-            rusqlite::Connection::open(f.directory.path().join("state.sqlite")).unwrap();
+            rusqlite::Connection::open(f.directory.path().join("state.agent-v1.sqlite")).unwrap();
         connection.execute_batch("CREATE TRIGGER fail_handoff BEFORE INSERT ON agent_handoff_receipts BEGIN SELECT RAISE(ABORT,'injected receipt failure'); END;").unwrap();
         assert!(matches!(
             f.transfer(&request),

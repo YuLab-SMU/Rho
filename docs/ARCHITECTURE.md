@@ -1803,8 +1803,13 @@ Public native/task/context DTOs have one owner in `rho-agent-api`; the existing 
 reexports those types while context providers and component-Agent migration continues.
 `rho-agent-owner` owns the native task state machine and repository interface.
 Application retains only its scope/error conversion at this boundary; the current
-SQLite adapter implements the public task repository until ordinary backend/storage
-composition replaces it. Both Host updates and manual handoff continue to use the
+SQLite adapter only forwards to `rho-agent-store`, the single package-owned SQL
+implementation. Native/component tasks, assets, task-list projections and handoff
+share one Agent store and transactions. The temporary composition supplies a new
+`agent-v1.sqlite` sibling path; it never reads or imports previous Application task
+tables or deletes their files. The store checks its format before creating tables
+and has no scientific-journal connection. Ordinary backend process composition
+must still replace this temporary core adapter. Both Host updates and manual handoff use the
 same task writer gate. A public request conversion preserves captured wire bytes,
 so original request digests, draft versions and native session identities do not
 change merely because their Rust owner moved.
@@ -1812,14 +1817,14 @@ The component model-task state machine also lives in `rho-agent-owner::component
 Its public captured task/document/call/receipt types are in `rho-agent-api::component`;
 only the public plugin protocol and R media API are dependencies. The native
 Application adapter revalidates the original live controller, converts records and
-injects its original atomic repository. It owns no second task state machine or
+injects the Agent-owned atomic repository. It owns no second task state machine or
 writer gate. Full native receipt captures retain save/run steps, applied document
 versions, save acknowledgements and structured diagnostics; the document call
 boundary admits only the six supported document actions. Fixed-view controls
 remain unavailable. This is a transitional data conversion, not an old-store
 reader or a migration service. A conversion failure remains an error, never a
 successful empty result. Ordinary backend/storage composition still has to remove
-these temporary core DTO/repository adapters.
+these temporary core DTO/repository adapters and supply instance-owned storage.
 
 Native protocol transport does not register capabilities, persist task truth or
 expand the caller's scientific authority.
@@ -1873,14 +1878,14 @@ See [PRIVACY.md](../PRIVACY.md) and
 
 The approved manual-handoff policy and public contract live in the Agent package
 (`rho-agent-owner::handoff` and `rho-agent-api::handoff`). Application only forwards
-typed captures to that owner and injects the original atomic repository. Its typed
+typed captures to that owner and injects the Agent-owned atomic repository. Its typed
 source/target references point to the existing native task and Rho conversation
 owners. The Host reads any additional native-task operation references through the
 existing caller-filtered journal and validates selected references through the
 existing source readers. Models cannot supply trusted provenance or handoff authority.
 
 The target's original owner lock serializes the write with draft saves and streamed
-observations. ApplicationStore rechecks source material, target draft version and
+observations. AgentStore rechecks source material, target draft version and
 controller in the same transaction that appends text, merges references, advances
 the original owner's version and records a bounded handoff receipt. Assets and
 permission/grant fields are preserved. The receipt provides idempotent replay and

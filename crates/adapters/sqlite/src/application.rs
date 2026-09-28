@@ -7,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use std::{path::Path, sync::Mutex, time::Duration};
 
 /// Local application state, never part of the scientific journal or outbox.
-pub struct ApplicationStore(pub(crate) Mutex<Connection>);
+pub struct ApplicationStore(pub(crate) Mutex<Connection>, pub(crate) rho_agent_store::AgentStore);
 
 impl ApplicationStore {
     pub fn open(path: &Path) -> Result<Self, String> {
@@ -46,12 +46,11 @@ impl ApplicationStore {
                 PRIMARY KEY(project,principal,receipt_key));",
             )
             .map_err(err)?;
-        crate::agent_tasks::initialize(&connection)?;
-        crate::component_agents::initialize(&connection)?;
-        crate::agent_handoffs::initialize(&connection)?;
         crate::annotations::initialize(&connection)?;
         crate::runtime_instances::initialize(&connection)?;
-        Ok(Self(Mutex::new(connection)))
+        // The new Agent namespace never reads or imports the previous Application tables.
+        let agents = rho_agent_store::AgentStore::open(&path.with_extension("agent-v1.sqlite"))?;
+        Ok(Self(Mutex::new(connection), agents))
     }
 
     pub fn read(&self, scope: &str, key: &str) -> Result<ApplicationState, String> {

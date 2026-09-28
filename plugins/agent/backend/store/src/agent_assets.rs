@@ -1,7 +1,7 @@
 //! Shared immutable byte storage for native-task and Rho-conversation uploads.
-use crate::ApplicationStore;
-use rho_application::{AgentTaskError, AgentTaskScope};
-use rho_contract::AgentAsset;
+use crate::AgentStore;
+use rho_agent_api::AgentAsset;
+use rho_agent_owner::{AgentTaskError, AgentTaskScope};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 pub(crate) enum AssetOwner<'a> {
@@ -32,7 +32,7 @@ fn owner_key(
     Ok(key)
 }
 pub(crate) fn list(
-    store: &ApplicationStore,
+    store: &AgentStore,
     scope: &AgentTaskScope,
     owner: AssetOwner<'_>,
 ) -> Result<Vec<AgentAsset>, AgentTaskError> {
@@ -48,7 +48,7 @@ pub(crate) fn list(
         .collect()
 }
 pub(crate) fn read(
-    store: &ApplicationStore,
+    store: &AgentStore,
     scope: &AgentTaskScope,
     owner: AssetOwner<'_>,
     id: &str,
@@ -60,7 +60,7 @@ pub(crate) fn read(
     Ok((serde_json::from_str(&value).map_err(storage)?, data))
 }
 pub(crate) fn put(
-    store: &ApplicationStore,
+    store: &AgentStore,
     scope: &AgentTaskScope,
     owner: AssetOwner<'_>,
     asset: &AgentAsset,

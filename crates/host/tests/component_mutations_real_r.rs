@@ -1914,7 +1914,7 @@ async fn injected_application_write_failures_preserve_native_facts_without_repla
     for phase in ["intent", "result", "terminal"] {
         let f = Fixture::new("counter <- counter + 1L; invisible(counter)", false).await;
         let database =
-            rusqlite::Connection::open(f._temp.path().join("components.sqlite")).unwrap();
+            rusqlite::Connection::open(f._temp.path().join("components.agent-v1.sqlite")).unwrap();
         let trigger = match phase {
             "intent" => {
                 "CREATE TRIGGER fail_component BEFORE INSERT ON component_agent_tools BEGIN SELECT RAISE(ABORT,'injected intent failure'); END;"

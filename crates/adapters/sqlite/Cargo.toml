@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+rho-agent-store = { path = "../../../plugins/agent/backend/store" }
+rho-agent-owner = { path = "../../../plugins/agent/backend/owner" }
 rho-application = { path = "../../application" }
 uuid.workspace = true
 async-trait.workspace = true

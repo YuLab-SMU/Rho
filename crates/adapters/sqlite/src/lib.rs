@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 mod agent_tasks;
-mod agent_assets;
-mod project_agent_tasks;
+mod agent_storage;
 mod agent_handoffs;
 mod annotations;
 mod caller_records;
