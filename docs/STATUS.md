@@ -1374,13 +1374,25 @@ retain the saved request; inspection never invokes R. Foreign-view retry stays
 disabled. Newer input survives observation and a failed acknowledgement save keeps
 the recovery identity. The independent package build/model check passes, including
 eleven mismatched-record cases, edits during observation and stale-response refusal.
-The first added concurrency test used an incorrect test-side scheduling assumption;
-its failure is retained in `console-submission-recovery-v3.log`. An explicit query
-arrival signal fixes that fixture. The latest `console-submission-recovery-v5.log`
-also verifies that acknowledging the original submission preserves already
-observed output and its cursor; the independent build/model check passes.
-Updated isolated Chrome and lost-acknowledgement real-R cases are written but not
-yet run; prior browser evidence below remains a separate baseline.
+The latest model check (`console-submission-recovery-v6.log`) also verifies that
+acknowledging the original submission preserves already observed output and its
+cursor. Native recent-operation pages are bounded partial observations: they now
+supply candidates, followed by complete exact-record verification. Cached pages,
+partial records and missing evidence retain uncertainty. All three current Console
+and Objects isolated Chrome cases pass (`console-submission-browser-v3.log`).
+Current real-R acceptance passes: Console in `console-submission-real-r-v4.log`,
+Objects in `console-submission-real-r-v5.log`, using the same frozen Host and
+independent packages. Console recovers the original run from a replacement view,
+retains the newer Unicode draft and confirms the R counter ran exactly once.
+Objects explicitly reconnects after transport loss, sets aside the saved request,
+and recovers its original PNG Operation from another view without executing again.
+Initial route-cleanup, partial-page and disconnected-view fixture failures, plus
+the third attempt's pre-body R initialization timeout, remain in the versioned
+logs; none is counted as a pass. Twenty-six related captures were inspected,
+including normal/wide/constrained layouts and the actual recovered native states.
+No clipping, overlap or page-wide horizontal overflow was observed. Unchanged
+layout observations are reused; this does not close the full native interaction
+matrix.
 
 Console history scans bounded pages past unrelated view-state writes and retains
 100 completed runs plus active work. The limit is visible; exhausted pagination
@@ -1441,8 +1453,13 @@ replacement view; missing, partial or foreign records retain uncertainty. Failed
 save acknowledgements keep the current action blocked and preserve its request.
 Set Aside sends no scientific call or cancellation. All 68 independent model,
 component and action cases pass, including four new retention/recovery cases
-(`objects-set-aside-v2.log`). The updated isolated browser case is written but
-not yet run; preceding browser/native evidence remains a separate baseline.
+(`objects-set-aside-v3.log`). The current isolated browser case passes, including
+replacement-view inspection through a partial candidate page and complete exact
+record. Its initial fixture counted before the native reply was withheld; waiting
+for that explicit event fixes the fixture. The expanded real-R case passes after
+explicitly reconnecting the disconnected view: one retained request, the exact original caller/arguments and PNG result,
+and unchanged execution count. The initial disconnected-view assertion failure
+remains in `console-submission-real-r-v4.log`; the corrected flow is in `v5.log`.
 
 The ordinary `org.rho.packages` package now assembles outside the checkout with
 its approved compact list, wide inspector, copy-specific source details and
@@ -1756,9 +1773,10 @@ R, Files/Git, Process, Remote, Environment, Editor, Console, Objects, Packages,
 Help, Plots, Viewer, Manager and Studio now have ordinary package sources and
 individual acceptance evidence above. Complete their final scenario integration
 and the outstanding cross-plugin workflows; source extraction alone does not
-establish the complete replacement. Console's new original-submission recovery
-still needs its current browser and real-R acceptance, and Objects needs an
-updated browser check of its explicit set-aside and retained-request inspection.
+establish the complete replacement. Console's original-submission recovery and
+Objects' explicit set-aside and retained-request inspection pass their current model and isolated browser checks.
+Both also pass their current disposable real-R recovery checks; prior failures
+remain separately recorded above.
 Neither feature claims cancellation or non-acceptance. The older standalone
 frame pointer-routing failure remains separate from the passing generic-window
 pointer checks. Abrupt browser disposal cannot establish that unacknowledged

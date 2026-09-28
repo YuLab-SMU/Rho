@@ -151,7 +151,9 @@ export class ObjectsActions extends Model<Snapshot> {
   private async findOriginal(pending: PendingAction): Promise<RecordReply> {
     const response = await this.client.query<{ status: string; completeness: string; data?: { operations: { operation_id: string }[]; next_cursor: number | null } }>(
       { id: "operation.list_recent", version: 1 }, { client_request_id: await operationRequestId(pending.view, pending.request), limit: 10 });
-    if (response.status !== "ready" || response.completeness !== "complete" || !Array.isArray(response.data?.operations) || response.data.operations.length > 10 || response.data.next_cursor !== null)
+    // Native recent-operation pages are bounded, partial observations. They only
+    // select candidates; readOperation and matchesPending verify complete truth.
+    if (response.status !== "ready" || !["complete", "partial"].includes(response.completeness) || !Array.isArray(response.data?.operations) || response.data.operations.length > 10 || response.data.next_cursor !== null)
       throw new Error("The original request observation is unavailable.");
     const matches: RecordReply[] = [];
     for (const item of response.data.operations) {

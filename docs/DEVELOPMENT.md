@@ -538,8 +538,10 @@ change the Host binary. Synthetic composition events cover submission guards;
 they do not establish native input-method acceptance.
 
 The Console model check also covers read-only original-submission recovery from a
-replacement view, exact view/request/provider/session/code matching, partial or
-ambiguous reads, failed acknowledgement persistence and edits during observation.
+replacement view, exact view/request/provider/session/code matching, partial records
+or ambiguous candidates, failed acknowledgement persistence and edits during observation.
+Native recent-operation pages are partial by design; recovery uses them only to
+locate candidates before requiring a complete, exactly matching Operation record.
 `console-editor.spec.ts` exercises the explicit inspection action, disabled foreign
 retry, preserved uncertainty and recovered drafts across reload at normal, wide
 and constrained sizes. `r-plugin-console.spec.ts` drops a native submission reply,

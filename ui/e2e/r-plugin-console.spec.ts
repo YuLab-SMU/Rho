@@ -213,7 +213,9 @@ test("ordinary Console runs and cancels original R work while preserving drafts 
     // or inferred rollback is sent to R when that acknowledgement is lost.
     await page.goto("about:blank");
   } finally { releaseReply(); }
-  await page.unroute("**/api/plugin-view");
+  // Finish the deliberately withheld route before disabling interception;
+  // otherwise unroute can continue it while the handler is still aborting it.
+  await page.unrouteAll({ behavior: "wait" });
   await invoke("views.close", { view: view.view, mode: { kind: "retain_acknowledged", expected_version: uncertain.state_version } });
   view = await openView("console-original-recovery", uncertain.state); await show(page, view);
   await expect(input).toContainText("next draft after lost acknowledgement 中文");

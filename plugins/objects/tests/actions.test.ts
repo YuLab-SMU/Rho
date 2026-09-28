@@ -114,7 +114,7 @@ it("finds an original accepted request after reopening without sending it from t
   await expect(original.actions.run("print(plot)", "console")).rejects.toThrow();
   const saved = structuredClone(original.persisted[0]) as any;
   const reopened = fixture(saved); reopened.view.view = "reopened-view";
-  reopened.query.mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { operations: [{ operation_id: "original-operation" }], next_cursor: null } });
+  reopened.query.mockResolvedValueOnce({ status: "ready", completeness: "partial", data: { operations: [{ operation_id: "original-operation" }], next_cursor: null } });
   reopened.query.mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { record: { status: "running", outcome: null,
     operation: { caller: { kind: "plugin", id: "objects-one" }, operation_id: "original-operation",
       client_request_id: requestId(saved.pending.view, saved.pending.request), capability: { id: "r.execute", version: 2 }, normalized_arguments: saved.pending.arguments } } } });
@@ -151,10 +151,10 @@ it("setting aside saves the exact unconfirmed request and permits only a distinc
   expect(f.invoke.mock.calls[1][2].requestId).not.toBe(original.request);
   expect(f.actions.getSnapshot().retained).toEqual([original]);
   const reopened = fixture(f.persisted.at(-1)!); reopened.view.view = "replacement-view";
-  reopened.query.mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { operations: [], next_cursor: null } });
+  reopened.query.mockResolvedValueOnce({ status: "ready", completeness: "partial", data: { operations: [], next_cursor: null } });
   await expect(reopened.actions.inspectRetained(original.view, original.request)).rejects.toThrow("remains unconfirmed");
   expect(reopened.actions.getSnapshot().retained).toEqual([original]);
-  reopened.query.mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { operations: [{ operation_id: "original-operation" }], next_cursor: null } });
+  reopened.query.mockResolvedValueOnce({ status: "ready", completeness: "partial", data: { operations: [{ operation_id: "original-operation" }], next_cursor: null } });
   reopened.query.mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { record: { status: "running", outcome: null,
     operation: { caller: { kind: "plugin", id: original.view }, operation_id: "original-operation", client_request_id: requestId(original.view, original.request),
       capability: { id: original.capability, version: original.version }, normalized_arguments: original.arguments } } } });
@@ -176,7 +176,7 @@ it("failed retention acknowledgement keeps the pending request and blocks new ac
   expect(f.actions.getSnapshot()).toMatchObject({ pending: null, retained: [original] });
 });
 
-it("retained recovery refuses partial, foreign and unsaved results without changing another pending request", async () => {
+it("retained recovery refuses partial records, foreign and unsaved results without changing another pending request", async () => {
   const f = fixture(); f.invoke.mockRejectedValueOnce(new Error("lost"));
   await expect(f.actions.run("print(old)", "console")).rejects.toThrow();
   const original = structuredClone(f.actions.getSnapshot().pending)!; await f.actions.setAside();
@@ -185,11 +185,13 @@ it("retained recovery refuses partial, foreign and unsaved results without chang
   const next = structuredClone(f.actions.getSnapshot().pending);
   await expect(f.actions.inspectRetained("foreign", original.request)).rejects.toThrow("Select one retained");
   expect(f.query).not.toHaveBeenCalled();
-  f.query.mockResolvedValueOnce({ status: "ready", completeness: "partial", data: { operations: [{ operation_id: "original-operation" }], next_cursor: null } });
+  f.query.mockResolvedValueOnce({ status: "ready", completeness: "cached", data: { operations: [{ operation_id: "original-operation" }], next_cursor: null } });
   await expect(f.actions.inspectRetained(original.view, original.request)).rejects.toThrow("unavailable");
-  const page = { status: "ready", completeness: "complete", data: { operations: [{ operation_id: "original-operation" }], next_cursor: null } };
+  const page = { status: "ready", completeness: "partial", data: { operations: [{ operation_id: "original-operation" }], next_cursor: null } };
   const record = { status: "running", outcome: null, operation: { caller: { kind: "plugin", id: original.view }, operation_id: "original-operation",
     client_request_id: requestId(original.view, original.request), capability: { id: original.capability, version: original.version }, normalized_arguments: original.arguments } };
+  f.query.mockResolvedValueOnce(page).mockResolvedValueOnce({ status: "ready", completeness: "partial", data: { record } });
+  await expect(f.actions.inspectRetained(original.view, original.request)).rejects.toThrow("unavailable");
   f.query.mockResolvedValueOnce(page).mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { record: { ...record, operation: { ...record.operation, operation_id: "foreign" } } } });
   await expect(f.actions.inspectRetained(original.view, original.request)).rejects.toThrow("another Operation");
   f.query.mockResolvedValueOnce(page).mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { record } });

@@ -56,7 +56,7 @@ try {
     caller:{kind:'plugin',id:captured.view},client_request_id:lookup,preconditions:[],
     normalized_arguments:{...structuredClone(calls[0].args),preconditions:null}}};
   const observations=[],recoverySaves=[];
-  let observed=recoveredRecord,listed=[{operation_id:'original-run'}],completeness='complete',failRecoverySave=false;
+  let observed=recoveredRecord,listed=[{operation_id:'original-run'}],completeness='partial',recordCompleteness='complete',failRecoverySave=false;
   const recoveryClient={...client,view:{...client.view,view:'replacement-view',state:{...saved[0],input:'new draft after reopening'}},
     invoke:async()=>{throw new Error('Recovery must never invoke');},control:async()=>{throw new Error('Recovery must never control');},
     query:async(cap,args)=>{
@@ -66,7 +66,7 @@ try {
         return {status:'ready',completeness,data:{operations:listed,next_cursor:null}};
       }
       assert.equal(cap.id,'operation.get');assert.deepEqual(args,{operation_id:'original-run'});
-      return {status:'ready',completeness:'complete',data:{record:observed}};
+      return {status:'ready',completeness:recordCompleteness,data:{record:observed}};
     },setState:async state=>{if(failRecoverySave)throw new Error('Recovery state not saved');recoverySaves.push(structuredClone(state));return state;}};
   const recovery=new ConsoleModel(recoveryClient,owner);
   const priorRun=runFrom(recoveredRecord,owner);mergeEvents(priorRun,page([event(1,'already observed original output\n')]));
@@ -101,9 +101,15 @@ try {
     await assert.rejects(()=>missing.recoverSubmission(),/No unique original run/);
     assert.deepEqual(missing.state.submission,captured);
   }
-  listed=[{operation_id:'original-run'}];completeness='partial';
-  const partial=new ConsoleModel(recoveryClient,owner);await assert.rejects(()=>partial.recoverSubmission(),/No unique original run/);
-  assert.deepEqual(partial.state.submission,captured);completeness='complete';
+  listed=[{operation_id:'original-run'}];
+  for(const invalid of ['cached','unavailable','unknown']) {
+    completeness=invalid;const partial=new ConsoleModel(recoveryClient,owner);
+    await assert.rejects(()=>partial.recoverSubmission(),/No unique original run/);
+    assert.deepEqual(partial.state.submission,captured);
+  }
+  completeness='partial';recordCompleteness='partial';
+  const partial=new ConsoleModel(recoveryClient,owner);await assert.rejects(()=>partial.recoverSubmission(),/original run is unavailable/);
+  assert.deepEqual(partial.state.submission,captured);recordCompleteness='complete';
   failRecoverySave=true;const unsaved=new ConsoleModel(recoveryClient,owner);
   await assert.rejects(()=>unsaved.recoverSubmission(),/Recovery state not saved/);
   assert.deepEqual(unsaved.state.submission,captured);assert.equal(unsaved.state.input,'new draft after reopening');

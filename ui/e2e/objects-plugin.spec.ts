@@ -83,7 +83,7 @@ test("ordinary Objects keeps read-only content, independent object navigation an
               text_start: 1, next_text_start: null, observed_at_ms: Date.now(), complete: true, notices: [] }) }; break;
             case "windows.layout": result = { status: "ready", data: fixture.layout }; break;
             case "operation.get": result = { status: "ready", completeness: "complete", data: { record: fixture.records.find(record => record.operation.operation_id === body.arguments.operation_id) } }; break;
-            case "operation.list_recent": result = { status: "ready", completeness: "complete", data: { operations: fixture.records.filter(record => !fixture.hideOriginal && record.operation.client_request_id === body.arguments.client_request_id).map(record => ({ operation_id: record.operation.operation_id })), next_cursor: null } }; break;
+            case "operation.list_recent": result = { status: "ready", completeness: "partial", data: { operations: fixture.records.filter(record => !fixture.hideOriginal && record.operation.client_request_id === body.arguments.client_request_id).map(record => ({ operation_id: record.operation.operation_id })), next_cursor: null } }; break;
             default: error = `Unexpected query ${body.capability.id}`;
           }
         } else if (body.type === "set_state") {
@@ -148,6 +148,7 @@ test("ordinary Objects keeps read-only content, independent object navigation an
   }
   await page.evaluate(() => { (window as any).fixture.loseNextReply = true; });
   await plot.getByRole("button", { name: "Render plot", exact: true }).click();
+  await expect(directoryView.getByText("Fixture original reply lost", { exact: true })).toBeVisible();
   await expect(directoryView.getByText("Action unconfirmed", { exact: false })).toBeVisible();
   expect(await page.evaluate(() => (window as any).fixture.records.length)).toBe(3);
   const original = await page.evaluate(() => structuredClone((window as any).fixture.views.directory.state.actions.pending));

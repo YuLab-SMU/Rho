@@ -158,8 +158,8 @@ export class ConsoleModel {
     await this.acceptSubmission(captured, run);
     return run;
   }
-  /** Locate a retained admission under the original view/request without Invoke.
-   * A missing or partial observation never authorizes a replacement submission. */
+  /** The bounded journal page supplies candidates only. A complete exact record
+   * confirms admission; missing evidence never authorizes another submission. */
   async recoverSubmission() {
     const captured = structuredClone(this.state.submission);
     if (!captured) throw new Error("There is no unconfirmed Console submission.");
@@ -167,7 +167,7 @@ export class ConsoleModel {
     const original = await operationRequestId(captured.view, captured.request);
     const page = await this.client.query<{ status: string; completeness: string; data?: { operations?: { operation_id: string }[]; next_cursor: number | null } }>(
       key("operation.list_recent"), { client_request_id: original, limit: 2 });
-    if (page.status !== "ready" || page.completeness !== "complete" || !Array.isArray(page.data?.operations) || page.data.operations.length !== 1 || page.data.next_cursor !== null)
+    if (page.status !== "ready" || !["complete", "partial"].includes(page.completeness) || !Array.isArray(page.data?.operations) || page.data.operations.length !== 1 || page.data.next_cursor !== null)
       throw new Error("No unique original run is confirmed. The saved submission remains available for inspection.");
     const id = page.data.operations[0]!.operation_id;
     if (typeof id !== "string" || !id) throw new Error("The original run identity is unavailable. The saved submission remains unconfirmed.");

@@ -162,7 +162,54 @@ test("ordinary Objects reads exact native objects and captures navigation and ex
   await frame.getByRole("button", { name: "Inspect Operation", exact: true }).click();
   await expect(frame.getByText("Plot execution: succeeded", { exact: false })).toBeVisible();
   expect(await executions()).toHaveLength(2);
+  // Lose one actual native result, save its original identity separately, then
+  // inspect it from a replacement view through the bounded journal page.
+  await filter.fill("");
+  let lostReply = false;
+  await page.route("**/api/plugin-view", async route => {
+    const body = route.request().postDataJSON()?.message?.body;
+    if (!lostReply && body?.type === "invoke" && body.capability?.id === "r.execute") {
+      lostReply = true;
+      await route.fetch(); await route.abort(); return;
+    }
+    await route.continue();
+  });
+  await plot.getByRole("button", { name: "Render plot", exact: true }).click();
+  await expect.poll(() => lostReply).toBe(true);
+  await page.unrouteAll({ behavior: "wait" });
+  // A lost HTTP reply disconnects the containing channel. Reconnect its saved
+  // document explicitly before using the plugin's retained-request controls.
+  await expect(page.getByRole("button", { name: "Reconnect this view", exact: true })).toBeVisible();
+  const disconnected = await query("views.inspect", { view: reopened.view });
+  expect(disconnected.state.actions.pending).toMatchObject({ view: reopened.view, capability: "r.execute" });
+  expect(await executions()).toHaveLength(3);
+  await page.getByRole("button", { name: "Reconnect this view", exact: true }).click();
+  await expect(frame.getByText("Action unconfirmed", { exact: false })).toBeVisible();
+  await expect(frame.getByRole("button", { name: "Set Aside", exact: true })).toBeEnabled();
+  await frame.getByRole("button", { name: "Set Aside", exact: true }).click();
+  await expect(frame.getByText("Requests set aside (1)", { exact: true })).toBeVisible();
+  saved = await query("views.inspect", { view: reopened.view });
+  const retained = saved.state.actions.retained[0];
+  expect(retained.view).toBe(reopened.view);
+  expect(saved.state.actions.pending).toBeNull();
+  expect(await executions()).toHaveLength(3);
   await invoke("views.close", { view: reopened.view });
+  saved = await query("views.inspect", { view: reopened.view });
+  const recovery = await openView("objects-native", saved.state); await show(page, recovery);
+  await expect(frame.getByText("Requests set aside (1)", { exact: true })).toBeVisible();
+  await page.screenshot({ path: info.outputPath("objects-native-retained.png") });
+  await frame.getByRole("button", { name: "Inspect Saved Request", exact: true }).click();
+  await expect(frame.getByText("Requests set aside (1)", { exact: true })).toBeHidden();
+  await expect(frame.getByText("Plot execution: succeeded", { exact: false })).toBeVisible();
+  const recovered = await query("views.inspect", { view: recovery.view });
+  expect(recovered.state.actions.retained).toEqual([]);
+  expect(recovered.state.actions.receipt).toMatchObject({ view: retained.view, request: retained.request, capability: "r.execute" });
+  const recoveredRecord = (await query("operation.get", { operation_id: recovered.state.actions.receipt.id })).record;
+  expect(recoveredRecord.operation.normalized_arguments).toEqual(retained.arguments);
+  expect(recoveredRecord.output.outputs.some((item: any) => item.reference.media_type === "image/png")).toBe(true);
+  expect(await executions()).toHaveLength(3);
+  await page.screenshot({ path: info.outputPath("objects-native-recovered.png") });
+  await invoke("views.close", { view: recovery.view });
   await invoke("plugins.release", { instance: objectsInstance }); await invoke("plugins.release", { instance: r });
   completed = true;
 });

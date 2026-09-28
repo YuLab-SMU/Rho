@@ -55,7 +55,7 @@ async function mountConsole(page: Page, recovery: { request: string; scoped: str
         let result: any;
         if (request.type === "query") {
           switch (request.capability.id) {
-            case "operation.list_recent": result = { status: "ready", completeness: "complete", data: { operations: fixture.runs
+            case "operation.list_recent": result = { status: "ready", completeness: "partial", data: { operations: fixture.runs
               .filter(run => !request.arguments.client_request_id || !fixture.hideOriginal && run.operation.client_request_id === request.arguments.client_request_id)
               .map(run => ({ operation_id: run.operation.operation_id, capability: run.operation.capability })), next_cursor: null } }; break;
             case "operation.get": result = { status: "ready", completeness: "complete", data: { record: fixture.runs.find(run => run.operation.operation_id === request.arguments.operation_id) } }; break;
