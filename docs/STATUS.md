@@ -183,10 +183,13 @@ Source now adds `plugins.delegated_operation`: the native backend can resolve
 its original reverse request from the retained parent admission with exact
 project/principal/instance checks. It returns only the original Operation identity;
 an absent journal record is partial evidence and never permission to replay.
-A separate generic Host fixture covers an active child, discarded reply,
-cross-instance/identity/scope rejection and read-only release/reopen. Public
-declarations, schemas and consumer checks are included. These runtime checks are
-pending in the current serial run. Ordinary Agent model configuration is also
+A separate generic Host fixture now passes for an active child, discarded reply,
+cross-instance/identity/scope rejection and read-only release/removal/reopen.
+Its first run reached the final cross-project setup but correctly encountered
+the single-Host journal lock. The fixture now closes the disposable original Host
+before rebinding that same journal to another project; the complete v5 case passes.
+Public declarations, schemas and consumer checks are included; their generation
+and independent checks remain in the serial run. Ordinary Agent model configuration is also
 composed through the existing owner's versioned settings admission; its new
 configuration/isolation fixture and generic Host case remain pending. The earlier
 five-case metadata result predates this addition. No model or actual credential

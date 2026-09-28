@@ -280,6 +280,19 @@ async fn original_reverse_request_is_observable_while_pending_after_lost_reply_a
         .unwrap()["operation_id"],
         json!(child)
     );
+    assert_eq!(
+        query(&reopened, "plugins.instances", json!({"limit":20})).await["instances"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|item| item["observed_in_this_host"] == true)
+            .count(),
+        0
+    );
+    // A journal has one Host owner. Rebind this same retained journal only after
+    // closing the disposable original Host, so the test reaches project filtering.
+    reopened.drain().await;
+    drop(reopened);
     let other_root = temp.path().join("other-project");
     fs::create_dir(&other_root).unwrap();
     let foreign = NextHost::open_plugin_workspace(&db, &other_root)
@@ -290,13 +303,5 @@ async fn original_reverse_request_is_observable_while_pending_after_lost_reply_a
             .await
             .is_err()
     );
-    assert_eq!(
-        query(&reopened, "plugins.instances", json!({"limit":20})).await["instances"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter(|item| item["observed_in_this_host"] == true)
-            .count(),
-        0
-    );
+    foreign.drain().await;
 }
