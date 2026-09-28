@@ -86,7 +86,7 @@ an owner-admitted request or receipt, or commit an operation. Image labels and
 verified bytes are supplied by the containing owner. The transitional core adapter
 preserves admitted actions and records owner diagnostics before returning errors.
 
-The new `backend/` process composes the same owner and store for task metadata.
+The `backend/` process composes the same owner and store for task metadata.
 Its public manifest contributes task-list/conversation/settings queries plus
 model-task creation, draft saving, title/archive updates, explicit control
 transfer and versioned model configuration. Configuration accepts credential
@@ -98,8 +98,18 @@ are submitted to the original Host Operation and retained until terminal settlem
 This process uses the public SDK's bounded Host-call client and imports no private
 core crate. [Build instructions](BUILD.md) describe the independent source package.
 
-The process currently provides metadata only. Model execution, native Agent
-connections, context providers and Agent views still require integration. The
-registered metadata capabilities do not claim those features; default delivery
-remains unfinished. The backend transport and independent Host verification
-commands are described in the build instructions.
+The explicit `agent.model.test` Operation runs the existing Rig engine's bounded
+synthetic connection or image diagnostic. It receives no scientific context or
+Host tools. Only this explicit action reads the captured model's scoped key and
+contacts the selected endpoint. The original Operation stays active until the
+test ends; `agent.model.diagnostic` only reads its retained state. An explicit
+`agent.model.test.stop` checks the native controller and expected version, and
+disabling model settings also stops live diagnostics. A stop request does not
+claim the original Operation already finished. Repeated requests and process
+reopen observe the original diagnostic and never restart it.
+
+Ordinary model-task execution, native Agent connections, context providers and
+Agent views still require integration. Synthetic diagnostics do not establish
+scientific execution or real-provider quality. Default delivery remains unfinished.
+The backend transport and independent Host verification commands are described
+in the build instructions.

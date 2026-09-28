@@ -24,5 +24,5 @@ try {
   assert.equal(digest(executable), original);
   execFileSync(executable, ['--ignored', '--nocapture'], {cwd: root, env: {...env, RHO_AGENT_PLUGIN_PACKAGE: source}, stdio: 'inherit'});
   assert.equal(digest(executable), original);
-  console.log(`Independent Agent metadata package passed generic Host identity, isolation, idempotency and journal retention checks. Host harness SHA256 ${original}`);
+  console.log(`Independent Agent package passed generic Host metadata, Control, synthetic model lifetime and journal retention checks. Host harness SHA256 ${original}`);
 } finally { fs.rmSync(directory, {recursive: true, force: true}); }

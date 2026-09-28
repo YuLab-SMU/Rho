@@ -165,9 +165,10 @@ cases pass before the key-Control addition, covering concurrency, version/contro
 conflicts, invalid plaintext/embedded credentials, instance separation and
 observation-only reopen. The independent package build in v5 passed, but its
 subsequent test selected the system's Rust 1.88 instead of the project's 1.97.
-The build and test scripts now share an explicitly resolved toolchain; this
-correction and the generic Host acceptance are pending the key-Control verifier.
-No compile failure is recorded as a successful independent test.
+The build and test scripts now share an explicitly resolved toolchain. The
+corrected independent backend build and all ten framed cases now pass in the
+key-Control verifier. Its generic Host acceptance now also passes; the original
+v5 failure remains recorded. No compile failure is recorded as a passing test.
 
 The credential file stores a secret and its scoped original-request reference in
 one atomic replacement. Identical retries return the original reference; changed
@@ -175,7 +176,7 @@ reuse is refused. Read-only lookup survives reopen, and removal retains the
 non-secret receipt so an old request cannot recreate the secret. All ten credential store cases now pass, including the four new cases for
 original-request recovery, concurrent duplicates, missing storage and corrupt
 receipt refusal. The independent assembly has also passed all 14 owner and 19
-store cases; its schema freshness stage is still running.
+store cases and its public schema freshness check.
 
 The backend now exposes `agent.model.key.store` as ephemeral Control, with original
 caller observation and instance-owned credential storage, plus the read-only
@@ -186,15 +187,34 @@ require native settlement. Four new framed fixtures cover lost replies/reopen,
 wrong kinds/identity/scopes, disconnect before admission and mixed capacity.
 The generic Host fixture also checks unchanged journal table counts and separate
 instance receipts. All ten framed cases now pass, including those four new Control cases. Manifest
-generation also passes. Independent assemblies and the generic Host case are
-still running serially in `target/plugin-refactor/agent-key-control-verify.py`;
-they are not yet passes.
+generation also passes. The independent assemblies and the generic Host case all pass, including exact
+journal exclusion, two instances, retained Operations and removal. Architecture,
+boundary and documentation checks also pass; the complete serial result is in
+`target/plugin-refactor/agent-key-control-results-v1.json`. Its Host harness was
+compiled and its external package copied before the following diagnostic source
+change, retaining the ten-capability baseline. The harness hash stayed unchanged
+while the external package was built and loaded.
 The v5 public-port logs and results are retained separately.
 
-This remains incomplete Agent migration. Model execution and native Agent transport
-composition, context providers, Agent views, Studio Agent assistance and final
-composition/default delivery remain active work. The metadata process does not
-claim to run models or scientific actions.
+Source now composes the public Rig engine for explicit synthetic model diagnostics:
+`agent.model.test`, `agent.model.diagnostic` and `agent.model.test.stop`. Only
+explicit test admission reads the captured scoped key and contacts its endpoint.
+The original native Operation remains active until the diagnostic ends. Stop
+requests and settings disable signal the original live test; read/reopen/repeated
+requests only observe retained state. Tests have no scientific context or Host
+tools. Three additional framed fixtures cover actual loopback HTTP/SSE, retained
+settlement, caller/version stop checks, disabling and interrupted reopen. A second
+generic Host case exercises the independently packaged process and original
+Operation lifetime. The lock update, all 13 framed cases and manifest generation
+now pass, including the three new diagnostic cases. Independent packaging and
+the two generic Host cases remain in the serial
+`target/plugin-refactor/agent-model-diagnostic-verify.py`; they are not yet passes.
+The earlier metadata/Control evidence remains its own baseline.
+
+This remains incomplete Agent migration. Ordinary model-task execution and native
+Agent transport composition, context providers, Agent views, Studio Agent
+assistance and final composition/default delivery remain active work. Synthetic
+diagnostics do not establish those features or real-provider quality.
 Initial import warnings were corrected. Existing user Hosts and R sessions have
 not been replaced; runtime acceptance uses disposable projects. No full-workspace
 audit, installation or publication ran.

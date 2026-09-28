@@ -25,9 +25,15 @@ database path. The Agent metadata store is separate from the scientific journal.
 Only the Host commits Operation results. A result candidate is retained until its
 original Host settlement; disconnect never means cancellation or rollback.
 
-This composition does not yet start models, native Agent transports or scientific
-work and has no Agent view. Those remain implementation work; the extracted
-engine/client sources are included but are not falsely registered as capabilities.
+`agent.model.test` explicitly runs a bounded synthetic connection/image diagnostic
+through the same public Rig engine. It captures settings and a scoped key, retains
+the original native Operation until completion, and offers read-only observation
+and explicit stopping. Disabling settings also fences live diagnostics. Neither
+reopen nor repeated requests restart an original test. These diagnostics have no
+scientific tools or project context.
+
+Ordinary model-task execution, native Agent transports, scientific work and Agent
+views remain implementation work. They are not falsely registered as capabilities.
 Importing the package does not activate it. Installing or activating a development
 package is an explicit plugin lifecycle operation.
 

@@ -19,9 +19,10 @@ use std::{
 pub struct Metadata {
     pub owner: ComponentAgentOwner,
     store: Arc<AgentStore>,
-    credentials: CredentialFile,
+    pub(crate) credentials: CredentialFile,
+    diagnostics: crate::diagnostics::Diagnostics,
     instance: PluginInstance,
-    scope: AgentTaskScope,
+    pub(crate) scope: AgentTaskScope,
 }
 
 pub fn now() -> u64 {
@@ -76,7 +77,7 @@ pub fn decode<T: DeserializeOwned>(value: &Value) -> Result<T, Failure> {
     serde_json::from_value(value.clone())
         .map_err(|_| Failure::invalid("Arguments do not match the declared Agent contract"))
 }
-fn encoded(value: impl serde::Serialize) -> Result<Value, Failure> {
+pub(crate) fn encoded(value: impl serde::Serialize) -> Result<Value, Failure> {
     serde_json::to_value(value).map_err(|_| Failure::invalid("Agent metadata could not be encoded"))
 }
 
@@ -123,6 +124,7 @@ impl Metadata {
         Ok(Self {
             owner,
             store,
+            diagnostics: Default::default(),
             credentials: CredentialFile::at(
                 Path::new(&environment.data_root).join("model-credentials-v1.json"),
             ),
@@ -172,6 +174,7 @@ impl Metadata {
     }
     pub fn read(&self, call: &PluginCall) -> Result<Value, Failure> {
         match call.binding.capability.id.as_str() {
+            "agent.model.diagnostic" => self.diagnostics.read(self, &call.arguments),
             "agent.model.key.receipt" => {
                 let args: CredentialRequest = decode(&call.arguments)?;
                 let status = self
@@ -242,7 +245,7 @@ impl Metadata {
             .component_conversation(&self.scope, id)?
             .ok_or(ComponentTaskError::NotFound)?)
     }
-    pub fn mutate(&self, call: &PluginCall, caller: PluginViewCaller) -> Result<Value, Failure> {
+    pub(crate) fn actor(&self, caller: PluginViewCaller, observed_at: u64) -> ComponentActor {
         let controller = match caller.view {
             Some(origin) => AgentControllerRef {
                 window_id: origin.window.to_string(),
@@ -255,21 +258,37 @@ impl Metadata {
                 incarnation: self.owner.host_incarnation.clone(),
             },
         };
-        let now = now();
-        let actor = ComponentActor::new(
+        ComponentActor::new(
             self.scope.clone(),
             controller,
             Arc::new(CurrentAdmission {
-                observed_at: now,
+                observed_at,
                 unused: AtomicBool::new(true),
             }),
-        );
+        )
+    }
+    pub async fn dispatch(
+        &self,
+        call: &PluginCall,
+        caller: PluginViewCaller,
+    ) -> Result<Value, Failure> {
+        match call.binding.capability.id.as_str() {
+            "agent.model.test" => self.diagnostics.start(self, call, caller).await,
+            "agent.model.test.stop" => self.diagnostics.stop(self, call, caller),
+            _ => self.mutate(call, caller),
+        }
+    }
+    pub fn mutate(&self, call: &PluginCall, caller: PluginViewCaller) -> Result<Value, Failure> {
+        let now = now();
+        let actor = self.actor(caller, now);
         match call.binding.capability.id.as_str() {
             "agent.model.configure" => {
                 let settings: rho_agent_api::ComponentModelSettings = decode(&call.arguments)?;
-                // This composition has no live model loops. When those are
-                // composed, disabling must also fence their original live tasks.
-                encoded(self.owner.configure(&actor, &settings, now)?)
+                let updated = self.owner.configure(&actor, &settings, now)?;
+                if !updated.enabled {
+                    self.diagnostics.cancel_all();
+                }
+                encoded(updated)
             }
             "agent.model.create" => {
                 let args: CreateConversation = decode(&call.arguments)?;

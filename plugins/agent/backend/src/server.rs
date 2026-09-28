@@ -65,9 +65,7 @@ fn plan(result: Result<Value, Failure>) -> PluginCommitPlan {
 fn caller(result: Result<Value, HostCallError>) -> Result<PluginViewCaller, Failure> {
     let value = result.map_err(|_| Failure {
         code: "caller_unavailable",
-        message:
-            "The original caller could not be observed; no Agent metadata write was dispatched"
-                .into(),
+        message: "The original caller could not be observed; no Agent action was dispatched".into(),
     })?;
     if value["status"] != "ready" || value["completeness"] != "complete" {
         return Err(Failure::invalid(
@@ -125,12 +123,12 @@ where
         tokio::select! {
             completed = jobs.join_next(), if !jobs.is_empty() => {
                 let Some(Ok(completed)) = completed else {
-                    break Err("Agent metadata work ended without a confirmed result".into());
+                    break Err("Agent work ended without a confirmed result".into());
                 };
                 let (request, body) = match completed {
                     Completed::Operation(operation, output) => {
                         let Some(entry) = retained.get_mut(&operation) else {
-                            break Err("Agent metadata result lost its original operation".into());
+                            break Err("Agent result lost its original operation".into());
                         };
                         entry.outcome = Some(output.outcome);
                         (entry.request.clone(), RpcBody::CommitPlan(output))
@@ -185,7 +183,7 @@ where
                                 Err(failure) => failure.body(),
                             })
                         } else if retained.len() + controls.len() >= CAPACITY {
-                            Some(error("busy", "Agent metadata capacity reached; inspect original operations"))
+                            Some(error("busy", "Agent capacity reached; inspect original operations"))
                         } else {
                             let operation = if kind == CapabilityKind::Operation {
                                 let id = match OperationId::new(call.operation_id.as_ref().unwrap()) {
@@ -208,7 +206,10 @@ where
                             if let Some(id) = operation {
                                 retained.insert(id.clone(), Retained { request: request.clone(), binding: call.binding.clone(), outcome: None });
                                 jobs.spawn(async move {
-                                    let result = caller(pending.receive().await).and_then(|origin| metadata.mutate(&call, origin));
+                                    let result = match caller(pending.receive().await) {
+                                        Ok(origin) => metadata.dispatch(&call, origin).await,
+                                        Err(error) => Err(error),
+                                    };
                                     Completed::Operation(id, plan(result))
                                 });
                             } else {
@@ -251,9 +252,9 @@ where
                         if let Err(error) = writer.send(request, RpcBody::Released).await { break Err(error.to_string()); }
                         break Ok(());
                     },
-                    RpcBody::Release => Some(error("busy", "Agent metadata operations still await their original Host settlement")),
+                    RpcBody::Release => Some(error("busy", "Agent operations still await their original Host settlement")),
                     RpcBody::HostResult { .. } | RpcBody::Error { .. } => break Err("Agent received an uncorrelated Host response".into()),
-                    _ => Some(error("unsupported", "Agent metadata does not support this message")),
+                    _ => Some(error("unsupported", "Agent does not support this message")),
                 };
                 if let Some(reply) = reply {
                     if let Err(error) = writer.send(request, reply).await { break Err(error.to_string()); }

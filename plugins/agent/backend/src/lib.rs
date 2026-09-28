@@ -5,3 +5,5 @@ pub mod arguments;
 pub mod manifest;
 mod metadata;
 pub mod server;
+
+mod diagnostics;

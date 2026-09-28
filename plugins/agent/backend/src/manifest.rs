@@ -1,7 +1,8 @@
 use crate::arguments::*;
 use rho_agent_api::{
     ComponentCredentialRef, ComponentCredentialStatus, ComponentModelSettings,
-    ProjectAgentTaskPage, component::ComponentAgentConversation,
+    ProjectAgentTaskPage,
+    component::{ComponentAgentConversation, ComponentModelDiagnostic},
 };
 use rho_plugin_sdk::protocol::*;
 use schemars::schema_for;
@@ -21,6 +22,8 @@ pub fn is_mutation(id: &str) -> bool {
             | "agent.model.update"
             | "agent.model.take_control"
             | "agent.model.configure"
+            | "agent.model.test"
+            | "agent.model.test.stop"
     )
 }
 pub fn kind(id: &str) -> CapabilityKind {
@@ -45,7 +48,11 @@ fn capability(
     CapabilityContribution {
         capability: key(id), kind,
         title: title.into(),
-        description: if control {
+        description: if id == "agent.model.test" {
+            "Explicitly run a bounded synthetic model test with the captured settings and scoped key. Retains the original Operation until completion; it has no project context or scientific tools. Repeated original requests only observe their retained diagnostic."
+        } else if id == "agent.model.test.stop" {
+            "Request that the original live model diagnostic stop, using its native controller and expected version. The original Operation remains active until the model test settles."
+        } else if control {
             "Save a scoped model key through ephemeral input with an atomic original-request reference. Does not create an Operation, configure a model or start work; inspect the original receipt after a lost reply."
         } else if id == "agent.model.key.receipt" {
             "Read the original scoped key reference and availability without secret bytes. An absent receipt is an incomplete observation, never proof that a pending write cannot finish."
@@ -57,7 +64,7 @@ fn capability(
         input_schema: input, output_schema: output, examples: vec![example],
         recovery_schema: json!({"type":"object","additionalProperties":false,"properties":{"code":{"type":"string"}},"required":["code"]}),
         required_scopes: if operation || control { ["application.control".into(), "plugins.read".into()].into() } else { ["application.read".into()].into() },
-        effects: if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
+        effects: if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
         cancellation: CancellationSupport::Unsupported, preflight: None,
     }
 }
@@ -68,7 +75,7 @@ pub fn manifest() -> PluginManifest {
         id: PluginId::new("org.rho.agent").unwrap(),
         name: "Agent".into(),
         version: "0.1.0".into(),
-        description: "Scoped Agent task metadata and original-controller drafts".into(),
+        description: "Agent tasks, scoped model settings and explicit synthetic diagnostics".into(),
         license: "AGPL-3.0-only".into(),
         source: SourceDeclaration {
             files: [
@@ -89,6 +96,27 @@ pub fn manifest() -> PluginManifest {
         }],
         optional_requires: vec![],
         capabilities: vec![
+            capability(
+                "agent.model.test",
+                "Test the configured model",
+                schema_for!(TestModel).to_value(),
+                schema_for!(ComponentModelDiagnostic).to_value(),
+                json!({"request_id":"model-test-example","model_settings_version":1,"kind":"connection"}),
+            ),
+            capability(
+                "agent.model.test.stop",
+                "Stop a model test",
+                schema_for!(StopModelDiagnostic).to_value(),
+                schema_for!(ComponentModelDiagnostic).to_value(),
+                json!({"request_id":"model-test-example","expected_version":2}),
+            ),
+            capability(
+                "agent.model.diagnostic",
+                "Read an original model diagnostic",
+                schema_for!(ModelDiagnostic).to_value(),
+                schema_for!(ComponentModelDiagnostic).to_value(),
+                json!({"request_id":"model-test-example"}),
+            ),
             capability(
                 "agent.model.key.store",
                 "Save a model key",

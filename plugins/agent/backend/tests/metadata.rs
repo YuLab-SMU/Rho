@@ -194,7 +194,7 @@ impl Fixture {
 fn manifest_contains_only_public_bounded_metadata_capabilities() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 10);
+    assert_eq!(manifest.capabilities.len(), 13);
     assert_eq!(
         manifest.requires[0].capability,
         manifest::key("views.caller")
@@ -902,4 +902,308 @@ async fn controls_and_operations_share_capacity_without_sharing_settlement() {
         f.settle(&native, PluginOutcome::Succeeded).await;
     }
     f.release().await;
+}
+
+#[derive(Clone, Default)]
+struct SyntheticModelState {
+    requests: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    entered: std::sync::Arc<tokio::sync::Notify>,
+    resume: std::sync::Arc<tokio::sync::Notify>,
+}
+struct SyntheticModel {
+    state: SyntheticModelState,
+    url: String,
+    task: tokio::task::JoinHandle<()>,
+}
+impl Drop for SyntheticModel {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+impl SyntheticModel {
+    async fn start() -> Self {
+        let state = SyntheticModelState::default();
+        let app = axum::Router::new()
+            .route(
+                "/v1/chat/completions",
+                axum::routing::post(synthetic_completion),
+            )
+            .with_state(state.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/v1", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        Self { state, url, task }
+    }
+    async fn entered(&self) {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(10),
+            self.state.entered.notified(),
+        )
+        .await
+        .unwrap();
+    }
+    fn count(&self) -> usize {
+        self.state
+            .requests
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+async fn synthetic_completion(
+    axum::extract::State(state): axum::extract::State<SyntheticModelState>,
+    headers: axum::http::HeaderMap,
+    axum::Json(body): axum::Json<Value>,
+) -> impl axum::response::IntoResponse {
+    assert_eq!(headers["authorization"], "Bearer diagnostic-fixture-key");
+    let index = state
+        .requests
+        .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    state.entered.notify_one();
+    if index == 0 {
+        state.resume.notified().await;
+    }
+    let chunk = |delta: Value, finish: Value| {
+        format!(
+            "data: {}\n\n",
+            json!({
+                "id":"diagnostic-fixture", "object":"chat.completion.chunk", "created":1, "model":"fixture",
+                "choices":[{"index":0,"delta":delta,"finish_reason":finish}]
+            })
+        )
+    };
+    let mut sse = chunk(json!({"role":"assistant"}), Value::Null);
+    if index == 0 {
+        assert_eq!(body["tools"].as_array().unwrap().len(), 1);
+        assert_eq!(body["tools"][0]["function"]["name"], "component_verify");
+        sse.push_str(&chunk(
+            json!({"tool_calls":[{"index":0,"id":"verify-original","type":"function",
+            "function":{"name":"component_verify","arguments":"{}"}}]}),
+            Value::Null,
+        ));
+        sse.push_str(&chunk(json!({}), json!("tool_calls")));
+    } else {
+        let output = body["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["role"] == "tool")
+            .unwrap();
+        let output: Value = serde_json::from_str(output["content"].as_str().unwrap()).unwrap();
+        sse.push_str(&chunk(json!({"content":output["marker"]}), Value::Null));
+        sse.push_str(&chunk(json!({}), json!("stop")));
+    }
+    sse.push_str("data: [DONE]\n\n");
+    ([("content-type", "text/event-stream")], sse)
+}
+impl Fixture {
+    async fn model_settings(&mut self, model: &SyntheticModel) -> Value {
+        let reverse = self
+            .begin_control(
+                "diagnostic-key",
+                json!({"request_id":"diagnostic-key","value":"diagnostic-fixture-key"}),
+            )
+            .await;
+        let RpcBody::ControlResult { data: credential } =
+            self.control_answer(reverse, origin("view-one")).await
+        else {
+            panic!()
+        };
+        let (native, reverse) = self.begin("diagnostic-configure", "agent.model.configure", json!({
+            "version":0,"enabled":true,"connection":{"protocol":"openai_completions","model":"fixture","base_url":model.url,"credential":credential}
+        })).await;
+        let result = self.answer(reverse, origin("view-one")).await;
+        assert_eq!(result.outcome, PluginOutcome::Succeeded);
+        self.settle(&native, result.outcome).await;
+        result.output.unwrap()
+    }
+    async fn start_diagnostic(&mut self) -> PluginCall {
+        let (native, reverse) = self.begin("test-original", "agent.model.test", json!({"request_id":"diagnostic-original","model_settings_version":1,"kind":"connection"})).await;
+        self.writer.send(reverse.request, RpcBody::HostResult { result: json!({"status":"ready","completeness":"complete","data":origin("view-one")}) }).await.unwrap();
+        native
+    }
+}
+
+#[tokio::test]
+async fn diagnostic_retains_original_operation_through_real_rig_and_repeated_reads_never_restart_it()
+ {
+    let mut f = Fixture::start().await;
+    let model = SyntheticModel::start().await;
+    f.model_settings(&model).await;
+    let native = f.start_diagnostic().await;
+    model.entered().await;
+    let running = f
+        .query(
+            "agent.model.diagnostic",
+            json!({"request_id":"diagnostic-original"}),
+        )
+        .await;
+    assert_eq!(running["state"], "running");
+    assert!(!running.to_string().contains("diagnostic-fixture-key"));
+    f.writer
+        .send(id("during-test"), RpcBody::Release)
+        .await
+        .unwrap();
+    assert!(matches!(f.read().await.body, RpcBody::Error { code, .. } if code == "busy"));
+    let (repeat, reverse) = f
+        .begin(
+            "repeat-active",
+            "agent.model.test",
+            native.arguments.clone(),
+        )
+        .await;
+    let observed = f.answer(reverse, origin("view-one")).await;
+    assert_eq!(observed.output.unwrap()["state"], "running");
+    f.settle(&repeat, observed.outcome).await;
+    assert_eq!(model.count(), 1);
+    let (busy, reverse) = f.begin("second-test", "agent.model.test", json!({"request_id":"another-diagnostic","model_settings_version":1,"kind":"connection"})).await;
+    let blocked = f.answer(reverse, origin("view-one")).await;
+    assert_eq!(blocked.outcome, PluginOutcome::Failed);
+    assert_eq!(blocked.recovery.unwrap()["code"], "busy");
+    f.settle(&busy, blocked.outcome).await;
+    model.state.resume.notify_one();
+    let result = f.read().await;
+    assert_eq!(result.request, native.request);
+    let RpcBody::CommitPlan(result) = result.body else {
+        panic!()
+    };
+    assert_eq!(result.outcome, PluginOutcome::Succeeded);
+    assert_eq!(
+        result.output.as_ref().unwrap()["state"],
+        "passed",
+        "{result:?}"
+    );
+    assert_eq!(model.count(), 2);
+    // Finishing the engine does not retire the accepted native execution lease.
+    f.writer
+        .send(id("before-original-settlement"), RpcBody::Release)
+        .await
+        .unwrap();
+    assert!(matches!(f.read().await.body, RpcBody::Error { code, .. } if code == "busy"));
+    f.settle(&native, result.outcome).await;
+    let (directory, environment) = f.release().await;
+    let mut reopened = Fixture::open(directory, environment).await;
+    assert_eq!(
+        reopened
+            .query(
+                "agent.model.diagnostic",
+                json!({"request_id":"diagnostic-original"})
+            )
+            .await["state"],
+        "passed"
+    );
+    let (repeat, reverse) = reopened
+        .begin("repeat-after-reopen", "agent.model.test", native.arguments)
+        .await;
+    let result = reopened.answer(reverse, origin("view-one")).await;
+    assert_eq!(result.output.unwrap()["state"], "passed");
+    reopened.settle(&repeat, result.outcome).await;
+    assert_eq!(model.count(), 2);
+    reopened.release().await;
+}
+
+#[tokio::test]
+async fn model_diagnostic_stop_checks_controller_and_version_and_disable_fences_original_work() {
+    for disable in [false, true] {
+        let mut f = Fixture::start().await;
+        let model = SyntheticModel::start().await;
+        let settings = f.model_settings(&model).await;
+        let native = f.start_diagnostic().await;
+        model.entered().await;
+        let original = f
+            .query(
+                "agent.model.diagnostic",
+                json!({"request_id":"diagnostic-original"}),
+            )
+            .await;
+        for (tag, caller, version) in [
+            ("wrong-controller", "view-two", original["version"].clone()),
+            ("stale-stop", "view-one", json!(0)),
+        ] {
+            let (stop, reverse) = f
+                .begin(
+                    tag,
+                    "agent.model.test.stop",
+                    json!({"request_id":"diagnostic-original","expected_version":version}),
+                )
+                .await;
+            let refusal = f.answer(reverse, origin(caller)).await;
+            assert_eq!(refusal.outcome, PluginOutcome::Failed);
+            f.settle(&stop, refusal.outcome).await;
+        }
+        let (control, reverse) = if disable {
+            let mut disabled = settings;
+            disabled["enabled"] = json!(false);
+            f.begin("disable-model", "agent.model.configure", disabled)
+                .await
+        } else {
+            f.begin(
+                "stop-model",
+                "agent.model.test.stop",
+                json!({"request_id":"diagnostic-original","expected_version":original["version"]}),
+            )
+            .await
+        };
+        f.writer.send(reverse.request, RpcBody::HostResult { result: json!({"status":"ready","completeness":"complete","data":origin("view-one")}) }).await.unwrap();
+        let mut originals = 0;
+        for _ in 0..2 {
+            let frame = f.read().await;
+            let RpcBody::CommitPlan(result) = frame.body else {
+                panic!()
+            };
+            assert_eq!(result.outcome, PluginOutcome::Succeeded);
+            if frame.request == native.request {
+                assert_eq!(result.output.unwrap()["state"], "interrupted");
+                originals += 1;
+            } else {
+                assert_eq!(frame.request, control.request);
+            }
+        }
+        assert_eq!(originals, 1);
+        f.settle(&native, PluginOutcome::Succeeded).await;
+        f.settle(&control, PluginOutcome::Succeeded).await;
+        assert_eq!(model.count(), 1);
+        f.release().await;
+    }
+}
+
+#[tokio::test]
+async fn disconnect_during_model_test_keeps_original_diagnostic_interrupted_without_replay() {
+    let mut f = Fixture::start().await;
+    let model = SyntheticModel::start().await;
+    f.model_settings(&model).await;
+    let native = f.start_diagnostic().await;
+    model.entered().await;
+    let Fixture {
+        directory,
+        environment,
+        reader,
+        writer,
+        task,
+    } = f;
+    drop(reader);
+    drop(writer);
+    task.await.unwrap().unwrap();
+    let mut reopened = Fixture::open(directory, environment).await;
+    assert_eq!(
+        reopened
+            .query(
+                "agent.model.diagnostic",
+                json!({"request_id":"diagnostic-original"})
+            )
+            .await["state"],
+        "interrupted"
+    );
+    let (repeat, reverse) = reopened
+        .begin(
+            "repeat-disconnected-test",
+            "agent.model.test",
+            native.arguments,
+        )
+        .await;
+    let result = reopened.answer(reverse, origin("view-one")).await;
+    assert_eq!(result.output.unwrap()["state"], "interrupted");
+    reopened.settle(&repeat, result.outcome).await;
+    assert_eq!(model.count(), 1);
+    reopened.release().await;
 }

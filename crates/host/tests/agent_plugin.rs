@@ -361,3 +361,149 @@ async fn ordinary_agent_metadata_uses_generic_host_scopes_isolated_storage_and_o
     drop(host);
     assert!(!root.join(".Rhistory").exists());
 }
+
+#[tokio::test]
+#[ignore = "requires an independently built package; run scripts/test-agent-plugin.mjs"]
+async fn ordinary_agent_retains_model_test_operation_until_explicit_stop_and_never_replays() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    #[derive(Clone)]
+    struct Provider {
+        entered: Arc<tokio::sync::Notify>,
+        count: Arc<AtomicUsize>,
+    }
+    async fn held(
+        axum::extract::State(provider): axum::extract::State<Provider>,
+        headers: axum::http::HeaderMap,
+        axum::Json(body): axum::Json<Value>,
+    ) -> axum::http::StatusCode {
+        assert_eq!(
+            headers["authorization"],
+            "Bearer native-diagnostic-fixture-key"
+        );
+        assert_eq!(body["tools"].as_array().unwrap().len(), 1);
+        assert_eq!(body["tools"][0]["function"]["name"], "component_verify");
+        provider.count.fetch_add(1, Ordering::SeqCst);
+        provider.entered.notify_one();
+        std::future::pending().await
+    }
+    let provider = Provider {
+        entered: Arc::default(),
+        count: Arc::default(),
+    };
+    let app = axum::Router::new()
+        .route("/v1/chat/completions", axum::routing::post(held))
+        .with_state(provider.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let provider_task = tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    });
+    let package = PathBuf::from(std::env::var_os("RHO_AGENT_PLUGIN_PACKAGE").unwrap());
+    let archive = snapshot_directory(&package, None, &backend_target()).unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("project");
+    std::fs::create_dir(&root).unwrap();
+    let db = directory.path().join("host.sqlite");
+    PluginRepository::open(&repository_path(&db))
+        .unwrap()
+        .import(&archive)
+        .unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &root).await.unwrap();
+    let first = succeeded(&host, "activate", "plugins.activate", json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":backend_target(),"alias":"agent-model","configuration":{}})).await.output.unwrap()["instance"]["identity"].clone();
+    let store = binding(&host, &first, "agent.model.key.store").await;
+    let key = host.dispatch(&NextHost::local_context(), HostRequest::Control(ControlRequest {
+        capability: CapabilityRef::new("agent.model.key.store", 1).unwrap(),
+        arguments: json!({"binding":store,"arguments":{"request_id":"test-key","value":"native-diagnostic-fixture-key"}}),
+    })).await.unwrap();
+    let configure = binding(&host, &first, "agent.model.configure").await;
+    succeeded(&host, "configure", "agent.model.configure", json!({"binding":configure,"arguments":{
+        "version":0,"enabled":true,"connection":{"protocol":"openai_completions","base_url":url,"model":"fixture","credential":key}
+    }})).await;
+    let test = binding(&host, &first, "agent.model.test").await;
+    let diagnostic = binding(&host, &first, "agent.model.diagnostic").await;
+    let stop = binding(&host, &first, "agent.model.test.stop").await;
+    let request = json!({"binding":test,"arguments":{"request_id":"original-diagnostic","model_settings_version":1,"kind":"connection"}});
+    let native = invoke(
+        &host,
+        "original-native-test",
+        "agent.model.test",
+        request.clone(),
+    );
+    let inspect_and_stop = async {
+        tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            provider.entered.notified(),
+        )
+        .await
+        .unwrap();
+        let observed = query(
+            &host,
+            "agent.model.diagnostic",
+            json!({"binding":diagnostic,"arguments":{"request_id":"original-diagnostic"}}),
+        )
+        .await;
+        assert_eq!(observed["state"], "running");
+        let instance = query(&host, "plugins.instance", json!({"instance":first})).await;
+        assert!(instance["retained_calls"].as_u64().unwrap() >= 1);
+        succeeded(&host, "stop-original", "agent.model.test.stop", json!({"binding":stop,"arguments":{"request_id":"original-diagnostic","expected_version":observed["version"]}})).await;
+    };
+    let (original, ()) = tokio::time::timeout(std::time::Duration::from_secs(45), async {
+        tokio::join!(native, inspect_and_stop)
+    })
+    .await
+    .unwrap();
+    assert_eq!(original.status, OperationStatus::Succeeded, "{original:?}");
+    assert_eq!(original.output.as_ref().unwrap()["state"], "interrupted");
+    let repeated = succeeded(&host, "new-native-observation", "agent.model.test", request).await;
+    assert_eq!(repeated.output.as_ref().unwrap()["state"], "interrupted");
+    assert_eq!(provider.count.load(Ordering::SeqCst), 1);
+    assert!(
+        !serde_json::to_string(
+            &host
+                .outbox(&NextHost::local_context(), 0, 100)
+                .await
+                .unwrap()
+        )
+        .unwrap()
+        .contains("native-diagnostic-fixture-key")
+    );
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        loop {
+            let observed = query(&host, "plugins.instance", json!({"instance":first})).await;
+            if observed["retained_calls"] == 0 && observed["pending_messages"] == 0 {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    succeeded(
+        &host,
+        "release",
+        "plugins.release",
+        json!({"instance":first}),
+    )
+    .await;
+    succeeded(
+        &host,
+        "remove",
+        "plugins.remove",
+        json!({"revision":archive.revision.id}),
+    )
+    .await;
+    assert_eq!(
+        host.get_operation(&NextHost::local_context(), &original.operation.operation_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .output,
+        original.output
+    );
+    host.drain().await;
+    provider_task.abort();
+    let _ = provider_task.await;
+}

@@ -5945,7 +5945,9 @@ dependencies = [
 name = "rho-agent-backend"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "rho-agent-api",
+ "rho-agent-engine",
  "rho-agent-owner",
  "rho-agent-store",
  "rho-plugin-sdk",
@@ -5954,6 +5956,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "tokio-util",
  "uuid",
 ]
 

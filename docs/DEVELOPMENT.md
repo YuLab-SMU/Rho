@@ -261,8 +261,12 @@ the generic Host harness, then loads an independently built package without
 changing that harness. Its explicitly selected ignored case checks scopes, two
 instances, durable request deduplication, key-Control journal exclusion and retained
 journal reads after removal.
-No check contacts models or replaces user sessions. These establish metadata
-composition only; model/scientific execution and Agent view acceptance are separate.
+The synthetic model fixtures exercise the production Rig driver against a local
+HTTP/SSE provider, retain the original Operation until completion, reject stale or
+foreign stop requests, and verify disable/disconnect behavior without replay.
+They use temporary keys and no real provider or user session. Scientific tools,
+ordinary model tasks, native Agent connections and Agent view acceptance remain
+separate checks.
 
 Independent assemblies include the public plugin protocol and R media API, with
 all source/dependency paths checked to stay inside the assembly. Agent-owned storage

@@ -3,7 +3,7 @@
   "id": "org.rho.agent",
   "name": "Agent",
   "version": "0.1.0",
-  "description": "Scoped Agent task metadata and original-controller drafts",
+  "description": "Agent tasks, scoped model settings and explicit synthetic diagnostics",
   "license": "AGPL-3.0-only",
   "source": {
     "files": [
@@ -35,6 +35,745 @@
   ],
   "views": [],
   "capabilities": [
+    {
+      "capability": {
+        "id": "agent.model.test",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Test the configured model",
+      "description": "Explicitly run a bounded synthetic model test with the captured settings and scoped key. Retains the original Operation until completion; it has no project context or scientific tools. Repeated original requests only observe their retained diagnostic.",
+      "input_schema": {
+        "$defs": {
+          "ComponentModelTestKind": {
+            "enum": [
+              "connection",
+              "images"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "$ref": "#/$defs/ComponentModelTestKind"
+          },
+          "model_settings_version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "request_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "model_settings_version",
+          "kind"
+        ],
+        "title": "TestModel",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "kind": "connection",
+          "model_settings_version": 1,
+          "request_id": "model-test-example"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AgentControllerRef": {
+            "additionalProperties": false,
+            "description": "Correlation identity supplied by the Agent owner after admission. This value\nis not an authorization credential and cannot grant access to a Host window.",
+            "properties": {
+              "incarnation": {
+                "type": "string"
+              },
+              "window_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "window_id",
+              "incarnation"
+            ],
+            "type": "object"
+          },
+          "ComponentCredentialRef": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "environment",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Retained references from Hosts that used memory-only credentials.",
+                "properties": {
+                  "key_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "session",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key_id"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Immutable version in the user-local Rho configuration file.",
+                "properties": {
+                  "key_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "local_file",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key_id"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "ComponentModelConnection": {
+            "additionalProperties": false,
+            "properties": {
+              "base_url": {
+                "type": "string"
+              },
+              "credential": {
+                "$ref": "#/$defs/ComponentCredentialRef"
+              },
+              "model": {
+                "type": "string"
+              },
+              "protocol": {
+                "$ref": "#/$defs/ComponentModelProtocol"
+              }
+            },
+            "required": [
+              "protocol",
+              "base_url",
+              "model",
+              "credential"
+            ],
+            "type": "object"
+          },
+          "ComponentModelProtocol": {
+            "enum": [
+              "anthropic",
+              "openai_completions"
+            ],
+            "type": "string"
+          },
+          "ComponentModelTestKind": {
+            "enum": [
+              "connection",
+              "images"
+            ],
+            "type": "string"
+          },
+          "ComponentModelTestState": {
+            "enum": [
+              "queued",
+              "running",
+              "passed",
+              "failed",
+              "interrupted"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "connection_digest": {
+            "type": "string"
+          },
+          "created_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/$defs/ComponentModelTestKind"
+          },
+          "model": {
+            "$ref": "#/$defs/ComponentModelConnection"
+          },
+          "model_settings_version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/$defs/ComponentModelTestState"
+          },
+          "updated_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "window": {
+            "$ref": "#/$defs/AgentControllerRef"
+          }
+        },
+        "required": [
+          "request_id",
+          "version",
+          "window",
+          "model_settings_version",
+          "connection_digest",
+          "model",
+          "kind",
+          "state",
+          "created_at_ms",
+          "updated_at_ms"
+        ],
+        "title": "ComponentModelDiagnostic",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "required_scopes": [
+        "application.control",
+        "plugins.read"
+      ],
+      "effects": [
+        "agent.model.test"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "agent.model.test.stop",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "Stop a model test",
+      "description": "Request that the original live model diagnostic stop, using its native controller and expected version. The original Operation remains active until the model test settles.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "expected_version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "request_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "expected_version"
+        ],
+        "title": "StopModelDiagnostic",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "expected_version": 2,
+          "request_id": "model-test-example"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AgentControllerRef": {
+            "additionalProperties": false,
+            "description": "Correlation identity supplied by the Agent owner after admission. This value\nis not an authorization credential and cannot grant access to a Host window.",
+            "properties": {
+              "incarnation": {
+                "type": "string"
+              },
+              "window_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "window_id",
+              "incarnation"
+            ],
+            "type": "object"
+          },
+          "ComponentCredentialRef": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "environment",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Retained references from Hosts that used memory-only credentials.",
+                "properties": {
+                  "key_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "session",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key_id"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Immutable version in the user-local Rho configuration file.",
+                "properties": {
+                  "key_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "local_file",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key_id"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "ComponentModelConnection": {
+            "additionalProperties": false,
+            "properties": {
+              "base_url": {
+                "type": "string"
+              },
+              "credential": {
+                "$ref": "#/$defs/ComponentCredentialRef"
+              },
+              "model": {
+                "type": "string"
+              },
+              "protocol": {
+                "$ref": "#/$defs/ComponentModelProtocol"
+              }
+            },
+            "required": [
+              "protocol",
+              "base_url",
+              "model",
+              "credential"
+            ],
+            "type": "object"
+          },
+          "ComponentModelProtocol": {
+            "enum": [
+              "anthropic",
+              "openai_completions"
+            ],
+            "type": "string"
+          },
+          "ComponentModelTestKind": {
+            "enum": [
+              "connection",
+              "images"
+            ],
+            "type": "string"
+          },
+          "ComponentModelTestState": {
+            "enum": [
+              "queued",
+              "running",
+              "passed",
+              "failed",
+              "interrupted"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "connection_digest": {
+            "type": "string"
+          },
+          "created_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/$defs/ComponentModelTestKind"
+          },
+          "model": {
+            "$ref": "#/$defs/ComponentModelConnection"
+          },
+          "model_settings_version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/$defs/ComponentModelTestState"
+          },
+          "updated_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "window": {
+            "$ref": "#/$defs/AgentControllerRef"
+          }
+        },
+        "required": [
+          "request_id",
+          "version",
+          "window",
+          "model_settings_version",
+          "connection_digest",
+          "model",
+          "kind",
+          "state",
+          "created_at_ms",
+          "updated_at_ms"
+        ],
+        "title": "ComponentModelDiagnostic",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "required_scopes": [
+        "application.control",
+        "plugins.read"
+      ],
+      "effects": [
+        "agent.metadata"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "agent.model.diagnostic",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Read an original model diagnostic",
+      "description": "Read scoped Agent-owned metadata without starting a model, reconnecting a native Agent or recovering work.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "ModelDiagnostic",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "request_id": "model-test-example"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AgentControllerRef": {
+            "additionalProperties": false,
+            "description": "Correlation identity supplied by the Agent owner after admission. This value\nis not an authorization credential and cannot grant access to a Host window.",
+            "properties": {
+              "incarnation": {
+                "type": "string"
+              },
+              "window_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "window_id",
+              "incarnation"
+            ],
+            "type": "object"
+          },
+          "ComponentCredentialRef": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "environment",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Retained references from Hosts that used memory-only credentials.",
+                "properties": {
+                  "key_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "session",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key_id"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Immutable version in the user-local Rho configuration file.",
+                "properties": {
+                  "key_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "local_file",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key_id"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "ComponentModelConnection": {
+            "additionalProperties": false,
+            "properties": {
+              "base_url": {
+                "type": "string"
+              },
+              "credential": {
+                "$ref": "#/$defs/ComponentCredentialRef"
+              },
+              "model": {
+                "type": "string"
+              },
+              "protocol": {
+                "$ref": "#/$defs/ComponentModelProtocol"
+              }
+            },
+            "required": [
+              "protocol",
+              "base_url",
+              "model",
+              "credential"
+            ],
+            "type": "object"
+          },
+          "ComponentModelProtocol": {
+            "enum": [
+              "anthropic",
+              "openai_completions"
+            ],
+            "type": "string"
+          },
+          "ComponentModelTestKind": {
+            "enum": [
+              "connection",
+              "images"
+            ],
+            "type": "string"
+          },
+          "ComponentModelTestState": {
+            "enum": [
+              "queued",
+              "running",
+              "passed",
+              "failed",
+              "interrupted"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "connection_digest": {
+            "type": "string"
+          },
+          "created_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/$defs/ComponentModelTestKind"
+          },
+          "model": {
+            "$ref": "#/$defs/ComponentModelConnection"
+          },
+          "model_settings_version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/$defs/ComponentModelTestState"
+          },
+          "updated_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "window": {
+            "$ref": "#/$defs/AgentControllerRef"
+          }
+        },
+        "required": [
+          "request_id",
+          "version",
+          "window",
+          "model_settings_version",
+          "connection_digest",
+          "model",
+          "kind",
+          "state",
+          "created_at_ms",
+          "updated_at_ms"
+        ],
+        "title": "ComponentModelDiagnostic",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "required_scopes": [
+        "application.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
     {
       "capability": {
         "id": "agent.model.key.store",

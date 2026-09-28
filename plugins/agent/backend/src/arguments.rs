@@ -78,3 +78,25 @@ pub struct TakeControl {
     pub conversation_id: String,
     pub expected_version: u64,
 }
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TestModel {
+    #[schemars(length(min = 1, max = 160))]
+    pub request_id: String,
+    pub model_settings_version: u64,
+    pub kind: rho_agent_api::ComponentModelTestKind,
+}
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ModelDiagnostic {
+    #[schemars(length(min = 1, max = 160))]
+    pub request_id: String,
+}
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct StopModelDiagnostic {
+    #[schemars(length(min = 1, max = 160))]
+    pub request_id: String,
+    pub expected_version: u64,
+}
