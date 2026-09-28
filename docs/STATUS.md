@@ -302,9 +302,9 @@ the captured identity or input. Receipt display copies may be released while the
 immutable original remains readable. Binary attachment input requires a separate
 scoped Control; these records do not reconstruct authority or start a connection.
 All seven new real-store fixtures pass, covering concurrency, immutable capture,
-rollback, reopen, scope/parent reuse refusal and storage budgets. Affected owner,
-store, native runtime, Host and independent assembly checks are still running;
-they are not yet passes. Ordinary native backend/MCP composition remains unfinished. The preceding complete runtime/binary/recovery run froze its
+rollback, reopen, scope/parent reuse refusal and storage budgets. All 18 owner and
+29 store cases also pass. Native runtime, core storage, Host and independent
+assembly checks are still running; they are not yet passes. Ordinary native backend/MCP composition remains unfinished. The preceding complete runtime/binary/recovery run froze its
 source before this admission addition.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
