@@ -95,7 +95,8 @@ function validateRegistry(registry, root, errors) {
       if (!Number.isInteger(page.max_lines) || page.max_lines <= 0) {
         errors.push(`${label}.max_lines must be a positive integer`);
       } else {
-        const lines = fs.readFileSync(path.join(root, page.document), "utf8").split("\n").length - 1;
+        const content = fs.readFileSync(path.join(root, page.document), "utf8");
+        const lines = content.length === 0 ? 0 : content.split("\n").length - Number(content.endsWith("\n"));
         if (lines > page.max_lines) errors.push(`${page.document}: ${lines} lines exceeds max_lines ${page.max_lines}; summarize instead of appending history`);
       }
     }

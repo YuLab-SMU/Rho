@@ -41,6 +41,9 @@ try {
     ? fs.realpathSync(process.env.RHO_AGENT_PLUGIN_PACKAGE)
     : stage('independent-build', () => buildAgentPlugin(path.join(directory, 'package')));
   assert.ok(!source.startsWith(root + path.sep), 'Use an independent package');
+  const manifest = JSON.parse(fs.readFileSync(path.join(source, 'plugin.json'), 'utf8'));
+  assert.ok(manifest.source.files.includes('backend/src/server.rs'));
+  assert.ok(manifest.source.files.includes('public/plugin-sdk/src/host_calls.rs'));
   record.backend_sha256 = digest(path.join(source, 'dist/rho-agent-backend'));
   if (!skipFramed) {
     const external = agentPluginBuildEnvironment();

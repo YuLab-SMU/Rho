@@ -89,12 +89,10 @@ The repository check `node scripts/test-agent-tool-grants.mjs` compares the
 published optional versions/scopes with all six public provider manifests and
 rejects accidental Control/Runtime grants. It does not execute those providers.
 Real R and provider quality require separate acceptance.
-`node scripts/test-agent-plugin-backend.mjs` independently builds the package and
-runs these framed cases. `node scripts/test-agent-plugin.mjs` freezes the generic
-Host harness before building and loading the external package, then exercises
-metadata, key Controls, diagnostics and ordinary model-task lifetime through the
-same native ports. At a milestone, run only the latter: it also runs the framed
-cases against its single independent build (`--evidence <file>` records stages and
+`node scripts/test-agent-plugin.mjs` freezes the generic Host harness, builds one
+external package and runs its framed cases, then exercises metadata, key Controls,
+diagnostics and ordinary model-task lifetime through the same native ports.
+This is the single combined milestone entry (`--evidence <file>` records stages and
 hashes; `--skip-framed` when a current framed result already covers the source).
 All projects, instance storage and keys are disposable.
 

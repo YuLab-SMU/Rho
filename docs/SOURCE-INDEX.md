@@ -140,7 +140,6 @@ Sources:
 - `scripts/generate-editor-context.mjs`
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-agent-core-tools.mjs`
-- `scripts/test-agent-plugin-backend.mjs`
 - `scripts/test-agent-plugin-client.mjs`
 - `scripts/test-agent-plugin-engine.mjs`
 - `scripts/test-agent-plugin-native.mjs`
@@ -220,7 +219,6 @@ Checks:
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `plugins.agent-adapter`: `["cargo","test","-p","rho-agents","--lib","--locked"]`
 - `plugins.agent-backend`: `["cargo","test","-p","rho-agent-backend","--test","metadata","--locked"]`
-- `plugins.agent-backend-independent`: `["node","scripts/test-agent-plugin-backend.mjs"]`
 - `plugins.agent-component-boundary`: `["cargo","test","-p","rho-application","--lib","component_boundary","--locked"]`
 - `plugins.agent-core-tools`: `["node","scripts/test-agent-core-tools.mjs"]`
 - `plugins.agent-engine`: `["cargo","test","-p","rho-agent-engine","--locked"]`

@@ -247,10 +247,10 @@ acceptance: `cargo test -p rho-agent-backend --test metadata native_tasks --lock
 uses an injected native factory and real package storage/loopback endpoints.
 It covers original Send retention, explicit Stop, next drafts, attachment input,
 reopen deduplication and refusal to forget unconfirmed native cleanup.
-`node scripts/test-agent-plugin-backend.mjs` repeats all framed cases in an
-independent assembly. `node scripts/test-agent-plugin.mjs` checks task metadata,
-attachment Control journal exclusion and instance separation through a generic
-Host compiled before that external package. The `native_foreign_takeover` framed
+`node scripts/test-agent-plugin.mjs` builds one independent assembly and repeats
+all framed cases, then checks task metadata, attachment Control journal exclusion
+and instance separation through a generic Host compiled before that external
+package. The `native_foreign_takeover` framed
 case checks attached/closing/unknown originals, changed requesting connections,
 confirmed detachment and original-request retries. The `view_presence` case in
 `cargo test -p rho-host --test plugin_view_delegation --locked` uses the public
@@ -392,11 +392,10 @@ The same target covers ephemeral key Controls, original-key receipt reads,
 wrong-port/identity refusal, lost replies/reopen and combined capacity without
 fabricated Control settlement.
 `node plugins/agent/generate-manifest.mjs` updates its contributed schemas; use
-`--check` for freshness. `node scripts/test-agent-plugin-backend.mjs` assembles and
-builds the source outside the checkout, checks public dependency containment and
-repeats those transport fixtures. `node scripts/test-agent-plugin.mjs` first builds
-the generic Host harness, then loads an independently built package without
-changing that harness. Its explicitly selected ignored cases check scopes, two
+`--check` for freshness. `node scripts/test-agent-plugin.mjs` first builds the
+generic Host harness, then builds one external package, checks public dependency
+containment, repeats the framed fixtures and loads that same package without
+changing the Host harness. Its explicitly selected ignored cases check scopes, two
 instances, durable request deduplication, key-Control journal exclusion and retained
 journal reads after removal.
 The synthetic model fixtures exercise the production Rig driver against a local
