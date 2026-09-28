@@ -592,6 +592,17 @@ the transport reports uncertainty and never retries, commits or claims rollback.
 The core remains authoritative for delegated grants, scope and original Operation
 idempotency. The pump cannot turn a query parent into effectful authority.
 
+Agent metadata composition uses its package-owned task/store libraries behind an
+ordinary native backend. Native initialization supplies its normalized project and
+per-instance store directory; task arguments cannot choose a database, principal
+or controller. Each caller mutation reads `views.caller` through its original
+active parent and consumes that observation synchronously in one owner admission.
+View controllers retain both native view and connection identities; direct callers
+use a separate instance/incarnation namespace. Changing controllers requires the
+owner's explicit versioned takeover. A result candidate retains its original
+Operation until Host settlement. This metadata path does not start model, native
+Agent or scientific work and never opens the core journal.
+
 `views.caller` exposes only the original native view/window/connection identity
 captured at authenticated ingress. Backend delegation retains that private capture;
 neither public RPC arguments nor selectors can supply or replace it. Non-view

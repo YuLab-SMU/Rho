@@ -74,6 +74,17 @@ an owner-admitted request or receipt, or commit an operation. Image labels and
 verified bytes are supplied by the containing owner. The transitional core adapter
 preserves admitted actions and records owner diagnostics before returning errors.
 
-This source is not yet a loadable Agent plugin: ordinary backend process composition,
-context providers and Agent views still require migration. No backend manifest,
-default activation or delivery claim is made until those owners use public ports.
+The new `backend/` process composes the same owner and store for task metadata.
+Its public manifest contributes task-list/conversation/settings queries plus
+model-task creation, draft saving, title/archive updates and explicit control
+transfer. It accepts only native initialization paths. Each mutation uses the
+original `views.caller` observation and a synchronous, one-use owner admission;
+neither arguments nor stored observations can grant a later action. Task results
+are submitted to the original Host Operation and retained until terminal settlement.
+This process uses the public SDK's bounded Host-call client and imports no private
+core crate. [Build instructions](BUILD.md) describe the independent source package.
+
+Compilation, manifest generation, standalone package and generic Host acceptance
+for this new composition are pending. Model execution, native Agent connections,
+context providers and Agent views still require integration. The registered metadata
+capabilities do not claim those features; default delivery remains unfinished.

@@ -53,7 +53,9 @@ component Chrome flows pass; two opt-in real-model cases were excluded. All nine
 current normal/narrow/wide, settings and scientific-state captures were inspected
 without visible clipping, missing glyphs or overlapping controls. The independent
 assembly passes all 14 owner and 15 store cases and verifies the public schemas.
-Real-R/manual-handoff acceptance remains in progress. An initial
+All 18 fixture-engine real-R source/execution cases pass with the new store; ten
+live-model cases were excluded. The current binary/manual-handoff run remains in
+progress. An initial
 all-platform offline metadata query failed on an uncached non-host dependency;
 the Apple Silicon filtered query passed without downloads.
 
@@ -141,9 +143,23 @@ selectors, lost scopes and closure during accepted work. Its tests, public type
 generation and independent consumer validation remain pending after the current
 serial storage verifier. Existing storage results do not validate this new port.
 
-This remains a migration foundation, not an ordinary loadable Agent runtime/view.
-Ordinary backend process composition, context providers, Agent views, Studio
-Agent assistance and final composition/default delivery remain active work.
+An ordinary Agent metadata backend has now been added in source. It composes the
+same public task owner and Agent store in an isolated process, uses bounded SDK
+Host calls for original native caller observation, and contributes task queries,
+creation, draft saving, title/archive updates and explicit controller takeover.
+It rejects caller-selected identity/paths, separates non-view controllers, preserves
+version checks and retains submitted results until their original Host settlement.
+Five framed-protocol fixtures and an independent-package generic Host fixture are
+added. Compilation, manifest generation and those runtime checks are pending;
+the current verifier is still finishing the preceding storage acceptance. The
+follow-up sequence is `target/plugin-refactor/agent-public-ports-verify.py`; run
+only after the current Cargo owner ends. Static dependency, source containment,
+documentation map and script syntax checks pass for the new source.
+
+This remains incomplete Agent migration. Model execution and native Agent transport
+composition, context providers, Agent views, Studio Agent assistance and final
+composition/default delivery remain active work. The metadata process does not
+claim to run models or scientific actions.
 Initial import warnings were corrected. Existing user Hosts and R sessions have
 not been replaced; runtime acceptance uses disposable projects. No full-workspace
 audit, installation or publication ran.

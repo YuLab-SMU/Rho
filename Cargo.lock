@@ -5942,6 +5942,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-agent-backend"
+version = "0.1.0"
+dependencies = [
+ "rho-agent-api",
+ "rho-agent-owner",
+ "rho-agent-store",
+ "rho-plugin-sdk",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "rho-agent-client"
 version = "0.1.0"
 dependencies = [

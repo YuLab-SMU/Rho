@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "checks": {
+    "plugins.agent-backend": {"command": ["cargo", "test", "-p", "rho-agent-backend", "--test", "metadata", "--locked"]},
+    "plugins.agent-backend-independent": {"command": ["node", "scripts/test-agent-plugin-backend.mjs"]},
+    "plugins.agent-manifest": {"command": ["node", "plugins/agent/generate-manifest.mjs", "--check"]},
+    "plugins.agent-host": {"command": ["node", "scripts/test-agent-plugin.mjs"]},
     "plugins.agent-store": {"command": ["cargo", "test", "-p", "rho-agent-store", "--lib", "--locked"]},
     "plugins.agent-store-independent": {"command": ["node", "scripts/test-agent-plugin-store.mjs"]},
     "plugins.agent-handoff": {"command": ["cargo", "test", "-p", "rho-agent-owner", "-p", "rho-application", "--lib", "handoff", "--locked"]},
@@ -1062,6 +1066,8 @@
         "scripts/test-agent-plugin-engine.mjs",
         "scripts/test-agent-plugin-owner.mjs",
         "scripts/test-agent-plugin-store.mjs",
+        "scripts/build-agent-plugin.mjs", "scripts/test-agent-plugin-backend.mjs",
+        "scripts/test-agent-plugin.mjs",
         "scripts/test-agent-plugin-client.mjs", "scripts/test-agent-plugin-types.mjs",
         "scripts/test-environment-plugin-owner.mjs",
         "scripts/build-environment-plugin.mjs",
@@ -1074,6 +1080,8 @@
         "plugins.agent-owner", "plugins.agent-owner-independent", "plugins.agent-request", "plugins.agent-component-boundary",
         "plugins.agent-handoff", "plugins.agent-handoff-store",
         "plugins.agent-store", "plugins.agent-store-independent",
+        "plugins.agent-backend", "plugins.agent-backend-independent", "plugins.agent-manifest",
+        "plugins.agent-host",
         "plugins.agent-native", "plugins.agent-independent", "plugins.agent-protocol", "plugins.agent-types",
         "plugins.development-owner",
         "plugins.build-owner", "plugins.archive-owner", "plugins.archive-ports",

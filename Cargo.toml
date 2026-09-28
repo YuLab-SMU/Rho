@@ -42,6 +42,7 @@ members = [
   "crates/cli",
   "crates/mcp",
   "plugins/agent/api",
+  "plugins/agent/backend",
   "plugins/agent/backend/client",
   "plugins/agent/backend/owner",
   "plugins/agent/backend/store",

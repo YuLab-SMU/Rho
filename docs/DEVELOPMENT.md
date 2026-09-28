@@ -238,6 +238,20 @@ reverse_calls_inherit_active_parent_and_declared_scope_without_host_credentials
 multiple hops, forged selectors, native scope loss and closure while an accepted
 operation is waiting. A non-view origin stays distinct from a stale view. These
 checks use the generic plugin-only Host and do not establish Agent task admission.
+
+The ordinary Agent metadata process uses `cargo test -p rho-agent-backend --test
+metadata --locked` for framed Host exchanges, original caller identity, task/draft
+CAS, explicit controller takeover, bounded concurrency, disconnect and settlement.
+`node plugins/agent/generate-manifest.mjs` updates its contributed schemas; use
+`--check` for freshness. `node scripts/test-agent-plugin-backend.mjs` assembles and
+builds the source outside the checkout, checks public dependency containment and
+repeats those transport fixtures. `node scripts/test-agent-plugin.mjs` first builds
+the generic Host harness, then loads an independently built package without
+changing that harness. Its explicitly selected ignored case checks scopes, two
+instances, durable request deduplication and retained journal reads after removal.
+No check contacts models or replaces user sessions. These establish metadata
+composition only; model/scientific execution and Agent view acceptance are separate.
+
 Independent assemblies include the public plugin protocol and R media API, with
 all source/dependency paths checked to stay inside the assembly. Agent-owned storage
 includes scoped credential-file locking, replacement, redaction and explicit-path
