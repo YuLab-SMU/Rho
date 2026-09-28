@@ -113,31 +113,24 @@ pub fn manifest() -> PluginManifest {
                 scopes: ["plugins.read".into()].into(),
             })
             .collect(),
-        optional_requires: vec![
-            CapabilityRequirement {
-                capability: key("plugins.inspect"),
-                scopes: ["plugins.read".into()].into(),
-            },
-            CapabilityRequirement {
-                capability: CapabilityKey {
-                    id: ContributionId::new("r.execute").unwrap(),
-                    version: 2,
+        optional_requires: {
+            let mut grants = crate::native_grants::scientific_requirements();
+            grants.extend([
+                CapabilityRequirement {
+                    capability: key("plugins.inspect"),
+                    scopes: ["plugins.read".into()].into(),
                 },
-                scopes: ["workspace.run_r".into()].into(),
-            },
-            CapabilityRequirement {
-                capability: key("r.session"),
-                scopes: ["workspace.read".into()].into(),
-            },
-            CapabilityRequirement {
-                capability: key("operation.get"),
-                scopes: ["operation.read".into()].into(),
-            },
-            CapabilityRequirement {
-                capability: key("plugins.delegated_operation"),
-                scopes: ["operation.read".into()].into(),
-            },
-        ],
+                CapabilityRequirement {
+                    capability: key("operation.get"),
+                    scopes: ["operation.read".into()].into(),
+                },
+                CapabilityRequirement {
+                    capability: key("plugins.delegated_operation"),
+                    scopes: ["operation.read".into()].into(),
+                },
+            ]);
+            grants
+        },
         capabilities: vec![
             capability(
                 "agent.native.tool",

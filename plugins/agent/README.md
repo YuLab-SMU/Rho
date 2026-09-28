@@ -59,9 +59,12 @@ their immutable public manifests and revalidates the live caller before capturin
 descriptions, schemas, scopes and targets with the original Send. The private MCP
 endpoint exposes `rho_tools` and `rho_call`; callers must name that Send and a
 canonical tool UUID. Identity reuse observes the original call; changed input or
-an old Send on a later turn is refused. The current package declares R query/run
-grants; selecting other capabilities requires their explicit package declarations.
-Control and runtime capabilities cannot be selected as tools.
+an old Send on a later turn is refused. The package declares optional grants for
+the public R, Files, Process, Remote, Environment and Editor Query/Operation
+contracts. Each exact capability version remains a separate activation choice;
+the declaration alone grants nothing and does not select or start a provider.
+Other capabilities require explicit package declarations. Control and runtime
+capabilities cannot be selected as tools.
 
 Tool admission shares Stop's owner gate and durably records a bounded semantic
 request before queuing it under the original Send's Host parent. Dropping an HTTP

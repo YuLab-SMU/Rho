@@ -1906,8 +1906,12 @@ the same package libraries. Fresh public caller observation precedes each write;
 persisted native controller correlation remains stable across renderer reconnection.
 The ordinary endpoint exposes generic tool catalog/call methods for the explicit
 Query/Operation selections captured by each original Send. Descriptors come from
-immutable public manifests; selected grants and scopes are checked before a fresh
-caller observation and synchronous owner admission. A later Send cannot inherit
+immutable public manifests. Scientific requirements are optional declarations
+of exact capability versions and scopes; they do not activate dependencies,
+select targets or start runtimes. Several owners can be selected in one Send,
+each retaining its own binding and semantic request. Selected grants and scopes
+are checked before a fresh caller observation and synchronous owner admission.
+A later Send cannot inherit
 an earlier tool request, target or authority. The owner retains a semantic UUID
 and exact native request before dispatch under that Send's original Host parent.
 Its durable tool store is separate from scientific truth. Stop fences new calls

@@ -148,6 +148,7 @@ Sources:
 - `scripts/test-agent-plugin-store.mjs`
 - `scripts/test-agent-plugin-types.mjs`
 - `scripts/test-agent-plugin.mjs`
+- `scripts/test-agent-tool-grants.mjs`
 - `scripts/test-console-plugin.mjs`
 - `scripts/test-editor-plugin.mjs`
 - `scripts/test-environment-plugin-owner.mjs`
@@ -240,6 +241,7 @@ Checks:
 - `plugins.agent-request`: `["cargo","test","-p","rho-contract","--lib","public_agent_request","--locked"]`
 - `plugins.agent-store`: `["cargo","test","-p","rho-agent-store","--lib","--locked"]`
 - `plugins.agent-store-independent`: `["node","scripts/test-agent-plugin-store.mjs"]`
+- `plugins.agent-tool-grants`: `["node","scripts/test-agent-tool-grants.mjs"]`
 - `plugins.agent-types`: `["node","scripts/test-agent-plugin-types.mjs"]`
 - `plugins.archive-owner`: `["cargo","test","-p","rho-plugins","--test","archive_transfers","--locked"]`
 - `plugins.archive-ports`: `["cargo","test","-p","rho-host","--test","plugin_archives","--locked"]`

@@ -386,8 +386,10 @@ parent until settlement. Bounded partial/cached queries remain labeled, while
 unverified, missing or oversized scientific replies retain uncertainty. Scoped
 receipt and original-operation queries observe recovery without dispatch or
 rewriting uncertainty. Scientific results still commit only through core Operation.
-The current manifest declares optional R query/run grants; other owner grants and
-core management tools remain to be connected.
+The package now declares optional Query/Operation grants for the exact public R,
+Files, Process, Remote, Environment and Editor contracts. Activation selects each
+capability version separately; declarations do not activate a provider or select
+tools for a Send. Core management tools remain to be connected.
 
 Two focused durable-tool tests and the initial three framed connection cases pass.
 The first complete backend run passed 31 cases and found a stale manifest count
@@ -417,6 +419,17 @@ provider, real model, user credentials or user R sessions. Full generic Host res
 and ordinary Agent view acceptance remain unfinished.
 Logs are retained under `target/plugin-refactor/agent-native-tools-*`; no failed
 check is recorded as a pass.
+
+The expanded scientific grant source passes all 35 framed backend cases. The two
+new cases cover three distinct provider bindings under one Send and ten refusals
+when either an activation grant or the original caller scopes are absent. Generated
+optional declarations match all 83 Query/Operation contracts from the six public
+provider manifests, including exact versions and scopes; Control/Runtime grants
+remain excluded. Its independent package and unchanged-Host verification are
+running separately in `agent-peer-tools-verify-v1.log`. These synthetic peer
+records and declaration checks do not establish actual local/remote process or
+environment execution through Agent. The independent real-R acceptance above uses
+the preceding frozen package.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,
@@ -2032,10 +2045,11 @@ continuation and optional real-model/alternate-R cases remain unexecuted.
 ### Remaining work and restart boundary
 
 The ordinary Agent backend is loadable and has independent package/Host acceptance
-for metadata, credentials, model runs and native task commands. Complete native
-scientific tool dispatch under each original Send, retained child settlement,
-full-size attachment resources and public context/document composition, then
-migrate Agent views. Same-instance recovery across an actual Host restart still
+for metadata, credentials, model runs, native task commands and scientific tool
+dispatch with retained child settlement under each original Send. Complete the
+core management tool selection, full-size attachment resources
+and public context/document composition, then migrate Agent views.
+Same-instance recovery across an actual Host restart still
 needs acceptance. Studio's
 Agent workflow must capture an exact development branch and preserve the separate
 checkpoint, build, preview and scenario-application actions. Remaining annotation

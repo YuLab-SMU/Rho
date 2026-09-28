@@ -228,7 +228,11 @@ performance or plugin view acceptance.
 adds real private-loopback MCP calls with an injected native Agent and synthetic
 Host scientific records. It covers original Send/child retention, dropped reply
 observers, Stop, later turns, partial/cached queries, result verification/bounds,
-grant/caller revalidation and observation-only reopen. These framed tests do not
+grant/caller revalidation, multiple scientific owners under one Send, refusal
+when either an activation grant or original caller scope is missing, and
+observation-only reopen. After manifest generation, run
+`node scripts/test-agent-tool-grants.mjs` to compare the exact optional versions
+and scopes against the public scientific-provider manifests. These framed tests do not
 establish actual R execution. `node scripts/test-agent-plugin-real-r.mjs` compiles
 generic Host harnesses before independently building the ordinary Agent/R packages.
 Its native ACP fixture runs only from an isolated PATH/home and calls the actual

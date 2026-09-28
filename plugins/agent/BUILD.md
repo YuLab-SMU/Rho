@@ -57,7 +57,10 @@ component-model attachments/continuation and ordinary views remain implementatio
 Send can capture explicit ordinary-plugin Query/Operation tools. Enable
 `plugins.inspect@1` to resolve immutable tool contracts, the selected scientific
 capabilities, and `operation.get@1`/`plugins.delegated_operation@1` for effectful
-tools. Each tool carries an exact provider binding and target; the original caller
+tools. The package declares exact optional Query/Operation grants for R, Files,
+Process, Remote, Environment and Editor. Activation does not automatically select
+them, and declaring several versions does not choose a version for a Send.
+Each tool carries an exact provider binding and target; the original caller
 must hold its scopes. The private `rho_call` method requires the original Send and
 a semantic tool UUID, with no provider selector in its arguments. Accepted children
 survive Stop and dropped reply observers. `agent.native.tool` and
@@ -74,7 +77,11 @@ native identity, text, stopping, takeover, interrupted reopen, scientific revers
 requests, late native results, scoped Explain/Run and read-only original recovery.
 The `native_science` cases use actual private MCP HTTP with synthetic Host records
 to check selected grants, original Send identity, retries, Stop, later turns,
-partial/cached observations and unverified/oversized result refusal.
+partial/cached observations and unverified/oversized result refusal. Multiple
+scientific owners in one Send retain separate bindings, requests and results.
+The repository check `node scripts/test-agent-tool-grants.mjs` compares the
+published optional versions/scopes with all six public provider manifests and
+rejects accidental Control/Runtime grants. It does not execute those providers.
 Real R and provider quality require separate acceptance.
 `node scripts/test-agent-plugin-backend.mjs` independently builds the package and
 runs these framed cases. `node scripts/test-agent-plugin.mjs` freezes the generic

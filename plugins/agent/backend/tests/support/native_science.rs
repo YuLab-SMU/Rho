@@ -621,3 +621,249 @@ async fn native_science_revalidates_manifest_grants_and_live_caller_before_nativ
         f.release().await;
     }
 }
+
+#[tokio::test]
+async fn native_science_multiple_owners_keep_distinct_bindings_under_one_send() {
+    let factory = Arc::new(Factory::default());
+    factory.hold.store(true, Ordering::SeqCst);
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().canonicalize().unwrap();
+    let environment = BackendEnvironment {
+        project_root: root.join("project").to_str().unwrap().into(),
+        data_root: root.join("instance").to_str().unwrap().into(),
+    };
+    std::fs::create_dir(&environment.project_root).unwrap();
+    std::fs::create_dir(&environment.data_root).unwrap();
+    let mut f = Fixture::open_with_factory(
+        directory,
+        environment,
+        &[
+            "plugins.inspect",
+            "operation.get",
+            "plugins.delegated_operation",
+            "files.apply_patch",
+            "process.run_local",
+            "environment.status",
+        ],
+        factory.clone(),
+    )
+    .await;
+    let created = f.native_create().await;
+    let saved = draft(&mut f, &created, "Use the explicitly selected providers").await;
+    let mut input = send(&saved);
+    let peers = [
+        (
+            "files.apply_patch",
+            1,
+            "operation",
+            vec!["project.read", "project.write"],
+        ),
+        (
+            "process.run_local",
+            2,
+            "operation",
+            vec!["project.read", "process.run_local"],
+        ),
+        (
+            "environment.status",
+            1,
+            "query",
+            vec!["project.read", "environment.read"],
+        ),
+    ];
+    let selections: Vec<_> = peers
+        .iter()
+        .enumerate()
+        .map(|(index, (name, version, _, _))| {
+            let mut selected = binding();
+            selected["capability"] = json!({"id":name,"version":version});
+            selected["provider"]["plugin"] = json!(format!("org.fixture.peer{index}"));
+            selected["provider"]["instance"] = json!(format!("peer-{index}"));
+            selected["provider"]["revision"] =
+                json!(format!("sha256:{}", index.to_string().repeat(64)));
+            selected["target"] = json!(format!("captured-target-{index}"));
+            json!({"name":format!("tool{index}"),"binding":selected})
+        })
+        .collect();
+    input["tools"] = json!(selections);
+    let mut native = scientific(
+        "multiple-native-owners",
+        "agent.native.command",
+        input.clone(),
+        true,
+    );
+    for (_, _, _, scopes) in &peers {
+        native
+            .scopes
+            .extend(scopes.iter().map(|scope| (*scope).to_owned()));
+    }
+    begin(&mut f, &native).await;
+    for (index, (_, _, kind, scopes)) in peers.iter().enumerate() {
+        let frame = f.read().await;
+        let selected = &selections[index]["binding"];
+        assert!(
+            matches!(&frame.body, RpcBody::HostCall { parent_request, capability, arguments }
+            if parent_request == &native.request && capability == &manifest::key("plugins.inspect")
+                && arguments == &json!({"revision":selected["provider"]["revision"]}))
+        );
+        let mut catalog = inspection();
+        catalog["summary"]["revision"] = selected["provider"]["revision"].clone();
+        catalog["summary"]["plugin"] = selected["provider"]["plugin"].clone();
+        catalog["manifest"]["id"] = selected["provider"]["plugin"].clone();
+        catalog["manifest"]["capabilities"][0]["capability"] = selected["capability"].clone();
+        catalog["manifest"]["capabilities"][0]["kind"] = json!(kind);
+        catalog["manifest"]["capabilities"][0]["required_scopes"] = json!(scopes);
+        answer(&mut f, frame, catalog).await;
+    }
+    let frame = f.read().await;
+    assert!(
+        matches!(&frame.body, RpcBody::HostCall { capability, .. } if capability == &manifest::key("views.caller"))
+    );
+    answer(&mut f, frame, origin("view-one")).await;
+    sent(&factory, 1).await;
+    let mcp = Mcp::connect(&factory).await;
+    let mut requests = std::collections::BTreeSet::new();
+    for (index, (_, _, kind, _)) in peers.iter().enumerate() {
+        let tool = json!({"send_request":input["request_id"],"tool_request":uuid::Uuid::new_v4().to_string(),"tool":format!("tool{index}"),"arguments":{"code":format!("original input {index}")},"preconditions":{"expected":format!("native-state-{index}")}});
+        let waiting = mcp.start(tool.clone());
+        let child = f.read().await;
+        let RpcBody::HostCall {
+            parent_request,
+            capability,
+            arguments,
+        } = &child.body
+        else {
+            panic!("{child:?}")
+        };
+        assert_eq!(parent_request, &native.request);
+        assert_eq!(
+            json!(capability),
+            selections[index]["binding"]["capability"]
+        );
+        assert_eq!(arguments["binding"], selections[index]["binding"]);
+        assert_eq!(arguments["arguments"], tool["arguments"]);
+        assert_eq!(arguments["preconditions"], tool["preconditions"]);
+        assert!(requests.insert(child.request.clone()));
+        let result = if *kind == "query" {
+            json!({"status":"ready","completeness":"complete","data":{"provider":index}})
+        } else {
+            let mut record = scientific_record(&f, &native, arguments);
+            record["operation"]["operation_id"] = json!(format!("scientific-child-{index}"));
+            record
+        };
+        f.writer
+            .send(child.request, RpcBody::HostResult { result })
+            .await
+            .unwrap();
+        let original = waiting.await.unwrap();
+        assert_ne!(original["result"]["isError"], true, "{original}");
+        let repeated = mcp.call(tool.clone()).await;
+        assert_eq!(repeated["result"], original["result"]);
+        let receipt = f
+            .query(
+                "agent.native.tool",
+                json!({"send_request":tool["send_request"],"tool_request":tool["tool_request"]}),
+            )
+            .await;
+        assert_eq!(receipt["phase"], "resolved");
+        assert_eq!(
+            receipt["native_request"]["binding"],
+            selections[index]["binding"]
+        );
+        assert_eq!(receipt["operation"].is_null(), *kind == "query");
+    }
+    finish(&factory);
+    let frame = f.read().await;
+    assert_eq!(frame.request, native.request);
+    let RpcBody::CommitPlan(plan) = frame.body else {
+        panic!("{frame:?}")
+    };
+    assert_eq!(plan.outcome, PluginOutcome::Succeeded);
+    f.settle(&native, plan.outcome).await;
+    f.release().await;
+}
+
+#[tokio::test]
+async fn native_science_peer_tools_require_both_activation_grants_and_original_scopes() {
+    for (name, version, scopes) in [
+        (
+            "files.apply_patch",
+            1,
+            vec!["project.read", "project.write"],
+        ),
+        (
+            "process.run_local",
+            2,
+            vec!["project.read", "process.run_local"],
+        ),
+        ("slurm.submit", 2, vec!["project.read", "slurm.write"]),
+        (
+            "environment.status",
+            1,
+            vec!["project.read", "environment.read"],
+        ),
+        ("editor.context.search", 1, vec!["documents.read"]),
+    ] {
+        for missing_grant in [true, false] {
+            let factory = Arc::new(Factory::default());
+            let directory = tempfile::tempdir().unwrap();
+            let root = directory.path().canonicalize().unwrap();
+            let environment = BackendEnvironment {
+                project_root: root.join("project").to_str().unwrap().into(),
+                data_root: root.join("instance").to_str().unwrap().into(),
+            };
+            std::fs::create_dir(&environment.project_root).unwrap();
+            std::fs::create_dir(&environment.data_root).unwrap();
+            let mut optional = vec![
+                "plugins.inspect",
+                "operation.get",
+                "plugins.delegated_operation",
+            ];
+            if !missing_grant {
+                optional.push(name);
+            }
+            let mut f =
+                Fixture::open_with_factory(directory, environment, &optional, factory.clone())
+                    .await;
+            let created = f.native_create().await;
+            let saved = draft(&mut f, &created, "Retain this draft on refusal").await;
+            let mut input = send(&saved);
+            input["tools"][0]["binding"]["capability"] = json!({"id":name,"version":version});
+            let mut native = scientific("refused-peer-tool", "agent.native.command", input, true);
+            if missing_grant {
+                native
+                    .scopes
+                    .extend(scopes.iter().map(|scope| (*scope).to_owned()));
+            }
+            begin(&mut f, &native).await;
+            let frame = f.read().await;
+            let mut catalog = inspection();
+            catalog["manifest"]["capabilities"][0]["capability"] =
+                json!({"id":name,"version":version});
+            catalog["manifest"]["capabilities"][0]["kind"] = json!(if matches!(
+                name,
+                "environment.status" | "editor.context.search"
+            ) {
+                "query"
+            } else {
+                "operation"
+            });
+            catalog["manifest"]["capabilities"][0]["required_scopes"] = json!(scopes);
+            answer(&mut f, frame, catalog).await;
+            let frame = f.read().await;
+            assert_eq!(frame.request, native.request);
+            let RpcBody::CommitPlan(plan) = frame.body else {
+                panic!("{frame:?}")
+            };
+            assert_eq!(
+                plan.outcome,
+                PluginOutcome::Failed,
+                "{name}: missing_grant={missing_grant}"
+            );
+            f.settle(&native, plan.outcome).await;
+            assert_eq!(factory.opens.load(Ordering::SeqCst), 0);
+            assert_eq!(factory.sends.load(Ordering::SeqCst), 0);
+            f.release().await;
+        }
+    }
+}
