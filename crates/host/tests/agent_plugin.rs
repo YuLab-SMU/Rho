@@ -310,6 +310,21 @@ async fn ordinary_agent_metadata_uses_generic_host_scopes_isolated_storage_and_o
             .len(),
         1
     );
+    // Completed journal entries and native settlement acknowledgement are
+    // separate. Release only after both accepted execution leases have retired.
+    for instance in [&first, &second] {
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let observed = query(&host, "plugins.instance", json!({"instance":instance})).await;
+                if observed["retained_calls"] == 0 && observed["pending_messages"] == 0 {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+    }
     succeeded(
         &host,
         "release-first",
