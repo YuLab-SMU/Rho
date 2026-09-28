@@ -5947,6 +5947,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum",
+ "reqwest 0.13.5",
  "rho-agent-api",
  "rho-agent-client",
  "rho-agent-engine",

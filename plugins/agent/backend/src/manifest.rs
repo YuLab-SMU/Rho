@@ -1,8 +1,8 @@
 use crate::{arguments::*, native_arguments::*};
 use rho_agent_api::{
-    AgentCommandReceipt, AgentNativeHistoryPage, AgentTaskCommandResult, AgentTaskDetail,
-    AgentTaskEventPage, ComponentCredentialRef, ComponentCredentialStatus, ComponentModelSettings,
-    ProjectAgentTaskPage,
+    AgentCommandReceipt, AgentNativeHistoryPage, AgentNativeToolReceipt, AgentTaskCommandResult,
+    AgentTaskDetail, AgentTaskEventPage, ComponentCredentialRef, ComponentCredentialStatus,
+    ComponentModelSettings, ProjectAgentTaskPage,
     component::{
         ComponentAgentConversation, ComponentAgentEventPage, ComponentAgentRun,
         ComponentModelDiagnostic, ComponentToolReceipt,
@@ -56,7 +56,7 @@ fn capability(
         capability: key(id), kind,
         title: title.into(),
         description: if id == "agent.native.command" {
-            "Admit a native Agent command with the original native caller and task generation. Fresh native work retains its containing Operation until its original receipt is observed; identical requests only observe their original receipt. Does not install an Agent or compose scientific tools/context yet. Attachment bytes are excluded from this Operation contract."
+            "Admit a native Agent command with the original caller and task generation. Send may select exact ordinary-plugin query/Operation tools under existing grants; immutable manifests supply their contracts. Retains the original parent until the native turn and accepted scientific children settle. Identical requests only observe original receipts. Tool retries require the same Send and semantic request identity. Does not install an Agent. Attachment bytes are excluded and contributed context is not yet composed."
         } else if id == "agent.native.assets.upload" {
             "Store a bounded native task attachment through ephemeral input, the same task owner and runtime, without journaling its bytes or starting a native Agent. Inspect its original task receipt after a lost reply. This capability currently accepts only bounded single-message attachments."
         } else if id == "agent.model.run" {
@@ -78,7 +78,7 @@ fn capability(
         }.into(),
         input_schema: input, output_schema: output, examples: vec![example],
         recovery_schema: json!({"type":"object","additionalProperties":false,"properties":{"code":{"type":"string"}},"required":["code"]}),
-        required_scopes: if operation || control { ["application.control".into(), "plugins.read".into()].into() } else if id == "agent.model.tool.operation" { ["application.read".into(), "operation.read".into()].into() } else { ["application.read".into()].into() },
+        required_scopes: if operation || control { ["application.control".into(), "plugins.read".into()].into() } else if matches!(id, "agent.model.tool.operation" | "agent.native.tool.operation") { ["application.read".into(), "operation.read".into()].into() } else { ["application.read".into()].into() },
         effects: if id == "agent.native.command" { ["agent.native.command".into()].into() } else if id == "agent.native.assets.upload" { ["agent.assets".into()].into() } else if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
         cancellation: CancellationSupport::Unsupported, preflight: None,
     }
@@ -106,11 +106,18 @@ pub fn manifest() -> PluginManifest {
             }),
         },
         dependencies: Default::default(),
-        requires: ["views.caller", "views.presence"].into_iter().map(|id| CapabilityRequirement {
-            capability: key(id),
-            scopes: ["plugins.read".into()].into(),
-        }).collect(),
+        requires: ["views.caller", "views.presence"]
+            .into_iter()
+            .map(|id| CapabilityRequirement {
+                capability: key(id),
+                scopes: ["plugins.read".into()].into(),
+            })
+            .collect(),
         optional_requires: vec![
+            CapabilityRequirement {
+                capability: key("plugins.inspect"),
+                scopes: ["plugins.read".into()].into(),
+            },
             CapabilityRequirement {
                 capability: CapabilityKey {
                     id: ContributionId::new("r.execute").unwrap(),
@@ -132,6 +139,20 @@ pub fn manifest() -> PluginManifest {
             },
         ],
         capabilities: vec![
+            capability(
+                "agent.native.tool",
+                "Read an original native tool receipt",
+                schema_for!(NativeToolReceipt).to_value(),
+                schema_for!(AgentNativeToolReceipt).to_value(),
+                json!({"send_request":"11111111-1111-4111-8111-111111111111","tool_request":"22222222-2222-4222-8222-222222222222"}),
+            ),
+            capability(
+                "agent.native.tool.operation",
+                "Inspect an original native scientific Operation",
+                schema_for!(NativeToolReceipt).to_value(),
+                json!({"type":"object"}),
+                json!({"send_request":"11111111-1111-4111-8111-111111111111","tool_request":"22222222-2222-4222-8222-222222222222"}),
+            ),
             capability(
                 "agent.native.command",
                 "Change a native Agent task",

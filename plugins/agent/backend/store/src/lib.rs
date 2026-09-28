@@ -9,6 +9,7 @@ mod agent_assets;
 mod agent_handoffs;
 mod agent_tasks;
 mod component_agents;
+mod native_tools;
 mod project_agent_tasks;
 
 pub struct AgentStore(pub(crate) Mutex<Connection>);
@@ -60,6 +61,7 @@ impl AgentStore {
             .execute_batch("PRAGMA synchronous = FULL;")
             .map_err(|e| e.to_string())?;
         agent_tasks::initialize(&connection)?;
+        native_tools::initialize(&connection)?;
         component_agents::initialize(&connection)?;
         agent_handoffs::initialize(&connection)?;
         Ok(Self(Mutex::new(connection)))

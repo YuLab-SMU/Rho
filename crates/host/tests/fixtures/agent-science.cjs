@@ -1,0 +1,84 @@
+#!/usr/bin/env node
+// Local ACP peer for ordinary-plugin acceptance. Never contacts a model or reads
+// native credentials; all fixture input and evidence belong to its disposable cwd.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const readline = require('node:readline');
+const {randomUUID} = require('node:crypto');
+// Backend processes inherit only PATH/locale. The disposable launcher directory
+// supplies this marker without weakening the Host's environment boundary.
+assert.equal(fs.readFileSync(path.join(__dirname, 'rho-science-fixture'), 'utf8'), 'disposable');
+let cwd, session, endpoint, headers, mcpSession, pending, prompts = 0;
+const send = value => process.stdout.write(JSON.stringify(value) + '\n');
+const result = (id, value) => send({jsonrpc:'2.0', id, result:value});
+const config = () => [{id:'model', category:'model', type:'select', name:'Model', currentValue:'fixture', options:[{value:'fixture', name:'Fixture'}]}];
+const save = value => {
+  const temporary = path.join(cwd, 'native-science-evidence.tmp');
+  fs.writeFileSync(temporary, JSON.stringify(value));
+  fs.renameSync(temporary, path.join(cwd, 'native-science-evidence.json'));
+};
+async function rpc(method, params, id = randomUUID()) {
+  const response = await fetch(endpoint, {method:'POST', headers:{...headers, 'content-type':'application/json', accept:'application/json, text/event-stream', 'mcp-protocol-version':'2025-06-18', ...(mcpSession ? {'mcp-session-id':mcpSession} : {})}, body:JSON.stringify({jsonrpc:'2.0', ...(id === null ? {} : {id}), method, params}), signal:AbortSignal.timeout(60000)});
+  assert.ok(response.ok);
+  mcpSession ??= response.headers.get('mcp-session-id');
+  const text = await response.text();
+  if (id === null) return;
+  let value;
+  try { value = JSON.parse(text); } catch { value = text.split('\n').filter(line => line.startsWith('data:')).map(line => JSON.parse(line.slice(5))).find(item => item.id === id); }
+  assert.equal(value.id, id);
+  assert.equal(value.error, undefined);
+  return value.result;
+}
+async function prompt(message) {
+  const id = message.id;
+  pending = id;
+  prompts++;
+  const text = message.params.prompt.filter(p => p.type === 'text').map(p => p.text).join('\n');
+  const sendRequest = text.match(/Use rho_call with send_request=([0-9a-f-]{36}) /)?.[1];
+  assert.ok(sendRequest, 'Original Send identity must arrive through native input');
+  if (!mcpSession) {
+    await rpc('initialize', {protocolVersion:'2025-06-18', capabilities:{}, clientInfo:{name:'rho-science-fixture', version:'1'}});
+    await rpc('notifications/initialized', {}, null);
+  }
+  const catalog = await rpc('tools/call', {name:'rho_tools', arguments:{send_request:sendRequest}});
+  assert.equal(catalog.structuredContent.tools.length, 1);
+  assert.equal(catalog.structuredContent.tools[0].selection.name, 'execute');
+  const input = JSON.parse(fs.readFileSync(path.join(cwd, 'native-science-input.json'), 'utf8'));
+  const invocation = {send_request:sendRequest, tool_request:randomUUID(), tool:'execute', arguments:input, preconditions:null};
+  const evidence = {session, prompts, invocation};
+  save(evidence);
+  const original = await rpc('tools/call', {name:'rho_call', arguments:invocation});
+  assert.notEqual(original.isError, true);
+  assert.equal(original.structuredContent.result.status, 'succeeded');
+  const stopped = pending !== id;
+  if (!stopped) {
+    assert.deepEqual(await rpc('tools/call', {name:'rho_call', arguments:invocation}), original);
+    send({jsonrpc:'2.0', method:'session/update', params:{sessionId:session, update:{sessionUpdate:'agent_message_chunk', content:{type:'text', text:'Original scientific result observed 中文'}}}});
+    result(id, {stopReason:'end_turn'});
+    pending = null;
+  }
+  save({...evidence, result:original.structuredContent, stopped});
+}
+const lines = readline.createInterface({input:process.stdin});
+lines.on('line', line => {
+  const message = JSON.parse(line), p = message.params || {};
+  if (message.method === 'initialize') result(message.id, {protocolVersion:1, agentInfo:{name:'Local scientific fixture', version:'1'}, agentCapabilities:{promptCapabilities:{embeddedContext:true}, sessionCapabilities:{close:{}}}});
+  else if (message.method === 'session/new') {
+    cwd = p.cwd; session = randomUUID(); endpoint = p.mcpServers[0].url;
+    assert.equal(new URL(endpoint).hostname, '127.0.0.1');
+    headers = Object.fromEntries(p.mcpServers[0].headers.map(h => [h.name,h.value]));
+    result(message.id, {sessionId:session, configOptions:config()});
+  } else if (message.method === 'session/set_config_option') result(message.id, {configOptions:config()});
+  else if (message.method === 'session/prompt') void prompt(message).catch(error => {
+    save({prompts, error:error.message});
+    if (pending === message.id) send({jsonrpc:'2.0', id:message.id, error:{code:-32603, message:'Local scientific fixture failed; inspect disposable evidence'}});
+    pending = null;
+  });
+  else if (message.method === 'session/cancel' || message.method === 'session/close') {
+    if (pending) result(pending, {stopReason:'cancelled'});
+    pending = null;
+    if (message.id !== undefined) result(message.id, {});
+  } else if (message.id !== undefined) send({jsonrpc:'2.0', id:message.id, error:{code:-32601, message:'Unsupported fixture method'}});
+});
+lines.on('close', () => process.exit(0));

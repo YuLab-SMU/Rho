@@ -10,6 +10,10 @@ mod diagnostics;
 mod runs;
 
 pub mod native_arguments;
-mod native_tasks;
 mod native_controller;
+mod native_result;
+mod native_selection;
+mod native_tasks;
+mod native_tool_observation;
+mod native_tools;
 mod tools;

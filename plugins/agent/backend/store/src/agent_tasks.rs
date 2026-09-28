@@ -52,6 +52,21 @@ fn decode_task(value: String, cursor: u64, gap: bool) -> Result<StoredAgentTask,
     Ok(task)
 }
 impl AgentTaskRepository for AgentStore {
+    fn agent_native_tool(
+        &self,
+        scope: &AgentTaskScope,
+        send: &str,
+        tool: &str,
+    ) -> Result<Option<AgentNativeToolReceipt>, AgentTaskError> {
+        crate::native_tools::read(self, scope, send, tool)
+    }
+    fn put_agent_native_tool(
+        &self,
+        scope: &AgentTaskScope,
+        receipt: &AgentNativeToolReceipt,
+    ) -> Result<(), AgentTaskError> {
+        crate::native_tools::put(self, scope, receipt)
+    }
     fn project_agent_tasks(
         &self,
         scope: &AgentTaskScope,

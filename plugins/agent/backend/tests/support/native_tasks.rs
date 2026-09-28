@@ -13,6 +13,9 @@ fn now() -> u64 {
 use std::sync::{Mutex as SyncMutex, atomic::AtomicUsize};
 use tokio::sync::Notify;
 
+#[path = "native_science.rs"]
+mod science;
+
 #[derive(Default)]
 struct Factory {
     opens: AtomicUsize,
@@ -25,6 +28,7 @@ struct Factory {
     refuse_open: AtomicBool,
     sessions: SyncMutex<Vec<Arc<Session>>>,
     inputs: Arc<SyncMutex<Vec<Vec<NativeInput>>>>,
+    endpoints: SyncMutex<Vec<(String, String)>>,
     delay: AtomicBool,
     release: Notify,
 }
@@ -45,6 +49,10 @@ impl NativeAgentFactory for Factory {
         r: NativeOpenRequest,
     ) -> Result<Arc<dyn NativeAgentSession>, NativeOpenFailure> {
         let number = self.opens.fetch_add(1, Ordering::SeqCst) + 1;
+        self.endpoints
+            .lock()
+            .unwrap()
+            .push((r.endpoint.clone(), r.token.clone()));
         if self.refuse_open.load(Ordering::SeqCst) {
             return Err("native open refused".into());
         }

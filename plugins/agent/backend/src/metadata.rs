@@ -224,7 +224,7 @@ impl Metadata {
             .as_str()
             .starts_with("agent.native.")
         {
-            return self.native.query(self, call).await;
+            return self.native.query(self, call, host).await;
         }
         if call.binding.capability.id.as_str() == "agent.model.tool.operation" {
             return crate::tools::inspect_original(self, call, host).await;

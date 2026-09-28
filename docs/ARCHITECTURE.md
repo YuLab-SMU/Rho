@@ -1904,8 +1904,20 @@ Host adapter still supplies context and scientific MCP integration. The ordinary
 backend now composes native command/observation and attachment operations using
 the same package libraries. Fresh public caller observation precedes each write;
 persisted native controller correlation remains stable across renderer reconnection.
-The ordinary endpoint currently advertises no scientific tools, and contributed
-context input is refused before native submission. Foreign active-controller
+The ordinary endpoint exposes generic tool catalog/call methods for the explicit
+Query/Operation selections captured by each original Send. Descriptors come from
+immutable public manifests; selected grants and scopes are checked before a fresh
+caller observation and synchronous owner admission. A later Send cannot inherit
+an earlier tool request, target or authority. The owner retains a semantic UUID
+and exact native request before dispatch under that Send's original Host parent.
+Its durable tool store is separate from scientific truth. Stop fences new calls
+through the same writer gate; accepted children survive dropped HTTP waits and
+keep their original parent retained until settlement. Scientific replies must
+match their caller, parent, provider, scope, arguments and preconditions. Invalid,
+missing and oversized results remain uncertain, with available original identity
+retained for read-only delegated-operation lookup. Partial/cached queries preserve
+their observation status. That lookup never replays work or rewrites the Agent
+receipt. Contributed context input is refused before native submission. Foreign active-controller
 takeover consumes the public view-presence observation and a fresh caller check;
 attached or closing original views cannot be treated as detached. The native scheduler has
 no private core dependency or scientific journal connection.

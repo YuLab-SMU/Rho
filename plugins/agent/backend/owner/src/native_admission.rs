@@ -3,7 +3,8 @@
 use crate::{AgentTaskError, AgentTaskScope};
 use rho_agent_api::component::{OperationId, ProviderBinding, RequestId};
 use rho_agent_api::{
-    AgentCommandReceipt, AgentTask, AgentTaskCommand, AgentTaskDraft, AgentTaskRequest,
+    AgentCommandReceipt, AgentNativeToolGrant, AgentTask, AgentTaskCommand, AgentTaskDraft,
+    AgentTaskRequest,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -21,6 +22,8 @@ pub struct AgentNativeCommandOrigin {
     pub project_root: String,
     pub principal: String,
     pub scopes: BTreeSet<String>,
+    #[serde(default)]
+    pub tools: Vec<AgentNativeToolGrant>,
 }
 impl AgentNativeCommandOrigin {
     pub fn validate(&self, scope: &AgentTaskScope) -> Result<(), AgentTaskError> {
@@ -62,6 +65,14 @@ impl StoredAgentNativeAdmission {
         receipt: &AgentCommandReceipt,
     ) -> Result<(), AgentTaskError> {
         self.origin.validate(scope)?;
+        crate::native_tools::validate_grants(&self.origin)?;
+        if !self.origin.tools.is_empty()
+            && !matches!(self.request.command, AgentTaskCommand::Send { .. })
+        {
+            return Err(AgentTaskError::InvalidInput(
+                "Only Send can capture native tools".into(),
+            ));
+        }
         if self.task_id != receipt.task_id
             || self.request.project_root != scope.project
             || self.input_task.task_id != self.task_id

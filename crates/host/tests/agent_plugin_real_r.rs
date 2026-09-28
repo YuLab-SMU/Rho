@@ -12,6 +12,9 @@ use std::{
     time::Duration,
 };
 
+#[path = "support/agent_native_real_r.rs"]
+mod native;
+
 async fn query(host: &NextHost, cap: &str, arguments: Value) -> Value {
     host.query_snapshot(
         &NextHost::local_context(),

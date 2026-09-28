@@ -24,6 +24,7 @@ tokio = { version = "1.0", features = ["macros", "rt", "io-std", "io-util", "syn
 uuid = { version = "1.18", features = ["v4"] }
 
 [dev-dependencies]
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
 tokio = { version = "1.0", features = ["net"] }
 tempfile = "3.20"

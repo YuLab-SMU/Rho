@@ -5,6 +5,8 @@ mod tasks;
 pub use tasks::*;
 mod project_tasks;
 pub use project_tasks::*;
+mod native_tools;
+pub use native_tools::*;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -119,5 +121,5 @@ mod model;
 pub use model::*;
 
 pub mod component;
-pub mod handoff;
 pub mod component_boundary;
+pub mod handoff;

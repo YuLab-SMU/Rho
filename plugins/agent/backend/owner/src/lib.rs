@@ -4,6 +4,8 @@
 use rho_agent_api::*;
 mod native_admission;
 pub use native_admission::*;
+mod native_tools;
+pub use native_tools::*;
 mod boundary;
 pub use boundary::*;
 use serde::{Deserialize, Serialize};
@@ -143,6 +145,25 @@ pub trait AgentTaskRepository: Send + Sync {
     ) -> Result<(), AgentTaskError> {
         Err(AgentTaskError::Storage(
             "Atomic native admission is unavailable".into(),
+        ))
+    }
+    fn agent_native_tool(
+        &self,
+        _scope: &AgentTaskScope,
+        _send: &str,
+        _tool: &str,
+    ) -> Result<Option<AgentNativeToolReceipt>, AgentTaskError> {
+        Err(AgentTaskError::Storage(
+            "Native tool observations are unavailable".into(),
+        ))
+    }
+    fn put_agent_native_tool(
+        &self,
+        _scope: &AgentTaskScope,
+        _receipt: &AgentNativeToolReceipt,
+    ) -> Result<(), AgentTaskError> {
+        Err(AgentTaskError::Storage(
+            "Native tool storage is unavailable".into(),
         ))
     }
     fn commit_agent_task(
@@ -351,7 +372,9 @@ impl AgentTaskOwner {
                 original.validate(scope, &receipt)?;
                 // A new transport request only observes this original admission.
                 // It cannot move the command to a different Agent instance.
-                if original.origin.binding != origin.binding {
+                if original.origin.binding != origin.binding
+                    || original.origin.tools != origin.tools
+                {
                     return Err(AgentTaskError::RequestConflict);
                 }
             }

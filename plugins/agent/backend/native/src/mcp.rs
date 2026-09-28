@@ -62,6 +62,7 @@ pub struct NativeMcpCall {
     pub tool: String,
     pub arguments: Value,
 }
+#[derive(Clone)]
 pub struct NativeMcpReply {
     pub value: Value,
     pub failed: bool,

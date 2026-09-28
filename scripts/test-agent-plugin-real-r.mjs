@@ -11,6 +11,15 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 assert.ok(process.env.RHO_ARK && process.env.RHO_R_HOME, 'Set RHO_ARK and RHO_R_HOME for disposable R acceptance');
 const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-science-')));
 const env = {...process.env, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '2'};
+const nativeBin = path.join(directory, 'native-bin');
+fs.mkdirSync(nativeBin);
+fs.writeFileSync(path.join(nativeBin, 'rho-science-fixture'), 'disposable');
+fs.copyFileSync(path.join(root, 'crates/host/tests/fixtures/agent-science.cjs'), path.join(nativeBin, 'kimi'));
+fs.chmodSync(path.join(nativeBin, 'kimi'), 0o700);
+env.PATH = `${nativeBin}${path.delimiter}${env.PATH}`;
+env.KIMI_CODE_HOME = path.join(directory, 'native-home');
+fs.mkdirSync(env.KIMI_CODE_HOME);
+env.RHO_AGENT_NATIVE_SCIENCE_FIXTURE = '1';
 const digest = file => createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 try {
   const tests = ['agent_plugin', 'agent_plugin_real_r'];

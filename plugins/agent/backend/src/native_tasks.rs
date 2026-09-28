@@ -1,6 +1,6 @@
 //! Ordinary native task composition over the single public owner/store/runtime.
-//! Native chat uses the existing scheduler; contributed scientific tools/context
-//! must be connected before claiming complete Agent migration.
+//! Native chat and captured scientific tools use the existing scheduler. Context
+//! contributions and the complete Agent UI migration remain separate work.
 use crate::{
     metadata::{Failure, Metadata, decode, encoded, now},
     native_arguments::*,
@@ -10,7 +10,7 @@ use rho_agent_api::*;
 use rho_agent_client::{NativeAgentFactory, NativeInput};
 use rho_agent_native::{
     NativeTaskEndpoint, NativeTaskFailure, NativeTaskPort, NativeTaskRuntime,
-    mcp::{NativeMcpCall, NativeMcpLease, NativeMcpPending, NativeMcpPort, native_mcp_endpoint},
+    mcp::{NativeMcpLease, native_mcp_endpoint},
 };
 use rho_agent_owner::*;
 use rho_plugin_sdk::protocol::{OperationId, PluginCall, PluginViewCaller};
@@ -28,6 +28,7 @@ pub struct NativeTasks {
     runtime: Arc<NativeTaskRuntime>,
     endpoints: Endpoints,
     closing: Mutex<BTreeSet<String>>,
+    tools: Arc<crate::native_tools::NativeTools>,
 }
 impl From<AgentTaskError> for Failure {
     fn from(error: AgentTaskError) -> Self {
@@ -69,6 +70,7 @@ impl NativeTasks {
             owner,
             endpoints: Default::default(),
             closing: Default::default(),
+            tools: Default::default(),
         }
     }
     fn receipt(
@@ -95,9 +97,17 @@ impl NativeTasks {
         }
         Ok(receipt)
     }
-    pub async fn query(&self, metadata: &Metadata, call: &PluginCall) -> Result<Value, Failure> {
+    pub async fn query(
+        &self,
+        metadata: &Metadata,
+        call: &PluginCall,
+        host: rho_plugin_sdk::HostCallClient,
+    ) -> Result<Value, Failure> {
         let scope = &metadata.scope;
         match call.binding.capability.id.as_str() {
+            "agent.native.tool" | "agent.native.tool.operation" => {
+                crate::native_tool_observation::query(metadata, call, host).await
+            }
             "agent.native.task" => {
                 let input: NativeTask = decode(&call.arguments)?;
                 encoded(self.owner.detail(scope, &input.task_id)?)
@@ -151,6 +161,9 @@ impl NativeTasks {
             command: input.command.into(),
         };
         crate::native_controller::check_takeover(metadata, call, &caller, &request, &host).await?;
+        let tools =
+            crate::native_selection::capture(metadata, call, &caller, &request, input.tools, &host)
+                .await?;
         let at = now();
         let origin = AgentNativeCommandOrigin {
             operation: OperationId::new(call.operation_id.as_deref().ok_or_else(|| {
@@ -162,11 +175,17 @@ impl NativeTasks {
             project_root: metadata.scope.project.clone(),
             principal: metadata.scope.principal.clone(),
             scopes: call.scopes.clone(),
+            tools,
         };
         // No await between the caller observation, durable admission and launch.
-        let admission = self
-            .owner
-            .admit_native(&metadata.scope, &request, origin, at)?;
+        let admission = self.tools.admit(
+            self.owner.clone(),
+            &metadata.scope,
+            &request,
+            origin,
+            host,
+            at,
+        )?;
         let task_id = admission.task.task.task_id.clone();
         let repeated = admission.repeated;
         let generation = admission.task.attachment.generation;
@@ -175,33 +194,45 @@ impl NativeTasks {
             let port = Arc::new(InputPort {
                 owner: self.owner.clone(),
                 endpoints: self.endpoints.clone(),
+                tools: self.tools.clone(),
             });
-            if let Some(work) =
-                self.runtime
-                    .launch(metadata.scope.clone(), request.clone(), admission, port)
-            {
-                work.await.map_err(|_| Failure {
+            let native_result = async {
+                if let Some(work) =
+                    self.runtime
+                        .launch(metadata.scope.clone(), request.clone(), admission, port)
+                {
+                    work.await.map_err(|_| {
+                        Failure {
                     code: "native_outcome_uncertain",
                     message:
                         "Original native work ended without a receipt; inspect it before continuing"
                             .into(),
-                })?;
-            }
-            // launch can finish after prompt acceptance while the native turn is
-            // still running. Keep this parent retained until its observed outcome.
-            loop {
-                let receipt = self.receipt(&metadata.scope, &request.request_id)?;
-                if !matches!(receipt.status.as_str(), "prepared" | "submitted") {
-                    break;
                 }
-                if self.runtime.is_stopped() {
-                    return Err(Failure {
-                        code: "native_outcome_uncertain",
-                        message: "Native shutdown did not confirm this original command".into(),
-                    });
+                    })?;
                 }
-                tokio::time::sleep(Duration::from_millis(100)).await;
+                // launch can finish after prompt acceptance while the native turn is
+                // still running. Keep this parent retained until its observed outcome.
+                loop {
+                    let receipt = self.receipt(&metadata.scope, &request.request_id)?;
+                    if !matches!(receipt.status.as_str(), "prepared" | "submitted") {
+                        break;
+                    }
+                    if self.runtime.is_stopped() {
+                        return Err(Failure {
+                            code: "native_outcome_uncertain",
+                            message: "Native shutdown did not confirm this original command".into(),
+                        });
+                    }
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+                Ok::<_, Failure>(())
             }
+            .await;
+            // Fence new tools and retain every accepted child even when the
+            // model/native wait failed or Stop settled the native turn first.
+            let tools_result = self.tools.finish(&task_id, &request.request_id).await;
+            tools_result?;
+            native_result?;
         } else if !repeated
             && matches!(
                 request.command,
@@ -257,6 +288,7 @@ impl NativeTasks {
         let port = Arc::new(InputPort {
             owner: self.owner.clone(),
             endpoints: self.endpoints.clone(),
+            tools: self.tools.clone(),
         });
         if let Some(work) =
             self.runtime
@@ -287,6 +319,7 @@ impl NativeTasks {
             .map_err(|_| Failure::invalid("Native process cleanup is unavailable"))?
             .extend(tasks);
         self.runtime.close().await;
+        let tools_result = self.tools.close().await;
         let leases: Vec<_> = self
             .endpoints
             .lock()
@@ -351,18 +384,13 @@ impl NativeTasks {
             .lock()
             .map_err(|_| Failure::invalid("Native process cleanup is unavailable"))?
             .clear();
-        Ok(())
+        tools_result
     }
 }
 struct InputPort {
     owner: Arc<AgentTaskOwner>,
     endpoints: Endpoints,
-}
-struct NoScientificTools;
-impl NativeMcpPort for NoScientificTools {
-    fn begin(&self, _: NativeMcpCall) -> Result<NativeMcpPending, String> {
-        Err("This connection has no captured scientific tools".into())
-    }
+    tools: Arc<crate::native_tools::NativeTools>,
 }
 #[async_trait]
 impl NativeTaskPort for InputPort {
@@ -378,6 +406,13 @@ impl NativeTaskPort for InputPort {
             ));
         }
         let mut parts = vec![NativeInput::Text(draft.content.text.clone())];
+        if let Some(context) = self
+            .tools
+            .context(&task.task.task_id)
+            .map_err(NativeTaskFailure::before)?
+        {
+            parts.push(NativeInput::Text(context));
+        }
         for id in &draft.content.assets {
             let (asset, bytes) = self
                 .owner
@@ -423,9 +458,12 @@ impl NativeTaskPort for InputPort {
         if let Some(prior) = prior {
             prior.close().await.map_err(NativeTaskFailure::before)?;
         }
-        let endpoint = native_mcp_endpoint(Arc::new(NoScientificTools), vec![])
-            .await
-            .map_err(NativeTaskFailure::before)?;
+        let endpoint = native_mcp_endpoint(
+            self.tools.port(task.task.task_id.clone()),
+            crate::native_tools::catalog(),
+        )
+        .await
+        .map_err(NativeTaskFailure::before)?;
         let mut endpoints = self
             .endpoints
             .lock()

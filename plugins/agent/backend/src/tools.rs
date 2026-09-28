@@ -485,41 +485,13 @@ fn operation_result(
     request: &PluginRequest,
     record: &Value,
 ) -> Result<(OperationId, Value), String> {
-    let operation = &record["operation"];
-    let id = OperationId::new(
-        operation["operation_id"]
-            .as_str()
-            .ok_or("Original native Operation identity is missing")?,
+    crate::native_result::operation_result(
+        &metadata.scope.project,
+        &origin.binding.provider.instance,
+        &origin.operation,
+        request,
+        record,
     )
-    .map_err(|_| "Invalid native Operation identity")?;
-    if operation["caller"]["kind"] != "plugin"
-        || operation["caller"]["id"] != origin.binding.provider.instance.as_str()
-        || operation["causation_id"] != origin.operation.as_str()
-        || operation["idempotency_scope"] != metadata.scope.project
-        || operation["capability"] != json!(request.binding.capability)
-        || operation["normalized_arguments"]["binding"] != json!(request.binding)
-        || operation["normalized_arguments"]["arguments"] != request.arguments
-        || operation["admission"]["owner_context"]["binding"] != json!(request.binding)
-        || ![
-            "accepted",
-            "running",
-            "reconciling",
-            "succeeded",
-            "failed",
-            "cancelled",
-            "uncertain",
-        ]
-        .iter()
-        .any(|state| record["status"] == *state)
-    {
-        return Err(
-            "Native tool result differs from the original admitted binding, scope or parent".into(),
-        );
-    }
-    Ok((
-        id.clone(),
-        json!({"operation_id":id,"status":record["status"],"output":record["output"],"error":record["error"],"recovery":record["recovery"],"cancellation_requested":record["cancellation_requested"]}),
-    ))
 }
 
 pub(crate) async fn inspect_original(

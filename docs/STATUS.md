@@ -324,8 +324,8 @@ assembly. All 13 Host task cases and the architecture, private-boundary and
 governance checks also pass. Exact commands and results are retained in
 `target/plugin-refactor/agent-native-mcp-results-v2.json`; the initial failed
 fixture remains in the v1 log. This is a
-transport primitive; scientific-tool composition remains unfinished. No actual
-model, user credentials or user sessions are used.
+transport primitive, now used by the native scientific-tool composition below.
+These transport checks use no actual model, user credentials or user sessions.
 
 The ordinary Agent backend now composes native task commands, observations and
 attachment Control using the same public owner/store/runtime. Fresh writes observe
@@ -351,8 +351,8 @@ without a terminal result; its absent processes were verified before rerunning
 only that frozen harness and the remaining static checks. Logs/results are in
 `target/plugin-refactor/agent-native-backend-results-v3.json` and
 `agent-native-backend-results-v4.json`; earlier failed/interrupted logs remain.
-The endpoint still advertises no scientific tools; contributed context,
-full-size resource transfer and ordinary Agent views remain unfinished. Current uploads are bounded to 524288 encoded bytes. No installed
+Contributed context, full-size resource transfer and ordinary Agent views remain
+unfinished. Current uploads are bounded to 524288 encoded bytes. No installed
 native Agent, real model or user credential is used by these checks. Existing Hosts
 and R sessions have not been restarted. The fixed core composition remains in place.
 
@@ -376,6 +376,33 @@ source inventory and identical remaining fields. That failed probe is retained.
 Commands and results are in `target/plugin-refactor/agent-view-presence-results-v2.json`;
 the independent stages are in `agent-view-presence-combined-v1.json`, with source
 parity in `agent-view-presence-source-parity-v2.json`. Initial failure logs remain.
+
+The ordinary native endpoint now composes explicitly selected scientific tools.
+Each Send captures exact Query/Operation bindings, immutable manifest descriptions,
+schemas and scopes after grant/caller checks. A semantic tool UUID is durably
+admitted under the original Send before dispatch. Dropped HTTP observers, Stop and
+later turns cannot replay or redirect it; accepted children retain their original
+parent until settlement. Bounded partial/cached queries remain labeled, while
+unverified, missing or oversized scientific replies retain uncertainty. Scoped
+receipt and original-operation queries observe recovery without dispatch or
+rewriting uncertainty. Scientific results still commit only through core Operation.
+The current manifest declares optional R query/run grants; other owner grants and
+core management tools remain to be connected.
+
+Two focused durable-tool tests and the initial three framed connection cases pass.
+The first complete backend run passed 31 cases and found a stale manifest count
+(27 instead of 29); the next passed 32 and correctly refused a query fixture missing
+its read scope. Both fixture expectations are corrected, and all 33 backend cases
+now pass (including the six result/observation variants in the fourth native-science
+case). All 18 owner, 31 store and 12 native runtime cases also pass on this source.
+A real ACP/private-MCP/generic-Host/R fixture has been added but has not yet run.
+Agent public declarations/schemas and its 29-capability manifest are generated.
+Public client generation, the independent strict TypeScript consumer, client build
+and consistency checks pass. Architecture, private boundaries, governance and diff
+checks also pass. Commands/results are in `agent-native-tools-results-v1.json`.
+Independent package and actual native-R acceptance for this addition remain pending.
+Logs are retained under `target/plugin-refactor/agent-native-tools-*`; no failed
+check is recorded as a pass.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,

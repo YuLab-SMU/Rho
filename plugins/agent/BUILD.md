@@ -51,8 +51,18 @@ model does not cancel or roll back R: its containing Operation waits for already
 issued native work, retaining late results. After disconnect, `agent.model.run.tools`
 and `agent.model.tool.operation` observe original evidence without replay or task
 store updates. Missing evidence remains partial. General context contributions,
-attachments, continuation, native Agent transports and views remain implementation
-work.
+component-model attachments/continuation and ordinary views remain implementation work.
+
+`agent.native.command` composes the same native task owner, store and scheduler.
+Send can capture explicit ordinary-plugin Query/Operation tools. Enable
+`plugins.inspect@1` to resolve immutable tool contracts, the selected scientific
+capabilities, and `operation.get@1`/`plugins.delegated_operation@1` for effectful
+tools. Each tool carries an exact provider binding and target; the original caller
+must hold its scopes. The private `rho_call` method requires the original Send and
+a semantic tool UUID, with no provider selector in its arguments. Accepted children
+survive Stop and dropped reply observers. `agent.native.tool` and
+`agent.native.tool.operation` inspect retained evidence without replay. General
+contributed context and the full-size attachment resource transfer remain unfinished.
 Importing the package does not activate it. Installing or activating a development
 package is an explicit plugin lifecycle operation.
 
@@ -62,6 +72,9 @@ The fixtures use local synthetic Host exchanges and a loopback HTTP/SSE model,
 never real user keys or remote models. They cover model/task lifetime, original
 native identity, text, stopping, takeover, interrupted reopen, scientific reverse
 requests, late native results, scoped Explain/Run and read-only original recovery.
+The `native_science` cases use actual private MCP HTTP with synthetic Host records
+to check selected grants, original Send identity, retries, Stop, later turns,
+partial/cached observations and unverified/oversized result refusal.
 Real R and provider quality require separate acceptance.
 `node scripts/test-agent-plugin-backend.mjs` independently builds the package and
 runs these framed cases. `node scripts/test-agent-plugin.mjs` freezes the generic
@@ -73,8 +86,11 @@ same native ports. All projects, instance storage and keys are disposable.
 scripts/test-agent-plugin-real-r.mjs` freezes a generic plugin-only Host harness
 and builds both packages outside the checkout. It also freezes and reruns the
 ordinary metadata, key and model lifetime harness against that same Agent package.
-It runs a disposable native R
-counter through the loopback model, checks native causation and retained reports,
-stops model waiting while R is executing, and verifies repeated task requests do
-not repeat scientific effects. It does not contact external models or use existing
-user sessions. Required runtimes must already be installed.
+It runs separate disposable R counter fixtures through the loopback model and a
+local native ACP process/private MCP endpoint. They check native causation,
+retained reports, stopping Agent/model waiting while R is executing, and repeated
+request observations without repeated effects. The native fixture uses only its
+isolated PATH and disposable files; it does not need forwarded Host environment
+variables. These checks do not contact external models, use existing user sessions
+or establish native model quality/full Host restart. Required runtimes must already
+be installed.

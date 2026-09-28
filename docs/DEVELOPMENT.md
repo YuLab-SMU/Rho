@@ -221,8 +221,22 @@ case checks attached/closing/unknown originals, changed requesting connections,
 confirmed detachment and original-request retries. The `view_presence` case in
 `cargo test -p rho-host --test plugin_view_delegation --locked` uses the public
 ports for cross-window/backend observations, refused closure, backend exit,
-visibility and credential/content exclusion. These do not establish scientific
-native-tool dispatch, real provider performance or plugin view acceptance.
+visibility and credential/content exclusion. These do not establish real provider
+performance or plugin view acceptance.
+
+`cargo test -p rho-agent-backend --test metadata native_science --locked`
+adds real private-loopback MCP calls with an injected native Agent and synthetic
+Host scientific records. It covers original Send/child retention, dropped reply
+observers, Stop, later turns, partial/cached queries, result verification/bounds,
+grant/caller revalidation and observation-only reopen. These framed tests do not
+establish actual R execution. `node scripts/test-agent-plugin-real-r.mjs` compiles
+generic Host harnesses before independently building the ordinary Agent/R packages.
+Its native ACP fixture runs only from an isolated PATH/home and calls the actual
+private MCP endpoint; the disposable R counter must execute once and retain its
+original result after native Stop. The existing component model fixture is run
+separately in the same harness. Set `RHO_ARK` and `RHO_R_HOME`; no real model or user
+credentials are used. Neither fixture establishes native model quality or the
+full Agent UI/restart flow.
 
 Use `cargo test -p rho-agent-native --lib mcp --locked` for private native MCP
 transport changes. These real loopback HTTP fixtures cover connection/session
@@ -238,6 +252,9 @@ concurrent duplicates, original-parent retention, atomic write rollback, later
 receipt mutation, observation-only reopen, scoped visibility and admission budgets.
 The independent store/owner assembly includes these cases. These checks establish
 persistence invariants, not native plugin MCP or view acceptance.
+The `native_tools` filter covers captured bindings/scopes, exact retry observations,
+post-Stop admission refusal, atomic storage failure, byte budgets and immutable
+tool results across reopen.
 
 The public model driver is `plugins/agent/backend/engine`. Run `cargo test -p
 rho-agent-engine --locked` for the real Rig HTTP/SSE codecs and production-driver

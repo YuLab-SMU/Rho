@@ -1,6 +1,8 @@
 //! Native task inputs contain no caller identity, project path or attachment bytes.
 //! The ordinary backend supplies the authenticated caller and original Operation.
-use rho_agent_api::{AgentDraftContent, AgentProvider, AgentTaskCommand, AgentTaskControl};
+use rho_agent_api::{
+    AgentDraftContent, AgentNativeToolSelection, AgentProvider, AgentTaskCommand, AgentTaskControl,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -41,6 +43,11 @@ pub struct NativeAction {
     #[schemars(length(min = 36, max = 36))]
     pub request_id: String,
     pub command: NativeCommand,
+    /// Only Send accepts explicit tool selections. Descriptors and scopes are
+    /// captured from their immutable native manifests by the containing backend.
+    #[serde(default)]
+    #[schemars(length(max = 16))]
+    pub tools: Vec<AgentNativeToolSelection>,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -53,6 +60,14 @@ pub struct NativeTask {
 pub struct NativeReceipt {
     #[schemars(length(min = 36, max = 36))]
     pub request_id: String,
+}
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct NativeToolReceipt {
+    #[schemars(length(min = 36, max = 36))]
+    pub send_request: String,
+    #[schemars(length(min = 36, max = 36))]
+    pub tool_request: String,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]

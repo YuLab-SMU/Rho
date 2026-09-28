@@ -23,6 +23,216 @@ fn origin() -> AgentNativeCommandOrigin {
     }))
     .unwrap()
 }
+
+fn scientific_origin() -> AgentNativeCommandOrigin {
+    let mut origin = origin();
+    origin.scopes.insert("workspace.run_r".into());
+    let mut binding = origin.binding.clone();
+    binding.provider.instance = serde_json::from_value(serde_json::json!("r-one")).unwrap();
+    binding.provider.plugin = serde_json::from_value(serde_json::json!("org.rho.r")).unwrap();
+    binding.capability.id = serde_json::from_value(serde_json::json!("r.execute")).unwrap();
+    binding.capability.version = 2;
+    binding.target = Some("original-session".into());
+    origin.tools = vec![AgentNativeToolGrant {
+        selection: AgentNativeToolSelection {
+            name: "execute".into(),
+            binding,
+        },
+        kind: AgentNativeToolKind::Operation,
+        description: "Execute in the captured session".into(),
+        input_schema: serde_json::json!({"type":"object"}),
+        required_scopes: ["workspace.run_r".into()].into(),
+    }];
+    origin
+}
+
+#[test]
+fn native_tools_capture_exact_selection_and_deduplicate_semantic_requests_after_stop_and_reopen() {
+    let (directory, store, owner, created) = setup();
+    let saved = draft(&owner, &created.task, 0, "Use selected tools");
+    let command = request(AgentTaskCommand::Send {
+        control: control(&saved.task),
+        draft_version: 1,
+    });
+    let parent = scientific_origin();
+    let sent = owner
+        .admit_native(&scope(), &command, parent.clone(), 3)
+        .unwrap();
+    let mut altered = parent.clone();
+    altered.tools[0].selection.binding.target = Some("another-session".into());
+    assert!(matches!(
+        owner.admit_native(&scope(), &command, altered, 4),
+        Err(AgentTaskError::RequestConflict)
+    ));
+    let input = AgentNativeToolInvocation {
+        send_request: command.request_id.clone(),
+        tool_request: uuid::Uuid::new_v4().to_string(),
+        tool: "execute".into(),
+        arguments: serde_json::json!({"code":"original Unicode 数据"}),
+        preconditions: serde_json::Value::Null,
+    };
+    let id = &sent.task.task.task_id;
+    let generation = sent.task.attachment.generation;
+    let (prepared, repeated) = owner
+        .admit_native_tool(&scope(), id, generation, input.clone(), 5)
+        .unwrap();
+    assert!(!repeated);
+    assert_eq!(
+        prepared.native_request.binding,
+        parent.tools[0].selection.binding
+    );
+    assert_ne!(prepared.request, parent.request);
+    let (retry, repeated) = owner
+        .admit_native_tool(&scope(), id, generation, input.clone(), 6)
+        .unwrap();
+    assert!(repeated);
+    assert_eq!(retry, prepared);
+    let mut changed = input.clone();
+    changed.arguments = serde_json::json!({"code":"different effect"});
+    assert!(matches!(
+        owner.admit_native_tool(&scope(), id, generation, changed, 6),
+        Err(AgentTaskError::RequestConflict)
+    ));
+    owner
+        .admit_native(
+            &scope(),
+            &request(AgentTaskCommand::Stop {
+                control: control(&sent.task),
+            }),
+            origin(),
+            7,
+        )
+        .unwrap();
+    let mut fresh = input.clone();
+    fresh.tool_request = uuid::Uuid::new_v4().to_string();
+    assert!(
+        owner
+            .admit_native_tool(&scope(), id, generation, fresh, 8)
+            .is_err()
+    );
+    assert!(
+        owner
+            .admit_native_tool(&scope(), id, generation, input.clone(), 8)
+            .unwrap()
+            .1
+    );
+    let mut resolved = prepared.clone();
+    resolved.phase = AgentNativeToolPhase::Resolved;
+    resolved.operation =
+        Some(rho_agent_api::component::OperationId::new("original-child").unwrap());
+    resolved.result = Some(serde_json::json!({"status":"succeeded","output":"retained"}));
+    resolved.updated_at_ms = 9;
+    store.put_agent_native_tool(&scope(), &resolved).unwrap();
+    let mut replaced = resolved.clone();
+    replaced.result = Some(serde_json::json!("changed"));
+    assert!(matches!(
+        store.put_agent_native_tool(&scope(), &replaced),
+        Err(AgentTaskError::RequestConflict)
+    ));
+    let foreign = AgentTaskScope {
+        principal: "other".into(),
+        ..scope()
+    };
+    assert!(
+        store
+            .agent_native_tool(&foreign, &input.send_request, &input.tool_request)
+            .unwrap()
+            .is_none()
+    );
+    let reopened = Arc::new(AgentStore::open(&directory.path().join("agent.sqlite")).unwrap());
+    let next = AgentTaskOwner::new(reopened);
+    let (observed, repeated) = next
+        .admit_native_tool(&scope(), id, generation, input, 10)
+        .unwrap();
+    assert!(repeated);
+    assert_eq!(observed, resolved);
+}
+
+#[test]
+fn native_tools_refuse_invalid_capture_missing_scope_and_storage_failure_before_dispatch() {
+    let (_directory, store, owner, created) = setup();
+    let saved = draft(&owner, &created.task, 0, "Bounded tool work");
+    let command = request(AgentTaskCommand::Send {
+        control: control(&saved.task),
+        draft_version: 1,
+    });
+    for variant in 0..3 {
+        let mut invalid = scientific_origin();
+        match variant {
+            0 => {
+                invalid.scopes.remove("workspace.run_r");
+            }
+            1 => invalid.tools.push(invalid.tools[0].clone()),
+            _ => {
+                invalid.tools[0].selection.binding.project =
+                    serde_json::from_value(serde_json::json!("foreign-project")).unwrap()
+            }
+        }
+        assert!(owner.admit_native(&scope(), &command, invalid, 3).is_err());
+        assert!(
+            store
+                .agent_receipt(&scope(), &command.request_id)
+                .unwrap()
+                .is_none()
+        );
+    }
+    let sent = owner
+        .admit_native(&scope(), &command, scientific_origin(), 3)
+        .unwrap();
+    let input = AgentNativeToolInvocation {
+        send_request: command.request_id,
+        tool_request: uuid::Uuid::new_v4().to_string(),
+        tool: "execute".into(),
+        arguments: serde_json::json!({}),
+        preconditions: serde_json::Value::Null,
+    };
+    let invoke = |input| {
+        owner.admit_native_tool(
+            &scope(),
+            &sent.task.task.task_id,
+            sent.task.attachment.generation,
+            input,
+            4,
+        )
+    };
+    let mut oversized = input.clone();
+    oversized.arguments =
+        serde_json::json!("x".repeat(rho_agent_owner::MAX_NATIVE_TOOL_ARGUMENT_BYTES));
+    assert!(matches!(invoke(oversized), Err(AgentTaskError::Budget(_))));
+    store.0.lock().unwrap().execute_batch("CREATE TRIGGER fail_tool BEFORE INSERT ON agent_native_tools BEGIN SELECT RAISE(ABORT, 'injected native tool write failure'); END;").unwrap();
+    assert!(matches!(
+        invoke(input.clone()),
+        Err(AgentTaskError::Storage(_))
+    ));
+    assert!(
+        store
+            .agent_native_tool(&scope(), &input.send_request, &input.tool_request)
+            .unwrap()
+            .is_none()
+    );
+    store
+        .0
+        .lock()
+        .unwrap()
+        .execute_batch("DROP TRIGGER fail_tool;")
+        .unwrap();
+    let (record, _) = invoke(input.clone()).unwrap();
+    let mut changed = record.clone();
+    changed.native_request.binding.target = Some("forged-target".into());
+    assert!(store.put_agent_native_tool(&scope(), &changed).is_err());
+    store
+        .0
+        .lock()
+        .unwrap()
+        .execute(
+            "UPDATE agent_native_tools SET bytes=?1",
+            [rho_agent_owner::MAX_PROJECT_NATIVE_TOOL_BYTES],
+        )
+        .unwrap();
+    let mut fresh = input;
+    fresh.tool_request = uuid::Uuid::new_v4().to_string();
+    assert!(matches!(invoke(fresh), Err(AgentTaskError::Budget(_))));
+}
 fn request(command: AgentTaskCommand) -> AgentTaskRequest {
     AgentTaskRequest {
         project_root: scope().project,

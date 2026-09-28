@@ -1,6 +1,6 @@
-use rho_agent_api::*;
-use rho_agent_api::handoff::*;
 use rho_agent_api::component::*;
+use rho_agent_api::handoff::*;
+use rho_agent_api::*;
 use std::{fs, path::PathBuf};
 use ts_rs::{Config, TS};
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -14,13 +14,33 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_large_int("number");
     macro_rules! export { ($($ty:ty),+ $(,)?) => { $(<$ty>::export_all(&types)?;)+ }; }
     export!(
-        AgentHandoffSourceSnapshot, AgentHandoffTargetSnapshot, AgentHandoffsQuery,
-        AgentHandoffQuery, AgentHandoffQueryResult, AgentHandoffCommand, AgentHandoffReceipt,
-        ComponentAgentProfile, ComponentPermissionPolicy, ComponentTaskAuthorization,
-        ComponentRequestedAction, ComponentIntentAction, ComponentAgentTaskIntent,
-        ComponentModelProtocol, ComponentCredentialRef, ComponentModelConnection,
-        ComponentModelSettings, ComponentAgentBudget, ComponentCredentialStatus,
-        ComponentModelTestKind, ComponentModelTestState, AgentModelRun, ComponentToolSpec,
+        AgentNativeToolSelection,
+        AgentNativeToolGrant,
+        AgentNativeToolInvocation,
+        AgentNativeToolReceipt,
+        AgentHandoffSourceSnapshot,
+        AgentHandoffTargetSnapshot,
+        AgentHandoffsQuery,
+        AgentHandoffQuery,
+        AgentHandoffQueryResult,
+        AgentHandoffCommand,
+        AgentHandoffReceipt,
+        ComponentAgentProfile,
+        ComponentPermissionPolicy,
+        ComponentTaskAuthorization,
+        ComponentRequestedAction,
+        ComponentIntentAction,
+        ComponentAgentTaskIntent,
+        ComponentModelProtocol,
+        ComponentCredentialRef,
+        ComponentModelConnection,
+        ComponentModelSettings,
+        ComponentAgentBudget,
+        ComponentCredentialStatus,
+        ComponentModelTestKind,
+        ComponentModelTestState,
+        AgentModelRun,
+        ComponentToolSpec,
         ComponentAgentMode,
         ComponentPermissionState,
         ComponentAgentPermission,
@@ -61,7 +81,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ComponentSourceSearch,
         ComponentSourceSearchResult,
         ReadComponentAgentAsset,
-        ApplicationCommandRequest, ApplicationCommandReceipt, Invocation, QueryRequest,
+        ApplicationCommandRequest,
+        ApplicationCommandReceipt,
+        Invocation,
+        QueryRequest,
         AgentControllerRef,
         AgentProvider,
         AgentModel,
@@ -100,21 +123,61 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
+        (
+            "native-tool-selection",
+            schemars::schema_for!(AgentNativeToolSelection),
+        ),
+        (
+            "native-tool-receipt",
+            schemars::schema_for!(AgentNativeToolReceipt),
+        ),
         ("handoff-query", schemars::schema_for!(AgentHandoffsQuery)),
-        ("handoff-query-result", schemars::schema_for!(AgentHandoffQueryResult)),
-        ("handoff-command", schemars::schema_for!(AgentHandoffCommand)),
-        ("handoff-receipt", schemars::schema_for!(AgentHandoffReceipt)),
-        ("component-start", schemars::schema_for!(ComponentAgentStart)),
-        ("component-conversation", schemars::schema_for!(ComponentAgentConversation)),
+        (
+            "handoff-query-result",
+            schemars::schema_for!(AgentHandoffQueryResult),
+        ),
+        (
+            "handoff-command",
+            schemars::schema_for!(AgentHandoffCommand),
+        ),
+        (
+            "handoff-receipt",
+            schemars::schema_for!(AgentHandoffReceipt),
+        ),
+        (
+            "component-start",
+            schemars::schema_for!(ComponentAgentStart),
+        ),
+        (
+            "component-conversation",
+            schemars::schema_for!(ComponentAgentConversation),
+        ),
         ("component-run", schemars::schema_for!(ComponentAgentRun)),
-        ("component-events", schemars::schema_for!(ComponentAgentEventPage)),
-        ("component-tool-receipt", schemars::schema_for!(ComponentToolReceipt)),
-        ("component-model-diagnostic", schemars::schema_for!(ComponentModelDiagnostic)),
-        ("native-document-call", schemars::schema_for!(ApplicationCommandRequest)),
-        ("native-document-receipt", schemars::schema_for!(ApplicationCommandReceipt)),
-
+        (
+            "component-events",
+            schemars::schema_for!(ComponentAgentEventPage),
+        ),
+        (
+            "component-tool-receipt",
+            schemars::schema_for!(ComponentToolReceipt),
+        ),
+        (
+            "component-model-diagnostic",
+            schemars::schema_for!(ComponentModelDiagnostic),
+        ),
+        (
+            "native-document-call",
+            schemars::schema_for!(ApplicationCommandRequest),
+        ),
+        (
+            "native-document-receipt",
+            schemars::schema_for!(ApplicationCommandReceipt),
+        ),
         ("model-run", schemars::schema_for!(AgentModelRun)),
-        ("model-settings", schemars::schema_for!(ComponentModelSettings)),
+        (
+            "model-settings",
+            schemars::schema_for!(ComponentModelSettings),
+        ),
         ("task-request", schemars::schema_for!(AgentTaskRequest)),
         ("task-detail", schemars::schema_for!(AgentTaskDetail)),
         ("task-events", schemars::schema_for!(AgentTaskEventPage)),

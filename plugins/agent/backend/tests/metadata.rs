@@ -253,7 +253,7 @@ impl Fixture {
 fn manifest_contains_public_bounded_agent_capabilities() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 27);
+    assert_eq!(manifest.capabilities.len(), 29);
     assert_eq!(
         manifest.requires[0].capability,
         manifest::key("views.caller")
