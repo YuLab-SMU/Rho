@@ -32,9 +32,10 @@ export class FilesActions extends Model<Snapshot> {
   private task: Promise<void> | null = null;
   private error = "";
   private stopped = false;
-  constructor(private client: Client, private owner: Owner, readonly group: string | null, private readonly editorInstance: InstanceRef | null) {
+  constructor(private client: Client, private owner: Owner, readonly group: string | null, private readonly editorInstance: InstanceRef | null, private readonly runtime: InstanceRef | null = null) {
     super();
     this.editorInstance = editorInstance ? Object.freeze(structuredClone(editorInstance)) : null;
+    this.runtime = runtime ? Object.freeze(structuredClone(runtime)) : null;
     const saved = owner.actionState as Partial<SavedActions> | null;
     this.state = { pending: structuredClone(saved?.pending ?? null), receipt: structuredClone(saved?.receipt ?? null) };
   }
@@ -69,7 +70,7 @@ export class FilesActions extends Model<Snapshot> {
       // Capture the native identity before layout observation. The Editor must
       // read using this expected SHA; a later file must not silently replace it.
       if (this.stopped) throw new Error("Files actions are closed.");
-      const configuredFile = { source: this.owner.source, file };
+      const configuredFile = { source: this.owner.source, file, ...(this.runtime ? { runtime: this.runtime } : {}) };
       const result = await this.client.query<{ status: string; data?: PluginWindowLayout }>({ id: "windows.layout", version: 1 }, { window: this.client.view.window });
       if (this.stopped) throw new Error("Files actions are closed.");
       const layout = result.data, view = this.client.view;
@@ -117,6 +118,7 @@ export class FilesActions extends Model<Snapshot> {
     if (pending.capability !== "windows.open_view" || pending.version !== 1 || !this.editorInstance ||
       !args?.view || !same(args.view.instance, this.editorInstance) || args.view.window !== view.window ||
       args.view.contribution !== "editor" || !exact(args.view.configuration?.source) ||
+      !same(args.view.configuration.runtime ?? null, this.runtime) ||
       !(args.view.configuration.file === null || typeof args.view.configuration.file?.path === "string" && typeof args.view.configuration.file?.sha256 === "string"))
       throw new Error("The saved navigation no longer matches its original view or provider.");
   }

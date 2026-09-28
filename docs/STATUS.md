@@ -29,7 +29,7 @@ written deletion condition. Internal pieces are not reported as milestones.
 
 | # | Milestone (user flow) | Replaces / deletes | State |
 | --- | --- | --- | --- |
-| M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Not started |
+| M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Ordinary Manager preparation and real-R flow verified; default entry pending |
 | M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Backend done; view not started |
 | M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Not verified |
 | M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Not started |
@@ -39,6 +39,31 @@ written deletion condition. Internal pieces are not reported as milestones.
 M1 is deliberately first: the ordinary scenario must become the integration target
 before more Agent surface is built, so composition problems surface continuously.
 M3 is pulled forward because it is the least certain boundary.
+
+### Scientific scenario: current integration
+
+The ordinary Manager now provides **Scenarios → New R workspace**. It selects
+installed exact artifacts for nine scientific plugins and existing Ark/R paths,
+activates their instances, saves a checkpoint and prepares their views. Switching
+the window and starting R are separate explicit actions. Files passes its captured
+R provider to newly opened Editors; Help has an initial empty view until a package
+is selected. Lost preparation receipts retain the original requests and instances;
+recovery does not replay them or continue later stages automatically.
+
+Verified with a disposable generic Host and real R: Manager preparation/switch →
+Console Start R → Files opens a Unicode-named file → Editor Save and Run → original
+Console output, Objects value and Plots image. Browser reload preserves the native
+session and the single original execution. Setup and result screenshots were
+inspected; the Manager dialog also passed normal, wide and constrained layouts.
+`target/plugin-refactor/scientific-workspace-results.json` records the checks,
+artifact reuse and limits; browser evidence is retained beside it. Current R and
+Editor native artifacts were reused, and Files was built once through the primary
+workspace cache. This is integration evidence, not a new independent-source build.
+
+Next: connect ordinary project startup/default scenario delivery, then retire the
+fixed scientific default path. `rho workbench` still launches the fixed composition;
+the new starter requires installed packages in the plugin-only workspace. No user
+Host was replaced and no installation or publication ran.
 
 ### Agent migration: current state
 

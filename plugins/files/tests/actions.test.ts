@@ -6,6 +6,7 @@ import type { JsonValue, PluginViewRecord } from "../public/plugin-protocol/inde
 const requestId = (view: string, request: string) => `sha256:${createHash("sha256").update(`${view}:${request}`).digest("hex")}`;
 const source = { instance: "files-one", plugin: "files", revision: "files-revision", artifact: "files-artifact" };
 const editor = { instance: "editor-one", plugin: "editor", revision: "editor-revision", artifact: "editor-artifact" };
+const runtime = { instance: "r-one", plugin: "org.rho.r", revision: "r-revision", artifact: "r-artifact" };
 const selected = "分析.R";
 const file = { path: selected, kind: "regular", sha256: "original-hash", byte_size: 42, mode: 420, modified_at_ns: "123" };
 function fixture(saved: JsonValue = null) {
@@ -39,6 +40,27 @@ it("changing a file during layout observation cannot replace the captured identi
   const opening = f.actions.openDocument(selected); await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
   f.owner.read.mockResolvedValue({ status: "ready", data: { root: "/project", files: [{ ...file, sha256: "later-hash" }] } });
   finish(layout); await opening; expect(f.invoke.mock.calls[0][1].view.configuration.file.sha256).toBe("original-hash");
+});
+it("opens runnable Editors with the exact configured R instance and preserves it after a lost reply", async () => {
+  const f = fixture(), selectedRuntime = structuredClone(runtime);
+  const actions = new FilesActions(f.client, f.owner as never, "editor-group", editor, selectedRuntime);
+  selectedRuntime.instance = "changed-after-construction";
+  f.invoke.mockRejectedValueOnce(new Error("lost reply"));
+  await expect(actions.openDocument(selected)).rejects.toThrow("lost reply");
+  const original = structuredClone(f.invoke.mock.calls[0]);
+  expect(original[1].view.configuration).toEqual({ source, file, runtime });
+  await actions.retry(); expect(f.invoke.mock.calls[1]).toEqual(original);
+  expect(f.query).toHaveBeenCalledTimes(1);
+  const reopened = new FilesActions(f.client, { ...f.owner, actionState: f.persisted[0] } as never, "editor-group", editor, { ...runtime, instance: "r-two" });
+  await expect(reopened.retry()).rejects.toThrow("original view or provider");
+  expect(f.invoke).toHaveBeenCalledTimes(2);
+});
+it("new documents retain the configured R instance without reading or starting it", async () => {
+  const f = fixture();
+  await new FilesActions(f.client, f.owner as never, "editor-group", editor, runtime).openDocument(null);
+  expect(f.owner.read).not.toHaveBeenCalled();
+  expect(f.query.mock.calls.map(call => call[0])).toEqual([{ id: "windows.layout", version: 1 }]);
+  expect(f.invoke.mock.calls[0][1].view.configuration).toEqual({ source, file: null, runtime });
 });
 it("new documents have no existing file and navigation never creates a native file", async () => {
   const f = fixture(); await f.actions.openDocument(null); expect(f.owner.read).not.toHaveBeenCalled();

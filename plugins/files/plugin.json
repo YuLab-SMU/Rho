@@ -89,7 +89,10 @@
         "operation.read",
         "plugins.run",
         "project.read",
-        "project.write"
+        "project.write",
+        "resources.read",
+        "workspace.read",
+        "workspace.run_r"
       ]
     },
     {
@@ -176,6 +179,17 @@
               "string",
               "null"
             ]
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Fixed R provider for newly opened Editors; never resolved again on retry."
           }
         },
         "title": "FilesViewConfiguration",

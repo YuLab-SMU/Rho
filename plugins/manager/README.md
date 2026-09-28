@@ -37,6 +37,20 @@ definitions, including aliases, provider bindings, resource context and layout.
 Viewing an older checkpoint does not alter its branch. Saving it creates a new
 checkpoint against the observed current head. Saving never applies a scene.
 
+**New R workspace** selects installed R, Files, Editor, Console, Objects, Plots,
+Viewer, Packages and Help revisions, plus existing Ark/R paths. The Manager recipe
+uses normal activation and view ports, captures exact identities for cross-view
+bindings, and saves a scientific scenario. It retains the current Manager view.
+Preparation does not switch the window or start R; use the existing Switch action,
+then Start R in Console. Missing packages are never installed automatically.
+Choices and partial preparation survive view reload. Each original request is
+recovered separately; continuing is explicit, and unavailable prepared instances
+are not silently replaced. This is a starter in the ordinary Manager, not yet the
+default `rho workbench` launch path or the final default delivery mechanism.
+With no unconfirmed request, **Keep instances and start over** resets the setup
+form so paths and selections can be corrected; created instances, views and
+checkpoints remain available through their normal inspection and cleanup controls.
+
 Review captures the current window layout version. Each alias explicitly chooses
 a new instance or a compatible existing instance; each view explicitly chooses
 checkpoint state or an observed compatible live view. Preparation opens missing

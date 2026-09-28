@@ -3,6 +3,7 @@ import type {PluginCatalogPage, PluginInspection, PluginInstanceObservation, Plu
   ScenarioRevision, PluginViewRecord, PluginWindowNode, WindowScenarioSnapshot, SaveScenario} from '../public/plugin-protocol/index.js';
 import {Manager, initial, read, short, same, matches, viewsOf, viewMatches, checkpointInput, own, type Saved} from './model.js';
 import {archiveExportPanel} from './export-panel.js';
+import {workspacePanel} from './workspace-panel.js';
 const client = await connectPluginView();
 const restored = client.view.state as Partial<Saved>;
 const manager = new Manager(client,{...initial(),...restored});
@@ -19,6 +20,7 @@ const message = (e:unknown)=>e instanceof Error?e.message:String(e);
 const layoutViews = (layout:PluginWindowNode):string[]=>layout.kind==='tabs'?layout.views:layout.kind==='split'?layout.children.flatMap(layoutViews):[];
 const containingGroup = (layout:PluginWindowNode,view:string):string|null=>layout.kind==='tabs'?(layout.views.includes(view)?layout.id:null):layout.kind==='split'?layout.children.map(child=>containingGroup(child,view)).find(Boolean)??null:null;
 const exports=archiveExportPanel(manager,act,saveDraftSoon,()=>busy);
+const workspace=workspacePanel(manager,act,saveDraftSoon,()=>refresh());
 function button(title:string,action:()=>Promise<unknown>|void,className='',readOnly=false) {const b=node('button',title,className);if(readOnly)b.dataset.readOnly='true';b.disabled=busy||!!manager.state.pending&&!readOnly;b.onclick=()=>act(action);return b;}
 function block(title:string,...children:HTMLElement[]){const e=node('div','','block');e.append(node('h3',title),...children);return e;}
 function heading(title:string,...children:HTMLElement[]){const e=node('div','','block');e.append(node('h2',title),...children);return e;}
@@ -49,6 +51,7 @@ function renderControls(){
   document.querySelectorAll<HTMLButtonElement>('[data-protected]').forEach(b=>b.disabled=true);
   renderImport();
   exports.render();get('export-error').textContent=error;get('export-error').hidden=!error;
+  workspace.render(error);
 }
 function renderImport(){
   const upload=manager.state.upload,pending=!!manager.state.pending,out=get('archive-details');
@@ -97,7 +100,10 @@ function renderList(){
   document.querySelectorAll<HTMLElement>('nav button').forEach(b=>b.setAttribute('aria-current',String(b.dataset.section===section)));
   const list=get('list');list.replaceChildren();
   if(section==='scenarios'){
-    const bar=node('div','','toolbar');bar.append(button(manager.state.draft?'Continue draft':'New scenario',()=>edit()));list.append(bar);
+    const bar=node('div','','toolbar'), scientific=button('New R workspace',()=>workspace.open());scientific.dataset.workspace='true';
+    bar.append(scientific);
+    if(manager.state.workspace)bar.append(button('Keep instances and start over',async()=>{await manager.resetWorkspace();await refresh();}));
+    bar.append(button(manager.state.draft?'Continue draft':'New scenario',()=>edit()));list.append(bar);
   }else{
     const labels=node('div','','row table-head');labels.setAttribute('aria-hidden','true');
     labels.append(...(section==='installed'?['PLUGIN','REVISION','REFERENCES']:['INSTANCE / REVISION','STATE','WORK']).map(label=>node('span',label)));list.append(labels);

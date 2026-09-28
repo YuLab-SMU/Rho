@@ -5,8 +5,9 @@ import { type Client, type Intent, type RecordReply, json, same, verifyOriginal,
 import { ViewRequestError } from '../public/plugin-ui/index.js';
 import { ArchiveUpload, verifyArchiveImport, type ArchiveUploadState } from './archive.js';
 import { ArchiveExport, type ArchiveExportState } from './export.js';
+import { scientificPlugins, scientificScenario, type ScientificWorkspace } from './scientific-workspace.js';
 export { same, json } from './operations.js';
-export type Purpose = { kind: 'activate' | 'view'; key: string } | { kind: 'apply' | 'checkpoint' | 'archive_import' | 'archive_export' | 'other' };
+export type Purpose = { kind: 'activate' | 'view' | 'workspace_instance'; key: string } | { kind: 'apply' | 'checkpoint' | 'workspace_checkpoint' | 'archive_import' | 'archive_export' | 'other' };
 export interface Preparation { definition: ScenarioRevision; request: ApplyScenario; ready: boolean; }
 export interface Saved {
   section: 'installed' | 'instances' | 'scenarios'; selected: string; detail: boolean; scroll: number;
@@ -15,6 +16,8 @@ export interface Saved {
   pending: { intent: Intent; purpose: Purpose } | null;
   upload?: ArchiveUploadState | null;
   exported?: ArchiveExportState | null;
+  workspace?: ScientificWorkspace | null;
+  workspaceDraft?: { name: string; ark: string; r_home: string; choices: Record<string, string> };
 }
 export const initial = (): Saved => ({ section: 'installed', selected: '', detail: false, scroll: 0, draft: null, preparation: null, retained_views: [], pending: null });
 export const viewsOf = (layout: ScenarioLayout): ScenarioView[] => layout.kind === 'tabs' ? layout.views : layout.kind === 'split' ? layout.children.flatMap(viewsOf) : [];
@@ -127,7 +130,22 @@ export class Manager {
       await this.save(); throw new Error(record.error || `Original request is ${record.status}.`);
     }
     const prep = this.state.preparation;
-    if (pending.purpose.kind === 'activate') {
+    if (pending.purpose.kind === 'workspace_instance') {
+      const setup = this.state.workspace, key = pending.purpose.key, output = record.output as PluginInstanceObservation;
+      if (!setup || !setup.packages[key] || !matches(output, setup.packages[key])) throw Error('The workspace activation returned another instance.');
+      put(setup.instances, key, output.instance.identity);
+    } else if (pending.purpose.kind === 'workspace_checkpoint') {
+      const setup = this.state.workspace, output = record.output as ScenarioRevision;
+      if (!setup || !same(checkpointInput(pending.intent.arguments), checkpointInput(scientificScenario(setup, this.client.view))) ||
+        output.scenario !== setup.scenario || !same(output.instances, (pending.intent.arguments as any).instances) ||
+        !same(output.layout, (pending.intent.arguments as any).layout) || !same(output.providers, (pending.intent.arguments as any).providers))
+        throw Error('The saved workspace differs from its prepared instances and views.');
+      setup.checkpoint = output.id;
+      this.state.preparation = { definition: output, ready: false, request: { window: this.client.view.window,
+        revision: output.id, expected_layout_version: setup.layoutVersion,
+        instances: { ...structuredClone(setup.instances), manager: this.client.view.instance }, views: { manager: this.client.view.view } } };
+      this.state.section = 'scenarios'; this.state.selected = output.id; this.state.detail = true;
+    } else if (pending.purpose.kind === 'activate') {
       if (!prep) throw new Error('The saved preparation is missing; retain the original request for inspection.');
       const output = record.output as PluginInstanceObservation, wanted = prep.definition.instances[pending.purpose.key];
       if (!wanted || !matches(output, wanted)) throw new Error('Activation returned a different or unavailable instance.');
@@ -158,9 +176,52 @@ export class Manager {
   }
   async begin(definition: ScenarioRevision, version: number) {
     if (this.state.pending) throw new Error('An original request still needs inspection.');
+    const workspace = this.state.workspace;
+    if (workspace && !workspace.checkpoint) throw Error('Continue the retained R workspace preparation before reviewing another switch.');
     this.state.preparation = { definition:structuredClone(definition), ready:false,
-      request:{window:this.client.view.window,revision:definition.id,expected_layout_version:version,instances:{},views:{}} };
+      request:{window:this.client.view.window,revision:definition.id,expected_layout_version:version,
+        instances:workspace?.checkpoint === definition.id ? { ...structuredClone(workspace.instances), manager:this.client.view.instance } : {},
+        views:workspace?.checkpoint === definition.id ? { manager:this.client.view.view } : {}} };
+    // Explicitly reviewing a saved checkpoint hands off to the normal scenario
+    // workflow. Already created views/instances remain retained, never released.
+    this.state.workspace = null;
     await this.save();
+  }
+  async startWorkspace(setup: ScientificWorkspace) {
+    if (this.state.pending || this.state.workspace) throw Error('Continue the retained workspace preparation before creating another.');
+    this.state.workspace = structuredClone(setup); await this.save();
+  }
+  async resetWorkspace() {
+    if (this.state.pending) throw Error('Inspect the original request before setting aside its preparation.');
+    // Only the setup form is reset. Instances, views, checkpoints and original
+    // Operations remain owned by their ordinary catalogs and recovery records.
+    this.state.workspace = null; await this.save();
+  }
+  async prepareWorkspace() {
+    const setup = this.state.workspace;
+    if (!setup || this.state.pending) throw Error('Inspect the original request before continuing workspace preparation.');
+    // Re-observe the entire immutable selection before any remaining mutation.
+    const inspections = new Map<string, PluginInspection>();
+    for (const wanted of Object.values(setup.packages)) {
+      const inspection = await read<PluginInspection>(this.client, 'plugins.inspect', { revision: wanted.revision });
+      if (inspection.summary.plugin !== wanted.plugin || !inspection.artifacts.some(a => a.id === wanted.artifact && a.target === wanted.target))
+        throw Error(`Import the missing exact workspace artifact: ${wanted.revision}.`);
+      inspections.set(wanted.revision, inspection);
+    }
+    for (const key of scientificPlugins) {
+      const wanted = setup.packages[key];
+      if (setup.instances[key]) {
+        const observed = await read<PluginInstanceObservation>(this.client, 'plugins.instance', { instance: setup.instances[key] });
+        if (!matches(observed, wanted)) throw Error(`The prepared ${key} instance is unavailable. Retain this preparation for recovery.`);
+      } else await this.invoke('plugins.activate', { revision: wanted.revision, artifact: wanted.artifact, target: wanted.target, alias: key,
+        configuration: wanted.configuration, ...(wanted.optional_capabilities?.length ? { optional_capabilities: wanted.optional_capabilities } : {}) }, { kind: 'workspace_instance', key });
+    }
+    if (!setup.checkpoint) await this.invoke('scenarios.checkpoint', checkpointInput(scientificScenario(setup, this.client.view)), { kind: 'workspace_checkpoint' });
+    if (this.state.preparation?.definition.id !== setup.checkpoint) throw Error('The retained workspace has a different preparation. Review its saved checkpoint.');
+    const manager = this.client.view.instance;
+    inspections.set(manager.revision, await read<PluginInspection>(this.client, 'plugins.inspect', { revision: manager.revision }));
+    await this.prepare(inspections, {}, {}, []);
+    this.state.workspace = null; await this.save();
   }
   async prepare(inspections: Map<string,PluginInspection>, selections: Record<string,string>, viewSelections: Record<string,string>, instances: PluginInstanceObservation[]) {
     const prep = this.state.preparation;

@@ -12,6 +12,8 @@ struct Empty {}
 struct FilesViewConfiguration {
     editor: Option<InstanceRef>,
     editor_group: Option<String>,
+    /// Fixed R provider for newly opened Editors; never resolved again on retry.
+    runtime: Option<InstanceRef>,
 }
 fn capability(id: &str, input: Value, output: Value, example: Value) -> CapabilityContribution {
     let operation = id == "files.apply_patch";
@@ -129,7 +131,7 @@ pub fn manifest() -> PluginManifest {
             // Navigation can delegate only these declared scopes, intersected
             // with its caller. Editor still declares and receives its own exact
             // capability grants; Files gets no direct draft/file-write grant.
-            ("windows.open_view", vec!["plugins.run", "project.read", "project.write", "documents.read", "documents.write", "operation.read"]),
+            ("windows.open_view", vec!["plugins.run", "project.read", "project.write", "documents.read", "documents.write", "operation.read", "workspace.read", "workspace.run_r", "resources.read"]),
             ("operation.get", vec!["operation.read"]),
             ("operation.list_recent", vec!["operation.read"]),
         ]

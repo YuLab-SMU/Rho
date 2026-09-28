@@ -49,6 +49,17 @@ the running Host. It cannot be combined with fixed R/remote/Skill startup flags.
 Closing views keeps their instances alive; normal Host shutdown drains its own
 instances.
 
+In the ordinary Plugins view, open **Scenarios → New R workspace** to choose
+installed scientific packages and the paths to an existing Ark executable and
+R home. **Prepare workspace** captures exact instances and saves a scenario;
+**Switch to R workspace** applies its layout to this window. Then use **Start R**
+in Console. Files opens Editors bound to that same R provider, so **Save and Run**
+can feed Console, Objects and Plots. Missing packages remain missing until an
+explicit import. If preparation loses a reply, inspect its original request before
+continuing; the retained partial instances are not recreated automatically.
+This starter currently requires the plugin-only workspace and installed packages;
+the ordinary default launch path is still under development.
+
 The native development ports `plugins.test_create`, `plugins.test_project`,
 `plugins.test_projects`, `plugins.test_operation` and `plugins.test_stop` create,
 observe and stop a separate test project. Describe their input contracts through

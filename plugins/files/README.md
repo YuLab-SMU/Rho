@@ -61,11 +61,16 @@ View configuration optionally names an exact Editor instance and destination tab
 group (`editor` and `editor_group`). Missing Editor configuration disables opening
 and creation. An explicit open captures the regular file's native hash/size before
 reading layout, then persists the original request before `windows.open_view`.
-The Editor receives `{ source: InstanceRef, file: FileObservation | null }`; `null`
+An optional exact `runtime` instance is forwarded to new and existing-file Editors
+so they can use the scenario's selected R provider. This binding is frozen with
+the original open request, including after a lost reply. Navigation delegates
+the Editor's declared R/resource scopes through `windows.open_view`; Files has
+no direct R execution grant and opening a document does not start R.
+The Editor receives `{ source: InstanceRef, file: FileObservation | null, runtime?: InstanceRef }`; `null`
 means a new draft, not a filesystem creation. It must read the selected file using
 the captured SHA. Lost acknowledgements retain the original navigation identity;
 copying a view's state cannot replay its old request from a new caller.
-The complete ordinary Editor and default scenario remain in progress.
+The default scenario and primary launch path remain in progress.
 
 `node scripts/test-files-ui.mjs` compiles and tests the independent model,
 connection and actions. After building the current client and Host, run

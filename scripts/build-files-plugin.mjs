@@ -5,6 +5,8 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 assert.ok(process.argv[2], 'Specify a new directory outside the checkout');
+assert.ok(process.argv.slice(3).every(arg => arg === '--workspace'), 'Only --workspace is supported after the destination');
+const workspaceBuild = process.argv.includes('--workspace');
 const output = path.join(fs.realpathSync(path.dirname(path.resolve(process.argv[2]))), path.basename(process.argv[2]));
 assert.ok(output !== root && !output.startsWith(root + path.sep), 'Use a standalone directory');
 fs.mkdirSync(output);
@@ -32,5 +34,23 @@ assert.deepEqual(packages.map(pkg => pkg.name).sort(), ['rho-files-api', 'rho-fi
 for (const pkg of packages) for (const dependency of pkg.dependencies) if (dependency.path) {
   assert.ok(dependency.path.startsWith(output + path.sep), `${pkg.name}: dependency leaves standalone source`);
 }
-execFileSync(process.execPath, [path.join(output, 'build.mjs')], { cwd: output, env, stdio: 'inherit' });
-console.log(`Independent Files source and native artifact: ${output}`);
+if (workspaceBuild) {
+  // Rapid iteration reuses Cargo's primary checkout cache. The delivered source
+  // closure and immutable artifact still go through normal repository capture.
+  // This mode is integration evidence, not independent-source build acceptance.
+  execFileSync(env.RHO_PLUGIN_CARGO, ['build', '--locked', '-p', 'rho-files-backend', '--bins'], { cwd: root, env, stdio: 'inherit' });
+  execFileSync(path.join(root, 'target/debug/export-files-manifest'), [path.join(output, 'plugin.json')], { cwd: root, env, stdio: 'inherit' });
+  execFileSync(process.execPath, [path.join(output, 'build-ui.mjs')], { cwd: output, env, stdio: 'inherit' });
+  fs.copyFileSync(path.join(root, 'target/debug/rho-files-backend'), path.join(output, 'dist/rho-files-backend'));
+  fs.chmodSync(path.join(output, 'dist/rho-files-backend'), 0o755);
+  const walk = directory => fs.readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
+    assert.ok(!entry.isSymbolicLink(), 'Package source cannot contain symlinks');
+    if (['target', 'dist', 'node_modules', '.git'].includes(entry.name)) return [];
+    const location = path.join(directory, entry.name);
+    return entry.isDirectory() ? walk(location) : [path.relative(output, location).split(path.sep).join('/')];
+  });
+  const manifest = JSON.parse(fs.readFileSync(path.join(output, 'plugin.json'), 'utf8'));
+  manifest.source.files = walk(output).filter(file => file !== 'plugin.json' && !manifest.source.lockfiles.includes(file)).sort();
+  fs.writeFileSync(path.join(output, 'plugin.json'), JSON.stringify(manifest, null, 2) + '\n');
+} else execFileSync(process.execPath, [path.join(output, 'build.mjs')], { cwd: output, env, stdio: 'inherit' });
+console.log(`${workspaceBuild ? 'Workspace-built' : 'Independent'} Files source and native artifact: ${output}`);

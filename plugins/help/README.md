@@ -8,6 +8,10 @@ links ask for an explicit installed-copy selection; no name-based fallback runs.
 Busy reads wait for the next poll. Expired observations or changed files remain
 visible diagnostics requiring a new explicit Packages selection.
 
+A scenario may open an initial Help view with `copy: null, topic: null`. It shows
+how to choose a package in Packages and performs no R observation or execution.
+Selecting a package still opens a separately captured exact-copy Help view.
+
 HTML is accumulated in bounded UTF-8 chunks with index and Help file fences.
 Incomplete markup is shown only as raw text. Complete HTML is rebuilt as static
 structural content with no original scripts, handlers, styles or fetched resources.

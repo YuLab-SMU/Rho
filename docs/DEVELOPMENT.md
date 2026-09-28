@@ -71,6 +71,19 @@ framed result that covers the current source. Real-R reuse also requires
 Keep retained packages through milestone acceptance and remove them when their
 evidence is no longer needed. Older packages without receipts are not adopted.
 
+The scientific-window integration runner also reuses explicit native packages:
+`node scripts/test-scientific-workspace.mjs --packages /absolute/packages.json`,
+with `RHO_ARK` and `RHO_R_HOME` selecting an existing disposable-test runtime.
+The JSON object maps `r`, `files` and `editor` to absolute built package directories;
+optional Console/Objects/Plots/Viewer/Packages/Help paths reuse unchanged UI builds.
+The runner builds only missing UI packages and the current Manager, opens a fresh plugin-only Host, and
+drives Manager → scenario preparation/switch → Files → Editor Save and Run →
+Console/Objects/Plots → browser reload. It does not run Cargo or install software.
+For Files iteration, `node scripts/build-files-plugin.mjs /new/package --workspace`
+builds the current backend in the primary Cargo workspace and packages that artifact
+with its source and UI. It is integration evidence; omit `--workspace` only when
+independent-source build acceptance is actually due. Keep Cargo invocations serial.
+
 ### Status discipline
 
 `docs/STATUS.md` stays under about 300 lines. Update it at milestone boundaries or

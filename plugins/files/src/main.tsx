@@ -32,9 +32,9 @@ const root = createRoot(document.getElementById("root")!);
 try {
   const client = await connectPluginView();
   if (client.view.contribution !== "files") throw new Error("The Files contribution is missing.");
-  const configuration = client.view.configuration as unknown as { editor: InstanceRef | null; editor_group: string | null };
+  const configuration = client.view.configuration as unknown as { editor: InstanceRef | null; editor_group: string | null; runtime?: InstanceRef | null };
   const connection = new FilesConnection(client);
-  const actions = new FilesActions(client, connection, configuration.editor_group ?? null, configuration.editor ?? null);
+  const actions = new FilesActions(client, connection, configuration.editor_group ?? null, configuration.editor ?? null, configuration.runtime ?? null);
   const closing = await client.installCloseHandler({
     async flush() { await connection.pause(); await actions.settled(); await connection.flush(); },
     resume() { connection.resume(); },

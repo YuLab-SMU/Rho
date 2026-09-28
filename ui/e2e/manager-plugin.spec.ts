@@ -77,6 +77,31 @@ test('ordinary manager inspects revisions, prepares scenes and keeps original li
   const lifetime=await note.evaluate(()=>{(window as any).lifetime=crypto.randomUUID();return(window as any).lifetime;});
   await page.getByRole('tab',{name:'Plugins',exact:true}).click();
   await frame.getByRole('button',{name:'Scenarios',exact:true}).click();
+  // The scientific starter is ordinary Manager UI. Missing delivered packages
+  // stay missing, and a saved choice never starts a runtime or changes a scene.
+  await frame.getByRole('button',{name:'New R workspace',exact:true}).click();
+  const workspace=frame.getByRole('dialog',{name:'New R workspace',exact:true});
+  await expect(workspace).toBeVisible();
+  await workspace.getByLabel('Workspace name',{exact:true}).fill('Scientific study 中文');
+  await workspace.getByLabel('Existing Ark executable',{exact:true}).fill('/existing/ark');
+  await workspace.getByLabel('Existing R home',{exact:true}).fill('/existing/R');
+  await expect(workspace.getByLabel('R runtime',{exact:true})).toContainText('No revision');
+  for(const width of [1440,1920,390,220]){
+    await resize(width);
+    await workspace.evaluate(element=>element.scrollTop=0);
+    expect(await workspace.evaluate(element=>{const box=element.getBoundingClientRect();return box.left>=0&&box.right<=innerWidth&&document.documentElement.scrollWidth<=innerWidth;})).toBe(true);
+    await page.screenshot({path:info.outputPath(`manager-workspace-${width}.png`)});
+    await workspace.getByRole('button',{name:'Prepare workspace',exact:true}).scrollIntoViewIfNeeded();
+    await page.screenshot({path:info.outputPath(`manager-workspace-bottom-${width}.png`)});
+  }
+  await workspace.getByRole('button',{name:'Prepare workspace',exact:true}).click();
+  await expect(workspace.getByRole('alert')).toContainText('Select an installed r artifact');
+  expect((await query('plugins.instances',{after:null,limit:100})).total).toBe(countBefore);
+  await workspace.getByRole('button',{name:'Keep choices and close',exact:true}).click();
+  await frame.getByRole('button',{name:'New R workspace',exact:true}).click();
+  await expect(workspace.getByLabel('Workspace name',{exact:true})).toHaveValue('Scientific study 中文');
+  await workspace.getByRole('button',{name:'Keep choices and close',exact:true}).click();
+  await resize(1440);
   await frame.getByRole('button',{name:/R analysis Checkpoint/}).click();
   await frame.getByRole('button',{name:'Review switch',exact:true}).click();
   await frame.getByLabel('Instance for manager',{exact:true}).selectOption(manager.instance);
