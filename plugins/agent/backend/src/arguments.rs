@@ -1,6 +1,6 @@
 //! Inputs deliberately omit project, principal, controller, paths and credentials.
 //! These are supplied by native initialization and the original calling view.
-use rho_agent_api::{AgentDraftContent, ComponentAgentGrant, ComponentAgentProfile};
+use rho_agent_api::{AgentDraftContent, ComponentAgentProfile, component::ComponentAgentGrant};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

@@ -1,5 +1,7 @@
 use crate::arguments::*;
-use rho_agent_api::{ComponentAgentConversation, ComponentModelSettings, ProjectAgentTaskPage};
+use rho_agent_api::{
+    ComponentModelSettings, ProjectAgentTaskPage, component::ComponentAgentConversation,
+};
 use rho_plugin_sdk::protocol::*;
 use schemars::schema_for;
 use serde_json::{Value, json};

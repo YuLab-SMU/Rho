@@ -132,11 +132,12 @@ correlates concurrent replies, refuses queued/duplicate/mismatched replies, and
 keeps abandoned waits reserved until response or disconnect. Pump closure fences
 new calls and returns unconfirmed outcomes for queued/dispatched requests; it does
 not replay, cancel or commit scientific work. Typed Host errors preserve recovery
-without printing it in debug output. Seven focused tests, including a framed
-exchange over bounded duplex I/O, are added but not yet executed. This is a public
-transport building block; Agent's ordinary backend still needs to consume it.
+without printing it in debug output. All seven focused tests, including a framed
+exchange over bounded duplex I/O, and six existing transport cases now pass. This is a public
+transport building block consumed by the new Agent metadata backend; model/native
+dispatch integration remains pending.
 The new SDK source was written after the storage-integration binaries were
-compiled. Its own focused checks are now running in the follow-up serial verifier.
+compiled. Its own focused checks passed in the follow-up serial verifier.
 
 The generic `views.caller` query now exposes the original authenticated view,
 window and connection identities without private tokens. Native ingress captures
@@ -157,6 +158,9 @@ Five framed-protocol fixtures and an independent-package generic Host fixture ar
 added. Compilation, manifest generation and those runtime checks are pending in
 `target/plugin-refactor/agent-public-ports-verify.py`, which is now running after
 the completed storage acceptance. Do not start another Cargo command concurrently.
+The first backend compilation failed on three public component-type imports;
+those paths were corrected and the sequence resumed at that stage, preserving
+the passing SDK result and the original failure log.
 Static dependency, source containment,
 documentation map and script syntax checks pass for the new source.
 

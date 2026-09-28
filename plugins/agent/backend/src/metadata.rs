@@ -1,5 +1,5 @@
 use crate::arguments::*;
-use rho_agent_api::{AgentControllerRef, ComponentAgentConversation};
+use rho_agent_api::{AgentControllerRef, component::ComponentAgentConversation};
 use rho_agent_owner::component::{
     ComponentActor, ComponentActorValidator, ComponentAgentOwner, ComponentTaskError,
 };

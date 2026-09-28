@@ -84,7 +84,8 @@ are submitted to the original Host Operation and retained until terminal settlem
 This process uses the public SDK's bounded Host-call client and imports no private
 core crate. [Build instructions](BUILD.md) describe the independent source package.
 
-Compilation, manifest generation, standalone package and generic Host acceptance
-for this new composition are pending. Model execution, native Agent connections,
-context providers and Agent views still require integration. The registered metadata
-capabilities do not claim those features; default delivery remains unfinished.
+The process currently provides metadata only. Model execution, native Agent
+connections, context providers and Agent views still require integration. The
+registered metadata capabilities do not claim those features; default delivery
+remains unfinished. The backend transport and independent Host verification
+commands are described in the build instructions.
