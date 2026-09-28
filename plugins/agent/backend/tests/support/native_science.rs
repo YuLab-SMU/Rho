@@ -82,7 +82,7 @@ fn send(value: &Value) -> Value {
     let mut input = action(
         json!({"kind":"send","control":control(value),"draft_version":value["detail"]["draft"]["version"]}),
     );
-    input["tools"] = json!([{"name":"execute","binding":binding()}]);
+    input["tools"] = json!([{"name":"execute","target":{"type":"provider","binding":binding()}}]);
     input
 }
 #[derive(Clone)]
@@ -236,9 +236,10 @@ async fn native_science_preserves_partial_queries_and_refuses_unverified_or_over
         let mut catalog = inspection();
         let is_query = matches!(variant, "query" | "cached" | "invalid-query");
         if is_query {
-            input["tools"][0]["binding"]["capability"] = json!({"id":"r.session","version":1});
+            input["tools"][0]["target"]["binding"]["capability"] =
+                json!({"id":"r.session","version":1});
             catalog["manifest"]["capabilities"][0]["capability"] =
-                input["tools"][0]["binding"]["capability"].clone();
+                input["tools"][0]["target"]["binding"]["capability"].clone();
             catalog["manifest"]["capabilities"][0]["kind"] = "query".into();
             catalog["manifest"]["capabilities"][0]["required_scopes"] = json!(["workspace.read"]);
         }
@@ -546,7 +547,10 @@ async fn native_science_disconnect_retains_uncertainty_and_only_observes_origina
         .await;
     assert_eq!(receipt["phase"], "uncertain");
     assert_eq!(receipt["request"], json!(child.request));
-    assert_eq!(receipt["native_request"]["arguments"], tool["arguments"]);
+    assert_eq!(
+        receipt["native_request"]["request"]["arguments"],
+        tool["arguments"]
+    );
     // A missing durable child is partial evidence, never an invitation to
     // dispatch again. A cached identity is likewise not a fresh confirmation.
     for observation in [
@@ -735,7 +739,7 @@ async fn native_science_multiple_owners_keep_distinct_bindings_under_one_send() 
             selected["provider"]["revision"] =
                 json!(format!("sha256:{}", index.to_string().repeat(64)));
             selected["target"] = json!(format!("captured-target-{index}"));
-            json!({"name":format!("tool{index}"),"binding":selected})
+            json!({"name":format!("tool{index}"),"target":{"type":"provider","binding":selected}})
         })
         .collect();
     input["tools"] = json!(selections);
@@ -753,7 +757,7 @@ async fn native_science_multiple_owners_keep_distinct_bindings_under_one_send() 
     begin(&mut f, &native).await;
     for (index, (_, _, kind, scopes)) in peers.iter().enumerate() {
         let frame = f.read().await;
-        let selected = &selections[index]["binding"];
+        let selected = &selections[index]["target"]["binding"];
         assert!(
             matches!(&frame.body, RpcBody::HostCall { parent_request, capability, arguments }
             if parent_request == &native.request && capability == &manifest::key("plugins.inspect")
@@ -791,9 +795,9 @@ async fn native_science_multiple_owners_keep_distinct_bindings_under_one_send() 
         assert_eq!(parent_request, &native.request);
         assert_eq!(
             json!(capability),
-            selections[index]["binding"]["capability"]
+            selections[index]["target"]["binding"]["capability"]
         );
-        assert_eq!(arguments["binding"], selections[index]["binding"]);
+        assert_eq!(arguments["binding"], selections[index]["target"]["binding"]);
         assert_eq!(arguments["arguments"], tool["arguments"]);
         assert_eq!(arguments["preconditions"], tool["preconditions"]);
         assert!(requests.insert(child.request.clone()));
@@ -820,8 +824,8 @@ async fn native_science_multiple_owners_keep_distinct_bindings_under_one_send() 
             .await;
         assert_eq!(receipt["phase"], "resolved");
         assert_eq!(
-            receipt["native_request"]["binding"],
-            selections[index]["binding"]
+            receipt["native_request"]["request"]["binding"],
+            selections[index]["target"]["binding"]
         );
         assert_eq!(receipt["operation"].is_null(), *kind == "query");
     }
@@ -881,7 +885,8 @@ async fn native_science_peer_tools_require_both_activation_grants_and_original_s
             let created = f.native_create().await;
             let saved = draft(&mut f, &created, "Retain this draft on refusal").await;
             let mut input = send(&saved);
-            input["tools"][0]["binding"]["capability"] = json!({"id":name,"version":version});
+            input["tools"][0]["target"]["binding"]["capability"] =
+                json!({"id":name,"version":version});
             let mut native = scientific("refused-peer-tool", "agent.native.command", input, true);
             if missing_grant {
                 native
@@ -920,3 +925,5 @@ async fn native_science_peer_tools_require_both_activation_grants_and_original_s
         }
     }
 }
+
+include!("native_host_tools.rs");

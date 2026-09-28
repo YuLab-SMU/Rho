@@ -36,7 +36,7 @@ fn scientific_origin() -> AgentNativeCommandOrigin {
     origin.tools = vec![AgentNativeToolGrant {
         selection: AgentNativeToolSelection {
             name: "execute".into(),
-            binding,
+            target: AgentNativeToolTarget::Provider { binding },
         },
         kind: AgentNativeToolKind::Operation,
         description: "Execute in the captured session".into(),
@@ -59,7 +59,10 @@ fn native_tools_capture_exact_selection_and_deduplicate_semantic_requests_after_
         .admit_native(&scope(), &command, parent.clone(), 3)
         .unwrap();
     let mut altered = parent.clone();
-    altered.tools[0].selection.binding.target = Some("another-session".into());
+    let AgentNativeToolTarget::Provider { binding } = &mut altered.tools[0].selection.target else {
+        panic!("expected provider")
+    };
+    binding.target = Some("another-session".into());
     assert!(matches!(
         owner.admit_native(&scope(), &command, altered, 4),
         Err(AgentTaskError::RequestConflict)
@@ -77,10 +80,14 @@ fn native_tools_capture_exact_selection_and_deduplicate_semantic_requests_after_
         .admit_native_tool(&scope(), id, generation, input.clone(), 5)
         .unwrap();
     assert!(!repeated);
-    assert_eq!(
-        prepared.native_request.binding,
-        parent.tools[0].selection.binding
-    );
+    let AgentNativeToolRequest::Provider { request: admitted } = &prepared.native_request else {
+        panic!("expected provider request")
+    };
+    let AgentNativeToolTarget::Provider { binding: selected } = &parent.tools[0].selection.target
+    else {
+        panic!("expected provider")
+    };
+    assert_eq!(&admitted.binding, selected);
     assert_ne!(prepared.request, parent.request);
     let (retry, repeated) = owner
         .admit_native_tool(&scope(), id, generation, input.clone(), 6)
@@ -164,8 +171,13 @@ fn native_tools_refuse_invalid_capture_missing_scope_and_storage_failure_before_
             }
             1 => invalid.tools.push(invalid.tools[0].clone()),
             _ => {
-                invalid.tools[0].selection.binding.project =
-                    serde_json::from_value(serde_json::json!("foreign-project")).unwrap()
+                let AgentNativeToolTarget::Provider { binding } =
+                    &mut invalid.tools[0].selection.target
+                else {
+                    panic!("expected provider")
+                };
+                binding.project =
+                    serde_json::from_value(serde_json::json!("foreign-project")).unwrap();
             }
         }
         assert!(owner.admit_native(&scope(), &command, invalid, 3).is_err());
@@ -218,7 +230,10 @@ fn native_tools_refuse_invalid_capture_missing_scope_and_storage_failure_before_
         .unwrap();
     let (record, _) = invoke(input.clone()).unwrap();
     let mut changed = record.clone();
-    changed.native_request.binding.target = Some("forged-target".into());
+    let AgentNativeToolRequest::Provider { request } = &mut changed.native_request else {
+        panic!("expected provider request")
+    };
+    request.binding.target = Some("forged-target".into());
     assert!(store.put_agent_native_tool(&scope(), &changed).is_err());
     store
         .0
@@ -773,5 +788,133 @@ fn native_admission_concurrent_retries_retain_one_original_parent() {
     assert_eq!(
         store.agent_tasks(&scope(), None, None, 20).unwrap().len(),
         1
+    );
+}
+
+#[test]
+fn native_host_tools_retain_captured_branch_and_refuse_model_scope_replacement() {
+    let (directory, store, owner, created) = setup();
+    let saved = draft(
+        &owner,
+        &created.task,
+        0,
+        "Edit only the chosen plugin branch",
+    );
+    let command = request(AgentTaskCommand::Send {
+        control: control(&saved.task),
+        draft_version: 1,
+    });
+    let mut parent = origin();
+    parent.scopes.insert("plugins.write".into());
+    parent.tools = vec![AgentNativeToolGrant {
+        selection: AgentNativeToolSelection {
+            name: "checkpoint".into(),
+            target: AgentNativeToolTarget::Host {
+                project: parent.binding.project.clone(),
+                capability: serde_json::from_value(
+                    serde_json::json!({"id":"plugins.checkpoint","version":1}),
+                )
+                .unwrap(),
+                fixed_arguments: [("branch".into(), serde_json::json!("chosen-branch"))].into(),
+            },
+        },
+        kind: AgentNativeToolKind::Operation,
+        description: "Checkpoint the selected branch".into(),
+        input_schema: serde_json::json!({"type":"object","properties":{"expected_head":{"type":"string"},"changes":{"type":"object"}},"required":["expected_head","changes"],"additionalProperties":false}),
+        required_scopes: ["plugins.write".into()].into(),
+    }];
+    let sent = owner
+        .admit_native(&scope(), &command, parent.clone(), 3)
+        .unwrap();
+    let id = sent.task.task.task_id.clone();
+    let generation = sent.task.attachment.generation;
+    let input = AgentNativeToolInvocation {
+        send_request: command.request_id.clone(),
+        tool_request: uuid::Uuid::new_v4().to_string(),
+        tool: "checkpoint".into(),
+        arguments: serde_json::json!({"expected_head":"sha256:original","changes":{}}),
+        preconditions: serde_json::Value::Null,
+    };
+    for branch in ["another-branch", "chosen-branch"] {
+        let mut invalid = input.clone();
+        invalid.arguments["branch"] = serde_json::json!(branch);
+        assert!(
+            owner
+                .admit_native_tool(&scope(), &id, generation, invalid, 4)
+                .is_err()
+        );
+        assert!(
+            store
+                .agent_native_tool(&scope(), &input.send_request, &input.tool_request)
+                .unwrap()
+                .is_none()
+        );
+    }
+    let mut invalid = input.clone();
+    invalid.preconditions = serde_json::json!([]);
+    assert!(
+        owner
+            .admit_native_tool(&scope(), &id, generation, invalid, 4)
+            .is_err()
+    );
+    let (receipt, repeated) = owner
+        .admit_native_tool(&scope(), &id, generation, input.clone(), 5)
+        .unwrap();
+    assert!(!repeated);
+    let AgentNativeToolRequest::Host {
+        project,
+        capability,
+        arguments,
+    } = &receipt.native_request
+    else {
+        panic!("expected Host request")
+    };
+    assert_eq!(project, &parent.binding.project);
+    assert_eq!(capability.id.as_str(), "plugins.checkpoint");
+    assert_eq!(
+        arguments,
+        &serde_json::json!({"branch":"chosen-branch","expected_head":"sha256:original","changes":{}})
+    );
+    let mut forged = receipt.clone();
+    let AgentNativeToolRequest::Host { arguments, .. } = &mut forged.native_request else {
+        unreachable!()
+    };
+    arguments["branch"] = serde_json::json!("another-branch");
+    assert!(store.put_agent_native_tool(&scope(), &forged).is_err());
+    let mut altered = parent.clone();
+    let AgentNativeToolTarget::Host {
+        fixed_arguments, ..
+    } = &mut altered.tools[0].selection.target
+    else {
+        unreachable!()
+    };
+    fixed_arguments.insert("branch".into(), serde_json::json!("another-branch"));
+    assert!(matches!(
+        owner.admit_native(&scope(), &command, altered, 6),
+        Err(AgentTaskError::RequestConflict)
+    ));
+    owner
+        .admit_native(
+            &scope(),
+            &request(AgentTaskCommand::Stop {
+                control: control(&sent.task),
+            }),
+            origin(),
+            7,
+        )
+        .unwrap();
+    let (observed, repeated) = owner
+        .admit_native_tool(&scope(), &id, generation, input.clone(), 8)
+        .unwrap();
+    assert!(repeated);
+    assert_eq!(observed, receipt);
+    drop(owner);
+    drop(store);
+    let reopened = AgentStore::open(&directory.path().join("agent.sqlite")).unwrap();
+    assert_eq!(
+        reopened
+            .agent_native_tool(&scope(), &input.send_request, &input.tool_request)
+            .unwrap(),
+        Some(receipt)
     );
 }

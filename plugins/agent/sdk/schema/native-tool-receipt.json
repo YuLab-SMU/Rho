@@ -24,7 +24,7 @@
       "$ref": "#/$defs/AgentNativeToolKind"
     },
     "native_request": {
-      "$ref": "#/$defs/PluginRequest"
+      "$ref": "#/$defs/AgentNativeToolRequest"
     },
     "operation": {
       "type": [
@@ -100,6 +100,52 @@
         "prepared",
         "resolved",
         "uncertain"
+      ]
+    },
+    "AgentNativeToolRequest": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "request": {
+              "$ref": "#/$defs/PluginRequest"
+            },
+            "type": {
+              "type": "string",
+              "const": "provider"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "request"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "arguments": {
+              "description": "Complete native input, including the caller's captured fields."
+            },
+            "capability": {
+              "$ref": "#/$defs/CapabilityKey"
+            },
+            "project": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "host"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "project",
+            "capability",
+            "arguments"
+          ]
+        }
       ]
     },
     "CapabilityKey": {

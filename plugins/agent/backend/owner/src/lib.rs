@@ -4,6 +4,8 @@
 use rho_agent_api::*;
 mod native_admission;
 pub use native_admission::*;
+mod native_host;
+pub use native_host::*;
 mod native_tools;
 pub use native_tools::*;
 mod boundary;

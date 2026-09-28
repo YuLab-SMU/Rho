@@ -53,18 +53,23 @@ Agent. A subsequent versioned draft write selects the asset. The current upload
 accepts at most 524288 encoded bytes; larger assets still need controlled resource
 transfer. Contributed context input is still refused before native submission.
 
-Send can explicitly select up to 16 contributed Query/Operation tools by exact
-provider binding. With the declared optional grants enabled, the backend reads
-their immutable public manifests and revalidates the live caller before capturing
-descriptions, schemas, scopes and targets with the original Send. The private MCP
-endpoint exposes `rho_tools` and `rho_call`; callers must name that Send and a
-canonical tool UUID. Identity reuse observes the original call; changed input or
-an old Send on a later turn is refused. The package declares optional grants for
-the public R, Files, Process, Remote, Environment and Editor Query/Operation
-contracts. Each exact capability version remains a separate activation choice;
-the declaration alone grants nothing and does not select or start a provider.
-Other capabilities require explicit package declarations. Control and runtime
-capabilities cannot be selected as tools.
+Send can explicitly select up to 16 Query/Operation tools. Provider targets retain
+an exact ordinary-plugin binding and immutable public manifest; Host targets retain
+the project and exact native capability inspected through `host.core_contract`.
+The backend revalidates the live caller before capturing descriptions, schemas,
+scopes and targets with the original Send. Host targets can freeze declared
+argument fields, such as the chosen development branch. Those fields are removed
+from the model's input schema and inserted by the owner; model input cannot supply
+or replace them. Native compare-and-swap requirements remain in the full request.
+
+The private MCP endpoint exposes `rho_tools` and `rho_call`; callers must name that
+Send and a canonical tool UUID. Identity reuse observes the original call; changed
+input or an old Send on a later turn is refused. The package declares optional
+grants for public R, Files, Process, Remote, Environment and Editor contracts and
+native plugin, window and scenario management. Each exact capability version
+remains a separate activation choice; declarations alone neither grant authority
+nor select a tool. A branch checkpoint does not authorize a build, preview or
+scenario application. Control and runtime capabilities cannot be selected as tools.
 
 Tool admission shares Stop's owner gate and durably records a bounded semantic
 request before queuing it under the original Send's Host parent. Dropping an HTTP
@@ -73,9 +78,12 @@ work and its independent result remain retained. Each Send accepts at most 64
 calls, with 64 KiB inputs and 96 KiB observations. Invalid, oversized or missing
 replies preserve uncertainty; partial/cached queries retain their labels.
 `agent.native.tool` reads the scoped receipt; `agent.native.tool.operation` follows
-the original delegated request into the scientific journal and verifies its exact
-parent, provider, arguments and preconditions. Neither read replays work or rewrites
-an uncertain receipt. Only core Operation commits scientific results.
+the original delegated request into the native journal. Provider replies must match
+captured arguments and preconditions. Host owners may normalize their input;
+verification uses the independently correlated original Operation identity, parent,
+project, caller and capability rather than treating normalized JSON as raw input.
+Neither read replays work or rewrites an uncertain receipt. Only core Operation
+commits scientific results.
 
 `backend/native::mcp` supplies the private transport for an explicitly opened
 connection: its own loopback listener, bearer and session manager. It never
@@ -207,7 +215,7 @@ Stop retains already dispatched R work until its actual reply; original-result
 queries never replay it. The build instructions distinguish framed fixtures from
 the separate independent-package real-R acceptance.
 
-Native Agent connections and explicitly selected scientific tools are composed as
+Native Agent connections and explicitly selected native tools are composed as
 described above. General context providers, full-size attachment transfer,
 component-model continuation and Agent views still require integration. Synthetic diagnostics and
 submitted-text runs alone do not establish scientific execution or real-provider quality. Default

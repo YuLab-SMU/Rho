@@ -5,6 +5,6 @@ import type { JsonValue } from "./serde_json/JsonValue.js";
 
 /**
  * Descriptions, schemas and scopes are captured from the selected immutable
- * plugin manifest, never supplied by model tool arguments.
+ * plugin manifest or native Host contract, never supplied by model tool arguments.
  */
 export type AgentNativeToolGrant = { selection: AgentNativeToolSelection, kind: AgentNativeToolKind, description: string, input_schema: JsonValue, required_scopes: Array<string>, };

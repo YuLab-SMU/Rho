@@ -23,15 +23,32 @@ pub fn validate_grants(origin: &AgentNativeCommandOrigin) -> Result<(), AgentTas
     }
     for tool in &origin.tools {
         let selection = &tool.selection;
-        if selection.name.is_empty()
+        let target_valid = match &selection.target {
+            AgentNativeToolTarget::Provider { binding } => {
+                binding.project == origin.binding.project
+                    && binding.provider != origin.binding.provider
+            }
+            AgentNativeToolTarget::Host {
+                project,
+                capability,
+                fixed_arguments,
+            } => {
+                project == &origin.binding.project
+                    && (1..=65535).contains(&capability.version)
+                    && fixed_arguments.len() <= 128
+                    && fixed_arguments
+                        .keys()
+                        .all(|name| !name.is_empty() && name.len() <= 256)
+            }
+        };
+        if !target_valid
+            || selection.name.is_empty()
             || selection.name.len() > 64
             || !selection
                 .name
                 .bytes()
                 .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
             || !names.insert(&selection.name)
-            || selection.binding.project != origin.binding.project
-            || selection.binding.provider == origin.binding.provider
             || !tool.required_scopes.is_subset(&origin.scopes)
             || tool.description.len() > 4096
             || !tool.input_schema.is_object()
@@ -43,6 +60,33 @@ pub fn validate_grants(origin: &AgentNativeCommandOrigin) -> Result<(), AgentTas
 }
 fn storage(error: impl ToString) -> AgentTaskError {
     AgentTaskError::Storage(error.to_string())
+}
+fn captured_request(
+    grant: &AgentNativeToolGrant,
+    input: &AgentNativeToolInvocation,
+) -> Result<AgentNativeToolRequest, AgentTaskError> {
+    Ok(match &grant.selection.target {
+        AgentNativeToolTarget::Provider { binding } => AgentNativeToolRequest::Provider {
+            request: PluginRequest {
+                binding: binding.clone(),
+                arguments: input.arguments.clone(),
+                preconditions: input.preconditions.clone(),
+            },
+        },
+        AgentNativeToolTarget::Host {
+            project,
+            capability,
+            fixed_arguments,
+        } => AgentNativeToolRequest::Host {
+            project: project.clone(),
+            capability: capability.clone(),
+            arguments: native_host_tool_arguments(
+                fixed_arguments,
+                &input.arguments,
+                &input.preconditions,
+            )?,
+        },
+    })
 }
 fn native_tool_request(input: &AgentNativeToolInvocation) -> RequestId {
     let digest =
@@ -75,14 +119,7 @@ pub fn validate_native_tool(
         .iter()
         .find(|t| t.selection.name == input.tool)
         .ok_or_else(|| invalid("Tool is outside the original Send selection"))?;
-    if receipt.kind != grant.kind
-        || receipt.native_request
-            != (PluginRequest {
-                binding: grant.selection.binding.clone(),
-                arguments: input.arguments.clone(),
-                preconditions: input.preconditions.clone(),
-            })
-    {
+    if receipt.kind != grant.kind || receipt.native_request != captured_request(grant, input)? {
         return Err(AgentTaskError::RequestConflict);
     }
     if serde_json::to_vec(input).map_err(storage)?.len() > MAX_NATIVE_TOOL_ARGUMENT_BYTES
@@ -151,11 +188,7 @@ impl AgentTaskOwner {
         let record = AgentNativeToolReceipt {
             task_id: task_id.into(),
             request: native_tool_request(&input),
-            native_request: PluginRequest {
-                binding: grant.selection.binding.clone(),
-                arguments: input.arguments.clone(),
-                preconditions: input.preconditions.clone(),
-            },
+            native_request: captured_request(grant, &input)?,
             kind: grant.kind,
             invocation: input,
             phase: AgentNativeToolPhase::Prepared,

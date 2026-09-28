@@ -115,6 +115,7 @@ pub fn manifest() -> PluginManifest {
             .collect(),
         optional_requires: {
             let mut grants = crate::native_grants::scientific_requirements();
+            grants.extend(crate::native_core_grants::requirements());
             grants.extend([
                 CapabilityRequirement {
                     capability: key("plugins.inspect"),
@@ -141,7 +142,7 @@ pub fn manifest() -> PluginManifest {
             ),
             capability(
                 "agent.native.tool.operation",
-                "Inspect an original native scientific Operation",
+                "Inspect an original native Operation",
                 schema_for!(NativeToolReceipt).to_value(),
                 json!({"type":"object"}),
                 json!({"send_request":"11111111-1111-4111-8111-111111111111","tool_request":"22222222-2222-4222-8222-222222222222"}),

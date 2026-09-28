@@ -610,6 +610,16 @@ names or domains resemble core ports. Ordinary contributed tools instead inspect
 their exact immutable manifest and retain the selected provider binding. Neither
 inspection path starts a runtime or recovers an Operation.
 
+Agent Send records explicitly distinguish ordinary provider targets from native
+Host targets. A Host target freezes its project, exact capability and caller-chosen
+argument fields before model submission. The model's schema excludes frozen
+fields; admission rejects their presence in model input and composes the full
+request before durable retention. Native owners still validate full input and
+compare-and-swap conditions. Host results may contain normalized arguments, so
+Agent correlates their original Operation through the retained reverse-request
+mapping and verifies caller, parent, project and capability. It does not duplicate
+a private core digest or use returned result identity as its own evidence.
+
 Agent metadata composition uses its package-owned task/store libraries behind an
 ordinary native backend. Native initialization supplies its normalized project and
 per-instance store directory; task arguments cannot choose a database, principal

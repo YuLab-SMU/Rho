@@ -1,4 +1,4 @@
-//! Resolve descriptions from immutable public manifests before admitting Send.
+//! Capture exact public provider manifests or native Host contracts before Send.
 use crate::{
     manifest,
     metadata::{Failure, Metadata, decode},
@@ -46,23 +46,30 @@ pub(crate) async fn capture(
     if selected.is_empty() {
         return Ok(vec![]);
     }
-    require(
-        metadata,
-        call,
-        &manifest::key("plugins.inspect"),
-        &["plugins.read".into()].into(),
-    )?;
     let mut revisions = BTreeMap::new();
     let mut tools = vec![];
     for selection in selected {
-        if selection.binding.project != call.binding.project
-            || selection.binding.provider == call.binding.provider
-        {
+        if matches!(&selection.target, AgentNativeToolTarget::Host { .. }) {
+            tools.push(
+                crate::native_host_selection::capture(metadata, call, selection, host).await?,
+            );
+            continue;
+        }
+        let AgentNativeToolTarget::Provider { binding } = &selection.target else {
+            unreachable!()
+        };
+        require(
+            metadata,
+            call,
+            &manifest::key("plugins.inspect"),
+            &["plugins.read".into()].into(),
+        )?;
+        if binding.project != call.binding.project || binding.provider == call.binding.provider {
             return Err(Failure::invalid(
                 "Tool selection must name another provider in this project",
             ));
         }
-        let revision = &selection.binding.provider.revision;
+        let revision = &binding.provider.revision;
         if !revisions.contains_key(revision) {
             let result = query(
                 host,
@@ -73,11 +80,11 @@ pub(crate) async fn capture(
             .await?;
             let inspected: PluginInspection = decode(&result)?;
             if &inspected.summary.revision != revision
-                || inspected.manifest.id != selection.binding.provider.plugin
+                || inspected.manifest.id != binding.provider.plugin
                 || !inspected
                     .artifacts
                     .iter()
-                    .any(|a| a.id == selection.binding.provider.artifact)
+                    .any(|a| a.id == binding.provider.artifact)
             {
                 return Err(Failure::invalid(
                     "Tool manifest differs from its exact selected version",
@@ -86,11 +93,11 @@ pub(crate) async fn capture(
             revisions.insert(revision.clone(), inspected);
         }
         let inspected = &revisions[revision];
-        if inspected.manifest.id != selection.binding.provider.plugin
+        if inspected.manifest.id != binding.provider.plugin
             || !inspected
                 .artifacts
                 .iter()
-                .any(|a| a.id == selection.binding.provider.artifact)
+                .any(|a| a.id == binding.provider.artifact)
         {
             return Err(Failure::invalid(
                 "Tool artifact differs from the original selection",
@@ -100,7 +107,7 @@ pub(crate) async fn capture(
             .manifest
             .capabilities
             .iter()
-            .find(|c| c.capability == selection.binding.capability)
+            .find(|c| c.capability == binding.capability)
             .ok_or_else(|| {
                 Failure::invalid("The selected version does not contribute this tool")
             })?;

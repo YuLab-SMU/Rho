@@ -92,7 +92,7 @@ async fn exercise(stop: bool) {
         std::fs::write(root.join("native-science-input.json"), serde_json::to_vec(&arguments).unwrap()).unwrap();
         if !stop { std::fs::write(root.join("release-r"), "continue").unwrap(); }
         let send = uuid::Uuid::new_v4().to_string();
-        let request = json!({"binding":commands,"arguments":{"request_id":send,"command":{"kind":"send","control":control(&connected["detail"]),"draft_version":connected["detail"]["draft"]["version"]},"tools":[{"name":"execute","binding":r_binding}]}});
+        let request = json!({"binding":commands,"arguments":{"request_id":send,"command":{"kind":"send","control":control(&connected["detail"]),"draft_version":connected["detail"]["draft"]["version"]},"tools":[{"name":"execute","target":{"type":"provider","binding":r_binding}}]}});
         let running_host = host.clone();
         let running_request = request.clone();
         let running = tokio::spawn(async move { invoke(&running_host,"original-native-send","agent.native.command",1,running_request).await });

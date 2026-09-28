@@ -64,6 +64,46 @@ async fn ordinary_agent_metadata_uses_generic_host_scopes_isolated_storage_and_o
         .import(&archive)
         .unwrap();
     let host = NextHost::open_plugin_workspace(&db, &root).await.unwrap();
+    // Public metadata must cover every declared native management grant. This is
+    // read-only and occurs before any Agent backend activation or model startup.
+    for grant in &archive.revision.manifest.optional_requires {
+        let name = grant.capability.id.as_str();
+        if [
+            "host.",
+            "plugins.",
+            "windows.",
+            "views.",
+            "scenarios.",
+            "operation.",
+        ]
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+        {
+            let observed: rho_plugin_protocol::HostCapabilityContract = serde_json::from_value(
+                query(
+                    &host,
+                    "host.core_contract",
+                    json!({"capability":grant.capability}),
+                )
+                .await,
+            )
+            .unwrap();
+            assert_eq!(observed.capability, grant.capability);
+            assert!(
+                matches!(
+                    observed.kind,
+                    rho_plugin_protocol::CapabilityKind::Query
+                        | rho_plugin_protocol::CapabilityKind::Operation
+                ),
+                "{name}"
+            );
+            assert!(observed.required_scopes.is_subset(&grant.scopes), "{name}");
+            assert!(
+                grant.scopes.is_subset(&NextHost::local_context().scopes),
+                "{name}"
+            );
+        }
+    }
     let active = succeeded(&host, "activate", "plugins.activate", json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":backend_target(),"alias":"agent","configuration":{}})).await;
     let first = active.output.unwrap()["instance"]["identity"].clone();
     let key_store = binding(&host, &first, "agent.model.key.store").await;

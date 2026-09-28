@@ -1,6 +1,7 @@
-//! Captured ordinary-plugin tools. These records describe original work and do
+//! Captured native Host and ordinary-plugin tools. These records describe original work and do
 //! not grant authority to dispatch it again after a connection or process loss.
-use rho_plugin_protocol::{OperationId, PluginRequest, ProviderBinding, RequestId};
+use crate::{AgentNativeToolRequest, AgentNativeToolTarget};
+use rho_plugin_protocol::{OperationId, RequestId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -11,7 +12,7 @@ use ts_rs::TS;
 #[serde(deny_unknown_fields)]
 pub struct AgentNativeToolSelection {
     pub name: String,
-    pub binding: ProviderBinding,
+    pub target: AgentNativeToolTarget,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
@@ -22,7 +23,7 @@ pub enum AgentNativeToolKind {
 }
 
 /// Descriptions, schemas and scopes are captured from the selected immutable
-/// plugin manifest, never supplied by model tool arguments.
+/// plugin manifest or native Host contract, never supplied by model tool arguments.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct AgentNativeToolGrant {
@@ -60,7 +61,7 @@ pub struct AgentNativeToolReceipt {
     pub task_id: String,
     pub invocation: AgentNativeToolInvocation,
     pub request: RequestId,
-    pub native_request: PluginRequest,
+    pub native_request: AgentNativeToolRequest,
     pub kind: AgentNativeToolKind,
     pub phase: AgentNativeToolPhase,
     pub operation: Option<OperationId>,

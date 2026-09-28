@@ -337,6 +337,20 @@ after model stop, original causation, no duplicate execution and retained native
 reports after package removal. All sessions, projects and model keys are disposable.
 Neither this nor the framed suite establishes real-provider quality or Agent views.
 
+Native Host tool capture uses the `native_host` filters in owner/store/backend
+checks and the ordinary framed `metadata` suite. These cover fixed branches,
+model-field override refusal, explicit optional grants, foreign project/version
+rejection, normalized result correlation and read-only tools without mutation
+observation grants. Run `node scripts/test-agent-tool-grants.mjs` after manifest
+generation to compare published scientific and management declarations.
+`node scripts/test-agent-core-tools.mjs` freezes the generic Host harness before
+building an independent Agent package. Its isolated native ACP peer uses the real
+private MCP endpoint to read a chosen branch and checkpoint its source once,
+refuses another branch, observes identical retries, recovers the original journal
+record and leaves the running revision unchanged. The peer also asserts no build,
+preview or scenario application occurred. This establishes native transport and
+Host composition, not model quality or Studio's Ask Agent interface.
+
 The ordinary Agent metadata process uses `cargo test -p rho-agent-backend --test
 metadata --locked` for framed Host exchanges, original caller identity, task/draft
 CAS, explicit controller takeover, bounded concurrency, disconnect and settlement.

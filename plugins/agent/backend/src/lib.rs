@@ -11,7 +11,10 @@ mod runs;
 
 pub mod native_arguments;
 mod native_controller;
+mod native_core_grants;
 mod native_grants;
+mod native_host_result;
+mod native_host_selection;
 mod native_result;
 mod native_selection;
 mod native_tasks;

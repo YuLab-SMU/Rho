@@ -3,19 +3,67 @@
   "title": "AgentNativeToolSelection",
   "type": "object",
   "properties": {
-    "binding": {
-      "$ref": "#/$defs/ProviderBinding"
-    },
     "name": {
       "type": "string"
+    },
+    "target": {
+      "$ref": "#/$defs/AgentNativeToolTarget"
     }
   },
   "additionalProperties": false,
   "required": [
     "name",
-    "binding"
+    "target"
   ],
   "$defs": {
+    "AgentNativeToolTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "binding": {
+              "$ref": "#/$defs/ProviderBinding"
+            },
+            "type": {
+              "type": "string",
+              "const": "provider"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "binding"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "$ref": "#/$defs/CapabilityKey"
+            },
+            "fixed_arguments": {
+              "description": "Captured by the caller before Send, for example its selected branch.\nModel arguments cannot include or replace these top-level fields.",
+              "type": "object",
+              "additionalProperties": true
+            },
+            "project": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "const": "host"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "project",
+            "capability",
+            "fixed_arguments"
+          ]
+        }
+      ]
+    },
     "CapabilityKey": {
       "type": "object",
       "properties": {

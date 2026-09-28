@@ -14,6 +14,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_large_int("number");
     macro_rules! export { ($($ty:ty),+ $(,)?) => { $(<$ty>::export_all(&types)?;)+ }; }
     export!(
+        AgentNativeToolTarget,
+        AgentNativeToolRequest,
         AgentNativeToolSelection,
         AgentNativeToolGrant,
         AgentNativeToolInvocation,

@@ -44,7 +44,7 @@ pub struct NativeAction {
     pub request_id: String,
     pub command: NativeCommand,
     /// Only Send accepts explicit tool selections. Descriptors and scopes are
-    /// captured from their immutable native manifests by the containing backend.
+    /// captured from exact plugin manifests or native Host contracts by the backend.
     #[serde(default)]
     #[schemars(length(max = 16))]
     pub tools: Vec<AgentNativeToolSelection>,

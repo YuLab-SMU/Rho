@@ -5,6 +5,8 @@ mod tasks;
 pub use tasks::*;
 mod project_tasks;
 pub use project_tasks::*;
+mod native_host_tools;
+pub use native_host_tools::*;
 mod native_tools;
 pub use native_tools::*;
 

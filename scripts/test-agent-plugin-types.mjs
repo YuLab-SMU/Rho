@@ -10,13 +10,17 @@ try {
   fs.writeFileSync(path.join(directory, 'package.json'), '{"type":"module"}');
   fs.writeFileSync(path.join(directory, 'consumer.ts'), `import type {AgentHandoffCommand, AgentHandoffQueryResult, AgentHandoffReceipt, ComponentAgentStart,ComponentAgentRun,ComponentAgentEventPage,ComponentToolReceipt,ApplicationCommandRequest,ApplicationCommandReceipt,AgentModelRun,ComponentModelSettings,ComponentToolSpec,AgentTaskRequest,AgentTaskDetail,AgentTaskEventPage,ProjectAgentTaskPage,AgentControllerRef,AgentProvider,AgentClientSession,AgentNativeCapabilities,AgentUsageObservation,LocalAgent} from './sdk/index.js';
 const controller:AgentControllerRef={window_id:'window',incarnation:'incarnation'};
-import type {AgentNativeToolGrant,AgentNativeToolInvocation,AgentNativeToolReceipt,AgentNativeToolPhase} from './sdk/index.js';
-function nativeTools(grant:AgentNativeToolGrant,call:AgentNativeToolInvocation,receipt:AgentNativeToolReceipt){return [grant.selection.binding,grant.kind,call.send_request,call.tool_request,receipt.request,receipt.operation,receipt.phase,receipt.result];}
+import type {AgentNativeToolGrant,AgentNativeToolInvocation,AgentNativeToolReceipt,AgentNativeToolPhase,AgentNativeToolTarget,AgentNativeToolRequest} from './sdk/index.js';
+function nativeTools(grant:AgentNativeToolGrant,call:AgentNativeToolInvocation,receipt:AgentNativeToolReceipt){return [grant.selection.target,grant.kind,call.send_request,call.tool_request,receipt.request,receipt.operation,receipt.phase,receipt.result];}
 // @ts-expect-error Captured tool metadata contains no Host dispatch credential.
 function nativeCredential(grant:AgentNativeToolGrant){return grant.token;}
 // @ts-expect-error A resolved receipt does not imply scientific cancellation.
 const cancelledTool:AgentNativeToolPhase='cancelled';
-void [nativeTools,nativeCredential,cancelledTool];
+const hostTarget:AgentNativeToolTarget={type:'host',project:'project',capability:{id:'plugins.checkpoint',version:1},fixed_arguments:{branch:'selected'}};
+function exactHost(request:AgentNativeToolRequest){return request.type==='host'?request.capability:request.request.binding;}
+// @ts-expect-error A Host target does not impersonate a plugin instance.
+const fabricatedHost:AgentNativeToolTarget={type:'host',project:'project',capability:{id:'plugins.checkpoint',version:1},fixed_arguments:{},binding:{}};
+void [nativeTools,nativeCredential,cancelledTool,hostTarget,exactHost,fabricatedHost];
 const providers:AgentProvider[]=['codex','kimi','deepseek'];
 function session(value:AgentClientSession):AgentControllerRef{return value.window;}
 function discovery(value:LocalAgent){return [value.models,value.capabilities,value.setup_required,value.error];}

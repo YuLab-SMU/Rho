@@ -2,9 +2,9 @@
 import type { AgentNativeToolInvocation } from "./AgentNativeToolInvocation.js";
 import type { AgentNativeToolKind } from "./AgentNativeToolKind.js";
 import type { AgentNativeToolPhase } from "./AgentNativeToolPhase.js";
+import type { AgentNativeToolRequest } from "./AgentNativeToolRequest.js";
 import type { OperationId } from "./OperationId.js";
-import type { PluginRequest } from "./PluginRequest.js";
 import type { RequestId } from "./RequestId.js";
 import type { JsonValue } from "./serde_json/JsonValue.js";
 
-export type AgentNativeToolReceipt = { task_id: string, invocation: AgentNativeToolInvocation, request: RequestId, native_request: PluginRequest, kind: AgentNativeToolKind, phase: AgentNativeToolPhase, operation: OperationId | null, result: JsonValue | null, failed: boolean, error: string | null, created_at_ms: number, updated_at_ms: number, };
+export type AgentNativeToolReceipt = { task_id: string, invocation: AgentNativeToolInvocation, request: RequestId, native_request: AgentNativeToolRequest, kind: AgentNativeToolKind, phase: AgentNativeToolPhase, operation: OperationId | null, result: JsonValue | null, failed: boolean, error: string | null, created_at_ms: number, updated_at_ms: number, };

@@ -18,7 +18,7 @@ const save = value => {
   fs.writeFileSync(temporary, JSON.stringify(value));
   fs.renameSync(temporary, path.join(cwd, 'native-science-evidence.json'));
 };
-async function rpc(method, params, id = randomUUID()) {
+async function rpc(method, params, id = randomUUID(), expectedErrorCode) {
   const response = await fetch(endpoint, {method:'POST', headers:{...headers, 'content-type':'application/json', accept:'application/json, text/event-stream', 'mcp-protocol-version':'2025-06-18', ...(mcpSession ? {'mcp-session-id':mcpSession} : {})}, body:JSON.stringify({jsonrpc:'2.0', ...(id === null ? {} : {id}), method, params}), signal:AbortSignal.timeout(60000)});
   assert.ok(response.ok);
   mcpSession ??= response.headers.get('mcp-session-id');
@@ -37,6 +37,11 @@ async function rpc(method, params, id = randomUUID()) {
     value = messages.find(item => item.id === id);
   } else if (text.trim()) value = JSON.parse(text);
   assert.equal(value?.id, id, `${method}: missing correlated MCP response (HTTP ${response.status})`);
+  if (expectedErrorCode !== undefined) {
+    assert.equal(value.error?.code, expectedErrorCode, `${method}: expected a protocol refusal`);
+    assert.equal(value.result, undefined);
+    return value.error;
+  }
   assert.equal(value.error, undefined, `${method}: MCP returned an error`);
   return value.result;
 }
@@ -52,6 +57,12 @@ async function prompt(message) {
     await rpc('notifications/initialized', {}, null);
   }
   const catalog = await rpc('tools/call', {name:'rho_tools', arguments:{send_request:sendRequest}});
+  if (fs.existsSync(path.join(cwd, 'native-core-input.json'))) {
+    await require('./agent-core-tools.cjs')({cwd, sendRequest, catalog, rpc, save, session, prompts});
+    result(id, {stopReason:'end_turn'});
+    pending = null;
+    return;
+  }
   assert.equal(catalog.structuredContent.tools.length, 1);
   assert.equal(catalog.structuredContent.tools[0].selection.name, 'execute');
   const input = JSON.parse(fs.readFileSync(path.join(cwd, 'native-science-input.json'), 'utf8'));

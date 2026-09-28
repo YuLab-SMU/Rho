@@ -31,7 +31,7 @@ pub(crate) async fn query(
     }
     if tool.kind != AgentNativeToolKind::Operation {
         return Err(Failure::invalid(
-            "This native tool is not a scientific Operation",
+            "This native tool is not a native Operation",
         ));
     }
     for name in ["plugins.delegated_operation", "operation.get"] {
@@ -76,7 +76,7 @@ pub(crate) async fn query(
     };
     if tool.operation.as_ref().is_some_and(|saved| saved != &id) {
         return Err(Failure::invalid(
-            "Original tool and scientific journal disagree",
+            "Original tool and native journal disagree",
         ));
     }
     let data = native_selection::query(
@@ -86,19 +86,31 @@ pub(crate) async fn query(
         json!({"operation_id":id}),
     )
     .await?;
-    let (found, result) = crate::native_result::operation_result(
-        &metadata.scope.project,
-        &capture.origin.binding.provider.instance,
-        &capture.origin.operation,
-        &tool.native_request,
-        &data["record"],
-    )
+    let (found, result) = match &tool.native_request {
+        AgentNativeToolRequest::Provider { request } => crate::native_result::operation_result(
+            &metadata.scope.project,
+            &capture.origin.binding.provider.instance,
+            &capture.origin.operation,
+            request,
+            &data["record"],
+        ),
+        AgentNativeToolRequest::Host { capability, .. } => {
+            crate::native_host_result::operation_result(
+                &metadata.scope.project,
+                &capture.origin.binding.provider.instance,
+                &capture.origin.operation,
+                capability,
+                &id,
+                &data["record"],
+            )
+        }
+    }
     .map_err(|_| {
-        Failure::invalid("Original scientific record differs from the retained native tool")
+        Failure::invalid("Original native record differs from the retained native tool")
     })?;
     if found != id {
         return Err(Failure::invalid(
-            "Scientific lookup returned another original identity",
+            "Original-operation lookup returned another original identity",
         ));
     }
     Ok(

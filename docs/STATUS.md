@@ -43,10 +43,10 @@ renderer reconnection. Cross-window takeover checks the original view's actual
 presence and freshly validates the requesting caller before owner admission.
 Unknown, attached or closing controllers cannot be treated as revoked.
 
-Each native Send captures explicit Query/Operation provider bindings, immutable
-manifest schemas/descriptions and original scopes. The package declares optional
-grants for 83 exact public R, Files, Process, Remote, Environment and Editor
-contracts, excluding Control/Runtime. Activation selects grants; Send separately
+Each native Send captures explicit Query/Operation targets, immutable provider
+manifests or native Host contracts, and original scopes. The package declares
+optional grants for 83 exact public R, Files, Process, Remote, Environment and
+Editor contracts plus 31 native management contracts, excluding Control/Runtime. Activation selects grants; Send separately
 selects tools. Semantic tool UUIDs and complete requests are durably admitted before
 dispatch. Later turns, Stop and dropped observers cannot redirect or replay them.
 Query results retain partial/cached status; unverified or oversized Operation
@@ -84,22 +84,32 @@ loopback model fixtures establishes real-provider quality. Existing user Hosts a
 R sessions have not been replaced, and no installation, publication or full-workspace
 audit ran.
 
-Native core management/Studio tools are the current integration focus. The new
-`host.core_contract` metadata port is implemented; its registry test and all 19
-public protocol cases and all six affected Host discovery/workspace cases pass.
-The first discovery run and diagnostic repeat exposed an obsolete empty-module
-expectation: the existing original-commit reconciliation port remains discoverable
-without granting execution. The corrected test asserts the exact four visible ports,
-the recovery-only module and absent scientific targets/observations. Permission
-rules are unchanged; both failed runs remain in the versioned core-contract logs.
-Public SDK generation/independent consumption, client build/consistency and
-architecture, plugin-boundary and governance checks also pass. Results are in
-`host-core-contract-results-v1.json` and `host-core-contract-results-v2.json`.
-Agent Host-target/fixed-argument/result-correlation
-modules are drafted but not connected or tested. Core tool dispatch, exact-branch
-Studio assistance, full-size attachments, contributed context, ordinary Agent views,
-component input/continuation, actual generic Host restart and removal of fixed
-composition/default delivery remain unfinished.
+Native core management tools now compose through the same original Send. Explicit
+Host targets freeze project, exact capability and caller-chosen fields, including
+the development branch. Model input cannot replace those fields. Native owners
+still validate the complete request and compare-and-swap conditions; Agent verifies
+normalized results against the original delegated Operation. The real private-MCP
+checkpoint case passes against an independent Agent package and frozen generic
+Host: one source checkpoint, unchanged unselected branch and running revision,
+original-record recovery, and no build, preview or scenario application.
+
+The core metadata port's registry case, 19 public protocol cases and six affected
+Host discovery/workspace cases pass, along with public SDK/client/static checks
+(`host-core-contract-results-v1.json` and `v2.json`). Current Agent checks pass 20
+owner, 32 store, one result-correlation unit and 38 root/independent framed cases;
+public generation, independent TypeScript consumption, grant declarations and
+client build/check also pass (`agent-core-results-v1.json` and `v2.json`). Four
+ordinary Host cases pass. Combined package/harness evidence is in
+`agent-core-combined-v1.json` and `v2.json`; source parity covers 322 files and the
+324-entry inventory in `agent-core-source-parity-v1.json`. The first checkpoint
+fixture incorrectly expected a tool-result error for a protocol-level refusal.
+Its corrected correlated invalid-params assertion passes with unchanged Host and
+Agent binaries; the failed run remains recorded. Both component and native real-R
+Agent cases also pass with the same frozen Host and independent Agent/R packages,
+including normal execution, Stop, original result retention and no replay.
+Exact-branch Studio assistance, full-size attachments, contributed context, ordinary
+Agent views, component input/continuation, actual generic Host restart and removal
+of fixed composition/default delivery remain unfinished.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,
@@ -1761,8 +1771,9 @@ continuation and optional real-model/alternate-R cases remain unexecuted.
 The ordinary Agent backend is loadable and has independent package/Host acceptance
 for metadata, credentials, model runs, native task commands and scientific tool
 dispatch with retained child settlement under each original Send. Complete the
-core management tool selection, full-size attachment resources
-and public context/document composition, then migrate Agent views.
+full-size attachment resources and public context/document composition, then
+migrate Agent views. Core management tool dispatch and exact captured-branch
+checkpointing now have independent-package/frozen-Host acceptance.
 Same-instance recovery across an actual Host restart still
 needs acceptance. Studio's
 Agent workflow must capture an exact development branch and preserve the separate
