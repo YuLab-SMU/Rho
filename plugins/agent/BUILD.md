@@ -93,7 +93,10 @@ Real R and provider quality require separate acceptance.
 runs these framed cases. `node scripts/test-agent-plugin.mjs` freezes the generic
 Host harness before building and loading the external package, then exercises
 metadata, key Controls, diagnostics and ordinary model-task lifetime through the
-same native ports. All projects, instance storage and keys are disposable.
+same native ports. At a milestone, run only the latter: it also runs the framed
+cases against its single independent build (`--evidence <file>` records stages and
+hashes; `--skip-framed` when a current framed result already covers the source).
+All projects, instance storage and keys are disposable.
 
 `RHO_ARK=/absolute/existing/ark RHO_R_HOME=/absolute/existing/R/home node
 scripts/test-agent-plugin-real-r.mjs` freezes a generic plugin-only Host harness
