@@ -4,10 +4,10 @@ use crate::{
     arguments::*,
     metadata::{Failure, Metadata, decode, encoded, now},
 };
+use rho_agent_api::ComponentModelTestState;
 use rho_agent_api::component::{ComponentModelDiagnostic, ComponentModelTestRequest};
-use rho_agent_api::{ComponentCredentialRef, ComponentModelTestState};
 use rho_agent_engine::RigAgentEngine;
-use rho_agent_owner::{ComponentModelKey, component::ComponentTaskError};
+use rho_agent_owner::component::ComponentTaskError;
 use rho_plugin_sdk::protocol::{PluginCall, PluginViewCaller};
 use serde_json::Value;
 use std::sync::Mutex;
@@ -174,23 +174,7 @@ impl Diagnostics {
                 .connection
                 .as_ref()
                 .ok_or_else(|| Failure::invalid("Configure a model before testing"))?;
-            let key = match &connection.credential {
-                ComponentCredentialRef::LocalFile { key_id } => metadata
-                    .credentials
-                    .key(&metadata.scope, key_id)
-                    .map_err(ComponentTaskError::from)?,
-                ComponentCredentialRef::Environment { name } => {
-                    ComponentModelKey::new(std::env::var(name).map_err(|_| {
-                        Failure::invalid("The configured model credential is unavailable")
-                    })?)
-                    .map_err(ComponentTaskError::from)?
-                }
-                ComponentCredentialRef::Session { .. } => {
-                    return Err(Failure::invalid(
-                        "The configured model credential is unavailable",
-                    ));
-                }
-            };
+            let key = metadata.model_key(&connection.credential)?;
             let (diagnostic, repeated) =
                 metadata
                     .owner

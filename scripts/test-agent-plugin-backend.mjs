@@ -15,5 +15,5 @@ try {
   execFileSync(env.RHO_PLUGIN_CARGO, ['test', '-p', 'rho-agent-backend', '--test', 'metadata', '--locked', '--offline'], {
     cwd: source, env, stdio: 'inherit',
   });
-  console.log('Independent Agent backend built with public dependencies and passed its framed metadata, Control and synthetic model diagnostic fixtures.');
+  console.log('Independent Agent backend built with public dependencies and passed its framed metadata, Control and model diagnostic/task fixtures.');
 } finally { fs.rmSync(directory, {recursive: true, force: true}); }

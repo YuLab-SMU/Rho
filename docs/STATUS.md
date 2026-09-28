@@ -207,11 +207,32 @@ settlement, caller/version stop checks, disabling and interrupted reopen. A seco
 generic Host case exercises the independently packaged process and original
 Operation lifetime. The lock update, all 13 framed cases and manifest generation
 now pass, including the three new diagnostic cases. Independent packaging and
-the two generic Host cases remain in the serial
-`target/plugin-refactor/agent-model-diagnostic-verify.py`; they are not yet passes.
+all 13 framed cases, both generic Host cases and architecture, boundary and
+governance checks also pass in the serial
+`target/plugin-refactor/agent-model-diagnostic-verify.py`. Exact results remain in
+`target/plugin-refactor/agent-model-diagnostic-results-v1.json`. That independent
+package and Host harness were frozen before the following model-task changes.
 The earlier metadata/Control evidence remains its own baseline.
 
-This remains incomplete Agent migration. Ordinary model-task execution and native
+Source now also composes ordinary submitted-text model runs using the same task
+owner, store, event log and Rig driver. Admission atomically captures its original
+native parent Operation, request and exact provider binding; later writes cannot
+replace or remove them. Existing tool receipt request IDs remain the intended
+native reverse-call identities, without another database. Duplicate task requests
+observe the original parent and do not read keys or restart models. Stop, disable
+and explicit takeover fence live loops; observation/reopen preserves unfinished
+records without replay. All seven focused owner/store native-identity cases pass,
+including four new parent-admission/storage cases. All 17 framed backend cases
+also pass, including the four new model-task cases for actual loopback Rig output,
+retained native parents/events, stop/disable/takeover, refusal of uncaptured grants,
+missing-key admission and observation-only reopen. Manifest generation also passes
+with all 18 capabilities. Independent owner/store/schema and backend builds, the
+temporary core boundary regression and generic Host acceptance remain in the serial
+`target/plugin-refactor/agent-model-run-verify.py`; pending stages are not passes.
+This initial run input carries submitted text only, without scientific tools,
+context capture, attachments or continuation.
+
+This remains incomplete Agent migration. Scientific model-tool execution and native
 Agent transport composition, context providers, Agent views, Studio Agent
 assistance and final composition/default delivery remain active work. Synthetic
 diagnostics do not establish those features or real-provider quality.

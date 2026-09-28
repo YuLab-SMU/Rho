@@ -7,6 +7,8 @@ use rho_agent_owner::component::ComponentTaskError as ApplicationError;
 use rho_agent_owner::component::*;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use serde::{Serialize, de::DeserializeOwned};
+#[cfg(test)]
+mod native_tests;
 pub(crate) mod payload_budget;
 
 fn error(error: impl ToString) -> ApplicationError {
@@ -415,6 +417,9 @@ impl ComponentAgentRepository for AgentStore {
             }
         }
         if let Some(run) = write.run {
+            if let Some(origin) = &run.native_origin {
+                origin.validate()?;
+            }
             if encode(run)?.len() > MAX_COMPONENT_RUN_RECORD_BYTES {
                 return Err(ApplicationError::Budget("Run payload is too large".into()));
             }
@@ -425,7 +430,8 @@ impl ComponentAgentRepository for AgentStore {
             let previous = previous.map(decode::<StoredComponentRun>).transpose()?;
             if let Some(previous) = &previous
                 && (previous.request_digest != run.request_digest
-                    || previous.run.request.request_id != run.run.request.request_id)
+                    || previous.run.request.request_id != run.run.request.request_id
+                    || previous.native_origin != run.native_origin)
             {
                 return Err(ApplicationError::RequestConflict);
             }

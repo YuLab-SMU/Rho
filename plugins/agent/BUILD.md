@@ -32,11 +32,24 @@ and explicit stopping. Disabling settings also fences live diagnostics. Neither
 reopen nor repeated requests restart an original test. These diagnostics have no
 scientific tools or project context.
 
-Ordinary model-task execution, native Agent transports, scientific work and Agent
-views remain implementation work. They are not falsely registered as capabilities.
+`agent.model.run` executes explicit submitted text with the existing task owner,
+model engine, retained native admission and task events. Its original-request/run
+queries and event pages are read-only. Explicit stop, disable and controller
+takeover fence the same live loop. Repeated requests and reopen never restart it.
+The current run input has no native tools, scientific context, attachments or
+continuation; those and native Agent transports and views remain implementation
+work.
 Importing the package does not activate it. Installing or activating a development
 package is an explicit plugin lifecycle operation.
 
 Run `cargo test -p rho-agent-backend --test metadata --locked --offline` for public
 framed transport, calling-origin, metadata version, controller and restart checks.
-These are local synthetic Host exchanges, not model or scientific acceptance.
+The fixtures use local synthetic Host exchanges and a loopback HTTP/SSE model,
+never real user keys or remote models. They cover model/task lifetime, original
+native identity, text, stopping, takeover and interrupted reopen; scientific-tool
+execution and provider quality require separate acceptance.
+`node scripts/test-agent-plugin-backend.mjs` independently builds the package and
+runs these framed cases. `node scripts/test-agent-plugin.mjs` freezes the generic
+Host harness before building and loading the external package, then exercises
+metadata, key Controls, diagnostics and ordinary model-task lifetime through the
+same native ports. All projects, instance storage and keys are disposable.

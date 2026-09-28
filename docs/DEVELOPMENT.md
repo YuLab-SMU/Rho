@@ -258,15 +258,23 @@ fabricated Control settlement.
 builds the source outside the checkout, checks public dependency containment and
 repeats those transport fixtures. `node scripts/test-agent-plugin.mjs` first builds
 the generic Host harness, then loads an independently built package without
-changing that harness. Its explicitly selected ignored case checks scopes, two
+changing that harness. Its explicitly selected ignored cases check scopes, two
 instances, durable request deduplication, key-Control journal exclusion and retained
 journal reads after removal.
 The synthetic model fixtures exercise the production Rig driver against a local
 HTTP/SSE provider, retain the original Operation until completion, reject stale or
 foreign stop requests, and verify disable/disconnect behavior without replay.
+The model-task fixtures additionally retain the original native admission,
+stream Unicode text into existing task events, project live task status and fence
+the original loop on stop/disable/takeover. Duplicate/reopened task requests are
+observations even after removing the fixture key file. The independent generic
+Host case exercises the ordinary task's actual retained process and journal.
 They use temporary keys and no real provider or user session. Scientific tools,
-ordinary model tasks, native Agent connections and Agent view acceptance remain
-separate checks.
+context/attachment capture, continuation, native Agent connections and Agent view
+acceptance remain separate checks. `cargo test -p rho-agent-owner -p
+rho-agent-store --lib native_ --locked` focuses on atomic parent identity,
+original-request deduplication, late native receipts, readonly reopen, scoped
+visibility and refusal to replace/remove a retained parent in a later write.
 
 Independent assemblies include the public plugin protocol and R media API, with
 all source/dependency paths checked to stay inside the assembly. Agent-owned storage

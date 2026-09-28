@@ -100,3 +100,31 @@ pub struct StopModelDiagnostic {
     pub request_id: String,
     pub expected_version: u64,
 }
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RunModel {
+    #[schemars(length(min = 1, max = 160))]
+    pub request_id: String,
+    #[schemars(length(min = 1, max = 160))]
+    pub conversation_id: String,
+    pub conversation_version: u64,
+    pub model_settings_version: u64,
+    #[schemars(length(min = 1, max = 32768))]
+    pub text: String,
+}
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ModelRun {
+    #[schemars(length(min = 1, max = 160))]
+    pub run_id: String,
+}
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ModelEvents {
+    #[schemars(length(min = 1, max = 160))]
+    pub run_id: String,
+    pub after: u64,
+    #[schemars(range(min = 1, max = 100))]
+    pub limit: u32,
+}

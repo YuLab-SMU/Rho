@@ -636,3 +636,115 @@ fn component_owner_permission_receipt_remains_bound_to_original_action() {
     assert_eq!(original.receipt.phase, ComponentToolPhase::Resolved);
     assert!(original.receipt.operation_id.is_none());
 }
+
+fn native_origin() -> ComponentNativeRunOrigin {
+    serde_json::from_value(serde_json::json!({
+        "operation":"original-operation", "request":"original-request",
+        "binding":{"capability":{"id":"agent.model.run","version":1},
+            "provider":{"instance":"agent-one","plugin":"org.rho.agent",
+                "revision":format!("sha256:{}", "a".repeat(64)),"artifact":format!("sha256:{}", "b".repeat(64))},
+            "project":"project-one","target":null}
+    })).unwrap()
+}
+
+#[test]
+fn native_run_retry_observes_original_parent_without_reparenting_or_reclaiming() {
+    let f = Fixture::new();
+    let request = f.request();
+    let origin = native_origin();
+    let first = f
+        .owner
+        .start_native(&f.actor, request.clone(), origin.clone(), 3)
+        .unwrap();
+    let mut retry_origin = origin.clone();
+    retry_origin.operation = OperationId::new("retry-operation").unwrap();
+    retry_origin.request = RequestId::new("retry-request").unwrap();
+    let repeat = f
+        .owner
+        .start_native(&f.actor, request.clone(), retry_origin, 4)
+        .unwrap();
+    assert!(repeat.repeated);
+    assert_eq!(repeat.run.run.run_id, first.run.run.run_id);
+    assert_eq!(repeat.run.native_origin, Some(origin.clone()));
+    let mut changed = origin.clone();
+    changed.binding.provider.instance =
+        serde_json::from_value(serde_json::json!("agent-two")).unwrap();
+    assert!(matches!(
+        f.owner.start_native(&f.actor, request.clone(), changed, 5),
+        Err(ApplicationError::RequestConflict)
+    ));
+    assert!(matches!(
+        f.owner.start(&f.actor, request.clone(), 5),
+        Err(ApplicationError::RequestConflict)
+    ));
+    let mut altered = request.clone();
+    altered.text.push('!');
+    assert!(matches!(
+        f.owner.start_native(&f.actor, altered, origin.clone(), 5),
+        Err(ApplicationError::RequestConflict)
+    ));
+    let restarted = ComponentAgentOwner::new(f.store.clone(), "replacement".into());
+    let repeated = restarted
+        .start_native(&f.actor, request.clone(), origin.clone(), 5)
+        .unwrap();
+    assert!(repeated.repeated);
+    assert_eq!(
+        restarted.observed_run(repeated.run).state,
+        ComponentAgentRunState::Interrupted
+    );
+    assert!(
+        restarted
+            .claim(f.actor.scope(), &first.run.run.run_id, 5)
+            .is_err()
+    );
+    f.controller.0.store(true, Ordering::SeqCst);
+    assert!(matches!(
+        f.owner.start_native(&f.actor, request, origin, 6),
+        Err(ApplicationError::IncarnationChanged)
+    ));
+}
+
+#[test]
+fn native_run_admission_failure_leaves_no_parent_or_active_task() {
+    let f = Fixture::new();
+    let request = f.request();
+    let origin = native_origin();
+    let before = f
+        .store
+        .component_conversation(f.actor.scope(), "task")
+        .unwrap()
+        .unwrap();
+    let mut invalid_origin = origin.clone();
+    invalid_origin.binding.target = Some("caller-selected".into());
+    assert!(
+        f.owner
+            .start_native(&f.actor, request.clone(), invalid_origin, 3)
+            .is_err()
+    );
+    f.store.fail.store(true, Ordering::SeqCst);
+    assert!(matches!(
+        f.owner
+            .start_native(&f.actor, request.clone(), origin.clone(), 3),
+        Err(ApplicationError::Storage(_))
+    ));
+    assert!(
+        f.store
+            .component_run_by_request(f.actor.scope(), &request.request_id)
+            .unwrap()
+            .is_none()
+    );
+    let after = f
+        .store
+        .component_conversation(f.actor.scope(), "task")
+        .unwrap()
+        .unwrap();
+    assert_eq!(after.version, before.version);
+    assert!(after.active_run_id.is_none());
+    f.store.fail.store(false, Ordering::SeqCst);
+    let admitted = f
+        .owner
+        .start_native(&f.actor, request, origin.clone(), 4)
+        .unwrap();
+    assert!(!admitted.repeated);
+    assert_eq!(admitted.run.native_origin, Some(origin));
+}

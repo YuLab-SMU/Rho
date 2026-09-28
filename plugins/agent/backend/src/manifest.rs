@@ -2,7 +2,10 @@ use crate::arguments::*;
 use rho_agent_api::{
     ComponentCredentialRef, ComponentCredentialStatus, ComponentModelSettings,
     ProjectAgentTaskPage,
-    component::{ComponentAgentConversation, ComponentModelDiagnostic},
+    component::{
+        ComponentAgentConversation, ComponentAgentEventPage, ComponentAgentRun,
+        ComponentModelDiagnostic,
+    },
 };
 use rho_plugin_sdk::protocol::*;
 use schemars::schema_for;
@@ -24,6 +27,8 @@ pub fn is_mutation(id: &str) -> bool {
             | "agent.model.configure"
             | "agent.model.test"
             | "agent.model.test.stop"
+            | "agent.model.run"
+            | "agent.model.run.stop"
     )
 }
 pub fn kind(id: &str) -> CapabilityKind {
@@ -48,7 +53,11 @@ fn capability(
     CapabilityContribution {
         capability: key(id), kind,
         title: title.into(),
-        description: if id == "agent.model.test" {
+        description: if id == "agent.model.run" {
+            "Run the submitted text using captured model settings and the original native controller. Retains the native Operation until the model ends and records text and usage in its original task. This composition has no scientific context, native tools or attachments. Identical original requests only observe the existing run."
+        } else if id == "agent.model.run.stop" {
+            "Request stopping the original model task under its current controller. Original execution remains retained until the model loop ends; a stop request is not proof of completion."
+        } else if id == "agent.model.test" {
             "Explicitly run a bounded synthetic model test with the captured settings and scoped key. Retains the original Operation until completion; it has no project context or scientific tools. Repeated original requests only observe their retained diagnostic."
         } else if id == "agent.model.test.stop" {
             "Request that the original live model diagnostic stop, using its native controller and expected version. The original Operation remains active until the model test settles."
@@ -64,7 +73,7 @@ fn capability(
         input_schema: input, output_schema: output, examples: vec![example],
         recovery_schema: json!({"type":"object","additionalProperties":false,"properties":{"code":{"type":"string"}},"required":["code"]}),
         required_scopes: if operation || control { ["application.control".into(), "plugins.read".into()].into() } else { ["application.read".into()].into() },
-        effects: if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
+        effects: if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
         cancellation: CancellationSupport::Unsupported, preflight: None,
     }
 }
@@ -75,7 +84,8 @@ pub fn manifest() -> PluginManifest {
         id: PluginId::new("org.rho.agent").unwrap(),
         name: "Agent".into(),
         version: "0.1.0".into(),
-        description: "Agent tasks, scoped model settings and explicit synthetic diagnostics".into(),
+        description: "Agent tasks, explicit model execution, scoped settings and diagnostics"
+            .into(),
         license: "AGPL-3.0-only".into(),
         source: SourceDeclaration {
             files: [
@@ -96,6 +106,41 @@ pub fn manifest() -> PluginManifest {
         }],
         optional_requires: vec![],
         capabilities: vec![
+            capability(
+                "agent.model.run",
+                "Run a model task",
+                schema_for!(RunModel).to_value(),
+                schema_for!(ComponentAgentRun).to_value(),
+                json!({"request_id":"model-run-example","conversation_id":"task-example","conversation_version":1,"model_settings_version":1,"text":"Explain this analysis approach"}),
+            ),
+            capability(
+                "agent.model.run.stop",
+                "Stop an original model task",
+                schema_for!(ModelRun).to_value(),
+                schema_for!(ComponentAgentRun).to_value(),
+                json!({"run_id":"run-example"}),
+            ),
+            capability(
+                "agent.model.run.get",
+                "Read an original model task run",
+                schema_for!(ModelRun).to_value(),
+                schema_for!(ComponentAgentRun).to_value(),
+                json!({"run_id":"run-example"}),
+            ),
+            capability(
+                "agent.model.run.request",
+                "Find a model task by its original request",
+                schema_for!(CredentialRequest).to_value(),
+                schema_for!(ComponentAgentRun).to_value(),
+                json!({"request_id":"model-run-example"}),
+            ),
+            capability(
+                "agent.model.run.events",
+                "Read original model task events",
+                schema_for!(ModelEvents).to_value(),
+                schema_for!(ComponentAgentEventPage).to_value(),
+                json!({"run_id":"run-example","after":0,"limit":50}),
+            ),
             capability(
                 "agent.model.test",
                 "Test the configured model",

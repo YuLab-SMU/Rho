@@ -191,10 +191,10 @@ impl Fixture {
 }
 
 #[test]
-fn manifest_contains_only_public_bounded_metadata_capabilities() {
+fn manifest_contains_public_bounded_agent_capabilities() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 13);
+    assert_eq!(manifest.capabilities.len(), 18);
     assert_eq!(
         manifest.requires[0].capability,
         manifest::key("views.caller")
@@ -973,7 +973,18 @@ async fn synthetic_completion(
         )
     };
     let mut sse = chunk(json!({"role":"assistant"}), Value::Null);
-    if index == 0 {
+    if body["tools"].as_array().is_none_or(Vec::is_empty) {
+        assert!(
+            body["messages"]
+                .to_string()
+                .contains("Explain this analysis")
+        );
+        sse.push_str(&chunk(
+            json!({"content":"Fixture model answer 中文"}),
+            Value::Null,
+        ));
+        sse.push_str(&chunk(json!({}), json!("stop")));
+    } else if index == 0 {
         assert_eq!(body["tools"].as_array().unwrap().len(), 1);
         assert_eq!(body["tools"][0]["function"]["name"], "component_verify");
         sse.push_str(&chunk(
@@ -996,6 +1007,9 @@ async fn synthetic_completion(
     sse.push_str("data: [DONE]\n\n");
     ([("content-type", "text/event-stream")], sse)
 }
+
+#[path = "support/model_runs.rs"]
+mod model_runs;
 impl Fixture {
     async fn model_settings(&mut self, model: &SyntheticModel) -> Value {
         let reverse = self

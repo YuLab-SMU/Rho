@@ -365,12 +365,23 @@ async fn ordinary_agent_metadata_uses_generic_host_scopes_isolated_storage_and_o
 #[tokio::test]
 #[ignore = "requires an independently built package; run scripts/test-agent-plugin.mjs"]
 async fn ordinary_agent_retains_model_test_operation_until_explicit_stop_and_never_replays() {
+    assert_model_retention(false).await;
+}
+
+#[tokio::test]
+#[ignore = "requires an independently built package; run scripts/test-agent-plugin.mjs"]
+async fn ordinary_agent_retains_model_task_operation_and_stops_only_its_original_loop() {
+    assert_model_retention(true).await;
+}
+
+async fn assert_model_retention(model_task: bool) {
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     };
     #[derive(Clone)]
     struct Provider {
+        model_task: bool,
         entered: Arc<tokio::sync::Notify>,
         count: Arc<AtomicUsize>,
     }
@@ -383,13 +394,23 @@ async fn ordinary_agent_retains_model_test_operation_until_explicit_stop_and_nev
             headers["authorization"],
             "Bearer native-diagnostic-fixture-key"
         );
-        assert_eq!(body["tools"].as_array().unwrap().len(), 1);
-        assert_eq!(body["tools"][0]["function"]["name"], "component_verify");
+        if provider.model_task {
+            assert!(body["tools"].as_array().is_none_or(Vec::is_empty));
+            assert!(
+                body["messages"]
+                    .to_string()
+                    .contains("Explain this analysis")
+            );
+        } else {
+            assert_eq!(body["tools"].as_array().unwrap().len(), 1);
+            assert_eq!(body["tools"][0]["function"]["name"], "component_verify");
+        }
         provider.count.fetch_add(1, Ordering::SeqCst);
         provider.entered.notify_one();
         std::future::pending().await
     }
     let provider = Provider {
+        model_task,
         entered: Arc::default(),
         count: Arc::default(),
     };
@@ -422,16 +443,30 @@ async fn ordinary_agent_retains_model_test_operation_until_explicit_stop_and_nev
     succeeded(&host, "configure", "agent.model.configure", json!({"binding":configure,"arguments":{
         "version":0,"enabled":true,"connection":{"protocol":"openai_completions","base_url":url,"model":"fixture","credential":key}
     }})).await;
-    let test = binding(&host, &first, "agent.model.test").await;
-    let diagnostic = binding(&host, &first, "agent.model.diagnostic").await;
-    let stop = binding(&host, &first, "agent.model.test.stop").await;
-    let request = json!({"binding":test,"arguments":{"request_id":"original-diagnostic","model_settings_version":1,"kind":"connection"}});
-    let native = invoke(
-        &host,
-        "original-native-test",
-        "agent.model.test",
-        request.clone(),
-    );
+    let (run_cap, read_cap, stop_cap, arguments, query_arguments) = if model_task {
+        let create = binding(&host, &first, "agent.model.create").await;
+        let task = succeeded(&host, "create-task", "agent.model.create", json!({"binding":create,"arguments":{"conversation_id":"model-task","profile":"project"}})).await.output.unwrap();
+        (
+            "agent.model.run",
+            "agent.model.run.request",
+            "agent.model.run.stop",
+            json!({"request_id":"original-model-task","conversation_id":"model-task","conversation_version":task["version"],"model_settings_version":1,"text":"Explain this analysis"}),
+            json!({"request_id":"original-model-task"}),
+        )
+    } else {
+        (
+            "agent.model.test",
+            "agent.model.diagnostic",
+            "agent.model.test.stop",
+            json!({"request_id":"original-diagnostic","model_settings_version":1,"kind":"connection"}),
+            json!({"request_id":"original-diagnostic"}),
+        )
+    };
+    let test = binding(&host, &first, run_cap).await;
+    let diagnostic = binding(&host, &first, read_cap).await;
+    let stop = binding(&host, &first, stop_cap).await;
+    let request = json!({"binding":test,"arguments":arguments});
+    let native = invoke(&host, "original-native-test", run_cap, request.clone());
     let inspect_and_stop = async {
         tokio::time::timeout(
             std::time::Duration::from_secs(30),
@@ -441,14 +476,25 @@ async fn ordinary_agent_retains_model_test_operation_until_explicit_stop_and_nev
         .unwrap();
         let observed = query(
             &host,
-            "agent.model.diagnostic",
-            json!({"binding":diagnostic,"arguments":{"request_id":"original-diagnostic"}}),
+            read_cap,
+            json!({"binding":diagnostic,"arguments":query_arguments}),
         )
         .await;
         assert_eq!(observed["state"], "running");
         let instance = query(&host, "plugins.instance", json!({"instance":first})).await;
         assert!(instance["retained_calls"].as_u64().unwrap() >= 1);
-        succeeded(&host, "stop-original", "agent.model.test.stop", json!({"binding":stop,"arguments":{"request_id":"original-diagnostic","expected_version":observed["version"]}})).await;
+        let stop_arguments = if model_task {
+            json!({"run_id":observed["run_id"]})
+        } else {
+            json!({"request_id":"original-diagnostic","expected_version":observed["version"]})
+        };
+        succeeded(
+            &host,
+            "stop-original",
+            stop_cap,
+            json!({"binding":stop,"arguments":stop_arguments}),
+        )
+        .await;
     };
     let (original, ()) = tokio::time::timeout(std::time::Duration::from_secs(45), async {
         tokio::join!(native, inspect_and_stop)
@@ -456,9 +502,16 @@ async fn ordinary_agent_retains_model_test_operation_until_explicit_stop_and_nev
     .await
     .unwrap();
     assert_eq!(original.status, OperationStatus::Succeeded, "{original:?}");
-    assert_eq!(original.output.as_ref().unwrap()["state"], "interrupted");
-    let repeated = succeeded(&host, "new-native-observation", "agent.model.test", request).await;
-    assert_eq!(repeated.output.as_ref().unwrap()["state"], "interrupted");
+    let expected_state = if model_task { "stopped" } else { "interrupted" };
+    assert_eq!(original.output.as_ref().unwrap()["state"], expected_state);
+    let repeated = succeeded(&host, "new-native-observation", run_cap, request).await;
+    assert_eq!(repeated.output.as_ref().unwrap()["state"], expected_state);
+    if model_task {
+        assert_eq!(
+            original.output.as_ref().unwrap()["run_id"],
+            repeated.output.as_ref().unwrap()["run_id"]
+        );
+    }
     assert_eq!(provider.count.load(Ordering::SeqCst), 1);
     assert!(
         !serde_json::to_string(

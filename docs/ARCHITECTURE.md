@@ -612,6 +612,19 @@ owner's explicit versioned takeover. A result candidate retains its original
 Operation until Host settlement. This metadata path does not start model, native
 Agent or scientific work and never opens the core journal.
 
+Explicit ordinary model runs use that same owner/store plus the public Rig engine.
+The containing backend captures the original native Operation, request and exact
+provider binding in the run's admission transaction. Those fields are immutable
+on later writes. An identical task request from a later admission can observe the
+original run; it cannot reparent, reclaim or restart it. Native parent identities
+never come from model arguments. Tool intents already persist a unique request ID
+before dispatch, which is the identity for original reverse-call observation;
+there is no second dispatch database. The parent remains active through the model
+loop and then retains its result candidate until native settlement. Stop/disable
+and explicit takeover fence the original loop. Reads project interrupted ownership
+without changing stored state or contacting a model. The current submitted-text
+composition has no scientific tools, captured context, attachments or continuation.
+
 `views.caller` exposes only the original native view/window/connection identity
 captured at authenticated ingress. Backend delegation retains that private capture;
 neither public RPC arguments nor selectors can supply or replace it. Non-view

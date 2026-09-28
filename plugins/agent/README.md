@@ -100,7 +100,7 @@ core crate. [Build instructions](BUILD.md) describe the independent source packa
 
 The explicit `agent.model.test` Operation runs the existing Rig engine's bounded
 synthetic connection or image diagnostic. It receives no scientific context or
-Host tools. Only this explicit action reads the captured model's scoped key and
+Host tools. This explicit action reads the captured model's scoped key and
 contacts the selected endpoint. The original Operation stays active until the
 test ends; `agent.model.diagnostic` only reads its retained state. An explicit
 `agent.model.test.stop` checks the native controller and expected version, and
@@ -108,8 +108,21 @@ disabling model settings also stops live diagnostics. A stop request does not
 claim the original Operation already finished. Repeated requests and process
 reopen observe the original diagnostic and never restart it.
 
-Ordinary model-task execution, native Agent connections, context providers and
-Agent views still require integration. Synthetic diagnostics do not establish
-scientific execution or real-provider quality. Default delivery remains unfinished.
+`agent.model.run` also composes the real model-task owner and Rig loop for explicit
+submitted text. It captures the original native Operation, request and provider
+binding atomically with admission. Text, usage and terminal state use the existing
+task event log. `agent.model.run.request`, `.get` and `.events` only observe that
+original record; `.stop`, disabling settings and explicit controller takeover fence
+the original loop. A duplicate semantic request returns the original run without
+reading a key or restarting, even if its new transport admission differs. It cannot
+replace the stored parent or change the provider binding. Tool intent receipts
+already have durable unique request IDs; native delegation will reuse these.
+This initial composition exposes submitted text only; it does not yet capture
+scientific context, attachments, continuation or grant native tools.
+
+Scientific model-tool execution, native Agent connections, context providers and
+Agent views still require integration. Synthetic diagnostics and submitted-text
+runs do not establish scientific execution or real-provider quality. Default
+delivery remains unfinished.
 The backend transport and independent Host verification commands are described
 in the build instructions.

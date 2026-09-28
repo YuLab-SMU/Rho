@@ -21,6 +21,7 @@ pub struct Metadata {
     store: Arc<AgentStore>,
     pub(crate) credentials: CredentialFile,
     diagnostics: crate::diagnostics::Diagnostics,
+    runs: crate::runs::Runs,
     instance: PluginInstance,
     pub(crate) scope: AgentTaskScope,
 }
@@ -98,6 +99,31 @@ impl ComponentActorValidator for CurrentAdmission {
 }
 
 impl Metadata {
+    /// Only explicit new model work reads the captured key; observations and
+    /// repeated original requests never call this method.
+    pub(crate) fn model_key(
+        &self,
+        reference: &rho_agent_api::ComponentCredentialRef,
+    ) -> Result<rho_agent_owner::ComponentModelKey, Failure> {
+        use rho_agent_api::ComponentCredentialRef;
+        match reference {
+            ComponentCredentialRef::LocalFile { key_id } => self
+                .credentials
+                .key(&self.scope, key_id)
+                .map_err(ComponentTaskError::from)
+                .map_err(Into::into),
+            ComponentCredentialRef::Environment { name } => {
+                rho_agent_owner::ComponentModelKey::new(std::env::var(name).map_err(|_| {
+                    Failure::invalid("The configured model credential is unavailable")
+                })?)
+                .map_err(ComponentTaskError::from)
+                .map_err(Into::into)
+            }
+            ComponentCredentialRef::Session { .. } => Err(Failure::invalid(
+                "The configured model credential is unavailable",
+            )),
+        }
+    }
     pub fn new(instance: PluginInstance, environment: BackendEnvironment) -> Result<Self, String> {
         decode::<Empty>(&instance.configuration).map_err(|e| e.message)?;
         for directory in [&environment.project_root, &environment.data_root] {
@@ -125,6 +151,7 @@ impl Metadata {
             owner,
             store,
             diagnostics: Default::default(),
+            runs: Default::default(),
             credentials: CredentialFile::at(
                 Path::new(&environment.data_root).join("model-credentials-v1.json"),
             ),
@@ -174,6 +201,9 @@ impl Metadata {
     }
     pub fn read(&self, call: &PluginCall) -> Result<Value, Failure> {
         match call.binding.capability.id.as_str() {
+            "agent.model.run.get" | "agent.model.run.request" | "agent.model.run.events" => {
+                self.runs.read(self, call)
+            }
             "agent.model.diagnostic" => self.diagnostics.read(self, &call.arguments),
             "agent.model.key.receipt" => {
                 let args: CredentialRequest = decode(&call.arguments)?;
@@ -194,8 +224,7 @@ impl Metadata {
                 {
                     return Err(Failure::invalid("Agent task page bounds are invalid"));
                 }
-                // This metadata composition has no running native or model loops.
-                // Retained active records remain interrupted observations, never restarted.
+                let live = self.runs.live_ids()?;
                 encoded(
                     self.store
                         .project_agent_tasks(
@@ -205,7 +234,7 @@ impl Metadata {
                             args.limit as usize,
                             &self.owner.host_incarnation,
                             &self.owner.host_incarnation,
-                            &[],
+                            &live,
                         )
                         .map_err(ComponentTaskError::from)?,
                 )
@@ -268,11 +297,13 @@ impl Metadata {
         )
     }
     pub async fn dispatch(
-        &self,
+        self: &Arc<Self>,
         call: &PluginCall,
         caller: PluginViewCaller,
     ) -> Result<Value, Failure> {
         match call.binding.capability.id.as_str() {
+            "agent.model.run" => self.runs.start(self, call, caller).await,
+            "agent.model.run.stop" => self.runs.stop(self, call, caller),
             "agent.model.test" => self.diagnostics.start(self, call, caller).await,
             "agent.model.test.stop" => self.diagnostics.stop(self, call, caller),
             _ => self.mutate(call, caller),
@@ -287,6 +318,7 @@ impl Metadata {
                 let updated = self.owner.configure(&actor, &settings, now)?;
                 if !updated.enabled {
                     self.diagnostics.cancel_all();
+                    self.runs.cancel_all();
                 }
                 encoded(updated)
             }
@@ -326,12 +358,17 @@ impl Metadata {
             }
             "agent.model.take_control" => {
                 let args: TakeControl = decode(&call.arguments)?;
-                encoded(self.owner.take_control(
+                let active = self.conversation(&args.conversation_id)?.active_run_id;
+                let updated = self.owner.take_control(
                     &actor,
                     &args.conversation_id,
                     args.expected_version,
                     now,
-                )?)
+                )?;
+                if let Some(run) = active {
+                    self.runs.cancel(&run);
+                }
+                encoded(updated)
             }
             _ => Err(Failure::invalid("Agent mutation is not implemented")),
         }

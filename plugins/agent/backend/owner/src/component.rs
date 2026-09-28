@@ -71,6 +71,30 @@ pub struct StoredComponentRun {
     pub run: ComponentAgentRun,
     pub request_digest: String,
     pub host_incarnation: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_origin: Option<ComponentNativeRunOrigin>,
+}
+
+/// Captured from the containing native admission, never from model arguments.
+/// Stored atomically with the run so interrupted tools can find the original
+/// delegated Operation without replaying an invocation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentNativeRunOrigin {
+    pub operation: OperationId,
+    pub request: RequestId,
+    pub binding: ProviderBinding,
+}
+impl ComponentNativeRunOrigin {
+    pub fn validate(&self) -> Result<(), ComponentTaskError> {
+        if self.binding.capability.id.as_str() != "agent.model.run"
+            || self.binding.capability.version != 1
+            || self.binding.target.is_some()
+        {
+            return Err(invalid("Invalid native model run admission"));
+        }
+        Ok(())
+    }
 }
 
 /// Constructed by the trusted tool adapter after binding identities. The owner
@@ -823,6 +847,25 @@ impl ComponentAgentOwner {
         request: ComponentAgentStart,
         now: u64,
     ) -> Result<ComponentRunAdmission, ApplicationError> {
+        self.start_with_origin(actor, request, None, now)
+    }
+    pub fn start_native(
+        &self,
+        actor: &ComponentActor,
+        request: ComponentAgentStart,
+        origin: ComponentNativeRunOrigin,
+        now: u64,
+    ) -> Result<ComponentRunAdmission, ApplicationError> {
+        origin.validate()?;
+        self.start_with_origin(actor, request, Some(origin), now)
+    }
+    fn start_with_origin(
+        &self,
+        actor: &ComponentActor,
+        request: ComponentAgentStart,
+        origin: Option<ComponentNativeRunOrigin>,
+        now: u64,
+    ) -> Result<ComponentRunAdmission, ApplicationError> {
         let _guard = self.gate.lock().map_err(storage)?;
         actor.validate(now)?;
         id(&request.request_id)?;
@@ -834,7 +877,12 @@ impl ComponentAgentOwner {
             .store
             .component_run_by_request(&actor.scope, &request.request_id)?
         {
-            if existing.request_digest != digest {
+            // A new transport admission may observe an identical original task.
+            // It cannot reparent that task or cross its admitted provider binding.
+            if existing.request_digest != digest
+                || existing.native_origin.as_ref().map(|o| &o.binding)
+                    != origin.as_ref().map(|o| &o.binding)
+            {
                 return Err(ApplicationError::RequestConflict);
             }
             return Ok(ComponentRunAdmission {
@@ -891,6 +939,7 @@ impl ComponentAgentOwner {
         let run = StoredComponentRun {
             request_digest: digest,
             host_incarnation: self.host_incarnation.clone(),
+            native_origin: origin,
             run: ComponentAgentRun {
                 document_grants,
                 task_intent,
