@@ -1778,12 +1778,20 @@ package inspection.
 | `plugins/remote/backend` | Ordinary configured Remote RPC provider; scoped original-submission reads, fixed target qualifications, resource evidence and settlement fencing; no independent journal or automatic resubmission |
 | `plugins/environment/api`, `plugins/environment/backend/owner` | Public Environment data and sole native execution, observation, staging and recovery implementation; transitional Host adapter preserves the core operation port |
 | `crates/host` | Concrete composition and runtime configuration |
-| `crates/agent-client` | Bounded native Codex app-server / Kimi and DeepSeek ACP clients; no scientific handlers or Agent behavior loop |
+| `plugins/agent/api`, `plugins/agent/backend/client` | Public native Agent observations and bounded Codex app-server / Kimi and DeepSeek ACP clients; no private core imports, scientific handlers or Agent behavior loop |
 | `crates/agents` | Optional Rig integration; only Application/contract ports, no scientific owners or native adapter dependencies |
 | `crates/cli`, `mcp`, `workbench` | Transport and application entry points |
 | `plugins/r/backend/engine/r/bridge`, `plugins/environment/backend/owner/r` | Native R execution, bounded observation and environment helpers |
 | `ui/src`, `scripts/` | Studio models/views and reproducible development/verification tools |
 | `.agents/skills/` | Standard method packages, read by native clients or the shared Skills owner |
+
+The Agent transport's `AgentControllerRef` is correlation data supplied after owner
+admission, not a Host window credential. The transitional Host converts its admitted
+Application window identity when opening, sending or rebinding a native connection.
+Public session/usage DTOs have one owner in `rho-agent-api`; the existing contract
+reexports those types while task, context and component-Agent migration continues.
+Native protocol transport does not register capabilities, persist task truth or
+expand the caller's scientific authority.
 
 Jet is a pinned external core-library dependency in `vendor/jet-core`, excluded
 from the production workspace's members. Only the package-owned R engine depends on it.

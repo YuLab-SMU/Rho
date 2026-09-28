@@ -1,25 +1,7 @@
 //! Persistent application tasks and bounded native observations. Not scientific truth.
-use crate::{AgentDecision, AgentModel, AgentProvider, ApplicationWindowRef};
+use crate::{AgentDecision, AgentNativeCapabilities, AgentProvider, ApplicationWindowRef};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-pub struct AgentPermissionMode {
-    pub id: String,
-    pub name: String,
-    pub description: Option<String>,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
-pub struct AgentNativeCapabilities {
-    pub resume: bool,
-    pub history: String,
-    pub images: bool,
-    pub embedded_context: bool,
-    pub modes: Vec<AgentPermissionMode>,
-    pub current_mode: Option<String>,
-    pub models: Vec<AgentModel>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct AgentTask {

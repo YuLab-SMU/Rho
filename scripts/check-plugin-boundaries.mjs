@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const privateCrates = /\brho[-_](?:host|application|contract|operation|workbench|sqlite|workspace|r[-_]runtime|agents|agent[-_]client)\b/;
+const privateCrates = /\brho[-_](?:host|application|contract|operation|workbench|sqlite|workspace|r[-_]runtime|agents)\b/;
 
 export function checkPluginSource(name, content) {
   if (/\.(?:[cm]?[jt]sx?|rs)$|Cargo\.toml$/.test(name)) {
@@ -32,11 +32,13 @@ if (process.argv.includes("--self-test")) {
   for (const [name, content] of [
     ["src/view.ts", "import { Studio } from '../../../ui/src/studio'"],
     ["backend/src/main.rs", "use rho_host::NextHost;"],
+    ["backend/client/src/lib.rs", "use rho_agents::ComponentAgent;"],
     ["backend/Cargo.toml", 'rho-contract = { path = "../../../crates/contract" }'],
     ["plugin.json", '{"bundled":true}'],
   ]) assert.throws(() => checkPluginSource(name, content));
   checkPluginSource("src/view.ts", 'import type { PluginManifest } from "@rho/plugin-protocol";');
   checkPluginSource("backend/src/main.rs", "use rho_plugin_sdk::Backend;");
+  checkPluginSource("backend/src/main.rs", "use rho_agent_client::NativeInput;");
   console.log("Plugin private-import and delivery-bypass fixtures passed.");
 } else {
   for (const file of ["plugins", "sdk/plugin-ui"].flatMap(directory => walk(path.join(root, directory))))

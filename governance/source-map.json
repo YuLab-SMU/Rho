@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "checks": {
+    "plugins.agent-types": {"command": ["node", "scripts/test-agent-plugin-types.mjs"]},
+    "plugins.agent-native": {"command": ["cargo", "test", "-p", "rho-agent-client", "--lib", "--locked"]},
+    "plugins.agent-independent": {"command": ["node", "scripts/test-agent-plugin-client.mjs"]},
+    "plugins.agent-protocol": {"command": ["node", "plugins/agent/generate-sdk.mjs", "--check"]},
     "plugins.test-project-session": {"command": ["cargo", "test", "-p", "rho-cli", "--test", "session_test_project", "--locked"]},
     "plugins.test-project-edges": {"command": ["cargo", "test", "-p", "rho-workbench", "--lib", "plugin_test_", "--locked"]},
     "plugins.test-project-browser": {"command": ["npm", "run", "test:browser", "--prefix", "ui", "--", "plugin-test-project.spec.ts"]},
@@ -1042,12 +1046,14 @@
         "scripts/build-remote-plugin.mjs",
         "scripts/test-remote-plugin.mjs",
         "scripts/test-remote-plugin-types.mjs",
+        "scripts/test-agent-plugin-client.mjs", "scripts/test-agent-plugin-types.mjs",
         "scripts/test-environment-plugin-owner.mjs",
         "scripts/build-environment-plugin.mjs",
         "scripts/test-environment-plugin-types.mjs",
         "scripts/test-environment-plugin.mjs"
       ],
       "checks": [
+        "plugins.agent-native", "plugins.agent-independent", "plugins.agent-protocol", "plugins.agent-types",
         "plugins.development-owner",
         "plugins.build-owner", "plugins.archive-owner", "plugins.archive-ports",
         "plugins.preview-host",

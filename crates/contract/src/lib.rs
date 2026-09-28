@@ -2,9 +2,8 @@
 mod agent_client;
 pub use agent_client::*;
 mod agent_task;
-mod agent_usage;
-pub use agent_usage::*;
 pub use agent_task::*;
+pub use rho_agent_api::*;
 mod project_agent_task;
 pub use project_agent_task::*;
 mod agent_handoff;

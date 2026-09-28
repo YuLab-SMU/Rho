@@ -124,7 +124,7 @@ impl NativeAgentSession for Session {
             marker: "fixture-owned".into(),
         })
     }
-    fn rebind(&self, w: ApplicationWindowRef) {
+    fn rebind(&self, w: AgentControllerRef) {
         self.state.lock().unwrap().window = w;
     }
     async fn configure(&self, m: &str, e: Option<&str>, _: Option<&str>) -> Result<(), String> {
@@ -1042,7 +1042,7 @@ async fn assert_takeover_preserves_native_transport_until_disconnect(stop: bool)
     assert!(Arc::ptr_eq(&live, &current_live));
     assert!(Arc::ptr_eq(&live.session, &current_live.session));
     assert_eq!(current_live.session.snapshot().native_session_id, native.native_session_id);
-    assert_eq!(current_live.session.snapshot().window, f.other);
+    assert_eq!(current_live.session.snapshot().window, AgentControllerRef::from(f.other.clone()));
     assert_eq!(current_live.mcp.token, token);
     assert_eq!(f.service.mcp_connections.resolve(&token).unwrap().context.connection_id, identity.context.connection_id);
     assert!(identity.is_valid());

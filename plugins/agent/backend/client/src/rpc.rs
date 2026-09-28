@@ -1,5 +1,5 @@
 use futures::StreamExt;
-use rho_contract::{
+use rho_agent_api::{
     AgentClientSession, AgentDecision, AgentDecisionOption, AgentMessage, AgentProvider,
 };
 use serde_json::{Value, json};
@@ -56,7 +56,7 @@ pub(crate) struct Rpc {
     closed: AtomicBool,
     pub buffer: Arc<Mutex<Buffer>>,
     pub observer: Mutex<crate::observation::Observer>,
-    pub capabilities: Mutex<rho_contract::AgentNativeCapabilities>,
+    pub capabilities: Mutex<rho_agent_api::AgentNativeCapabilities>,
     pub changes: tokio::sync::Notify,
     pub owner_marker: String,
     secret: String,
@@ -221,7 +221,7 @@ impl Rpc {
             secret: secret.to_owned(),
             owned_home: launch.map(|launch| launch.owned_home),
             observer: Mutex::new(crate::observation::Observer::default()),
-            capabilities: Mutex::new(rho_contract::AgentNativeCapabilities::default()),
+            capabilities: Mutex::new(rho_agent_api::AgentNativeCapabilities::default()),
             changes: tokio::sync::Notify::new(),
             owner_marker,
         });

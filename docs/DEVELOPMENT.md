@@ -181,6 +181,22 @@ These tests do not establish the management UI, iframe continuity in a browser o
 real-R scenario acceptance. View resource context is qualified against bounded
 retained metadata; the separate byte ports remain responsible for byte integrity.
 
+Agent native transport lives in `plugins/agent/backend/client`, depending only on
+the public `plugins/agent/api` and external libraries. Iterate with
+`cargo test -p rho-agent-client --lib --locked`; generate public declarations and
+schemas with `node plugins/agent/generate-sdk.mjs` (supports `--check`).
+`node scripts/test-agent-plugin-types.mjs` compiles an independent TypeScript
+consumer using only the public declarations, including unknown usage counters.
+`node scripts/test-agent-plugin-client.mjs` assembles only those two crates outside
+the checkout, verifies all local dependency containment and runs the same native
+protocol/recovery fixtures plus generated-contract freshness. Local fake providers
+exercise original input identity, bounded/redacted observations, uncertain replies,
+cancellation and native-session recovery without starting real Agents. Host task
+admission and HTTP identity integration remain covered by `cargo test -p rho-host
+--lib agent_tasks --locked` and `cargo test -p rho-workbench --lib mcp_identity
+--locked`; these do not establish an ordinary Agent runtime/view or real-provider
+acceptance. No setup entry point is invoked by the native fixture checks.
+
 Environment contracts, native execution and R helpers live in
 `plugins/environment/api` and `plugins/environment/backend/owner`. The retiring
 `rho-r-environment` adapter delegates to this owner. Iterate with

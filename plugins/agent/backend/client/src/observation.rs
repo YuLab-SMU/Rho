@@ -1,6 +1,6 @@
 //! Bounded native observations. Synthetic keys identify observations, never
 //! pretend to be native turn/item identities absent from a protocol frame.
-use rho_contract::{AgentProvider, AgentUsageObservation};
+use rho_agent_api::{AgentProvider, AgentUsageObservation};
 use serde_json::Value;
 use std::collections::{HashSet, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};

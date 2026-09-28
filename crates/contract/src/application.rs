@@ -12,6 +12,15 @@ pub struct ApplicationWindowRef {
     pub incarnation: String,
 }
 
+impl From<ApplicationWindowRef> for crate::AgentControllerRef {
+    fn from(window: ApplicationWindowRef) -> Self {
+        Self {
+            window_id: window.window_id,
+            incarnation: window.incarnation,
+        }
+    }
+}
+
 /// A bridge credential is returned only to the registering Studio connection.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]

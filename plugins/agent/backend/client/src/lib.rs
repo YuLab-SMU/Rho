@@ -10,8 +10,8 @@ pub use task_adapter::*;
 mod protocol_tests;
 mod rpc;
 pub use deepseek::install as install_deepseek_component;
-use rho_contract::{
-    AgentClientSession, AgentMessage, AgentModel, AgentProvider, ApplicationWindowRef, LocalAgent,
+use rho_agent_api::{
+    AgentClientSession, AgentMessage, AgentModel, AgentProvider, AgentControllerRef, LocalAgent,
 };
 use rpc::{Rpc, bounded};
 use serde_json::{Value, json};
@@ -298,7 +298,7 @@ impl ExternalAgentClient {
     pub async fn connect(
         provider: AgentProvider,
         root: &Path,
-        window: ApplicationWindowRef,
+        window: AgentControllerRef,
         model: &str,
         effort: Option<&str>,
         endpoint: &str,
@@ -333,7 +333,7 @@ impl ExternalAgentClient {
     async fn configure(
         &self,
         root: &Path,
-        window: ApplicationWindowRef,
+        window: AgentControllerRef,
         model: &str,
         effort: Option<&str>,
         endpoint: &str,
@@ -420,7 +420,7 @@ impl ExternalAgentClient {
         text: &str,
         test: bool,
         request_id: &str,
-        window: ApplicationWindowRef,
+        window: AgentControllerRef,
     ) -> Result<AgentClientSession, String> {
         if text.len() > 32000 {
             return Err("Agent prompt exceeds 32 KiB".into());

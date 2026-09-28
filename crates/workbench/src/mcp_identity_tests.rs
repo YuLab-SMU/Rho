@@ -92,7 +92,7 @@ impl NativeAgentSession for QuietSession {
             marker: "test-only".into(),
         })
     }
-    fn rebind(&self, window: ApplicationWindowRef) {
+    fn rebind(&self, window: AgentControllerRef) {
         self.state.lock().unwrap().window = window;
     }
     async fn configure(&self, _: &str, _: Option<&str>, _: Option<&str>) -> Result<(), String> {

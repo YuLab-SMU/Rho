@@ -75,8 +75,8 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         }),
     )
 }
-fn window() -> ApplicationWindowRef {
-    ApplicationWindowRef {
+fn window() -> AgentControllerRef {
+    AgentControllerRef {
         window_id: "window-1".into(),
         incarnation: "incarnation-1".into(),
     }
@@ -236,7 +236,7 @@ async fn acp_catalog_updates_are_retained_before_a_ui_session_exists() {
 #[tokio::test]
 async fn timeout_remains_uncertain_and_foreign_windows_cannot_submit() {
     let (_dir, client) = fixture().await;
-    let other = ApplicationWindowRef {
+    let other = AgentControllerRef {
         window_id: "other".into(),
         ..window()
     };

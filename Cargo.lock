@@ -5930,13 +5930,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-agent-api"
+version = "0.1.0"
+dependencies = [
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "ts-rs",
+]
+
+[[package]]
 name = "rho-agent-client"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
  "futures",
- "rho-contract",
+ "rho-agent-api",
  "serde_json",
  "sha2",
  "sysinfo",
@@ -6003,6 +6013,7 @@ dependencies = [
 name = "rho-contract"
 version = "0.1.0"
 dependencies = [
+ "rho-agent-api",
  "rho-environment-api",
  "rho-files-api",
  "rho-plugin-protocol",

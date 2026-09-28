@@ -41,7 +41,8 @@ members = [
   "crates/host",
   "crates/cli",
   "crates/mcp",
-  "crates/agent-client",
+  "plugins/agent/api",
+  "plugins/agent/backend/client",
   "crates/workbench",
 ]
 default-members = ["crates/cli"]

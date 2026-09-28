@@ -11,6 +11,31 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
+Agent native transport now lives in `plugins/agent/backend/client`, with public
+DTOs in `plugins/agent/api` and generated declarations/schemas in its SDK. It has
+no private core dependency. The transitional Host converts admitted window identity
+to transport correlation data; original task persistence, scope admission and MCP
+credentials remain with their current owners. This is an extraction foundation,
+not yet an ordinary Agent runtime/view. Rig, task/context/handoff ownership, Studio
+Agent assistance and final composition/default delivery remain active work.
+
+All 31 native protocol/recovery fixtures pass in the checkout and in an independent
+source assembly. Independent generated-contract freshness and a TypeScript consumer,
+18 Host task tests, 4 HTTP/MCP identity tests, 36 affected client tests, client
+generation/build/consistency and the current binary build pass. A disposable Host
+crash preserves native session identity, the uncertain original receipt and the
+next draft; resumed multimodal input works and user configuration remains unchanged.
+Three Chrome flows pass: draft retention across closure/refresh, native permission
+responses and second-window takeover. Their three Agent captures were inspected;
+the affected controls remain visible without overlap. Architecture, public-import
+boundaries and governance checks pass. No real-provider/model or real-R acceptance,
+full-workspace audit, installation, publication or user-Host replacement ran.
+
+The first Host test compile found one takeover assertion still using the old
+window type; it now compares the equivalent public correlation value. The original
+failed compile and successful reruns are retained in
+`target/plugin-refactor/agent-native-verification.txt` and its referenced logs.
+
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,
 validates the complete archive and rechecks native read authority before requesting

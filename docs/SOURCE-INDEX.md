@@ -136,6 +136,8 @@ Sources:
 - `scripts/fixtures/studio-development.mjs`
 - `scripts/generate-editor-context.mjs`
 - `scripts/plugin-protocol.mjs`
+- `scripts/test-agent-plugin-client.mjs`
+- `scripts/test-agent-plugin-types.mjs`
 - `scripts/test-console-plugin.mjs`
 - `scripts/test-editor-plugin.mjs`
 - `scripts/test-environment-plugin-owner.mjs`
@@ -204,6 +206,10 @@ Sources:
 Checks:
 
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
+- `plugins.agent-independent`: `["node","scripts/test-agent-plugin-client.mjs"]`
+- `plugins.agent-native`: `["cargo","test","-p","rho-agent-client","--lib","--locked"]`
+- `plugins.agent-protocol`: `["node","plugins/agent/generate-sdk.mjs","--check"]`
+- `plugins.agent-types`: `["node","scripts/test-agent-plugin-types.mjs"]`
 - `plugins.archive-owner`: `["cargo","test","-p","rho-plugins","--test","archive_transfers","--locked"]`
 - `plugins.archive-ports`: `["cargo","test","-p","rho-host","--test","plugin_archives","--locked"]`
 - `plugins.backend-sdk`: `["cargo","test","-p","rho-plugin-sdk","--locked"]`

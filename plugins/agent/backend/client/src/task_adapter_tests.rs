@@ -162,7 +162,7 @@ async fn codex_native_history_uses_full_turn_pages_and_rejects_nonadvancing_curs
         provider: AgentProvider::Codex,
         native_session_id: "thread-1".into(),
         project_root: dir.path().to_string_lossy().into_owned(),
-        window: ApplicationWindowRef {
+        window: AgentControllerRef {
             window_id: "w".into(),
             incarnation: "i".into(),
         },

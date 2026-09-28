@@ -2,7 +2,7 @@
 use super::*;
 use async_trait::async_trait;
 use base64::{Engine, engine::general_purpose::STANDARD};
-use rho_contract::{AgentNativeCapabilities, AgentPermissionMode};
+use rho_agent_api::{AgentNativeCapabilities, AgentPermissionMode};
 use sha2::{Digest, Sha256};
 use std::{collections::HashSet, ffi::OsStr};
 use sysinfo::{
@@ -19,7 +19,7 @@ pub struct NativeProcessProof {
 pub struct NativeOpenRequest {
     pub provider: AgentProvider,
     pub root: PathBuf,
-    pub window: ApplicationWindowRef,
+    pub window: AgentControllerRef,
     pub native_session_id: Option<String>,
     pub endpoint: String,
     pub token: String,
@@ -42,7 +42,7 @@ pub struct NativePrompt {
     pub request_id: String,
     pub display_text: String,
     pub parts: Vec<NativeInput>,
-    pub window: ApplicationWindowRef,
+    pub window: AgentControllerRef,
 }
 #[async_trait]
 pub trait NativeAgentSession: Send + Sync {
@@ -62,7 +62,7 @@ pub trait NativeAgentSession: Send + Sync {
     async fn decide(&self, id: u64, option: &str) -> Result<(), String>;
     async fn close(&self);
     async fn changed(&self);
-    fn rebind(&self, window: ApplicationWindowRef);
+    fn rebind(&self, window: AgentControllerRef);
     async fn history(
         &self,
         cursor: Option<String>,
@@ -448,7 +448,7 @@ impl NativeAgentSession for Connection {
     fn process_proof(&self) -> Option<NativeProcessProof> {
         self.proof.clone()
     }
-    fn rebind(&self, window: ApplicationWindowRef) {
+    fn rebind(&self, window: AgentControllerRef) {
         if let Some(s) = &mut self.client.rpc.buffer.lock().unwrap().session {
             s.window = window;
         }

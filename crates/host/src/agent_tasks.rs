@@ -202,7 +202,7 @@ impl AgentTaskService {
                 .open(NativeOpenRequest {
                     provider: request.provider,
                     root: request.project_root.into(),
-                    window: request.window.clone(),
+                    window: request.window.clone().into(),
                     native_session_id: None,
                     endpoint,
                     token: _mcp.token.clone(),
@@ -215,7 +215,7 @@ impl AgentTaskService {
                     let result=async {
                         if service.stopped.load(Ordering::Acquire) { return Err("Host closed before the diagnostic started".into()); }
                         session.configure(&request.model,request.effort.as_deref(),None).await?;
-                        session.send(NativePrompt{request_id:request.request_id,display_text:"Connection test".into(),parts:vec![NativeInput::Text("Reply with exactly ok. Do not call tools or read files.".into())],window:request.window}).await?;
+                        session.send(NativePrompt{request_id:request.request_id,display_text:"Connection test".into(),parts:vec![NativeInput::Text("Reply with exactly ok. Do not call tools or read files.".into())],window:request.window.into()}).await?;
                         tokio::time::timeout(Duration::from_secs(90),async {
                             let mut tick=tokio::time::interval(Duration::from_millis(100));
                             loop {
@@ -619,7 +619,7 @@ impl AgentTaskService {
             )
             && let Some(live) = self.live.lock().await.get(&id).cloned()
         {
-            live.session.rebind(request.window.clone());
+            live.session.rebind(request.window.clone().into());
             live.generation
                 .store(admission.task.attachment.generation, Ordering::Release);
         }
@@ -750,7 +750,7 @@ impl AgentTaskService {
                             a.draft.content.text.clone()
                         },
                         parts,
-                        window: request.window.clone(),
+                        window: request.window.clone().into(),
                     })
                     .await
                     .map_err(TaskFailure::uncertain)?;
@@ -942,7 +942,7 @@ impl AgentTaskService {
                     Ok(())
                 })?;
                 if transfer && let Some(live) = live {
-                    live.session.rebind(request.window.clone());
+                    live.session.rebind(request.window.clone().into());
                     live.generation.store(generation + 1, Ordering::Release);
                 }
             }
@@ -1092,7 +1092,7 @@ impl AgentTaskService {
             .open(NativeOpenRequest {
                 provider: task.task.provider,
                 root: task.task.project_root.clone().into(),
-                window: request.window.clone(),
+                window: request.window.clone().into(),
                 native_session_id: task.task.native_session_id.clone(),
                 endpoint: endpoint.into(),
                 token: mcp.token.clone(),
