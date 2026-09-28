@@ -18,6 +18,40 @@ Cargo commands share `target/`. Run only one Cargo build/test/check process at a
 time, including client type generation, which invokes Cargo. Wait for background
 commands to complete instead of polling them with sleep loops.
 
+### Milestone cadence
+
+Organize work as end-to-end user flows (the milestone table in
+[Status](STATUS.md#work-order-reset-2026-09-28)). Within a milestone:
+
+- **Build the thinnest complete flow first**, including its real view, before
+  deepening any one layer. Missing infrastructure should surface from the flow, not
+  from a later integration pass.
+- **Iterate with L0/L1 only.** Independent package builds, frozen-Host harnesses,
+  source-parity inventories, real-R fixtures and browser flows (plugin L2) run
+  **once per milestone** on settled source, and again only when a later change
+  touches the same boundary. Do not run them per commit.
+- **Preflight before any L2 run:** correct toolchain for independent directories
+  (`agentPluginBuildEnvironment()` and equivalents), generated manifests/SDKs
+  current (`--check`), fixture counts and capability names updated in the same
+  change, browser fixtures waiting on explicit Ready/paint. A harness failure is
+  fixed and rerun for that stage only; it is not a product failure and is not
+  recorded in Status.
+- **Use tracked harnesses.** Acceptance runners belong in `scripts/` and in the
+  governance map, not as one-off files under `target/`. Extend an existing runner
+  (for example `scripts/test-agent-plugin.mjs`) instead of copying it per feature.
+- **Delete as you go.** When a milestone's flow passes, remove the fixed-composition
+  path it replaces in the same milestone, or record the exact deletion condition
+  in the Status table.
+
+### Status discipline
+
+`docs/STATUS.md` stays under about 300 lines. Update it at milestone boundaries or
+when current behavior, open problems or restart guidance change — not per commit.
+Record the current evidence file for a milestone, not every versioned attempt;
+failed attempts, compile errors and harness corrections stay in logs and Git.
+Commits that only record a verification result are folded into the change they
+verify.
+
 ## Testing SOP
 
 The generic plugin-only Host uses `cargo test -p rho-host --test plugin_workspace

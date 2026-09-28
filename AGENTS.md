@@ -96,7 +96,14 @@ and reviews do not require edits, builds, status updates, or commits.
 - Testing is tiered as documented in `docs/DEVELOPMENT.md` § Testing SOP: use
   focused crate/test-file checks while iterating and affected-module or
   cross-boundary checks once behavior settles. The full workspace suite is an
-  optional audit; run it only for an explicit release/user request. Incremental
+  optional audit; run it only for an explicit release/user request.
+- Work in milestones organized as end-to-end user flows (Status work-order table).
+  Build the thinnest complete flow, including its view, first. Heavy plugin
+  acceptance (independent package builds, frozen-Host harnesses, source parity,
+  real-R fixtures, browser flows) runs once per milestone on settled source, after
+  the preflight in `docs/DEVELOPMENT.md` § Milestone cadence. Harness failures are
+  fixed and rerun for that stage; they are not status material. Keep acceptance
+  runners tracked in `scripts/`, not as one-off files under `target/`. Incremental
   compilation does not limit `cargo test --workspace` to changed crates; that
   command still executes every workspace test target.
 - A timed-out, ignored, skipped, or unavailable check is not a pass. Report the
@@ -164,5 +171,7 @@ When a task changes the repository, commit coherent authorized work and check
 verification conclusions, focus, or unresolved work changes; include relevant
 checks and restart guidance where useful. Do not add a status entry merely to
 record a completed edit or read-only review. Keep transient process details out.
+Update Status at milestone boundaries, not per commit; keep it under about 300
+lines and fold verification-only commits into the change they verify.
 The next session should read that page and inspect the live processes before
 starting another Host for the same project.
