@@ -425,10 +425,10 @@ impl Services {
             }
             host::CapabilityKind::Operation if !call.query_only && call.parent.operation_id.is_some() => {
                 let gateway=self.gateway.get().and_then(Weak::upgrade).ok_or_else(||OperationError::Unavailable("Host gateway ended".into()))?;
-                let identity=json!({"provider":call.provider,"parent":call.parent.operation_id,"request":call.request,"project":self.scope});
-                let id=crate::content_digest(&serde_json::to_vec(&identity).map_err(error)?);
+                let request_id = crate::delegated::request_identity(&call.provider,
+                    call.parent.operation_id.as_deref().expect("effectful parent checked"), &call.request, &self.scope)?;
                 tasks.spawn(async move {
-                    let result=gateway.invoke(&context,host::Invocation {client_request_id:format!("delegated-{}",id.as_str()),capability,arguments:call.arguments,preconditions:vec![]}).await;
+                    let result=gateway.invoke(&context,host::Invocation {client_request_id:request_id,capability,arguments:call.arguments,preconditions:vec![]}).await;
                     drop(lifetime);
                     result.map(|value|json!(value))
                 }).await.map_err(error)?

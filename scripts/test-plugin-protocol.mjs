@@ -43,6 +43,15 @@ const credentialCaller:PluginViewOrigin={...originatingView,call_token:"private"
 // @ts-expect-error An observation must distinguish a view from a non-view caller.
 const unspecifiedCaller:PluginViewCaller={};
 void [viewCaller,nonViewCaller,credentialCaller,unspecifiedCaller];
+import type {PluginDelegatedOperationArguments,PluginDelegatedOperation} from "../protocol/index.js";
+const delegatedRequest:PluginDelegatedOperationArguments={parent_operation:"original-parent",request:"original-reverse"};
+const delegatedRecord:PluginDelegatedOperation={operation_id:"original-operation"};
+const unresolvedRequest:PluginDelegatedOperation={operation_id:null};
+// @ts-expect-error Native caller identity cannot be supplied by a backend.
+const delegatedCaller:PluginDelegatedOperationArguments={...delegatedRequest,caller:"another-instance"};
+// @ts-expect-error Observations never attest that a mutation was not dispatched.
+const falseAbsence:PluginDelegatedOperation={operation_id:null,not_dispatched:true};
+void [delegatedRequest,delegatedRecord,unresolvedRequest,delegatedCaller,falseAbsence];
 import type {ReleasePluginViewRenderer,PluginViewRendererRelease} from "../protocol/index.js";
 import type {PluginViewMessage,PluginViewRequest} from "../protocol/index.js";
 const selectedTestMessage: PluginViewMessage = {protocol_version:1,connection:"connection",view:"view",sequence:1,request:"original",test_project:"test-one",body:{type:"query",capability:{id:"plugins.instances",version:1},arguments:{limit:20}}};
@@ -148,7 +157,7 @@ export function inspect(manifest: PluginManifest, visual: VisualDocument, page: 
   execFileSync(process.execPath, [path.join(root, "ui/node_modules/typescript/bin/tsc"),
     "--noEmit", "--strict", "--module", "NodeNext", "--moduleResolution", "NodeNext",
     "--target", "ES2022", "--rootDir", consumer, path.join(consumer, "consumer.mts")], { stdio: "inherit" });
-  for (const name of ["stage-archive", "read-archive", "export-archive", "archive-reference", "archive-arguments", "archive-progress", "archive-discarded", "archive-chunk", "archive-receipt", "archive-inspection", "archive-operation-arguments", "release-view-renderer", "view-renderer-release", "create-plugin-test-project", "plugin-test-project-observation", "plugin-test-project-arguments", "plugin-test-operation-arguments", "stop-plugin-test-project", "list-plugin-test-projects", "plugin-test-project-page", "list-plugin-source", "plugin-source-page", "read-plugin-source", "plugin-source-chunk", "list-plugin-branches", "plugin-branch-page", "checkpoint-plugin", "plugin-checkpoint", "manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "view-close", "window-layout", "window-open-view", "context-page", "preview-context", "context-preview", "document-draft", "list-document-drafts", "document-draft-page", "save-document-draft", "scenario", "save-scenario", "scenario-page", "apply-scenario", "window-scenario-snapshot", "resolve-window-provider", "visual-document"]) {
+  for (const name of ["delegated-operation-arguments", "delegated-operation", "stage-archive", "read-archive", "export-archive", "archive-reference", "archive-arguments", "archive-progress", "archive-discarded", "archive-chunk", "archive-receipt", "archive-inspection", "archive-operation-arguments", "release-view-renderer", "view-renderer-release", "create-plugin-test-project", "plugin-test-project-observation", "plugin-test-project-arguments", "plugin-test-operation-arguments", "stop-plugin-test-project", "list-plugin-test-projects", "plugin-test-project-page", "list-plugin-source", "plugin-source-page", "read-plugin-source", "plugin-source-chunk", "list-plugin-branches", "plugin-branch-page", "checkpoint-plugin", "plugin-checkpoint", "manifest", "archive", "rpc", "resource-transfer-request", "resource-transfer-response", "view-message", "view-close", "window-layout", "window-open-view", "context-page", "preview-context", "context-preview", "document-draft", "list-document-drafts", "document-draft-page", "save-document-draft", "scenario", "save-scenario", "scenario-page", "apply-scenario", "window-scenario-snapshot", "resolve-window-provider", "visual-document"]) {
     const schema = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema", `${name}.json`), "utf8"));
     assert.ok(schema.$schema && schema.title, `missing standalone schema: ${name}`);
     const visit = value => {

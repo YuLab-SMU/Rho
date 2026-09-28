@@ -76,6 +76,7 @@ pub(crate) fn register(
         "windows.scenario",
         "windows.resolve",
         "plugins.repository",
+        "plugins.delegated_operation",
         "plugins.list",
         "plugins.inspect",
         "plugins.instances",
@@ -123,6 +124,11 @@ pub(crate) fn register(
 }
 fn descriptor(id: &str) -> host::CapabilityDescriptor {
     let (input, output, example, summary, operation, scope) = match id {
+        "plugins.delegated_operation" => (
+            schema_for!(PluginDelegatedOperationArguments).to_value(), schema_for!(PluginDelegatedOperation).to_value(),
+            json!({"parent_operation":"operation-example","request":"original-reverse-request"}),
+            "Find the original backend-delegated Operation without replaying it", false, "operation.read",
+        ),
         "plugins.preview" => (
             schema_for!(PreviewPlugin).to_value(), schema_for!(PluginInstanceObservation).to_value(),
             json!({"revision":digest(),"artifact":digest(),"alias":"preview","configuration":{},"queries":[]}),
@@ -381,6 +387,12 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
         descriptor.documentation.effects = "Read only the native calling view identity. Never open or recover a view, enumerate other windows, or return bridge/asset tokens.".into();
         descriptor.documentation.related_capabilities = vec![key("views.inspect")];
     }
+    if id == "plugins.delegated_operation" {
+        descriptor.documentation.when_to_use = vec!["Resolve a retained reverse-call request after delayed or lost acknowledgement, then read its operation.get record.".into()];
+        descriptor.documentation.limitations = vec!["Only the original native backend instance may query its own parent admission under the original principal and project. Identity cannot be selected through arguments. Historical reads do not require a running provider.".into(), "A null operation_id means no visible durable record was observed; dispatch may still be pending. It is never proof of no execution and never authorizes replay.".into()];
+        descriptor.documentation.effects = "Read at most one parent admission and its exact original request record. No runtime start, cancellation, recovery, reactivation or scientific mutation.".into();
+        descriptor.documentation.related_capabilities = vec![key("operation.get")];
+    }
     if id.starts_with("scenarios.") {
         descriptor.domain = "scenarios".into();
         descriptor.documentation.owner = "plugins".into();
@@ -471,6 +483,7 @@ fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
         "resources.inspect" => normalize::<ResourceInspect>(value),
         "resources.read" => normalize::<ResourceRead>(value),
         "plugins.repository" | "workspace.paths" | "views.caller" => normalize::<Empty>(value),
+        "plugins.delegated_operation" => normalize::<PluginDelegatedOperationArguments>(value),
         "plugins.project_coverage" => normalize::<ProjectReadCoverageArguments>(value),
         "plugins.list" => normalize::<PluginCatalogArguments>(value),
         "plugins.inspect" | "plugins.remove" => normalize::<PluginRevisionArguments>(value),
@@ -545,6 +558,7 @@ impl QueryHandler for Read {
             }
             "views.inspect" => json!(service.view_record(context,&decode::<PluginViewArguments>(value)?.view)?),
             "views.caller" => json!(service.caller_view(context)?),
+            "plugins.delegated_operation" => json!(service.delegated_operation(context, &decode(value)?).await?),
             "views.connection" => json!(service.view_connection(context,&decode::<PluginViewArguments>(value)?.view)?),
 
             "resources.list" | "resources.inspect" | "resources.read" => {
@@ -690,11 +704,11 @@ impl QueryHandler for Read {
                 kind: if self.id == "workspace.paths" { "workspace" } else if self.id.starts_with("resources.") { "plugin_resources" } else { "plugin_repository" }.into(),
                 identity: service.scope.clone(),
             },
-            source: if self.id == "workspace.paths" { "host/path-boundaries" } else if self.id.starts_with("resources.") { "resources/retained-bytes" } else { "plugins/repository-and-native-lifecycle" }.into(),
+            source: if self.id == "workspace.paths" { "host/path-boundaries" } else if self.id == "plugins.delegated_operation" { "operation-journal/original-delegation" } else if self.id.starts_with("resources.") { "resources/retained-bytes" } else { "plugins/repository-and-native-lifecycle" }.into(),
             observed_at_ms: SystemClock.now_ms()?,
             status: host::QueryStatus::Ready,
-            completeness: host::ObservationCompleteness::Complete,
-            notices: vec![],
+            completeness: if self.id == "plugins.delegated_operation" && data["operation_id"].is_null() { host::ObservationCompleteness::Partial } else { host::ObservationCompleteness::Complete },
+            notices: if self.id == "plugins.delegated_operation" && data["operation_id"].is_null() { vec!["No visible durable record was observed. Dispatch may still be pending; do not replay the request.".into()] } else { vec![] },
             next_reads: vec![],
             diagnostics: vec![],
             data: Some(data),

@@ -29,6 +29,7 @@ mod drafts;
 mod draft_service;
 pub use views::PluginViewAsset;
 mod service;
+mod delegated;
 mod service_handlers;
 pub use service::*;
 pub use package::*;

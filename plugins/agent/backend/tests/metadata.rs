@@ -194,7 +194,7 @@ impl Fixture {
 fn manifest_contains_only_public_bounded_metadata_capabilities() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 7);
+    assert_eq!(manifest.capabilities.len(), 8);
     assert_eq!(
         manifest.requires[0].capability,
         manifest::key("views.caller")
@@ -467,5 +467,77 @@ async fn bounded_concurrent_calls_keep_each_origin_and_refuse_original_operation
             .len(),
         16
     );
+    reopened.release().await;
+}
+
+#[tokio::test]
+async fn model_settings_use_scoped_owner_cas_without_reading_keys_or_contacting_a_model() {
+    let mut f = Fixture::start().await;
+    let before = f.query("agent.model.settings", json!({})).await;
+    let settings = json!({"version":before["version"],"enabled":true,"connection":{
+        "protocol":"openai_completions","base_url":"https://model.invalid/v1","model":"fixture-only",
+        "credential":{"kind":"environment","name":"RHO_AGENT_FIXTURE_UNUSED_KEY"}
+    }});
+    let (first, reverse) = f
+        .begin("configure", "agent.model.configure", settings.clone())
+        .await;
+    let changed = f.answer(reverse, origin("view-one")).await;
+    assert_eq!(
+        changed.outcome,
+        PluginOutcome::Succeeded,
+        "{:?}",
+        changed.error
+    );
+    assert!(changed.facts.is_empty() && changed.evidence.is_empty());
+    let saved = changed.output.unwrap();
+    assert_eq!(saved["version"], before["version"].as_u64().unwrap() + 1);
+    f.settle(&first, PluginOutcome::Succeeded).await;
+    let (stale, reverse) = f
+        .begin("stale-settings", "agent.model.configure", settings)
+        .await;
+    assert_eq!(
+        f.answer(reverse, origin("view-two")).await.outcome,
+        PluginOutcome::Failed
+    );
+    f.settle(&stale, PluginOutcome::Failed).await;
+    for (name, value) in [
+        (
+            "no-model",
+            json!({"version":saved["version"],"enabled":true,"connection":null}),
+        ),
+        ("secret", {
+            let mut value = saved.clone();
+            value["connection"]["api_key"] = json!("never-persist-this-secret");
+            value
+        }),
+        ("bad-endpoint", {
+            let mut value = saved.clone();
+            value["connection"]["base_url"] = json!("https://user:secret@model.invalid/v1");
+            value
+        }),
+    ] {
+        let (call, reverse) = f.begin(name, "agent.model.configure", value).await;
+        let rejected = f.answer(reverse, origin("view-one")).await;
+        assert_eq!(rejected.outcome, PluginOutcome::Failed, "{name}");
+        assert!(
+            !serde_json::to_string(&rejected)
+                .unwrap()
+                .contains("never-persist-this-secret")
+        );
+        f.settle(&call, PluginOutcome::Failed).await;
+        assert_eq!(f.query("agent.model.settings", json!({})).await, saved);
+    }
+    let (directory, environment) = f.release().await;
+    let mut reopened = Fixture::open(directory, environment).await;
+    assert_eq!(
+        reopened.query("agent.model.settings", json!({})).await,
+        saved
+    );
+    let mut independent = Fixture::start().await;
+    assert_eq!(
+        independent.query("agent.model.settings", json!({})).await,
+        before
+    );
+    independent.release().await;
     reopened.release().await;
 }

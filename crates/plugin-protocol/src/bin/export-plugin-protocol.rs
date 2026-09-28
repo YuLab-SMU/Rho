@@ -31,6 +31,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ProjectReadCoverageArguments::export_all(&types)?;
     PluginInstancePage::export_all(&types)?;
     PluginRequest::export_all(&types)?;
+    PluginDelegatedOperationArguments::export_all(&types)?;
+    PluginDelegatedOperation::export_all(&types)?;
     PluginPreflightRequest::export_all(&types)?;
     PluginPreflightResult::export_all(&types)?;
     PluginCatalogArguments::export_all(&types)?;
@@ -145,6 +147,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("archive-inspection", schemars::schema_for!(PluginArchiveInspection)),
         ("archive-operation-arguments", schemars::schema_for!(PluginArchiveOperationArguments)),
         ("rpc", schemars::schema_for!(RpcFrame)),
+        ("delegated-operation-arguments", schemars::schema_for!(PluginDelegatedOperationArguments)),
+        ("delegated-operation", schemars::schema_for!(PluginDelegatedOperation)),
         ("workspace-paths", schemars::schema_for!(WorkspacePaths)),
         ("view-message", schemars::schema_for!(PluginViewMessage)),
         ("view-caller", schemars::schema_for!(PluginViewCaller)),

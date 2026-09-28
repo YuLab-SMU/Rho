@@ -592,6 +592,15 @@ the transport reports uncertainty and never retries, commits or claims rollback.
 The core remains authoritative for delegated grants, scope and original Operation
 idempotency. The pump cannot turn a query parent into effectful authority.
 
+`plugins.delegated_operation` resolves an original reverse-call request from its
+retained parent admission. Only the native backend caller for that exact instance,
+project and principal may observe it, with `operation.read`; caller/provider/path
+selectors are not accepted. It returns the original Operation identity for the
+existing `operation.get` read. No durable match is a partial observation, never
+proof of no dispatch or permission to replay. The bounded journal read requires
+no live provider, reconnect, activation or recovery, and keeps the native request
+key derivation in the same core owner as dispatch.
+
 Agent metadata composition uses its package-owned task/store libraries behind an
 ordinary native backend. Native initialization supplies its normalized project and
 per-instance store directory; task arguments cannot choose a database, principal

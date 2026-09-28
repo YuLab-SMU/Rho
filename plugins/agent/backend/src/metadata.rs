@@ -233,6 +233,12 @@ impl Metadata {
             }),
         );
         match call.binding.capability.id.as_str() {
+            "agent.model.configure" => {
+                let settings: rho_agent_api::ComponentModelSettings = decode(&call.arguments)?;
+                // This composition has no live model loops. When those are
+                // composed, disabling must also fence their original live tasks.
+                encoded(self.owner.configure(&actor, &settings, now)?)
+            }
             "agent.model.create" => {
                 let args: CreateConversation = decode(&call.arguments)?;
                 encoded(

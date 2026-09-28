@@ -239,6 +239,14 @@ multiple hops, forged selectors, native scope loss and closure while an accepted
 operation is waiting. A non-view origin stays distinct from a stale view. These
 checks use the generic plugin-only Host and do not establish Agent task admission.
 
+Original reverse-request observation uses `cargo test -p rho-host --test
+plugin_delegated_operations --locked`. Its independent framed Python backend
+keeps a parent active while its delegated child runs, discards the child's reply,
+and resolves the exact journal identity without repeating the call. The fixture
+checks absent-record uncertainty, argument forgery, sibling-instance denial,
+principal/project/read-scope boundaries and journal reads after release/reopen.
+Public declarations and standalone schemas are covered by the protocol consumer.
+
 The ordinary Agent metadata process uses `cargo test -p rho-agent-backend --test
 metadata --locked` for framed Host exchanges, original caller identity, task/draft
 CAS, explicit controller takeover, bounded concurrency, disconnect and settlement.

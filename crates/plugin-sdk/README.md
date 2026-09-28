@@ -119,6 +119,16 @@ errors retain their code and recovery without including recovery in debug output
 The helper is a transient transport, not an idempotency database, authorization
 grant, retry policy or scientific result owner.
 
+Retain both the native parent `operation_id` and your original reverse `RequestId`
+before dispatching scientific work. With an explicit `plugins.delegated_operation`
+grant containing `operation.read`, a later active query can pass
+`{parent_operation, request}` to resolve that original Operation, then read it
+through `operation.get`. The Host derives the provider from its native parent
+admission and verifies the original backend caller, project and principal. You
+cannot select another caller or supply the Host's opaque idempotency key. A null
+identity is a partial observation: dispatch may still be pending. Do not replay
+an unresolved mutation. Observation does not reconnect or recover a backend.
+
 For files and other large observations, initialization can include a
 `resource_channel`. On the current Unix target, construct `ResourceClient` from
 it and call `put` with the active incoming request ID, declared size, media type,

@@ -19,6 +19,7 @@ pub fn is_mutation(id: &str) -> bool {
             | "agent.model.draft"
             | "agent.model.update"
             | "agent.model.take_control"
+            | "agent.model.configure"
     )
 }
 fn capability(
@@ -99,6 +100,13 @@ pub fn manifest() -> PluginManifest {
                 schema_for!(CreateConversation).to_value(),
                 conversation.clone(),
                 json!({"conversation_id":"task-example","profile":"project"}),
+            ),
+            capability(
+                "agent.model.configure",
+                "Save Agent model settings",
+                schema_for!(ComponentModelSettings).to_value(),
+                schema_for!(ComponentModelSettings).to_value(),
+                json!({"version":0,"enabled":false,"connection":null}),
             ),
             capability(
                 "agent.model.draft",

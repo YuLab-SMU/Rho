@@ -12,7 +12,9 @@ and `dist/rho-agent-backend`. All first-party sources, dependency locks, license
 and these instructions are included in the package inventory.
 
 The current process contributes task metadata queries and model-task create,
-draft, title/archive and explicit control-transfer Operations. Native initialization
+draft, title/archive, explicit control-transfer and model-configuration Operations.
+Configuration validates an expected settings version and credential references;
+it does not contact models or persist plaintext keys. Native initialization
 selects the exact instance data directory. Mutations observe the original caller
 through `views.caller`; callers cannot select a project, principal, controller or
 database path. The Agent metadata store is separate from the scientific journal.

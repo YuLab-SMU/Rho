@@ -76,8 +76,10 @@ preserves admitted actions and records owner diagnostics before returning errors
 
 The new `backend/` process composes the same owner and store for task metadata.
 Its public manifest contributes task-list/conversation/settings queries plus
-model-task creation, draft saving, title/archive updates and explicit control
-transfer. It accepts only native initialization paths. Each mutation uses the
+model-task creation, draft saving, title/archive updates, explicit control
+transfer and versioned model configuration. Configuration accepts credential
+references only; it does not read a key, test an endpoint or start a model.
+It accepts only native initialization paths. Each mutation uses the
 original `views.caller` observation and a synchronous, one-use owner admission;
 neither arguments nor stored observations can grant a later action. Task results
 are submitted to the original Host Operation and retained until terminal settlement.

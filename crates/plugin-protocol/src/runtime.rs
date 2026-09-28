@@ -139,6 +139,23 @@ pub struct PluginRequest {
     pub preconditions: Value,
 }
 
+/// Observe a backend's original reverse Operation call. Identity is resolved
+/// from the native caller and retained parent admission, never a caller selector.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginDelegatedOperationArguments {
+    pub parent_operation: OperationId,
+    pub request: RequestId,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginDelegatedOperation {
+    /// Null means no visible durable record was observed. It does not prove
+    /// that dispatch did not happen and must never authorize a replay.
+    pub operation_id: Option<OperationId>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct PluginPreflightRequest {

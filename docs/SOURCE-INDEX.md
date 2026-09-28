@@ -85,8 +85,10 @@ Sources:
 - `crates/cli/tests/session_test_project.rs`
 - `crates/host/src/plugin_tests.rs`
 - `crates/host/tests/files_plugin.rs`
+- `crates/host/tests/fixtures/delegated_operation.py`
 - `crates/host/tests/fixtures/view_delegation.py`
 - `crates/host/tests/plugin_archives.rs`
+- `crates/host/tests/plugin_delegated_operations.rs`
 - `crates/host/tests/plugin_development.rs`
 - `crates/host/tests/plugin_optional_requirements.rs`
 - `crates/host/tests/plugin_preview.rs`
@@ -241,6 +243,7 @@ Checks:
 - `plugins.build-owner`: `["cargo","test","-p","rho-plugins","--test","build_operations","--locked"]`
 - `plugins.console`: `["node","scripts/test-console-plugin.mjs"]`
 - `plugins.console-editor`: `["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"]`
+- `plugins.delegated-operation`: `["cargo","test","-p","rho-host","--test","plugin_delegated_operations","--locked"]`
 - `plugins.development-host`: `["cargo","test","-p","rho-host","--test","plugin_development","--locked"]`
 - `plugins.development-owner`: `["cargo","test","-p","rho-plugins","--test","source_development","--locked"]`
 - `plugins.download-browser`: `["npm","run","test:browser","--prefix","ui","--","plugin-download.spec.ts"]`

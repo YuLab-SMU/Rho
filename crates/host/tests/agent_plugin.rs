@@ -66,6 +66,42 @@ async fn ordinary_agent_metadata_uses_generic_host_scopes_isolated_storage_and_o
     let host = NextHost::open_plugin_workspace(&db, &root).await.unwrap();
     let active = succeeded(&host, "activate", "plugins.activate", json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":backend_target(),"alias":"agent","configuration":{}})).await;
     let first = active.output.unwrap()["instance"]["identity"].clone();
+    let settings = binding(&host, &first, "agent.model.settings").await;
+    let before = query(
+        &host,
+        "agent.model.settings",
+        json!({"binding":settings,"arguments":{}}),
+    )
+    .await;
+    let configure = binding(&host, &first, "agent.model.configure").await;
+    let request = json!({"binding":configure,"arguments":{"version":before["version"],"enabled":false,"connection":null}});
+    let saved = succeeded(
+        &host,
+        "configure-original",
+        "agent.model.configure",
+        request.clone(),
+    )
+    .await;
+    let repeat = succeeded(
+        &host,
+        "configure-original",
+        "agent.model.configure",
+        request.clone(),
+    )
+    .await;
+    assert_eq!(saved.operation.operation_id, repeat.operation.operation_id);
+    assert_eq!(saved.output, repeat.output);
+    let stale = invoke(&host, "configure-stale", "agent.model.configure", request).await;
+    assert_eq!(stale.status, OperationStatus::Failed);
+    assert_eq!(
+        query(
+            &host,
+            "agent.model.settings",
+            json!({"binding":settings,"arguments":{}})
+        )
+        .await,
+        saved.output.unwrap()
+    );
     let list = binding(&host, &first, "agent.tasks").await;
     assert_eq!(
         query(

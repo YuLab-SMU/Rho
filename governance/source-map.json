@@ -625,6 +625,9 @@
     "plugins.view-delegation": {
       "command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_view_delegation", "--locked"]
     },
+    "plugins.delegated-operation": {
+      "command": ["cargo", "test", "-p", "rho-host", "--test", "plugin_delegated_operations", "--locked"]
+    },
     "plugins.editor-context": {
       "command": ["cargo", "test", "-p", "rho-editor-backend", "--lib", "--locked"]
     },
@@ -1045,6 +1048,8 @@
         "ui/e2e/editor-code.spec.ts",
         "ui/e2e/files-plugin.spec.ts",
         "crates/host/tests/plugin_view_delegation.rs",
+        "crates/host/tests/plugin_delegated_operations.rs",
+        "crates/host/tests/fixtures/delegated_operation.py",
         "crates/host/tests/fixtures/view_delegation.py",
         "crates/host/tests/plugin_self_requirements.rs",
         "crates/host/tests/plugin_optional_requirements.rs",
@@ -1155,6 +1160,7 @@
         "plugins.scenario-ports",
         "plugins.draft-browser",
         "plugins.view-delegation",
+        "plugins.delegated-operation",
         "plugins.editor-context",
         "plugins.editor-context-manifest",
         "plugins.editor-model",

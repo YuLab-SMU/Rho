@@ -644,7 +644,7 @@ async fn caller_view_observation_is_native_credential_free_and_survives_backend_
         &context,
         "close-origin",
         "views.close",
-        json!({"view":view["view"]}),
+        json!({"view":view["view"],"mode":{"kind":"retain_acknowledged","expected_version":0}}),
     )
     .await;
     assert!(

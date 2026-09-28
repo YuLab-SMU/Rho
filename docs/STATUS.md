@@ -167,6 +167,25 @@ passes; follow-up results and logs use the `v2` suffix.
 Static dependency, source containment,
 documentation map and script syntax checks pass for the new source.
 
+The v2 view-origin stage passed all nine draft cases and one existing delegation
+case, but the new origin case requested ordinary close without a connected close
+handler. Host correctly refused. The fixture now explicitly retains acknowledged
+state at its expected version; no product close rule was weakened. The serial
+verifier resumed at that stage with `v3` logs, retaining the original failure.
+
+Source now adds `plugins.delegated_operation`: the native backend can resolve
+its original reverse request from the retained parent admission with exact
+project/principal/instance checks. It returns only the original Operation identity;
+an absent journal record is partial evidence and never permission to replay.
+A separate generic Host fixture covers an active child, discarded reply,
+cross-instance/identity/scope rejection and read-only release/reopen. Public
+declarations, schemas and consumer checks are included. These runtime checks are
+pending in the current serial run. Ordinary Agent model configuration is also
+composed through the existing owner's versioned settings admission; its new
+configuration/isolation fixture and generic Host case remain pending. The earlier
+five-case metadata result predates this addition. No model or actual credential
+is accessed by these checks.
+
 This remains incomplete Agent migration. Model execution and native Agent transport
 composition, context providers, Agent views, Studio Agent assistance and final
 composition/default delivery remain active work. The metadata process does not
