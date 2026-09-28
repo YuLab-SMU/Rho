@@ -11,441 +11,87 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
-Agent native transport, native and component task state machines, metadata storage
-and the Rig model driver now live in `plugins/agent/backend/client`, `backend/owner`,
-`backend/store` and `backend/engine`. Public DTOs, TypeScript declarations and JSON schemas are in
-the same package. These libraries have no private core dependency. The component
-API references only the public plugin protocol and R media API. The driver uses
-captured input and owner callback ports; scientific execution still uses the
-original owners and Operation path.
+### Agent migration
 
-The component task owner now contains the sole admission, continuation,
-permission, recovery and budget implementation. The old Application implementations
-were removed. Its temporary core adapter translates typed captures, preserves
-structured errors and revalidates the original live controller for caller writes.
-It injects the Agent-owned atomic repository and shares the same writer gate with
-manual handoff; there is no second task store or approval flow. Full document
-receipts retain native operation IDs, save/run steps, applied versions and save
-acknowledgements. Only the six supported document actions are admitted; fixed-view
-controls remain unavailable. Read-only restart projections preserve uncertainty
-without recovering or replaying work. This is not a legacy-store reader.
+Agent transport, native/component task owners, credential/metadata storage and the
+Rig driver now live in the ordinary `plugins/agent` package. Its public APIs and
+SDK do not import private core modules. The temporary Host adapters forward to
+these same owners and stores; the fixed scientific composition is still present.
+Native/component tasks share one Agent-owned repository at the new
+`agent-v1.sqlite` path. It refuses unrelated database formats, does not read old
+Application task tables, and does not create a second scientific journal.
+Credential reads, atomic persistence, caller/project filtering and redacted
+errors belong to this package. Development checks have not opened user keys.
 
-The component extraction baseline passes 44 focused cases: nine public task-owner
-cases and 35 Application cases. These include atomic write failure, scoped original
-admission, live-controller loss, frozen permissions, late native receipts and
-observation-only restart. Three boundary cases check serialized bytes/digests,
-complete native document receipts, recovery states and structured errors. Public
-SDK generation and an independent strict TypeScript consumer also pass for that baseline.
+The ordinary backend contributes metadata queries, task creation/drafts,
+rename/archive, controller takeover, model settings and diagnostics, scoped
+credential Control, submitted-text component model runs, native task commands,
+attachment Control and original-request observations. Component runs retain their
+original native parent and exact optional R provider/session. Explain is read-only;
+Run uses the selected R execution capability. Stop fences later work while accepted
+R children retain their real settlement. Repeated requests observe the original
+admission instead of restarting a model. Component context, attachments and
+continuation have not yet been composed through the ordinary backend.
 
-The sole Agent SQL implementation has now moved into `backend/store`. Core SQL for
-native/component tasks, assets, handoff receipts, quotas and task-list projections
-was removed. Its temporary adapter keeps one Agent store for both task owners at a
-new `agent-v1.sqlite` sibling path, preserving the original transactional checks.
-It does not read/import previous Application task tables or delete their files.
-The package verifies its format and refuses unrelated/unsupported databases before
-schema changes. All nine public store cases (seven moved, two new) pass. All 75
-affected Host/storage cases now pass on the credential-extraction source, including
-the two new core composition cases, all six handoff cases, 40 stored component
-cases and 27 Host task/recovery cases. The focused Host history case also passes. Public dependency
-containment, native-target metadata and architecture checks pass. The current
-binary builds and its help/startup check passes with the new store. All 13 selected
-component Chrome flows pass; two opt-in real-model cases were excluded. All nine
-current normal/narrow/wide, settings and scientific-state captures were inspected
-without visible clipping, missing glyphs or overlapping controls. The independent
-assembly passes all 14 owner and 15 store cases and verifies the public schemas.
-All 18 fixture-engine real-R source/execution cases pass with the new store; ten
-live-model cases were excluded. The current binary build and selected manual-handoff
-Chrome case also pass. All five fresh handoff captures were inspected: constrained,
-320 px (including the scrolled target), wide and recovered receipt. Controls fit
-without overlap or horizontal overflow; scrolling retains the action footer. These
-are existing Agent views, not ordinary-plugin view acceptance. An initial
-all-platform offline metadata query failed on an uncached non-host dependency;
-the Apple Silicon filtered query passed without downloads.
+Native tasks use the package's existing scheduler and per-connection MCP endpoint.
+Connection admission, revocation, bounded HTTP/session/catalog/result handling and
+shutdown are owned together. Dropping a browser or HTTP observer does not stop or
+replay accepted work. Send retains its native parent until the turn and accepted
+tools settle. Release verifies both endpoint cleanup and recorded process quiet;
+failed disconnects remain unconfirmed. Saved controller correlation survives
+renderer reconnection. Cross-window takeover checks the original view's actual
+presence and freshly validates the requesting caller before owner admission.
+Unknown, attached or closing controllers cannot be treated as revoked.
 
-Credential file persistence now also lives in `backend/store`, with the original
-locking, atomic replacement, immutable key references, caller/project filtering and
-redacted diagnostics. The Host keeps only temporary path selection and typed
-forwarding. The public owner requires an explicit absolute path; missing-key reads
-and removals do not create a credential directory. Four credential cases moved with
-the implementation and two location/read-isolation cases were added. All six now
-pass in the independent assembly; the first owner/store run predates this change
-and remains a separate baseline.
-No actual user credential files were opened or changed by development checks.
+Each native Send captures explicit Query/Operation provider bindings, immutable
+manifest schemas/descriptions and original scopes. The package declares optional
+grants for 83 exact public R, Files, Process, Remote, Environment and Editor
+contracts, excluding Control/Runtime. Activation selects grants; Send separately
+selects tools. Semantic tool UUIDs and complete requests are durably admitted before
+dispatch. Later turns, Stop and dropped observers cannot redirect or replay them.
+Query results retain partial/cached status; unverified or oversized Operation
+replies remain uncertain. Original-operation recovery preserves missing, busy,
+cached and unavailable delegation observations as partial evidence and reads the
+original scientific record only when correlation is complete. Recovery does not
+rewrite the saved uncertain receipt. All scientific results still commit through
+core Operation.
 
-Manual handoff policy and contracts have now moved into the public Agent package;
-the Application implementation is a typed forwarding adapter to the same atomic
-repository. The original caller validator and target writer gates are retained.
-All 14 public owner cases now pass, including the five new handoff cases. The
-serialization/digest boundary case also passes. Public handoff SDK generation,
-independent strict TypeScript consumption and independently assembled schema
-freshness now pass. All six existing
-SQLite handoff cases pass before the subsequent storage split, including write-failure
-rollback, durable idempotency, stale material, scoped controllers and asset separation. This change
-does not create a model turn, transfer uploads or move grants between tasks.
+The public SDK's reverse-call pump and `views.caller`, `views.presence` and
+`plugins.delegated_operation` supply bounded native correlation without exposing
+Host credentials. The latter resolves only the original child under its retained
+parent admission and exact project/principal/instance. Absent evidence never
+authorizes a replay. Scoped attachment uploads currently accept at most 524288
+encoded bytes in one Control frame; full 8 MiB resource transport remains pending.
 
-An independent source assembly, containing the Agent libraries plus the two public
-API dependencies, passed all 29 execution/recovery cases (three model policy/error,
-17 Rig HTTP/SSE/production-driver, nine task-owner). Its aggregate check was then
-interrupted during an inactive doc-test stage with no executable documentation
-examples. A repeat using explicit library/protocol targets was interrupted during
-prolonged compilation before new tests ran. Both interruptions are retained as
-incomplete checks, not passes. No business logic changed between those attempts.
-The script now selects the actual library and protocol targets explicitly.
+Current Agent verification is layered by source; earlier results do not establish
+acceptance of later changes. Evidence below lives under `target/plugin-refactor/`.
 
-Client generation and all 67 affected Host/storage cases for the component
-extraction pass (27 Host and 40 storage). That command compiled the component
-libraries before the subsequent handoff source change; its result is a separate
-baseline. On the handoff source before the storage split, all six SQLite handoff
-cases, eight Host model-unit cases and 18 fixture-engine real-R cases pass. Ten
-live-model cases were excluded. Client build and generated-type/embedded-asset
-consistency and all 98 Agent client cases pass. The subsequent binary/browser checks use the new store;
-the component browser result is recorded above and focused/cross-boundary storage acceptance is running.
-Tool processes repeatedly remained inactive
-without a compiler diagnostic; the cause is not established. A completed earlier
-startup sample was predominantly `_dyld_start` before the harness, while later
-compiler/debugger sampling produced no usable stack. A privileged system sampler
-was unavailable and no privileges or system settings were changed. Preserve the
-existing passing evidence while completing these affected checks; do not infer
-current end-to-end acceptance from it. Details and commands are in
-`target/plugin-refactor/agent-component-verification.txt` and the versioned logs
-and interruption records alongside it. Inspect live verification processes before
-starting another Cargo invocation.
-That serial run completed successfully. The subsequent
-`target/plugin-refactor/agent-storage-verify.py` runs the new owner/store and core
-storage cases, regenerates the public SDK, checks an independent store/owner
-assembly, repeats real R with the new storage and exercises the existing
-manual-handoff Chrome flow. It has now completed successfully. Its exact results
-are in `target/plugin-refactor/agent-storage-results-v1.json`. The new public-port
-and ordinary metadata-backend verifier below is now the sole Cargo owner.
+| Scope | Executed evidence and limits |
+| --- | --- |
+| Extraction, storage and existing views | `agent-storage-results-v1.json` completes public owner/store, core storage, schema and independent-assembly checks, real-R fixture-engine cases and the existing manual-handoff browser case. Earlier engine acceptance at `1c871a8e` includes 75 Host/storage cases, 18 real-R fixture-engine cases, 98 client cases and 13 selected Chrome flows; nine captures were inspected. These are the existing views, not ordinary Agent views. Ten real-model R cases and two opt-in model/browser cases were excluded. |
+| Component scientific composition | `agent-science-results-v2.json`: 18 owner, 22 store and 23 framed backend cases, three core boundary cases, 40 core storage regressions, independent Agent/R builds, three ordinary Host cases and the real-R normal/Stop fixture pass. Frozen package/harness hashes are in `agent-science-packages-v2.json`. Native stdin is excluded from model context. |
+| Native runtime and private MCP | `agent-native-runtime-results-v1.json`, `agent-native-admission-results-v1.json` and `agent-native-mcp-results-v2.json` cover independent runtime/source assembly, durable admission and scoped storage, loopback MCP lifecycle, current-binary disposable ACP crash/resume, core task regressions and boundary checks at their recorded source. The MCP baseline passes all 12 native runtime cases, including five HTTP cases. |
+| Ordinary native backend | `agent-native-backend-results-v3.json` and `v4.json` cover the independently built 28-case backend and four generic Host cases on `41ad9981`, including attachments outside the journal, original identities, instance storage and failed-disconnect cleanup. The first interrupted Host attempt remains incomplete; the frozen-harness repeat passes. |
+| View/controller presence | `agent-view-presence-results-v2.json` and `agent-view-presence-combined-v1.json`: 29 root and independent framed cases, three public-Host delegation cases, four frozen-Host cases, public generation/TypeScript consumer, client build/check and architecture/boundary/governance pass on `82e8b505`. Source parity is retained separately. |
+| Native scientific tools | `agent-native-tools-results-v1.json`: 18 owner, 31 store, 12 runtime and 33 framed cases plus public generation/client checks pass. The independently built `cf525960` package passes 33 framed cases. Generic Host and component/native real-R normal/Stop fixtures pass across `agent-native-tools-combined-v1.json` and `agent-native-tools-native-rerun-v2.json`, using the same frozen Host and external Agent/R packages. Source parity covers 312 source files. |
+| Expanded provider grants | `agent-peer-tools-results-v1.json`: root/independent 35-case backend, independent build and four frozen-Host cases pass. Declarations match all 83 public Query/Operation contracts exactly. `agent-peer-tools-source-parity-v1.json` covers 313 source files and the 315-file inventory at `c26976a4`. Synthetic peer results do not establish actual Process, Remote or Environment execution through Agent. |
+| Partial native recovery | `agent-native-partial-results-v1.json`: focused disconnect/reopen, all 35 root cases, independent rebuild and 35 independent cases, architecture/boundary/diff checks pass. Three changed files match `ed1a6edf`; remaining independent sources retain the preceding baseline. Source/backend hashes are recorded. Full generic Host restart and ordinary Agent views remain unverified. |
 
-The preceding engine baseline at `1c871a8e` remains separate: 75 Host/storage cases,
-18 real-R fixture-engine cases, 98 Agent client cases and 13 selected Chrome flows
-passed; nine captures were inspected. Its ten real-model R cases and two opt-in
-real-model browser cases were excluded. See
-`target/plugin-refactor/agent-engine-verification.txt`. Unchanged native transport
-fixtures remain in `target/plugin-refactor/agent-native-verification.txt`; they
-have not been rerun for the current component extraction.
+Initial fixture failures and incomplete compilation attempts remain in their
+versioned logs and Git history; they are not counted as passes. Corrected fixtures
+retain the original behavioral assertions. None of these synthetic native peers or
+loopback model fixtures establishes real-provider quality. Existing user Hosts and
+R sessions have not been replaced, and no installation, publication or full-workspace
+audit ran.
 
-The public backend SDK now has a bounded asynchronous reverse-call client/pump
-for Agent owner callbacks. It retains the containing owner's original request ID,
-correlates concurrent replies, refuses queued/duplicate/mismatched replies, and
-keeps abandoned waits reserved until response or disconnect. Pump closure fences
-new calls and returns unconfirmed outcomes for queued/dispatched requests; it does
-not replay, cancel or commit scientific work. Typed Host errors preserve recovery
-without printing it in debug output. All seven focused tests, including a framed
-exchange over bounded duplex I/O, and six existing transport cases now pass. This is a public
-transport building block consumed by the new Agent metadata backend; model/native
-dispatch integration remains pending.
-The generic `views.caller` query exposes the original authenticated view, window
-and connection identities without private tokens. Native ingress captures this
-identity, backend hops retain it, and missing/closing/stale views fail. It reads
-existing state and does not authorize future writes. The new generic Host fixture
-passes for two delegation hops, forged selectors, lost scopes and closure during
-accepted work. Existing draft/delegation passes are reused; fixture cleanup now
-waits for native execution leases to retire before releasing the instance.
-
-`plugins.delegated_operation` resolves the original reverse request from its
-retained parent admission with exact project/principal/instance checks. It returns
-only the original Operation identity; an absent record is partial evidence and
-never permission to replay. The generic Host case passes for an active child,
-discarded reply, foreign identity/scope/instance refusal, and read-only observation
-after release/removal/reopen. It closes the original disposable Host before
-rebinding the same journal to another project, respecting the single-Host lock.
-The scoped delegation runtime case also passes. Public declarations and schemas,
-an independent strict TypeScript consumer, client build and client check all pass
-in the v5 verifier. Earlier failed fixture runs remain in their versioned logs.
-
-The ordinary Agent backend composes the public task owner and store in an isolated
-process. It contributes task queries, creation, draft saving, title/archive
-updates, explicit controller takeover and versioned model configuration. Each
-write observes its original native caller and consumes a one-use metadata
-admission. Callers cannot select an identity/path. Original operation candidates
-remain retained until native settlement. All six metadata/configuration framed
-cases pass before the key-Control addition, covering concurrency, version/control
-conflicts, invalid plaintext/embedded credentials, instance separation and
-observation-only reopen. The independent package build in v5 passed, but its
-subsequent test selected the system's Rust 1.88 instead of the project's 1.97.
-The build and test scripts now share an explicitly resolved toolchain. The
-corrected independent backend build and all ten framed cases now pass in the
-key-Control verifier. Its generic Host acceptance now also passes; the original
-v5 failure remains recorded. No compile failure is recorded as a passing test.
-
-The credential file stores a secret and its scoped original-request reference in
-one atomic replacement. Identical retries return the original reference; changed
-reuse is refused. Read-only lookup survives reopen, and removal retains the
-non-secret receipt so an old request cannot recreate the secret. All ten credential store cases now pass, including the four new cases for
-original-request recovery, concurrent duplicates, missing storage and corrupt
-receipt refusal. The independent assembly has also passed all 14 owner and 19
-store cases and its public schema freshness check.
-
-The backend now exposes `agent.model.key.store` as ephemeral Control, with original
-caller observation and instance-owned credential storage, plus the read-only
-`agent.model.key.receipt`. Missing receipts are explicitly partial observations.
-No raw key is placed into an Operation, task, configuration, revision or scenario.
-Controls and Operations share bounded transport capacity but only Operations
-require native settlement. Four new framed fixtures cover lost replies/reopen,
-wrong kinds/identity/scopes, disconnect before admission and mixed capacity.
-The generic Host fixture also checks unchanged journal table counts and separate
-instance receipts. All ten framed cases now pass, including those four new Control cases. Manifest
-generation also passes. The independent assemblies and the generic Host case all pass, including exact
-journal exclusion, two instances, retained Operations and removal. Architecture,
-boundary and documentation checks also pass; the complete serial result is in
-`target/plugin-refactor/agent-key-control-results-v1.json`. Its Host harness was
-compiled and its external package copied before the following diagnostic source
-change, retaining the ten-capability baseline. The harness hash stayed unchanged
-while the external package was built and loaded.
-The v5 public-port logs and results are retained separately.
-
-Source now composes the public Rig engine for explicit synthetic model diagnostics:
-`agent.model.test`, `agent.model.diagnostic` and `agent.model.test.stop`. Only
-explicit test admission reads the captured scoped key and contacts its endpoint.
-The original native Operation remains active until the diagnostic ends. Stop
-requests and settings disable signal the original live test; read/reopen/repeated
-requests only observe retained state. Tests have no scientific context or Host
-tools. Three additional framed fixtures cover actual loopback HTTP/SSE, retained
-settlement, caller/version stop checks, disabling and interrupted reopen. A second
-generic Host case exercises the independently packaged process and original
-Operation lifetime. The lock update, all 13 framed cases and manifest generation
-now pass, including the three new diagnostic cases. Independent packaging and
-all 13 framed cases, both generic Host cases and architecture, boundary and
-governance checks also pass in the serial
-`target/plugin-refactor/agent-model-diagnostic-verify.py`. Exact results remain in
-`target/plugin-refactor/agent-model-diagnostic-results-v1.json`. That independent
-package and Host harness were frozen before the following model-task changes.
-The earlier metadata/Control evidence remains its own baseline.
-
-Source now also composes ordinary submitted-text model runs using the same task
-owner, store, event log and Rig driver. Admission atomically captures its original
-native parent Operation, request and exact provider binding; later writes cannot
-replace or remove them. Existing tool receipt request IDs remain the intended
-native reverse-call identities, without another database. Duplicate task requests
-observe the original parent and do not read keys or restart models. Stop, disable
-and explicit takeover fence live loops; observation/reopen preserves unfinished
-records without replay. All seven focused owner/store native-identity cases pass,
-including four new parent-admission/storage cases. All 17 framed backend cases
-also pass, including the four new model-task cases for actual loopback Rig output,
-retained native parents/events, stop/disable/takeover, refusal of uncaptured grants,
-missing-key admission and observation-only reopen. Manifest generation also passes
-with all 18 capabilities. The independent assembly now passes all 16 owner and
-21 store cases and schema freshness; all three temporary core boundary cases also
-pass. The frozen independent backend build and all 17 framed cases now also pass
-in `target/plugin-refactor/agent-model-run-verify.py`. That external source predates
-the following scientific integration. The subsequent ordinary generic Host harness
-and independent backend both compiled, but all three Host cases failed before
-activation: the formatted manifest exceeded the 256 KiB raw-file limit. Its compact
-content was 124,058 bytes. The exporter and package builder now write compact JSON
-and check the encoded size; the public limit is unchanged. The failed v1 evidence
-is retained. The fresh independent ordinary Host run passes all three cases, and
-the combined scientific real-R case also passes.
-This initial run input carries submitted text only, without scientific tools,
-context capture, attachments or continuation.
-
-Scientific model-tool source now captures an optional exact R provider/session,
-validates Explain/Run and original optional grants, and dispatches through public
-Host calls using durable tool request IDs. Native replies must match the original
-binding, parent and project. Stop retains already dispatched R work until its real
-reply; disconnect recovery only reads the original delegated Operation. Six new
-framed fixtures, two owner cases, one additional store case and a separate
-two-package real-R Host harness are implemented. All 18 owner and 22 store tests
-now pass, including captured-request digest enforcement and the new native tool
-authorization cases. The first 23-case framed run passed 18 and timed out in five
-scientific cases: the server disabled its outgoing listener while the queue was
-empty, so an async job's subsequent Host request could not wake it. The listener
-now stays active; all 23 framed cases pass in v2, including those five cases. The
-v1 failures remain recorded. Native real-R acceptance now passes below. Explain can
-select a read-only `r.session@1` binding with only its read grant/scope; the focused
-fixtures also refuse using that binding for Run. Manifest regeneration passes with
-21 capabilities, including original-admission and tool inspection queries; its
-encoded file is 124,059 bytes. The serial science verifier has completed owner/store,
-framed and manifest checks; all three core boundary and 40 core component-storage
-regressions also pass. Independent Agent and R builds both succeeded, and all
-three ordinary Host cases and the real-R case now pass against those same external
-packages. The real-R fixture covers normal completion and stopping the model while
-R is active: the original native parent, child causation, exact R provider/session,
-late report and counter effect are retained, without replay on repeated requests.
-Architecture, boundary and governance checks also pass. Exact results are in
-`target/plugin-refactor/agent-science-results-v2.json`; the preceding owner/store
-result remains in v1. Both independent packages and frozen harnesses were retained
-with per-file hashes in `agent-science-packages-v2.json`. Native stdin is excluded
-from model context.
-
-This remains incomplete Agent migration. Native Agent transport composition,
-context providers, Agent views, Studio Agent
-assistance and final composition/default delivery remain active work. Synthetic
-diagnostics do not establish those features or real-provider quality.
-Native task scheduling, connection slots, event observation and cleanup now live
-in `plugins/agent/backend/native`. The Host delegates
-to that same injected owner/runtime; its duplicated scheduler and five pure
-runtime tests were removed. The package adds endpoint-open and post-open storage
-failure cases, plus an independent source assembly. Failed registration now closes
-the opened connection, revokes its endpoint and retains process evidence; lack of
-confirmed quiet stays uncertain and prevents replacement. Publication and shutdown
-share the live-map lock. Cargo has validated the new local dependency lock. All
-seven native runtime cases, 13 Host task cases and six SQLite handoff cases pass;
-the same seven runtime cases also pass in a source assembly outside the checkout.
-The current binary build and disposable ACP crash/resume check also pass. The
-fixture preserves the exact native session and later draft, keeps interrupted
-outcomes uncertain and sends no replayed input. Exact serial results are in
-`target/plugin-refactor/agent-native-runtime-results-v1.json`. The completed scientific Host/R acceptance froze its harness and both
-external source packages before this extraction; its results cannot establish
-native-runtime acceptance. Architecture and private-import checks do cover the
-new source. The recovery fixture now hashes only its temporary
-configuration by default, without opening native user credential files.
-Initial import warnings were corrected. Existing user Hosts and R sessions have
-not been replaced; runtime acceptance uses disposable projects. No full-workspace
-audit, installation or publication ran.
-
-Native command admission now atomically captures the original native parent,
-request, exact Agent binding, original scopes and pre-command task/draft input in
-the same Agent-owned transaction. Later edits and transport retries cannot replace
-the captured identity or input. Receipt display copies may be released while the
-immutable original remains readable. Binary attachment input requires a separate
-scoped Control; these records do not reconstruct authority or start a connection.
-All seven new real-store fixtures pass, covering concurrency, immutable capture,
-rollback, reopen, scope/parent reuse refusal and storage budgets. All 18 owner and
-29 store cases also pass. The seven native runtime, two core storage and 13 Host
-task cases pass on this admission source. An independent assembly passes all 18
-owner and 29 store cases plus public schema freshness. Architecture, private
-dependency boundaries and governance checks pass; exact commands and results are
-in `target/plugin-refactor/agent-native-admission-results-v1.json`. Ordinary native
-backend/MCP composition remains unfinished. The preceding complete
-runtime/binary/recovery run froze its source before this admission addition.
-
-The native package now includes a private per-connection MCP endpoint with its own
-loopback listener, bearer and session manager. Owner admission and revocation share
-a gate; cancelled observation waits leave accepted work with its original owner.
-Requests, streaming responses, sessions, catalogs and results are bounded. Explicit
-shutdown confirms HTTP/session cleanup only. The first four loopback tests compiled;
-three passed and one exposed the SDK's successful response for deleting a foreign
-session. The boundary now refuses unknown sessions before SDK dispatch, and a fifth
-fixture checks streaming-response capacity. All five corrected HTTP cases and all
-12 native runtime cases pass. The same 12 cases also pass in an independent source
-assembly. All 13 Host task cases and the architecture, private-boundary and
-governance checks also pass. Exact commands and results are retained in
-`target/plugin-refactor/agent-native-mcp-results-v2.json`; the initial failed
-fixture remains in the v1 log. This is a
-transport primitive, now used by the native scientific-tool composition below.
-These transport checks use no actual model, user credentials or user sessions.
-
-The ordinary Agent backend now composes native task commands, observations and
-attachment Control using the same public owner/store/runtime. Fresh writes observe
-the current native caller; Send retains its original Operation until the native
-receipt settles, while identical retries only observe it. Saved attachments require
-an explicit versioned draft selection. Persisted controller correlation survives
-renderer reconnection. Release verifies both HTTP cleanup and saved native process
-quiet, including failed disconnects whose live entry was already removed.
-The initial framed run passed three of four new cases; the fourth fixture omitted
-attachment selection in its draft. After correcting that fixture, all four cases
-and all 27 framed cases pass, as do the independent package build and its 27 cases.
-That v2 acceptance predates the added failed-disconnect release check. The subsequent
-architecture check found the new package-internal composition edges were missing
-from its declared map; the map now names the public native/client libraries without
-allowing private core imports. On `41ad9981`, all five focused native cases
-and all 28 framed cases pass. The independent package builds and passes the same
-28 cases. All four generic Host cases now pass, including native task metadata,
-attachment journal exclusion, original request identity and separate instance
-storage. The Host harness bytes were unchanged by the independent package build.
-Architecture and its allow/reject fixtures, private boundaries, governance and
-diff checks also pass. The first Host run was interrupted by the turn transition
-without a terminal result; its absent processes were verified before rerunning
-only that frozen harness and the remaining static checks. Logs/results are in
-`target/plugin-refactor/agent-native-backend-results-v3.json` and
-`agent-native-backend-results-v4.json`; earlier failed/interrupted logs remain.
-Contributed context, full-size resource transfer and ordinary Agent views remain
-unfinished. Current uploads are bounded to 524288 encoded bytes. No installed
-native Agent, real model or user credential is used by these checks. Existing Hosts
-and R sessions have not been restarted. The fixed core composition remains in place.
-
-On `82e8b505`, source exposes a bounded public `views.presence` observation and composes it
-for native cross-window takeover. Attached/closing views remain protected;
-unknown/foreign views fail, and a detached/closed result is followed by a fresh
-requesting-caller check before owner admission. The query contains no credentials
-or view content and does not reconnect a view. The focused native takeover case
-passes after correcting its stale control generation: first Send advances that
-generation, and the initial fixture was correctly refused before takeover. The
-first failure and its diagnostic repeat are retained. All 29 framed cases and
-all three public-Host view-delegation cases pass, including credential/content
-exclusion, refused-close recovery and backend-crash detachment. Public contract and
-manifest generation, the independent TypeScript consumer, client build and client
-consistency checks also pass. The independent package builds and passes the same
-29 framed cases. All four generic Host cases pass with the frozen Host executable
-unchanged. Architecture, private boundaries, governance and diff checks pass.
-A supplementary manifest byte comparison initially failed because the build
-expands `source.files`; comparison against the build recipe confirms the complete
-source inventory and identical remaining fields. That failed probe is retained.
-Commands and results are in `target/plugin-refactor/agent-view-presence-results-v2.json`;
-the independent stages are in `agent-view-presence-combined-v1.json`, with source
-parity in `agent-view-presence-source-parity-v2.json`. Initial failure logs remain.
-
-The ordinary native endpoint now composes explicitly selected scientific tools.
-Each Send captures exact Query/Operation bindings, immutable manifest descriptions,
-schemas and scopes after grant/caller checks. A semantic tool UUID is durably
-admitted under the original Send before dispatch. Dropped HTTP observers, Stop and
-later turns cannot replay or redirect it; accepted children retain their original
-parent until settlement. Bounded partial/cached queries remain labeled, while
-unverified, missing or oversized scientific replies retain uncertainty. Scoped
-receipt and original-operation queries observe recovery without dispatch or
-rewriting uncertainty. Scientific results still commit only through core Operation.
-The package now declares optional Query/Operation grants for the exact public R,
-Files, Process, Remote, Environment and Editor contracts. Activation selects each
-capability version separately; declarations do not activate a provider or select
-tools for a Send. Core management tools remain to be connected.
-
-Two focused durable-tool tests and the initial three framed connection cases pass.
-The first complete backend run passed 31 cases and found a stale manifest count
-(27 instead of 29); the next passed 32 and correctly refused a query fixture missing
-its read scope. Both fixture expectations are corrected, and all 33 backend cases
-now pass (including the six result/observation variants in the fourth native-science
-case). All 18 owner, 31 store and 12 native runtime cases also pass on this source.
-The real ACP/private-MCP/generic-Host/R fixture now passes its normal and Stop
-branches: R executes once, accepted children survive Agent Stop, identical requests
-only observe, and original scientific results remain readable after package removal.
-Agent public declarations/schemas and its 29-capability manifest are generated.
-Public client generation, the independent strict TypeScript consumer, client build
-and consistency checks pass. Architecture, private boundaries, governance and diff
-checks also pass. Commands/results are in `agent-native-tools-results-v1.json`.
-The independently built Agent package passes all 33 framed cases. All four generic
-Host cases and both real-R fixtures now pass across the recorded runs; the component
-fixture and native fixture each cover normal completion and stopping. The first
-native attempt failed because its local ACP test peer parsed an empty SSE data
-event as JSON. Correcting that peer's event parser resolves it; the same frozen
-Host executable and independent Agent/R packages were reused, without a product
-change or relaxed assertion. The initial failure remains in
-`agent-native-tools-combined-v1.log`; the native rerun is in
-`agent-native-tools-native-rerun-v2.json`. Independent package/source parity covers
-`cf525960` (312 compared source files and the exact expanded source inventory), and
-both Host harness hashes remain unchanged. These fixtures use no actual native
-provider, real model, user credentials or user R sessions. Full generic Host restart
-and ordinary Agent view acceptance remain unfinished.
-Logs are retained under `target/plugin-refactor/agent-native-tools-*`; no failed
-check is recorded as a pass.
-
-The expanded scientific grant source passes all 35 framed backend cases. The two
-new cases cover three distinct provider bindings under one Send and ten refusals
-when either an activation grant or the original caller scopes are absent. Generated
-optional declarations match all 83 Query/Operation contracts from the six public
-provider manifests, including exact versions and scopes; Control/Runtime grants
-remain excluded. Its independent package builds and passes the same 35 cases;
-all four frozen-Host cases also pass, with the Host hash unchanged. Source parity
-checks 313 files against `c26976a4` and the exact 315-file package inventory.
-Commands/results are in `agent-peer-tools-results-v1.json`, with source parity in
-`agent-peer-tools-source-parity-v1.json`. These synthetic peer
-records and declaration checks do not establish actual local/remote process or
-environment execution through Agent. The independent real-R acceptance above uses
-the preceding frozen package.
-
-Native original-operation recovery now retains missing, cached/busy and unavailable
-delegation observations as explicitly partial results. It leaves the original
-uncertain receipt unchanged and reads only the original operation when complete
-evidence later appears. Admission still requires a complete observation. The
-expanded disconnect/reopen case passes, as do all 35 backend cases and architecture,
-private-boundary and diff checks. The independent package rebuild and all 35 framed
-cases also pass. The three changed files match the root recovery source; the
-remaining package source retains the preceding independent baseline. Commands,
-source hashes and backend hash are in `agent-native-partial-results-v1.json`;
-its recovery source is `ed1a6edf`, separate from the completed `c26976a4` acceptance
-above. These results do not establish full generic Host restart or ordinary Agent
-view acceptance.
+Native core management/Studio tools are the current integration focus. The new
+`host.core_contract` metadata port is implemented; its registry test and all 19
+public protocol cases pass. Affected Host checks, generated SDK consumption and
+client checks are still running. Agent Host-target/fixed-argument/result-correlation
+modules are drafted but not connected or tested. Core tool dispatch, exact-branch
+Studio assistance, full-size attachments, contributed context, ordinary Agent views,
+component input/continuation, actual generic Host restart and removal of fixed
+composition/default delivery remain unfinished.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,
