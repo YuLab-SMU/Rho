@@ -44,7 +44,7 @@ const allowed = {
   "rho-environment-owner": ["rho-environment-api", "rho-process-engine", "rho-process-owner"],
   "rho-contract": ["rho-agent-api", "rho-plugin-protocol", "rho-r-api", "rho-files-api", "rho-process-api", "rho-remote-api", "rho-environment-api"],
   "rho-operation": ["rho-contract", "rho-plugin-protocol"],
-  "rho-application": ["rho-contract"],
+  "rho-application": ["rho-contract", "rho-agent-owner"],
   "rho-agents": ["rho-application", "rho-contract"],
   "rho-skills": ["rho-contract", "rho-operation"],
   "rho-adapter-skills": ["rho-contract", "rho-operation", "rho-skills"],
@@ -61,11 +61,13 @@ const allowed = {
   "rho-host": ["rho-plugin-protocol", "rho-plugins", "rho-agents", "rho-agent-client", "rho-contract", "rho-operation", "rho-application", "rho-skills", "rho-adapter-skills", "rho-sqlite", "rho-workspace", "rho-r-runtime", "rho-project", "rho-git", "rho-environment", "rho-r-environment", "rho-execution", "rho-process", "rho-ssh"],
   "rho-mcp": ["rho-contract", "rho-host"],
   "rho-agent-api": [],
+  "rho-agent-owner": ["rho-agent-api"],
   "rho-agent-client": ["rho-agent-api"],
   "rho-workbench": ["rho-plugin-protocol", "rho-contract", "rho-host", "rho-mcp"],
   "rho-cli": ["rho-contract", "rho-host", "rho-mcp", "rho-workbench", "rho-plugin-protocol", "rho-plugins"],
 };
 const pluginLibraries = {
+  "rho-agent-owner": "plugins/agent/backend/owner",
   "rho-agent-api": "plugins/agent/api", "rho-agent-client": "plugins/agent/backend/client",
   "rho-environment-api": "plugins/environment/api", "rho-environment-owner": "plugins/environment/backend/owner",
   "rho-remote-api": "plugins/remote/api", "rho-remote-owner": "plugins/remote/backend/owner",

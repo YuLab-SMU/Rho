@@ -8,7 +8,7 @@ const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-types-'));
 try {
   fs.cpSync(path.join(root, 'plugins/agent/sdk'), path.join(directory, 'sdk'), {recursive: true});
   fs.writeFileSync(path.join(directory, 'package.json'), '{"type":"module"}');
-  fs.writeFileSync(path.join(directory, 'consumer.ts'), `import type {AgentControllerRef,AgentProvider,AgentClientSession,AgentNativeCapabilities,AgentUsageObservation,LocalAgent} from './sdk/index.js';
+  fs.writeFileSync(path.join(directory, 'consumer.ts'), `import type {AgentTaskRequest,AgentTaskDetail,AgentTaskEventPage,ProjectAgentTaskPage,AgentControllerRef,AgentProvider,AgentClientSession,AgentNativeCapabilities,AgentUsageObservation,LocalAgent} from './sdk/index.js';
 const controller:AgentControllerRef={window_id:'window',incarnation:'incarnation'};
 const providers:AgentProvider[]=['codex','kimi','deepseek'];
 function session(value:AgentClientSession):AgentControllerRef{return value.window;}
@@ -21,7 +21,13 @@ const incomplete:AgentControllerRef={window_id:'window'};
 function inventedUsage(value:AgentUsageObservation):number{return value.total_tokens;}
 // @ts-expect-error An Agent session includes native identity and bounded observations.
 const fabricated:AgentClientSession={window:controller,provider:'kimi',state:'ready'};
-void [controller,providers,session,discovery,modes,usage,incomplete,inventedUsage,fabricated];
+function captured(request:AgentTaskRequest){return [request.request_id,request.window.incarnation,request.command.kind];}
+function task(value:AgentTaskDetail){return [value.summary.attachment.control_frozen,value.draft.content.context,value.receipts.map(receipt=>receipt.submitted_draft)];}
+function events(value:AgentTaskEventPage){return [value.history_gap,value.history_generation,value.events.map(event=>event.usage?.total_tokens)];}
+function projection(value:ProjectAgentTaskPage){return value.tasks.map(task=>task.reference.kind);}
+// @ts-expect-error A captured send requires the exact draft version.
+const uncaptured:AgentTaskRequest['command']={kind:'send',control:{task_id:'task',generation:1}};
+void [captured,task,events,projection,uncaptured,controller,providers,session,discovery,modes,usage,incomplete,inventedUsage,fabricated];
 `);
   execFileSync(process.execPath, [path.join(root, 'ui/node_modules/typescript/bin/tsc'), '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--rootDir', directory, path.join(directory, 'consumer.ts')], {cwd: directory, stdio: 'inherit'});
   console.log('Independent Agent contract consumer compiled using only public declarations.');

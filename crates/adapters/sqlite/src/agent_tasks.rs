@@ -1,14 +1,14 @@
 //! Typed Agent application storage. No writes to the scientific journal.
 use crate::ApplicationStore;
 use rho_application::{
-    AgentTaskRepository, AgentTaskWrite, ApplicationError, ApplicationScope, MAX_AGENT_EVENT_BYTES,
+    AgentTaskRepository, AgentTaskWrite, AgentTaskError, AgentTaskScope, MAX_AGENT_EVENT_BYTES,
     MAX_AGENT_EVENTS, MAX_AGENT_TASKS, MAX_PROJECT_AGENT_EVENT_BYTES, StoredAgentTask,
 };
 use rho_contract::*;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
-fn error(e: impl std::fmt::Display) -> ApplicationError {
-    ApplicationError::Storage(e.to_string())
+fn error(e: impl std::fmt::Display) -> AgentTaskError {
+    AgentTaskError::Storage(e.to_string())
 }
 pub(crate) fn initialize(c: &Connection) -> Result<(), String> {
     c.execute_batch("CREATE TABLE IF NOT EXISTS agent_tasks (
@@ -38,34 +38,34 @@ pub(crate) fn initialize(c: &Connection) -> Result<(), String> {
         PRIMARY KEY(project,principal,task_id,asset_id));")
         .map_err(|e| e.to_string())
 }
-fn decode_task(value: String, cursor: u64, gap: bool) -> Result<StoredAgentTask, ApplicationError> {
+fn decode_task(value: String, cursor: u64, gap: bool) -> Result<StoredAgentTask, AgentTaskError> {
     let mut task: StoredAgentTask = serde_json::from_str(&value).map_err(error)?;
     task.event_cursor = cursor;
     task.history_gap |= gap;
     Ok(task)
 }
 impl AgentTaskRepository for ApplicationStore {
-    fn project_agent_tasks(&self, scope: &ApplicationScope, archived: Option<bool>, before: Option<&str>, limit: usize, native_host: &str, rho_host: &str, rho_live: &[String]) -> Result<ProjectAgentTaskPage, ApplicationError> {
+    fn project_agent_tasks(&self, scope: &AgentTaskScope, archived: Option<bool>, before: Option<&str>, limit: usize, native_host: &str, rho_host: &str, rho_live: &[String]) -> Result<ProjectAgentTaskPage, AgentTaskError> {
         self.read_project_agent_tasks(scope, archived, before, limit, native_host, rho_host, rho_live)
     }
     fn agent_task(
         &self,
-        scope: &ApplicationScope,
+        scope: &AgentTaskScope,
         id: &str,
-    ) -> Result<Option<StoredAgentTask>, ApplicationError> {
+    ) -> Result<Option<StoredAgentTask>, AgentTaskError> {
         let c = self.0.lock().map_err(error)?;
         let row: Option<(String, u64, bool)> = c.query_row("SELECT value,event_cursor,history_gap FROM agent_tasks WHERE project=?1 AND principal=?2 AND task_id=?3", params![scope.project,scope.principal,id], |r| Ok((r.get(0)?,r.get(1)?,r.get(2)?))).optional().map_err(error)?;
         row.map(|(v, c, g)| decode_task(v, c, g)).transpose()
     }
     fn agent_tasks(
         &self,
-        scope: &ApplicationScope,
+        scope: &AgentTaskScope,
         archived: Option<bool>,
         before: Option<&str>,
         limit: usize,
-    ) -> Result<Vec<StoredAgentTask>, ApplicationError> {
+    ) -> Result<Vec<StoredAgentTask>, AgentTaskError> {
         if !(1..=128).contains(&limit) {
-            return Err(ApplicationError::InvalidInput(
+            return Err(AgentTaskError::InvalidInput(
                 "Task page limit must be 1–128".into(),
             ));
         }
@@ -73,13 +73,13 @@ impl AgentTaskRepository for ApplicationStore {
             .map(|s| {
                 let (time, id) = s
                     .split_once(':')
-                    .ok_or_else(|| ApplicationError::InvalidInput("Invalid task cursor".into()))?;
+                    .ok_or_else(|| AgentTaskError::InvalidInput("Invalid task cursor".into()))?;
                 let time = time
                     .parse::<u64>()
-                    .map_err(|_| ApplicationError::InvalidInput("Invalid task cursor".into()))?;
+                    .map_err(|_| AgentTaskError::InvalidInput("Invalid task cursor".into()))?;
                 uuid::Uuid::parse_str(id)
-                    .map_err(|_| ApplicationError::InvalidInput("Invalid task cursor".into()))?;
-                Ok::<_, ApplicationError>((time, id))
+                    .map_err(|_| AgentTaskError::InvalidInput("Invalid task cursor".into()))?;
+                Ok::<_, AgentTaskError>((time, id))
             })
             .transpose()?;
         let c = self.0.lock().map_err(error)?;
@@ -113,9 +113,9 @@ impl AgentTaskRepository for ApplicationStore {
     }
     fn agent_task_counts(
         &self,
-        scope: &ApplicationScope,
+        scope: &AgentTaskScope,
         host: &str,
-    ) -> Result<(u32, u32), ApplicationError> {
+    ) -> Result<(u32, u32), AgentTaskError> {
         let c = self.0.lock().map_err(error)?;
         c.query_row("SELECT COALESCE(SUM(CASE WHEN json_extract(value,'$.host_incarnation')=?3 AND json_extract(value,'$.attachment.state') IN ('connecting','resuming','running','stopping') THEN 1 ELSE 0 END),0),
             COALESCE(SUM(CASE WHEN json_extract(value,'$.host_incarnation')=?3 THEN json_array_length(value,'$.attachment.decisions') ELSE 0 END),0)
@@ -123,18 +123,18 @@ impl AgentTaskRepository for ApplicationStore {
     }
     fn agent_draft(
         &self,
-        scope: &ApplicationScope,
+        scope: &AgentTaskScope,
         id: &str,
-    ) -> Result<AgentTaskDraft, ApplicationError> {
+    ) -> Result<AgentTaskDraft, AgentTaskError> {
         let c = self.0.lock().map_err(error)?;
         let value: Option<String> = c.query_row("SELECT value FROM agent_task_drafts WHERE project=?1 AND principal=?2 AND task_id=?3",params![scope.project,scope.principal,id],|r|r.get(0)).optional().map_err(error)?;
-        serde_json::from_str(&value.ok_or(ApplicationError::NotFound)?).map_err(error)
+        serde_json::from_str(&value.ok_or(AgentTaskError::NotFound)?).map_err(error)
     }
     fn agent_receipt(
         &self,
-        scope: &ApplicationScope,
+        scope: &AgentTaskScope,
         id: &str,
-    ) -> Result<Option<AgentCommandReceipt>, ApplicationError> {
+    ) -> Result<Option<AgentCommandReceipt>, AgentTaskError> {
         let c = self.0.lock().map_err(error)?;
         let value: Option<String> = c.query_row("SELECT value FROM agent_task_receipts WHERE project=?1 AND principal=?2 AND request_id=?3",params![scope.project,scope.principal,id],|r|r.get(0)).optional().map_err(error)?;
         value
@@ -143,9 +143,9 @@ impl AgentTaskRepository for ApplicationStore {
     }
     fn agent_receipts(
         &self,
-        scope: &ApplicationScope,
+        scope: &AgentTaskScope,
         task: &str,
-    ) -> Result<Vec<AgentCommandReceipt>, ApplicationError> {
+    ) -> Result<Vec<AgentCommandReceipt>, AgentTaskError> {
         let c = self.0.lock().map_err(error)?;
         let mut s=c.prepare("SELECT value FROM agent_task_receipts WHERE project=?1 AND principal=?2 AND task_id=?3 ORDER BY CASE WHEN json_extract(value,'$.status') IN ('prepared','submitted','uncertain','interrupted') THEN 0 WHEN json_extract(value,'$.command')='send' THEN 1 ELSE 2 END,updated_at DESC,request_id DESC LIMIT 128").map_err(error)?;
         let rows = s
@@ -158,18 +158,18 @@ impl AgentTaskRepository for ApplicationStore {
     }
     fn agent_events(
         &self,
-        scope: &ApplicationScope,
+        scope: &AgentTaskScope,
         task: &str,
         after: Option<u64>,
         before: Option<u64>,
         limit: usize,
-    ) -> Result<AgentTaskEventPage, ApplicationError> {
+    ) -> Result<AgentTaskEventPage, AgentTaskError> {
         if !(1..=100).contains(&limit) || (after.is_some() && before.is_some()) {
-            return Err(ApplicationError::InvalidInput("Invalid event page".into()));
+            return Err(AgentTaskError::InvalidInput("Invalid event page".into()));
         }
         let c = self.0.lock().map_err(error)?;
         let header: Option<(u64,bool)> = c.query_row("SELECT event_cursor,history_gap FROM agent_tasks WHERE project=?1 AND principal=?2 AND task_id=?3", params![scope.project,scope.principal,task],|r|Ok((r.get(0)?,r.get(1)?))).optional().map_err(error)?;
-        let (durable, gap) = header.ok_or(ApplicationError::NotFound)?;
+        let (durable, gap) = header.ok_or(AgentTaskError::NotFound)?;
         let history_generation: u64=c.query_row("SELECT json_extract(value,'$.history_generation') FROM agent_tasks WHERE project=?1 AND principal=?2 AND task_id=?3",params![scope.project,scope.principal,task],|r|r.get(0)).map_err(error)?;
         let oldest: u64=c.query_row("SELECT COALESCE(MIN(sequence),0) FROM agent_task_events WHERE project=?1 AND principal=?2 AND task_id=?3", params![scope.project,scope.principal,task],|r|r.get(0)).map_err(error)?;
         let descending = before.is_some() || after.is_none();
@@ -210,24 +210,24 @@ impl AgentTaskRepository for ApplicationStore {
             durable_cursor: durable,
         })
     }
-    fn agent_assets(&self, scope: &ApplicationScope, task: &str) -> Result<Vec<AgentAsset>, ApplicationError> {
+    fn agent_assets(&self, scope: &AgentTaskScope, task: &str) -> Result<Vec<AgentAsset>, AgentTaskError> {
         crate::agent_assets::list(self, scope, crate::agent_assets::AssetOwner::Native(task))
     }
-    fn agent_asset(&self, scope: &ApplicationScope, task: &str, asset: &str) -> Result<(AgentAsset, Vec<u8>), ApplicationError> {
+    fn agent_asset(&self, scope: &AgentTaskScope, task: &str, asset: &str) -> Result<(AgentAsset, Vec<u8>), AgentTaskError> {
         crate::agent_assets::read(self, scope, crate::agent_assets::AssetOwner::Native(task), asset)
     }
-    fn put_agent_asset(&self, scope: &ApplicationScope, task: &str, asset: &AgentAsset, bytes: &[u8]) -> Result<(), ApplicationError> {
+    fn put_agent_asset(&self, scope: &AgentTaskScope, task: &str, asset: &AgentAsset, bytes: &[u8]) -> Result<(), AgentTaskError> {
         crate::agent_assets::put(self, scope, crate::agent_assets::AssetOwner::Native(task), asset, bytes)
     }
     fn commit_agent_task(
         &self,
-        scope: &ApplicationScope,
+        scope: &AgentTaskScope,
         write: AgentTaskWrite<'_>,
-    ) -> Result<(), ApplicationError> {
+    ) -> Result<(), AgentTaskError> {
         let record = write.task;
         let id = &record.task.task_id;
         if record.task.project_root != scope.project {
-            return Err(ApplicationError::NotFound);
+            return Err(AgentTaskError::NotFound);
         }
         let mut c = self.0.lock().map_err(error)?;
         let tx = c
@@ -242,13 +242,13 @@ impl AgentTaskRepository for ApplicationStore {
             .optional()
             .map_err(error)?;
         if old.as_deref() != write.expected_revision {
-            return Err(ApplicationError::Conflict);
+            return Err(AgentTaskError::Conflict);
         }
         if old.is_some() {
             let generation: u64 = tx.query_row("SELECT json_extract(value,'$.history_generation') FROM agent_tasks WHERE project=?1 AND principal=?2 AND task_id=?3",params![scope.project,scope.principal,id],|r|r.get(0)).map_err(error)?;
             if record.history_generation != generation {
                 if record.history_generation < generation {
-                    return Err(ApplicationError::Conflict);
+                    return Err(AgentTaskError::Conflict);
                 }
                 tx.execute("DELETE FROM agent_task_events WHERE project=?1 AND principal=?2 AND task_id=?3",params![scope.project,scope.principal,id]).map_err(error)?;
             }
@@ -262,18 +262,18 @@ impl AgentTaskRepository for ApplicationStore {
                 )
                 .map_err(error)?;
             if count >= MAX_AGENT_TASKS {
-                return Err(ApplicationError::Budget(
+                return Err(AgentTaskError::Budget(
                     "Project task index is full".into(),
                 ));
             }
         }
         for receipt in write.receipts {
             if receipt.task_id != *id {
-                return Err(ApplicationError::NotFound);
+                return Err(AgentTaskError::NotFound);
             }
             let prior:Option<String>=tx.query_row("SELECT digest FROM agent_task_receipts WHERE project=?1 AND principal=?2 AND request_id=?3",params![scope.project,scope.principal,receipt.request_id],|r|r.get(0)).optional().map_err(error)?;
             if prior.as_ref().is_some_and(|s| *s != receipt.request_digest) {
-                return Err(ApplicationError::RequestConflict);
+                return Err(AgentTaskError::RequestConflict);
             }
             tx.execute("INSERT INTO agent_task_receipts(project,principal,request_id,task_id,digest,updated_at,value) VALUES(?1,?2,?3,?4,?5,?6,?7)
                 ON CONFLICT(project,principal,request_id) DO UPDATE SET updated_at=excluded.updated_at,value=excluded.value",params![scope.project,scope.principal,receipt.request_id,id,receipt.request_digest,receipt.updated_at_ms,serde_json::to_string(receipt).map_err(error)?]).map_err(error)?;
@@ -288,11 +288,11 @@ impl AgentTaskRepository for ApplicationStore {
                 || event.generation != record.attachment.generation
                 || record.task.native_session_id.as_deref() != Some(&event.native_session_id)
             {
-                return Err(ApplicationError::Conflict);
+                return Err(AgentTaskError::Conflict);
             }
             let value = serde_json::to_string(event).map_err(error)?;
             if value.len() > MAX_AGENT_EVENT_BYTES {
-                return Err(ApplicationError::Budget(
+                return Err(AgentTaskError::Budget(
                     "Native observation exceeds its cache budget".into(),
                 ));
             }
@@ -317,7 +317,7 @@ impl AgentTaskRepository for ApplicationStore {
             }
             let victim:Option<String>=tx.query_row("SELECT t.task_id FROM agent_tasks t WHERE t.project=?1 AND t.principal=?2 AND json_extract(t.value,'$.attachment.state') NOT IN ('running','waiting_for_permission','connecting','resuming','stopping') AND EXISTS(SELECT 1 FROM agent_task_events e WHERE e.project=t.project AND e.principal=t.principal AND e.task_id=t.task_id) ORDER BY t.updated_at,t.task_id LIMIT 1",params![scope.project,scope.principal],|r|r.get(0)).optional().map_err(error)?;
             let Some(victim) = victim else {
-                return Err(ApplicationError::Budget(
+                return Err(AgentTaskError::Budget(
                     "Project observation cache is full of active tasks".into(),
                 ));
             };
@@ -338,20 +338,20 @@ mod tests {
     use rho_application::AgentTaskOwner;
     use std::sync::Arc;
 
-    fn scope() -> ApplicationScope {
-        ApplicationScope {
+    fn scope() -> AgentTaskScope {
+        AgentTaskScope {
             project: "/study".into(),
             principal: "human".into(),
         }
     }
-    fn window(id: &str) -> ApplicationWindowRef {
-        ApplicationWindowRef {
+    fn window(id: &str) -> AgentControllerRef {
+        AgentControllerRef {
             window_id: id.into(),
             incarnation: format!("{id}-incarnation"),
         }
     }
-    fn request(window_id: &str, command: AgentTaskCommand) -> AgentTasksCommand {
-        AgentTasksCommand {
+    fn request(window_id: &str, command: AgentTaskCommand) -> AgentTaskRequest {
+        AgentTaskRequest {
             project_root: "/study".into(),
             window: window(window_id),
             request_id: uuid::Uuid::new_v4().to_string(),
@@ -440,7 +440,7 @@ mod tests {
         };
         assert!(matches!(
             owner.admit(&scope(), &altered, 210),
-            Err(ApplicationError::RequestConflict)
+            Err(AgentTaskError::RequestConflict)
         ));
         assert!(first.task.task.native_session_id.is_none());
     }
@@ -459,7 +459,7 @@ mod tests {
         );
         assert!(matches!(
             owner.admit(&scope(), &stale, 120),
-            Err(ApplicationError::Conflict)
+            Err(AgentTaskError::Conflict)
         ));
         let takeover = owner
             .admit(
@@ -485,7 +485,7 @@ mod tests {
         );
         assert!(matches!(
             owner.admit(&scope(), &old, 140),
-            Err(ApplicationError::Conflict)
+            Err(AgentTaskError::Conflict)
         ));
         let wrong = request(
             "one",
@@ -496,13 +496,13 @@ mod tests {
             },
         );
         assert!(owner.admit(&scope(), &wrong, 150).is_err());
-        let other = ApplicationScope {
+        let other = AgentTaskScope {
             principal: "another principal".into(),
             ..scope()
         };
         assert!(matches!(
             owner.detail(&other, &initial.task.task.task_id),
-            Err(ApplicationError::NotFound)
+            Err(AgentTaskError::NotFound)
         ));
     }
     #[test]
@@ -615,7 +615,7 @@ mod tests {
             .unwrap();
         assert!(matches!(
             owner.update(&scope(), id, 1, |_, _, _, _| Ok(())),
-            Err(ApplicationError::Conflict)
+            Err(AgentTaskError::Conflict)
         ));
     }
     #[test]
@@ -638,7 +638,7 @@ mod tests {
                     events: &[]
                 }
             ),
-            Err(ApplicationError::Conflict)
+            Err(AgentTaskError::Conflict)
         ));
         assert_eq!(
             owner

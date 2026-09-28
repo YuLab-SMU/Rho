@@ -1,6 +1,11 @@
 #![forbid(unsafe_code)]
-//! Public Agent transport observations. These values confer no scientific or
+//! Public Agent transport observations and task contracts. These values confer no scientific or
 //! application authority. Native missing observations remain unknown.
+mod tasks;
+pub use tasks::*;
+mod project_tasks;
+pub use project_tasks::*;
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;

@@ -5957,6 +5957,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-agent-owner"
+version = "0.1.0"
+dependencies = [
+ "rho-agent-api",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.20",
+ "uuid",
+]
+
+[[package]]
 name = "rho-agents"
 version = "0.1.0"
 dependencies = [
@@ -5981,6 +5993,7 @@ name = "rho-application"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "rho-agent-owner",
  "rho-contract",
  "serde",
  "serde_json",

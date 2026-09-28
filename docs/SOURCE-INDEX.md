@@ -137,6 +137,7 @@ Sources:
 - `scripts/generate-editor-context.mjs`
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-agent-plugin-client.mjs`
+- `scripts/test-agent-plugin-owner.mjs`
 - `scripts/test-agent-plugin-types.mjs`
 - `scripts/test-console-plugin.mjs`
 - `scripts/test-editor-plugin.mjs`
@@ -208,7 +209,11 @@ Checks:
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
 - `plugins.agent-independent`: `["node","scripts/test-agent-plugin-client.mjs"]`
 - `plugins.agent-native`: `["cargo","test","-p","rho-agent-client","--lib","--locked"]`
+- `plugins.agent-owner`: `["cargo","test","-p","rho-agent-owner","--lib","--locked"]`
+- `plugins.agent-owner-independent`: `["node","scripts/test-agent-plugin-owner.mjs"]`
 - `plugins.agent-protocol`: `["node","plugins/agent/generate-sdk.mjs","--check"]`
+- `plugins.agent-real-r`: `["node","scripts/test-real-r.mjs","--agent"]`
+- `plugins.agent-request`: `["cargo","test","-p","rho-contract","--lib","public_agent_request","--locked"]`
 - `plugins.agent-types`: `["node","scripts/test-agent-plugin-types.mjs"]`
 - `plugins.archive-owner`: `["cargo","test","-p","rho-plugins","--test","archive_transfers","--locked"]`
 - `plugins.archive-ports`: `["cargo","test","-p","rho-host","--test","plugin_archives","--locked"]`

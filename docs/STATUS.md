@@ -11,30 +11,58 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
-Agent native transport now lives in `plugins/agent/backend/client`, with public
-DTOs in `plugins/agent/api` and generated declarations/schemas in its SDK. It has
-no private core dependency. The transitional Host converts admitted window identity
-to transport correlation data; original task persistence, scope admission and MCP
-credentials remain with their current owners. This is an extraction foundation,
-not yet an ordinary Agent runtime/view. Rig, task/context/handoff ownership, Studio
-Agent assistance and final composition/default delivery remain active work.
+Agent native transport and the task state machine now live in
+`plugins/agent/backend/client` and `plugins/agent/backend/owner`, with public
+native/task/context DTOs in `plugins/agent/api` and generated SDK declarations and
+schemas. Neither library imports private core code. The task owner retains one
+writer for admission, captured drafts, original receipts, generation fences and
+observation-only restart handling. Application now supplies only scope/error
+conversion; its current SQLite adapter implements the public repository port.
+Host updates and manual handoff still share the same writer gate. Admitted request
+conversion preserves serialized bytes, so moving the Rust owner does not alter
+original request digests, draft versions or native session identities.
 
-All 31 native protocol/recovery fixtures pass in the checkout and in an independent
-source assembly. Independent generated-contract freshness and a TypeScript consumer,
-18 Host task tests, 4 HTTP/MCP identity tests, 36 affected client tests, client
-generation/build/consistency and the current binary build pass. A disposable Host
-crash preserves native session identity, the uncertain original receipt and the
-next draft; resumed multimodal input works and user configuration remains unchanged.
-Three Chrome flows pass: draft retention across closure/refresh, native permission
-responses and second-window takeover. Their three Agent captures were inspected;
-the affected controls remain visible without overlap. Architecture, public-import
-boundaries and governance checks pass. No real-provider/model or real-R acceptance,
-full-workspace audit, installation, publication or user-Host replacement ran.
+This remains a migration foundation, not yet an ordinary Agent runtime/view.
+Ordinary backend/storage composition, Rig, context providers and handoff, Agent
+views, Studio Agent assistance and final composition/default delivery remain active
+work. Caller admission, native MCP credentials and scientific execution still use
+their existing owners; no plugin-specific approval flow was introduced.
 
-The first Host test compile found one takeover assertion still using the old
-window type; it now compares the equivalent public correlation value. The original
-failed compile and successful reruns are retained in
-`target/plugin-refactor/agent-native-verification.txt` and its referenced logs.
+The four task admission/recovery fixtures pass in the checkout and in an
+independent source assembly. All three contract library tests pass, including
+exact captured-request byte preservation. Independent SDK freshness and a
+TypeScript consumer pass. The affected Host/SQLite/Workbench libraries pass 112
+tests; shared storage/handoff integration passes 46, Host component/recovery
+integration passes 27, and the client passes all 98 Agent-related tests.
+Client generation, build/consistency and the current binary build pass. Two Host
+library cases remain ignored (recovery-copy prerequisites and an explicit
+AutoContinue fixture); neither is counted as a pass.
+
+All 18 focused real-R cases pass with fixture engines: authorized execution,
+original-operation recovery, captured documents, shared queues, input ownership,
+independent sessions and object/Packages/plot context without additional science.
+The real-model cases are explicitly excluded. A disposable Host crash preserves
+the native session identity, uncertain original receipt and next draft; resumed
+multimodal input succeeds without replay and user configuration remains unchanged.
+All six Chrome flows pass: draft closure/refresh, native permissions, controller
+takeover, attachments/context, cross-owner handoff with a lost reply, and real-R
+table/plot context. Ten affected captures were inspected at normal, wide and
+constrained sizes, including the 320-pixel handoff and its scrolled target section;
+Agent controls remain accessible without overlap or horizontal overflow.
+Architecture, public-import boundaries and governance checks pass.
+
+Initial compiles found missing public/core controller and scope/error conversions;
+the corrected compile and integration runs pass. Two initial owner tests assumed
+a fixed generation after Send; they now use the owner's actual returned generation.
+Original failures, executed commands, ignored/filtered cases and capture locations
+are retained in `target/plugin-refactor/agent-owner-verification.txt`. A startup
+sample showed the delayed Workbench test binary at `_dyld_start`; it subsequently
+completed all 29 cases. The cause of that launch delay is not established.
+The previous extraction's 31 native protocol/recovery fixtures remain the unchanged
+baseline in `target/plugin-refactor/agent-native-verification.txt`; they were not
+rerun for this task-owner change. No full-workspace audit, real-provider/model
+acceptance, installation or publication ran. Existing user Hosts and R sessions
+were not replaced; runtime acceptance used disposable projects.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,

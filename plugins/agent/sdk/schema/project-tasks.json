@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProjectAgentTaskPage",
+  "type": "object",
+  "properties": {
+    "attention": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ProjectAgentTaskSummary"
+      }
+    },
+    "attention_count": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "next": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "permissions": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "running": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ProjectAgentTaskSummary"
+      }
+    }
+  },
+  "required": [
+    "attention_count",
+    "tasks",
+    "attention",
+    "running",
+    "permissions"
+  ],
+  "$defs": {
+    "AgentProvider": {
+      "type": "string",
+      "enum": [
+        "codex",
+        "kimi",
+        "deepseek"
+      ]
+    },
+    "ProjectAgentTaskRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "native"
+            },
+            "task_id": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "task_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "conversation_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "rho"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "conversation_id"
+          ]
+        }
+      ]
+    },
+    "ProjectAgentTaskSummary": {
+      "type": "object",
+      "properties": {
+        "archived": {
+          "type": "boolean"
+        },
+        "attention_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "created_at_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "has_draft": {
+          "type": "boolean"
+        },
+        "history_gap": {
+          "type": "boolean"
+        },
+        "permissions": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "provider": {
+          "description": "None denotes Rho; native transport identity remains unchanged.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentProvider"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reference": {
+          "$ref": "#/$defs/ProjectAgentTaskRef"
+        },
+        "state": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "updated_at_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "reference",
+        "title",
+        "created_at_ms",
+        "updated_at_ms",
+        "archived",
+        "state",
+        "has_draft",
+        "permissions",
+        "history_gap"
+      ]
+    }
+  }
+}

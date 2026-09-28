@@ -1779,6 +1779,7 @@ package inspection.
 | `plugins/environment/api`, `plugins/environment/backend/owner` | Public Environment data and sole native execution, observation, staging and recovery implementation; transitional Host adapter preserves the core operation port |
 | `crates/host` | Concrete composition and runtime configuration |
 | `plugins/agent/api`, `plugins/agent/backend/client` | Public native Agent observations and bounded Codex app-server / Kimi and DeepSeek ACP clients; no private core imports, scientific handlers or Agent behavior loop |
+| `plugins/agent/backend/owner` | Sole native task admission/recovery state machine and repository port; captured drafts, receipts, generation fences and pure restart observations |
 | `crates/agents` | Optional Rig integration; only Application/contract ports, no scientific owners or native adapter dependencies |
 | `crates/cli`, `mcp`, `workbench` | Transport and application entry points |
 | `plugins/r/backend/engine/r/bridge`, `plugins/environment/backend/owner/r` | Native R execution, bounded observation and environment helpers |
@@ -1788,8 +1789,15 @@ package inspection.
 The Agent transport's `AgentControllerRef` is correlation data supplied after owner
 admission, not a Host window credential. The transitional Host converts its admitted
 Application window identity when opening, sending or rebinding a native connection.
-Public session/usage DTOs have one owner in `rho-agent-api`; the existing contract
-reexports those types while task, context and component-Agent migration continues.
+Public native/task/context DTOs have one owner in `rho-agent-api`; the existing contract
+reexports those types while context providers and component-Agent migration continues.
+`rho-agent-owner` owns the native task state machine and repository interface.
+Application retains only its scope/error conversion at this boundary; the current
+SQLite adapter implements the public task repository until ordinary backend/storage
+composition replaces it. Both Host updates and manual handoff continue to use the
+same task writer gate. A public request conversion preserves captured wire bytes,
+so original request digests, draft versions and native session identities do not
+change merely because their Rust owner moved.
 Native protocol transport does not register capabilities, persist task truth or
 expand the caller's scientific authority.
 

@@ -118,10 +118,10 @@ impl Fixture {
             let created = self
                 .native
                 .admit(
-                    self.actor.scope(),
-                    &AgentTasksCommand {
+                    &self.actor.scope().into(),
+                    &AgentTaskRequest {
                         project_root: "/project".into(),
-                        window: self.actor.window().clone(),
+                        window: self.actor.window().clone().into(),
                         request_id: uuid::Uuid::new_v4().to_string(),
                         command: AgentTaskCommand::Create {
                             provider: AgentProvider::Codex,
@@ -135,10 +135,10 @@ impl Fixture {
             let id = created.task.task.task_id;
             self.native
                 .admit(
-                    self.actor.scope(),
-                    &AgentTasksCommand {
+                    &self.actor.scope().into(),
+                    &AgentTaskRequest {
                         project_root: "/project".into(),
-                        window: self.actor.window().clone(),
+                        window: self.actor.window().clone().into(),
                         request_id: uuid::Uuid::new_v4().to_string(),
                         command: AgentTaskCommand::SaveDraft {
                             control: AgentTaskControl {
@@ -198,7 +198,7 @@ fn all_target_kinds_preserve_existing_draft_and_scope_with_durable_idempotent_re
         let old_native = if let ProjectAgentTaskRef::Native { task_id } = &target {
             Some(
                 f.store
-                    .agent_task(f.actor.scope(), task_id)
+                    .agent_task(&f.actor.scope().into(), task_id)
                     .unwrap()
                     .unwrap(),
             )
@@ -265,7 +265,7 @@ fn all_target_kinds_preserve_existing_draft_and_scope_with_durable_idempotent_re
         if let Some(old) = old_native {
             let stored = f
                 .store
-                .agent_task(f.actor.scope(), &old.task.task_id)
+                .agent_task(&f.actor.scope().into(), &old.task.task_id)
                 .unwrap()
                 .unwrap();
             assert_ne!(stored.revision, old.revision);
@@ -273,7 +273,7 @@ fn all_target_kinds_preserve_existing_draft_and_scope_with_durable_idempotent_re
             assert_eq!(stored.active_request, old.active_request);
             assert!(matches!(
                 f.store.commit_agent_task(
-                    f.actor.scope(),
+                    &f.actor.scope().into(),
                     AgentTaskWrite {
                         expected_revision: Some(&old.revision),
                         task: &old,
@@ -282,7 +282,7 @@ fn all_target_kinds_preserve_existing_draft_and_scope_with_durable_idempotent_re
                         events: &[]
                     }
                 ),
-                Err(ApplicationError::Conflict)
+                Err(AgentTaskError::Conflict)
             ));
         }
         if let Some(old) = old_rho {
@@ -467,7 +467,7 @@ fn scope_and_target_controller_are_checked_but_source_can_be_archived_and_read_o
             for frozen in [true, false] {
                 let old = f
                     .store
-                    .agent_task(f.actor.scope(), task_id)
+                    .agent_task(&f.actor.scope().into(), task_id)
                     .unwrap()
                     .unwrap();
                 let mut changed = old.clone();
@@ -476,7 +476,7 @@ fn scope_and_target_controller_are_checked_but_source_can_be_archived_and_read_o
                 changed.observation_version += 1;
                 f.store
                     .commit_agent_task(
-                        f.actor.scope(),
+                        &f.actor.scope().into(),
                         AgentTaskWrite {
                             expected_revision: Some(&old.revision),
                             task: &changed,
@@ -513,10 +513,10 @@ fn scope_and_target_controller_are_checked_but_source_can_be_archived_and_read_o
         } else if let ProjectAgentTaskRef::Native { task_id } = &target {
             f.native
                 .admit(
-                    f.actor.scope(),
-                    &AgentTasksCommand {
+                    &f.actor.scope().into(),
+                    &AgentTaskRequest {
                         project_root: "/project".into(),
-                        window: f.actor.window().clone(),
+                        window: f.actor.window().clone().into(),
                         request_id: uuid::Uuid::new_v4().to_string(),
                         command: AgentTaskCommand::Archive {
                             control: AgentTaskControl {
@@ -589,16 +589,16 @@ fn source_uploads_stay_with_their_owner_and_target_uploads_are_preserved() {
         match &target {
             ProjectAgentTaskRef::Native { task_id } => {
                 f.store
-                    .put_agent_asset(f.actor.scope(), task_id, &target_asset, b"keep")
+                    .put_agent_asset(&f.actor.scope().into(), task_id, &target_asset, b"keep")
                     .unwrap();
-                let mut draft = f.store.agent_draft(f.actor.scope(), task_id).unwrap();
+                let mut draft = f.store.agent_draft(&f.actor.scope().into(), task_id).unwrap();
                 draft.content.assets.push(target_asset.asset_id.clone());
                 f.native
                     .admit(
-                        f.actor.scope(),
-                        &AgentTasksCommand {
+                        &f.actor.scope().into(),
+                        &AgentTaskRequest {
                             project_root: "/project".into(),
-                            window: f.actor.window().clone(),
+                            window: f.actor.window().clone().into(),
                             request_id: uuid::Uuid::new_v4().to_string(),
                             command: AgentTaskCommand::SaveDraft {
                                 control: AgentTaskControl {
@@ -673,14 +673,14 @@ fn successful_native_send_uses_latest_retained_user_goal_after_draft_and_receipt
     let ProjectAgentTaskRef::Native { task_id } = &source else {
         panic!()
     };
-    let draft = f.store.agent_draft(f.actor.scope(), task_id).unwrap();
+    let draft = f.store.agent_draft(&f.actor.scope().into(), task_id).unwrap();
     let sent = f
         .native
         .admit(
-            f.actor.scope(),
-            &AgentTasksCommand {
+            &f.actor.scope().into(),
+            &AgentTaskRequest {
                 project_root: "/project".into(),
-                window: f.actor.window().clone(),
+                window: f.actor.window().clone().into(),
                 request_id: uuid::Uuid::new_v4().to_string(),
                 command: AgentTaskCommand::Send {
                     control: AgentTaskControl {
@@ -700,7 +700,7 @@ fn successful_native_send_uses_latest_retained_user_goal_after_draft_and_receipt
     receipt.updated_at_ms = 5;
     f.native
         .update(
-            f.actor.scope(),
+            &f.actor.scope().into(),
             task_id,
             sent.task.attachment.generation,
             |task, draft, receipts, events| {
@@ -746,7 +746,7 @@ fn successful_native_send_uses_latest_retained_user_goal_after_draft_and_receipt
         panic!()
     };
     f.native
-        .update(f.actor.scope(), other, 1, |task, _, _, events| {
+        .update(&f.actor.scope().into(), other, 1, |task, _, _, events| {
             task.task.native_session_id = Some("other-native".into());
             task.event_cursor = 99;
             events.push(AgentTaskEvent {
@@ -770,7 +770,7 @@ fn successful_native_send_uses_latest_retained_user_goal_after_draft_and_receipt
         .unwrap();
     assert!(
         f.store
-            .agent_draft(f.actor.scope(), task_id)
+            .agent_draft(&f.actor.scope().into(), task_id)
             .unwrap()
             .content
             .text
@@ -778,7 +778,7 @@ fn successful_native_send_uses_latest_retained_user_goal_after_draft_and_receipt
     );
     assert!(
         f.store
-            .agent_receipt(f.actor.scope(), &receipt.request_id)
+            .agent_receipt(&f.actor.scope().into(), &receipt.request_id)
             .unwrap()
             .unwrap()
             .submitted_draft

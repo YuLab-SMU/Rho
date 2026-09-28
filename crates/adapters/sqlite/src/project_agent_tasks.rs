@@ -1,10 +1,10 @@
 //! Project navigation is a projection of the existing native and Rho owners.
 use crate::ApplicationStore;
-use rho_application::{ApplicationError, ApplicationScope};
+use rho_application::{AgentTaskError, AgentTaskScope};
 use rho_contract::*;
 use rusqlite::params;
 
-fn error(e: impl std::fmt::Display) -> ApplicationError { ApplicationError::Storage(e.to_string()) }
+fn error(e: impl std::fmt::Display) -> AgentTaskError { AgentTaskError::Storage(e.to_string()) }
 // Both branches apply visibility before any ordering, aggregation, or limiting.
 const TASKS: &str = "WITH tasks AS (
  SELECT 'native' AS backend, task_id AS id, created_at, updated_at, archived,
@@ -49,13 +49,13 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectAgentTaskSummary> {
 }
 
 impl ApplicationStore {
-    pub(crate) fn read_project_agent_tasks(&self, scope: &ApplicationScope, archived: Option<bool>, before: Option<&str>, limit: usize, native_host: &str, rho_host: &str, rho_live: &[String]) -> Result<ProjectAgentTaskPage, ApplicationError> {
-        if !(1..=100).contains(&limit) { return Err(ApplicationError::InvalidInput("Task page limit must be 1–100".into())); }
+    pub(crate) fn read_project_agent_tasks(&self, scope: &AgentTaskScope, archived: Option<bool>, before: Option<&str>, limit: usize, native_host: &str, rho_host: &str, rho_live: &[String]) -> Result<ProjectAgentTaskPage, AgentTaskError> {
+        if !(1..=100).contains(&limit) { return Err(AgentTaskError::InvalidInput("Task page limit must be 1–100".into())); }
         let cursor = before.map(|raw| {
-            if raw.len()>256 { return Err(ApplicationError::InvalidInput("Invalid task cursor".into())); }
-            let (time, kind, id): (u64,String,String) = serde_json::from_str(raw).map_err(|_| ApplicationError::InvalidInput("Invalid task cursor".into()))?;
+            if raw.len()>256 { return Err(AgentTaskError::InvalidInput("Invalid task cursor".into())); }
+            let (time, kind, id): (u64,String,String) = serde_json::from_str(raw).map_err(|_| AgentTaskError::InvalidInput("Invalid task cursor".into()))?;
             let valid_id = if kind == "native" { uuid::Uuid::parse_str(&id).is_ok() } else { kind == "rho" && !id.is_empty() && id.len() <= 160 && id.bytes().all(|b|b.is_ascii_alphanumeric() || b"-_.:".contains(&b)) };
-            if !valid_id { return Err(ApplicationError::InvalidInput("Invalid task cursor".into())); }
+            if !valid_id { return Err(AgentTaskError::InvalidInput("Invalid task cursor".into())); }
             Ok((time,kind,id))
         }).transpose()?;
         let live = serde_json::to_string(rho_live).map_err(error)?;
@@ -100,7 +100,7 @@ mod tests {
         let store=store(); let id="00000000-0000-0000-0000-000000000001";
         native(&store,"p","alice",id,false,"native-host"); rho(&store,"p","alice",id,"rho-host");
         native(&store,"p","bob",id,false,"native-host"); rho(&store,"other","alice",id,"rho-host");
-        let scope=ApplicationScope{project:"p".into(),principal:"alice".into()};
+        let scope=AgentTaskScope{project:"p".into(),principal:"alice".into()};
         let first=store.read_project_agent_tasks(&scope,Some(false),None,1,"native-host","rho-host",&["run".into()]).unwrap();
         assert_eq!(first.running,1); assert_eq!(first.permissions,1); assert_eq!(first.attention.len(),1);
         assert!(matches!(first.tasks[0].reference,ProjectAgentTaskRef::Rho{..})); assert!(first.tasks[0].has_draft);
@@ -117,7 +117,7 @@ mod tests {
     fn attention_uses_original_uncertain_facts_and_marks_partial_history_without_alerting_normal_work() {
         let store=store(); let id="00000000-0000-0000-0000-000000000002";
         native(&store,"p","alice",id,false,"native-host"); rho(&store,"p","alice",id,"rho-host");
-        let scope=ApplicationScope{project:"p".into(),principal:"alice".into()};
+        let scope=AgentTaskScope{project:"p".into(),principal:"alice".into()};
         {
             let c=store.0.lock().unwrap();
             c.execute("UPDATE component_agent_runs SET state='stopped'",[]).unwrap();

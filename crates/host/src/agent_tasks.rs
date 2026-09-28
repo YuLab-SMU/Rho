@@ -26,16 +26,16 @@ fn now() -> u64 {
 fn err(error: impl ToString) -> ApplicationError {
     ApplicationError::InvalidInput(error.to_string())
 }
-fn scope(project: &str, context: &CallContext) -> Result<ApplicationScope, ApplicationError> {
+fn scope(project: &str, context: &CallContext) -> Result<AgentTaskScope, ApplicationError> {
     context.validate().map_err(err)?;
-    Ok(ApplicationScope {
+    Ok(AgentTaskScope {
         project: project.into(),
         principal: serde_json::to_string(context.principal()).map_err(err)?,
     })
 }
 struct LiveTask {
     task_id: String,
-    scope: ApplicationScope,
+    scope: AgentTaskScope,
     session: Arc<dyn NativeAgentSession>,
     generation: AtomicU64,
     closed: AtomicBool,
@@ -65,7 +65,7 @@ impl AgentTaskService {
     pub async fn project_task_page(&self, host: &NextHost, context: &CallContext, project: &str, archived: Option<bool>, before: Option<&str>, limit: u32, rho: &crate::ComponentAgentService) -> Result<ProjectAgentTaskPage, ApplicationError> {
         Self::validate_project(host, project)?;
         let scope = scope(project, context)?;
-        rho.with_live_run_ids(|live| self.owner.store.project_agent_tasks(&scope, archived, before, limit as usize, &self.owner.host_incarnation, rho.host_incarnation(), live)).await
+        rho.with_live_run_ids(|live| self.owner.store.project_agent_tasks(&scope, archived, before, limit as usize, &self.owner.host_incarnation, rho.host_incarnation(), live)).await.map_err(Into::into)
     }
     fn validate_project(host: &NextHost, project: &str) -> Result<(), ApplicationError> {
         if !host
@@ -538,6 +538,7 @@ impl AgentTaskService {
             return Err(err("This Host is closing"));
         }
         Self::validate_window(&host, &request.window, &context).await?;
+        let request = AgentTaskRequest::from(request);
         let scope = scope(&request.project_root, &context)?;
         if let AgentTaskCommand::TakeOver {
             control,
@@ -546,7 +547,7 @@ impl AgentTaskService {
         {
             let record = self.owner.get(&scope, &control.task_id)?;
             if record.attachment.controller.window_id != request.window.window_id
-                && Self::validate_window(&host, &record.attachment.controller, &context)
+                && Self::validate_window(&host, &record.attachment.controller.clone().into(), &context)
                     .await
                     .is_ok()
             {
@@ -619,7 +620,7 @@ impl AgentTaskService {
             )
             && let Some(live) = self.live.lock().await.get(&id).cloned()
         {
-            live.session.rebind(request.window.clone().into());
+            live.session.rebind(request.window.clone());
             live.generation
                 .store(admission.task.attachment.generation, Ordering::Release);
         }
@@ -628,7 +629,7 @@ impl AgentTaskService {
     }
     fn fail(
         &self,
-        scope: &ApplicationScope,
+        scope: &AgentTaskScope,
         id: &str,
         generation: u64,
         original: &AgentCommandReceipt,
@@ -676,11 +677,11 @@ impl AgentTaskService {
                 }
                 receipts.push(receipt);
                 Ok(())
-            })
+            }).map_err(Into::into)
     }
     fn receipt(
         &self,
-        scope: &ApplicationScope,
+        scope: &AgentTaskScope,
         original: &AgentCommandReceipt,
         status: &str,
         error: Option<String>,
@@ -704,8 +705,8 @@ impl AgentTaskService {
         self: &Arc<Self>,
         host: &NextHost,
         context: &CallContext,
-        scope: &ApplicationScope,
-        request: &AgentTasksCommand,
+        scope: &AgentTaskScope,
+        request: &AgentTaskRequest,
         a: &AgentTaskAdmission,
         connection: (&str, &str),
     ) -> Result<(), TaskFailure> {
@@ -750,7 +751,7 @@ impl AgentTaskService {
                             a.draft.content.text.clone()
                         },
                         parts,
-                        window: request.window.clone().into(),
+                        window: request.window.clone(),
                     })
                     .await
                     .map_err(TaskFailure::uncertain)?;
@@ -942,7 +943,7 @@ impl AgentTaskService {
                     Ok(())
                 })?;
                 if transfer && let Some(live) = live {
-                    live.session.rebind(request.window.clone().into());
+                    live.session.rebind(request.window.clone());
                     live.generation.store(generation + 1, Ordering::Release);
                 }
             }
@@ -1021,7 +1022,7 @@ impl AgentTaskService {
             } => {
                 self.owner.update(scope, id, generation, |_, d, rs, _| {
                     if d.version != *draft_version {
-                        return Err(ApplicationError::Conflict);
+                        return Err(AgentTaskError::Conflict);
                     }
                     d.content.assets.retain(|id| id != asset_id);
                     d.version += 1;
@@ -1037,9 +1038,9 @@ impl AgentTaskService {
     async fn connection(
         self: &Arc<Self>,
         context: &CallContext,
-        scope: &ApplicationScope,
+        scope: &AgentTaskScope,
         task: &StoredAgentTask,
-        request: &AgentTasksCommand,
+        request: &AgentTaskRequest,
         endpoint: &str,
         _token: &str,
     ) -> Result<Arc<LiveTask>, TaskFailure> {
@@ -1092,7 +1093,7 @@ impl AgentTaskService {
             .open(NativeOpenRequest {
                 provider: task.task.provider,
                 root: task.task.project_root.clone().into(),
-                window: request.window.clone().into(),
+                window: request.window.clone(),
                 native_session_id: task.task.native_session_id.clone(),
                 endpoint: endpoint.into(),
                 token: mcp.token.clone(),
@@ -1166,7 +1167,7 @@ impl AgentTaskService {
         self.watch(scope.clone(), task.task.task_id.clone(), live.clone());
         Ok(live)
     }
-    fn watch(self: &Arc<Self>, scope: ApplicationScope, id: String, live: Arc<LiveTask>) {
+    fn watch(self: &Arc<Self>, scope: AgentTaskScope, id: String, live: Arc<LiveTask>) {
         if live.watching.swap(true, Ordering::AcqRel) {
             return;
         }
@@ -1258,7 +1259,7 @@ impl AgentTaskService {
         &self,
         host: &NextHost,
         context: &CallContext,
-        scope: &ApplicationScope,
+        scope: &AgentTaskScope,
         task: &StoredAgentTask,
         draft: &AgentTaskDraft,
     ) -> Result<Vec<NativeInput>, TaskFailure> {
@@ -1335,7 +1336,7 @@ impl AgentTaskService {
         for selection in &draft.content.context {
             let captured = crate::agent_context::preview(
                 &reader,
-                &task.attachment.controller,
+                &task.attachment.controller.clone().into(),
                 selection,
                 &providers,
                 true,
@@ -1355,7 +1356,7 @@ impl AgentTaskService {
     ) -> Result<(AgentAsset, Vec<u8>), ApplicationError> {
         self.owner
             .store
-            .agent_asset(&scope(project, context)?, task, asset)
+            .agent_asset(&scope(project, context)?, task, asset).map_err(Into::into)
     }
 }
 struct TaskFailure {
@@ -1378,6 +1379,9 @@ impl TaskFailure {
             native_id: None,
         }
     }
+}
+impl From<AgentTaskError> for TaskFailure {
+    fn from(error: AgentTaskError) -> Self { Self::from(ApplicationError::from(error)) }
 }
 impl From<ApplicationError> for TaskFailure {
     fn from(e: ApplicationError) -> Self {

@@ -2303,7 +2303,7 @@ fn uploaded_assets_share_byte_storage_but_keep_owner_kind_scope_and_immutable_id
     f.owner.put_asset(&f.actor, "asset-conversation", &asset, b"one", 4).unwrap();
     assert!(matches!(f.owner.put_asset(&f.actor, "asset-conversation", &asset, b"two", 5), Err(ApplicationError::RequestConflict)));
     assert_eq!(f.store.component_asset(f.actor.scope(), "asset-conversation", &asset.asset_id).unwrap().1, b"one");
-    assert!(matches!(f.store.agent_asset(f.actor.scope(), "component:asset-conversation", &asset.asset_id), Err(ApplicationError::NotFound)));
+    assert!(matches!(f.store.agent_asset(&f.actor.scope().into(), "component:asset-conversation", &asset.asset_id), Err(AgentTaskError::NotFound)));
     let foreign = ApplicationScope { project: f.actor.scope().project.clone(), principal: "another-principal".into() };
     assert!(matches!(f.store.component_asset(&foreign, "asset-conversation", &asset.asset_id), Err(ApplicationError::NotFound)));
     f.owner.save_draft_content(&f.actor, "asset-conversation", 1, AgentDraftContent { text: "read upload".into(), assets: vec![asset.asset_id.clone()], context: vec![] }, None, 6).unwrap();

@@ -55,13 +55,13 @@ pub(crate) fn initialize(connection: &Connection) -> Result<(), String> {
 
 impl ComponentAgentRepository for ApplicationStore {
     fn component_assets(&self, scope: &ApplicationScope, conversation: &str) -> Result<Vec<AgentAsset>, ApplicationError> {
-        crate::agent_assets::list(self, scope, crate::agent_assets::AssetOwner::Component(conversation))
+        crate::agent_assets::list(self, &scope.into(), crate::agent_assets::AssetOwner::Component(conversation)).map_err(Into::into)
     }
     fn component_asset(&self, scope: &ApplicationScope, conversation: &str, asset: &str) -> Result<(AgentAsset, Vec<u8>), ApplicationError> {
-        crate::agent_assets::read(self, scope, crate::agent_assets::AssetOwner::Component(conversation), asset)
+        crate::agent_assets::read(self, &scope.into(), crate::agent_assets::AssetOwner::Component(conversation), asset).map_err(Into::into)
     }
     fn put_component_asset(&self, scope: &ApplicationScope, conversation: &str, asset: &AgentAsset, bytes: &[u8]) -> Result<(), ApplicationError> {
-        crate::agent_assets::put(self, scope, crate::agent_assets::AssetOwner::Component(conversation), asset, bytes)
+        crate::agent_assets::put(self, &scope.into(), crate::agent_assets::AssetOwner::Component(conversation), asset, bytes).map_err(Into::into)
     }
 
     fn component_diagnostic(

@@ -1,15 +1,19 @@
 # Agent package source
 
-The public native transport is the first extracted part of the Agent plugin.
+The public native transport and task state machine are extracted parts of the Agent plugin.
 `api/` owns its Rust DTOs; `sdk/` contains generated TypeScript declarations and
 JSON schemas. `backend/client/` owns deterministic Codex app-server, Kimi ACP and
 DeepSeek ACP communication, bounded observations and owned-process recovery.
-Neither library depends on private Rho core crates or a model behavior engine.
+`backend/owner/` owns task admission, captured drafts, original receipts, control
+generation, observation-only restart handling and the repository port. These
+libraries do not depend on private Rho core crates or a model behavior engine.
 
 `AgentControllerRef` is owner-supplied correlation data, not a credential. Admission,
-project scope, native MCP credentials, task persistence and authorized scientific
-execution remain the responsibility of the containing owner. The current Host
-converts its admitted window identity at that boundary. Moving DTO ownership does
+project scope, native MCP credentials and authorized scientific execution remain
+the responsibility of the containing owner. The task state machine uses one
+injected repository; the transitional application store implements that public
+port. The current Host converts its admitted scope/window identity at the boundary.
+Moving DTO ownership does
 not change wire field names, replay input, authorize tools or transfer scientific
 truth to the transport.
 
@@ -21,6 +25,12 @@ native protocol/recovery fixtures. Those fixtures use local fake processes, neve
 real providers, model requests or user sessions. The native transport's explicit
 DeepSeek setup entry point is retained but is not invoked by these checks.
 
-This source is not yet a loadable Agent plugin: task persistence, Rig integration,
-context/handoff and Agent views still require migration. No backend manifest,
+`node scripts/test-agent-plugin-owner.mjs` builds the task owner and public API
+outside the checkout. Its focused fixtures cover original-request deduplication,
+scope and draft fences, atomic write failure, captured input retention, uncertain
+restart observations and stop/takeover fencing. Shared SQLite, component handoff
+and Host integration retain their own cross-boundary tests.
+
+This source is not yet a loadable Agent plugin: ordinary backend/storage composition,
+Rig integration, context/handoff and Agent views still require migration. No backend manifest,
 default activation or delivery claim is made until those owners use public ports.

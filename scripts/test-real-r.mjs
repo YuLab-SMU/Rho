@@ -17,6 +17,15 @@ const run = (command, args, options = {}) => {
 assert.ok(fs.existsSync(ark), "Set RHO_ARK to an installed Ark executable.");
 const rHome = process.env.RHO_R_HOME || run("Rscript", ["--vanilla", "-e", "cat(R.home())"]).trim();
 const env = { ...process.env, RHO_ARK: ark, RHO_R_HOME: rHome };
+if (process.argv.includes("--agent")) {
+  assert.deepEqual(process.argv.slice(2), ["--agent"], "Use --agent alone for the focused Agent boundary check");
+  const targets = ["--test", "component_sources_real_r", "--test", "component_mutations_real_r"];
+  run("cargo", ["test", "-p", "rho-host", ...targets, "--locked", "--offline", "--no-run"], { env, stdio: "inherit" });
+  run("cargo", ["test", "-p", "rho-host", ...targets, "--locked", "--offline", "--",
+    "--ignored", "--skip", "real_model_", "--test-threads=1"], { env, stdio: "inherit", timeout: 600_000 });
+  console.log("Verified real R Agent sources and authorized execution/recovery with fixture engines; real-model cases are excluded.");
+  process.exit(0);
+}
 if (process.argv.includes("--plugin-recovery")) {
   assert.deepEqual(process.argv.slice(2), ["--plugin-recovery"], "Use --plugin-recovery alone for the focused native check");
   assert.ok(process.env.RHO_CHECKPOINT_HELPER && fs.existsSync(process.env.RHO_CHECKPOINT_HELPER),

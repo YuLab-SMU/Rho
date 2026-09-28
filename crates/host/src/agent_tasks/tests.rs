@@ -215,22 +215,22 @@ impl FaultRepository {
     fn arm(&self, failures: usize) { self.remaining.store(failures, Ordering::SeqCst); }
 }
 impl AgentTaskRepository for FaultRepository {
-    fn agent_task(&self, scope: &ApplicationScope, id: &str) -> Result<Option<StoredAgentTask>, ApplicationError> { self.store.agent_task(scope, id) }
-    fn agent_tasks(&self, scope: &ApplicationScope, archived: Option<bool>, before: Option<&str>, limit: usize) -> Result<Vec<StoredAgentTask>, ApplicationError> { self.store.agent_tasks(scope, archived, before, limit) }
-    fn agent_task_counts(&self, scope: &ApplicationScope, host: &str) -> Result<(u32, u32), ApplicationError> { self.store.agent_task_counts(scope, host) }
-    fn agent_draft(&self, scope: &ApplicationScope, id: &str) -> Result<AgentTaskDraft, ApplicationError> { self.store.agent_draft(scope, id) }
-    fn agent_receipt(&self, scope: &ApplicationScope, id: &str) -> Result<Option<AgentCommandReceipt>, ApplicationError> { self.store.agent_receipt(scope, id) }
-    fn agent_receipts(&self, scope: &ApplicationScope, id: &str) -> Result<Vec<AgentCommandReceipt>, ApplicationError> { self.store.agent_receipts(scope, id) }
-    fn agent_events(&self, scope: &ApplicationScope, id: &str, after: Option<u64>, before: Option<u64>, limit: usize) -> Result<AgentTaskEventPage, ApplicationError> { self.store.agent_events(scope, id, after, before, limit) }
-    fn agent_assets(&self, scope: &ApplicationScope, id: &str) -> Result<Vec<AgentAsset>, ApplicationError> { self.store.agent_assets(scope, id) }
-    fn agent_asset(&self, scope: &ApplicationScope, task: &str, asset: &str) -> Result<(AgentAsset, Vec<u8>), ApplicationError> { self.store.agent_asset(scope, task, asset) }
-    fn put_agent_asset(&self, scope: &ApplicationScope, task: &str, asset: &AgentAsset, bytes: &[u8]) -> Result<(), ApplicationError> { self.store.put_agent_asset(scope, task, asset, bytes) }
-    fn commit_agent_task(&self, scope: &ApplicationScope, write: AgentTaskWrite<'_>) -> Result<(), ApplicationError> {
+    fn agent_task(&self, scope: &AgentTaskScope, id: &str) -> Result<Option<StoredAgentTask>, AgentTaskError> { self.store.agent_task(scope, id) }
+    fn agent_tasks(&self, scope: &AgentTaskScope, archived: Option<bool>, before: Option<&str>, limit: usize) -> Result<Vec<StoredAgentTask>, AgentTaskError> { self.store.agent_tasks(scope, archived, before, limit) }
+    fn agent_task_counts(&self, scope: &AgentTaskScope, host: &str) -> Result<(u32, u32), AgentTaskError> { self.store.agent_task_counts(scope, host) }
+    fn agent_draft(&self, scope: &AgentTaskScope, id: &str) -> Result<AgentTaskDraft, AgentTaskError> { self.store.agent_draft(scope, id) }
+    fn agent_receipt(&self, scope: &AgentTaskScope, id: &str) -> Result<Option<AgentCommandReceipt>, AgentTaskError> { self.store.agent_receipt(scope, id) }
+    fn agent_receipts(&self, scope: &AgentTaskScope, id: &str) -> Result<Vec<AgentCommandReceipt>, AgentTaskError> { self.store.agent_receipts(scope, id) }
+    fn agent_events(&self, scope: &AgentTaskScope, id: &str, after: Option<u64>, before: Option<u64>, limit: usize) -> Result<AgentTaskEventPage, AgentTaskError> { self.store.agent_events(scope, id, after, before, limit) }
+    fn agent_assets(&self, scope: &AgentTaskScope, id: &str) -> Result<Vec<AgentAsset>, AgentTaskError> { self.store.agent_assets(scope, id) }
+    fn agent_asset(&self, scope: &AgentTaskScope, task: &str, asset: &str) -> Result<(AgentAsset, Vec<u8>), AgentTaskError> { self.store.agent_asset(scope, task, asset) }
+    fn put_agent_asset(&self, scope: &AgentTaskScope, task: &str, asset: &AgentAsset, bytes: &[u8]) -> Result<(), AgentTaskError> { self.store.put_agent_asset(scope, task, asset, bytes) }
+    fn commit_agent_task(&self, scope: &AgentTaskScope, write: AgentTaskWrite<'_>) -> Result<(), AgentTaskError> {
         if !write.events.is_empty() && self.remaining.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
             (left > 0).then(|| left.saturating_sub(1))
         }).is_ok() {
             self.failed.fetch_add(1, Ordering::SeqCst);
-            return Err(ApplicationError::Storage("Injected native event transaction failure".into()));
+            return Err(AgentTaskError::Storage("Injected native event transaction failure".into()));
         }
         let receipts = write.receipts.iter().map(|receipt| (receipt.request_id.clone(), receipt.status.clone())).collect::<Vec<_>>();
         self.store.commit_agent_task(scope, write)?;
@@ -286,7 +286,7 @@ impl Fixture {
             other,
         }
     }
-    fn scope(&self) -> ApplicationScope {
+    fn scope(&self) -> AgentTaskScope {
         scope(&self.root, &NextHost::local_context()).unwrap()
     }
     fn request(&self, w: &ApplicationWindowRef, command: AgentTaskCommand) -> AgentTasksCommand {
@@ -356,7 +356,7 @@ impl Fixture {
     fn expire_window(&self) {
         let mut w = self
             .store
-            .window(&self.scope(), &self.window.window_id)
+            .window(&(&self.scope()).into(), &self.window.window_id)
             .unwrap()
             .unwrap();
         let old = w.revision.clone();
@@ -364,7 +364,7 @@ impl Fixture {
         w.renewed_at_ms = 0;
         self.store
             .commit(
-                &self.scope(),
+                &(&self.scope()).into(),
                 Some(&old),
                 &w,
                 &ApplicationStoreChanges::default(),
@@ -1036,7 +1036,7 @@ async fn assert_takeover_preserves_native_transport_until_disconnect(stop: bool)
     let transfer = f.command(f.request(&f.other, AgentTaskCommand::TakeOver { control: ctl(&before), stop })).await;
     assert_eq!(f.settled(&transfer.receipt.request_id).await.status, "succeeded");
     let controlled = f.service.owner.detail(&f.scope(), &task_id).unwrap();
-    assert_eq!(controlled.summary.attachment.controller, f.other);
+    assert_eq!(controlled.summary.attachment.controller, f.other.clone().into());
     assert!(controlled.summary.attachment.generation > before.summary.attachment.generation);
     let current_live = f.service.live.lock().await.get(&task_id).unwrap().clone();
     assert!(Arc::ptr_eq(&live, &current_live));
@@ -1050,11 +1050,11 @@ async fn assert_takeover_preserves_native_transport_until_disconnect(stop: bool)
 
     // A fresh heartbeat cannot restore the old window's control. Check both its
     // old generation and a guessed current generation against the real owner.
-    let mut old_window = f.store.window(&f.scope(), &f.window.window_id).unwrap().unwrap();
+    let mut old_window = f.store.window(&(&f.scope()).into(), &f.window.window_id).unwrap().unwrap();
     let old_revision = old_window.revision.clone();
     old_window.revision = uuid::Uuid::new_v4().to_string();
     old_window.renewed_at_ms = now();
-    f.store.commit(&f.scope(), Some(&old_revision), &old_window, &ApplicationStoreChanges::default()).unwrap();
+    f.store.commit(&(&f.scope()).into(), Some(&old_revision), &old_window, &ApplicationStoreChanges::default()).unwrap();
     for control in [ctl(&before), ctl(&controlled)] {
         let rejected = f.request(&f.window, AgentTaskCommand::Send { control, draft_version: controlled.draft.version });
         assert!(f.service.command(f.host.clone(), NextHost::local_context(), rejected,

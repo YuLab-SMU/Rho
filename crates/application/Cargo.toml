@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+rho-agent-owner = { path = "../../plugins/agent/backend/owner" }
 async-trait.workspace = true
 tokio-util.workspace = true
 rho-contract = { path = "../contract" }

@@ -197,6 +197,21 @@ admission and HTTP identity integration remain covered by `cargo test -p rho-hos
 --locked`; these do not establish an ordinary Agent runtime/view or real-provider
 acceptance. No setup entry point is invoked by the native fixture checks.
 
+The public task state machine is `plugins/agent/backend/owner`. Iterate with
+`cargo test -p rho-agent-owner --lib --locked`; `node
+scripts/test-agent-plugin-owner.mjs` repeats its admission/recovery fixtures from
+an independent source assembly and verifies public contract freshness. The
+transitional request conversion is checked by `cargo test -p rho-contract --lib
+public_agent_request --locked`. Shared storage and manual handoff use
+`cargo test -p rho-sqlite --lib agent_tasks --locked` and `cargo test -p rho-sqlite
+--test agent_handoffs --test component_agents --locked`. These preserve one native
+task writer, original receipt/draft captures and component/native asset separation;
+they do not prove an ordinary Agent backend or default delivery.
+`node scripts/test-real-r.mjs --agent` runs the real-R Agent source and authorized
+execution/recovery targets with fixture engines, explicitly excluding `real_model_`
+cases. It requires installed Ark/R, runs serially and does not install prerequisites.
+It is an affected-boundary check; the no-argument script retains the broader real-R gate.
+
 Environment contracts, native execution and R helpers live in
 `plugins/environment/api` and `plugins/environment/backend/owner`. The retiring
 `rho-r-environment` adapter delegates to this owner. Iterate with
