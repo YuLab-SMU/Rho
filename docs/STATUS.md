@@ -154,13 +154,16 @@ Host calls for original native caller observation, and contributes task queries,
 creation, draft saving, title/archive updates and explicit controller takeover.
 It rejects caller-selected identity/paths, separates non-view controllers, preserves
 version checks and retains submitted results until their original Host settlement.
-Five framed-protocol fixtures and an independent-package generic Host fixture are
-added. Compilation, manifest generation and those runtime checks are pending in
-`target/plugin-refactor/agent-public-ports-verify.py`, which is now running after
-the completed storage acceptance. Do not start another Cargo command concurrently.
+All five new framed-protocol fixtures now pass, including concurrent reverse
+responses, original settlement, controller/version conflicts and observation-only
+reopen. The independent-package generic Host fixture is added but not yet run.
+Manifest generation, native-origin checks, standalone build and actual Host
+acceptance remain in `target/plugin-refactor/agent-public-ports-verify.py`, now
+running after the completed storage acceptance. Do not start another Cargo command concurrently.
 The first backend compilation failed on three public component-type imports;
 those paths were corrected and the sequence resumed at that stage, preserving
-the passing SDK result and the original failure log.
+the passing SDK result and the original failure log. The corrected backend command
+passes; follow-up results and logs use the `v2` suffix.
 Static dependency, source containment,
 documentation map and script syntax checks pass for the new source.
 
