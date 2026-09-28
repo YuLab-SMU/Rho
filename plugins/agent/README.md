@@ -51,8 +51,12 @@ original request reference in that same credential file. Repeating identical
 input returns the original reference; changed reuse is refused. Read-only
 `reference_for_request` resolves a lost acknowledgement after reopen without
 returning secret bytes. Explicit removal retains the non-secret receipt and
-prevents replay from recreating that key. These are storage primitives for the
-future ephemeral key Control; the metadata backend does not yet expose key input.
+prevents replay from recreating that key. The ordinary backend exposes them as `agent.model.key.store` (ephemeral
+Control) and `agent.model.key.receipt` (read-only Query). A native caller observation
+precedes each key write. Raw key input never enters an Operation or Agent task
+record; settings retain references only. An absent receipt is partial evidence,
+not proof that an outstanding write cannot finish. Each instance uses its own
+native data directory; it does not import existing user keys.
 
 Generate declarations with `node plugins/agent/generate-sdk.mjs`; add `--check` to
 verify freshness. `node scripts/test-agent-plugin-types.mjs` checks an independent

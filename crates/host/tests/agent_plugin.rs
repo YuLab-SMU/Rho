@@ -66,6 +66,99 @@ async fn ordinary_agent_metadata_uses_generic_host_scopes_isolated_storage_and_o
     let host = NextHost::open_plugin_workspace(&db, &root).await.unwrap();
     let active = succeeded(&host, "activate", "plugins.activate", json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":backend_target(),"alias":"agent","configuration":{}})).await;
     let first = active.output.unwrap()["instance"]["identity"].clone();
+    let key_store = binding(&host, &first, "agent.model.key.store").await;
+    let key_receipt = binding(&host, &first, "agent.model.key.receipt").await;
+    let secret = "fixture-only-key-752de101";
+    let key_request =
+        json!({"binding":key_store,"arguments":{"request_id":"original-key","value":secret}});
+    let control = || {
+        HostRequest::Control(ControlRequest {
+            capability: CapabilityRef::new("agent.model.key.store", 1).unwrap(),
+            arguments: key_request.clone(),
+        })
+    };
+    let journal_counts = || {
+        let connection = rusqlite::Connection::open(&db).unwrap();
+        [
+            "operations",
+            "operation_events",
+            "domain_facts",
+            "outbox",
+            "operation_commit_candidates",
+            "operation_uncommitted_evidence",
+        ]
+        .map(|table| {
+            connection
+                .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                    row.get::<_, i64>(0)
+                })
+                .unwrap()
+        })
+    };
+    let counts_before = journal_counts();
+    let original_key = host
+        .dispatch(&NextHost::local_context(), control())
+        .await
+        .unwrap();
+    assert_eq!(original_key["kind"], "local_file");
+    assert!(!original_key.to_string().contains(secret));
+    assert_eq!(
+        host.dispatch(&NextHost::local_context(), control())
+            .await
+            .unwrap(),
+        original_key
+    );
+    assert_eq!(
+        query(
+            &host,
+            "agent.model.key.receipt",
+            json!({"binding":key_receipt,"arguments":{"request_id":"original-key"}})
+        )
+        .await,
+        json!({"credential":original_key,"available":true})
+    );
+    // A wrong port cannot accidentally place key input into an Operation journal.
+    assert!(
+        host.invoke(
+            &NextHost::local_context(),
+            Invocation {
+                client_request_id: "wrong-key-port".into(),
+                capability: CapabilityRef::new("agent.model.key.store", 1).unwrap(),
+                arguments: key_request.clone(),
+                preconditions: vec![],
+            }
+        )
+        .await
+        .is_err()
+    );
+    assert!(
+        host.query_snapshot(
+            &NextHost::local_context(),
+            QueryRequest {
+                capability: CapabilityRef::new("agent.model.key.store", 1).unwrap(),
+                arguments: key_request.clone(),
+            }
+        )
+        .await
+        .is_err()
+    );
+    let mut key_weak = NextHost::local_context();
+    key_weak.scopes.remove("application.control");
+    assert!(host.dispatch(&key_weak, control()).await.is_err());
+    let mut key_foreign = NextHost::local_context();
+    key_foreign.caller.id = "other-key-principal".into();
+    assert!(host.dispatch(&key_foreign, control()).await.is_err());
+    assert_eq!(journal_counts(), counts_before);
+    assert!(
+        !serde_json::to_string(
+            &host
+                .outbox(&NextHost::local_context(), 0, 100)
+                .await
+                .unwrap()
+        )
+        .unwrap()
+        .contains(secret)
+    );
     let settings = binding(&host, &first, "agent.model.settings").await;
     let before = query(
         &host,
@@ -186,6 +279,16 @@ async fn ordinary_agent_metadata_uses_generic_host_scopes_isolated_storage_and_o
     );
     let second = succeeded(&host, "second-instance", "plugins.activate", json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":backend_target(),"alias":"agent-two","configuration":{}})).await.output.unwrap()["instance"]["identity"].clone();
     let second_list = binding(&host, &second, "agent.tasks").await;
+    let second_receipt = binding(&host, &second, "agent.model.key.receipt").await;
+    let absent = host.query_snapshot(&NextHost::local_context(), QueryRequest {
+        capability: CapabilityRef::new("agent.model.key.receipt", 1).unwrap(),
+        arguments: json!({"binding":second_receipt,"arguments":{"request_id":"original-key"}}),
+    }).await.unwrap();
+    assert_eq!(absent.completeness, ObservationCompleteness::Partial);
+    assert_eq!(
+        absent.data.unwrap(),
+        json!({"credential":null,"available":false})
+    );
     assert_eq!(
         query(
             &host,

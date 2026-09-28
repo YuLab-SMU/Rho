@@ -37,6 +37,253 @@
   "capabilities": [
     {
       "capability": {
+        "id": "agent.model.key.store",
+        "version": 1
+      },
+      "kind": "control",
+      "title": "Save a model key",
+      "description": "Save a scoped model key through ephemeral input with an atomic original-request reference. Does not create an Operation, configure a model or start work; inspect the original receipt after a lost reply.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 16384,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "value"
+        ],
+        "title": "StoreCredential",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "request_id": "key-request-example",
+          "value": "example-key-placeholder"
+        }
+      ],
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "environment",
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "name"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Retained references from Hosts that used memory-only credentials.",
+            "properties": {
+              "key_id": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "session",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "key_id"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Immutable version in the user-local Rho configuration file.",
+            "properties": {
+              "key_id": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "local_file",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "key_id"
+            ],
+            "type": "object"
+          }
+        ],
+        "title": "ComponentCredentialRef"
+      },
+      "recovery_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "required_scopes": [
+        "application.control",
+        "plugins.read"
+      ],
+      "effects": [
+        "agent.credentials"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "agent.model.key.receipt",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Read an original model key receipt",
+      "description": "Read the original scoped key reference and availability without secret bytes. An absent receipt is an incomplete observation, never proof that a pending write cannot finish.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "CredentialRequest",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "request_id": "key-request-example"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "ComponentCredentialRef": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "environment",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Retained references from Hosts that used memory-only credentials.",
+                "properties": {
+                  "key_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "session",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key_id"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "description": "Immutable version in the user-local Rho configuration file.",
+                "properties": {
+                  "key_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "local_file",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key_id"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ComponentCredentialRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "title": "ComponentCredentialStatus",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "required_scopes": [
+        "application.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
         "id": "agent.tasks",
         "version": 1
       },

@@ -1,6 +1,7 @@
 use crate::arguments::*;
 use rho_agent_api::{
-    ComponentModelSettings, ProjectAgentTaskPage, component::ComponentAgentConversation,
+    ComponentCredentialRef, ComponentCredentialStatus, ComponentModelSettings,
+    ProjectAgentTaskPage, component::ComponentAgentConversation,
 };
 use rho_plugin_sdk::protocol::*;
 use schemars::schema_for;
@@ -22,6 +23,15 @@ pub fn is_mutation(id: &str) -> bool {
             | "agent.model.configure"
     )
 }
+pub fn kind(id: &str) -> CapabilityKind {
+    if id == "agent.model.key.store" {
+        CapabilityKind::Control
+    } else if is_mutation(id) {
+        CapabilityKind::Operation
+    } else {
+        CapabilityKind::Query
+    }
+}
 fn capability(
     id: &str,
     title: &str,
@@ -30,18 +40,24 @@ fn capability(
     example: Value,
 ) -> CapabilityContribution {
     let operation = is_mutation(id);
+    let kind = kind(id);
+    let control = kind == CapabilityKind::Control;
     CapabilityContribution {
-        capability: key(id), kind: if operation { CapabilityKind::Operation } else { CapabilityKind::Query },
+        capability: key(id), kind,
         title: title.into(),
-        description: if operation {
+        description: if control {
+            "Save a scoped model key through ephemeral input with an atomic original-request reference. Does not create an Operation, configure a model or start work; inspect the original receipt after a lost reply."
+        } else if id == "agent.model.key.receipt" {
+            "Read the original scoped key reference and availability without secret bytes. An absent receipt is an incomplete observation, never proof that a pending write cannot finish."
+        } else if operation {
             "Change Agent-owned task metadata using the original native caller and expected task version. Does not start a model, execute scientific work or grant tools."
         } else {
             "Read scoped Agent-owned metadata without starting a model, reconnecting a native Agent or recovering work."
         }.into(),
         input_schema: input, output_schema: output, examples: vec![example],
         recovery_schema: json!({"type":"object","additionalProperties":false,"properties":{"code":{"type":"string"}},"required":["code"]}),
-        required_scopes: if operation { ["application.control".into(), "plugins.read".into()].into() } else { ["application.read".into()].into() },
-        effects: if operation { ["agent.metadata".into()].into() } else { Default::default() },
+        required_scopes: if operation || control { ["application.control".into(), "plugins.read".into()].into() } else { ["application.read".into()].into() },
+        effects: if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
         cancellation: CancellationSupport::Unsupported, preflight: None,
     }
 }
@@ -73,6 +89,20 @@ pub fn manifest() -> PluginManifest {
         }],
         optional_requires: vec![],
         capabilities: vec![
+            capability(
+                "agent.model.key.store",
+                "Save a model key",
+                schema_for!(StoreCredential).to_value(),
+                schema_for!(ComponentCredentialRef).to_value(),
+                json!({"request_id":"key-request-example","value":"example-key-placeholder"}),
+            ),
+            capability(
+                "agent.model.key.receipt",
+                "Read an original model key receipt",
+                schema_for!(CredentialRequest).to_value(),
+                schema_for!(ComponentCredentialStatus).to_value(),
+                json!({"request_id":"key-request-example"}),
+            ),
             capability(
                 "agent.tasks",
                 "Read Agent tasks",

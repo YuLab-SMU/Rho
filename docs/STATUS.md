@@ -136,76 +136,59 @@ without printing it in debug output. All seven focused tests, including a framed
 exchange over bounded duplex I/O, and six existing transport cases now pass. This is a public
 transport building block consumed by the new Agent metadata backend; model/native
 dispatch integration remains pending.
-The new SDK source was written after the storage-integration binaries were
-compiled. Its own focused checks passed in the follow-up serial verifier.
+The generic `views.caller` query exposes the original authenticated view, window
+and connection identities without private tokens. Native ingress captures this
+identity, backend hops retain it, and missing/closing/stale views fail. It reads
+existing state and does not authorize future writes. The new generic Host fixture
+passes for two delegation hops, forged selectors, lost scopes and closure during
+accepted work. Existing draft/delegation passes are reused; fixture cleanup now
+waits for native execution leases to retire before releasing the instance.
 
-The generic `views.caller` query now exposes the original authenticated view,
-window and connection identities without private tokens. Native ingress captures
-the identity, backend hops retain it, and missing/closing/stale views fail rather
-than becoming non-view callers. It reads existing state and does not authorize
-future writes. The new generic Host fixture covers two delegation hops, forged
-selectors, lost scopes and closure during accepted work. Its tests, public type
-generation and independent consumer validation remain pending in the follow-up
-serial verifier. Existing storage results do not validate this new port.
+`plugins.delegated_operation` resolves the original reverse request from its
+retained parent admission with exact project/principal/instance checks. It returns
+only the original Operation identity; an absent record is partial evidence and
+never permission to replay. The generic Host case passes for an active child,
+discarded reply, foreign identity/scope/instance refusal, and read-only observation
+after release/removal/reopen. It closes the original disposable Host before
+rebinding the same journal to another project, respecting the single-Host lock.
+The scoped delegation runtime case also passes. Public declarations and schemas,
+an independent strict TypeScript consumer, client build and client check all pass
+in the v5 verifier. Earlier failed fixture runs remain in their versioned logs.
 
-An ordinary Agent metadata backend has now been added in source. It composes the
-same public task owner and Agent store in an isolated process, uses bounded SDK
-Host calls for original native caller observation, and contributes task queries,
-creation, draft saving, title/archive updates and explicit controller takeover.
-It rejects caller-selected identity/paths, separates non-view controllers, preserves
-version checks and retains submitted results until their original Host settlement.
-All five new framed-protocol fixtures now pass, including concurrent reverse
-responses, original settlement, controller/version conflicts and observation-only
-reopen. The independent-package generic Host fixture is added but not yet run.
-Manifest generation, native-origin checks, standalone build and actual Host
-acceptance remain in `target/plugin-refactor/agent-public-ports-verify.py`, now
-running after the completed storage acceptance. Do not start another Cargo command concurrently.
-The first backend compilation failed on three public component-type imports;
-those paths were corrected and the sequence resumed at that stage, preserving
-the passing SDK result and the original failure log. The corrected backend command
-passes; follow-up results and logs use the `v2` suffix.
-Static dependency, source containment,
-documentation map and script syntax checks pass for the new source.
+The ordinary Agent backend composes the public task owner and store in an isolated
+process. It contributes task queries, creation, draft saving, title/archive
+updates, explicit controller takeover and versioned model configuration. Each
+write observes its original native caller and consumes a one-use metadata
+admission. Callers cannot select an identity/path. Original operation candidates
+remain retained until native settlement. All six metadata/configuration framed
+cases pass before the key-Control addition, covering concurrency, version/control
+conflicts, invalid plaintext/embedded credentials, instance separation and
+observation-only reopen. The independent package build in v5 passed, but its
+subsequent test selected the system's Rust 1.88 instead of the project's 1.97.
+The build and test scripts now share an explicitly resolved toolchain; this
+correction and the generic Host acceptance are pending the key-Control verifier.
+No compile failure is recorded as a successful independent test.
 
-The v2 view-origin stage passed all nine draft cases and one existing delegation
-case, but the new origin case requested ordinary close without a connected close
-handler. Host correctly refused. The fixture now explicitly retains acknowledged
-state at its expected version; no product close rule was weakened. The v3 run
-again passed the nine draft and existing delegation cases. The new origin case
-reached its final cleanup but released the instance before native settlement had
-retired the original execution lease. The fixture now observes both zero retained
-calls and zero pending messages before release. The corrected focused origin
-case passes in v4; both original failures remain recorded. Unchanged draft and
-existing-delegation passes are reused. The v4 serial run now checks the new
-delegated-operation port and Agent configuration before independent acceptance.
+The credential file stores a secret and its scoped original-request reference in
+one atomic replacement. Identical retries return the original reference; changed
+reuse is refused. Read-only lookup survives reopen, and removal retains the
+non-secret receipt so an old request cannot recreate the secret. All ten credential store cases now pass, including the four new cases for
+original-request recovery, concurrent duplicates, missing storage and corrupt
+receipt refusal. The independent assembly remains a separate pending check.
 
-Source now adds `plugins.delegated_operation`: the native backend can resolve
-its original reverse request from the retained parent admission with exact
-project/principal/instance checks. It returns only the original Operation identity;
-an absent journal record is partial evidence and never permission to replay.
-A separate generic Host fixture now passes for an active child, discarded reply,
-cross-instance/identity/scope rejection and read-only release/removal/reopen.
-Its first run reached the final cross-project setup but correctly encountered
-the single-Host journal lock. The fixture now closes the disposable original Host
-before rebinding that same journal to another project; the complete v5 case passes.
-Public declarations, schemas and consumer checks are included; their generation
-and independent checks remain in the serial run. The scoped backend delegation
-runtime case also passes. Ordinary Agent model configuration is composed through
-the existing owner's versioned settings admission. All six framed metadata cases
-now pass, including configuration persistence, version conflicts, rejection of
-plaintext/embedded credentials and independent instance settings. The earlier
-five-case result is superseded for this metadata source. Independent packaging
-and the generic Host Agent case remain pending. No model or actual user credential
-is accessed by these checks.
-
-The Agent credential store now has atomic original-request persistence in source:
-a secret and its scoped reference receipt share one file replacement. Identical
-retries return that reference; changed reuse is rejected. Read-only lookup survives
-reopen, and removal retains the non-secret receipt so an old request cannot
-recreate the secret. Four new store cases cover those boundaries, concurrent
-duplicates, missing storage and corrupt receipt refusal. These cases and the
-updated independent store assembly have not run yet; the existing credential
-evidence predates this addition. The raw-key ephemeral Control is still pending.
+The backend now exposes `agent.model.key.store` as ephemeral Control, with original
+caller observation and instance-owned credential storage, plus the read-only
+`agent.model.key.receipt`. Missing receipts are explicitly partial observations.
+No raw key is placed into an Operation, task, configuration, revision or scenario.
+Controls and Operations share bounded transport capacity but only Operations
+require native settlement. Four new framed fixtures cover lost replies/reopen,
+wrong kinds/identity/scopes, disconnect before admission and mixed capacity.
+The generic Host fixture also checks unchanged journal table counts and separate
+instance receipts. All ten framed cases now pass, including those four new Control cases. Manifest
+generation also passes. Independent assemblies and the generic Host case are
+still running serially in `target/plugin-refactor/agent-key-control-verify.py`;
+they are not yet passes.
+The v5 public-port logs and results are retained separately.
 
 This remains incomplete Agent migration. Model execution and native Agent transport
 composition, context providers, Agent views, Studio Agent assistance and final

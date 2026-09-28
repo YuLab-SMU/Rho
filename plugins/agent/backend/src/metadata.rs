@@ -4,7 +4,7 @@ use rho_agent_owner::component::{
     ComponentActor, ComponentActorValidator, ComponentAgentOwner, ComponentTaskError,
 };
 use rho_agent_owner::{AgentTaskRepository, AgentTaskScope};
-use rho_agent_store::AgentStore;
+use rho_agent_store::{AgentStore, CredentialFile};
 use rho_plugin_sdk::protocol::*;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -19,6 +19,7 @@ use std::{
 pub struct Metadata {
     pub owner: ComponentAgentOwner,
     store: Arc<AgentStore>,
+    credentials: CredentialFile,
     instance: PluginInstance,
     scope: AgentTaskScope,
 }
@@ -122,6 +123,9 @@ impl Metadata {
         Ok(Self {
             owner,
             store,
+            credentials: CredentialFile::at(
+                Path::new(&environment.data_root).join("model-credentials-v1.json"),
+            ),
             instance,
             scope,
         })
@@ -130,8 +134,10 @@ impl Metadata {
         &self,
         request: &RequestId,
         call: &PluginCall,
-        operation: bool,
+        kind: CapabilityKind,
     ) -> Result<(), Failure> {
+        let operation = kind == CapabilityKind::Operation;
+        let writes = kind != CapabilityKind::Query;
         if &call.request != request
             || call.binding.provider != self.instance.identity
             || call.binding.project != self.instance.project
@@ -146,18 +152,18 @@ impl Metadata {
                 "Agent call differs from its admitted identity or native preconditions",
             ));
         }
-        let scope = if operation {
+        let scope = if writes {
             "application.control"
         } else {
             "application.read"
         };
-        if !call.scopes.contains(scope) || (operation && !call.scopes.contains("plugins.read")) {
+        if !call.scopes.contains(scope) || (writes && !call.scopes.contains("plugins.read")) {
             return Err(Failure {
                 code: "access_denied",
                 message: "Original Agent call lacks its declared scope".into(),
             });
         }
-        if operation != crate::manifest::is_mutation(call.binding.capability.id.as_str()) {
+        if kind != crate::manifest::kind(call.binding.capability.id.as_str()) {
             return Err(Failure::invalid(
                 "Agent capability does not match the requested call kind",
             ));
@@ -166,6 +172,18 @@ impl Metadata {
     }
     pub fn read(&self, call: &PluginCall) -> Result<Value, Failure> {
         match call.binding.capability.id.as_str() {
+            "agent.model.key.receipt" => {
+                let args: CredentialRequest = decode(&call.arguments)?;
+                let status = self
+                    .credentials
+                    .reference_for_request(&self.scope, &args.request_id)
+                    .map_err(ComponentTaskError::from)?
+                    .unwrap_or(rho_agent_api::ComponentCredentialStatus {
+                        credential: None,
+                        available: false,
+                    });
+                encoded(status)
+            }
             "agent.tasks" => {
                 let args: TaskList = decode(&call.arguments)?;
                 if !(1..=20).contains(&args.limit)
@@ -199,6 +217,20 @@ impl Metadata {
             }
             _ => Err(Failure::invalid("Agent query is not implemented")),
         }
+    }
+    /// Invoked only after this Control's original native caller query succeeds.
+    /// Caller observations are consumed here, never retained for future writes.
+    pub fn control(&self, call: &PluginCall, caller: PluginViewCaller) -> Result<Value, Failure> {
+        if call.binding.capability.id.as_str() != "agent.model.key.store" {
+            return Err(Failure::invalid("Agent control is not implemented"));
+        }
+        drop(caller);
+        let args: StoreCredential = decode(&call.arguments)?;
+        encoded(
+            self.credentials
+                .put_for_request(&self.scope, &args.request_id, args.value)
+                .map_err(ComponentTaskError::from)?,
+        )
     }
     fn conversation(&self, id: &str) -> Result<ComponentAgentConversation, Failure> {
         if id.is_empty() || id.len() > 160 {

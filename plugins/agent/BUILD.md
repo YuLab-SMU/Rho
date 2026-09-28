@@ -13,8 +13,12 @@ and these instructions are included in the package inventory.
 
 The current process contributes task metadata queries and model-task create,
 draft, title/archive, explicit control-transfer and model-configuration Operations.
-Configuration validates an expected settings version and credential references;
-it does not contact models or persist plaintext keys. Native initialization
+Configuration validates an expected settings version and credential references.
+`agent.model.key.store` accepts plaintext only through ephemeral Control, outside
+the Operation journal. Its immutable key and original-request reference are saved
+atomically in the instance credential file. After a lost reply, the read-only
+`agent.model.key.receipt` resolves that reference; missing receipts remain partial
+observations. Neither port configures or contacts a model. Native initialization
 selects the exact instance data directory. Mutations observe the original caller
 through `views.caller`; callers cannot select a project, principal, controller or
 database path. The Agent metadata store is separate from the scientific journal.

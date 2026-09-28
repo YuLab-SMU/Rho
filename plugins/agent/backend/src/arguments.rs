@@ -1,5 +1,5 @@
-//! Inputs deliberately omit project, principal, controller, paths and credentials.
-//! These are supplied by native initialization and the original calling view.
+//! Inputs omit caller identities and paths. Plaintext key input belongs only to
+//! the ephemeral Control, never an Operation, configuration or task record.
 use rho_agent_api::{AgentDraftContent, ComponentAgentProfile, component::ComponentAgentGrant};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -7,6 +7,23 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Empty {}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CredentialRequest {
+    #[schemars(length(min = 1, max = 160))]
+    pub request_id: String,
+}
+
+// Deliberately no Debug: diagnostics must not expose credential material.
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct StoreCredential {
+    #[schemars(length(min = 1, max = 160))]
+    pub request_id: String,
+    #[schemars(length(min = 1, max = 16384))]
+    pub value: String,
+}
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]

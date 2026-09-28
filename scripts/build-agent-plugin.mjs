@@ -4,6 +4,13 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// Resolve in the checkout before entering a temporary independent package, where
+// rustup otherwise selects the user's unrelated default toolchain.
+export function agentPluginBuildEnvironment() {
+  const installed = name => fs.realpathSync(execFileSync('rustup', ['which', name], {cwd: root, encoding: 'utf8'}).trim());
+  return {...process.env, RHO_PLUGIN_CARGO: installed('cargo'), RUSTC: installed('rustc'), RUSTDOC: installed('rustdoc'),
+    CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '2', CARGO_TARGET_DIR: path.join(root, 'target')};
+}
 export function buildAgentPlugin(destination) {
   assert.ok(destination, 'Specify a new package directory outside the checkout');
   const output = path.join(fs.realpathSync(path.dirname(path.resolve(destination))), path.basename(destination));
@@ -28,9 +35,7 @@ export function buildAgentPlugin(destination) {
   }
   fs.writeFileSync(path.join(output, 'Cargo.toml'), '[workspace]\nresolver = "3"\nmembers = ["api", "backend", "backend/owner", "backend/store", "backend/engine", "backend/client", "public/r-api", "public/plugin-protocol", "public/plugin-sdk"]\n');
   fs.copyFileSync(path.join(root, 'Cargo.lock'), path.join(output, 'Cargo.lock'));
-  const installed = name => fs.realpathSync(execFileSync('rustup', ['which', name], {encoding: 'utf8'}).trim());
-  const env = {...process.env, RHO_PLUGIN_CARGO: installed('cargo'), RUSTC: installed('rustc'), RUSTDOC: installed('rustdoc'),
-    CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '2', CARGO_TARGET_DIR: path.join(root, 'target')};
+  const env = agentPluginBuildEnvironment();
   const target = execFileSync(env.RUSTC, ['-vV'], {encoding: 'utf8'}).match(/^host: (.+)$/m)?.[1];
   assert.ok(target);
   const metadata = JSON.parse(execFileSync(env.RHO_PLUGIN_CARGO, ['metadata', '--offline', '--filter-platform', target, '--format-version', '1'], {cwd: output, env, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024}));

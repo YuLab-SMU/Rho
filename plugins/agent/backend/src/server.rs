@@ -7,7 +7,7 @@ use rho_plugin_sdk::{
 };
 use serde_json::{Value, json};
 use std::{
-    collections::{BTreeMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     sync::Arc,
 };
 use tokio::{
@@ -23,6 +23,10 @@ struct Retained {
     request: RequestId,
     binding: ProviderBinding,
     outcome: Option<PluginOutcome>,
+}
+enum Completed {
+    Operation(OperationId, PluginCommitPlan),
+    Control(RequestId, Result<Value, Failure>),
 }
 
 fn error(code: &str, message: &str) -> RpcBody {
@@ -115,26 +119,39 @@ where
     let mut writer = connection.writer;
     let mut jobs = JoinSet::new();
     let mut retained: BTreeMap<OperationId, Retained> = BTreeMap::new();
+    let mut controls: BTreeSet<RequestId> = BTreeSet::new();
     let mut settled: VecDeque<OperationSettlement> = VecDeque::new();
     let result = loop {
         tokio::select! {
             completed = jobs.join_next(), if !jobs.is_empty() => {
-                let Some(Ok((operation, output))) = completed else {
+                let Some(Ok(completed)) = completed else {
                     break Err("Agent metadata work ended without a confirmed result".into());
                 };
-                let Some(entry) = retained.get_mut(&operation) else {
-                    break Err("Agent metadata result lost its original operation".into());
+                let (request, body) = match completed {
+                    Completed::Operation(operation, output) => {
+                        let Some(entry) = retained.get_mut(&operation) else {
+                            break Err("Agent metadata result lost its original operation".into());
+                        };
+                        entry.outcome = Some(output.outcome);
+                        (entry.request.clone(), RpcBody::CommitPlan(output))
+                    },
+                    Completed::Control(request, output) => {
+                        if !controls.remove(&request) { break Err("Agent control lost its original request".into()); }
+                        let body = match output {
+                            Ok(data) => RpcBody::ControlResult { data },
+                            Err(error) => error.body(),
+                        };
+                        (request, body)
+                    },
                 };
-                let output: PluginCommitPlan = output;
-                entry.outcome = Some(output.outcome);
-                if let Err(error) = writer.send(entry.request.clone(), RpcBody::CommitPlan(output)).await {
+                if let Err(error) = writer.send(request, body).await {
                     break Err(error.to_string());
                 }
             },
             outgoing = pump.next(), if pump.pending() > 0 => {
                 let Some(outgoing) = outgoing else { break Err("Agent Host call pump ended".into()); };
                 let RpcBody::HostCall { parent_request, .. } = &outgoing.body else { unreachable!() };
-                if !retained.values().any(|entry| &entry.request == parent_request && entry.outcome.is_none()) {
+                if !controls.contains(parent_request) && !retained.values().any(|entry| &entry.request == parent_request && entry.outcome.is_none()) {
                     break Err("Agent Host call has no active original parent".into());
                 }
                 if let Err(error) = writer.send(outgoing.request, outgoing.body).await { break Err(error.to_string()); }
@@ -146,41 +163,62 @@ where
                     continue;
                 }
                 let request = frame.request;
-                let operation = matches!(&frame.body, RpcBody::Invoke(_));
+                let kind = match &frame.body {
+                    RpcBody::Invoke(_) => CapabilityKind::Operation,
+                    RpcBody::Control(_) => CapabilityKind::Control,
+                    _ => CapabilityKind::Query,
+                };
                 let reply = match frame.body {
-                    RpcBody::Query(call) | RpcBody::Invoke(call) => {
-                        if let Err(failure) = metadata.validate(&request, &call, operation) {
+                    RpcBody::Query(call) | RpcBody::Invoke(call) | RpcBody::Control(call) => {
+                        if let Err(failure) = metadata.validate(&request, &call, kind) {
                             Some(failure.body())
-                        } else if retained.values().any(|entry| entry.request == request) {
+                        } else if controls.contains(&request) || retained.values().any(|entry| entry.request == request) {
                             break Err("Original Agent request is still retained".into());
-                        } else if !operation {
+                        } else if kind == CapabilityKind::Query {
                             Some(match metadata.read(&call) {
-                                Ok(data) => RpcBody::QueryResult { data, completeness: ObservationCompleteness::Complete, source: None },
+                                Ok(data) => {
+                                    let completeness = if call.binding.capability.id.as_str() == "agent.model.key.receipt" && data["credential"].is_null() {
+                                        ObservationCompleteness::Partial
+                                    } else { ObservationCompleteness::Complete };
+                                    RpcBody::QueryResult { data, completeness, source: None }
+                                },
                                 Err(failure) => failure.body(),
                             })
-                        } else if retained.len() >= CAPACITY {
+                        } else if retained.len() + controls.len() >= CAPACITY {
                             Some(error("busy", "Agent metadata capacity reached; inspect original operations"))
                         } else {
-                            let id = match OperationId::new(call.operation_id.as_ref().unwrap()) {
-                                Ok(id) => id, Err(error) => break Err(error.to_string()),
-                            };
-                            if retained.contains_key(&id) || settled.iter().any(|entry| entry.operation_id == id) {
-                                break Err("Original Agent operation was dispatched twice".into());
-                            }
+                            let operation = if kind == CapabilityKind::Operation {
+                                let id = match OperationId::new(call.operation_id.as_ref().unwrap()) {
+                                    Ok(id) => id, Err(error) => break Err(error.to_string()),
+                                };
+                                if retained.contains_key(&id) || settled.iter().any(|entry| entry.operation_id == id) {
+                                    break Err("Original Agent operation was dispatched twice".into());
+                                }
+                                Some(id)
+                            } else { None };
                             let reverse = loop {
                                 let candidate = RequestId::new(format!("agent-caller-{}", uuid::Uuid::new_v4())).unwrap();
-                                if candidate != request && !pump.contains(&candidate)
+                                if candidate != request && !pump.contains(&candidate) && !controls.contains(&candidate)
                                     && !retained.values().any(|entry| entry.request == candidate) { break candidate; }
                             };
                             let pending = match host.begin(reverse, request.clone(), manifest::key("views.caller"), json!({})) {
                                 Ok(pending) => pending, Err(error) => break Err(error.to_string()),
                             };
-                            retained.insert(id.clone(), Retained { request: request.clone(), binding: call.binding.clone(), outcome: None });
                             let metadata = metadata.clone();
-                            jobs.spawn(async move {
-                                let result = caller(pending.receive().await).and_then(|origin| metadata.mutate(&call, origin));
-                                (id, plan(result))
-                            });
+                            if let Some(id) = operation {
+                                retained.insert(id.clone(), Retained { request: request.clone(), binding: call.binding.clone(), outcome: None });
+                                jobs.spawn(async move {
+                                    let result = caller(pending.receive().await).and_then(|origin| metadata.mutate(&call, origin));
+                                    Completed::Operation(id, plan(result))
+                                });
+                            } else {
+                                controls.insert(request.clone());
+                                let original = request.clone();
+                                jobs.spawn(async move {
+                                    let result = caller(pending.receive().await).and_then(|origin| metadata.control(&call, origin));
+                                    Completed::Control(original, result)
+                                });
+                            }
                             None
                         }
                     },
@@ -209,7 +247,7 @@ where
                         }
                         Some(RpcBody::SettlementAcknowledged(settlement))
                     },
-                    RpcBody::Release if retained.is_empty() && jobs.is_empty() && pump.pending() == 0 => {
+                    RpcBody::Release if retained.is_empty() && controls.is_empty() && jobs.is_empty() && pump.pending() == 0 => {
                         if let Err(error) = writer.send(request, RpcBody::Released).await { break Err(error.to_string()); }
                         break Ok(());
                     },

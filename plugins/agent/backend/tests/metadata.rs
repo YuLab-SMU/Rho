@@ -194,12 +194,16 @@ impl Fixture {
 fn manifest_contains_only_public_bounded_metadata_capabilities() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 8);
+    assert_eq!(manifest.capabilities.len(), 10);
     assert_eq!(
         manifest.requires[0].capability,
         manifest::key("views.caller")
     );
     for contribution in &manifest.capabilities {
+        assert_eq!(
+            contribution.kind,
+            manifest::kind(contribution.capability.id.as_str())
+        );
         assert_eq!(contribution.cancellation, CancellationSupport::Unsupported);
         assert_eq!(contribution.input_schema["additionalProperties"], false);
         for name in [
@@ -213,6 +217,13 @@ fn manifest_contains_only_public_bounded_metadata_capabilities() {
             assert!(contribution.input_schema["properties"].get(name).is_none());
         }
     }
+    let key = manifest
+        .capabilities
+        .iter()
+        .find(|cap| cap.capability.id.as_str() == "agent.model.key.store")
+        .unwrap();
+    assert_eq!(key.kind, CapabilityKind::Control);
+    assert_eq!(key.input_schema["properties"]["value"]["maxLength"], 16384);
 }
 
 #[tokio::test]
@@ -540,4 +551,355 @@ async fn model_settings_use_scoped_owner_cas_without_reading_keys_or_contacting_
     );
     independent.release().await;
     reopened.release().await;
+}
+
+impl Fixture {
+    async fn begin_control(&mut self, request: &str, arguments: Value) -> RpcFrame {
+        let call = call(request, "agent.model.key.store", arguments, false);
+        self.writer
+            .send(call.request.clone(), RpcBody::Control(call))
+            .await
+            .unwrap();
+        let reverse = self.read().await;
+        assert_eq!(
+            reverse.body,
+            RpcBody::HostCall {
+                parent_request: id(request),
+                capability: manifest::key("views.caller"),
+                arguments: json!({})
+            }
+        );
+        reverse
+    }
+    async fn control_answer(&mut self, reverse: RpcFrame, origin: Value) -> RpcBody {
+        let parent = match reverse.body {
+            RpcBody::HostCall { parent_request, .. } => parent_request,
+            _ => panic!("Expected original caller observation"),
+        };
+        self.writer
+            .send(
+                reverse.request,
+                RpcBody::HostResult {
+                    result: json!({"status":"ready","completeness":"complete","data":origin}),
+                },
+            )
+            .await
+            .unwrap();
+        let result = self.read().await;
+        assert_eq!(result.request, parent);
+        result.body
+    }
+}
+
+#[tokio::test]
+async fn key_controls_recover_original_references_without_operations_or_secret_metadata() {
+    let mut f = Fixture::start().await;
+    let secret = "test-only-key-29c13";
+    let args = json!({"request_id":"original-key","value":secret});
+    let reverse = f.begin_control("key-write", args.clone()).await;
+    let path = std::path::Path::new(&f.environment.data_root).join("model-credentials-v1.json");
+    assert!(!path.exists());
+    f.writer
+        .send(id("busy-release"), RpcBody::Release)
+        .await
+        .unwrap();
+    assert!(matches!(f.read().await.body, RpcBody::Error { code, .. } if code == "busy"));
+    f.writer.send(reverse.request, RpcBody::HostResult {
+        result: json!({"status":"ready","completeness":"complete","data":origin("view-one")})
+    }).await.unwrap();
+    // Ignore the original Control result. A later query, not another write,
+    // discovers the reference even if observation races with the atomic write.
+    let reference = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        let mut ignored_reply = false;
+        for sequence in 0..100 {
+            let request = format!("receipt-{sequence}");
+            f.writer
+                .send(
+                    id(&request),
+                    RpcBody::Query(call(
+                        &request,
+                        "agent.model.key.receipt",
+                        json!({"request_id":"original-key"}),
+                        false,
+                    )),
+                )
+                .await
+                .unwrap();
+            loop {
+                let reply = f.read().await;
+                if reply.request == id("key-write") {
+                    assert!(matches!(&reply.body, RpcBody::ControlResult { .. }));
+                    assert!(!serde_json::to_string(&reply).unwrap().contains(secret));
+                    ignored_reply = true;
+                    continue;
+                }
+                assert_eq!(reply.request, id(&request));
+                let RpcBody::QueryResult {
+                    data, completeness, ..
+                } = reply.body
+                else {
+                    panic!()
+                };
+                if data["credential"].is_null() {
+                    assert_eq!(completeness, ObservationCompleteness::Partial);
+                    break;
+                }
+                assert_eq!(completeness, ObservationCompleteness::Complete);
+                assert_eq!(data["available"], true);
+                if !ignored_reply {
+                    let reply = f.read().await;
+                    assert_eq!(reply.request, id("key-write"));
+                    assert!(matches!(&reply.body, RpcBody::ControlResult { .. }));
+                    assert!(!serde_json::to_string(&reply).unwrap().contains(secret));
+                }
+                return data["credential"].clone();
+            }
+            tokio::task::yield_now().await;
+        }
+        panic!("Original key receipt was not observed");
+    })
+    .await
+    .unwrap();
+    let before = std::fs::read(&path).unwrap();
+    let reverse = f.begin_control("repeat-key", args.clone()).await;
+    let repeated = f.control_answer(reverse, origin("view-one")).await;
+    assert_eq!(
+        repeated,
+        RpcBody::ControlResult {
+            data: reference.clone()
+        }
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    let reverse = f
+        .begin_control(
+            "changed-key",
+            json!({"request_id":"original-key","value":"different-test-key"}),
+        )
+        .await;
+    assert!(
+        matches!(f.control_answer(reverse, origin("view-one")).await, RpcBody::Error { code, .. } if code == "request_conflict")
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    assert_eq!(
+        f.query("agent.tasks", json!({"limit":20})).await["tasks"],
+        json!([])
+    );
+    for entry in std::fs::read_dir(&f.environment.data_root).unwrap() {
+        let entry = entry.unwrap();
+        if entry
+            .file_name()
+            .to_string_lossy()
+            .starts_with("agent-v1.sqlite")
+        {
+            assert!(
+                !String::from_utf8_lossy(&std::fs::read(entry.path()).unwrap()).contains(secret)
+            );
+        }
+    }
+    let (directory, environment) = f.release().await;
+    let mut reopened = Fixture::open(directory, environment).await;
+    assert_eq!(
+        reopened
+            .query(
+                "agent.model.key.receipt",
+                json!({"request_id":"original-key"})
+            )
+            .await,
+        json!({"credential":reference,"available":true})
+    );
+    let reverse = reopened.begin_control("after-reopen", args).await;
+    assert_eq!(
+        reopened.control_answer(reverse, origin("view-one")).await,
+        RpcBody::ControlResult { data: reference }
+    );
+    reopened.release().await;
+}
+
+#[tokio::test]
+async fn key_input_requires_control_kind_native_identity_scope_and_complete_origin() {
+    let mut f = Fixture::start().await;
+    let args = json!({"request_id":"original-key","value":"test-only-key-44"});
+    for variant in ["query", "invoke", "principal", "scope", "operation"] {
+        let mut native = call(
+            variant,
+            "agent.model.key.store",
+            args.clone(),
+            variant == "invoke",
+        );
+        match variant {
+            "principal" => native.principal = PrincipalId::new("foreign").unwrap(),
+            "scope" => {
+                native.scopes.remove("application.control");
+            }
+            "operation" => native.operation_id = Some("forged-operation".into()),
+            _ => {}
+        }
+        let body = match variant {
+            "query" => RpcBody::Query(native),
+            "invoke" => RpcBody::Invoke(native),
+            _ => RpcBody::Control(native),
+        };
+        f.writer.send(id(variant), body).await.unwrap();
+        let reply = f.read().await;
+        assert_eq!(reply.request, id(variant));
+        assert!(matches!(reply.body, RpcBody::Error { .. }));
+    }
+    let reverse = f
+        .begin_control(
+            "forged-path",
+            json!({"request_id":"original-key","value":"test-only-key-44","path":"/forged"}),
+        )
+        .await;
+    assert!(matches!(
+        f.control_answer(reverse, origin("view-one")).await,
+        RpcBody::Error { .. }
+    ));
+    let reverse = f.begin_control("closed-view", args).await;
+    f.writer.send(reverse.request, RpcBody::HostResult {
+        result: json!({"status":"unavailable","completeness":"partial","data":{"view":null}})
+    }).await.unwrap();
+    assert!(matches!(f.read().await.body, RpcBody::Error { .. }));
+    assert!(
+        !std::path::Path::new(&f.environment.data_root)
+            .join("model-credentials-v1.json")
+            .exists()
+    );
+    f.release().await;
+}
+
+#[tokio::test]
+async fn disconnect_before_key_admission_never_writes_or_replays_on_reopen() {
+    let mut f = Fixture::start().await;
+    f.begin_control(
+        "unanswered-key",
+        json!({"request_id":"original-key","value":"never-stored-key"}),
+    )
+    .await;
+    let Fixture {
+        directory,
+        environment,
+        reader,
+        writer,
+        task,
+    } = f;
+    drop(reader);
+    drop(writer);
+    task.await.unwrap().unwrap();
+    assert!(
+        !std::path::Path::new(&environment.data_root)
+            .join("model-credentials-v1.json")
+            .exists()
+    );
+    let mut reopened = Fixture::open(directory, environment).await;
+    reopened
+        .writer
+        .send(
+            id("original-receipt"),
+            RpcBody::Query(call(
+                "original-receipt",
+                "agent.model.key.receipt",
+                json!({"request_id":"original-key"}),
+                false,
+            )),
+        )
+        .await
+        .unwrap();
+    let result = reopened.read().await;
+    assert!(matches!(
+        result.body,
+        RpcBody::QueryResult {
+            completeness: ObservationCompleteness::Partial,
+            ..
+        }
+    ));
+    assert!(
+        !std::path::Path::new(&reopened.environment.data_root)
+            .join("model-credentials-v1.json")
+            .exists()
+    );
+    reopened.release().await;
+}
+
+#[tokio::test]
+async fn controls_and_operations_share_capacity_without_sharing_settlement() {
+    let mut f = Fixture::start().await;
+    let mut operations = Vec::new();
+    for index in 0..16 {
+        let request = format!("mixed-{index}");
+        if index % 2 == 0 {
+            let native = call(
+                &request,
+                "agent.model.create",
+                json!({"conversation_id":format!("task-{index}"),"profile":"project"}),
+                true,
+            );
+            operations.push(native.clone());
+            f.writer
+                .send(id(&request), RpcBody::Invoke(native))
+                .await
+                .unwrap();
+        } else {
+            f.writer
+                .send(
+                    id(&request),
+                    RpcBody::Control(call(
+                        &request,
+                        "agent.model.key.store",
+                        json!({"request_id":request,"value":format!("fixture-key-{index}")}),
+                        false,
+                    )),
+                )
+                .await
+                .unwrap();
+        }
+    }
+    let mut reverse = Vec::new();
+    for _ in 0..16 {
+        let frame = f.read().await;
+        assert!(matches!(frame.body, RpcBody::HostCall { .. }));
+        reverse.push(frame);
+    }
+    f.writer
+        .send(
+            id("too-many"),
+            RpcBody::Control(call(
+                "too-many",
+                "agent.model.key.store",
+                json!({"request_id":"overflow","value":"never-admitted"}),
+                false,
+            )),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(f.read().await.body, RpcBody::Error { code, .. } if code == "busy"));
+    for frame in reverse.into_iter().rev() {
+        f.writer.send(frame.request, RpcBody::HostResult {
+            result: json!({"status":"ready","completeness":"complete","data":origin("view-one")})
+        }).await.unwrap();
+    }
+    let mut control_results = 0;
+    let mut operation_results = 0;
+    for _ in 0..16 {
+        match f.read().await.body {
+            RpcBody::ControlResult { data } => {
+                assert_eq!(data["kind"], "local_file");
+                control_results += 1;
+            }
+            RpcBody::CommitPlan(plan) => {
+                assert_eq!(plan.outcome, PluginOutcome::Succeeded);
+                operation_results += 1;
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+    assert_eq!((control_results, operation_results), (8, 8));
+    f.writer
+        .send(id("before-settlement"), RpcBody::Release)
+        .await
+        .unwrap();
+    assert!(matches!(f.read().await.body, RpcBody::Error { code, .. } if code == "busy"));
+    for native in operations {
+        f.settle(&native, PluginOutcome::Succeeded).await;
+    }
+    f.release().await;
 }
