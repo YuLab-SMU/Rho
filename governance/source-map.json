@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "checks": {
+    "plugins.agent-engine": {"command": ["cargo", "test", "-p", "rho-agent-engine", "--locked"]},
+    "plugins.agent-engine-independent": {"command": ["node", "scripts/test-agent-plugin-engine.mjs"]},
+    "plugins.agent-adapter": {"command": ["cargo", "test", "-p", "rho-agents", "--lib", "--locked"]},
+    "plugins.agent-model-host": {"command": ["cargo", "test", "-p", "rho-host", "--test", "component_agents", "--test", "component_recovery", "--locked"]},
     "plugins.agent-real-r": {"command": ["node", "scripts/test-real-r.mjs", "--agent"]},
     "plugins.agent-owner": {"command": ["cargo", "test", "-p", "rho-agent-owner", "--lib", "--locked"]},
     "plugins.agent-owner-independent": {"command": ["node", "scripts/test-agent-plugin-owner.mjs"]},
@@ -1050,6 +1054,7 @@
         "scripts/build-remote-plugin.mjs",
         "scripts/test-remote-plugin.mjs",
         "scripts/test-remote-plugin-types.mjs",
+        "scripts/test-agent-plugin-engine.mjs",
         "scripts/test-agent-plugin-owner.mjs",
         "scripts/test-agent-plugin-client.mjs", "scripts/test-agent-plugin-types.mjs",
         "scripts/test-environment-plugin-owner.mjs",
@@ -1058,6 +1063,7 @@
         "scripts/test-environment-plugin.mjs"
       ],
       "checks": [
+        "plugins.agent-engine", "plugins.agent-engine-independent", "plugins.agent-adapter", "plugins.agent-model-host",
         "plugins.agent-real-r",
         "plugins.agent-owner", "plugins.agent-owner-independent", "plugins.agent-request",
         "plugins.agent-native", "plugins.agent-independent", "plugins.agent-protocol", "plugins.agent-types",

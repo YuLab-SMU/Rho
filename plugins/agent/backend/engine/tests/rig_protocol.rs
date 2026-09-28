@@ -671,3 +671,6 @@ async fn anthropic_keeps_two_labelled_images_before_the_question_on_the_wire() {
     let wire = requests[0].to_string();
     assert!(!wire.contains("file://") && !wire.contains("synthetic-key"));
 }
+
+#[path = "support/engine.rs"]
+mod production;

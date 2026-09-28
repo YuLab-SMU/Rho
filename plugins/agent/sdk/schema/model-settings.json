@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ComponentModelSettings",
+  "type": "object",
+  "properties": {
+    "connection": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ComponentModelConnection"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "version": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "enabled"
+  ],
+  "$defs": {
+    "ComponentCredentialRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "environment"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "name"
+          ]
+        },
+        {
+          "description": "Retained references from Hosts that used memory-only credentials.",
+          "type": "object",
+          "properties": {
+            "key_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "session"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "key_id"
+          ]
+        },
+        {
+          "description": "Immutable version in the user-local Rho configuration file.",
+          "type": "object",
+          "properties": {
+            "key_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "local_file"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "key_id"
+          ]
+        }
+      ]
+    },
+    "ComponentModelConnection": {
+      "type": "object",
+      "properties": {
+        "base_url": {
+          "type": "string"
+        },
+        "credential": {
+          "$ref": "#/$defs/ComponentCredentialRef"
+        },
+        "model": {
+          "type": "string"
+        },
+        "protocol": {
+          "$ref": "#/$defs/ComponentModelProtocol"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "base_url",
+        "model",
+        "credential"
+      ]
+    },
+    "ComponentModelProtocol": {
+      "type": "string",
+      "enum": [
+        "anthropic",
+        "openai_completions"
+      ]
+    }
+  }
+}

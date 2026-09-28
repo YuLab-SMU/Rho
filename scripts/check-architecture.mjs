@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export function assertAgentEngineBoundary(pkg) {
   for (const dep of pkg.dependencies) {
-    assert.ok(!(dep.name === "rig" || dep.name.startsWith("rig-")) || pkg.name === "rho-agents",
-      `${pkg.name} imports the component Agent engine outside rho-agents`);
+    assert.ok(!(dep.name === "rig" || dep.name.startsWith("rig-")) || pkg.name === "rho-agent-engine",
+      `${pkg.name} imports the component Agent engine outside rho-agent-engine`);
   }
 }
 const metadata = JSON.parse(execFileSync("cargo", [
@@ -45,7 +45,7 @@ const allowed = {
   "rho-contract": ["rho-agent-api", "rho-plugin-protocol", "rho-r-api", "rho-files-api", "rho-process-api", "rho-remote-api", "rho-environment-api"],
   "rho-operation": ["rho-contract", "rho-plugin-protocol"],
   "rho-application": ["rho-contract", "rho-agent-owner"],
-  "rho-agents": ["rho-application", "rho-contract"],
+  "rho-agents": ["rho-agent-engine", "rho-application", "rho-contract"],
   "rho-skills": ["rho-contract", "rho-operation"],
   "rho-adapter-skills": ["rho-contract", "rho-operation", "rho-skills"],
   "rho-workspace": ["rho-contract", "rho-operation", "rho-r-api"],
@@ -62,12 +62,14 @@ const allowed = {
   "rho-mcp": ["rho-contract", "rho-host"],
   "rho-agent-api": [],
   "rho-agent-owner": ["rho-agent-api"],
+  "rho-agent-engine": ["rho-agent-api", "rho-agent-owner"],
   "rho-agent-client": ["rho-agent-api"],
   "rho-workbench": ["rho-plugin-protocol", "rho-contract", "rho-host", "rho-mcp"],
   "rho-cli": ["rho-contract", "rho-host", "rho-mcp", "rho-workbench", "rho-plugin-protocol", "rho-plugins"],
 };
 const pluginLibraries = {
   "rho-agent-owner": "plugins/agent/backend/owner",
+  "rho-agent-engine": "plugins/agent/backend/engine",
   "rho-agent-api": "plugins/agent/api", "rho-agent-client": "plugins/agent/backend/client",
   "rho-environment-api": "plugins/environment/api", "rho-environment-owner": "plugins/environment/backend/owner",
   "rho-remote-api": "plugins/remote/api", "rho-remote-owner": "plugins/remote/backend/owner",

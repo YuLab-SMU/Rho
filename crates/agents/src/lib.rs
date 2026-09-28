@@ -1,8 +1,7 @@
 #![forbid(unsafe_code)]
-//! Optional component assistant engine boundary. Scientific owners never depend on Rig.
-//! Rig drives inference and tools; Application and Host retain admission and facts.
-mod runner;
-mod diagnostics;
+//! Transitional adapters from existing task owners to the public Agent engine.
+//! Model behavior and provider code live in the Agent package.
+mod bridge;
 mod permissions;
 pub use permissions::{action_permission, task_intent_spec};
-pub use runner::RigComponentEngine;
+pub use bridge::RigComponentEngine;

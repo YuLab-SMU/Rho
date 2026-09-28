@@ -5957,6 +5957,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-agent-engine"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "axum",
+ "futures",
+ "jsonschema",
+ "reqwest 0.13.5",
+ "rho-agent-api",
+ "rho-agent-owner",
+ "rig",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
 name = "rho-agent-owner"
 version = "0.1.0"
 dependencies = [
@@ -5965,6 +5984,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "thiserror 2.0.20",
+ "url",
  "uuid",
 ]
 
@@ -5973,19 +5993,12 @@ name = "rho-agents"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "axum",
- "futures",
- "jsonschema",
- "reqwest 0.13.5",
+ "rho-agent-engine",
  "rho-application",
  "rho-contract",
- "rig",
  "serde_json",
- "tempfile",
- "thiserror 2.0.20",
  "tokio",
  "tokio-util",
- "uuid",
 ]
 
 [[package]]
@@ -6001,7 +6014,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "tokio-util",
- "url",
  "uuid",
 ]
 

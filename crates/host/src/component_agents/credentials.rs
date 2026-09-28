@@ -171,7 +171,7 @@ impl CredentialFile {
             .get(key_id)
             .filter(|entry| entry.project == scope.project && entry.principal == scope.principal)
             .ok_or_else(unavailable)?;
-        ComponentModelKey::new(entry.key.clone())
+        ComponentModelKey::new(entry.key.clone()).map_err(Into::into)
     }
     pub(super) fn remove(
         &self,

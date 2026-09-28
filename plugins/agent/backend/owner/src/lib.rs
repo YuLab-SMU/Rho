@@ -652,3 +652,6 @@ impl AgentTaskOwner {
 
 #[cfg(test)]
 mod tests;
+
+mod model;
+pub use model::{ComponentModelKey, validate_model_connection};

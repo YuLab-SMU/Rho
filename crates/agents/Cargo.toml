@@ -7,20 +7,12 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+rho-agent-engine = { path = "../../plugins/agent/backend/engine" }
 rho-application = { path = "../application" }
 rho-contract = { path = "../contract" }
 async-trait.workspace = true
-uuid.workspace = true
-jsonschema.workspace = true
-reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream"] }
-rig = { version = "=0.42.0", default-features = false, features = ["agent", "rustls"] }
-futures.workspace = true
 serde_json.workspace = true
-thiserror.workspace = true
-tokio.workspace = true
 tokio-util.workspace = true
 
 [dev-dependencies]
-axum.workspace = true
-tempfile.workspace = true
-tokio = { workspace = true, features = ["net"] }
+tokio.workspace = true

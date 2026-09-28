@@ -197,6 +197,19 @@ admission and HTTP identity integration remain covered by `cargo test -p rho-hos
 --locked`; these do not establish an ordinary Agent runtime/view or real-provider
 acceptance. No setup entry point is invoked by the native fixture checks.
 
+The public model driver is `plugins/agent/backend/engine`. Run `cargo test -p
+rho-agent-engine --locked` for the real Rig HTTP/SSE codecs and production-driver
+ports using local provider fixtures. `node scripts/test-agent-plugin-engine.mjs`
+repeats these checks with the owner/API in an independent source assembly and
+checks SDK freshness. The transitional admitted-record adapter is covered by
+`cargo test -p rho-agents --lib --locked`, including foreign/fabricated ticket
+refusal and owner diagnostics. Host integration remains `cargo test -p rho-host
+--test component_agents --test component_recovery --locked`; it checks the actual
+adapter with the existing task owner. These are local synthetic-model tests;
+provider quality and ordinary Agent backend delivery remain separate outcomes.
+The explicit live provider probe now belongs to `rho-agent-engine`'s
+`provider_probe` example; no test invokes it implicitly.
+
 The public task state machine is `plugins/agent/backend/owner`. Iterate with
 `cargo test -p rho-agent-owner --lib --locked`; `node
 scripts/test-agent-plugin-owner.mjs` repeats its admission/recovery fixtures from

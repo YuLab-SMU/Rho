@@ -3,33 +3,12 @@ use super::{ComponentToolAdmission, StoredComponentTool};
 use crate::ApplicationError;
 use async_trait::async_trait;
 use rho_contract::ComponentAgentRun;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-/// Ephemeral credential material. Deliberately neither Debug nor serializable.
-pub struct ComponentModelKey(String);
-impl ComponentModelKey {
-    pub fn new(value: String) -> Result<Self, ApplicationError> {
-        if value.is_empty() || value.len() > 16384 || !value.bytes().all(|b| b.is_ascii_graphic()) {
-            return Err(ApplicationError::InvalidInput(
-                "Invalid model credential".into(),
-            ));
-        }
-        Ok(Self(value))
-    }
-    pub fn expose(&self) -> &str {
-        &self.0
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ComponentToolSpec {
-    pub name: String,
-    pub description: String,
-    pub parameters: Value,
-}
+pub use rho_agent_owner::ComponentModelKey;
+pub use rho_contract::ComponentToolSpec;
 
 pub struct ComponentEngineExecution {
     pub run: ComponentAgentRun,

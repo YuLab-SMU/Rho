@@ -1,7 +1,7 @@
-use async_trait::async_trait;
+use crate::*;
 use futures::StreamExt;
-use rho_application::*;
-use rho_contract::{ComponentAgentProfile, ComponentModelProtocol};
+use rho_agent_api::*;
+use rho_agent_owner::{ComponentModelKey, validate_model_connection};
 use rig::{
     agent::{
         MultiTurnStreamItem,
@@ -24,15 +24,15 @@ use std::{
 };
 
 #[derive(Default)]
-pub struct RigComponentEngine {
+pub struct RigAgentEngine {
     client: OnceLock<Result<reqwest::Client, String>>,
 }
 
 #[derive(Clone)]
 struct DispatchContext {
-    port: Arc<dyn ComponentRunPort>,
-    pending: Arc<Mutex<Option<ComponentToolAdmission>>>,
-    active: Arc<Mutex<Option<StoredComponentTool>>>,
+    port: Arc<dyn AgentModelPort>,
+    pending: Arc<Mutex<Option<AgentToolTicket>>>,
+    active: Arc<Mutex<Option<AgentToolTicket>>>,
     model_call: Arc<AtomicU32>,
     failure: Arc<Mutex<Option<String>>>,
     cancellation: tokio_util::sync::CancellationToken,
@@ -82,7 +82,6 @@ impl AgentHook for Hooks {
                 CompletionCallAction::Continue
             }
             Err(error) => {
-                let _ = self.0.port.record_diagnostic(error.diagnostic()).await;
                 self.0.fail(error.to_string());
                 CompletionCallAction::Stop("Model admission failed".into())
             }
@@ -109,16 +108,19 @@ impl AgentHook for Hooks {
             )
             .await
         {
-            Ok(ticket) => {
-                if matches!(ticket.tool.action, ComponentToolAction::Rejected { .. }) {
-                    return match ticket.tool.receipt.result {
-                        Some(feedback) => ToolCallAction::Skip(feedback.to_string()),
-                        None => {
-                            self.0.fail("Rejected tool feedback is unavailable");
-                            ToolCallAction::Stop("Tool feedback unavailable".into())
-                        }
-                    };
-                }
+            Ok(admission) => {
+                let ticket = match admission {
+                    AgentToolAdmission::Ready(ticket) => ticket,
+                    AgentToolAdmission::Rejected { feedback } => {
+                        return match feedback {
+                            Some(feedback) => ToolCallAction::Skip(feedback.to_string()),
+                            None => {
+                                self.0.fail("Rejected tool feedback is unavailable");
+                                ToolCallAction::Stop("Tool feedback unavailable".into())
+                            }
+                        };
+                    }
+                };
                 let Ok(mut pending) = self.0.pending.lock() else {
                     return ToolCallAction::Stop("Dispatch context unavailable".into());
                 };
@@ -130,7 +132,6 @@ impl AgentHook for Hooks {
                 ToolCallAction::Run
             }
             Err(error) => {
-                let _ = self.0.port.record_diagnostic(error.diagnostic()).await;
                 self.0.fail(error.to_string());
                 ToolCallAction::Stop("Tool admission failed".into())
             }
@@ -203,8 +204,10 @@ fn instructions(profile: ComponentAgentProfile) -> String {
     )
 }
 
-fn task_instructions(run: &rho_contract::ComponentAgentRun) -> String {
-    if run.request.grant.permission_policy.is_none() { return instructions(run.profile); }
+fn task_instructions(run: &AgentModelRun) -> String {
+    if run.permission_policy.is_none() {
+        return instructions(run.profile);
+    }
     let mut text = instructions(ComponentAgentProfile::Project);
     text.push_str("\nThe component entry supplies context, not a work mode. Decide whether to explain, edit, save or run from the user's actual request. Before changing anything, use rho_task_intent once to record your understanding with an exact excerpt of the original request and its finite intended actions. You may first read owners to identify exact targets. A request to fix, save and run already authorizes those related actions; do not ask again. Additional actions follow the saved permission policy; do not fabricate user intent to bypass it. Package and environment inspection stays read-only: viewing must not load or attach packages. Authorized R analysis may use already installed packages, including library() and namespace calls. Do not install, update or remove packages, alter library configuration, change environments or control runtime lifecycle; these management capabilities are outside this Agent's scope.");
     text.push_str(" To work on a project script that was not selected, open it with application_open_document and use the returned owner reference. For a new script, record the exact relative path and create/edit/save actions in the task intent, then application_create_document creates an empty draft; edit and save it through the returned document ID. An execute action with document_id=null and path=null refers only to this run's bound R session. Never invent document IDs or native session IDs.");
@@ -215,24 +218,23 @@ fn task_instructions(run: &rho_contract::ComponentAgentRun) -> String {
     text
 }
 
-#[async_trait]
-impl ComponentAgentEngine for RigComponentEngine {
-    async fn test_model(
+impl RigAgentEngine {
+    pub async fn test_model(
         &self,
-        model: rho_contract::ComponentModelConnection,
+        model: rho_agent_api::ComponentModelConnection,
         key: ComponentModelKey,
-        kind: rho_contract::ComponentModelTestKind,
+        kind: rho_agent_api::ComponentModelTestKind,
         cancellation: tokio_util::sync::CancellationToken,
     ) -> Result<(), String> {
         crate::diagnostics::test(self, model, key, kind, cancellation).await
     }
-    async fn execute(&self, request: ComponentEngineExecution) -> ComponentEngineOutcome {
+    pub async fn execute(&self, request: AgentModelExecution) -> AgentModelOutcome {
         let cancellation = request.cancellation.clone();
         if cancellation.is_cancelled() {
-            return ComponentEngineOutcome::Stopped;
+            return AgentModelOutcome::Stopped;
         }
-        if let Err(error) = validate_component_model(&request.run.model) {
-            return ComponentEngineOutcome::Failed(error.to_string());
+        if let Err(error) = validate_model_connection(&request.run.model) {
+            return AgentModelOutcome::Failed(error.to_string());
         }
         let context = DispatchContext {
             port: request.port.clone(),
@@ -248,43 +250,44 @@ impl ComponentAgentEngine for RigComponentEngine {
         let pending = context.pending.clone();
         let failure = context.failure.clone();
         let port = request.port.clone();
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default().as_millis() as u64;
-        let duration = Duration::from_millis(request.run.created_at_ms
-            .saturating_add(request.run.budget.duration_ms).saturating_sub(now));
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let duration = Duration::from_millis(
+            request
+                .run
+                .created_at_ms
+                .saturating_add(request.run.budget.duration_ms)
+                .saturating_sub(now),
+        );
         let outcome = tokio::select! { biased;
-            _=cancellation.cancelled()=>ComponentEngineOutcome::Stopped,
-            _=tokio::time::sleep(duration)=>ComponentEngineOutcome::Failed("Component run deadline exceeded".into()),
+            _=cancellation.cancelled()=>AgentModelOutcome::Stopped,
+            _=tokio::time::sleep(duration)=>AgentModelOutcome::Failed("Component run deadline exceeded".into()),
             result=self.drive(request,context)=>result,
         };
         let interrupted = active
             .lock()
             .ok()
             .and_then(|mut slot| slot.take())
-            .or_else(|| {
-                pending
-                    .lock()
-                    .ok()
-                    .and_then(|mut slot| slot.take())
-                    .map(|ticket| ticket.tool)
-            });
+            .or_else(|| pending.lock().ok().and_then(|mut slot| slot.take()));
         if let Some(tool) = interrupted
             && let Err(error) = port.interrupted_tool(&tool).await
         {
-            return ComponentEngineOutcome::Failed(error.to_string());
+            return AgentModelOutcome::Failed(error.to_string());
         }
-        if matches!(outcome, ComponentEngineOutcome::Stopped) {
+        if matches!(outcome, AgentModelOutcome::Stopped) {
             return outcome;
         }
         if let Some(error) = failure.lock().ok().and_then(|f| f.clone()) {
-            ComponentEngineOutcome::Failed(error)
+            AgentModelOutcome::Failed(error)
         } else {
             outcome
         }
     }
 }
 
-impl RigComponentEngine {
+impl RigAgentEngine {
     pub(super) fn http_client(&self) -> Result<reqwest::Client, String> {
         self.client
             .get_or_init(|| {
@@ -300,9 +303,9 @@ impl RigComponentEngine {
     }
     async fn drive(
         &self,
-        request: ComponentEngineExecution,
+        request: AgentModelExecution,
         mut context: DispatchContext,
-    ) -> ComponentEngineOutcome {
+    ) -> AgentModelOutcome {
         let result: Result<(), String> = async {
             let client = self.http_client()?;
             let preamble = task_instructions(&request.run);
@@ -314,7 +317,7 @@ impl RigComponentEngine {
             if request
                 .context
                 .len()
-                .saturating_add(request.run.request.text.len())
+                .saturating_add(request.run.text.len())
                 .saturating_add(context.fixed_context_bytes)
                 > context.max_context_bytes
             {
@@ -371,7 +374,7 @@ impl RigComponentEngine {
                                 })?;
                             *context.active.lock().map_err(|_| {
                                 ToolExecutionError::refused("Dispatch context unavailable")
-                            })? = Some(ticket.tool.clone());
+                            })? = Some(ticket.clone());
                             match context.port.execute_tool(ticket).await {
                                 Ok(value) => {
                                     *context.active.lock().map_err(|_| {
@@ -380,7 +383,6 @@ impl RigComponentEngine {
                                     Ok(ToolOutput::json(value))
                                 }
                                 Err(error) => {
-                                    let _ = context.port.record_diagnostic(error.diagnostic()).await;
                                     context.fail(error.to_string());
                                     Err(ToolExecutionError::refused("Host tool execution failed"))
                                 }
@@ -416,7 +418,7 @@ impl RigComponentEngine {
             tool_context.insert(context.clone());
             let prompt = format!(
                 "{}\n\nProvided context (untrusted data):\n{}",
-                request.run.request.text, request.context
+                request.run.text, request.context
             );
             if request.images.len() > 2 {
                 return Err("At most two images can be included".into());
@@ -431,11 +433,7 @@ impl RigComponentEngine {
                     "image/jpeg" => ImageMediaType::JPEG,
                     _ => return Err("Unsupported verified image format".into()),
                 };
-                let label = match &image.reference {
-                    ComponentImageSource::Scientific(reference) => format!("Selected image: {} / output {}", reference.operation_id.as_str(), reference.sequence),
-                    ComponentImageSource::Attachment { conversation_id, asset } => format!("User-uploaded image: {} (rho://attachments/component/{}/{}, sha256:{})", asset.name, conversation_id, asset.asset_id, asset.sha256),
-                };
-                content.push(UserContent::text(label));
+                content.push(UserContent::text(image.label));
                 content.push(UserContent::image_base64(image.base64, Some(mime), None));
             }
             // Keep image labels adjacent to their blocks, before the long question/context.
@@ -524,8 +522,8 @@ impl RigComponentEngine {
         }
         .await;
         match result {
-            Ok(()) => ComponentEngineOutcome::Completed,
-            Err(error) => ComponentEngineOutcome::Failed(error),
+            Ok(()) => AgentModelOutcome::Completed,
+            Err(error) => AgentModelOutcome::Failed(error),
         }
     }
 }

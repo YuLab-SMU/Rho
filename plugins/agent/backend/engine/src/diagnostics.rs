@@ -1,8 +1,8 @@
 //! Explicit synthetic diagnostics. No Host tool port or project context is available.
-use crate::RigComponentEngine;
+use crate::RigAgentEngine;
 use futures::StreamExt;
-use rho_application::{ComponentModelKey, validate_component_model};
-use rho_contract::{ComponentModelConnection, ComponentModelProtocol, ComponentModelTestKind};
+use rho_agent_api::{ComponentModelConnection, ComponentModelProtocol, ComponentModelTestKind};
+use rho_agent_owner::{ComponentModelKey, validate_model_connection};
 use rig::{
     agent::MultiTurnStreamItem,
     message::{ImageMediaType, Message, UserContent},
@@ -22,13 +22,13 @@ use std::{
 use tokio_util::sync::CancellationToken;
 
 pub(super) async fn test(
-    engine: &RigComponentEngine,
+    engine: &RigAgentEngine,
     model: ComponentModelConnection,
     key: ComponentModelKey,
     kind: ComponentModelTestKind,
     cancellation: CancellationToken,
 ) -> Result<(), String> {
-    validate_component_model(&model).map_err(|_| "Invalid diagnostic model configuration")?;
+    validate_model_connection(&model).map_err(|_| "Invalid diagnostic model configuration")?;
     if cancellation.is_cancelled() {
         return Err("Model test interrupted".into());
     }

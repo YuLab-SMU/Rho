@@ -12,6 +12,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_large_int("number");
     macro_rules! export { ($($ty:ty),+ $(,)?) => { $(<$ty>::export_all(&types)?;)+ }; }
     export!(
+        ComponentAgentProfile, ComponentPermissionPolicy, ComponentTaskAuthorization,
+        ComponentRequestedAction, ComponentIntentAction, ComponentAgentTaskIntent,
+        ComponentModelProtocol, ComponentCredentialRef, ComponentModelConnection,
+        ComponentModelSettings, ComponentAgentBudget, ComponentCredentialStatus,
+        ComponentModelTestKind, ComponentModelTestState, AgentModelRun, ComponentToolSpec,
         AgentControllerRef,
         AgentProvider,
         AgentModel,
@@ -50,6 +55,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
+        ("model-run", schemars::schema_for!(AgentModelRun)),
+        ("model-settings", schemars::schema_for!(ComponentModelSettings)),
         ("task-request", schemars::schema_for!(AgentTaskRequest)),
         ("task-detail", schemars::schema_for!(AgentTaskDetail)),
         ("task-events", schemars::schema_for!(AgentTaskEventPage)),

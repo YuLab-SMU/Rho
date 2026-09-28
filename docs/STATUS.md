@@ -11,58 +11,72 @@ in Paper, inspected and explicitly approved on 2026-09-23; see [Design section
 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved). Implementation
 remains active. The fixed scientific composition has not yet been removed.
 
-Agent native transport and the task state machine now live in
-`plugins/agent/backend/client` and `plugins/agent/backend/owner`, with public
-native/task/context DTOs in `plugins/agent/api` and generated SDK declarations and
-schemas. Neither library imports private core code. The task owner retains one
-writer for admission, captured drafts, original receipts, generation fences and
-observation-only restart handling. Application now supplies only scope/error
-conversion; its current SQLite adapter implements the public repository port.
-Host updates and manual handoff still share the same writer gate. Admitted request
-conversion preserves serialized bytes, so moving the Rust owner does not alter
-original request digests, draft versions or native session identities.
+Agent native transport, task state and the Rig model driver now live in
+`plugins/agent/backend/client`, `backend/owner` and `backend/engine`, with public
+DTOs, TypeScript declarations and JSON schemas in the same package. These
+libraries have no private core dependency. The task owner keeps its original
+repository port and single writer; the model driver receives captured public
+input, verified images and owner-offered tools through a callback port.
 
-This remains a migration foundation, not yet an ordinary Agent runtime/view.
-Ordinary backend/storage composition, Rig, context providers and handoff, Agent
-views, Studio Agent assistance and final composition/default delivery remain active
-work. Caller admission, native MCP credentials and scientific execution still use
-their existing owners; no plugin-specific approval flow was introduced.
+`rho-agents` is now a transitional adapter without a model/provider implementation.
+It preserves owner-admitted tool requests in opaque, nonserializable tickets,
+rejects foreign/fabricated tickets, records owner diagnostics and returns the
+original ticket after interrupted execution. The model-setting validator and
+transient key type moved to the public owner; serialized records contain only
+credential references. Deterministic permission rules use saved intent and
+owner-classified actions. Existing Host admission and scientific execution still
+use the original owners and Operation path, without a second receipt database or
+an additional Agent approval flow.
 
-The four task admission/recovery fixtures pass in the checkout and in an
-independent source assembly. All three contract library tests pass, including
-exact captured-request byte preservation. Independent SDK freshness and a
-TypeScript consumer pass. The affected Host/SQLite/Workbench libraries pass 112
-tests; shared storage/handoff integration passes 46, Host component/recovery
-integration passes 27, and the client passes all 98 Agent-related tests.
-Client generation, build/consistency and the current binary build pass. Two Host
-library cases remain ignored (recovery-copy prerequisites and an explicit
-AutoContinue fixture); neither is counted as a pass.
+This remains a migration foundation, not an ordinary loadable Agent runtime/view.
+Component-task ownership, backend/storage composition, context providers and
+handoff, Agent views, Studio Agent assistance and final composition/default
+delivery remain active work.
 
-All 18 focused real-R cases pass with fixture engines: authorized execution,
-original-operation recovery, captured documents, shared queues, input ownership,
-independent sessions and object/Packages/plot context without additional science.
-The real-model cases are explicitly excluded. A disposable Host crash preserves
-the native session identity, uncertain original receipt and next draft; resumed
-multimodal input succeeds without replay and user configuration remains unchanged.
-All six Chrome flows pass: draft closure/refresh, native permissions, controller
-takeover, attachments/context, cross-owner handoff with a lost reply, and real-R
-table/plot context. Ten affected captures were inspected at normal, wide and
-constrained sizes, including the 320-pixel handoff and its scrolled target section;
-Agent controls remain accessible without overlap or horizontal overflow.
-Architecture, public-import boundaries and governance checks pass.
+All 28 focused checkout cases pass: three model policy/error cases, 17 real Rig
+HTTP/SSE protocol and production-driver fixtures, four task-owner cases and four
+transitional-adapter cases. An independent assembly containing only the three
+public Agent libraries also passes its 24 execution/recovery cases. Synthetic
+providers verify original tool admission, sequential dispatch, rejection feedback,
+stop/failure handling, usage and both protocols' labelled images; they establish
+no real-provider/model quality result. SDK freshness and an independent strict
+TypeScript consumer pass. All 75 affected Host/storage cases pass (23 model
+integration, four recovery, 40 storage and eight Host internal cases). All 18
+focused real-R cases pass with fixture engines; ten real-model cases are explicitly
+filtered out. Client generation, build/consistency and all 98 Agent client tests pass.
 
-Initial compiles found missing public/core controller and scope/error conversions;
-the corrected compile and integration runs pass. Two initial owner tests assumed
-a fixed generation after Send; they now use the owner's actual returned generation.
-Original failures, executed commands, ignored/filtered cases and capture locations
-are retained in `target/plugin-refactor/agent-owner-verification.txt`. A startup
-sample showed the delayed Workbench test binary at `_dyld_start`; it subsequently
-completed all 29 cases. The cause of that launch delay is not established.
-The previous extraction's 31 native protocol/recovery fixtures remain the unchanged
-baseline in `target/plugin-refactor/agent-native-verification.txt`; they were not
-rerun for this task-owner change. No full-workspace audit, real-provider/model
-acceptance, installation or publication ran. Existing user Hosts and R sessions
-were not replaced; runtime acceptance used disposable projects.
+The rebuilt application passes all 13 selected Chrome flows with a local model
+protocol fixture. The production Rig driver performs the original authorized R
+operation, retains its identity and opens its real plot. Drafts, takeover, diagnostic
+buttons, native preedit, stream latency/scrolling and attachments also pass. Two
+opt-in real-model browser cases are excluded. Nine captures were inspected: normal
+workspace, 320-pixel panel, 600/1024/1440/1920-pixel windows, model diagnostics and
+running/completed scientific work. Controls and Unicode input remain visible
+without overlap or horizontal overflow. This is regression evidence for the
+transitional Agent interface, not acceptance of the ordinary Agent view.
+
+Architecture, package import boundaries and governance checks pass. Commands,
+counts, filtered cases and current binary hash are retained in
+`target/plugin-refactor/agent-engine-verification.txt`; screenshots are in
+`target/plugin-refactor/agent-engine-captures`. The rebuilt Host is required to use
+the extracted driver; running Hosts were not replaced.
+
+The preceding task-owner boundary remains verified in
+`target/plugin-refactor/agent-owner-verification.txt`: 112 affected library cases,
+46 storage/handoff cases, 27 Host component/recovery cases, 98 client cases, 18
+real-R cases with fixture engines, native crash/resume and six Chrome flows. Its
+two ignored Host cases and excluded real-model checks were not counted as passes.
+Ten normal/wide/constrained screenshots were inspected. This earlier evidence
+remains separate from the current model-driver verification. Native transport's
+unchanged 31 protocol/recovery fixtures are recorded in
+`target/plugin-refactor/agent-native-verification.txt`.
+
+The initial compile of this extraction passed with unused imports and an ambiguous
+reexport warning; both are resolved, and the focused tests compile without warnings.
+A slow owner-test startup was sampled at `_dyld_start` before test code; all cases
+subsequently completed. The cause of that launch delay is not established.
+Existing user Hosts and R sessions have not been replaced; new runtime acceptance
+uses disposable projects. No full-workspace audit, installation or publication ran.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,
@@ -1677,27 +1691,34 @@ continuation and optional real-model/alternate-R cases remain unexecuted.
 
 ### Remaining work and restart boundary
 
-Complete production integration of cooperative view closure and resolve the
-retained standalone frame’s native pointer-routing issue described above. Abrupt browser disposal still cannot establish that
-unacknowledged edits were saved; recovery is explicit. Add captured
-document execution, checkpoint ownership and plot/context navigation.
-Complete Console recovery of an unconfirmed submission from a newly opened view;
-the current origin check safely refuses replay but does not yet provide that
-workflow. Objects can find its original request read-only, but still needs an
+Finish the ordinary Agent backend: component-task ownership, storage composition,
+context providers, manual handoff and Agent views. The extracted native client,
+task owner and model engine are prerequisites, not a loadable package. Studio's
+Agent workflow must capture an exact development branch and preserve the separate
+checkpoint, build, preview and scenario-application actions. Remaining annotation
+and Agent context sources must register through public contributions.
+
+R, Files/Git, Process, Remote, Environment, Editor, Console, Objects, Packages,
+Help, Plots, Viewer, Manager and Studio now have ordinary package sources and
+individual acceptance evidence above. Complete their final scenario integration
+and the outstanding cross-plugin workflows; source extraction alone does not
+establish the complete replacement. In particular, Console still needs recovery
+of an unconfirmed submission from a newly opened view, and Objects needs an
 explicit way to set aside an unconfirmed request while retaining its recovery
-identity and without claiming cancellation or non-acceptance.
-Migrate all remaining Files/Git, Editor, Objects, Packages (read-only), Help, Plots,
-Agent, Environment/process/SSH/Slurm and annotation/context owners and views into
-ordinary packages. Complete per-window scenarios, coexisting live compositions,
-history/branches, VisualDocument canvas/source/shared undo, invalid-source retention,
-build/fixture/disposable preview/apply/import/export and Agent development workflows.
-Management and Plugin Studio themselves must be ordinary replaceable plugins.
+identity without claiming cancellation or non-acceptance. The older standalone
+frame pointer-routing failure remains separate from the passing generic-window
+pointer checks. Abrupt browser disposal cannot establish that unacknowledged
+edits were saved; recovery stays explicit.
 
 Default delivery must use the same repository and lifecycle, with all feature
 plugins removable and no silent reinstall. Remove replaced fixed registrations,
 panels and scientific/Agent branches; permanent dual composition is not accepted.
-New storage does not read or migrate abandoned formats. The full independent
-provider, all-features-removed and native interaction acceptance still remains.
+New storage does not read or migrate abandoned formats. Complete the full-plan
+acceptance matrix against the final composition: independent external providers,
+all feature packages removed/reimported, versions and running R across scenario
+switches, retained drafts and operations, faults, and native interaction behavior.
+The earlier focused results do not establish that complete end state.
+
 Existing user Hosts and R memory have not been restarted. New Host capabilities
 require the rebuilt binary; a client refresh alone cannot add them. Inspect live
 work and preserve its session before any separately authorized replacement. All

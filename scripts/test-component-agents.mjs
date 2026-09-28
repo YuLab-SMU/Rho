@@ -27,18 +27,18 @@ async function run(label, command, echo = true) {
   await new Promise(resolve => log.end(resolve));
   assert.equal(code, 0, `${label} failed; evidence: ${directory}`);
 }
-await run("protocol", ["cargo", "test", "-p", "rho-agents", "--locked"]);
+await run("protocol", ["cargo", "test", "-p", "rho-agents", "-p", "rho-agent-engine", "--locked"]);
 await run("application", ["cargo", "test", "-p", "rho-sqlite", "--test", "component_agents", "--locked"]);
 await run("host", ["cargo", "test", "-p", "rho-host", "--test", "component_agents", "--locked"]);
 await run("recovery", ["cargo", "test", "-p", "rho-host", "--test", "component_recovery", "--locked"]);
 await run("boundaries", ["node", "scripts/test-architecture.mjs"]);
-await run("dependencies", ["cargo", "tree", "-p", "rho-agents", "--locked", "--edges", "normal", "--prefix", "none"], false);
+await run("dependencies", ["cargo", "tree", "-p", "rho-agents", "-p", "rho-agent-engine", "--locked", "--edges", "normal", "--prefix", "none"], false);
 const dependencies = fs.readFileSync(path.join(directory, "dependencies.log"), "utf8");
 for (const forbidden of ["sqlx", "rig-sqlite", "lancedb", "fastembed", "ort", "datafusion", "rig-memory", "rmcp"]) {
   assert.ok(!new RegExp(`^${forbidden} v`, "m").test(dependencies), `Unexpected active integration: ${forbidden}`);
 }
 if (real) {
-  await run("real-model", ["cargo", "run", "-p", "rho-agents", "--example", "provider_probe", "--locked"]);
+  await run("real-model", ["cargo", "run", "-p", "rho-agent-engine", "--example", "provider_probe", "--locked"]);
   await run("real-host", ["cargo", "run", "-p", "rho-host", "--example", "component_agent_probe", "--locked"]);
   if (sources) {
     await run("real-sources", ["cargo", "run", "-p", "rho-host", "--example", "component_source_probe", "--locked"]);

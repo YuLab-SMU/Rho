@@ -1,0 +1,269 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgentModelRun",
+  "description": "Data captured by the task owner before entering a model engine. No live owner\nrecord, tool credentials or scientific operation flow is exposed to the engine.",
+  "type": "object",
+  "properties": {
+    "budget": {
+      "$ref": "#/$defs/ComponentAgentBudget"
+    },
+    "created_at_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "model": {
+      "$ref": "#/$defs/ComponentModelConnection"
+    },
+    "permission_policy": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ComponentPermissionPolicy"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "profile": {
+      "$ref": "#/$defs/ComponentAgentProfile"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "task_intent": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ComponentAgentTaskIntent"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "run_id",
+    "profile",
+    "model",
+    "budget",
+    "created_at_ms",
+    "text"
+  ],
+  "$defs": {
+    "ComponentAgentBudget": {
+      "type": "object",
+      "properties": {
+        "context_bytes": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "duration_ms": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "model_calls": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "output_tokens": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "tool_calls": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "tool_result_bytes": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "model_calls",
+        "tool_calls",
+        "context_bytes",
+        "tool_result_bytes",
+        "output_tokens",
+        "duration_ms"
+      ]
+    },
+    "ComponentAgentProfile": {
+      "type": "string",
+      "enum": [
+        "objects",
+        "packages",
+        "plots",
+        "documents",
+        "workspace",
+        "project",
+        "environment"
+      ]
+    },
+    "ComponentAgentTaskIntent": {
+      "type": "object",
+      "properties": {
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ComponentIntentAction"
+          }
+        },
+        "request_excerpt": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "request_id",
+        "request_excerpt",
+        "actions"
+      ]
+    },
+    "ComponentCredentialRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "environment"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "name"
+          ]
+        },
+        {
+          "description": "Retained references from Hosts that used memory-only credentials.",
+          "type": "object",
+          "properties": {
+            "key_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "session"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "key_id"
+          ]
+        },
+        {
+          "description": "Immutable version in the user-local Rho configuration file.",
+          "type": "object",
+          "properties": {
+            "key_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "local_file"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "key_id"
+          ]
+        }
+      ]
+    },
+    "ComponentIntentAction": {
+      "type": "object",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/ComponentRequestedAction"
+        },
+        "document_id": {
+          "description": "None denotes execution in the run's already bound R session.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "An exact project-relative destination, including a not-yet-created file.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "action"
+      ]
+    },
+    "ComponentModelConnection": {
+      "type": "object",
+      "properties": {
+        "base_url": {
+          "type": "string"
+        },
+        "credential": {
+          "$ref": "#/$defs/ComponentCredentialRef"
+        },
+        "model": {
+          "type": "string"
+        },
+        "protocol": {
+          "$ref": "#/$defs/ComponentModelProtocol"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "base_url",
+        "model",
+        "credential"
+      ]
+    },
+    "ComponentModelProtocol": {
+      "type": "string",
+      "enum": [
+        "anthropic",
+        "openai_completions"
+      ]
+    },
+    "ComponentPermissionPolicy": {
+      "description": "Approval policy is independent of the work selected by the Agent.",
+      "type": "string",
+      "enum": [
+        "ask",
+        "auto_approval",
+        "full_access"
+      ]
+    },
+    "ComponentRequestedAction": {
+      "type": "string",
+      "enum": [
+        "create",
+        "edit",
+        "save",
+        "execute"
+      ]
+    }
+  }
+}

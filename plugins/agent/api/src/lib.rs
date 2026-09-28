@@ -114,3 +114,6 @@ pub struct AgentUsageObservation {
     pub context_used: Option<u64>,
     pub context_capacity: Option<u64>,
 }
+
+mod model;
+pub use model::*;

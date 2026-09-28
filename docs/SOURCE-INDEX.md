@@ -137,6 +137,7 @@ Sources:
 - `scripts/generate-editor-context.mjs`
 - `scripts/plugin-protocol.mjs`
 - `scripts/test-agent-plugin-client.mjs`
+- `scripts/test-agent-plugin-engine.mjs`
 - `scripts/test-agent-plugin-owner.mjs`
 - `scripts/test-agent-plugin-types.mjs`
 - `scripts/test-console-plugin.mjs`
@@ -207,7 +208,11 @@ Sources:
 Checks:
 
 - `docs.index`: `["node","scripts/governance.mjs","check"]`
+- `plugins.agent-adapter`: `["cargo","test","-p","rho-agents","--lib","--locked"]`
+- `plugins.agent-engine`: `["cargo","test","-p","rho-agent-engine","--locked"]`
+- `plugins.agent-engine-independent`: `["node","scripts/test-agent-plugin-engine.mjs"]`
 - `plugins.agent-independent`: `["node","scripts/test-agent-plugin-client.mjs"]`
+- `plugins.agent-model-host`: `["cargo","test","-p","rho-host","--test","component_agents","--test","component_recovery","--locked"]`
 - `plugins.agent-native`: `["cargo","test","-p","rho-agent-client","--lib","--locked"]`
 - `plugins.agent-owner`: `["cargo","test","-p","rho-agent-owner","--lib","--locked"]`
 - `plugins.agent-owner-independent`: `["node","scripts/test-agent-plugin-owner.mjs"]`

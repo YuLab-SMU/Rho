@@ -8,7 +8,7 @@ const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-types-'));
 try {
   fs.cpSync(path.join(root, 'plugins/agent/sdk'), path.join(directory, 'sdk'), {recursive: true});
   fs.writeFileSync(path.join(directory, 'package.json'), '{"type":"module"}');
-  fs.writeFileSync(path.join(directory, 'consumer.ts'), `import type {AgentTaskRequest,AgentTaskDetail,AgentTaskEventPage,ProjectAgentTaskPage,AgentControllerRef,AgentProvider,AgentClientSession,AgentNativeCapabilities,AgentUsageObservation,LocalAgent} from './sdk/index.js';
+  fs.writeFileSync(path.join(directory, 'consumer.ts'), `import type {AgentModelRun,ComponentModelSettings,ComponentToolSpec,AgentTaskRequest,AgentTaskDetail,AgentTaskEventPage,ProjectAgentTaskPage,AgentControllerRef,AgentProvider,AgentClientSession,AgentNativeCapabilities,AgentUsageObservation,LocalAgent} from './sdk/index.js';
 const controller:AgentControllerRef={window_id:'window',incarnation:'incarnation'};
 const providers:AgentProvider[]=['codex','kimi','deepseek'];
 function session(value:AgentClientSession):AgentControllerRef{return value.window;}
@@ -27,7 +27,10 @@ function events(value:AgentTaskEventPage){return [value.history_gap,value.histor
 function projection(value:ProjectAgentTaskPage){return value.tasks.map(task=>task.reference.kind);}
 // @ts-expect-error A captured send requires the exact draft version.
 const uncaptured:AgentTaskRequest['command']={kind:'send',control:{task_id:'task',generation:1}};
-void [captured,task,events,projection,uncaptured,controller,providers,session,discovery,modes,usage,incomplete,inventedUsage,fabricated];
+function modelCapture(run:AgentModelRun, settings:ComponentModelSettings, tool:ComponentToolSpec){return [run.task_intent?.request_excerpt,run.budget.context_bytes,settings.connection?.credential.kind,tool.parameters];}
+// @ts-expect-error A captured model run does not contain plaintext credentials.
+function secret(run:AgentModelRun){return run.key;}
+void [modelCapture,secret,captured,task,events,projection,uncaptured,controller,providers,session,discovery,modes,usage,incomplete,inventedUsage,fabricated];
 `);
   execFileSync(process.execPath, [path.join(root, 'ui/node_modules/typescript/bin/tsc'), '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--rootDir', directory, path.join(directory, 'consumer.ts')], {cwd: directory, stdio: 'inherit'});
   console.log('Independent Agent contract consumer compiled using only public declarations.');

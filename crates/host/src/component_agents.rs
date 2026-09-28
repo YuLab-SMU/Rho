@@ -470,7 +470,7 @@ impl ComponentAgentService {
             ComponentCredentialRef::Environment { name } => ComponentModelKey::new(
                 std::env::var(name)
                     .map_err(|_| error("Configured model credential is unavailable"))?,
-            ),
+            ).map_err(Into::into),
             ComponentCredentialRef::LocalFile { key_id } => self.credential_file.key(scope, key_id),
             ComponentCredentialRef::Session { key_id } => {
                 let keys = self
@@ -488,7 +488,7 @@ impl ComponentAgentService {
                     })?
                     .expose()
                     .into(),
-                )
+                ).map_err(Into::into)
             }
         }
     }

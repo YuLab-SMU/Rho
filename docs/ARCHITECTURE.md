@@ -765,7 +765,7 @@ the authorized design.
 | Owner | Responsibility |
 | --- | --- |
 | External Agent platform | Conversation/session lifecycle, intent, planning, tool choice, model/provider settings, permission decisions and continuation |
-| Optional component assistant | Rig-driven model/tool execution within a user-initiated Application scope; engine dependencies stay in `rho-agents` |
+| Optional component assistant | Rig-driven model/tool execution within a user-initiated Application scope; engine dependencies stay in `rho-agent-engine` |
 | Host | Compose domains and adapters, own runtime lifetime, bind trusted local context and expose shared ports |
 | Operation foundation | Capability registration, schema/scope validation, idempotency, state transitions and atomic commit discipline |
 | Scientific domains | Interpret observations, validate domain preconditions and describe results and effects |
@@ -777,7 +777,8 @@ the authorized design.
 Agent integration is a thin boundary. Scientific owners validate mechanical
 constraints and respond to requested operations; they do not infer goals, plan
 Agent work, call models or introduce a second approval decision. The optional
-component assistant uses Rig's existing driver in `rho-agents`, with explicit
+component assistant uses Rig's driver in `plugins/agent/backend/engine`, through
+the transitional `rho-agents` owner adapter, with explicit
 model configuration and a user-initiated bounded request.
 Conversation content is not a scientific authority source.
 External scientific requests use MCP; built-in tools use the same Host gateways
@@ -830,7 +831,9 @@ the request ID. Business tool arguments cannot change the policy or assert an
 approval override. This is ordinary task interpretation by the executing Agent;
 there is no separate approval model or keyword-based authorization parser.
 
-Deterministic rules in `rho-agents` consume the saved intent and policy. Ask reuses
+Deterministic rules in `rho-agent-engine` consume the saved intent, policy and
+owner-classified action. The transitional adapter projects existing admitted
+actions; model arguments cannot supply the classification. Ask reuses
 explicit task authorization and asks about additional effectful actions. Auto also
 permits its explicit catalog of document create/edit/save and execution in the
 already bound R session; unmatched additional actions need a decision. Full access
@@ -860,8 +863,14 @@ custom Application database can retain an existing reference. Only explicit remo
 deletes the exact selected key ID, so a delayed settings writer cannot erase a
 newer writer's current credential.
 
-`ComponentAgentEngine` and `ComponentRunPort` are Application interfaces; the Rig
-implementation stays in `rho-agents` and the port implementation stays in Host.
+`ComponentAgentEngine` and `ComponentRunPort` remain transitional Application
+interfaces; Host implements the owner port. `rho-agents` converts their admitted
+records to the public `AgentModelRun` and `AgentModelPort` used by the package-owned
+Rig driver. The model receives only captured input, verified image bytes/citations
+and owner-offered tools. An opaque, nonserializable ticket carries the original
+admission back to its originating port. The adapter rejects foreign tickets and
+records owner diagnostics before returning admission/dispatch errors. No second
+receipt database or scientific commit path is introduced.
 Model-facing schemas are derived from current descriptors without modifying the
 registry. Host-bound identity fields are removed from that schema, injected from
 the accepted run, then validated against the original native schema. Dispatch
@@ -1780,7 +1789,8 @@ package inspection.
 | `crates/host` | Concrete composition and runtime configuration |
 | `plugins/agent/api`, `plugins/agent/backend/client` | Public native Agent observations and bounded Codex app-server / Kimi and DeepSeek ACP clients; no private core imports, scientific handlers or Agent behavior loop |
 | `plugins/agent/backend/owner` | Sole native task admission/recovery state machine and repository port; captured drafts, receipts, generation fences and pure restart observations |
-| `crates/agents` | Optional Rig integration; only Application/contract ports, no scientific owners or native adapter dependencies |
+| `plugins/agent/backend/engine` | Public Rig execution/diagnostics, captured model input and owner callback ports; the sole direct Rig dependency, with no private core imports |
+| `crates/agents` | Transitional admitted-record, image citation and tool-ticket adapters to the public model engine; no model/provider implementation |
 | `crates/cli`, `mcp`, `workbench` | Transport and application entry points |
 | `plugins/r/backend/engine/r/bridge`, `plugins/environment/backend/owner/r` | Native R execution, bounded observation and environment helpers |
 | `ui/src`, `scripts/` | Studio models/views and reproducible development/verification tools |

@@ -8,6 +8,9 @@
 需求依据是用户提供的架构评议及后续讨论，最终约束为：采用现成 Agent 引擎，
 避免自研循环，把组件作为统一 Agent 的上下文入口，并共享 Rho 的真实科研系统。
 实施进度只记录在 [STATUS](STATUS.md)，本文件不追加完成历史。
+统一插件重构后的源码归属以 [Architecture](ARCHITECTURE.md) 为准：Rig 驱动属于
+`plugins/agent/backend/engine`，`rho-agents` 暂时保留原执行端口的转换层。
+下文目录图描述原方案，不约束插件迁移后的包位置。
 
 ## 1. 实施结论与第一版完成定义
 

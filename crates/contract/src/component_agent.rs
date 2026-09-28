@@ -1,5 +1,6 @@
 //! Component assistant application records. No engine types or scientific state machine.
 use crate::{
+    ComponentAgentProfile, ComponentPermissionPolicy, ComponentTaskAuthorization, ComponentAgentTaskIntent, ComponentModelConnection, ComponentModelSettings, ComponentAgentBudget, ComponentModelTestKind, ComponentModelTestState,
     AgentContextSelection, ApplicationDocumentRef, ApplicationWindowRef, MediaReference,
     OperationId,
 };
@@ -8,66 +9,10 @@ use ts_rs::TS;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
-pub enum ComponentAgentProfile {
-    Objects,
-    Packages,
-    Plots,
-    Documents,
-    Workspace,
-    Project,
-    Environment,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
 pub enum ComponentAgentMode {
     Explain,
     Edit,
     Run,
-}
-
-/// Approval policy is independent of the work selected by the Agent.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum ComponentPermissionPolicy {
-    Ask,
-    AutoApproval,
-    FullAccess,
-}
-
-/// The executing Agent interprets the user's request; no review model is called.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum ComponentTaskAuthorization {
-    UserRequest,
-    Additional,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum ComponentRequestedAction {
-    Create,
-    Edit,
-    Save,
-    Execute,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(deny_unknown_fields)]
-pub struct ComponentIntentAction {
-    pub action: ComponentRequestedAction,
-    /// None denotes execution in the run's already bound R session.
-    pub document_id: Option<String>,
-    /// An exact project-relative destination, including a not-yet-created file.
-    pub path: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(deny_unknown_fields)]
-pub struct ComponentAgentTaskIntent {
-    pub request_id: String,
-    pub request_excerpt: String,
-    pub actions: Vec<ComponentIntentAction>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -138,40 +83,6 @@ impl ComponentAgentGrant {
     pub fn allows_save(&self, document: &ComponentDocumentGrant) -> bool {
         document.path.is_some() && (self.permission_policy.is_some() || document.allow_save)
     }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum ComponentModelProtocol {
-    Anthropic,
-    OpenaiCompletions,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub enum ComponentCredentialRef {
-    Environment { name: String },
-    /// Retained references from Hosts that used memory-only credentials.
-    Session { key_id: String },
-    /// Immutable version in the user-local Rho configuration file.
-    LocalFile { key_id: String },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(deny_unknown_fields)]
-pub struct ComponentModelConnection {
-    pub protocol: ComponentModelProtocol,
-    pub base_url: String,
-    pub model: String,
-    pub credential: ComponentCredentialRef,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(deny_unknown_fields)]
-pub struct ComponentModelSettings {
-    pub version: u64,
-    pub enabled: bool,
-    pub connection: Option<ComponentModelConnection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -245,16 +156,6 @@ impl ComponentAgentRunState {
             Self::Completed | Self::Stopped | Self::Failed | Self::Interrupted
         )
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-pub struct ComponentAgentBudget {
-    pub model_calls: u32,
-    pub tool_calls: u32,
-    pub context_bytes: u32,
-    pub tool_result_bytes: u32,
-    pub output_tokens: u32,
-    pub duration_ms: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -589,12 +490,6 @@ pub struct ComponentLocalCredential {
     pub key: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct ComponentCredentialStatus {
-    pub credential: Option<ComponentCredentialRef>,
-    pub available: bool,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum ComponentSubmissionState {
@@ -613,21 +508,6 @@ pub struct ComponentRequestFailure {
     pub existing_request_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum ComponentModelTestKind {
-    Connection,
-    Images,
-}
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum ComponentModelTestState {
-    Queued,
-    Running,
-    Passed,
-    Failed,
-    Interrupted,
-}
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentModelTestRequest {
