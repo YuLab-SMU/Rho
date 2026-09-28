@@ -36,7 +36,8 @@ test("ordinary Objects keeps read-only content, independent object navigation an
     const ui = { ...source, instance: "objects-one", plugin: "org.rho.objects" };
     const initial = { view: "directory", instance: ui, project: "project", principal: "principal", contribution: "objects", window: "window",
       configuration: { source, object_group: "main" }, state: {}, state_version: 0, closed: false };
-    const fixture = { views: { directory: initial } as Record<string, any>, calls: [] as any[], records: [] as any[], failCapture: false,
+    const fixture = { views: { directory: initial } as Record<string, any>, calls: [] as any[], records: [] as any[], failCapture: false, loseNextReply: false, hideOriginal: false,
+      reopen: null as (() => void) | null,
       layout: { window: "window", project: "project", principal: "principal", version: 1, layout: { kind: "tabs", id: "main", views: ["directory"], selected: "directory" } } };
     (window as any).fixture = fixture;
     const value = (number: number | null, text: string | null = null) => ({ kind: "value", object_type: text === null ? "double" : "character", number,
@@ -59,6 +60,10 @@ test("ordinary Objects keeps read-only content, independent object navigation an
       frame.style.cssText = "width:100vw;height:calc(100vh - 36px);border:0;display:block";
       frame.src = `/dist/index.html#rho-view-nonce=${view.view}`; document.querySelector("main")!.append(frame); show(view.view);
     };
+    fixture.reopen = () => {
+      const replacement = { ...structuredClone(fixture.views.directory), view: "replacement-directory", state_version: 0 };
+      fixture.views[replacement.view] = replacement; mount(replacement);
+    };
     window.addEventListener("message", event => {
       if (event.data?.type !== "rho:view:ready") return;
       const view = fixture.views[event.data.nonce]; if (!view) return;
@@ -77,8 +82,8 @@ test("ordinary Objects keeps read-only content, independent object navigation an
               metadata: entry!.metadata, values: entry!.metadata.preview, columns: [], children: [], start: 1, next_start: null, column_start: 1, next_column_start: null,
               text_start: 1, next_text_start: null, observed_at_ms: Date.now(), complete: true, notices: [] }) }; break;
             case "windows.layout": result = { status: "ready", data: fixture.layout }; break;
-            case "operation.get": result = { status: "ready", data: { record: fixture.records.find(record => record.operation.operation_id === body.arguments.operation_id) } }; break;
-            case "operation.list_recent": result = { status: "ready", data: { operations: fixture.records.filter(record => record.operation.client_request_id === body.arguments.client_request_id).map(record => ({ operation_id: record.operation.operation_id })), next_cursor: null } }; break;
+            case "operation.get": result = { status: "ready", completeness: "complete", data: { record: fixture.records.find(record => record.operation.operation_id === body.arguments.operation_id) } }; break;
+            case "operation.list_recent": result = { status: "ready", completeness: "complete", data: { operations: fixture.records.filter(record => !fixture.hideOriginal && record.operation.client_request_id === body.arguments.client_request_id).map(record => ({ operation_id: record.operation.operation_id })), next_cursor: null } }; break;
             default: error = `Unexpected query ${body.capability.id}`;
           }
         } else if (body.type === "set_state") {
@@ -88,6 +93,7 @@ test("ordinary Objects keeps read-only content, independent object navigation an
           result = { operation: { operation_id: `operation-${fixture.records.length + 1}`, caller: { kind: "plugin", id: view.view },
             client_request_id: `sha256:${Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${view.view}:${body.request_id}`))), byte => byte.toString(16).padStart(2, "0")).join("")}`, capability: body.capability, normalized_arguments: body.arguments }, status: "accepted", outcome: null };
           fixture.records.push(result);
+          if (fixture.loseNextReply) { fixture.loseNextReply = false; error = "Fixture original reply lost"; }
           if (body.capability.id === "windows.open_view") {
             const opened = { ...body.arguments.view, view: `object-${fixture.records.length}`, project: "project", principal: "principal", state_version: 0, closed: false };
             fixture.views[opened.view] = opened; fixture.layout.version++; fixture.layout.layout.views.push(opened.view); fixture.layout.layout.selected = opened.view; mount(opened);
@@ -140,6 +146,38 @@ test("ordinary Objects keeps read-only content, independent object navigation an
     await filter.evaluate(() => document.fonts.ready);
     await page.screenshot({ path: info.outputPath(`objects-plugin-${width}.png`) });
   }
+  await page.evaluate(() => { (window as any).fixture.loseNextReply = true; });
+  await plot.getByRole("button", { name: "Render plot", exact: true }).click();
+  await expect(directoryView.getByText("Action unconfirmed", { exact: false })).toBeVisible();
+  expect(await page.evaluate(() => (window as any).fixture.records.length)).toBe(3);
+  const original = await page.evaluate(() => structuredClone((window as any).fixture.views.directory.state.actions.pending));
+  await directoryView.getByRole("button", { name: "Set Aside", exact: true }).click();
+  await expect(directoryView.getByText("Requests set aside (1)", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => (window as any).fixture.records.length)).toBe(3);
+  await expect(plot.getByRole("button", { name: "Render plot", exact: true })).toBeEnabled();
+  await plot.getByRole("button", { name: "Render plot", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).fixture.records.length)).toBe(4);
+  await expect.poll(() => page.evaluate(() => (window as any).fixture.views.directory.state.actions.pending)).toBeNull();
+  expect(await page.evaluate(() => (window as any).fixture.views.directory.state.actions.retained)).toEqual([original]);
+  await page.evaluate(() => { (window as any).fixture.reopen(); (window as any).fixture.hideOriginal = true; });
+  const recovered = page.frameLocator('iframe[title="replacement-directory"]');
+  await recovered.getByRole("button", { name: "Inspect Saved Request", exact: true }).click();
+  await expect(recovered.getByText("No unique original Operation was found in this bounded observation. The request remains unconfirmed.", { exact: true })).toBeVisible();
+  for (const width of [1440, 1920, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    const savedRequest = recovered.getByRole("button", { name: "Inspect Saved Request", exact: true });
+    await expect.poll(() => savedRequest.evaluate(() => innerWidth)).toBe(width);
+    await expect(savedRequest).toBeInViewport();
+    expect(await savedRequest.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+    await savedRequest.evaluate(() => document.fonts.ready);
+    await page.screenshot({ path: info.outputPath(`objects-retained-${width}.png`) });
+  }
+  await page.evaluate(() => { (window as any).fixture.hideOriginal = false; });
+  await recovered.getByRole("button", { name: "Inspect Saved Request", exact: true }).click();
+  await expect(recovered.getByText("Requests set aside (1)", { exact: true })).toBeHidden();
+  expect(await page.evaluate(() => (window as any).fixture.views["replacement-directory"].state.actions.receipt.id)).toBe("operation-3");
+  expect(await page.evaluate(() => (window as any).fixture.records.length)).toBe(4);
+  await page.screenshot({ path: info.outputPath("objects-retained-recovered.png") });
   expect(errors).toEqual([]);
   const calls = await page.evaluate(() => (window as any).fixture.calls);
   const run = calls.find((call: any) => call.type === "invoke" && call.capability.id === "r.execute");

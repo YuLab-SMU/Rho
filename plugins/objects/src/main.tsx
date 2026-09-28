@@ -37,12 +37,17 @@ try {
       execution: { blocked: close.preparing || action.working || !!action.pending, run: (code, mode) => actions.run(code, mode).catch(() => undefined) }, clipboard: client }}>
       <main className="objects-root">
         {client.view.contribution === "object" ? <ObjectViewer {...configuration.object!} viewId={client.view.view} /> : <ObjectsPanel viewId={client.view.view} />}
-        {(close.error || state.notice || state.saveError || action.error || action.pending || receipt) && <aside className="objects-status" aria-label="Objects status">
+        {(close.error || state.notice || state.saveError || action.error || action.pending || action.retained.length > 0 || receipt) && <aside className="objects-status" aria-label="Objects status">
           {close.error && <p role="alert">{close.error}</p>}
           {state.notice && <p role="status">{state.notice}</p>}
           {state.saveError && <p role="alert">{state.saveError}<button onClick={() => ignore(connection.flush())}>Retry Save</button></p>}
           {action.error && <p role="alert">{action.error}</p>}
-          {action.pending && <p>Action unconfirmed · <code>{action.pending.request}</code><button disabled={action.working} onClick={() => ignore(actions.retry())}>Retry Original Request</button><button disabled={action.working} onClick={() => ignore(actions.inspectPending())}>Find Original Operation</button></p>}
+          {action.pending && <p>Action unconfirmed · <code>{action.pending.request}</code><button disabled={action.working || action.pending.view !== client.view.view} onClick={() => ignore(actions.retry())}>Retry Original Request</button><button disabled={action.working} onClick={() => ignore(actions.inspectPending())}>Find Original Operation</button><button disabled={action.working} onClick={() => ignore(actions.setAside())}>Set Aside</button></p>}
+          {action.retained.length > 0 && <details open><summary>Requests set aside ({action.retained.length})</summary>
+            <p>These requests remain unconfirmed. Setting one aside does not cancel or undo it.</p>
+            {action.retained.map(item => <p key={`${item.view}:${item.request}`}>{item.capability === "r.execute" ? "Plot execution" : "Open object"} · <code>{item.request}</code>
+              <button disabled={action.working} onClick={() => ignore(actions.inspectRetained(item.view, item.request))}>Inspect Saved Request</button></p>)}
+          </details>}
           {receipt && <p>{receipt.capability === "r.execute" ? "Plot execution" : "Open object"}: {receipt.status} · <code>{receipt.id}</code>
             <button disabled={action.working} onClick={() => ignore(actions.inspect())}>Inspect Operation</button>{receipt.error && <span className="error"> {receipt.error}</span>}</p>}
         </aside>}

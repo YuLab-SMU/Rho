@@ -12,7 +12,7 @@ function fixture(saved: JsonValue = null) {
     saveActions: vi.fn(async (value: JsonValue) => { persisted.push(structuredClone(value)); }) };
   const invoke = vi.fn(async (capability, args, options) => ({ status: "succeeded", outcome: "succeeded", output: {},
     operation: { caller: { kind: "plugin", id: "objects-one" }, operation_id: "original-operation", client_request_id: requestId("objects-one", options.requestId), capability, normalized_arguments: structuredClone(args) } }));
-  const query = vi.fn<(...args: any[]) => Promise<any>>(async () => ({ status: "ready", data: { project: view.project, principal: view.principal, window: view.window,
+  const query = vi.fn<(...args: any[]) => Promise<any>>(async () => ({ status: "ready", completeness: "complete", data: { project: view.project, principal: view.principal, window: view.window,
     version: 7, layout: { kind: "tabs", id: "editor-group", views: [], selected: null } } }));
   const operation = vi.fn();
   const client = { get view() { return structuredClone(view); }, invoke, query, operation };
@@ -96,7 +96,7 @@ it("retains terminal failure as the original Operation instead of preparing anot
     operation: { caller: { kind: "plugin", id: "objects-one" }, operation_id: "original-operation", client_request_id: requestId("objects-one", options.requestId), capability, normalized_arguments: args } }));
   await expect(f.actions.run("print(plot)", "console")).rejects.toThrow("native failure");
   expect(f.actions.getSnapshot()).toMatchObject({ pending: null, receipt: { id: "original-operation", status: "failed" } });
-  f.query.mockResolvedValueOnce({ status: "ready", data: { record: { status: "failed", operation: { caller: { kind: "plugin", id: "objects-one" }, operation_id: "original-operation", client_request_id: requestId("objects-one", f.invoke.mock.calls[0][2].requestId), capability: { id: "r.execute", version: 2 } }, error: "native failure" } } });
+  f.query.mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { record: { status: "failed", operation: { caller: { kind: "plugin", id: "objects-one" }, operation_id: "original-operation", client_request_id: requestId("objects-one", f.invoke.mock.calls[0][2].requestId), capability: { id: "r.execute", version: 2 } }, error: "native failure" } } });
   await f.actions.inspect(); expect(f.invoke).toHaveBeenCalledOnce();
 });
 it("serializes explicit actions and refuses execution without an existing session", async () => {
@@ -114,8 +114,8 @@ it("finds an original accepted request after reopening without sending it from t
   await expect(original.actions.run("print(plot)", "console")).rejects.toThrow();
   const saved = structuredClone(original.persisted[0]) as any;
   const reopened = fixture(saved); reopened.view.view = "reopened-view";
-  reopened.query.mockResolvedValueOnce({ status: "ready", data: { operations: [{ operation_id: "original-operation" }] } });
-  reopened.query.mockResolvedValueOnce({ status: "ready", data: { record: { status: "running", outcome: null,
+  reopened.query.mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { operations: [{ operation_id: "original-operation" }], next_cursor: null } });
+  reopened.query.mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { record: { status: "running", outcome: null,
     operation: { caller: { kind: "plugin", id: "objects-one" }, operation_id: "original-operation",
       client_request_id: requestId(saved.pending.view, saved.pending.request), capability: { id: "r.execute", version: 2 }, normalized_arguments: saved.pending.arguments } } } });
   await reopened.actions.inspectPending();
@@ -127,7 +127,7 @@ it("an absent original request remains unconfirmed and lookup never submits or c
   const f = fixture(); f.invoke.mockRejectedValueOnce(new Error("lost"));
   await expect(f.actions.openObject("x")).rejects.toThrow();
   const pending = structuredClone(f.actions.getSnapshot().pending);
-  f.query.mockResolvedValueOnce({ status: "ready", data: { operations: [] } });
+  f.query.mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { operations: [], next_cursor: null } });
   await expect(f.actions.inspectPending()).rejects.toThrow("remains unconfirmed");
   expect(f.actions.getSnapshot().pending).toEqual(pending); expect(f.invoke).toHaveBeenCalledOnce();
 });
@@ -137,4 +137,78 @@ it("stopping during capture cannot submit work when the late save reply arrives"
   const running = f.actions.run("print(plot)", "console"); await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
   f.actions.stop(); finish(); await expect(running).rejects.toThrow("closed");
   expect(f.invoke).not.toHaveBeenCalled();
+});
+
+it("setting aside saves the exact unconfirmed request and permits only a distinct new action", async () => {
+  const f = fixture(); f.invoke.mockRejectedValueOnce(new Error("reply lost"));
+  await expect(f.actions.run("print(original_plot)", "console")).rejects.toThrow("reply lost");
+  const original = structuredClone(f.actions.getSnapshot().pending)!;
+  await f.actions.setAside();
+  expect(f.actions.getSnapshot()).toMatchObject({ pending: null, retained: [original], receipt: null });
+  expect(f.persisted.at(-1)).toMatchObject({ pending: null, retained: [original] });
+  expect(f.invoke).toHaveBeenCalledOnce();
+  await f.actions.run("print(new_plot)", "console");
+  expect(f.invoke.mock.calls[1][2].requestId).not.toBe(original.request);
+  expect(f.actions.getSnapshot().retained).toEqual([original]);
+  const reopened = fixture(f.persisted.at(-1)!); reopened.view.view = "replacement-view";
+  reopened.query.mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { operations: [], next_cursor: null } });
+  await expect(reopened.actions.inspectRetained(original.view, original.request)).rejects.toThrow("remains unconfirmed");
+  expect(reopened.actions.getSnapshot().retained).toEqual([original]);
+  reopened.query.mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { operations: [{ operation_id: "original-operation" }], next_cursor: null } });
+  reopened.query.mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { record: { status: "running", outcome: null,
+    operation: { caller: { kind: "plugin", id: original.view }, operation_id: "original-operation", client_request_id: requestId(original.view, original.request),
+      capability: { id: original.capability, version: original.version }, normalized_arguments: original.arguments } } } });
+  await reopened.actions.inspectRetained(original.view, original.request);
+  expect(reopened.invoke).not.toHaveBeenCalled();
+  expect(reopened.actions.getSnapshot()).toMatchObject({ pending: null, retained: [], receipt: { view: original.view, request: original.request, id: "original-operation", status: "running" } });
+});
+
+it("failed retention acknowledgement keeps the pending request and blocks new actions", async () => {
+  const f = fixture(); f.invoke.mockRejectedValueOnce(new Error("lost"));
+  await expect(f.actions.run("print(plot)", "console")).rejects.toThrow();
+  const original = structuredClone(f.actions.getSnapshot().pending);
+  f.owner.saveActions.mockRejectedValueOnce(new Error("saved state unconfirmed"));
+  await expect(f.actions.setAside()).rejects.toThrow("saved state unconfirmed");
+  expect(f.actions.getSnapshot()).toMatchObject({ pending: original, retained: [] });
+  await expect(f.actions.run("print(another)", "console")).rejects.toThrow("unconfirmed");
+  expect(f.invoke).toHaveBeenCalledOnce();
+  await f.actions.setAside();
+  expect(f.actions.getSnapshot()).toMatchObject({ pending: null, retained: [original] });
+});
+
+it("retained recovery refuses partial, foreign and unsaved results without changing another pending request", async () => {
+  const f = fixture(); f.invoke.mockRejectedValueOnce(new Error("lost"));
+  await expect(f.actions.run("print(old)", "console")).rejects.toThrow();
+  const original = structuredClone(f.actions.getSnapshot().pending)!; await f.actions.setAside();
+  f.invoke.mockRejectedValueOnce(new Error("new reply lost"));
+  await expect(f.actions.run("print(new)", "console")).rejects.toThrow();
+  const next = structuredClone(f.actions.getSnapshot().pending);
+  await expect(f.actions.inspectRetained("foreign", original.request)).rejects.toThrow("Select one retained");
+  expect(f.query).not.toHaveBeenCalled();
+  f.query.mockResolvedValueOnce({ status: "ready", completeness: "partial", data: { operations: [{ operation_id: "original-operation" }], next_cursor: null } });
+  await expect(f.actions.inspectRetained(original.view, original.request)).rejects.toThrow("unavailable");
+  const page = { status: "ready", completeness: "complete", data: { operations: [{ operation_id: "original-operation" }], next_cursor: null } };
+  const record = { status: "running", outcome: null, operation: { caller: { kind: "plugin", id: original.view }, operation_id: "original-operation",
+    client_request_id: requestId(original.view, original.request), capability: { id: original.capability, version: original.version }, normalized_arguments: original.arguments } };
+  f.query.mockResolvedValueOnce(page).mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { record: { ...record, operation: { ...record.operation, operation_id: "foreign" } } } });
+  await expect(f.actions.inspectRetained(original.view, original.request)).rejects.toThrow("another Operation");
+  f.query.mockResolvedValueOnce(page).mockResolvedValueOnce({ status: "ready", completeness: "complete", data: { record } });
+  f.owner.saveActions.mockRejectedValueOnce(new Error("result state unconfirmed"));
+  await expect(f.actions.inspectRetained(original.view, original.request)).rejects.toThrow("result state unconfirmed");
+  expect(f.actions.getSnapshot()).toMatchObject({ pending: next, retained: [original], receipt: null });
+  expect(f.invoke).toHaveBeenCalledTimes(2);
+});
+
+it("retention capacity never evicts an older unconfirmed request", async () => {
+  const f = fixture(); f.invoke.mockRejectedValue(new Error("lost"));
+  for (let index = 0; index < 8; index++) {
+    await expect(f.actions.run(`print(plot_${index})`, "console")).rejects.toThrow("lost");
+    await f.actions.setAside();
+  }
+  const retained = structuredClone(f.actions.getSnapshot().retained);
+  await expect(f.actions.run("print(ninth)", "console")).rejects.toThrow("lost");
+  const pending = structuredClone(f.actions.getSnapshot().pending);
+  await expect(f.actions.setAside()).rejects.toThrow("capacity is full");
+  expect(f.actions.getSnapshot()).toMatchObject({ pending, retained });
+  expect(f.invoke).toHaveBeenCalledTimes(9);
 });

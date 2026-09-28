@@ -1777,6 +1777,17 @@ failure remains separate; the current case does not claim to fix that path.
 Default scenario wiring and remaining native interaction acceptance are still
 required before replacing the old UI.
 
+Objects now offers explicit Set Aside for an unconfirmed request. It first saves
+the original view, request, capability and complete arguments, then permits a
+distinct new action. Retention is bounded to eight requests and 256 KiB without
+eviction. Later inspection can recover one exact original Operation from a
+replacement view; missing, partial or foreign records retain uncertainty. Failed
+save acknowledgements keep the current action blocked and preserve its request.
+Set Aside sends no scientific call or cancellation. All 68 independent model,
+component and action cases pass, including four new retention/recovery cases
+(`objects-set-aside-v2.log`). The updated isolated browser case is written but
+not yet run; preceding browser/native evidence remains a separate baseline.
+
 The ordinary `org.rho.packages` package now assembles outside the checkout with
 its approved compact list, wide inspector, copy-specific source details and
 read-only R/library dialog. Counts, index pages and installed-copy details remain
@@ -2091,8 +2102,8 @@ individual acceptance evidence above. Complete their final scenario integration
 and the outstanding cross-plugin workflows; source extraction alone does not
 establish the complete replacement. Console's new original-submission recovery
 still needs its current browser and real-R acceptance, and Objects needs an
-explicit way to set aside an unconfirmed request while retaining its recovery
-identity without claiming cancellation or non-acceptance. The older standalone
+updated browser check of its explicit set-aside and retained-request inspection.
+Neither feature claims cancellation or non-acceptance. The older standalone
 frame pointer-routing failure remains separate from the passing generic-window
 pointer checks. Abrupt browser disposal cannot establish that unacknowledged
 edits were saved; recovery stays explicit.

@@ -10,7 +10,7 @@ interface PendingAction {
   version: number; arguments: JsonValue;
 }
 interface Receipt { view: string; id: string; request: string; capability: string; version: number; status: string; error: string; }
-interface SavedActions { pending: PendingAction | null; receipt: Receipt | null; }
+interface SavedActions { pending: PendingAction | null; receipt: Receipt | null; retained: PendingAction[]; }
 interface Snapshot extends SavedActions { working: boolean; error: string; }
 type Client = Pick<PluginViewClient, "view" | "query" | "invoke">;
 type Owner = Pick<ObjectsConnection, "source" | "nativeSession" | "actionState" | "saveActions">;
@@ -35,7 +35,7 @@ export class ObjectsActions extends Model<Snapshot> {
   constructor(private client: Client, private owner: Owner, readonly group: string | null) {
     super();
     const saved = owner.actionState as Partial<SavedActions> | null;
-    this.state = { pending: structuredClone(saved?.pending ?? null), receipt: structuredClone(saved?.receipt ?? null) };
+    this.state = { pending: structuredClone(saved?.pending ?? null), receipt: structuredClone(saved?.receipt ?? null), retained: structuredClone(saved?.retained ?? []) };
   }
   protected readSnapshot(): Snapshot { return { ...structuredClone(this.state), working: this.task !== null, error: this.error }; }
   private async save() { await this.owner.saveActions(json(this.state)); }
@@ -48,7 +48,7 @@ export class ObjectsActions extends Model<Snapshot> {
     this.publish(); return this.task;
   }
   private requireNew() {
-    if (this.state.pending) throw new Error("Inspect or retry the original unconfirmed action before starting another.");
+    if (this.state.pending) throw new Error("Inspect, retry or explicitly set aside the original unconfirmed action before starting another.");
   }
   openObject(name: string, path: ObjectPathElement[] = []): Promise<void> {
     return this.active(async () => {
@@ -87,6 +87,20 @@ export class ObjectsActions extends Model<Snapshot> {
     });
   }
   retry(): Promise<void> { return this.active(() => this.submit()); }
+  /** Keep the original recovery material before allowing a distinct new action.
+   * This saves presentation state only; it neither retries nor cancels work. */
+  setAside(): Promise<void> {
+    return this.active(async () => {
+      const pending = this.state.pending;
+      if (!pending) throw new Error("No unconfirmed action is retained.");
+      const retained = [...this.state.retained, structuredClone(pending)];
+      if (retained.length > 8 || new TextEncoder().encode(JSON.stringify(retained)).length > 262144)
+        throw new Error("Saved request capacity is full. Inspect the retained original requests before setting aside another.");
+      const next = { ...this.state, pending: null, retained };
+      await this.owner.saveActions(json(next));
+      if (!this.stopped) this.state = next;
+    });
+  }
   private async submit() {
     const pending = this.state.pending;
     if (!pending || pending.view !== this.client.view.view) throw new Error("This action belongs to another view. Inspect its original Operation; copied state cannot replay it.");
@@ -129,9 +143,23 @@ export class ObjectsActions extends Model<Snapshot> {
       statuses.includes(record.status) && typeof record.operation.operation_id === "string";
   }
   private async readOperation(id: string): Promise<RecordReply> {
-    const response = await this.client.query<{ status: string; data?: { record?: RecordReply } }>({ id: "operation.get", version: 1 }, { operation_id: id });
-    if (response.status !== "ready" || !response.data?.record) throw new Error("The original Operation is unavailable.");
+    const response = await this.client.query<{ status: string; completeness: string; data?: { record?: RecordReply } }>({ id: "operation.get", version: 1 }, { operation_id: id });
+    if (response.status !== "ready" || response.completeness !== "complete" || !response.data?.record) throw new Error("The original Operation is unavailable.");
+    if (response.data.record.operation?.operation_id !== id) throw new Error("The observation belongs to another Operation.");
     return response.data.record;
+  }
+  private async findOriginal(pending: PendingAction): Promise<RecordReply> {
+    const response = await this.client.query<{ status: string; completeness: string; data?: { operations: { operation_id: string }[]; next_cursor: number | null } }>(
+      { id: "operation.list_recent", version: 1 }, { client_request_id: await operationRequestId(pending.view, pending.request), limit: 10 });
+    if (response.status !== "ready" || response.completeness !== "complete" || !Array.isArray(response.data?.operations) || response.data.operations.length > 10 || response.data.next_cursor !== null)
+      throw new Error("The original request observation is unavailable.");
+    const matches: RecordReply[] = [];
+    for (const item of response.data.operations) {
+      const record = await this.readOperation(item.operation_id);
+      if (await this.matchesPending(record, pending)) matches.push(record);
+    }
+    if (matches.length !== 1) throw new Error("No unique original Operation was found in this bounded observation. The request remains unconfirmed.");
+    return matches[0]!;
   }
   /** Lookup is read-only and works after a copied view reopens. It never sends
    * the saved request from the new caller or treats absence as non-acceptance. */
@@ -139,21 +167,25 @@ export class ObjectsActions extends Model<Snapshot> {
     return this.active(async () => {
       const pending = this.state.pending;
       if (!pending) throw new Error("No unconfirmed action is retained.");
-      const response = await this.client.query<{ status: string; data?: { operations: { operation_id: string }[] } }>(
-        { id: "operation.list_recent", version: 1 }, { client_request_id: await operationRequestId(pending.view, pending.request), limit: 10 });
-      if (response.status !== "ready" || !Array.isArray(response.data?.operations) || response.data.operations.length > 10)
-        throw new Error("The original request observation is unavailable.");
-      const matches: RecordReply[] = [];
-      for (const item of response.data.operations) {
-        const record = await this.readOperation(item.operation_id);
-        if (await this.matchesPending(record, pending)) matches.push(record);
-      }
-      if (matches.length !== 1) throw new Error("No unique original Operation was found in this bounded observation. The request remains unconfirmed.");
+      const record = await this.findOriginal(pending);
       if (this.stopped) return;
-      const record = matches[0];
       this.state.receipt = { view: pending.view, id: record.operation.operation_id, request: pending.request,
         capability: pending.capability, version: pending.version, status: record.status, error: record.error ?? "" };
       this.state.pending = null; await this.save();
+    });
+  }
+  inspectRetained(view: string, request: string): Promise<void> {
+    return this.active(async () => {
+      const selected = this.state.retained.filter(item => item.view === view && item.request === request);
+      if (selected.length !== 1) throw new Error("Select one retained original request.");
+      const pending = selected[0]!, record = await this.findOriginal(pending);
+      if (this.stopped) return;
+      const next: SavedActions = { ...this.state,
+        receipt: { view: pending.view, id: record.operation.operation_id, request: pending.request,
+          capability: pending.capability, version: pending.version, status: record.status, error: record.error ?? "" },
+        retained: this.state.retained.filter(item => item !== pending) };
+      await this.owner.saveActions(json(next));
+      if (!this.stopped) this.state = next;
     });
   }
   inspect(): Promise<void> {
