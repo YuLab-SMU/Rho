@@ -356,7 +356,7 @@ full-size resource transfer and ordinary Agent views remain unfinished. Current 
 native Agent, real model or user credential is used by these checks. Existing Hosts
 and R sessions have not been restarted. The fixed core composition remains in place.
 
-Source now exposes a bounded public `views.presence` observation and composes it
+On `82e8b505`, source exposes a bounded public `views.presence` observation and composes it
 for native cross-window takeover. Attached/closing views remain protected;
 unknown/foreign views fail, and a detached/closed result is followed by a fresh
 requesting-caller check before owner admission. The query contains no credentials
@@ -367,9 +367,15 @@ first failure and its diagnostic repeat are retained. All 29 framed cases and
 all three public-Host view-delegation cases pass, including credential/content
 exclusion, refused-close recovery and backend-crash detachment. Public contract and
 manifest generation, the independent TypeScript consumer, client build and client
-consistency checks also pass. Independent backend/Host acceptance and static checks
-are still running serially; those results remain unconfirmed. Evidence is recorded in
-`target/plugin-refactor/agent-view-presence-*-v2.*`, with the initial v1 logs retained.
+consistency checks also pass. The independent package builds and passes the same
+29 framed cases. All four generic Host cases pass with the frozen Host executable
+unchanged. Architecture, private boundaries, governance and diff checks pass.
+A supplementary manifest byte comparison initially failed because the build
+expands `source.files`; comparison against the build recipe confirms the complete
+source inventory and identical remaining fields. That failed probe is retained.
+Commands and results are in `target/plugin-refactor/agent-view-presence-results-v2.json`;
+the independent stages are in `agent-view-presence-combined-v1.json`, with source
+parity in `agent-view-presence-source-parity-v2.json`. Initial failure logs remain.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,
