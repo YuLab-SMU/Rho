@@ -98,6 +98,27 @@ no generic Host credential. Cancellation acknowledgement with `confirmed: false`
 only reports receipt. Neither disconnect nor timeout means execution stopped;
 return confirmed cancellation only after the native owner observes it stopped.
 
+`host_call_channel(1..=32)` supplies a cloneable `HostCallClient` and one
+`HostCallPump` for asynchronous owner callbacks. `begin` queues one captured
+request with the owner's retained request ID, active parent ID, capability and
+arguments (at most 256 KiB; use resources for larger content). It reserves the
+slot and queues synchronously. The server selects `pump.next()` alongside its
+dedicated reader's decoded frames, checks that the parent is still active, and
+sends the returned request/body through its existing `RpcWriter`. Pass only
+validated `HostResult`/`Error` frames to `pump.respond`; other frames stay with the
+ordinary server loop. Host still checks declared grants and original caller scope.
+
+Await `PendingHostCall::receive()` in the task's callback. Concurrent results may
+arrive in a different order. Dropping that wait leaves the original slot reserved
+until its response or connection closure; it never retracts or replays the call.
+The task owner retains its recovery identities and decides whether to continue
+waiting or inspect the original Operation. Close or drop the pump when the server
+connection ends: queued and dispatched waiters return `Unconfirmed`, never a
+successful cancellation. Admission after closure is refused. Structured Host
+errors retain their code and recovery without including recovery in debug output.
+The helper is a transient transport, not an idempotency database, authorization
+grant, retry policy or scientific result owner.
+
 For files and other large observations, initialization can include a
 `resource_channel`. On the current Unix target, construct `ResourceClient` from
 it and call `put` with the active incoming request ID, declared size, media type,

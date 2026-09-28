@@ -1,6 +1,8 @@
 //! Public, language-neutral transport helpers. No scientific owner or Host internals.
 #![forbid(unsafe_code)]
 
+mod host_calls;
+pub use host_calls::*;
 mod transport;
 mod resources;
 pub use resources::*;

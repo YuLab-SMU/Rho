@@ -586,6 +586,11 @@ as causation. Query parents cannot delegate mutations or controls. Delegated wor
 is owned by the Host task tracker and retains the Host lifetime across disconnect.
 Core result reconciliation can retire original plugin protections; failure to
 retire one does not replace the already committed scientific result.
+The public SDK's bounded reverse-call pump keeps the task owner's request identity
+and active parent unchanged. Abandoning an await retains the pending slot; closing
+the transport reports uncertainty and never retries, commits or claims rollback.
+The core remains authoritative for delegated grants, scope and original Operation
+idempotency. The pump cannot turn a query parent into effectful authority.
 
 An owner can contribute an ephemeral Control handler through the same atomic
 registry. Host, CLI, MCP and scoped view requests validate the exact contract,

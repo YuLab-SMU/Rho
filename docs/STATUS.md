@@ -68,7 +68,7 @@ Manual handoff policy and contracts have now moved into the public Agent package
 the Application implementation is a typed forwarding adapter to the same atomic
 repository. The original caller validator and target writer gates are retained.
 All 14 public owner cases now pass, including the five new handoff cases. The
-serialization/digest boundary case and public handoff SDK generation remain pending. All six existing
+serialization/digest boundary case also passes. Public handoff SDK generation remains pending. All six existing
 SQLite handoff cases pass before the subsequent storage split, including write-failure
 rollback, durable idempotency, stale material, scoped controllers and asset separation. This change
 does not create a model turn, transfer uploads or move grants between tasks.
@@ -114,6 +114,18 @@ real-model browser cases were excluded. See
 `target/plugin-refactor/agent-engine-verification.txt`. Unchanged native transport
 fixtures remain in `target/plugin-refactor/agent-native-verification.txt`; they
 have not been rerun for the current component extraction.
+
+The public backend SDK now has a bounded asynchronous reverse-call client/pump
+for Agent owner callbacks. It retains the containing owner's original request ID,
+correlates concurrent replies, refuses queued/duplicate/mismatched replies, and
+keeps abandoned waits reserved until response or disconnect. Pump closure fences
+new calls and returns unconfirmed outcomes for queued/dispatched requests; it does
+not replay, cancel or commit scientific work. Typed Host errors preserve recovery
+without printing it in debug output. Seven focused tests, including a framed
+exchange over bounded duplex I/O, are added but not yet executed. This is a public
+transport building block; Agent's ordinary backend still needs to consume it.
+The new SDK source was written after the active storage-integration binaries were
+compiled. Its own focused checks must run after the current serial verifier.
 
 This remains a migration foundation, not an ordinary loadable Agent runtime/view.
 Ordinary backend process composition, context providers, Agent views, Studio

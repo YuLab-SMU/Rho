@@ -225,6 +225,12 @@ rho-agent-owner -p rho-application --lib handoff --locked`: all task-kind pairs,
 original receipt recovery, scoped/live controllers, stale or unowned context,
 target budgets and atomic commit faults. The boundary fixture checks exact
 serialized bytes, digests and the structured observation-expired diagnostic.
+Asynchronous native reverse-call transport uses `cargo test -p rho-plugin-sdk
+--test host_calls --test transport --locked`: original request IDs, concurrent
+correlation, retained abandoned waits, queued/unknown/duplicate reply refusal,
+capacity and payload bounds, typed recovery, and unconfirmed disconnects. These
+SDK checks do not establish ordinary Agent process composition or scientific
+execution; Host delegation checks still own authority and journal idempotency.
 Independent assemblies include the public plugin protocol and R media API, with
 all source/dependency paths checked to stay inside the assembly. Agent-owned storage
 includes scoped credential-file locking, replacement, redaction and explicit-path
