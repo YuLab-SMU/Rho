@@ -675,6 +675,15 @@ async fn caller_view_observation_is_native_credential_free_and_survives_backend_
             .unwrap()
             .contains("original calling view")
     );
+    // Journal completion precedes native settlement acknowledgement. Wait for
+    // the original execution lease rather than treating it as already released.
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let owner = query(&host, &context, "plugins.instance", json!({"instance":instance})).await;
+            if owner["retained_calls"] == 0 && owner["pending_messages"] == 0 { break; }
+            tokio::task::yield_now().await;
+        }
+    }).await.unwrap();
     invoke(
         &host,
         &context,

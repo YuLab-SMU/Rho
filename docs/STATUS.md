@@ -170,8 +170,14 @@ documentation map and script syntax checks pass for the new source.
 The v2 view-origin stage passed all nine draft cases and one existing delegation
 case, but the new origin case requested ordinary close without a connected close
 handler. Host correctly refused. The fixture now explicitly retains acknowledged
-state at its expected version; no product close rule was weakened. The serial
-verifier resumed at that stage with `v3` logs, retaining the original failure.
+state at its expected version; no product close rule was weakened. The v3 run
+again passed the nine draft and existing delegation cases. The new origin case
+reached its final cleanup but released the instance before native settlement had
+retired the original execution lease. The fixture now observes both zero retained
+calls and zero pending messages before release. The corrected focused origin
+case passes in v4; both original failures remain recorded. Unchanged draft and
+existing-delegation passes are reused. The v4 serial run now checks the new
+delegated-operation port and Agent configuration before independent acceptance.
 
 Source now adds `plugins.delegated_operation`: the native backend can resolve
 its original reverse request from the retained parent admission with exact
