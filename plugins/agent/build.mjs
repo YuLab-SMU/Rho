@@ -16,7 +16,10 @@ const walk = directory => fs.readdirSync(directory, {withFileTypes: true}).flatM
 });
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'plugin.json'), 'utf8'));
 manifest.source.files = walk(root).filter(file => file !== 'plugin.json' && !manifest.source.lockfiles.includes(file)).sort();
-fs.writeFileSync(path.join(root, 'plugin.json'), JSON.stringify(manifest, null, 2) + '\n');
+const encoded = JSON.stringify(manifest) + '\n';
+// Match the public protocol's 256 KiB raw manifest limit after adding sources.
+assert.ok(Buffer.byteLength(encoded) <= 256 * 1024, 'Agent manifest exceeds the public protocol byte limit');
+fs.writeFileSync(path.join(root, 'plugin.json'), encoded);
 fs.mkdirSync(path.join(root, 'dist'), {recursive: true});
 fs.copyFileSync(path.join(target, 'debug/rho-agent-backend'), path.join(root, 'dist/rho-agent-backend'));
 fs.chmodSync(path.join(root, 'dist/rho-agent-backend'), 0o755);

@@ -230,8 +230,12 @@ with all 18 capabilities. The independent assembly now passes all 16 owner and
 21 store cases and schema freshness; all three temporary core boundary cases also
 pass. The frozen independent backend build and all 17 framed cases now also pass
 in `target/plugin-refactor/agent-model-run-verify.py`. That external source predates
-the following scientific integration. The subsequent ordinary generic Host cases
-use the new source and remain pending; pending stages are not passes.
+the following scientific integration. The subsequent ordinary generic Host harness
+and independent backend both compiled, but all three Host cases failed before
+activation: the formatted manifest exceeded the 256 KiB raw-file limit. Its compact
+content was 124,058 bytes. The exporter and package builder now write compact JSON
+and check the encoded size; the public limit is unchanged. The failed v1 evidence
+is retained. A fresh combined ordinary/scientific Host run remains pending.
 This initial run input carries submitted text only, without scientific tools,
 context capture, attachments or continuation.
 
@@ -241,10 +245,16 @@ Host calls using durable tool request IDs. Native replies must match the origina
 binding, parent and project. Stop retains already dispatched R work until its real
 reply; disconnect recovery only reads the original delegated Operation. Six new
 framed fixtures, two owner cases, one additional store case and a separate
-two-package real-R Host harness are implemented but have not yet run. Manifest
-regeneration is also pending; the current source adds original-admission and tool
-inspection queries. The new serial science verifier is prepared but not started. Native scope and late-result claims remain unverified for this
-source until those checks complete. Native stdin is excluded from model context.
+two-package real-R Host harness are implemented. All 18 owner and 22 store tests
+now pass, including captured-request digest enforcement and the new native tool
+authorization cases. Framed and real-R acceptance remain pending. Explain can
+select a read-only `r.session@1` binding with only its read grant/scope; the focused
+fixtures also refuse using that binding for Run. Manifest regeneration is pending;
+the source adds original-admission and tool inspection queries. The serial science
+verifier has completed owner/store checks and is running framed, boundary,
+core-storage and independent ordinary/real-R Host acceptance. End-to-end native
+scope and late-result claims remain unverified for this source until those checks
+complete. Native stdin is excluded from model context.
 
 This remains incomplete Agent migration. Scientific execution acceptance and native
 Agent transport composition, context providers, Agent views, Studio Agent

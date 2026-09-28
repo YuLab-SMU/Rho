@@ -33,6 +33,9 @@ impl Fixture {
         } else {
             call("science-run", "agent.model.run", input, true)
         };
+        self.scientific_admit(native).await
+    }
+    async fn scientific_admit(&mut self, native: PluginCall) -> PluginCall {
         self.writer
             .send(native.request.clone(), RpcBody::Invoke(native.clone()))
             .await
@@ -400,6 +403,7 @@ async fn scientific_admission_requires_captured_grants_and_exact_target_before_m
         "foreign-project",
         "no-target",
         "wrong-version",
+        "query-binding-cannot-run",
         "unsupported-mode",
     ] {
         let mut f = Fixture::start_with_grants(case != "missing-grant").await;
@@ -410,6 +414,9 @@ async fn scientific_admission_requires_captured_grants_and_exact_target_before_m
             "foreign-project" => input["r"]["project"] = json!("foreign"),
             "no-target" => input["r"]["target"] = Value::Null,
             "wrong-version" => input["r"]["capability"]["version"] = json!(1),
+            "query-binding-cannot-run" => {
+                input["r"]["capability"] = json!({"id":"r.session","version":1})
+            }
             "unsupported-mode" => input["mode"] = json!("edit"),
             _ => {}
         }
@@ -454,11 +461,16 @@ async fn scientific_model_cannot_expand_explain_or_choose_provider_via_tool_argu
 
 #[tokio::test]
 async fn scientific_explain_uses_only_the_original_readonly_r_query() {
-    let mut f = Fixture::start_with_grants(true).await;
+    let mut f = Fixture::start_with_optional(&["r.session"]).await;
     let model = SyntheticModel::with_tool(Some(("r_session".into(), json!({})))).await;
     f.model_settings(&model).await;
-    let input = f.science_input("explain").await;
-    let native = f.scientific_begin(input, true).await;
+    let mut input = f.science_input("explain").await;
+    // A read-only provider need not advertise r.execute just to explain its session.
+    input["r"]["capability"] = json!({"id":"r.session","version":1});
+    let mut native = scientific_call("science-run", "agent.model.run", input, true);
+    native.scopes.remove("workspace.run_r");
+    native.scopes.remove("operation.read");
+    let native = f.scientific_admit(native).await;
     f.session_observation(&native).await;
     model.entered().await;
     let run = f.original_run().await;

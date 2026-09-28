@@ -871,7 +871,14 @@ fn native_plugin_tool_binds_revision_target_mode_and_original_request_before_dis
 #[test]
 fn native_explain_reads_only_captured_r_and_cannot_acquire_execution_or_change_provider_on_retry() {
     let f = Fixture::new();
-    let origin = native_origin();
+    let mut origin = native_origin();
+    origin.r.as_mut().unwrap().capability =
+        serde_json::from_value(serde_json::json!({"id":"r.session","version":1})).unwrap();
+    assert!(
+        f.owner
+            .start_native(&f.actor, f.request(), origin.clone(), 3)
+            .is_err()
+    );
     let mut input = f.request();
     input.grant.mode = ComponentAgentMode::Explain;
     let run = f
@@ -891,6 +898,11 @@ fn native_explain_reads_only_captured_r_and_cannot_acquire_execution_or_change_p
     f.owner
         .begin_model_call(f.actor.scope(), &run.run_id, 5)
         .unwrap();
+    let ComponentToolAction::PluginInvoke(mut execution) = native_execution(&origin) else {
+        panic!()
+    };
+    execution.binding.capability =
+        serde_json::from_value(serde_json::json!({"id":"r.execute","version":2})).unwrap();
     assert!(
         f.owner
             .admit_tool(
@@ -898,7 +910,7 @@ fn native_explain_reads_only_captured_r_and_cannot_acquire_execution_or_change_p
                 &run.run_id,
                 1,
                 "execute",
-                native_execution(&origin),
+                ComponentToolAction::PluginInvoke(execution),
                 6
             )
             .is_err()

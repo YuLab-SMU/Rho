@@ -22,7 +22,10 @@ pub(super) fn validate_targets(
         (None, None) if request.grant.mode == ComponentAgentMode::Explain => Ok(()),
         (Some(binding), Some(session))
             if binding.provider.instance.as_str() == session.workspace_instance_id
-                && binding.target.as_deref() == Some(session.session_id.as_str()) =>
+                && binding.target.as_deref() == Some(session.session_id.as_str())
+                && (request.grant.mode == ComponentAgentMode::Explain
+                    || (binding.capability.id.as_str() == "r.execute"
+                        && binding.capability.version == 2)) =>
         {
             Ok(())
         }

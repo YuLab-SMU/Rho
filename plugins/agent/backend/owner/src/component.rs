@@ -85,8 +85,8 @@ pub struct ComponentNativeRunOrigin {
     pub operation: OperationId,
     pub request: RequestId,
     pub binding: ProviderBinding,
-    /// Exact selected R provider and session. Capability is r.execute@2 even
-    /// for Explain; the task's captured mode separately controls execution.
+    /// Exact selected R provider and session. Explain may capture r.session@1;
+    /// Run requires r.execute@2. Captured mode independently gates mutation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub r: Option<ProviderBinding>,
 }
@@ -99,8 +99,11 @@ impl ComponentNativeRunOrigin {
             return Err(invalid("Invalid native model run admission"));
         }
         if let Some(r) = &self.r {
-            if r.capability.id.as_str() != "r.execute"
-                || r.capability.version != 2
+            let supported = matches!(
+                (r.capability.id.as_str(), r.capability.version),
+                ("r.session", 1) | ("r.execute", 2)
+            );
+            if !supported
                 || r.project != self.binding.project
                 || r.target.as_deref().is_none_or(str::is_empty)
             {

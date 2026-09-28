@@ -84,7 +84,9 @@ pub(crate) fn validate_selection(
     mode: ComponentAgentMode,
 ) -> Result<(), Failure> {
     if let Some(r) = r {
-        if r.capability != key("r.execute", 2)
+        let supported = r.capability == key("r.execute", 2)
+            || (mode == ComponentAgentMode::Explain && r.capability == key("r.session", 1));
+        if !supported
             || r.project != call.binding.project
             || r.target.as_deref().is_none_or(str::is_empty)
         {
@@ -532,6 +534,14 @@ pub(crate) async fn inspect_original(
         require_grant(metadata, call, &capability, "operation.read")?;
     }
     let args: ModelTool = decode(&call.arguments)?;
+    if [&args.run_id, &args.receipt_id]
+        .iter()
+        .any(|id| id.is_empty() || id.len() > 160)
+    {
+        return Err(Failure::invalid(
+            "Invalid original task or tool receipt identity",
+        ));
+    }
     let run = metadata
         .owner
         .store

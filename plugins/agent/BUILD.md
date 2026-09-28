@@ -10,6 +10,8 @@ prunes the copied lockfile for the native target and verifies source containment
 Inside that standalone package, run `node build.mjs` to reproduce `plugin.json`
 and `dist/rho-agent-backend`. All first-party sources, dependency locks, license
 and these instructions are included in the package inventory.
+The generated manifest uses compact JSON so the complete encoded file, including
+its source inventory, remains within the public protocol's 256 KiB read limit.
 
 The current process contributes task metadata queries and model-task create,
 draft, title/archive, explicit control-transfer and model-configuration Operations.
@@ -37,7 +39,8 @@ model engine, retained native admission and task events. Its original-request/ru
 queries and event pages are read-only. Explicit stop, disable and controller
 takeover fence the same live loop. Repeated requests and reopen never restart it.
 An optional exact R binding and Explain/Run mode select scientific access. Activate
-only the desired optional capabilities: `r.session@1` for observation, and
+only the desired optional capabilities: `r.session@1` for observation (an Explain
+request can select that read-only binding directly), and
 `r.execute@2`, `operation.get@1` and `plugins.delegated_operation@1` for execution
 and original-result inspection. The original caller must also hold each selected
 scope. Model arguments carry only code; they cannot replace the selected provider,
@@ -68,7 +71,9 @@ same native ports. All projects, instance storage and keys are disposable.
 
 `RHO_ARK=/absolute/existing/ark RHO_R_HOME=/absolute/existing/R/home node
 scripts/test-agent-plugin-real-r.mjs` freezes a generic plugin-only Host harness
-and builds both packages outside the checkout. It runs a disposable native R
+and builds both packages outside the checkout. It also freezes and reruns the
+ordinary metadata, key and model lifetime harness against that same Agent package.
+It runs a disposable native R
 counter through the loopback model, checks native causation and retained reports,
 stops model waiting while R is executing, and verifies repeated task requests do
 not repeat scientific effects. It does not contact external models or use existing

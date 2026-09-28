@@ -3,6 +3,13 @@ use rho_plugin_sdk::{BackendConnection, RpcReader, RpcWriter, protocol::*};
 use serde_json::{Value, json};
 use tokio::io::{DuplexStream, ReadHalf, WriteHalf};
 
+const SCIENTIFIC_GRANTS: &[&str] = &[
+    "r.session",
+    "r.execute",
+    "operation.get",
+    "plugins.delegated_operation",
+];
+
 fn id(value: &str) -> RequestId {
     RequestId::new(value).unwrap()
 }
@@ -51,6 +58,9 @@ impl Fixture {
         Self::start_with_grants(false).await
     }
     async fn start_with_grants(scientific: bool) -> Self {
+        Self::start_with_optional(if scientific { SCIENTIFIC_GRANTS } else { &[] }).await
+    }
+    async fn start_with_optional(optional: &[&str]) -> Self {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path().canonicalize().unwrap();
         let project = root.join("project");
@@ -61,7 +71,7 @@ impl Fixture {
             project_root: project.to_str().unwrap().into(),
             data_root: data.to_str().unwrap().into(),
         };
-        Self::open_with_grants(directory, environment, scientific).await
+        Self::open_with_optional(directory, environment, optional).await
     }
     async fn open(directory: tempfile::TempDir, environment: BackendEnvironment) -> Self {
         Self::open_with_grants(directory, environment, false).await
@@ -70,6 +80,18 @@ impl Fixture {
         directory: tempfile::TempDir,
         environment: BackendEnvironment,
         scientific: bool,
+    ) -> Self {
+        Self::open_with_optional(
+            directory,
+            environment,
+            if scientific { SCIENTIFIC_GRANTS } else { &[] },
+        )
+        .await
+    }
+    async fn open_with_optional(
+        directory: tempfile::TempDir,
+        environment: BackendEnvironment,
+        optional: &[&str],
     ) -> Self {
         let (host, backend) = tokio::io::duplex(65536);
         let (input, output) = tokio::io::split(backend);
@@ -96,9 +118,12 @@ impl Fixture {
                     grants: {
                         let manifest = manifest::manifest();
                         let mut grants = manifest.requires;
-                        if scientific {
-                            grants.extend(manifest.optional_requires);
-                        }
+                        grants.extend(
+                            manifest
+                                .optional_requires
+                                .into_iter()
+                                .filter(|grant| optional.contains(&grant.capability.id.as_str())),
+                        );
                         grants
                     },
                     resource_channel: None,
