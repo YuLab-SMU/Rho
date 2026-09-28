@@ -54,8 +54,11 @@ current normal/narrow/wide, settings and scientific-state captures were inspecte
 without visible clipping, missing glyphs or overlapping controls. The independent
 assembly passes all 14 owner and 15 store cases and verifies the public schemas.
 All 18 fixture-engine real-R source/execution cases pass with the new store; ten
-live-model cases were excluded. The current binary/manual-handoff run remains in
-progress. An initial
+live-model cases were excluded. The current binary build and selected manual-handoff
+Chrome case also pass. All five fresh handoff captures were inspected: constrained,
+320 px (including the scrolled target), wide and recovered receipt. Controls fit
+without overlap or horizontal overflow; scrolling retains the action footer. These
+are existing Agent views, not ordinary-plugin view acceptance. An initial
 all-platform offline metadata query failed on an uncached non-host dependency;
 the Apple Silicon filtered query passed without downloads.
 
@@ -107,12 +110,13 @@ current end-to-end acceptance from it. Details and commands are in
 `target/plugin-refactor/agent-component-verification.txt` and the versioned logs
 and interruption records alongside it. Inspect live verification processes before
 starting another Cargo invocation.
-That serial run completed successfully. The now-running
+That serial run completed successfully. The subsequent
 `target/plugin-refactor/agent-storage-verify.py` runs the new owner/store and core
 storage cases, regenerates the public SDK, checks an independent store/owner
 assembly, repeats real R with the new storage and exercises the existing
-manual-handoff Chrome flow. It supersedes the prepared handoff-only sequence.
-Do not start it concurrently with Cargo.
+manual-handoff Chrome flow. It has now completed successfully. Its exact results
+are in `target/plugin-refactor/agent-storage-results-v1.json`. The new public-port
+and ordinary metadata-backend verifier below is now the sole Cargo owner.
 
 The preceding engine baseline at `1c871a8e` remains separate: 75 Host/storage cases,
 18 real-R fixture-engine cases, 98 Agent client cases and 13 selected Chrome flows
@@ -131,8 +135,8 @@ not replay, cancel or commit scientific work. Typed Host errors preserve recover
 without printing it in debug output. Seven focused tests, including a framed
 exchange over bounded duplex I/O, are added but not yet executed. This is a public
 transport building block; Agent's ordinary backend still needs to consume it.
-The new SDK source was written after the active storage-integration binaries were
-compiled. Its own focused checks must run after the current serial verifier.
+The new SDK source was written after the storage-integration binaries were
+compiled. Its own focused checks are now running in the follow-up serial verifier.
 
 The generic `views.caller` query now exposes the original authenticated view,
 window and connection identities without private tokens. Native ingress captures
@@ -140,8 +144,8 @@ the identity, backend hops retain it, and missing/closing/stale views fail rathe
 than becoming non-view callers. It reads existing state and does not authorize
 future writes. The new generic Host fixture covers two delegation hops, forged
 selectors, lost scopes and closure during accepted work. Its tests, public type
-generation and independent consumer validation remain pending after the current
-serial storage verifier. Existing storage results do not validate this new port.
+generation and independent consumer validation remain pending in the follow-up
+serial verifier. Existing storage results do not validate this new port.
 
 An ordinary Agent metadata backend has now been added in source. It composes the
 same public task owner and Agent store in an isolated process, uses bounded SDK
@@ -150,10 +154,10 @@ creation, draft saving, title/archive updates and explicit controller takeover.
 It rejects caller-selected identity/paths, separates non-view controllers, preserves
 version checks and retains submitted results until their original Host settlement.
 Five framed-protocol fixtures and an independent-package generic Host fixture are
-added. Compilation, manifest generation and those runtime checks are pending;
-the current verifier is still finishing the preceding storage acceptance. The
-follow-up sequence is `target/plugin-refactor/agent-public-ports-verify.py`; run
-only after the current Cargo owner ends. Static dependency, source containment,
+added. Compilation, manifest generation and those runtime checks are pending in
+`target/plugin-refactor/agent-public-ports-verify.py`, which is now running after
+the completed storage acceptance. Do not start another Cargo command concurrently.
+Static dependency, source containment,
 documentation map and script syntax checks pass for the new source.
 
 This remains incomplete Agent migration. Model execution and native Agent transport
