@@ -340,11 +340,17 @@ and all 27 framed cases pass, as do the independent package build and its 27 cas
 That v2 acceptance predates the added failed-disconnect release check. The subsequent
 architecture check found the new package-internal composition edges were missing
 from its declared map; the map now names the public native/client libraries without
-allowing private core imports. Final focused, framed, independent/generic-Host and
-boundary acceptance is running in the serial v3 verifier. Its Host fixture checks
-native task metadata, attachment journal exclusion, original request identity and
-separate instance storage. Logs/results are in
-`target/plugin-refactor/agent-native-backend-*-v3.*`; earlier failure logs remain.
+allowing private core imports. On the final source, all five focused native cases
+and all 28 framed cases pass. The independent package builds and passes the same
+28 cases. All four generic Host cases now pass, including native task metadata,
+attachment journal exclusion, original request identity and separate instance
+storage. The Host harness bytes were unchanged by the independent package build.
+Architecture and its allow/reject fixtures, private boundaries, governance and
+diff checks also pass. The first Host run was interrupted by the turn transition
+without a terminal result; its absent processes were verified before rerunning
+only that frozen harness and the remaining static checks. Logs/results are in
+`target/plugin-refactor/agent-native-backend-results-v3.json` and
+`agent-native-backend-results-v4.json`; earlier failed/interrupted logs remain.
 The endpoint still advertises no scientific tools; contributed context, public
 foreign-controller presence, full-size resource transfer and ordinary Agent views
 remain unfinished. Current uploads are bounded to 524288 encoded bytes. No installed
