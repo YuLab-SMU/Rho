@@ -46,13 +46,14 @@ The package verifies its format and refuses unrelated/unsupported databases befo
 schema changes. All nine public store cases (seven moved, two new) pass. All 75
 affected Host/storage cases now pass on the credential-extraction source, including
 the two new core composition cases, all six handoff cases, 40 stored component
-cases and 27 Host task/recovery cases. Public dependency
+cases and 27 Host task/recovery cases. The focused Host history case also passes. Public dependency
 containment, native-target metadata and architecture checks pass. The current
 binary builds and its help/startup check passes with the new store. All 13 selected
 component Chrome flows pass; two opt-in real-model cases were excluded. All nine
 current normal/narrow/wide, settings and scientific-state captures were inspected
-without visible clipping, missing glyphs or overlapping controls. Independent
-credential tests and real-R/manual-handoff acceptance remain in progress. An initial
+without visible clipping, missing glyphs or overlapping controls. The independent
+assembly passes all 14 owner and 15 store cases and verifies the public schemas.
+Real-R/manual-handoff acceptance remains in progress. An initial
 all-platform offline metadata query failed on an uncached non-host dependency;
 the Apple Silicon filtered query passed without downloads.
 
@@ -61,16 +62,18 @@ locking, atomic replacement, immutable key references, caller/project filtering 
 redacted diagnostics. The Host keeps only temporary path selection and typed
 forwarding. The public owner requires an explicit absolute path; missing-key reads
 and removals do not create a credential directory. Four credential cases moved with
-the implementation and two location/read-isolation cases were added. Their tests
-have not yet run: the active verifier compiled its first owner/store binaries before
-this credential change, while the later independent assembly will use the new source.
+the implementation and two location/read-isolation cases were added. All six now
+pass in the independent assembly; the first owner/store run predates this change
+and remains a separate baseline.
 No actual user credential files were opened or changed by development checks.
 
 Manual handoff policy and contracts have now moved into the public Agent package;
 the Application implementation is a typed forwarding adapter to the same atomic
 repository. The original caller validator and target writer gates are retained.
 All 14 public owner cases now pass, including the five new handoff cases. The
-serialization/digest boundary case also passes. Public handoff SDK generation remains pending. All six existing
+serialization/digest boundary case also passes. Public handoff SDK generation,
+independent strict TypeScript consumption and independently assembled schema
+freshness now pass. All six existing
 SQLite handoff cases pass before the subsequent storage split, including write-failure
 rollback, durable idempotency, stale material, scoped controllers and asset separation. This change
 does not create a model turn, transfer uploads or move grants between tasks.
