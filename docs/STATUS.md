@@ -318,8 +318,9 @@ Requests, streaming responses, sessions, catalogs and results are bounded. Expli
 shutdown confirms HTTP/session cleanup only. The first four loopback tests compiled;
 three passed and one exposed the SDK's successful response for deleting a foreign
 session. The boundary now refuses unknown sessions before SDK dispatch, and a fifth
-fixture checks streaming-response capacity. The corrected run and affected native,
-independent-package and Host checks are running, not yet passes. Logs are retained
+fixture checks streaming-response capacity. All five corrected HTTP cases and all
+12 native runtime cases pass. The same 12 cases also pass in an independent source
+assembly. Host integration and final mapped checks are still running, not yet passes. Logs are retained
 under `target/plugin-refactor/agent-native-mcp-*-v1.log` and `*-v2.log`. This is a
 transport primitive; ordinary native backend and scientific-tool composition remain
 unfinished. No actual model, user credentials or user sessions are used.
