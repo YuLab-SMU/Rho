@@ -3,7 +3,8 @@ use crate::AgentStore;
 use rho_agent_api::*;
 use rho_agent_owner::{
     AgentTaskError, AgentTaskRepository, AgentTaskScope, AgentTaskWrite, MAX_AGENT_EVENT_BYTES,
-    MAX_AGENT_EVENTS, MAX_AGENT_TASKS, MAX_PROJECT_AGENT_EVENT_BYTES, StoredAgentTask,
+    MAX_AGENT_EVENTS, MAX_AGENT_TASKS, MAX_PROJECT_AGENT_EVENT_BYTES,
+    MAX_PROJECT_NATIVE_ADMISSION_BYTES, StoredAgentNativeAdmission, StoredAgentTask,
 };
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
@@ -27,6 +28,12 @@ pub(crate) fn initialize(c: &Connection) -> Result<(), String> {
         task_id TEXT NOT NULL, digest TEXT NOT NULL, updated_at INTEGER NOT NULL,
         value TEXT NOT NULL CHECK(json_valid(value)), PRIMARY KEY(project,principal,request_id));
       CREATE INDEX IF NOT EXISTS agent_task_receipt_order ON agent_task_receipts(project,principal,task_id,updated_at DESC);
+      CREATE TABLE IF NOT EXISTS agent_native_admissions (
+        project TEXT NOT NULL, principal TEXT NOT NULL, request_id TEXT NOT NULL,
+        task_id TEXT NOT NULL, native_operation TEXT NOT NULL, native_request TEXT NOT NULL,
+        bytes INTEGER NOT NULL, value TEXT NOT NULL CHECK(json_valid(value)),
+        PRIMARY KEY(project,principal,request_id),
+        UNIQUE(project,principal,native_operation), UNIQUE(project,principal,native_request));
       CREATE TABLE IF NOT EXISTS agent_task_events (
         project TEXT NOT NULL, principal TEXT NOT NULL, task_id TEXT NOT NULL,
         sequence INTEGER NOT NULL, event_id TEXT NOT NULL, bytes INTEGER NOT NULL,
@@ -262,10 +269,47 @@ impl AgentTaskRepository for AgentStore {
             bytes,
         )
     }
+    fn agent_native_admission(
+        &self,
+        scope: &AgentTaskScope,
+        request: &str,
+    ) -> Result<Option<StoredAgentNativeAdmission>, AgentTaskError> {
+        let c = self.0.lock().map_err(error)?;
+        let value: Option<String> = c.query_row("SELECT value FROM agent_native_admissions WHERE project=?1 AND principal=?2 AND request_id=?3", params![scope.project,scope.principal,request], |r|r.get(0)).optional().map_err(error)?;
+        let Some(value) = value else {
+            return Ok(None);
+        };
+        let capture: StoredAgentNativeAdmission = serde_json::from_str(&value).map_err(error)?;
+        let receipt: String = c.query_row("SELECT value FROM agent_task_receipts WHERE project=?1 AND principal=?2 AND request_id=?3",params![scope.project,scope.principal,request],|r|r.get(0)).map_err(error)?;
+        capture.validate(scope, &serde_json::from_str(&receipt).map_err(error)?)?;
+        Ok(Some(capture))
+    }
+    fn commit_agent_native_admission(
+        &self,
+        scope: &AgentTaskScope,
+        write: AgentTaskWrite<'_>,
+        admission: &StoredAgentNativeAdmission,
+    ) -> Result<(), AgentTaskError> {
+        if write.receipts.len() != 1 {
+            return Err(AgentTaskError::RequestConflict);
+        }
+        admission.validate(scope, &write.receipts[0])?;
+        self.commit_task(scope, write, Some(admission))
+    }
     fn commit_agent_task(
         &self,
         scope: &AgentTaskScope,
         write: AgentTaskWrite<'_>,
+    ) -> Result<(), AgentTaskError> {
+        self.commit_task(scope, write, None)
+    }
+}
+impl AgentStore {
+    fn commit_task(
+        &self,
+        scope: &AgentTaskScope,
+        write: AgentTaskWrite<'_>,
+        admission: Option<&StoredAgentNativeAdmission>,
     ) -> Result<(), AgentTaskError> {
         let record = write.task;
         let id = &record.task.task_id;
@@ -311,6 +355,32 @@ impl AgentTaskRepository for AgentStore {
         for receipt in write.receipts {
             if receipt.task_id != *id {
                 return Err(AgentTaskError::NotFound);
+            }
+            let retained:Option<String>=tx.query_row("SELECT value FROM agent_native_admissions WHERE project=?1 AND principal=?2 AND request_id=?3",params![scope.project,scope.principal,receipt.request_id],|r|r.get(0)).optional().map_err(error)?;
+            if let Some(value) = retained {
+                let retained: StoredAgentNativeAdmission =
+                    serde_json::from_str(&value).map_err(error)?;
+                retained.validate(scope, receipt)?;
+                if let Some(admission) = admission {
+                    if serde_json::to_value(&retained).map_err(error)?
+                        != serde_json::to_value(admission).map_err(error)?
+                    {
+                        return Err(AgentTaskError::RequestConflict);
+                    }
+                }
+            } else if let Some(admission) = admission {
+                let reused:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM agent_task_receipts WHERE project=?1 AND principal=?2 AND request_id=?3) OR EXISTS(SELECT 1 FROM agent_native_admissions WHERE project=?1 AND principal=?2 AND (native_operation=?4 OR native_request=?5))",params![scope.project,scope.principal,receipt.request_id,admission.origin.operation.as_str(),admission.origin.request.as_str()],|r|r.get(0)).map_err(error)?;
+                if reused {
+                    return Err(AgentTaskError::RequestConflict);
+                }
+                let value = serde_json::to_string(admission).map_err(error)?;
+                let used:usize=tx.query_row("SELECT COALESCE(SUM(bytes),0) FROM agent_native_admissions WHERE project=?1 AND principal=?2",params![scope.project,scope.principal],|r|r.get(0)).map_err(error)?;
+                if used.saturating_add(value.len()) > MAX_PROJECT_NATIVE_ADMISSION_BYTES {
+                    return Err(AgentTaskError::Budget(
+                        "Original native command storage is full".into(),
+                    ));
+                }
+                tx.execute("INSERT INTO agent_native_admissions(project,principal,request_id,task_id,native_operation,native_request,bytes,value) VALUES(?1,?2,?3,?4,?5,?6,?7,?8)",params![scope.project,scope.principal,receipt.request_id,id,admission.origin.operation.as_str(),admission.origin.request.as_str(),value.len(),value]).map_err(error)?;
             }
             let prior:Option<String>=tx.query_row("SELECT digest FROM agent_task_receipts WHERE project=?1 AND principal=?2 AND request_id=?3",params![scope.project,scope.principal,receipt.request_id],|r|r.get(0)).optional().map_err(error)?;
             if prior.as_ref().is_some_and(|s| *s != receipt.request_digest) {
@@ -691,3 +761,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "agent_tasks/native_admission_tests.rs"]
+mod native_admission_tests;

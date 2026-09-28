@@ -2,10 +2,11 @@
 //! One writer for persistent Agent application metadata. Native actions are
 //! admitted here before the Host adapter touches a process or transport.
 use rho_agent_api::*;
+mod native_admission;
+pub use native_admission::*;
 mod boundary;
 pub use boundary::*;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
 pub const MAX_AGENT_TASKS: usize = 4096;
@@ -52,8 +53,19 @@ pub struct AgentTaskWrite<'a> {
 
 pub trait AgentTaskRepository: Send + Sync {
     /// Bounded projection of the two existing task owners in one read snapshot.
-    fn project_agent_tasks(&self, _scope: &AgentTaskScope, _archived: Option<bool>, _before: Option<&str>, _limit: usize, _native_host: &str, _rho_host: &str, _rho_live: &[String]) -> Result<ProjectAgentTaskPage, AgentTaskError> {
-        Err(AgentTaskError::Storage("Unified task reading is unavailable".into()))
+    fn project_agent_tasks(
+        &self,
+        _scope: &AgentTaskScope,
+        _archived: Option<bool>,
+        _before: Option<&str>,
+        _limit: usize,
+        _native_host: &str,
+        _rho_host: &str,
+        _rho_live: &[String],
+    ) -> Result<ProjectAgentTaskPage, AgentTaskError> {
+        Err(AgentTaskError::Storage(
+            "Unified task reading is unavailable".into(),
+        ))
     }
     fn agent_task(
         &self,
@@ -113,6 +125,26 @@ pub trait AgentTaskRepository: Send + Sync {
         asset: &AgentAsset,
         bytes: &[u8],
     ) -> Result<(), AgentTaskError>;
+    fn agent_native_admission(
+        &self,
+        _scope: &AgentTaskScope,
+        _request_id: &str,
+    ) -> Result<Option<StoredAgentNativeAdmission>, AgentTaskError> {
+        Err(AgentTaskError::Storage(
+            "Native admission observations are unavailable".into(),
+        ))
+    }
+    /// Persist original capture and receipt in the same task transaction.
+    fn commit_agent_native_admission(
+        &self,
+        _scope: &AgentTaskScope,
+        _write: AgentTaskWrite<'_>,
+        _admission: &StoredAgentNativeAdmission,
+    ) -> Result<(), AgentTaskError> {
+        Err(AgentTaskError::Storage(
+            "Atomic native admission is unavailable".into(),
+        ))
+    }
     fn commit_agent_task(
         &self,
         scope: &AgentTaskScope,
@@ -135,8 +167,14 @@ pub struct AgentTaskOwner {
 }
 
 impl AgentTaskOwner {
-    pub fn with_handoff_write<T, E: From<AgentTaskError>>(&self, write: impl FnOnce() -> Result<T, E>) -> Result<T, E> {
-        let _guard=self.gate.lock().map_err(|_| AgentTaskError::Storage("Agent metadata lock poisoned".into()))?;
+    pub fn with_handoff_write<T, E: From<AgentTaskError>>(
+        &self,
+        write: impl FnOnce() -> Result<T, E>,
+    ) -> Result<T, E> {
+        let _guard = self
+            .gate
+            .lock()
+            .map_err(|_| AgentTaskError::Storage("Agent metadata lock poisoned".into()))?;
         write()
     }
 }
@@ -219,11 +257,7 @@ impl AgentTaskOwner {
         }
         task
     }
-    pub fn get(
-        &self,
-        scope: &AgentTaskScope,
-        id: &str,
-    ) -> Result<StoredAgentTask, AgentTaskError> {
+    pub fn get(&self, scope: &AgentTaskScope, id: &str) -> Result<StoredAgentTask, AgentTaskError> {
         self.store
             .agent_task(scope, id)?
             .map(|t| self.effective(t))
@@ -275,6 +309,27 @@ impl AgentTaskOwner {
         request: &AgentTaskRequest,
         now: u64,
     ) -> Result<AgentTaskAdmission, AgentTaskError> {
+        self.admit_inner(scope, request, now, None)
+    }
+    /// The containing backend validates live caller/instance identity before this
+    /// admission. Retained origin records support inspection, never later dispatch.
+    pub fn admit_native(
+        &self,
+        scope: &AgentTaskScope,
+        request: &AgentTaskRequest,
+        origin: AgentNativeCommandOrigin,
+        now: u64,
+    ) -> Result<AgentTaskAdmission, AgentTaskError> {
+        origin.validate(scope)?;
+        self.admit_inner(scope, request, now, Some(origin))
+    }
+    fn admit_inner(
+        &self,
+        scope: &AgentTaskScope,
+        request: &AgentTaskRequest,
+        now: u64,
+        origin: Option<AgentNativeCommandOrigin>,
+    ) -> Result<AgentTaskAdmission, AgentTaskError> {
         let _gate = self
             .gate
             .lock()
@@ -283,13 +338,22 @@ impl AgentTaskOwner {
         if request.project_root != scope.project {
             return Err(AgentTaskError::NotFound);
         }
-        let digest = format!(
-            "{:x}",
-            Sha256::digest(serde_json::to_vec(request).map_err(|e| invalid(&e.to_string()))?)
-        );
+        let digest = agent_request_digest(request)?;
         if let Some(receipt) = self.store.agent_receipt(scope, &request.request_id)? {
             if receipt.request_digest != digest {
                 return Err(AgentTaskError::RequestConflict);
+            }
+            if let Some(origin) = &origin {
+                let original = self
+                    .store
+                    .agent_native_admission(scope, &request.request_id)?
+                    .ok_or(AgentTaskError::RequestConflict)?;
+                original.validate(scope, &receipt)?;
+                // A new transport request only observes this original admission.
+                // It cannot move the command to a different Agent instance.
+                if original.origin.binding != origin.binding {
+                    return Err(AgentTaskError::RequestConflict);
+                }
             }
             return Ok(AgentTaskAdmission {
                 task: self.get(scope, &receipt.task_id)?,
@@ -383,18 +447,42 @@ impl AgentTaskOwner {
             let expected = task.revision.clone();
             (task, draft, Some(expected))
         };
-        if task.task.archived && matches!(request.command, AgentTaskCommand::SaveDraft { .. } | AgentTaskCommand::Send { .. } | AgentTaskCommand::AddAsset { .. } | AgentTaskCommand::RemoveAsset { .. } | AgentTaskCommand::Configure { .. } | AgentTaskCommand::Connect { .. } | AgentTaskCommand::Resume { .. }) {
+        if task.task.archived
+            && matches!(
+                request.command,
+                AgentTaskCommand::SaveDraft { .. }
+                    | AgentTaskCommand::Send { .. }
+                    | AgentTaskCommand::AddAsset { .. }
+                    | AgentTaskCommand::RemoveAsset { .. }
+                    | AgentTaskCommand::Configure { .. }
+                    | AgentTaskCommand::Connect { .. }
+                    | AgentTaskCommand::Resume { .. }
+            )
+        {
             return Err(invalid("Unarchive this task before editing or sending"));
         }
+        let native_input = origin.as_ref().map(|_| (task.task.clone(), draft.clone()));
         let mut receipt = AgentCommandReceipt {
             request_id: request.request_id.clone(),
             task_id: task.task.task_id.clone(),
             command: agent_command_name(&request.command).into(),
-            input_digest: format!("{:x}", Sha256::digest(serde_json::to_vec(&serde_json::json!({"command":request.command,"draft":draft.content,"model":task.task.model,"effort":task.task.effort,"mode":task.task.mode})).map_err(|e|invalid(&e.to_string()))?)),
-            request_digest: digest,
-            input_assets: if matches!(request.command,AgentTaskCommand::Send{..}) {draft.content.assets.clone()} else {vec![]},
-            input_context: if matches!(request.command,AgentTaskCommand::Send{..}) {draft.content.context.clone()} else {vec![]},
-            submitted_draft: if matches!(request.command,AgentTaskCommand::Send{..}) {Some(draft.content.clone())} else {None},
+            input_digest: agent_input_digest(request, &task.task, &draft)?,
+            request_digest: digest.clone(),
+            input_assets: if matches!(request.command, AgentTaskCommand::Send { .. }) {
+                draft.content.assets.clone()
+            } else {
+                vec![]
+            },
+            input_context: if matches!(request.command, AgentTaskCommand::Send { .. }) {
+                draft.content.context.clone()
+            } else {
+                vec![]
+            },
+            submitted_draft: if matches!(request.command, AgentTaskCommand::Send { .. }) {
+                Some(draft.content.clone())
+            } else {
+                None
+            },
             status: "succeeded".into(),
             native_session_id: task.task.native_session_id.clone(),
             native_turn_id: None,
@@ -592,16 +680,29 @@ impl AgentTaskOwner {
         if task.attachment.controller.window_id == request.window.window_id {
             task.attachment.controller = request.window.clone();
         }
-        self.store.commit_agent_task(
-            scope,
-            AgentTaskWrite {
-                expected_revision: expected.as_deref(),
-                task: &task,
-                draft: Some(&draft),
-                receipts: std::slice::from_ref(&receipt),
-                events: &[],
-            },
-        )?;
+        let write = AgentTaskWrite {
+            expected_revision: expected.as_deref(),
+            task: &task,
+            draft: Some(&draft),
+            receipts: std::slice::from_ref(&receipt),
+            events: &[],
+        };
+        if let Some(origin) = origin {
+            let (input_task, input_draft) = native_input.unwrap();
+            let capture = StoredAgentNativeAdmission {
+                input_task,
+                input_draft,
+                task_id: task.task.task_id.clone(),
+                request_digest: digest,
+                request: request.clone(),
+                origin,
+            };
+            capture.validate(scope, &receipt)?;
+            self.store
+                .commit_agent_native_admission(scope, write, &capture)?;
+        } else {
+            self.store.commit_agent_task(scope, write)?;
+        }
         Ok(AgentTaskAdmission {
             task,
             receipt,

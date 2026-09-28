@@ -273,8 +273,8 @@ This remains incomplete Agent migration. Native Agent transport composition,
 context providers, Agent views, Studio Agent
 assistance and final composition/default delivery remain active work. Synthetic
 diagnostics do not establish those features or real-provider quality.
-The next source change extracts native task scheduling, connection slots, event
-observation and cleanup into `plugins/agent/backend/native`. The Host delegates
+Native task scheduling, connection slots, event observation and cleanup now live
+in `plugins/agent/backend/native`. The Host delegates
 to that same injected owner/runtime; its duplicated scheduler and five pure
 runtime tests were removed. The package adds endpoint-open and post-open storage
 failure cases, plus an independent source assembly. Failed registration now closes
@@ -294,6 +294,18 @@ configuration by default, without opening native user credential files.
 Initial import warnings were corrected. Existing user Hosts and R sessions have
 not been replaced; runtime acceptance uses disposable projects. No full-workspace
 audit, installation or publication ran.
+
+Native command admission now atomically captures the original native parent,
+request, exact Agent binding, original scopes and pre-command task/draft input in
+the same Agent-owned transaction. Later edits and transport retries cannot replace
+the captured identity or input. Receipt display copies may be released while the
+immutable original remains readable. Binary attachment input requires a separate
+scoped Control; these records do not reconstruct authority or start a connection.
+All seven new real-store fixtures pass, covering concurrency, immutable capture,
+rollback, reopen, scope/parent reuse refusal and storage budgets. Affected owner,
+store, native runtime, Host and independent assembly checks are still running;
+they are not yet passes. Ordinary native backend/MCP composition remains unfinished. The preceding complete runtime/binary/recovery run froze its
+source before this admission addition.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,

@@ -1,7 +1,6 @@
 //! Transitional Host scope, context and native MCP adapter. The Agent package
 //! owns task admission, durable observations and native connection scheduling.
 use crate::{ApplicationStore, NextHost};
-use base64::{Engine, engine::general_purpose::STANDARD};
 use rho_agent_client::*;
 use rho_agent_native::{NativeTaskEndpoint, NativeTaskFailure, NativeTaskPort, NativeTaskRuntime};
 use rho_application::*;

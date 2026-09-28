@@ -210,6 +210,13 @@ a disposable Host crash and explicit resume. Its default fixture run observes
 only temporary configuration; native user settings are inspected only by explicit
 `--real-*` runs. Ordinary native-plugin composition remains a separate acceptance.
 
+Native command admission uses `cargo test -p rho-agent-store --lib
+native_admission --locked`. Its real-store fixtures cover pre-command captures,
+concurrent duplicates, original-parent retention, atomic write rollback, later
+receipt mutation, observation-only reopen, scoped visibility and admission budgets.
+The independent store/owner assembly includes these cases. These checks establish
+persistence invariants, not native plugin MCP or view acceptance.
+
 The public model driver is `plugins/agent/backend/engine`. Run `cargo test -p
 rho-agent-engine --locked` for the real Rig HTTP/SSE codecs and production-driver
 ports using local provider fixtures. `node scripts/test-agent-plugin-engine.mjs`

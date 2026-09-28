@@ -1165,6 +1165,20 @@ must pass PID/start/executable/ownership-marker checks before any replacement wr
 Disconnect is subject to that same proof. A resume cannot simply relabel an uncertain
 live transport as ready. Old-generation/session/turn/item events are fenced.
 
+The public native task owner's `admit_native` additionally captures the containing
+backend's original Operation/request, exact provider binding, project/principal
+and original scopes. Capture, task, draft and receipt commit in the same Agent
+transaction. The retained pre-command input is independent of subsequent draft
+and model-setting edits. Duplicate semantic requests return the original record;
+new transport identities cannot replace it or transfer it to another instance.
+Later native observations may update receipt outcomes but cannot change captured
+input. Captures have per-record and per-project budgets and exclude raw attachment
+bytes. They are inspection evidence, never reusable authority: the containing
+backend must validate live caller/instance identity before accepting a command,
+and native tools must retain the active original parent rather than reconstruct
+permissions from stored observations. This substrate does not itself compose the
+ordinary native backend or its scoped MCP endpoint.
+
 Every active task owns a native process; at most eight connections share a Host.
 Host restart leaves attachments disconnected until explicit Resume. Codex uses the
 exact thread ID, verifies cwd/ID and native idle, and reads native turn/item pages.

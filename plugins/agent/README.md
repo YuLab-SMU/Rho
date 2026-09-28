@@ -29,6 +29,17 @@ which are included in the independent source assemblies. The current Host conver
 Moving DTO ownership does not change wire field names, replay input, authorize tools or transfer scientific
 truth to the transport.
 
+`AgentTaskOwner::admit_native` atomically retains the containing backend's original
+Operation, request, exact provider binding and scopes with the task receipt and
+pre-command task/draft input. Later configuration or draft editing cannot change
+that capture. Identical retries observe the original admission; changed input,
+instance replacement and reusing an original native parent are refused. These
+records are recovery observations, not reusable dispatch credentials. The backend
+must still validate the current native caller and instance before admission.
+Captures are bounded to 128 KiB each and 64 MiB per project/principal. Binary
+attachment input is excluded; it requires a separate scoped ephemeral Control.
+Ordinary native connection/MCP composition is still separate work.
+
 `api::handoff` and `owner::handoff` own the handoff contract and policy. The
 containing owner supplies readable scientific references and the original live
 controller. The target writer gate and injected repository retain one atomic
@@ -41,7 +52,7 @@ initializing tables. It does not connect to a scientific journal or read the old
 Application task tables. The temporary core composition uses a separate
 `agent-v1.sqlite` suffix, keeps one store for both task owners and only forwards
 repository calls. Existing files are not imported or deleted. Ordinary backend
-instances must eventually supply their own managed plugin storage location.
+instances use their supplied managed plugin storage location.
 `CredentialFile::at` likewise takes an explicit absolute path, never searches for
 keys and performs no I/O at construction. Its locking, atomic writes and immutable
 references preserve accepted requests across replacement; reads/removals validate
