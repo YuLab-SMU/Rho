@@ -58,7 +58,7 @@ const allowed = {
   "rho-git": ["rho-files-engine"],
   "rho-sqlite": ["rho-contract", "rho-operation", "rho-application", "rho-agent-store", "rho-agent-owner"],
   "rho-r-runtime": ["rho-contract", "rho-workspace", "rho-r-api", "rho-r-engine", "rho-plugin-protocol"],
-  "rho-host": ["rho-plugin-protocol", "rho-plugins", "rho-agents", "rho-agent-client", "rho-agent-store", "rho-contract", "rho-operation", "rho-application", "rho-skills", "rho-adapter-skills", "rho-sqlite", "rho-workspace", "rho-r-runtime", "rho-project", "rho-git", "rho-environment", "rho-r-environment", "rho-execution", "rho-process", "rho-ssh"],
+  "rho-host": ["rho-plugin-protocol", "rho-plugins", "rho-agents", "rho-agent-client", "rho-agent-native", "rho-agent-store", "rho-contract", "rho-operation", "rho-application", "rho-skills", "rho-adapter-skills", "rho-sqlite", "rho-workspace", "rho-r-runtime", "rho-project", "rho-git", "rho-environment", "rho-r-environment", "rho-execution", "rho-process", "rho-ssh"],
   "rho-mcp": ["rho-contract", "rho-host"],
   "rho-agent-api": ["rho-plugin-protocol", "rho-r-api"],
   "rho-agent-backend": ["rho-plugin-sdk", "rho-agent-api", "rho-agent-owner", "rho-agent-store", "rho-agent-engine"],
@@ -66,10 +66,12 @@ const allowed = {
   "rho-agent-store": ["rho-agent-api", "rho-agent-owner"],
   "rho-agent-engine": ["rho-agent-api", "rho-agent-owner"],
   "rho-agent-client": ["rho-agent-api"],
+  "rho-agent-native": ["rho-agent-api", "rho-agent-owner", "rho-agent-client"],
   "rho-workbench": ["rho-plugin-protocol", "rho-contract", "rho-host", "rho-mcp"],
   "rho-cli": ["rho-contract", "rho-host", "rho-mcp", "rho-workbench", "rho-plugin-protocol", "rho-plugins"],
 };
 const pluginLibraries = {
+  "rho-agent-native": "plugins/agent/backend/native",
   "rho-agent-owner": "plugins/agent/backend/owner",
   "rho-agent-store": "plugins/agent/backend/store",
   "rho-agent-engine": "plugins/agent/backend/engine",
@@ -101,6 +103,7 @@ for (const pkg of metadata.packages) {
     if (dep.name.startsWith("rho-")) {
       if (["rho-host", "rho-mcp", "rho-workbench"].includes(pkg.name) && ["rho-plugin-protocol", "rho-plugins"].includes(dep.name) && dep.kind === "dev") continue;
       if (pkg.name === "rho-plugins" && dep.name === "rho-sqlite" && dep.kind === "dev") continue;
+      if (pkg.name === "rho-agent-native" && dep.name === "rho-agent-store" && dep.kind === "dev") continue;
       assert.ok(allowed[pkg.name].includes(dep.name),
         `${pkg.name} -> ${dep.name} bypasses the declared ownership boundary`);
     }

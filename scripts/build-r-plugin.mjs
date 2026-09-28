@@ -32,7 +32,7 @@ fs.writeFileSync(path.join(output,"Cargo.toml"),'[workspace]\nresolver = "3"\nme
 fs.copyFileSync(path.join(root,"Cargo.lock"),path.join(output,"Cargo.lock"));
 const installed=name=>fs.realpathSync(execFileSync("rustup",["which",name],{cwd:root,encoding:"utf8"}).trim());
 const env={...process.env,RHO_PLUGIN_CARGO:installed("cargo"),RUSTC:installed("rustc"),RUSTDOC:installed("rustdoc"),
- CARGO_BUILD_JOBS:"1",CARGO_TARGET_DIR:path.join(root,"target")};
+ CARGO_BUILD_JOBS:process.env.CARGO_BUILD_JOBS ?? "1",CARGO_TARGET_DIR:path.join(root,"target")};
 // Resolve the standalone dependency closure offline, then all builds are locked.
 execFileSync(env.RHO_PLUGIN_CARGO,["metadata","--offline","--format-version","1"],{cwd:output,env,stdio:"ignore"});
 const metadata=JSON.parse(execFileSync(env.RHO_PLUGIN_CARGO,["metadata","--no-deps","--offline","--format-version","1"],{cwd:output,env,encoding:"utf8"}));

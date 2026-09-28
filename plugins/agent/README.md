@@ -5,6 +5,9 @@ parts of the Agent plugin, including the component model-task state machine.
 `api/` owns its Rust DTOs; `sdk/` contains generated TypeScript declarations and
 JSON schemas. `backend/client/` owns deterministic Codex app-server, Kimi ACP and
 DeepSeek ACP communication, bounded observations and owned-process recovery.
+`backend/native/` owns native task scheduling, connection slots, original receipt
+observation and cleanup. It uses the same injected task owner as handoff, plus
+captured input and ephemeral endpoint ports; it does not open a core database.
 `backend/owner/` owns task admission, captured drafts, original receipts, control
 generation, observation-only restart handling, model-setting/credential validation,
 manual draft handoff and the repository ports. `backend/store/` owns the sole SQLite
@@ -66,6 +69,13 @@ native protocol/recovery fixtures. Those fixtures use local fake processes, neve
 real providers, model requests or user sessions. The native transport's explicit
 DeepSeek setup entry point is retained but is not invoked by these checks.
 
+`cargo test -p rho-agent-native --lib --locked` checks native scheduling and
+receipt recovery. `node scripts/test-agent-plugin-native.mjs` repeats the cases in
+an independent source assembly with the public owner/store/client dependencies.
+The temporary Host adapter delegates to this runtime while continuing to supply
+caller validation, scientific context capture and the scoped MCP lease. This
+extraction does not yet provide ordinary native-Agent process composition.
+
 `node scripts/test-agent-plugin-owner.mjs` builds the task owner and public API
 outside the checkout. Its focused fixtures cover original-request deduplication,
 scope and draft fences, atomic write failure, captured input retention, uncertain
@@ -117,12 +127,16 @@ the original loop. A duplicate semantic request returns the original run without
 reading a key or restarting, even if its new transport admission differs. It cannot
 replace the stored parent or change the provider binding. Tool intent receipts
 already have durable unique request IDs; native delegation will reuse these.
-This initial composition exposes submitted text only; it does not yet capture
-scientific context, attachments, continuation or grant native tools.
+An optional exact R provider/session and Explain/Run mode now select native
+observation or execution through public Host calls. The owner captures original
+grants, and native replies must match the original binding, project and parent.
+Stop retains already dispatched R work until its actual reply; original-result
+queries never replay it. The build instructions distinguish framed fixtures from
+the separate independent-package real-R acceptance.
 
-Scientific model-tool execution, native Agent connections, context providers and
-Agent views still require integration. Synthetic diagnostics and submitted-text
-runs do not establish scientific execution or real-provider quality. Default
+Native Agent connections, general context providers, attachments, continuation and
+Agent views still require ordinary backend integration. Synthetic diagnostics and
+submitted-text runs alone do not establish scientific execution or real-provider quality. Default
 delivery remains unfinished.
 The backend transport and independent Host verification commands are described
 in the build instructions.

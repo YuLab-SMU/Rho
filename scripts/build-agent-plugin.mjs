@@ -33,14 +33,14 @@ export function buildAgentPlugin(destination) {
     assert.ok(source.includes(from), `Dependency layout changed: ${file}`);
     fs.writeFileSync(location, source.replace(from, to));
   }
-  fs.writeFileSync(path.join(output, 'Cargo.toml'), '[workspace]\nresolver = "3"\nmembers = ["api", "backend", "backend/owner", "backend/store", "backend/engine", "backend/client", "public/r-api", "public/plugin-protocol", "public/plugin-sdk"]\n');
+  fs.writeFileSync(path.join(output, 'Cargo.toml'), '[workspace]\nresolver = "3"\nmembers = ["api", "backend", "backend/owner", "backend/store", "backend/engine", "backend/client", "backend/native", "public/r-api", "public/plugin-protocol", "public/plugin-sdk"]\n');
   fs.copyFileSync(path.join(root, 'Cargo.lock'), path.join(output, 'Cargo.lock'));
   const env = agentPluginBuildEnvironment();
   const target = execFileSync(env.RUSTC, ['-vV'], {encoding: 'utf8'}).match(/^host: (.+)$/m)?.[1];
   assert.ok(target);
   const metadata = JSON.parse(execFileSync(env.RHO_PLUGIN_CARGO, ['metadata', '--offline', '--filter-platform', target, '--format-version', '1'], {cwd: output, env, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024}));
   assert.deepEqual(metadata.packages.filter(pkg => metadata.workspace_members.includes(pkg.id)).map(pkg => pkg.name).sort(),
-    ['rho-agent-api', 'rho-agent-backend', 'rho-agent-client', 'rho-agent-engine', 'rho-agent-owner', 'rho-agent-store', 'rho-plugin-protocol', 'rho-plugin-sdk', 'rho-r-api']);
+    ['rho-agent-api', 'rho-agent-backend', 'rho-agent-client', 'rho-agent-engine', 'rho-agent-native', 'rho-agent-owner', 'rho-agent-store', 'rho-plugin-protocol', 'rho-plugin-sdk', 'rho-r-api']);
   for (const pkg of metadata.packages) {
     if (!pkg.source) assert.ok(pkg.manifest_path.startsWith(output + path.sep), `${pkg.name}: source leaves the independent package`);
     for (const dependency of pkg.dependencies) if (dependency.path)

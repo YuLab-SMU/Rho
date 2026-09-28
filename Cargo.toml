@@ -44,6 +44,7 @@ members = [
   "plugins/agent/api",
   "plugins/agent/backend",
   "plugins/agent/backend/client",
+  "plugins/agent/backend/native",
   "plugins/agent/backend/owner",
   "plugins/agent/backend/store",
   "plugins/agent/backend/engine",

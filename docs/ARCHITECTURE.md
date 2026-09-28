@@ -1147,8 +1147,8 @@ not supply an invented cost estimate.
 
 `AgentTask` binds project/principal, one runtime and one Rho-created native session.
 `AgentAttachment` is a short-lived connection with a controller window and generation.
-`AgentTaskDraft`, `AgentCommandReceipt` and `AgentTaskEvent` live in additive typed
-ApplicationStore tables. No abandoned store or external CLI session is imported.
+`AgentTaskDraft`, `AgentCommandReceipt` and `AgentTaskEvent` live in the
+package-owned Agent store. No abandoned store or external CLI session is imported.
 Native session IDs enter through the adapter, never arbitrary browser input.
 `/api/agents/tasks/query` performs bounded observations; `/api/agents/tasks/command`
 admits a task/window/generation-bound action. `/api/agents/test` is a separate
@@ -1851,6 +1851,7 @@ package inspection.
 | `crates/host` | Concrete composition and runtime configuration |
 | `plugins/agent/api`, `plugins/agent/backend/client` | Public native Agent observations and bounded Codex app-server / Kimi and DeepSeek ACP clients; no private core imports, scientific handlers or Agent behavior loop |
 | `plugins/agent/backend/owner` | Sole native and component task admission/recovery state machines and repository ports; captured drafts, receipts, generation fences and pure restart observations |
+| `plugins/agent/backend/native` | Native task scheduling, connection limits, event/receipt observation and process recovery through the injected task owner; ephemeral context/endpoint ports only |
 | `plugins/agent/backend/store` | Sole task/asset/handoff SQL and scoped credential-file persistence; explicit storage paths, immutable key references and no scientific journal connection |
 | `plugins/agent/backend/engine` | Public Rig execution/diagnostics, captured model input and owner callback ports; the sole direct Rig dependency, with no private core imports |
 | `crates/agents` | Transitional admitted-record, image citation and tool-ticket adapters to the public model engine; no model/provider implementation |
@@ -1865,6 +1866,17 @@ Application window identity when opening, sending or rebinding a native connecti
 Public native/task/context DTOs have one owner in `rho-agent-api`; the existing contract
 reexports those types while context providers and component-Agent migration continues.
 `rho-agent-owner` owns the native task state machine and repository interface.
+`rho-agent-native` owns its live scheduling, task gates, native connections,
+observation cursors and cleanup. It shares the exact injected owner and its writer
+gate with handoff. A captured `NativeTaskPort` supplies authorized input and an
+ephemeral endpoint lease; credentials are never stored in tasks or receipts.
+The lease is revoked on close, disconnect and failed native opening. A connection
+whose metadata cannot be retained is closed before reporting the failure; its
+native identity and process proof remain recovery material, and unconfirmed quiet
+cannot authorize replacement. Publication shares shutdown's live-map lock. The temporary
+Host adapter supplies caller/window validation, context and MCP identity; ordinary
+backend composition still has to replace that adapter. The native scheduler has
+no private core dependency or scientific journal connection.
 Application retains only its scope/error conversion at this boundary; the current
 SQLite adapter only forwards to `rho-agent-store`, the single package-owned SQL
 implementation. Native/component tasks, assets, task-list projections and handoff

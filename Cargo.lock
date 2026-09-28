@@ -5998,6 +5998,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-agent-native"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "rho-agent-api",
+ "rho-agent-client",
+ "rho-agent-owner",
+ "rho-agent-store",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "rho-agent-owner"
 version = "0.1.0"
 dependencies = [
@@ -6241,6 +6258,7 @@ dependencies = [
  "jsonschema",
  "rho-adapter-skills",
  "rho-agent-client",
+ "rho-agent-native",
  "rho-agent-store",
  "rho-agents",
  "rho-application",

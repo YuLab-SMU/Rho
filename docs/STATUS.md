@@ -256,8 +256,9 @@ select a read-only `r.session@1` binding with only its read grant/scope; the foc
 fixtures also refuse using that binding for Run. Manifest regeneration passes with
 21 capabilities, including original-admission and tool inspection queries; its
 encoded file is 124,059 bytes. The serial science verifier has completed owner/store,
-framed and manifest checks and is running boundary, core-storage and independent
-ordinary/real-R Host acceptance. End-to-end native
+framed and manifest checks; all three core boundary and 40 core component-storage
+regressions also pass. Independent ordinary/real-R Host acceptance is now running.
+End-to-end native
 scope and late-result claims remain unverified for this source until those checks
 complete. Native stdin is excluded from model context.
 
@@ -265,6 +266,18 @@ This remains incomplete Agent migration. Scientific execution acceptance and nat
 Agent transport composition, context providers, Agent views, Studio Agent
 assistance and final composition/default delivery remain active work. Synthetic
 diagnostics do not establish those features or real-provider quality.
+The next source change extracts native task scheduling, connection slots, event
+observation and cleanup into `plugins/agent/backend/native`. The Host delegates
+to that same injected owner/runtime; its duplicated scheduler and five pure
+runtime tests were removed. The package adds endpoint-open and post-open storage
+failure cases, plus an independent source assembly. Failed registration now closes
+the opened connection, revokes its endpoint and retains process evidence; lack of
+confirmed quiet stays uncertain and prevents replacement. Publication and shutdown
+share the live-map lock. These changes are applied but not yet compiled
+or verified. The running scientific Host/R acceptance froze its harness and both
+external source packages before this extraction; its results cannot establish
+native-runtime acceptance. The recovery fixture now hashes only its temporary
+configuration by default, without opening native user credential files.
 Initial import warnings were corrected. Existing user Hosts and R sessions have
 not been replaced; runtime acceptance uses disposable projects. No full-workspace
 audit, installation or publication ran.

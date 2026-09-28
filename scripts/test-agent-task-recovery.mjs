@@ -15,10 +15,19 @@ if(modelIndex>=0)assert.ok(real&&process.argv[modelIndex+1]&&!process.argv[model
 const model=modelIndex>=0?process.argv[modelIndex+1]:real?(provider==='codex'?'gpt-6-astra':provider==='deepseek'?'[\"115-newapi\",\"deepseek-v4-flash\"]':'b-ai/glm-5.3-flash'):'fixture-fast';
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'rho-agent-recovery-'));
 fs.mkdirSync(path.join(dir,'study'));const project=fs.realpathSync(path.join(dir,'study')),urlfile=path.join(dir,'launch'),log=path.join(dir,'native.jsonl');
-const watched=['config.toml','mcp.json'].map(n=>path.join(process.env.KIMI_CODE_HOME||path.join(os.homedir(),'.kimi-code'),n));
-watched.push(path.join(process.env.CODEX_HOME||path.join(os.homedir(),'.codex'),'config.toml'),...['settings.yaml','.credentials.yaml'].map(n=>path.join(process.env.DSH_HOME||path.join(os.homedir(),'.dsh'),n)));
+const env={...process.env};
+if(!real){
+ const bin=path.join(dir,'bin');fs.mkdirSync(bin);
+ fs.copyFileSync(path.join(root,'ui/e2e/fixtures/agents/kimi.cjs'),path.join(bin,'kimi'));fs.chmodSync(path.join(bin,'kimi'),0o700);
+ env.PATH=`${bin}${path.delimiter}${env.PATH}`;
+ env.KIMI_CODE_HOME=path.join(dir,'kimi-home');fs.mkdirSync(env.KIMI_CODE_HOME);
+ env.RHO_AGENT_FIXTURE_LOG=log;
+}
+// Fixture acceptance observes only its disposable configuration. User native
+// settings/credentials are inspected solely by an explicitly selected real run.
+const watched=['config.toml','mcp.json'].map(n=>path.join(env.KIMI_CODE_HOME||path.join(os.homedir(),'.kimi-code'),n));
+if(real)watched.push(path.join(process.env.CODEX_HOME||path.join(os.homedir(),'.codex'),'config.toml'),...['settings.yaml','.credentials.yaml'].map(n=>path.join(process.env.DSH_HOME||path.join(os.homedir(),'.dsh'),n)));
 const hashes=()=>watched.map(p=>fs.existsSync(p)?createHash('sha256').update(fs.readFileSync(p)).digest('hex'):null);const before=hashes();
-const env={...process.env};if(!real){const bin=path.join(dir,'bin');fs.mkdirSync(bin);fs.copyFileSync(path.join(root,'ui/e2e/fixtures/agents/kimi.cjs'),path.join(bin,'kimi'));fs.chmodSync(path.join(bin,'kimi'),0o700);env.PATH=`${bin}${path.delimiter}${env.PATH}`;env.KIMI_CODE_HOME=path.join(dir,'kimi-home');fs.mkdirSync(env.KIMI_CODE_HOME);env.RHO_AGENT_FIXTURE_LOG=log;}
 let host,origin,token='',registered,heartbeat,taskId,seq=0,stderr='';const windowId=randomUUID();
 const pause=ms=>new Promise(r=>setTimeout(r,ms));
 const safe=v=>String(v).replaceAll(token||'\0','<private-token>').replace(/([#?&]token=)[^&\s"']+/gi,'$1<private-token>');
@@ -81,5 +90,5 @@ try{
  }
  await reportUsage();
  assert.deepEqual(hashes(),before);
- console.log(JSON.stringify({phase:'user-configuration',provider:real?provider:'ACP fixture',unchanged:true}));
+ console.log(JSON.stringify({phase:real?'user-configuration':'fixture-configuration',provider:real?provider:'ACP fixture',unchanged:true}));
 }catch(e){if(taskId)await reportUsage().catch(()=>console.log(JSON.stringify({phase:'native-usage',provider,available:false,observationUnavailable:true,missingCounters:'unknown'})));console.error(safe(e.stack||e));process.exitCode=1;}finally{await stop('SIGINT');assert.deepEqual(hashes(),before);fs.rmSync(dir,{recursive:true,force:true});}

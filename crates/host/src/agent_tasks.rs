@@ -1,21 +1,19 @@
-//! Application task orchestration. Native adapters own protocol/process facts;
-//! Application owns durable identity, admission and presentation observations.
+//! Transitional Host scope, context and native MCP adapter. The Agent package
+//! owns task admission, durable observations and native connection scheduling.
 use crate::{ApplicationStore, NextHost};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use rho_agent_client::*;
+use rho_agent_native::{NativeTaskEndpoint, NativeTaskFailure, NativeTaskPort, NativeTaskRuntime};
 use rho_application::*;
 use rho_contract::*;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
-    sync::{
-        Arc, Weak,
-        atomic::{AtomicBool, AtomicU64, Ordering},
-    },
+    sync::Arc,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{Mutex, OwnedSemaphorePermit};
 
 fn now() -> u64 {
     SystemTime::now()
@@ -33,39 +31,48 @@ fn scope(project: &str, context: &CallContext) -> Result<AgentTaskScope, Applica
         principal: serde_json::to_string(context.principal()).map_err(err)?,
     })
 }
-struct LiveTask {
-    task_id: String,
-    scope: AgentTaskScope,
-    session: Arc<dyn NativeAgentSession>,
-    generation: AtomicU64,
-    closed: AtomicBool,
-    watching: AtomicBool,
-    cursor: AtomicU64,
-    flush: Mutex<()>,
-    _permit: OwnedSemaphorePermit,
-    mcp: crate::agent_connections::AgentMcpLease,
-}
 type DiagnosticEntries = HashMap<String, (String, Arc<std::sync::Mutex<AgentDiagnostic>>)>;
 pub struct AgentTaskService {
     owner: Arc<AgentTaskOwner>,
     factory: Arc<dyn NativeAgentFactory>,
-    live: Mutex<HashMap<String, Arc<LiveTask>>>,
-    gates: Mutex<HashMap<String, Weak<Mutex<()>>>>,
+    native: Arc<NativeTaskRuntime>,
     pub mcp_connections: Arc<crate::AgentMcpConnections>,
-    slots: Arc<Semaphore>,
-    stopped: AtomicBool,
     diagnostics: Mutex<DiagnosticEntries>,
     catalogs: std::sync::Mutex<HashMap<(String, AgentProvider), LocalAgent>>,
     context_providers: std::sync::RwLock<Vec<Arc<dyn crate::AgentContextProvider>>>,
 }
 impl AgentTaskService {
-    pub(crate) fn with_handoff_write<T>(&self, write: impl FnOnce() -> Result<T, ApplicationError>) -> Result<T, ApplicationError> {
+    pub(crate) fn with_handoff_write<T>(
+        &self,
+        write: impl FnOnce() -> Result<T, ApplicationError>,
+    ) -> Result<T, ApplicationError> {
         self.owner.with_handoff_write(write)
     }
-    pub async fn project_task_page(&self, host: &NextHost, context: &CallContext, project: &str, archived: Option<bool>, before: Option<&str>, limit: u32, rho: &crate::ComponentAgentService) -> Result<ProjectAgentTaskPage, ApplicationError> {
+    pub async fn project_task_page(
+        &self,
+        host: &NextHost,
+        context: &CallContext,
+        project: &str,
+        archived: Option<bool>,
+        before: Option<&str>,
+        limit: u32,
+        rho: &crate::ComponentAgentService,
+    ) -> Result<ProjectAgentTaskPage, ApplicationError> {
         Self::validate_project(host, project)?;
         let scope = scope(project, context)?;
-        rho.with_live_run_ids(|live| self.owner.store.project_agent_tasks(&scope, archived, before, limit as usize, &self.owner.host_incarnation, rho.host_incarnation(), live)).await.map_err(Into::into)
+        rho.with_live_run_ids(|live| {
+            self.owner.store.project_agent_tasks(
+                &scope,
+                archived,
+                before,
+                limit as usize,
+                &self.owner.host_incarnation,
+                rho.host_incarnation(),
+                live,
+            )
+        })
+        .await
+        .map_err(Into::into)
     }
     fn validate_project(host: &NextHost, project: &str) -> Result<(), ApplicationError> {
         if !host
@@ -85,14 +92,13 @@ impl AgentTaskService {
         store: Arc<dyn AgentTaskRepository>,
         factory: Arc<dyn NativeAgentFactory>,
     ) -> Arc<Self> {
+        let owner = Arc::new(AgentTaskOwner::new(store));
+        let native = NativeTaskRuntime::new(owner.clone(), factory.clone());
         Arc::new(Self {
-            owner: Arc::new(AgentTaskOwner::new(store)),
+            owner,
             factory,
-            live: Mutex::new(HashMap::new()),
-            gates: Mutex::new(HashMap::new()),
+            native,
             mcp_connections: Arc::default(),
-            slots: Arc::new(Semaphore::new(8)),
-            stopped: AtomicBool::new(false),
             diagnostics: Mutex::new(HashMap::new()),
             catalogs: std::sync::Mutex::new(HashMap::new()),
             context_providers: std::sync::RwLock::new(Vec::new()),
@@ -135,13 +141,10 @@ impl AgentTaskService {
         Ok(())
     }
     pub async fn has_live(&self) -> bool {
-        self.slots.available_permits() != 8
+        self.native.has_live().await
     }
     pub fn reserve_connection(&self) -> Result<OwnedSemaphorePermit, ApplicationError> {
-        self.slots
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| err("Eight Agent connections are active; disconnect an idle task first"))
+        self.native.reserve_connection().map_err(Into::into)
     }
     pub async fn test(
         self: &Arc<Self>,
@@ -192,7 +195,14 @@ impl AgentTaskService {
         entries.insert(request.request_id.clone(), (signature, status.clone()));
         drop(entries);
         let service = self.clone();
-        let mcp = self.mcp_connections.issue(&request.project_root, &NextHost::local_context(), "diagnostic", &request.request_id, 1, false);
+        let mcp = self.mcp_connections.issue(
+            &request.project_root,
+            &NextHost::local_context(),
+            "diagnostic",
+            &request.request_id,
+            1,
+            false,
+        );
         tokio::spawn(async move {
             let _permit = permit;
             let _mcp = mcp;
@@ -213,13 +223,13 @@ impl AgentTaskService {
                 Err(e) => Err(e.error),
                 Ok(session) => {
                     let result=async {
-                        if service.stopped.load(Ordering::Acquire) { return Err("Host closed before the diagnostic started".into()); }
+                        if service.native.is_stopped() { return Err("Host closed before the diagnostic started".into()); }
                         session.configure(&request.model,request.effort.as_deref(),None).await?;
                         session.send(NativePrompt{request_id:request.request_id,display_text:"Connection test".into(),parts:vec![NativeInput::Text("Reply with exactly ok. Do not call tools or read files.".into())],window:request.window.into()}).await?;
                         tokio::time::timeout(Duration::from_secs(90),async {
                             let mut tick=tokio::time::interval(Duration::from_millis(100));
                             loop {
-                                if service.stopped.load(Ordering::Acquire) { return Err("Host closed during the diagnostic".into()); }
+                                if service.native.is_stopped() { return Err("Host closed during the diagnostic".into()); }
                                 let s=session.snapshot();
                                 match s.state.as_str(){
                                     "ready"=>return Ok(session.events(0).events.into_iter().filter(|e|e.role.as_deref()==Some("assistant")).map(|e|e.text).collect::<Vec<_>>().join("\n")),
@@ -252,70 +262,7 @@ impl AgentTaskService {
     }
     pub async fn close(&self) {
         self.mcp_connections.revoke_all();
-        self.stopped.store(true, Ordering::Release);
-        let all: Vec<_> = self.live.lock().await.drain().map(|(_, v)| v).collect();
-        for live in all {
-            live.mcp.revoke();
-            live.closed.store(true, Ordering::Release);
-            let before = live.session.snapshot();
-            live.session.close().await;
-            let quiet = if let Some(proof) = live.session.process_proof() {
-                self.factory.recover_process(&proof).await.is_ok()
-            } else {
-                false
-            };
-            let _flush = live.flush.lock().await;
-            let page = live.session.events(live.cursor.load(Ordering::Acquire));
-            let _ = self.owner.update(
-                &live.scope,
-                &live.task_id,
-                live.generation.load(Ordering::Acquire),
-                |t, _, receipts, events| {
-                    t.attachment.state = "disconnected".into();
-                    t.attachment.connection_id = None;
-                    t.attachment.decisions.clear();
-                    t.native_quiet = quiet;
-                    append_events(t, page.events, events);
-                    if let Some(active) = &t.active_request
-                        && let Some(mut receipt) =
-                            self.owner.store.agent_receipt(&live.scope, active)?
-                    {
-                        receipt.status = if before.last_request_id.as_ref() == Some(active)
-                            && matches!(before.state.as_str(), "ready" | "interrupted" | "failed")
-                        {
-                            native_receipt_status(&before.state)
-                        } else {
-                            "uncertain"
-                        }
-                        .into();
-                        receipt.updated_at_ms = now();
-                        if receipt.status == "succeeded" {
-                            receipt.submitted_draft = None;
-                        }
-                        if receipt.status == "uncertain" {
-                            receipt.error = Some(
-                                "Host closed before the original native outcome was confirmed"
-                                    .into(),
-                            );
-                        }
-                        receipts.push(receipt);
-                    }
-                    Ok(())
-                },
-            );
-        }
-    }
-    async fn gate(&self, id: &str) -> Arc<Mutex<()>> {
-        let mut gates = self.gates.lock().await;
-        // A waiter holds the strong reference. Never remove an occupied gate:
-        // creating a second lock for the same task would break serialization.
-        gates.retain(|_, gate| gate.strong_count() > 0);
-        if let Some(gate) = gates.get(id).and_then(Weak::upgrade) {
-            return gate;
-        }
-        let gate = Arc::new(Mutex::new(()));
-        gates.insert(id.into(), Arc::downgrade(&gate));
-        gate
+        self.native.close().await;
     }
     pub async fn validate_window(
         host: &NextHost,
@@ -350,12 +297,51 @@ impl AgentTaskService {
         let scope = scope(&request.project_root, context)?;
         match request.query {
             AgentTaskQuery::ScientificWork { task_id, limit } => {
-                if !(1..=20).contains(&limit) { return Err(err("Task operation limit must be 1–20")); }
-                let task=self.owner.get(&scope,&task_id)?;
-                if !task.task_mcp_identity { return Ok(AgentTaskQueryResult::ScientificWork { work:AgentScientificWork{task_id,attributable:false,operations:vec![],has_more:false} }); }
-                let caller=CallerIdentity{kind:CallerKind::Agent,id:format!("task:{task_id}")};
-                let page=host.runtime.gateway.recent_for_caller(context,&caller,&RecentOperationsArguments{before_cursor:None,client_request_id:None,operation_id:None,limit}).await.map_err(|failure|ApplicationError::Diagnostic(Box::new(host.runtime.gateway.diagnostic(context,&failure))))?;
-                Ok(AgentTaskQueryResult::ScientificWork { work:AgentScientificWork{task_id,attributable:true,operations:page.operations,has_more:page.next_cursor.is_some()} })
+                if !(1..=20).contains(&limit) {
+                    return Err(err("Task operation limit must be 1–20"));
+                }
+                let task = self.owner.get(&scope, &task_id)?;
+                if !task.task_mcp_identity {
+                    return Ok(AgentTaskQueryResult::ScientificWork {
+                        work: AgentScientificWork {
+                            task_id,
+                            attributable: false,
+                            operations: vec![],
+                            has_more: false,
+                        },
+                    });
+                }
+                let caller = CallerIdentity {
+                    kind: CallerKind::Agent,
+                    id: format!("task:{task_id}"),
+                };
+                let page = host
+                    .runtime
+                    .gateway
+                    .recent_for_caller(
+                        context,
+                        &caller,
+                        &RecentOperationsArguments {
+                            before_cursor: None,
+                            client_request_id: None,
+                            operation_id: None,
+                            limit,
+                        },
+                    )
+                    .await
+                    .map_err(|failure| {
+                        ApplicationError::Diagnostic(Box::new(
+                            host.runtime.gateway.diagnostic(context, &failure),
+                        ))
+                    })?;
+                Ok(AgentTaskQueryResult::ScientificWork {
+                    work: AgentScientificWork {
+                        task_id,
+                        attributable: true,
+                        operations: page.operations,
+                        has_more: page.next_cursor.is_some(),
+                    },
+                })
             }
             AgentTaskQuery::ProjectList { .. } => Err(err("Use the Host project task projection")),
             AgentTaskQuery::ContextSources => Ok(AgentTaskQueryResult::ContextSources {
@@ -428,17 +414,7 @@ impl AgentTaskService {
                     .owner
                     .store
                     .agent_task_counts(&scope, &self.owner.host_incarnation)?;
-                let active_ids = self
-                    .live
-                    .lock()
-                    .await
-                    .values()
-                    .filter(|t| {
-                        t.scope.project == scope.project && t.scope.principal == scope.principal
-                    })
-                    .map(|t| t.task_id.clone())
-                    .take(8)
-                    .collect::<Vec<_>>();
+                let active_ids = self.native.active_ids(&scope).await;
                 let mut attention = Vec::new();
                 for id in active_ids {
                     let mut summary = self.owner.detail(&scope, &id)?.summary;
@@ -490,39 +466,9 @@ impl AgentTaskService {
                 task_id,
                 cursor,
                 limit,
-            } => {
-                let record = self.owner.get(&scope, &task_id)?;
-                let live=self.live.lock().await.get(&task_id).cloned().ok_or_else(||err("Resume this task to read its native history; cached history remains available"))?;
-                let (events, next) = live.session.history(cursor, limit).await.map_err(err)?;
-                let partial = events.len() >= 500
-                    || events
-                        .iter()
-                        .any(|e| e.status.as_deref() == Some("truncated"));
-                let receipts = self.owner.store.agent_receipts(&scope, &task_id)?;
-                let events = events
-                    .into_iter()
-                    .map(|mut e| {
-                        if let Some(turn) = &e.turn {
-                            e.request_id = receipts
-                                .iter()
-                                .find(|r| {
-                                    r.command == "send" && r.native_turn_id.as_ref() == Some(turn)
-                                })
-                                .map(|r| r.request_id.clone());
-                        }
-                        to_event(e, 0, record.attachment.generation)
-                    })
-                    .collect();
-                Ok(AgentTaskQueryResult::NativeHistory {
-                    page: AgentNativeHistoryPage {
-                        task_id,
-                        events,
-                        next_cursor: next,
-                        source: record.attachment.capabilities.history,
-                        partial,
-                    },
-                })
-            }
+            } => Ok(AgentTaskQueryResult::NativeHistory {
+                page: self.native.history(&scope, &task_id, cursor, limit).await?,
+            }),
         }
     }
     pub async fn command(
@@ -531,10 +477,10 @@ impl AgentTaskService {
         context: CallContext,
         request: AgentTasksCommand,
         endpoint: String,
-        token: String,
+        _token: String,
     ) -> Result<AgentTaskCommandResult, ApplicationError> {
         Self::validate_project(&host, &request.project_root)?;
-        if self.stopped.load(Ordering::Acquire) {
+        if self.native.is_stopped() {
             return Err(err("This Host is closing"));
         }
         Self::validate_window(&host, &request.window, &context).await?;
@@ -547,9 +493,13 @@ impl AgentTaskService {
         {
             let record = self.owner.get(&scope, &control.task_id)?;
             if record.attachment.controller.window_id != request.window.window_id
-                && Self::validate_window(&host, &record.attachment.controller.clone().into(), &context)
-                    .await
-                    .is_ok()
+                && Self::validate_window(
+                    &host,
+                    &record.attachment.controller.clone().into(),
+                    &context,
+                )
+                .await
+                .is_ok()
             {
                 return Err(err(
                     "The operating window is still online; stop the Agent there before taking over",
@@ -580,680 +530,29 @@ impl AgentTaskService {
             )?;
         }
         if admission.native && !admission.repeated {
-            let service = self.clone();
-            let background_scope = scope.clone();
-            tokio::spawn(async move {
-                let gate = service.gate(&id).await;
-                let _guard = gate.lock().await;
-                let generation = admission.task.attachment.generation;
-                if let Err(error) = service
-                    .run(
-                        &host,
-                        &context,
-                        &background_scope,
-                        &request,
-                        &admission,
-                        (&endpoint, &token),
-                    )
-                    .await
-                {
-                    let snapshot = service
-                        .live
-                        .lock()
-                        .await
-                        .get(&id)
-                        .map(|live| live.session.snapshot());
-                    let _ = service.fail(
-                        &background_scope,
-                        &id,
-                        generation,
-                        &admission.receipt,
-                        error,
-                        snapshot,
-                    );
-                }
+            let port = Arc::new(NativeCommandPort {
+                service: self.clone(),
+                host,
+                context,
+                endpoint,
             });
+            let _ = self.native.launch(scope.clone(), request, admission, port);
         } else if !admission.repeated
             && matches!(
                 request.command,
                 AgentTaskCommand::TakeOver { stop: false, .. }
             )
-            && let Some(live) = self.live.lock().await.get(&id).cloned()
         {
-            live.session.rebind(request.window.clone());
-            live.generation
-                .store(admission.task.attachment.generation, Ordering::Release);
+            self.native
+                .rebind(
+                    &id,
+                    request.window.clone(),
+                    admission.task.attachment.generation,
+                )
+                .await;
         }
         let detail = self.owner.detail(&scope, &receipt.task_id)?;
         Ok(AgentTaskCommandResult { receipt, detail })
-    }
-    fn fail(
-        &self,
-        scope: &AgentTaskScope,
-        id: &str,
-        generation: u64,
-        original: &AgentCommandReceipt,
-        failure: TaskFailure,
-        native: Option<AgentClientSession>,
-    ) -> Result<(), ApplicationError> {
-        let mut receipt = original.clone();
-        receipt.status = if failure.uncertain {
-            "uncertain"
-        } else {
-            "failed"
-        }
-        .into();
-        receipt.error = Some(failure.message.clone());
-        receipt.updated_at_ms = now();
-        self.owner
-            .update(scope, id, generation, |t, _, receipts, _| {
-                // Observation may have committed a final native result while this
-                // background failure was waiting for the task lock. Do not regress it.
-                if self.owner.store.agent_receipt(scope, &original.request_id)?.is_some_and(|receipt|
-                    matches!(receipt.status.as_str(), "succeeded" | "interrupted" | "failed")) {
-                    return Ok(());
-                }
-                if let Some(id) = failure.native_id {
-                    t.task.native_session_id = Some(id.clone());
-                    receipt.native_session_id = Some(id);
-                }
-                t.attachment.error = Some(failure.message);
-                if !t.attachment.control_frozen && t.attachment.state != "stopping" {
-                    t.attachment.state = if failure.uncertain {
-                        "uncertain".into()
-                    } else if let Some(native) = native {
-                        native.state
-                    } else if t.task.native_session_id.is_some() {
-                        "disconnected".into()
-                    } else {
-                        "draft".into()
-                    };
-                }
-                if !failure.uncertain && t.active_request.as_deref() == Some(&original.request_id) {
-                    t.active_request = None;
-                }
-                if t.attachment.control_frozen {
-                    t.attachment.state = "uncertain".into();
-                }
-                receipts.push(receipt);
-                Ok(())
-            }).map_err(Into::into)
-    }
-    fn receipt(
-        &self,
-        scope: &AgentTaskScope,
-        original: &AgentCommandReceipt,
-        status: &str,
-        error: Option<String>,
-    ) -> AgentCommandReceipt {
-        let mut r = self
-            .owner
-            .store
-            .agent_receipt(scope, &original.request_id)
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| original.clone());
-        r.status = status.into();
-        r.error = error;
-        r.updated_at_ms = now();
-        if status == "succeeded" {
-            r.submitted_draft = None;
-        }
-        r
-    }
-    async fn run(
-        self: &Arc<Self>,
-        host: &NextHost,
-        context: &CallContext,
-        scope: &AgentTaskScope,
-        request: &AgentTaskRequest,
-        a: &AgentTaskAdmission,
-        connection: (&str, &str),
-    ) -> Result<(), TaskFailure> {
-        let (endpoint, token) = connection;
-        let id = &a.task.task.task_id;
-        let generation = a.task.attachment.generation;
-        if self.owner.get(scope, id)?.attachment.generation != generation {
-            return Err(TaskFailure::before(
-                "Task attachment changed before the command ran",
-            ));
-        }
-        match &request.command {
-            AgentTaskCommand::Send { .. } => {
-                let parts = self.input(host, context, scope, &a.task, &a.draft).await?;
-                let live = self
-                    .connection(context, scope, &a.task, request, endpoint, token)
-                    .await?;
-                live.session
-                    .configure(
-                        &a.task.task.model,
-                        a.task.task.effort.as_deref(),
-                        a.task.task.mode.as_deref(),
-                    )
-                    .await
-                    .map_err(TaskFailure::before)?;
-                let current = self.owner.get(scope, id)?;
-                if self.stopped.load(Ordering::Acquire)
-                    || current.attachment.generation != generation
-                    || current.attachment.control_frozen
-                    || current.attachment.state == "stopping"
-                {
-                    return Err(TaskFailure::before(
-                        "Submission was stopped before sending; the draft is preserved",
-                    ));
-                }
-                live.session
-                    .send(NativePrompt {
-                        request_id: request.request_id.clone(),
-                        display_text: if a.draft.content.text.is_empty() {
-                            "Attached context".into()
-                        } else {
-                            a.draft.content.text.clone()
-                        },
-                        parts,
-                        window: request.window.clone(),
-                    })
-                    .await
-                    .map_err(TaskFailure::uncertain)?;
-                let _flush = live.flush.lock().await;
-                let page = live.session.events(live.cursor.load(Ordering::Acquire));
-                let current = live.session.snapshot();
-                let status = native_receipt_status(&current.state);
-                let mut receipt = self.receipt(scope, &a.receipt, status, current.error.clone());
-                receipt.native_session_id = Some(current.native_session_id);
-                receipt.native_turn_id = live.session.native_turn_id();
-                let committed = self.owner
-                    .update(scope, id, generation, |t, d, receipts, events| {
-                        if !t.attachment.control_frozen && t.attachment.state != "stopping" {
-                            t.attachment.state = current.state.clone();
-                        }
-                        t.attachment.error = current.error.clone();
-                        t.interrupted_context = false;
-                        if matches!(status, "succeeded" | "interrupted" | "failed") {
-                            t.active_request = None;
-                        }
-                        if d.version == a.draft.version && !matches!(status, "uncertain" | "failed")
-                        {
-                            d.content = AgentDraftContent::default();
-                            d.version += 1;
-                            d.updated_at_ms = now();
-                        }
-                        append_events(t, page.events.clone(), events);
-                        receipts.push(receipt);
-                        Ok(())
-                    });
-                if committed.is_ok() {
-                    live.cursor.store(page.cursor, Ordering::Release);
-                }
-                drop(_flush);
-                self.watch(scope.clone(), id.clone(), live);
-                // Native send already accepted the prompt. Retain its identity
-                // and keep observing if the acknowledgement could not be saved.
-                committed.map_err(TaskFailure::uncertain)?;
-            }
-            AgentTaskCommand::Connect { .. } | AgentTaskCommand::Resume { .. } => {
-                let live = self
-                    .connection(context, scope, &a.task, request, endpoint, token)
-                    .await?;
-                live.session
-                    .configure(
-                        &a.task.task.model,
-                        a.task.task.effort.as_deref(),
-                        a.task.task.mode.as_deref(),
-                    )
-                    .await
-                    .map_err(TaskFailure::before)?;
-                let mut old = self.owner.store.agent_receipts(scope, id)?;
-                for r in &mut old {
-                    if r.request_id != request.request_id
-                        && matches!(r.status.as_str(), "prepared" | "submitted")
-                    {
-                        r.status = "uncertain".into();
-                        r.error =
-                            Some("Previous Host ended before this outcome was confirmed".into());
-                        r.updated_at_ms = now();
-                    }
-                }
-                let mut receipt = self.receipt(scope, &a.receipt, "succeeded", None);
-                receipt.native_session_id = Some(live.session.snapshot().native_session_id);
-                self.owner
-                    .update(scope, id, generation, |t, _, receipts, _| {
-                        t.active_request = None;
-                        t.attachment.state = "ready".into();
-                        t.attachment.capabilities = live.session.capabilities();
-                        receipts.extend(
-                            old.into_iter()
-                                .filter(|r| r.request_id != request.request_id),
-                        );
-                        receipts.push(receipt);
-                        Ok(())
-                    })?;
-                self.watch(scope.clone(), id.clone(), live);
-            }
-            AgentTaskCommand::Configure { .. } => {
-                let live = self.live.lock().await.get(id).cloned().ok_or_else(|| {
-                    TaskFailure::before("Native connection was lost while updating configuration")
-                })?;
-                {
-                    let current = live.session.snapshot();
-                    let (model, effort) =
-                        if agent_busy(&current.state) || current.state == "uncertain" {
-                            (&current.model, current.effort.as_deref())
-                        } else {
-                            (&a.task.task.model, a.task.task.effort.as_deref())
-                        };
-                    live.session
-                        .configure(model, effort, a.task.task.mode.as_deref())
-                        .await
-                        .map_err(TaskFailure::before)?;
-                    self.owner.update(scope, id, generation, |t, _, rs, _| {
-                        t.attachment.capabilities = live.session.capabilities();
-                        rs.push(self.receipt(scope, &a.receipt, "succeeded", None));
-                        Ok(())
-                    })?;
-                }
-            }
-            AgentTaskCommand::Decision {
-                decision_id,
-                option_id,
-                ..
-            } => {
-                let live = self.live.lock().await.get(id).cloned().ok_or_else(|| {
-                    TaskFailure::before("Native permission connection is unavailable")
-                })?;
-                live.session
-                    .decide(*decision_id, option_id)
-                    .await
-                    .map_err(TaskFailure::uncertain)?;
-                self.owner.update(scope, id, generation, |t, _, rs, _| {
-                    t.attachment.decisions = live.session.snapshot().decisions;
-                    rs.push(self.receipt(scope, &a.receipt, "succeeded", None));
-                    Ok(())
-                })?;
-            }
-            AgentTaskCommand::Stop { .. } | AgentTaskCommand::TakeOver { stop: true, .. } => {
-                let live = self.live.lock().await.get(id).cloned();
-                if let Some(live) = &live {
-                    if agent_busy(&live.session.snapshot().state) {
-                        live.session
-                            .interrupt()
-                            .await
-                            .map_err(TaskFailure::uncertain)?;
-                    }
-                    tokio::time::timeout(Duration::from_secs(20), async {
-                        let mut tick = tokio::time::interval(Duration::from_millis(50));
-                        loop {
-                            if !agent_busy(&live.session.snapshot().state) {
-                                break;
-                            }
-                            tick.tick().await;
-                        }
-                    })
-                    .await
-                    .map_err(|_| TaskFailure::uncertain("Native stop could not be confirmed"))?;
-                    if matches!(
-                        live.session.snapshot().state.as_str(),
-                        "uncertain" | "disconnected"
-                    ) {
-                        return Err(TaskFailure::uncertain(
-                            "Native quiet is not confirmed; control was not transferred",
-                        ));
-                    }
-                } else if !a.task.native_quiet {
-                    let proof = a.task.process.as_ref().ok_or_else(|| {
-                        TaskFailure::uncertain(
-                            "The previous Agent process has no verifiable ownership evidence",
-                        )
-                    })?;
-                    self.factory
-                        .recover_process(&to_proof(proof))
-                        .await
-                        .map_err(TaskFailure::uncertain)?;
-                }
-                let transfer = matches!(request.command, AgentTaskCommand::TakeOver { .. });
-                self.owner.update(scope, id, generation, |t, _, rs, _| {
-                    if let Some(active) = &t.active_request
-                        && let Some(mut old) = self.owner.store.agent_receipt(scope, active)?
-                    {
-                        old.status = if live.is_some() {
-                            "interrupted"
-                        } else {
-                            "uncertain"
-                        }
-                        .into();
-                        old.updated_at_ms = now();
-                        rs.push(old);
-                    }
-                    t.active_request = None;
-                    t.attachment.control_frozen = false;
-                    t.attachment.decisions.clear();
-                    t.attachment.error = None;
-                    t.attachment.state = if live.is_some() {
-                        "ready"
-                    } else {
-                        "disconnected"
-                    }
-                    .into();
-                    t.native_quiet = live.is_none();
-                    if transfer {
-                        t.attachment.generation += 1;
-                        t.attachment.controller = request.window.clone();
-                    }
-                    rs.push(self.receipt(scope, &a.receipt, "succeeded", None));
-                    Ok(())
-                })?;
-                if transfer && let Some(live) = live {
-                    live.session.rebind(request.window.clone());
-                    live.generation.store(generation + 1, Ordering::Release);
-                }
-            }
-            AgentTaskCommand::Disconnect { .. } => {
-                let live = self.live.lock().await.remove(id);
-                if let Some(live) = live {
-                    live.mcp.revoke();
-            live.closed.store(true, Ordering::Release);
-                    live.session.close().await;
-                    if let Some(proof) = live.session.process_proof() {
-                        self.factory
-                            .recover_process(&proof)
-                            .await
-                            .map_err(TaskFailure::uncertain)?;
-                    } else {
-                        return Err(TaskFailure::uncertain(
-                            "Cannot verify that the native process ended",
-                        ));
-                    }
-                } else if !a.task.native_quiet {
-                    let proof = a.task.process.as_ref().ok_or_else(|| {
-                        TaskFailure::uncertain(
-                            "Cannot confirm ownership of the previous native process",
-                        )
-                    })?;
-                    self.factory
-                        .recover_process(&to_proof(proof))
-                        .await
-                        .map_err(TaskFailure::uncertain)?;
-                }
-                self.owner.update(scope, id, generation, |t, _, rs, _| {
-                    t.attachment.state = "disconnected".into();
-                    t.attachment.connection_id = None;
-                    t.attachment.decisions.clear();
-                    t.native_quiet = true;
-                    rs.push(self.receipt(scope, &a.receipt, "succeeded", None));
-                    Ok(())
-                })?;
-            }
-            AgentTaskCommand::AddAsset {
-                name,
-                mime_type,
-                data,
-                ..
-            } => {
-                if name.is_empty()
-                    || name.len() > 256
-                    || name.chars().any(char::is_control)
-                    || mime_type.len() > 128
-                    || mime_type.chars().any(char::is_control)
-                {
-                    return Err(TaskFailure::before("Invalid attachment metadata"));
-                }
-                let bytes = STANDARD
-                    .decode(data)
-                    .map_err(|_| TaskFailure::before("Invalid attachment encoding"))?;
-                let asset = AgentAsset {
-                    asset_id: request.request_id.clone(),
-                    name: name.rsplit(['/', '\\']).next().unwrap_or(name).into(),
-                    mime_type: mime_type.clone(),
-                    bytes: bytes.len() as u64,
-                    sha256: format!("{:x}", Sha256::digest(&bytes)),
-                };
-                self.owner
-                    .store
-                    .put_agent_asset(scope, id, &asset, &bytes)?;
-                self.owner.update(scope, id, generation, |_, _, rs, _| {
-                    rs.push(self.receipt(scope, &a.receipt, "succeeded", None));
-                    Ok(())
-                })?;
-            }
-            AgentTaskCommand::RemoveAsset {
-                asset_id,
-                draft_version,
-                ..
-            } => {
-                self.owner.update(scope, id, generation, |_, d, rs, _| {
-                    if d.version != *draft_version {
-                        return Err(AgentTaskError::Conflict);
-                    }
-                    d.content.assets.retain(|id| id != asset_id);
-                    d.version += 1;
-                    d.updated_at_ms = now();
-                    rs.push(self.receipt(scope, &a.receipt, "succeeded", None));
-                    Ok(())
-                })?;
-            }
-            _ => {}
-        }
-        Ok(())
-    }
-    async fn connection(
-        self: &Arc<Self>,
-        context: &CallContext,
-        scope: &AgentTaskScope,
-        task: &StoredAgentTask,
-        request: &AgentTaskRequest,
-        endpoint: &str,
-        _token: &str,
-    ) -> Result<Arc<LiveTask>, TaskFailure> {
-        let existing = self.live.lock().await.get(&task.task.task_id).cloned();
-        let replacing = existing.is_some();
-        if let Some(live) = existing {
-            if !live.closed.load(Ordering::Acquire)
-                && live.generation.load(Ordering::Acquire) == task.attachment.generation
-            {
-                return Ok(live);
-            }
-            // A resume is a new attachment, including after an uncertain native
-            // turn. Never revive the old transport by relabelling it ready.
-            live.mcp.revoke();
-            live.closed.store(true, Ordering::Release);
-            self.live.lock().await.remove(&task.task.task_id);
-            live.session.close().await;
-            let proof = live.session.process_proof().ok_or_else(|| {
-                TaskFailure::uncertain("Cannot verify ownership of the previous native process")
-            })?;
-            self.factory
-                .recover_process(&proof)
-                .await
-                .map_err(TaskFailure::uncertain)?;
-        }
-        let permit = if replacing {
-            tokio::time::timeout(Duration::from_secs(1), self.slots.clone().acquire_owned())
-                .await
-                .map_err(|_| TaskFailure::before("Previous connection is still closing"))?
-                .map_err(|_| TaskFailure::before("Agent connection service closed"))?
-        } else {
-            self.slots.clone().try_acquire_owned().map_err(|_| {
-                TaskFailure::before(
-                    "Eight Agent connections are active. Disconnect an idle task first.",
-                )
-            })?
-        };
-        if !task.native_quiet {
-            let proof = task.process.as_ref().ok_or_else(|| {
-                TaskFailure::uncertain("Cannot confirm ownership of the previous native process")
-            })?;
-            self.factory
-                .recover_process(&to_proof(proof))
-                .await
-                .map_err(TaskFailure::uncertain)?;
-        }
-        let mcp = self.mcp_connections.issue(&scope.project, context, "task", &task.task.task_id, task.attachment.generation, !task.task_mcp_identity);
-        let session = self
-            .factory
-            .open(NativeOpenRequest {
-                provider: task.task.provider,
-                root: task.task.project_root.clone().into(),
-                window: request.window.clone(),
-                native_session_id: task.task.native_session_id.clone(),
-                endpoint: endpoint.into(),
-                token: mcp.token.clone(),
-                interrupted: task.interrupted_context || task.active_request.is_some(),
-            })
-            .await
-            .map_err(|e| TaskFailure {
-                message: e.error,
-                uncertain: e.uncertain,
-                native_id: e.native_session_id,
-            })?;
-        let snapshot = session.snapshot();
-        if self.stopped.load(Ordering::Acquire) {
-            session.close().await;
-            return Err(TaskFailure {
-                message: "Host closed while the native connection was opening".into(),
-                uncertain: false,
-                native_id: Some(snapshot.native_session_id),
-            });
-        }
-        let live = Arc::new(LiveTask {
-            task_id: task.task.task_id.clone(),
-            scope: scope.clone(),
-            session,
-            generation: AtomicU64::new(task.attachment.generation),
-            closed: AtomicBool::new(false),
-            watching: AtomicBool::new(false),
-            cursor: AtomicU64::new(0),
-            flush: Mutex::new(()),
-            _permit: permit,
-            mcp,
-        });
-        let page = live.session.events(0);
-        self.owner.update(
-            scope,
-            &task.task.task_id,
-            task.attachment.generation,
-            |t, _, _, events| {
-                t.task.native_session_id = Some(snapshot.native_session_id.clone());
-                t.attachment.connection_id = Some(snapshot.id);
-                if t.attachment.state != "stopping" {
-                    t.attachment.state = "ready".into();
-                }
-                t.attachment.capabilities = live.session.capabilities();
-                t.attachment.error = None;
-                t.native_quiet = false;
-                t.host_incarnation = self.owner.host_incarnation.clone();
-                t.process = live.session.process_proof().map(|p| AgentOwnedProcess {
-                    pid: p.pid,
-                    start_time: p.start_time,
-                    executable: p.executable,
-                    marker: p.marker,
-                });
-                if task.task.provider == AgentProvider::Kimi
-                    && task.task.native_session_id.is_some()
-                    && !page.events.is_empty()
-                {
-                    t.history_generation += 1;
-                    t.history_gap = true;
-                }
-                t.history_gap |= page.gap;
-                append_events(t, page.events.clone(), events);
-                Ok(())
-            },
-        )?;
-        live.cursor.store(page.cursor, Ordering::Release);
-        self.live
-            .lock()
-            .await
-            .insert(task.task.task_id.clone(), live.clone());
-        self.watch(scope.clone(), task.task.task_id.clone(), live.clone());
-        Ok(live)
-    }
-    fn watch(self: &Arc<Self>, scope: AgentTaskScope, id: String, live: Arc<LiveTask>) {
-        if live.watching.swap(true, Ordering::AcqRel) {
-            return;
-        }
-        let service = Arc::downgrade(self);
-        tokio::spawn(async move {
-            let mut signature = String::new();
-            let mut tick = tokio::time::interval(Duration::from_millis(100));
-            loop {
-                tokio::select! {_=tick.tick()=>{},_=live.session.changed()=>{}}
-                let Some(service) = service.upgrade() else {
-                    break;
-                };
-                if service.stopped.load(Ordering::Acquire) || live.closed.load(Ordering::Acquire) {
-                    break;
-                }
-                let _flush = live.flush.lock().await;
-                let cursor = live.cursor.load(Ordering::Acquire);
-                let generation = live.generation.load(Ordering::Acquire);
-                let snapshot = live.session.snapshot();
-                let page = live.session.events(cursor);
-                let next_signature = serde_json::to_string(&(
-                    &snapshot.state,
-                    &snapshot.decisions,
-                    &snapshot.error,
-                    live.session.native_turn_id(),
-                    live.session.capabilities(),
-                ))
-                .unwrap_or_default();
-                if next_signature == signature && page.cursor == cursor {
-                    continue;
-                }
-                let result = service
-                    .owner
-                    .update(&scope, &id, generation, |t, d, rs, events| {
-                        if !t.attachment.control_frozen && t.attachment.state != "stopping" {
-                            t.attachment.state = snapshot.state.clone();
-                        }
-                        t.attachment.decisions = snapshot.decisions.clone();
-                        t.attachment.error = snapshot.error.clone();
-                        t.attachment.capabilities = live.session.capabilities();
-                        t.history_gap |= page.gap;
-                        append_events(t, page.events.clone(), events);
-                        if let Some(active) = &t.active_request
-                            && snapshot.last_request_id.as_ref() == Some(active)
-                            && let Some(mut r) =
-                                service.owner.store.agent_receipt(&scope, active)?
-                        {
-                            r.native_turn_id = live.session.native_turn_id();
-                            r.native_session_id = Some(snapshot.native_session_id.clone());
-                            r.updated_at_ms = now();
-                            r.status = native_receipt_status(&snapshot.state).into();
-                            r.error = snapshot.error.clone();
-                            if r.submitted_draft_version == Some(d.version)
-                                && matches!(r.status.as_str(), "submitted" | "succeeded" | "interrupted") {
-                                d.content = AgentDraftContent::default();
-                                d.version += 1;
-                                d.updated_at_ms = now();
-                            }
-                            if r.status == "succeeded" {
-                                r.submitted_draft = None;
-                            }
-                            if matches!(r.status.as_str(), "succeeded" | "interrupted" | "failed") {
-                                t.active_request = None;
-                            }
-                            rs.push(r);
-                        }
-                        Ok(())
-                    });
-                if result.is_ok() {
-                    live.cursor.store(page.cursor, Ordering::Release);
-                    signature = next_signature;
-                }
-                if result.is_ok() && snapshot.state == "disconnected" {
-                    live.mcp.revoke();
-            live.closed.store(true, Ordering::Release);
-                    let mut map = service.live.lock().await;
-                    if map
-                        .get(&id)
-                        .is_some_and(|current| Arc::ptr_eq(current, &live))
-                    {
-                        map.remove(&id);
-                    }
-                    break;
-                }
-            }
-        });
     }
     async fn input(
         &self,
@@ -1262,7 +561,7 @@ impl AgentTaskService {
         scope: &AgentTaskScope,
         task: &StoredAgentTask,
         draft: &AgentTaskDraft,
-    ) -> Result<Vec<NativeInput>, TaskFailure> {
+    ) -> Result<Vec<NativeInput>, NativeTaskFailure> {
         let mut parts = vec![NativeInput::Text(draft.content.text.clone())];
         let overview = host
             .dispatch(
@@ -1276,7 +575,7 @@ impl AgentTaskService {
                 }),
             )
             .await
-            .map_err(|e| TaskFailure::before(e.to_string()))?;
+            .map_err(|e| NativeTaskFailure::before(e.to_string()))?;
         let studio = match host
             .dispatch(
                 context,
@@ -1319,7 +618,7 @@ impl AgentTaskService {
                 });
             } else {
                 let text = String::from_utf8(bytes).map_err(|_| {
-                    TaskFailure::before(format!(
+                    NativeTaskFailure::before(format!(
                         "{} is not a supported text/image input for this Agent",
                         asset.name
                     ))
@@ -1342,8 +641,8 @@ impl AgentTaskService {
                 true,
             )
             .await
-            .map_err(TaskFailure::before)?;
-            parts.extend(crate::agent_context::input(captured).map_err(TaskFailure::before)?);
+            .map_err(NativeTaskFailure::before)?;
+            parts.extend(crate::agent_context::input(captured).map_err(NativeTaskFailure::before)?);
         }
         Ok(parts)
     }
@@ -1356,99 +655,46 @@ impl AgentTaskService {
     ) -> Result<(AgentAsset, Vec<u8>), ApplicationError> {
         self.owner
             .store
-            .agent_asset(&scope(project, context)?, task, asset).map_err(Into::into)
+            .agent_asset(&scope(project, context)?, task, asset)
+            .map_err(Into::into)
     }
 }
-struct TaskFailure {
-    message: String,
-    uncertain: bool,
-    native_id: Option<String>,
+struct NativeCommandPort {
+    service: Arc<AgentTaskService>,
+    host: Arc<NextHost>,
+    context: CallContext,
+    endpoint: String,
 }
-impl TaskFailure {
-    fn before(error: impl ToString) -> Self {
-        Self {
-            message: error.to_string(),
-            uncertain: false,
-            native_id: None,
-        }
+#[async_trait::async_trait]
+impl NativeTaskPort for NativeCommandPort {
+    async fn input(
+        &self,
+        scope: &AgentTaskScope,
+        task: &StoredAgentTask,
+        draft: &AgentTaskDraft,
+    ) -> Result<Vec<NativeInput>, NativeTaskFailure> {
+        self.service
+            .input(&self.host, &self.context, scope, task, draft)
+            .await
     }
-    fn uncertain(error: impl ToString) -> Self {
-        Self {
-            message: error.to_string(),
-            uncertain: true,
-            native_id: None,
-        }
-    }
-}
-impl From<AgentTaskError> for TaskFailure {
-    fn from(error: AgentTaskError) -> Self { Self::from(ApplicationError::from(error)) }
-}
-impl From<ApplicationError> for TaskFailure {
-    fn from(e: ApplicationError) -> Self {
-        Self::before(e)
-    }
-}
-fn to_proof(p: &AgentOwnedProcess) -> NativeProcessProof {
-    NativeProcessProof {
-        pid: p.pid,
-        start_time: p.start_time,
-        executable: p.executable.clone(),
-        marker: p.marker.clone(),
-    }
-}
-fn native_receipt_status(state: &str) -> &'static str {
-    match state {
-        "ready" => "succeeded",
-        "interrupted" => "interrupted",
-        "failed" => "failed",
-        "uncertain" | "disconnected" => "uncertain",
-        _ => "submitted",
-    }
-}
-fn append_events(
-    task: &mut StoredAgentTask,
-    native: Vec<NativeEvent>,
-    events: &mut Vec<AgentTaskEvent>,
-) {
-    for e in native {
-        if task.task.native_session_id.as_deref() != Some(&e.session) {
-            continue;
-        }
-        task.event_cursor += 1;
-        events.push(to_event(e, task.event_cursor, task.attachment.generation));
-    }
-}
-fn to_event(e: NativeEvent, sequence: u64, generation: u64) -> AgentTaskEvent {
-    AgentTaskEvent {
-        usage: e.usage,
-        sequence,
-        event_id: if e.role.as_deref() == Some("user") && e.request_id.is_some() {
-            format!(
-                "{}:request:{}:user",
-                e.session,
-                e.request_id.as_deref().unwrap()
-            )
-        } else if let (Some(turn), Some(item)) = (&e.turn, &e.item) {
-            format!("{}:native:{turn}:{item}", e.session)
-        } else {
-            format!("{}:{}", e.session, e.key)
-        },
-        request_id: e.request_id,
-        generation,
-        native_session_id: e.session,
-        native_turn_id: e.turn,
-        native_item_id: e.item,
-        kind: e.kind,
-        role: e.role,
-        text: e.text,
-        status: e.status,
-        source: if e.historical {
-            "native_history"
-        } else {
-            "observation"
-        }
-        .into(),
-        observed_at_ms: e.at_ms,
+    async fn endpoint(
+        &self,
+        scope: &AgentTaskScope,
+        task: &StoredAgentTask,
+    ) -> Result<NativeTaskEndpoint, NativeTaskFailure> {
+        let lease = Arc::new(self.service.mcp_connections.issue(
+            &scope.project,
+            &self.context,
+            "task",
+            &task.task.task_id,
+            task.attachment.generation,
+            !task.task_mcp_identity,
+        ));
+        Ok(NativeTaskEndpoint {
+            url: self.endpoint.clone(),
+            token: lease.token.clone(),
+            lease,
+        })
     }
 }
 

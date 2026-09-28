@@ -37,6 +37,11 @@ impl AgentMcpLease {
         }
     }
 }
+impl rho_agent_native::NativeConnectionLease for AgentMcpLease {
+    fn revoke(&self) {
+        AgentMcpLease::revoke(self);
+    }
+}
 impl Drop for AgentMcpLease {
     fn drop(&mut self) {
         self.revoke();

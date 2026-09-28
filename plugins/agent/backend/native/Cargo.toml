@@ -1,0 +1,22 @@
+[package]
+name = "rho-agent-native"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "AGPL-3.0-only"
+repository = "https://github.com/YuLab-SMU/Rho"
+
+[dependencies]
+rho-agent-api = { path = "../../api" }
+rho-agent-owner = { path = "../owner" }
+rho-agent-client = { path = "../client" }
+async-trait = "0.1"
+base64 = "0.22"
+serde_json = "1.0"
+sha2 = "0.10"
+tokio = { version = "1.0", features = ["macros", "rt", "sync", "time"] }
+
+[dev-dependencies]
+rho-agent-store = { path = "../store" }
+tempfile = "3.20"
+uuid = { version = "1.18", features = ["v4"] }

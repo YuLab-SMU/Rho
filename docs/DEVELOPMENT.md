@@ -197,6 +197,19 @@ admission and HTTP identity integration remain covered by `cargo test -p rho-hos
 --locked`; these do not establish an ordinary Agent runtime/view or real-provider
 acceptance. No setup entry point is invoked by the native fixture checks.
 
+The native task scheduler is `plugins/agent/backend/native`. Iterate with
+`cargo test -p rho-agent-native --lib --locked`, then run `cargo test -p rho-host
+--lib agent_tasks --locked` for caller/window/context and MCP integration.
+`node scripts/test-agent-plugin-native.mjs` assembles the scheduler, native client,
+owner and store outside the checkout and runs receipt-failure, no-replay and
+endpoint-cleanup fixtures, including failed registration and unconfirmed process
+cleanup, using only public dependencies. These use fake native
+sessions and a disposable Agent database. After building the current binary,
+`node scripts/test-agent-task-recovery.mjs` exercises the local ACP fixture across
+a disposable Host crash and explicit resume. Its default fixture run observes
+only temporary configuration; native user settings are inspected only by explicit
+`--real-*` runs. Ordinary native-plugin composition remains a separate acceptance.
+
 The public model driver is `plugins/agent/backend/engine`. Run `cargo test -p
 rho-agent-engine --locked` for the real Rig HTTP/SSE codecs and production-driver
 ports using local provider fixtures. `node scripts/test-agent-plugin-engine.mjs`
