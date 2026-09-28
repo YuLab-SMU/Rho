@@ -48,20 +48,32 @@ pub(crate) async fn query(
         .store
         .agent_native_admission(&metadata.scope, &input.send_request)?
         .ok_or(AgentTaskError::NotFound)?;
-    let observed = native_selection::query(
+    let observed = native_selection::observe(
         &host,
         &call.request,
         manifest::key("plugins.delegated_operation"),
         json!({"parent_operation":capture.origin.operation,"request":tool.request}),
     )
     .await?;
-    let Some(id) = observed["operation_id"].as_str() else {
-        return Ok(
-            json!({"send_request":input.send_request,"tool_request":input.tool_request,"completeness":"partial","request":tool.request,"operation":null}),
-        );
+    if !matches!(
+        observed["status"].as_str(),
+        Some("ready" | "busy" | "unavailable")
+    ) || !matches!(
+        observed["completeness"].as_str(),
+        Some("complete" | "partial" | "cached" | "unavailable")
+    ) {
+        return Err(Failure::invalid(
+            "Invalid original delegated-operation observation",
+        ));
+    }
+    let partial = || json!({"send_request":input.send_request,"tool_request":input.tool_request,"completeness":"partial","request":tool.request,"operation":null});
+    if observed["status"] != "ready" || observed["completeness"] != "complete" {
+        return Ok(partial());
+    }
+    let found: PluginDelegatedOperation = decode(&observed["data"])?;
+    let Some(id) = found.operation_id else {
+        return Ok(partial());
     };
-    let id = OperationId::new(id)
-        .map_err(|_| Failure::invalid("Invalid original scientific Operation identity"))?;
     if tool.operation.as_ref().is_some_and(|saved| saved != &id) {
         return Err(Failure::invalid(
             "Original tool and scientific journal disagree",

@@ -547,6 +547,59 @@ async fn native_science_disconnect_retains_uncertainty_and_only_observes_origina
     assert_eq!(receipt["phase"], "uncertain");
     assert_eq!(receipt["request"], json!(child.request));
     assert_eq!(receipt["native_request"]["arguments"], tool["arguments"]);
+    // A missing durable child is partial evidence, never an invitation to
+    // dispatch again. A cached identity is likewise not a fresh confirmation.
+    for observation in [
+        json!({"status":"ready","completeness":"partial","data":{"operation_id":null}}),
+        json!({"status":"busy","completeness":"cached","data":{"operation_id":"cached-child"}}),
+        json!({"status":"unavailable","completeness":"unavailable","data":null}),
+    ] {
+        let read = scientific(
+            "read-missing-original",
+            "agent.native.tool.operation",
+            json!({"send_request":tool["send_request"],"tool_request":tool["tool_request"]}),
+            false,
+        );
+        f.writer
+            .send(read.request.clone(), RpcBody::Query(read.clone()))
+            .await
+            .unwrap();
+        let frame = f.read().await;
+        assert!(
+            matches!(&frame.body, RpcBody::HostCall { parent_request, capability, arguments }
+            if parent_request == &read.request && capability == &manifest::key("plugins.delegated_operation")
+                && arguments == &json!({"parent_operation":native.operation_id,"request":child.request}))
+        );
+        f.writer
+            .send(
+                frame.request,
+                RpcBody::HostResult {
+                    result: observation,
+                },
+            )
+            .await
+            .unwrap();
+        let frame = f.read().await;
+        assert_eq!(frame.request, read.request);
+        let RpcBody::QueryResult {
+            data, completeness, ..
+        } = frame.body
+        else {
+            panic!("{frame:?}")
+        };
+        assert_eq!(completeness, ObservationCompleteness::Partial);
+        assert_eq!(data["completeness"], "partial");
+        assert_eq!(data["request"], json!(child.request));
+        assert!(data["operation"].is_null());
+        assert_eq!(
+            f.query(
+                "agent.native.tool",
+                json!({"send_request":tool["send_request"],"tool_request":tool["tool_request"]})
+            )
+            .await,
+            receipt
+        );
+    }
     inspect_original(&mut f, &native, &tool, &child.request, record).await;
     let later = f
         .query(

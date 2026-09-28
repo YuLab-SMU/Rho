@@ -181,12 +181,7 @@ pub(crate) async fn query(
     key: CapabilityKey,
     arguments: Value,
 ) -> Result<Value, Failure> {
-    let pending = host
-        .begin(read_id(), parent.clone(), key, arguments)
-        .map_err(|_| Failure::invalid("Native observation could not be queued"))?;
-    let value = pending.receive().await.map_err(|_| {
-        Failure::invalid("Original native observation is unavailable; no work was replayed")
-    })?;
+    let value = observe(host, parent, key, arguments).await?;
     if value["status"] != "ready" || value["completeness"] != "complete" {
         return Err(Failure::invalid(
             "Original native observation is incomplete",
@@ -196,4 +191,20 @@ pub(crate) async fn query(
         .get("data")
         .cloned()
         .ok_or_else(|| Failure::invalid("Original native observation has no data"))
+}
+
+/// Recovery can retain partial evidence; admission still uses the complete-only
+/// query above before capturing authority or performing any write.
+pub(crate) async fn observe(
+    host: &HostCallClient,
+    parent: &RequestId,
+    key: CapabilityKey,
+    arguments: Value,
+) -> Result<Value, Failure> {
+    let pending = host
+        .begin(read_id(), parent.clone(), key, arguments)
+        .map_err(|_| Failure::invalid("Native observation could not be queued"))?;
+    pending.receive().await.map_err(|_| {
+        Failure::invalid("Original native observation is unavailable; no work was replayed")
+    })
 }

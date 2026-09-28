@@ -425,11 +425,23 @@ new cases cover three distinct provider bindings under one Send and ten refusals
 when either an activation grant or the original caller scopes are absent. Generated
 optional declarations match all 83 Query/Operation contracts from the six public
 provider manifests, including exact versions and scopes; Control/Runtime grants
-remain excluded. Its independent package and unchanged-Host verification are
-running separately in `agent-peer-tools-verify-v1.log`. These synthetic peer
+remain excluded. Its independent package builds and passes the same 35 cases;
+all four frozen-Host cases also pass, with the Host hash unchanged. Source parity
+checks 313 files against `c26976a4` and the exact 315-file package inventory.
+Commands/results are in `agent-peer-tools-results-v1.json`, with source parity in
+`agent-peer-tools-source-parity-v1.json`. These synthetic peer
 records and declaration checks do not establish actual local/remote process or
 environment execution through Agent. The independent real-R acceptance above uses
 the preceding frozen package.
+
+Native original-operation recovery now retains missing, cached/busy and unavailable
+delegation observations as explicitly partial results. It leaves the original
+uncertain receipt unchanged and reads only the original operation when complete
+evidence later appears. Admission still requires a complete observation. The
+expanded disconnect/reopen case passes, as do all 35 backend cases and architecture,
+private-boundary and diff checks. The independent package repeat is running in
+`agent-native-partial-verify-v1.log`; its source is separate from the completed
+`c26976a4` package acceptance above.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,
