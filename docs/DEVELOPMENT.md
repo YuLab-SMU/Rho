@@ -231,6 +231,13 @@ correlation, retained abandoned waits, queued/unknown/duplicate reply refusal,
 capacity and payload bounds, typed recovery, and unconfirmed disconnects. These
 SDK checks do not establish ordinary Agent process composition or scientific
 execution; Host delegation checks still own authority and journal idempotency.
+Calling-view identity uses `cargo test -p rho-host --test plugin_view_delegation
+--test plugin_drafts --locked` plus `cargo test -p rho-plugins --test backend_runtime
+reverse_calls_inherit_active_parent_and_declared_scope_without_host_credentials
+--locked`. The independent backend fixture checks authenticated origin across
+multiple hops, forged selectors, native scope loss and closure while an accepted
+operation is waiting. A non-view origin stays distinct from a stale view. These
+checks use the generic plugin-only Host and do not establish Agent task admission.
 Independent assemblies include the public plugin protocol and R media API, with
 all source/dependency paths checked to stay inside the assembly. Agent-owned storage
 includes scoped credential-file locking, replacement, redaction and explicit-path

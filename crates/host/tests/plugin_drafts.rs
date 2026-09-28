@@ -1012,7 +1012,7 @@ async fn renderer_release_is_scoped_idempotent_and_does_not_attest_to_state() {
     assert!(control(&host, &other, "views.release_renderer", args.clone()).await.is_err());
     let mut plugin = context.clone(); plugin.caller.kind = CallerKind::Plugin;
     assert!(control(&host, &plugin, "views.release_renderer", args.clone()).await.is_err());
-    let mut window = context.clone(); window.view_scope = Some(ViewCallScope { window: rho_plugin_protocol::WindowId::new("another").unwrap(), draft_source: None });
+    let mut window = context.clone(); window.view_scope = Some(ViewCallScope { window: rho_plugin_protocol::WindowId::new("another").unwrap(), origin: None, draft_source: None });
     assert!(control(&host, &window, "views.release_renderer", args.clone()).await.is_err());
     let foreign_fixture = Fixture::new();
     let (foreign, _) = renderer_fixture(&foreign_fixture, &context).await;

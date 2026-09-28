@@ -67,6 +67,7 @@ pub(crate) fn register(
         "resources.inspect",
         "resources.read",
         "views.inspect",
+        "views.caller",
         "views.connection",
         "windows.layout",
         "scenarios.list",
@@ -171,6 +172,10 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
             schema_for!(UpdatePluginWindowLayout).to_value(), schema_for!(PluginWindowLayout).to_value(),
             json!({"window":"window-example","expected_version":0,"layout":{"kind":"empty"}}),
             "Save a scoped window layout using its expected version", true, PLUGINS_RUN_SCOPE,
+        ),
+        "views.caller" => (
+            schema_for!(Empty).to_value(), schema_for!(PluginViewCaller).to_value(),
+            json!({}), "Observe the original authenticated calling view without its private credentials", false, PLUGINS_READ_SCOPE,
         ),
         "views.inspect" | "views.connection" => (
             schema_for!(PluginViewArguments).to_value(),
@@ -370,6 +375,12 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
         descriptor.documentation.effects = "Read configuration metadata only. No runtime, filesystem scan, recovery or Operation is started.".into();
         descriptor.documentation.related_capabilities = vec![];
     }
+    if id == "views.caller" {
+        descriptor.documentation.when_to_use = vec!["Bind owner-controlled task or draft actions to the native view that originated this active call, including backend delegation.".into()];
+        descriptor.documentation.limitations = vec!["No caller-supplied selector or identity is accepted. An absent captured view is unavailable, never reinterpreted as a non-view caller. A successful observation contains no credential and does not authorize a later call or prove continued liveness.".into()];
+        descriptor.documentation.effects = "Read only the native calling view identity. Never open or recover a view, enumerate other windows, or return bridge/asset tokens.".into();
+        descriptor.documentation.related_capabilities = vec![key("views.inspect")];
+    }
     if id.starts_with("scenarios.") {
         descriptor.domain = "scenarios".into();
         descriptor.documentation.owner = "plugins".into();
@@ -459,7 +470,7 @@ fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
         "resources.list" => normalize::<ResourceList>(value),
         "resources.inspect" => normalize::<ResourceInspect>(value),
         "resources.read" => normalize::<ResourceRead>(value),
-        "plugins.repository" | "workspace.paths" => normalize::<Empty>(value),
+        "plugins.repository" | "workspace.paths" | "views.caller" => normalize::<Empty>(value),
         "plugins.project_coverage" => normalize::<ProjectReadCoverageArguments>(value),
         "plugins.list" => normalize::<PluginCatalogArguments>(value),
         "plugins.inspect" | "plugins.remove" => normalize::<PluginRevisionArguments>(value),
@@ -533,6 +544,7 @@ impl QueryHandler for Read {
                 json!(service.repository.lock().unwrap().window_layout(&service.project, &plugin_principal_id(context.principal()), &args.window).map_err(error)?)
             }
             "views.inspect" => json!(service.view_record(context,&decode::<PluginViewArguments>(value)?.view)?),
+            "views.caller" => json!(service.caller_view(context)?),
             "views.connection" => json!(service.view_connection(context,&decode::<PluginViewArguments>(value)?.view)?),
 
             "resources.list" | "resources.inspect" | "resources.read" => {

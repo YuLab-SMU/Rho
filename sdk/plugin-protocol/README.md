@@ -363,6 +363,14 @@ Views never receive the Host's general credential or parent DOM access.
 Private `views.connection` material remains with the containing Host shell;
 plugin callers cannot query it, even with a declared grant. `views.inspect`
 provides the public record, configuration and state without connection credentials.
+`views.caller@1` takes an empty object under `plugins.read` and returns
+`PluginViewCaller` (`schema/view-caller.json`). Its optional `view` contains the
+original native view, window and connection IDs, including across backend calls.
+Only a caller admitted without a view returns `null`. A closed, closing, missing
+or replaced calling view fails instead of falling back to another identity.
+The query accepts no selector, opens nothing and returns no call or asset token.
+This observation cannot authorize a later request or prove continuing liveness;
+owners must revalidate their original controller when admitting later writes.
 Native backends and build scripts are
 trusted local code: this is UI, failure and lifetime isolation, not an OS sandbox.
 

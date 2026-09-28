@@ -105,6 +105,22 @@ pub struct PluginViewRecord {
     pub state_version: u32,
     pub closed: bool,
 }
+/// Host-observed calling view identity. This contains no bridge or asset token
+/// and cannot be presented as a credential for another call.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginViewOrigin {
+    pub view: ViewInstanceId,
+    pub window: WindowId,
+    pub connection: ConnectionId,
+}
+/// `None` means the admitted caller was not a view. A captured view that is no
+/// longer present fails the observation rather than becoming a non-view caller.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginViewCaller {
+    pub view: Option<PluginViewOrigin>,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct PluginViewConnection {

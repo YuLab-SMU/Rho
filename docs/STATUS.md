@@ -43,14 +43,16 @@ was removed. Its temporary adapter keeps one Agent store for both task owners at
 new `agent-v1.sqlite` sibling path, preserving the original transactional checks.
 It does not read/import previous Application task tables or delete their files.
 The package verifies its format and refuses unrelated/unsupported databases before
-schema changes. All nine public store cases (seven moved, two new) pass; the two
-new core composition cases remain pending in the active cross-boundary run. Public dependency
+schema changes. All nine public store cases (seven moved, two new) pass. All 75
+affected Host/storage cases now pass on the credential-extraction source, including
+the two new core composition cases, all six handoff cases, 40 stored component
+cases and 27 Host task/recovery cases. Public dependency
 containment, native-target metadata and architecture checks pass. The current
 binary builds and its help/startup check passes with the new store. All 13 selected
 component Chrome flows pass; two opt-in real-model cases were excluded. All nine
 current normal/narrow/wide, settings and scientific-state captures were inspected
-without visible clipping, missing glyphs or overlapping controls. Focused and
-cross-boundary storage acceptance remains in progress. An initial
+without visible clipping, missing glyphs or overlapping controls. Independent
+credential tests and real-R/manual-handoff acceptance remain in progress. An initial
 all-platform offline metadata query failed on an uncached non-host dependency;
 the Apple Silicon filtered query passed without downloads.
 
@@ -126,6 +128,15 @@ exchange over bounded duplex I/O, are added but not yet executed. This is a publ
 transport building block; Agent's ordinary backend still needs to consume it.
 The new SDK source was written after the active storage-integration binaries were
 compiled. Its own focused checks must run after the current serial verifier.
+
+The generic `views.caller` query now exposes the original authenticated view,
+window and connection identities without private tokens. Native ingress captures
+the identity, backend hops retain it, and missing/closing/stale views fail rather
+than becoming non-view callers. It reads existing state and does not authorize
+future writes. The new generic Host fixture covers two delegation hops, forged
+selectors, lost scopes and closure during accepted work. Its tests, public type
+generation and independent consumer validation remain pending after the current
+serial storage verifier. Existing storage results do not validate this new port.
 
 This remains a migration foundation, not an ordinary loadable Agent runtime/view.
 Ordinary backend process composition, context providers, Agent views, Studio

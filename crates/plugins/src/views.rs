@@ -404,6 +404,37 @@ impl PluginService {
             .send_modify(|version| *version = version.wrapping_add(1));
         Ok(record)
     }
+    /// Observe only the original view captured by the authenticated ingress.
+    /// No supplied selector, shell credentials, mounting or reconnection.
+    pub(crate) fn caller_view(
+        &self,
+        context: &host::CallContext,
+    ) -> Result<PluginViewCaller, OperationError> {
+        let Some(scope) = &context.view_scope else {
+            return Ok(PluginViewCaller { view: None });
+        };
+        let unavailable = || OperationError::Unavailable(
+            "The original calling view is no longer available for new actions".into());
+        let origin = scope.origin.as_ref().ok_or_else(unavailable)?;
+        if scope.window != origin.window || scope.draft_source.is_some() {
+            return Err(unavailable());
+        }
+        let views = self.views.lock().unwrap();
+        let live = views.get(&origin.view).ok_or_else(unavailable)?;
+        let record = &live.connection.view;
+        if live.connection.connection != origin.connection
+            || record.window != origin.window
+            || record.project != self.project
+            || record.principal != plugin_principal_id(context.principal())
+            || record.closed || live.closing.is_some()
+            || !self.runtime.observe().iter().any(|observed|
+                observed.instance.identity == record.instance
+                    && observed.instance.state == InstanceState::Active)
+        {
+            return Err(unavailable());
+        }
+        Ok(PluginViewCaller { view: Some(origin.clone()) })
+    }
     /// Read existing connection material; never mount, restart or recover a view.
     pub fn view_connection(
         &self,
@@ -515,6 +546,11 @@ impl PluginService {
         }
         let mut scope = host::ViewCallScope {
             window: live.connection.view.window.clone(),
+            origin: Some(PluginViewOrigin {
+                view: live.connection.view.view.clone(),
+                window: live.connection.view.window.clone(),
+                connection: live.connection.connection.clone(),
+            }),
             draft_source: (live.closing.is_some() || !active).then(|| DraftSource {
                 revision: live.connection.view.instance.revision.clone(),
                 contribution: live.connection.view.contribution.clone(),

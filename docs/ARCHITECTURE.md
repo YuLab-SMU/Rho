@@ -592,6 +592,14 @@ the transport reports uncertainty and never retries, commits or claims rollback.
 The core remains authoritative for delegated grants, scope and original Operation
 idempotency. The pump cannot turn a query parent into effectful authority.
 
+`views.caller` exposes only the original native view/window/connection identity
+captured at authenticated ingress. Backend delegation retains that private capture;
+neither public RPC arguments nor selectors can supply or replace it. Non-view
+calls return an explicit null identity. A stale, closing, closed or unavailable
+captured view fails instead of becoming a non-view call. The observation grants
+no authority, contains no connection credentials and does not prove future
+liveness. It reads existing state without opening or reconnecting a view.
+
 An owner can contribute an ephemeral Control handler through the same atomic
 registry. Host, CLI, MCP and scoped view requests validate the exact contract,
 provider, principal and existing authority. Controls do not create an Operation,

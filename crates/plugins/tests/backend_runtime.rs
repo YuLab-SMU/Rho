@@ -509,6 +509,11 @@ async fn reverse_calls_inherit_active_parent_and_declared_scope_without_host_cre
     let lease = resolve(&runtime, &instance, false);
     let scope = rho_contract::ViewCallScope {
         window: WindowId::new("origin-window").unwrap(),
+        origin: Some(PluginViewOrigin {
+            view: ViewInstanceId::new("origin-view").unwrap(),
+            window: WindowId::new("origin-window").unwrap(),
+            connection: ConnectionId::new("origin-connection").unwrap(),
+        }),
         draft_source: Some(DraftSource {
             revision: instance.identity.revision.clone(),
             contribution: ContributionId::new("document").unwrap(),

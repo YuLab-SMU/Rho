@@ -34,6 +34,15 @@ const guessedArchive:ExportPluginArchive={revision:"revision"};
 const archiveOwner:PluginArchiveReference={...archiveReference,owner:{instance:"fake"}};
 void [archiveDiscarded,archiveStage,archiveRead,archiveChunk,archiveProgress,archiveImport,archiveExport,archiveOperation,archiveEvidence,archivePath,guessedArchive,archiveOwner];
 import type {ProjectReadCoverage,ProjectReadCoverageArguments} from "../protocol/index.js";
+import type {PluginViewCaller,PluginViewOrigin} from "../protocol/index.js";
+const originatingView:PluginViewOrigin={view:"view",window:"window",connection:"connection"};
+const viewCaller:PluginViewCaller={view:originatingView};
+const nonViewCaller:PluginViewCaller={view:null};
+// @ts-expect-error Observing a caller never returns a bridge credential.
+const credentialCaller:PluginViewOrigin={...originatingView,call_token:"private"};
+// @ts-expect-error An observation must distinguish a view from a non-view caller.
+const unspecifiedCaller:PluginViewCaller={};
+void [viewCaller,nonViewCaller,credentialCaller,unspecifiedCaller];
 import type {ReleasePluginViewRenderer,PluginViewRendererRelease} from "../protocol/index.js";
 import type {PluginViewMessage,PluginViewRequest} from "../protocol/index.js";
 const selectedTestMessage: PluginViewMessage = {protocol_version:1,connection:"connection",view:"view",sequence:1,request:"original",test_project:"test-one",body:{type:"query",capability:{id:"plugins.instances",version:1},arguments:{limit:20}}};
@@ -158,6 +167,13 @@ export function inspect(manifest: PluginManifest, visual: VisualDocument, page: 
     visit(schema);
   }
   const previewSchema = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/preview-plugin.json"), "utf8"));
+  const viewCaller = JSON.parse(fs.readFileSync(path.join(temp, "protocol/schema/view-caller.json"), "utf8"));
+  assert.equal(viewCaller.additionalProperties, false);
+  assert.deepEqual(Object.keys(viewCaller.properties), ["view"]);
+  assert.equal(viewCaller.$defs.PluginViewOrigin.additionalProperties, false);
+  assert.deepEqual(viewCaller.$defs.PluginViewOrigin.required, ["view", "window", "connection"]);
+  assert.equal(viewCaller.$defs.PluginViewOrigin.properties.call_token, undefined);
+  assert.equal(viewCaller.$defs.PluginViewOrigin.properties.asset_token, undefined);
   assert.equal(previewSchema.additionalProperties, false);
   assert.equal(previewSchema.properties.queries.maxItems, 128);
   assert.deepEqual(previewSchema.required, ["revision", "artifact", "alias", "configuration", "queries"]);
