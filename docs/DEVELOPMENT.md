@@ -220,6 +220,11 @@ digests and structured errors use `cargo test -p rho-application --lib
 component_boundary --locked`. Public component-owner fixtures inject controller
 loss and atomic write failure, and check original admission, late native receipts,
 observation-only restart, unsupported control refusal and frozen permissions.
+Public handoff ownership and the temporary core conversion use `cargo test -p
+rho-agent-owner -p rho-application --lib handoff --locked`: all task-kind pairs,
+original receipt recovery, scoped/live controllers, stale or unowned context,
+target budgets and atomic commit faults. The boundary fixture checks exact
+serialized bytes, digests and the structured observation-expired diagnostic.
 Independent assemblies include the public plugin protocol and R media API, with
 all source/dependency paths checked to stay inside the assembly. Shared storage and manual handoff use
 `cargo test -p rho-sqlite --lib agent_tasks --locked` and `cargo test -p rho-sqlite

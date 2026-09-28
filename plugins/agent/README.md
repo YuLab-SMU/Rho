@@ -6,8 +6,8 @@ parts of the Agent plugin, including the component model-task state machine.
 JSON schemas. `backend/client/` owns deterministic Codex app-server, Kimi ACP and
 DeepSeek ACP communication, bounded observations and owned-process recovery.
 `backend/owner/` owns task admission, captured drafts, original receipts, control
-generation, observation-only restart handling, model-setting/credential validation
-and the repository port. `backend/engine/` owns the sole Rig driver, provider
+generation, observation-only restart handling, model-setting/credential validation,
+manual draft handoff and the repository ports. `backend/engine/` owns the sole Rig driver, provider
 protocols, synthetic diagnostics and deterministic permission rules. These
 libraries do not depend on private Rho core crates. The transport and task owner
 have no model-engine dependency.
@@ -24,6 +24,13 @@ which are included in the independent source assemblies. The current Host conver
 Moving DTO ownership does not change wire field names, replay input, authorize tools or transfer scientific
 truth to the transport.
 
+`api::handoff` and `owner::handoff` own the handoff contract and policy. The
+containing owner supplies readable scientific references and the original live
+controller. The target writer gate and injected repository retain one atomic
+source/target precondition check, draft append and receipt. Handoff does not send
+a turn or transfer assets, grants or model credentials. Original request recovery
+returns its receipt even after the source changes; changed reuse is refused.
+
 Generate declarations with `node plugins/agent/generate-sdk.mjs`; add `--check` to
 verify freshness. `node scripts/test-agent-plugin-types.mjs` checks an independent
 TypeScript consumer. Run `node scripts/test-agent-plugin-client.mjs` from the checkout
@@ -35,7 +42,8 @@ DeepSeek setup entry point is retained but is not invoked by these checks.
 `node scripts/test-agent-plugin-owner.mjs` builds the task owner and public API
 outside the checkout. Its focused fixtures cover original-request deduplication,
 scope and draft fences, atomic write failure, captured input retention, uncertain
-restart observations and stop/takeover fencing. Shared SQLite, component handoff
+restart observations, stop/takeover fencing, all handoff source/target pairs,
+controller loss, stale material and atomic handoff failures. Shared SQLite, component handoff
 and Host integration retain their own cross-boundary tests.
 
 `node scripts/test-agent-plugin-engine.mjs` builds the API, owner and model engine
@@ -48,5 +56,5 @@ verified bytes are supplied by the containing owner. The transitional core adapt
 preserves admitted actions and records owner diagnostics before returning errors.
 
 This source is not yet a loadable Agent plugin: ordinary backend/storage composition,
-context/handoff and Agent views still require migration. No backend manifest,
+context providers and Agent views still require migration. No backend manifest,
 default activation or delivery claim is made until those owners use public ports.

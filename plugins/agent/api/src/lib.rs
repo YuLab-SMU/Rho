@@ -119,4 +119,5 @@ mod model;
 pub use model::*;
 
 pub mod component;
+pub mod handoff;
 pub mod component_boundary;

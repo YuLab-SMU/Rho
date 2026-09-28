@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "checks": {
+    "plugins.agent-handoff": {"command": ["cargo", "test", "-p", "rho-agent-owner", "-p", "rho-application", "--lib", "handoff", "--locked"]},
+    "plugins.agent-handoff-store": {"command": ["cargo", "test", "-p", "rho-sqlite", "--test", "agent_handoffs", "--locked"]},
     "plugins.agent-component-boundary": {"command": ["cargo", "test", "-p", "rho-application", "--lib", "component_boundary", "--locked"]},
     "plugins.agent-engine": {"command": ["cargo", "test", "-p", "rho-agent-engine", "--locked"]},
     "plugins.agent-engine-independent": {"command": ["node", "scripts/test-agent-plugin-engine.mjs"]},
@@ -1067,6 +1069,7 @@
         "plugins.agent-engine", "plugins.agent-engine-independent", "plugins.agent-adapter", "plugins.agent-model-host",
         "plugins.agent-real-r",
         "plugins.agent-owner", "plugins.agent-owner-independent", "plugins.agent-request", "plugins.agent-component-boundary",
+        "plugins.agent-handoff", "plugins.agent-handoff-store",
         "plugins.agent-native", "plugins.agent-independent", "plugins.agent-protocol", "plugins.agent-types",
         "plugins.development-owner",
         "plugins.build-owner", "plugins.archive-owner", "plugins.archive-ports",

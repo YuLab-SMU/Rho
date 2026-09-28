@@ -8,7 +8,7 @@ const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-types-'));
 try {
   fs.cpSync(path.join(root, 'plugins/agent/sdk'), path.join(directory, 'sdk'), {recursive: true});
   fs.writeFileSync(path.join(directory, 'package.json'), '{"type":"module"}');
-  fs.writeFileSync(path.join(directory, 'consumer.ts'), `import type {ComponentAgentStart,ComponentAgentRun,ComponentAgentEventPage,ComponentToolReceipt,ApplicationCommandRequest,ApplicationCommandReceipt,AgentModelRun,ComponentModelSettings,ComponentToolSpec,AgentTaskRequest,AgentTaskDetail,AgentTaskEventPage,ProjectAgentTaskPage,AgentControllerRef,AgentProvider,AgentClientSession,AgentNativeCapabilities,AgentUsageObservation,LocalAgent} from './sdk/index.js';
+  fs.writeFileSync(path.join(directory, 'consumer.ts'), `import type {AgentHandoffCommand, AgentHandoffQueryResult, AgentHandoffReceipt, ComponentAgentStart,ComponentAgentRun,ComponentAgentEventPage,ComponentToolReceipt,ApplicationCommandRequest,ApplicationCommandReceipt,AgentModelRun,ComponentModelSettings,ComponentToolSpec,AgentTaskRequest,AgentTaskDetail,AgentTaskEventPage,ProjectAgentTaskPage,AgentControllerRef,AgentProvider,AgentClientSession,AgentNativeCapabilities,AgentUsageObservation,LocalAgent} from './sdk/index.js';
 const controller:AgentControllerRef={window_id:'window',incarnation:'incarnation'};
 const providers:AgentProvider[]=['codex','kimi','deepseek'];
 function session(value:AgentClientSession):AgentControllerRef{return value.window;}
@@ -35,7 +35,10 @@ function componentRecords(start:ComponentAgentStart,run:ComponentAgentRun,events
 const fixedView:ApplicationCommandRequest['action']={kind:'open_view',view_type:'objects',expected_context_version:'view'};
 // @ts-expect-error Durable component runs contain credential references, never plaintext keys.
 function componentSecret(run:ComponentAgentRun){return run.model.api_key;}
-void [componentRecords,componentSecret,fixedView,modelCapture,secret,captured,task,events,projection,uncaptured,controller,providers,session,discovery,modes,usage,incomplete,inventedUsage,fabricated];
+function handoff(request:AgentHandoffCommand, result:AgentHandoffQueryResult, receipt:AgentHandoffReceipt){return [request.source_revision,request.target_draft_version,request.target_control_generation,result.kind,receipt.target_draft_version];}
+// @ts-expect-error A handoff changes a captured draft; it does not authorize a model turn.
+function automaticHandoff(request:AgentHandoffCommand){return request.send_turn;}
+void [handoff,automaticHandoff,componentRecords,componentSecret,fixedView,modelCapture,secret,captured,task,events,projection,uncaptured,controller,providers,session,discovery,modes,usage,incomplete,inventedUsage,fabricated];
 `);
   execFileSync(process.execPath, [path.join(root, 'ui/node_modules/typescript/bin/tsc'), '--noEmit', '--strict', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', '--rootDir', directory, path.join(directory, 'consumer.ts')], {cwd: directory, stdio: 'inherit'});
   console.log('Independent Agent contract consumer compiled using only public declarations.');

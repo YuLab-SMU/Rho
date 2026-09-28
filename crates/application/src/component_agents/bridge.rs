@@ -2,20 +2,20 @@
 use super::*;
 use serde::de::DeserializeOwned;
 
-pub(super) fn wire<T: Serialize + ?Sized, U: DeserializeOwned>(
+pub(crate) fn wire<T: Serialize + ?Sized, U: DeserializeOwned>(
     value: &T,
 ) -> Result<U, ApplicationError> {
     serde_json::to_vec(value)
         .and_then(|bytes| serde_json::from_slice(&bytes))
         .map_err(|_| ApplicationError::Storage("Agent record conversion failed".into()))
 }
-pub(super) fn public_scope(scope: &ApplicationScope) -> rho_agent_owner::AgentTaskScope {
+pub(crate) fn public_scope(scope: &ApplicationScope) -> rho_agent_owner::AgentTaskScope {
     rho_agent_owner::AgentTaskScope {
         project: scope.project.clone(),
         principal: scope.principal.clone(),
     }
 }
-fn native_scope(scope: &rho_agent_owner::AgentTaskScope) -> ApplicationScope {
+pub(crate) fn native_scope(scope: &rho_agent_owner::AgentTaskScope) -> ApplicationScope {
     ApplicationScope {
         project: scope.project.clone(),
         principal: scope.principal.clone(),

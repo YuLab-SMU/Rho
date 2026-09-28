@@ -1,4 +1,5 @@
 use rho_agent_api::*;
+use rho_agent_api::handoff::*;
 use rho_agent_api::component::*;
 use std::{fs, path::PathBuf};
 use ts_rs::{Config, TS};
@@ -13,6 +14,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_large_int("number");
     macro_rules! export { ($($ty:ty),+ $(,)?) => { $(<$ty>::export_all(&types)?;)+ }; }
     export!(
+        AgentHandoffSourceSnapshot, AgentHandoffTargetSnapshot, AgentHandoffsQuery,
+        AgentHandoffQuery, AgentHandoffQueryResult, AgentHandoffCommand, AgentHandoffReceipt,
         ComponentAgentProfile, ComponentPermissionPolicy, ComponentTaskAuthorization,
         ComponentRequestedAction, ComponentIntentAction, ComponentAgentTaskIntent,
         ComponentModelProtocol, ComponentCredentialRef, ComponentModelConnection,
@@ -97,6 +100,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
+        ("handoff-query", schemars::schema_for!(AgentHandoffsQuery)),
+        ("handoff-query-result", schemars::schema_for!(AgentHandoffQueryResult)),
+        ("handoff-command", schemars::schema_for!(AgentHandoffCommand)),
+        ("handoff-receipt", schemars::schema_for!(AgentHandoffReceipt)),
         ("component-start", schemars::schema_for!(ComponentAgentStart)),
         ("component-conversation", schemars::schema_for!(ComponentAgentConversation)),
         ("component-run", schemars::schema_for!(ComponentAgentRun)),

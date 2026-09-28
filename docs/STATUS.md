@@ -37,6 +37,15 @@ observation-only restart. Three boundary cases check serialized bytes/digests,
 complete native document receipts, recovery states and structured errors. Public
 SDK generation and an independent strict TypeScript consumer also pass.
 
+Manual handoff policy and contracts have now moved into the public Agent package;
+the Application implementation is a typed forwarding adapter to the same atomic
+repository. The original caller validator and target writer gates are retained.
+Five independent owner cases and one serialization/digest boundary case are added;
+their execution and public handoff SDK generation remain pending. All six existing
+SQLite handoff cases pass on the extracted implementation, including write-failure
+rollback, durable idempotency, stale material, scoped controllers and asset separation. This change
+does not create a model turn, transfer uploads or move grants between tasks.
+
 An independent source assembly, containing the Agent libraries plus the two public
 API dependencies, passed all 29 execution/recovery cases (three model policy/error,
 17 Rig HTTP/SSE/production-driver, nine task-owner). Its aggregate check was then
@@ -46,8 +55,12 @@ prolonged compilation before new tests ran. Both interruptions are retained as
 incomplete checks, not passes. No business logic changed between those attempts.
 The script now selects the actual library and protocol targets explicitly.
 
-Client generation and affected Host/storage, handoff, real-R and browser acceptance
-for this extraction have not completed. Tool processes repeatedly remained inactive
+Client generation and all 67 affected Host/storage cases for the component
+extraction pass (27 Host and 40 storage). That command compiled the component
+libraries before the subsequent handoff source change; its result is a separate
+baseline. The six SQLite handoff cases use the new source. Host model-unit,
+real-R and browser acceptance remain in progress on that source.
+Tool processes repeatedly remained inactive
 without a compiler diagnostic; the cause is not established. A completed earlier
 startup sample was predominantly `_dyld_start` before the harness, while later
 compiler/debugger sampling produced no usable stack. A privileged system sampler
@@ -57,6 +70,10 @@ current end-to-end acceptance from it. Details and commands are in
 `target/plugin-refactor/agent-component-verification.txt` and the versioned logs
 and interruption records alongside it. Inspect live verification processes before
 starting another Cargo invocation.
+After that serial run completes, the prepared
+`target/plugin-refactor/agent-handoff-verify.py` runs the new focused cases,
+regenerates the public SDK, checks the independent owner assembly and exercises
+the existing manual-handoff Chrome flow. Do not start it concurrently with Cargo.
 
 The preceding engine baseline at `1c871a8e` remains separate: 75 Host/storage cases,
 18 real-R fixture-engine cases, 98 Agent client cases and 13 selected Chrome flows
@@ -67,7 +84,7 @@ fixtures remain in `target/plugin-refactor/agent-native-verification.txt`; they
 have not been rerun for the current component extraction.
 
 This remains a migration foundation, not an ordinary loadable Agent runtime/view.
-Backend/storage composition, context providers and handoff, Agent views, Studio
+Backend/storage composition, context providers, Agent views, Studio
 Agent assistance and final composition/default delivery remain active work.
 Initial import warnings were corrected. Existing user Hosts and R sessions have
 not been replaced; runtime acceptance uses disposable projects. No full-workspace

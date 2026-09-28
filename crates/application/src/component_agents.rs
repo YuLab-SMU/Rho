@@ -5,7 +5,7 @@ use rho_contract::*;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-mod bridge;
+pub(crate) mod bridge;
 use bridge::*;
 
 mod engine;
@@ -286,7 +286,7 @@ impl public::ComponentActorValidator for ComponentActor {
     }
 }
 impl ComponentActor {
-    fn public(&self) -> public::ComponentActor {
+    pub(crate) fn public(&self) -> public::ComponentActor {
         public::ComponentActor::new(
             public_scope(&self.scope),
             rho_agent_api::AgentControllerRef {

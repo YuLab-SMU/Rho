@@ -212,6 +212,8 @@ Checks:
 - `plugins.agent-component-boundary`: `["cargo","test","-p","rho-application","--lib","component_boundary","--locked"]`
 - `plugins.agent-engine`: `["cargo","test","-p","rho-agent-engine","--locked"]`
 - `plugins.agent-engine-independent`: `["node","scripts/test-agent-plugin-engine.mjs"]`
+- `plugins.agent-handoff`: `["cargo","test","-p","rho-agent-owner","-p","rho-application","--lib","handoff","--locked"]`
+- `plugins.agent-handoff-store`: `["cargo","test","-p","rho-sqlite","--test","agent_handoffs","--locked"]`
 - `plugins.agent-independent`: `["node","scripts/test-agent-plugin-client.mjs"]`
 - `plugins.agent-model-host`: `["cargo","test","-p","rho-host","--test","component_agents","--test","component_recovery","--locked"]`
 - `plugins.agent-native`: `["cargo","test","-p","rho-agent-client","--lib","--locked"]`

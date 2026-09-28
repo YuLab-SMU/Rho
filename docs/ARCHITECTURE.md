@@ -1871,7 +1871,9 @@ See [PRIVACY.md](../PRIVACY.md) and
 
 ## Human Agent handoff
 
-The approved manual-handoff action is an Application draft transaction. Its typed
+The approved manual-handoff policy and public contract live in the Agent package
+(`rho-agent-owner::handoff` and `rho-agent-api::handoff`). Application only forwards
+typed captures to that owner and injects the original atomic repository. Its typed
 source/target references point to the existing native task and Rho conversation
 owners. The Host reads any additional native-task operation references through the
 existing caller-filtered journal and validates selected references through the

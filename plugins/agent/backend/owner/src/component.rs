@@ -61,7 +61,7 @@ impl ComponentActor {
     pub fn window(&self) -> &ApplicationWindowRef {
         &self.window
     }
-    fn validate(&self, now: u64) -> Result<(), ComponentTaskError> {
+    pub(crate) fn validate(&self, now: u64) -> Result<(), ComponentTaskError> {
         self.validator.validate(now)
     }
 }
