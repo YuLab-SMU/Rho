@@ -106,10 +106,10 @@ pub fn manifest() -> PluginManifest {
             }),
         },
         dependencies: Default::default(),
-        requires: vec![CapabilityRequirement {
-            capability: key("views.caller"),
+        requires: ["views.caller", "views.presence"].into_iter().map(|id| CapabilityRequirement {
+            capability: key(id),
             scopes: ["plugins.read".into()].into(),
-        }],
+        }).collect(),
         optional_requires: vec![
             CapabilityRequirement {
                 capability: CapabilityKey {

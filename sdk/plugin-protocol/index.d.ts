@@ -121,6 +121,8 @@ export type * from "./types/PluginViewConnection.js";
 export type * from "./types/PluginViewLifecycle.js";
 export type * from "./types/PluginViewMessage.js";
 export type * from "./types/PluginViewOrigin.js";
+export type * from "./types/PluginViewPresence.js";
+export type * from "./types/PluginViewPresenceState.js";
 export type * from "./types/PluginViewRecord.js";
 export type * from "./types/PluginViewRendererRelease.js";
 export type * from "./types/PluginViewRequest.js";

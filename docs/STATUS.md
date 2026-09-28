@@ -340,7 +340,7 @@ and all 27 framed cases pass, as do the independent package build and its 27 cas
 That v2 acceptance predates the added failed-disconnect release check. The subsequent
 architecture check found the new package-internal composition edges were missing
 from its declared map; the map now names the public native/client libraries without
-allowing private core imports. On the final source, all five focused native cases
+allowing private core imports. On `41ad9981`, all five focused native cases
 and all 28 framed cases pass. The independent package builds and passes the same
 28 cases. All four generic Host cases now pass, including native task metadata,
 attachment journal exclusion, original request identity and separate instance
@@ -351,11 +351,25 @@ without a terminal result; its absent processes were verified before rerunning
 only that frozen harness and the remaining static checks. Logs/results are in
 `target/plugin-refactor/agent-native-backend-results-v3.json` and
 `agent-native-backend-results-v4.json`; earlier failed/interrupted logs remain.
-The endpoint still advertises no scientific tools; contributed context, public
-foreign-controller presence, full-size resource transfer and ordinary Agent views
-remain unfinished. Current uploads are bounded to 524288 encoded bytes. No installed
+The endpoint still advertises no scientific tools; contributed context,
+full-size resource transfer and ordinary Agent views remain unfinished. Current uploads are bounded to 524288 encoded bytes. No installed
 native Agent, real model or user credential is used by these checks. Existing Hosts
 and R sessions have not been restarted. The fixed core composition remains in place.
+
+Source now exposes a bounded public `views.presence` observation and composes it
+for native cross-window takeover. Attached/closing views remain protected;
+unknown/foreign views fail, and a detached/closed result is followed by a fresh
+requesting-caller check before owner admission. The query contains no credentials
+or view content and does not reconnect a view. The focused native takeover case
+passes after correcting its stale control generation: first Send advances that
+generation, and the initial fixture was correctly refused before takeover. The
+first failure and its diagnostic repeat are retained. All 29 framed cases and
+all three public-Host view-delegation cases pass, including credential/content
+exclusion, refused-close recovery and backend-crash detachment. Public contract and
+manifest generation, the independent TypeScript consumer, client build and client
+consistency checks also pass. Independent backend/Host acceptance and static checks
+are still running serially; those results remain unconfirmed. Evidence is recorded in
+`target/plugin-refactor/agent-view-presence-*-v2.*`, with the initial v1 logs retained.
 
 Archive downloads and the ordinary Manager/Studio transfer interfaces are implemented
 and verified. The containing browser shares one download slot for archives/resources,
@@ -1970,10 +1984,12 @@ continuation and optional real-model/alternate-R cases remain unexecuted.
 
 ### Remaining work and restart boundary
 
-Finish current storage/credential and handoff boundary acceptance, then compose
-the ordinary Agent backend through public context, document and scientific ports,
-and migrate Agent views. Native transport, task/handoff policy, metadata, credentials
-and model engine are package-owned prerequisites, not yet a loadable package. Studio's
+The ordinary Agent backend is loadable and has independent package/Host acceptance
+for metadata, credentials, model runs and native task commands. Complete native
+scientific tool dispatch under each original Send, retained child settlement,
+full-size attachment resources and public context/document composition, then
+migrate Agent views. Same-instance recovery across an actual Host restart still
+needs acceptance. Studio's
 Agent workflow must capture an exact development branch and preserve the separate
 checkpoint, build, preview and scenario-application actions. Remaining annotation
 and Agent context sources must register through public contributions.

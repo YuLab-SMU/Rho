@@ -647,6 +647,15 @@ calls return an explicit null identity. A stale, closing, closed or unavailable
 captured view fails instead of becoming a non-view call. The observation grants
 no authority, contains no connection credentials and does not prove future
 liveness. It reads existing state without opening or reconnecting a view.
+`views.presence` separately observes one known, project/principal-visible view's
+native attachment. Attached, closing, detached and closed remain distinct; absence
+of a browser close-handler registration or an unresponsive browser does not establish
+native detachment. Unknown/foreign identities fail instead of returning absence.
+The response has no view content, configuration, renderer IDs or credentials.
+It creates no connection and does not authorize future work. Native Agent takeover
+uses this observation for the original controller and then reobserves the requesting
+caller before its synchronous owner admission. The owner still checks generation,
+original request identity and confirmed native quiet before transferring control.
 
 An owner can contribute an ephemeral Control handler through the same atomic
 registry. Host, CLI, MCP and scoped view requests validate the exact contract,
@@ -1897,7 +1906,8 @@ the same package libraries. Fresh public caller observation precedes each write;
 persisted native controller correlation remains stable across renderer reconnection.
 The ordinary endpoint currently advertises no scientific tools, and contributed
 context input is refused before native submission. Foreign active-controller
-takeover still requires a public controller-presence observation. The native scheduler has
+takeover consumes the public view-presence observation and a fresh caller check;
+attached or closing original views cannot be treated as detached. The native scheduler has
 no private core dependency or scientific journal connection.
 Its private MCP constructor creates one loopback endpoint and session manager per
 native connection. The endpoint has no general Host credential. Revocation and

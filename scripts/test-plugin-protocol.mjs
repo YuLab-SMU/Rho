@@ -34,7 +34,7 @@ const guessedArchive:ExportPluginArchive={revision:"revision"};
 const archiveOwner:PluginArchiveReference={...archiveReference,owner:{instance:"fake"}};
 void [archiveDiscarded,archiveStage,archiveRead,archiveChunk,archiveProgress,archiveImport,archiveExport,archiveOperation,archiveEvidence,archivePath,guessedArchive,archiveOwner];
 import type {ProjectReadCoverage,ProjectReadCoverageArguments} from "../protocol/index.js";
-import type {PluginViewCaller,PluginViewOrigin} from "../protocol/index.js";
+import type {PluginViewCaller,PluginViewOrigin,PluginViewPresence} from "../protocol/index.js";
 const originatingView:PluginViewOrigin={view:"view",window:"window",connection:"connection"};
 const viewCaller:PluginViewCaller={view:originatingView};
 const nonViewCaller:PluginViewCaller={view:null};
@@ -42,7 +42,10 @@ const nonViewCaller:PluginViewCaller={view:null};
 const credentialCaller:PluginViewOrigin={...originatingView,call_token:"private"};
 // @ts-expect-error An observation must distinguish a view from a non-view caller.
 const unspecifiedCaller:PluginViewCaller={};
-void [viewCaller,nonViewCaller,credentialCaller,unspecifiedCaller];
+const viewPresence:PluginViewPresence={view:"view",window:"window",instance:{instance:"instance",plugin:"org.rho.example",revision:"revision",artifact:"artifact"},state:"detached"};
+// @ts-expect-error A presence observation is not a connection credential.
+const credentialPresence:PluginViewPresence={...viewPresence,call_token:"private"};
+void [viewCaller,nonViewCaller,credentialCaller,unspecifiedCaller,viewPresence,credentialPresence];
 import type {PluginDelegatedOperationArguments,PluginDelegatedOperation} from "../protocol/index.js";
 const delegatedRequest:PluginDelegatedOperationArguments={parent_operation:"original-parent",request:"original-reverse"};
 const delegatedRecord:PluginDelegatedOperation={operation_id:"original-operation"};

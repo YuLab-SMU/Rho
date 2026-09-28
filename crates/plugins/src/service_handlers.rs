@@ -68,6 +68,7 @@ pub(crate) fn register(
         "resources.read",
         "views.inspect",
         "views.caller",
+        "views.presence",
         "views.connection",
         "windows.layout",
         "scenarios.list",
@@ -182,6 +183,10 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
         "views.caller" => (
             schema_for!(Empty).to_value(), schema_for!(PluginViewCaller).to_value(),
             json!({}), "Observe the original authenticated calling view without its private credentials", false, PLUGINS_READ_SCOPE,
+        ),
+        "views.presence" => (
+            schema_for!(PluginViewArguments).to_value(), schema_for!(PluginViewPresence).to_value(),
+            json!({"view":"view-example"}), "Observe a known view's scoped native connection presence without credentials or content", false, PLUGINS_READ_SCOPE,
         ),
         "views.inspect" | "views.connection" => (
             schema_for!(PluginViewArguments).to_value(),
@@ -387,6 +392,12 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
         descriptor.documentation.effects = "Read only the native calling view identity. Never open or recover a view, enumerate other windows, or return bridge/asset tokens.".into();
         descriptor.documentation.related_capabilities = vec![key("views.inspect")];
     }
+    if id == "views.presence" {
+        descriptor.documentation.when_to_use = vec!["Inspect the native attachment of one known view before an owner-controlled cross-window handoff.".into()];
+        descriptor.documentation.limitations = vec!["An unknown or foreign view fails instead of reporting absence. Attached means native authority remains present, not that a browser is responsive. Closing may be refused and must not be treated as detached. This observation does not grant a later write.".into()];
+        descriptor.documentation.effects = "Read one scoped retained view and its existing native attachment. Never mount, reconnect, rotate credentials, recover, inspect content or create an Operation.".into();
+        descriptor.documentation.related_capabilities = vec![key("views.caller"), key("views.inspect")];
+    }
     if id == "plugins.delegated_operation" {
         descriptor.documentation.when_to_use = vec!["Resolve a retained reverse-call request after delayed or lost acknowledgement, then read its operation.get record.".into()];
         descriptor.documentation.limitations = vec!["Only the original native backend instance may query its own parent admission under the original principal and project. Identity cannot be selected through arguments. Historical reads do not require a running provider.".into(), "A null operation_id means no visible durable record was observed; dispatch may still be pending. It is never proof of no execution and never authorizes replay.".into()];
@@ -496,7 +507,7 @@ fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
         "plugins.check_source" | "plugins.checkpoint" => normalize::<CheckpointPlugin>(value),
         "plugins.branch_head" => normalize::<PluginBranchArguments>(value),
         "plugins.compare" => normalize::<ComparePluginRevisions>(value),
-        "views.inspect" | "views.connection" => normalize::<PluginViewArguments>(value),
+        "views.inspect" | "views.connection" | "views.presence" => normalize::<PluginViewArguments>(value),
         "views.close" => normalize::<ClosePluginView>(value),
         "views.open" => normalize::<OpenPluginView>(value),
         "plugins.preview" => normalize::<PreviewPlugin>(value),
@@ -558,6 +569,7 @@ impl QueryHandler for Read {
             }
             "views.inspect" => json!(service.view_record(context,&decode::<PluginViewArguments>(value)?.view)?),
             "views.caller" => json!(service.caller_view(context)?),
+            "views.presence" => json!(service.view_presence(context,&decode::<PluginViewArguments>(value)?.view)?),
             "plugins.delegated_operation" => json!(service.delegated_operation(context, &decode(value)?).await?),
             "views.connection" => json!(service.view_connection(context,&decode::<PluginViewArguments>(value)?.view)?),
 

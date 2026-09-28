@@ -52,6 +52,8 @@ while (frame := read()) is not None:
         action = data['arguments'].get('action')
         if kind == 'invoke' and action == 'hold':
             held[request] = frame
+        elif action == 'crash':
+            sys.exit(4)
         elif action == 'held':
             query(request, {'held': len(held)})
         elif action == 'release_held':

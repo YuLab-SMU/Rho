@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginViewPresence",
+  "type": "object",
+  "properties": {
+    "instance": {
+      "$ref": "#/$defs/InstanceRef"
+    },
+    "state": {
+      "$ref": "#/$defs/PluginViewPresenceState"
+    },
+    "view": {
+      "type": "string"
+    },
+    "window": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "view",
+    "window",
+    "instance",
+    "state"
+  ],
+  "$defs": {
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "PluginViewPresenceState": {
+      "description": "Native connection presence is an observation, not browser responsiveness or\nauthority to act. Closing remains distinct because a refused close can reopen.",
+      "type": "string",
+      "enum": [
+        "attached",
+        "closing",
+        "detached",
+        "closed"
+      ]
+    }
+  }
+}

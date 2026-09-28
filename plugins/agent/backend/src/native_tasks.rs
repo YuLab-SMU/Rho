@@ -137,33 +137,21 @@ impl NativeTasks {
         metadata: &Metadata,
         call: &PluginCall,
         caller: PluginViewCaller,
+        host: rho_plugin_sdk::HostCallClient,
     ) -> Result<Value, Failure> {
         if self.runtime.is_stopped() {
             return Err(Failure::invalid("This native Agent instance is closing"));
         }
         let input: NativeAction = decode(&call.arguments)?;
-        let at = now();
-        let controller = Self::controller(metadata, caller);
+        let controller = Self::controller(metadata, caller.clone());
         let request = AgentTaskRequest {
             project_root: metadata.scope.project.clone(),
             window: controller,
             request_id: input.request_id,
             command: input.command.into(),
         };
-        // A public live-controller observation must replace the temporary Host's
-        // equivalent check before foreign active-controller takeover is composed.
-        if let AgentTaskCommand::TakeOver {
-            control,
-            stop: true,
-        } = &request.command
-        {
-            let task = self.owner.get(&metadata.scope, &control.task_id)?;
-            if task.attachment.controller.window_id != request.window.window_id {
-                return Err(Failure::invalid(
-                    "Original controller presence is unavailable; stop this task from its controlling view",
-                ));
-            }
-        }
+        crate::native_controller::check_takeover(metadata, call, &caller, &request, &host).await?;
+        let at = now();
         let origin = AgentNativeCommandOrigin {
             operation: OperationId::new(call.operation_id.as_deref().ok_or_else(|| {
                 Failure::invalid("Native commands require their original Operation")

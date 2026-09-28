@@ -63,6 +63,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     PluginViewRendererRelease::export_all(&types)?;
     PluginViewConnection::export_all(&types)?;
     PluginViewCaller::export_all(&types)?;
+    PluginViewPresence::export_all(&types)?;
     PluginViewMessage::export_all(&types)?;
     PluginWindowLayout::export_all(&types)?;
     PluginWindowArguments::export_all(&types)?;
@@ -152,6 +153,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("workspace-paths", schemars::schema_for!(WorkspacePaths)),
         ("view-message", schemars::schema_for!(PluginViewMessage)),
         ("view-caller", schemars::schema_for!(PluginViewCaller)),
+        ("view-presence", schemars::schema_for!(PluginViewPresence)),
         ("view-close", schemars::schema_for!(ClosePluginView)),
         ("release-view-renderer", schemars::schema_for!(ReleasePluginViewRenderer)),
         ("view-renderer-release", schemars::schema_for!(PluginViewRendererRelease)),

@@ -28,8 +28,8 @@ fn package(path: &Path) -> PluginArchive {
     manifest["requires"] = Value::Array(
         caps.iter()
             .map(|(id, _)| *id)
-            .chain(["documents.list", "views.caller"])
-            .map(|id| json!({"capability":{"id":id,"version":1},"scopes":[if matches!(id, "fixture.origin" | "fixture.origin_run" | "views.caller") { "plugins.read" } else { "documents.read" }]}))
+            .chain(["documents.list", "views.caller", "views.presence"])
+            .map(|id| json!({"capability":{"id":id,"version":1},"scopes":[if matches!(id, "fixture.origin" | "fixture.origin_run" | "views.caller" | "views.presence") { "plugins.read" } else { "documents.read" }]}))
             .collect(),
     );
     manifest["capabilities"] = Value::Array(caps.iter().map(|(id, kind)| {
@@ -694,3 +694,6 @@ async fn caller_view_observation_is_native_credential_free_and_survives_backend_
     .await;
     host.drain().await;
 }
+
+#[path = "fixtures/view_presence.rs"]
+mod view_presence;

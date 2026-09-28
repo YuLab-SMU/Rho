@@ -344,7 +344,7 @@ impl Metadata {
         host: rho_plugin_sdk::HostCallClient,
     ) -> Result<Value, Failure> {
         match call.binding.capability.id.as_str() {
-            "agent.native.command" => self.native.command(self, call, caller).await,
+            "agent.native.command" => self.native.command(self, call, caller, host).await,
             "agent.model.run" => self.runs.start(self, call, caller, host).await,
             "agent.model.run.stop" => self.runs.stop(self, call, caller),
             "agent.model.test" => self.diagnostics.start(self, call, caller).await,

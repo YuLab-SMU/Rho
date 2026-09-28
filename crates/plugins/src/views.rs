@@ -435,6 +435,37 @@ impl PluginService {
         }
         Ok(PluginViewCaller { view: Some(origin.clone()) })
     }
+    /// Observe one known, caller-visible view without exposing its credentials,
+    /// content or browser registrations. An unknown/foreign view is not absence.
+    pub(crate) fn view_presence(
+        &self,
+        context: &host::CallContext,
+        id: &ViewInstanceId,
+    ) -> Result<PluginViewPresence, OperationError> {
+        // Match closure/update's views -> repository lock order so the retained
+        // record and current native connection belong to the same observation.
+        let views = self.views.lock().unwrap();
+        let record = self.view_record(context, id)?;
+        let state = if record.closed {
+            PluginViewPresenceState::Closed
+        } else if let Some(live) = views.get(id) {
+            if live.closing.is_some() {
+                PluginViewPresenceState::Closing
+            } else if self.runtime.observe().iter().any(|observed|
+                observed.instance.identity == record.instance
+                    && observed.instance.state == InstanceState::Active)
+            {
+                PluginViewPresenceState::Attached
+            } else {
+                PluginViewPresenceState::Detached
+            }
+        } else {
+            PluginViewPresenceState::Detached
+        };
+        Ok(PluginViewPresence {
+            view: record.view, window: record.window, instance: record.instance, state,
+        })
+    }
     /// Read existing connection material; never mount, restart or recover a view.
     pub fn view_connection(
         &self,

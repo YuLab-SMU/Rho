@@ -11,4 +11,5 @@ mod runs;
 
 pub mod native_arguments;
 mod native_tasks;
+mod native_controller;
 mod tools;

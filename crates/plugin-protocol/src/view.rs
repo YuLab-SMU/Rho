@@ -121,6 +121,24 @@ pub struct PluginViewOrigin {
 pub struct PluginViewCaller {
     pub view: Option<PluginViewOrigin>,
 }
+/// Native connection presence is an observation, not browser responsiveness or
+/// authority to act. Closing remains distinct because a refused close can reopen.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PluginViewPresenceState {
+    Attached,
+    Closing,
+    Detached,
+    Closed,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PluginViewPresence {
+    pub view: ViewInstanceId,
+    pub window: WindowId,
+    pub instance: InstanceRef,
+    pub state: PluginViewPresenceState,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct PluginViewConnection {

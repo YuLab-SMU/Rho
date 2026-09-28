@@ -66,7 +66,7 @@ fn plan(result: Result<Value, Failure>) -> PluginCommitPlan {
         },
     }
 }
-fn caller(result: Result<Value, HostCallError>) -> Result<PluginViewCaller, Failure> {
+pub(crate) fn caller(result: Result<Value, HostCallError>) -> Result<PluginViewCaller, Failure> {
     let value = result.map_err(|_| Failure {
         code: "caller_unavailable",
         message: "The original caller could not be observed; no Agent action was dispatched".into(),
@@ -104,10 +104,14 @@ where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
 {
-    if !connection.grants.iter().any(|grant| {
-        grant.capability == manifest::key("views.caller") && grant.scopes.contains("plugins.read")
-    }) {
-        return Err("Agent requires an explicit views.caller grant with plugins.read".into());
+    for capability in ["views.caller", "views.presence"] {
+        if !connection.grants.iter().any(|grant| {
+            grant.capability == manifest::key(capability) && grant.scopes.contains("plugins.read")
+        }) {
+            return Err(format!(
+                "Agent requires an explicit {capability} grant with plugins.read"
+            ));
+        }
     }
     let instance = connection.instance.clone();
     let metadata = Arc::new(Metadata::new(

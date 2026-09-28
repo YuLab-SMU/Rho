@@ -44,7 +44,11 @@ The ordinary backend now composes the same native owner, store and scheduler for
 retains Send until the original native receipt settles, and only observes repeated
 requests. Persisted controller labels use view/window or instance identity so
 renderer reconnection does not change the original input digest; they are not
-credentials. Upload stores an asset without changing a draft or opening a native
+credentials. Cross-window stop/takeover observes the old controller through
+`views.presence`; attached and closing views are refused. A detached/closed result
+is followed by a fresh `views.caller` check, then the same generation and native
+quiet checks. Unknown presence never authorizes takeover, and retries only observe
+the original admitted command. Upload stores an asset without changing a draft or opening a native
 Agent. A subsequent versioned draft write selects the asset. The current upload
 accepts at most 524288 encoded bytes; larger assets still need controlled resource
 transfer. Contributed context and scientific tool dispatch remain unfinished and

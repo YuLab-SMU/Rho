@@ -566,3 +566,163 @@ async fn native_release_refuses_a_failed_disconnect_even_after_live_entry_is_rem
     );
     assert_eq!(factory.closes.load(Ordering::SeqCst), 1);
 }
+
+#[tokio::test]
+async fn native_foreign_takeover_requires_revoked_original_view_and_fresh_requesting_caller() {
+    let factory = Arc::new(Factory::default());
+    factory.hold.store(true, Ordering::SeqCst);
+    let mut f = fixture(factory.clone()).await;
+    let created = f.native_create().await;
+    let draft=f.native_action("takeover-draft", action(json!({"kind":"save_draft","control":control(&created),"version":0,"content":{"text":"Retained turn","assets":[],"context":[]}}))).await;
+    let send = f
+        .native_send(action(
+            json!({"kind":"send","control":control(&draft),"draft_version":1}),
+        ))
+        .await;
+    submitted(&factory).await;
+    let running = f
+        .query(
+            "agent.native.task",
+            json!({"task_id":draft["detail"]["summary"]["task"]["task_id"]}),
+        )
+        .await;
+    let task_control = json!({"task_id":running["summary"]["task"]["task_id"],"generation":running["summary"]["attachment"]["generation"]});
+    let mut other = origin("view-two");
+    other["view"]["window"] = "window-two".into();
+    for (name, state) in [
+        ("online", "attached"),
+        ("closing", "closing"),
+        ("unknown", "unknown"),
+    ] {
+        let (call, reverse) = f
+            .begin(
+                name,
+                "agent.native.command",
+                action(json!({"kind":"take_over","control":task_control,"stop":true})),
+            )
+            .await;
+        f.writer
+            .send(
+                reverse.request,
+                RpcBody::HostResult {
+                    result: json!({"status":"ready","completeness":"complete","data":other}),
+                },
+            )
+            .await
+            .unwrap();
+        let presence = f.read().await;
+        assert!(
+            matches!(&presence.body,RpcBody::HostCall{parent_request,capability,arguments} if parent_request==&call.request && capability==&manifest::key("views.presence") && arguments==&json!({"view":"view-one"}))
+        );
+        let plan=f.answer(presence,json!({"view":"view-one","window":"window-one","instance":instance().identity,"state":state})).await;
+        assert_eq!(plan.outcome, PluginOutcome::Failed);
+        assert_eq!(
+            factory.sessions.lock().unwrap()[0].snapshot().state,
+            "running"
+        );
+        f.settle(&call, plan.outcome).await;
+    }
+    // A complete old-view observation cannot preserve a caller which disappeared
+    // while it was awaiting that observation.
+    let (changed, reverse) = f
+        .begin(
+            "changed-controller",
+            "agent.native.command",
+            action(json!({"kind":"take_over","control":task_control,"stop":true})),
+        )
+        .await;
+    f.writer
+        .send(
+            reverse.request,
+            RpcBody::HostResult {
+                result: json!({"status":"ready","completeness":"complete","data":other}),
+            },
+        )
+        .await
+        .unwrap();
+    let presence = f.read().await;
+    f.writer.send(presence.request,RpcBody::HostResult{result:json!({"status":"ready","completeness":"complete","data":{"view":"view-one","window":"window-one","instance":instance().identity,"state":"detached"}})}).await.unwrap();
+    let recheck = f.read().await;
+    assert!(
+        matches!(&recheck.body,RpcBody::HostCall{capability,..} if capability==&manifest::key("views.caller"))
+    );
+    let mut replaced = other.clone();
+    replaced["view"]["connection"] = "replacement-connection".into();
+    let refused = f.answer(recheck, replaced).await;
+    assert_eq!(refused.outcome, PluginOutcome::Failed);
+    f.settle(&changed, refused.outcome).await;
+    assert_eq!(
+        factory.sessions.lock().unwrap()[0].snapshot().state,
+        "running"
+    );
+
+    let takeover = action(json!({"kind":"take_over","control":task_control,"stop":true}));
+    let (accepted, reverse) = f
+        .begin(
+            "accepted-controller",
+            "agent.native.command",
+            takeover.clone(),
+        )
+        .await;
+    f.writer
+        .send(
+            reverse.request,
+            RpcBody::HostResult {
+                result: json!({"status":"ready","completeness":"complete","data":other}),
+            },
+        )
+        .await
+        .unwrap();
+    let presence = f.read().await;
+    f.writer.send(presence.request,RpcBody::HostResult{result:json!({"status":"ready","completeness":"complete","data":{"view":"view-one","window":"window-one","instance":instance().identity,"state":"closed"}})}).await.unwrap();
+    let recheck = f.read().await;
+    f.writer
+        .send(
+            recheck.request,
+            RpcBody::HostResult {
+                result: json!({"status":"ready","completeness":"complete","data":other}),
+            },
+        )
+        .await
+        .unwrap();
+    let mut results = std::collections::BTreeMap::new();
+    for _ in 0..2 {
+        let frame = f.read().await;
+        let RpcBody::CommitPlan(plan) = frame.body else {
+            panic!()
+        };
+        assert_eq!(
+            plan.outcome,
+            if frame.request == accepted.request {
+                PluginOutcome::Succeeded
+            } else {
+                PluginOutcome::Failed
+            },
+            "{plan:?}"
+        );
+        results.insert(frame.request, plan);
+    }
+    assert_eq!(results[&send.request].outcome, PluginOutcome::Failed);
+    assert_eq!(results[&accepted.request].outcome, PluginOutcome::Succeeded);
+    let taken = results[&accepted.request].output.as_ref().unwrap();
+    assert_eq!(
+        taken["detail"]["summary"]["attachment"]["controller"]["window_id"],
+        "window-two"
+    );
+    assert_eq!(
+        taken["detail"]["summary"]["attachment"]["generation"],
+        task_control["generation"].as_u64().unwrap() + 1
+    );
+    f.settle(&send, results[&send.request].outcome).await;
+    f.settle(&accepted, results[&accepted.request].outcome)
+        .await;
+    let (repeat, reverse) = f
+        .begin("repeat-controller", "agent.native.command", takeover)
+        .await;
+    let repeated = f.answer(reverse, other).await;
+    assert_eq!(repeated.outcome, PluginOutcome::Succeeded);
+    f.settle(&repeat, repeated.outcome).await;
+    assert_eq!(factory.sends.load(Ordering::SeqCst), 1);
+    assert_eq!(factory.opens.load(Ordering::SeqCst), 1);
+    f.release().await;
+}

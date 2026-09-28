@@ -216,7 +216,12 @@ reopen deduplication and refusal to forget unconfirmed native cleanup.
 `node scripts/test-agent-plugin-backend.mjs` repeats all framed cases in an
 independent assembly. `node scripts/test-agent-plugin.mjs` checks task metadata,
 attachment Control journal exclusion and instance separation through a generic
-Host compiled before that external package. These do not establish scientific
+Host compiled before that external package. The `native_foreign_takeover` framed
+case checks attached/closing/unknown originals, changed requesting connections,
+confirmed detachment and original-request retries. The `view_presence` case in
+`cargo test -p rho-host --test plugin_view_delegation --locked` uses the public
+ports for cross-window/backend observations, refused closure, backend exit,
+visibility and credential/content exclusion. These do not establish scientific
 native-tool dispatch, real provider performance or plugin view acceptance.
 
 Use `cargo test -p rho-agent-native --lib mcp --locked` for private native MCP
