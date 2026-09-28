@@ -5,7 +5,7 @@
     {"id": "ARCHITECTURE", "title": "Architecture", "document": "docs/ARCHITECTURE.md", "area": "system"},
     {"id": "DEVELOPMENT", "title": "Development loop", "document": "docs/DEVELOPMENT.md", "area": "system"},
     {"id": "OPERATIONS", "title": "Runtime operator guide", "document": "docs/OPERATIONS.md", "area": "system"},
-    {"id": "STATUS", "title": "Rho current state and focus", "document": "docs/STATUS.md", "area": "documentation"},
+    {"id": "STATUS", "title": "Rho current state and focus", "document": "docs/STATUS.md", "area": "documentation", "max_lines": 300},
     {"id": "BUILTIN-AGENT-PLAN", "title": "Built-in component Agent implementation proposal", "document": "docs/BUILTIN-AGENT-PLAN.md", "area": "documentation"},
     {"id": "SCENARIO-PLUGINS", "title": "Scenario plugin design research (no implementation scope)", "document": "docs/SCENARIO-PLUGINS.md", "area": "documentation"},
     {"id": "STUDIO-FEEDBACK", "title": "Studio usability feedback and scenario reference", "document": "docs/STUDIO-FEEDBACK.md", "area": "documentation"},

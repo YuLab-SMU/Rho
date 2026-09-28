@@ -39,13 +39,15 @@ function readJson(root, file) {
   }
 }
 
-function requireShape(value, fields, label, errors) {
+function requireShape(value, fields, label, errors, optional = []) {
   if (!isObject(value)) {
     errors.push(`${label} must be an object`);
     return false;
   }
   for (const field of fields) if (!Object.hasOwn(value, field)) errors.push(`${label}: missing field ${field}`);
-  for (const field of Object.keys(value)) if (!fields.includes(field)) errors.push(`${label}: unknown field ${field}`);
+  for (const field of Object.keys(value)) {
+    if (!fields.includes(field) && !optional.includes(field)) errors.push(`${label}: unknown field ${field}`);
+  }
   return true;
 }
 
@@ -81,7 +83,7 @@ function validateRegistry(registry, root, errors) {
   const pages = [];
   registry.pages.forEach((page, index) => {
     const label = `${REGISTRY_FILE}: pages[${index}]`;
-    if (!requireShape(page, ["id", "title", "document", "area"], label, errors)) return;
+    if (!requireShape(page, ["id", "title", "document", "area"], label, errors, ["max_lines"])) return;
     for (const field of ["id", "title", "area"]) {
       if (typeof page[field] !== "string" || page[field].length === 0) errors.push(`${label}.${field} must be a non-empty string`);
     }
@@ -89,6 +91,13 @@ function validateRegistry(registry, root, errors) {
       errors.push(`${label}.document must name a repository-relative Markdown file below docs/`);
     } else if (!fs.existsSync(path.join(root, page.document))) {
       errors.push(`${label}.document does not exist: ${page.document}`);
+    } else if (page.max_lines !== undefined) {
+      if (!Number.isInteger(page.max_lines) || page.max_lines <= 0) {
+        errors.push(`${label}.max_lines must be a positive integer`);
+      } else {
+        const lines = fs.readFileSync(path.join(root, page.document), "utf8").split("\n").length - 1;
+        if (lines > page.max_lines) errors.push(`${page.document}: ${lines} lines exceeds max_lines ${page.max_lines}; summarize instead of appending history`);
+      }
     }
     pages.push({ id: page.id, title: page.title, document: page.document, area: page.area });
   });

@@ -88,6 +88,8 @@ for (const [mutate, pattern] of [
   [(value) => { value.registry.schema_version = 2; }, /schema_version must be 1/u],
   [(value) => { value.registry.pages.push({ ...value.registry.pages[0] }); }, /duplicate page id DOCS/u],
   [(value) => { value.registry.pages[0].area = "missing"; }, /references unknown area missing/u],
+  [(value) => { value.registry.pages[0].max_lines = 0; }, /max_lines must be a positive integer/u],
+  [(value) => { value.registry.pages[0].max_lines = 1; value.write(value.registry.pages[0].document, "a\nb\n"); }, /exceeds max_lines 1/u],
   [(value) => { value.sourceMap.areas.core.checks.push("missing"); }, /references unknown check missing/u],
   [(value) => { value.sourceMap.areas.core.sources.push("removed/**"); }, /pattern matches no file/u],
   [(value) => { value.sourceMap.areas.core.sources.push("Cargo.toml"); }, /duplicate value Cargo\.toml/u],
