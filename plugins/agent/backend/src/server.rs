@@ -161,7 +161,9 @@ where
                     break Err(error.to_string());
                 }
             },
-            outgoing = pump.next(), if pump.pending() > 0 => {
+            // Jobs may enqueue their next Host call after this select begins.
+            // Always listen, including while the queue is currently empty.
+            outgoing = pump.next() => {
                 let Some(outgoing) = outgoing else { break Err("Agent Host call pump ended".into()); };
                 let RpcBody::HostCall { parent_request, .. } = &outgoing.body else { unreachable!() };
                 if !queries.contains(parent_request) && !controls.contains(parent_request) && !retained.values().any(|entry| &entry.request == parent_request && entry.outcome.is_none()) {

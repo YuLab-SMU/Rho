@@ -247,12 +247,17 @@ reply; disconnect recovery only reads the original delegated Operation. Six new
 framed fixtures, two owner cases, one additional store case and a separate
 two-package real-R Host harness are implemented. All 18 owner and 22 store tests
 now pass, including captured-request digest enforcement and the new native tool
-authorization cases. Framed and real-R acceptance remain pending. Explain can
+authorization cases. The first 23-case framed run passed 18 and timed out in five
+scientific cases: the server disabled its outgoing listener while the queue was
+empty, so an async job's subsequent Host request could not wake it. The listener
+now stays active; all 23 framed cases pass in v2, including those five cases. The
+v1 failures remain recorded. Native real-R acceptance remains pending. Explain can
 select a read-only `r.session@1` binding with only its read grant/scope; the focused
-fixtures also refuse using that binding for Run. Manifest regeneration is pending;
-the source adds original-admission and tool inspection queries. The serial science
-verifier has completed owner/store checks and is running framed, boundary,
-core-storage and independent ordinary/real-R Host acceptance. End-to-end native
+fixtures also refuse using that binding for Run. Manifest regeneration passes with
+21 capabilities, including original-admission and tool inspection queries; its
+encoded file is 124,059 bytes. The serial science verifier has completed owner/store,
+framed and manifest checks and is running boundary, core-storage and independent
+ordinary/real-R Host acceptance. End-to-end native
 scope and late-result claims remain unverified for this source until those checks
 complete. Native stdin is excluded from model context.
 
