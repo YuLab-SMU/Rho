@@ -320,8 +320,10 @@ three passed and one exposed the SDK's successful response for deleting a foreig
 session. The boundary now refuses unknown sessions before SDK dispatch, and a fifth
 fixture checks streaming-response capacity. All five corrected HTTP cases and all
 12 native runtime cases pass. The same 12 cases also pass in an independent source
-assembly. Host integration and final mapped checks are still running, not yet passes. Logs are retained
-under `target/plugin-refactor/agent-native-mcp-*-v1.log` and `*-v2.log`. This is a
+assembly. All 13 Host task cases and the architecture, private-boundary and
+governance checks also pass. Exact commands and results are retained in
+`target/plugin-refactor/agent-native-mcp-results-v2.json`; the initial failed
+fixture remains in the v1 log. This is a
 transport primitive; ordinary native backend and scientific-tool composition remain
 unfinished. No actual model, user credentials or user sessions are used.
 
