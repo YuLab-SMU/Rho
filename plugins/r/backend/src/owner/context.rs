@@ -42,6 +42,14 @@ fn decode<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, String> {
 fn check(ok: bool, message: &str) -> Result<(), String> {
     if ok { Ok(()) } else { Err(message.into()) }
 }
+// Version only the owner-authored bounded summary, excluding observation clocks
+// and temporary handles. This is not a digest of an entire native object/package.
+fn summary_identity(kind: &str, lineage: Value, content: Value) -> Result<Value, String> {
+    let digest = |value: &Value| -> Result<String, String> {
+        Ok(format!("sha256:{:x}", Sha256::digest(serde_json::to_vec(value).map_err(|e|e.to_string())?)))
+    };
+    Ok(json!({"source_id":format!("{kind}:{}",digest(&lineage)?),"source_version":digest(&content)?}))
+}
 fn same_files(a: &[PackageFileIdentity], b: &[PackageFileIdentity]) -> bool {
     a.len() == b.len()
         && a.iter()

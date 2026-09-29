@@ -361,11 +361,12 @@ screenshot/upload, real R image provenance or an annotation editor.
 
 Add `--scientific` with a current retained `RHO_R_PLUGIN_PACKAGE`, `RHO_ARK` and
 `RHO_R_HOME` to test actual installed Help, saved HTML, Console transcript and
-Plots metadata as annotation sources.
+Plots metadata, Objects summaries and Packages copy metadata as annotation sources.
 The disposable R instance explicitly starts once. The check freezes exact evidence,
 refuses forged resources, preserves the original outputs after a newer run,
 and reads/replays notes after graceful Host restart while R remains suspended.
-With `--agent`, all four notes reach the real Agent/Rig path through a local model peer.
+Object/package checks separate observation identity from summary content versions.
+With `--agent`, all six notes reach the real Agent/Rig path through a local model peer.
 This is owner/RPC integration; it does not claim annotation-editor interaction.
 
 The generic plugin-only Host uses `cargo test -p rho-host --test plugin_workspace

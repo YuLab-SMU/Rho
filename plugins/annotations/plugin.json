@@ -81,6 +81,24 @@
     },
     {
       "capability": {
+        "id": "r.context.objects.preview",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.context.packages.preview",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
         "id": "r.context.console.preview",
         "version": 1
       },

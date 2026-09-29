@@ -33,6 +33,12 @@ Console binds code/transcript inclusions to the original run and recorded outcom
 Plots binds the ordered original outputs and image digests. A later execution
 cannot replace either source. Plot text freezing includes artifact metadata only;
 image import and browser capture are separate actions. Reads never rerun analysis.
+Objects and Packages annotation versions cover their bounded summary/installed-copy
+metadata. Their lineage retains the native session/name/path or installed library
+and package; versions digest metadata and completeness notices, excluding temporary
+observation handles and clocks. They do not fingerprint the full object or package
+files. Preview still checks the original handle/copy and refuses expired or changed
+sources; viewing never evaluates a binding or loads/installs a package.
 
 Viewer context requires the R instance's optional `operation.get`,
 `operation.list_recent` and `resources.read` grants. Context references never grant

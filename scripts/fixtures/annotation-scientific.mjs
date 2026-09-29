@@ -1,4 +1,4 @@
-// Real R-owned Help, Viewer, Console and Plots through public plugin ports.
+// Real R-owned scientific context summaries through public plugin ports.
 // This tests annotation evidence and recovery, not the pending annotation editor.
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -12,8 +12,8 @@ export async function annotationScientific({r, notes, window, binding, invoke, p
     assert.equal(result.status,'ready',JSON.stringify(result)); assert.equal(result.session_id,session);
     return result.data;
   };
-  const execute = async (text) => invoke('r.execute',{binding:await binding(r,'r.execute'),arguments:{expected_session:session,
-    code:`writeLines(${JSON.stringify(text)}, "annotation-viewer.html"); getOption("viewer")("annotation-viewer.html"); plot(1:3, main = "Annotation source"); cat("Original Console annotation output\\n"); 1L`}});
+  const execute = async (text, objectSize = 3) => invoke('r.execute',{binding:await binding(r,'r.execute'),arguments:{expected_session:session,
+    code:`annotation_object <- seq_len(${objectSize}); writeLines(${JSON.stringify(text)}, "annotation-viewer.html"); getOption("viewer")("annotation-viewer.html"); plot(1:3, main = "Annotation source"); cat("Original Console annotation output\\n"); 1L`}});
   const source = async (kind,text,matches=()=>true) => {
     let after=null;
     for(let page=0;page<20;page++) {
@@ -68,6 +68,32 @@ export async function annotationScientific({r, notes, window, binding, invoke, p
   const viewer=await freeze('viewer',await source('viewer',first.operation.operation_id),{kind:'text'},'Review this exact saved HTML output · 中文 🧬');
   assert.equal(viewer.preview.text,html+'\n');
   assert.equal(viewer.reference.selector.operation,first.operation.operation_id);
+  const observeObject=async()=>{
+    const observed=await native('r.observe_object',{name:'annotation_object',path:[]});
+    return source('objects','annotation_object',ref=>ref.selector.object_ref===observed.object_ref);
+  };
+  const objectNote=await freeze('objects',await observeObject(),{kind:'summary'},'Review the bounded object summary');
+  const freshObject=await observeObject();
+  const freshObjectPreview=await pluginQuery(r,'r.context.objects.preview',{reference:freshObject,inclusion:{kind:'summary'},max_bytes:16384});
+  assert.notEqual(freshObject.selector.object_ref,objectNote.reference.selector.object_ref);
+  assert.equal(freshObjectPreview.data.annotation_version_scope,'bounded_object_summary');
+  assert.deepEqual(freshObjectPreview.data.annotation_source,objectNote.preview.data.annotation_source);
+  const observePackage=async()=>{
+    const grouped=await native('r.packages',{filter:'parallel',grouped:true});
+    const copies=await native('r.packages',{observation_id:grouped.observation_id,package_name:'parallel',grouped:true,mode:'installed',filter:''});
+    assert.ok(copies.packages.length);
+    const library=copies.packages[0].library_path;
+    return source('packages','parallel',ref=>ref.selector.observation===grouped.observation_id&&ref.selector.library===library);
+  };
+  const packageNote=await freeze('packages',await observePackage(),{kind:'metadata'},'Review this installed-copy metadata');
+  const freshPackage=await observePackage();
+  const freshPackagePreview=await pluginQuery(r,'r.context.packages.preview',{reference:freshPackage,inclusion:{kind:'metadata'},max_bytes:16384});
+  assert.notEqual(freshPackage.selector.observation,packageNote.reference.selector.observation);
+  assert.equal(freshPackagePreview.data.annotation_version_scope,'installed_copy_metadata');
+  assert.deepEqual(freshPackagePreview.data.annotation_source,packageNote.preview.data.annotation_source);
+  const substitutedPackage=structuredClone(packageNote.command);substitutedPackage.reference.selector.library='/not-the-original-library';
+  await write('substituted-package-copy',substitutedPackage,randomUUID(),'failed');
+  assert.equal((await pluginQuery(notes,'annotations.read',{kind:'receipt',request_id:'substituted-package-copy'})).receipt,null);
   const consoleNote=await freeze('console',await source('console',first.operation.operation_id),{kind:'transcript'},'Review this original Console run');
   assert.ok(consoleNote.preview.text.includes('Original Console annotation output'));
   const codePreview=await pluginQuery(r,'r.context.console.preview',{reference:consoleNote.reference,inclusion:{kind:'code'},max_bytes:16384});
@@ -76,7 +102,13 @@ export async function annotationScientific({r, notes, window, binding, invoke, p
   assert.equal(plots.reference.selector.plots.length,1);
   assert.equal(plots.reference.selector.plots[0].operation,first.operation.operation_id);
   assert.ok(plots.preview.text.includes('no image content is included'));
-  const next=await execute('<html><body>Later Viewer output must not replace the original note.</body></html>');
+  const next=await execute('<html><body>Later Viewer output must not replace the original note.</body></html>',5);
+  await write('stale-object-summary',objectNote.command,randomUUID(),'failed');
+  assert.equal((await pluginQuery(notes,'annotations.read',{kind:'receipt',request_id:'stale-object-summary'})).receipt,null);
+  const changedObject=await observeObject();
+  const changedObjectPreview=await pluginQuery(r,'r.context.objects.preview',{reference:changedObject,inclusion:{kind:'summary'},max_bytes:16384});
+  assert.equal(changedObjectPreview.data.annotation_source.source_id,objectNote.preview.data.annotation_source.source_id);
+  assert.notEqual(changedObjectPreview.data.annotation_source.source_version,objectNote.preview.data.annotation_source.source_version);
   const nextRef=await source('viewer',next.operation.operation_id);
   const nextPreview=await pluginQuery(r,'r.context.viewer.preview',{reference:nextRef,inclusion:{kind:'text'},max_bytes:16384});
   assert.notEqual(nextPreview.data.annotation_source.source_id,viewer.preview.data.annotation_source.source_id);

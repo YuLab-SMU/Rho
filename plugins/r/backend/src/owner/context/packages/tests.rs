@@ -36,6 +36,15 @@ fn installed_copy_metadata_preserves_observation_provenance_and_unicode_bounds()
     assert!(full.text.contains("unknown"));
     assert!(full.text.contains("\"source\": null"));
     assert!(!full.truncated);
+    let mut fresh_source=source.clone();fresh_source.observation="fresh-observation".into();
+    let mut fresh_page=page.clone();fresh_page.observation_id=fresh_source.observation.clone();fresh_page.observed_at_ms=99;
+    let mut fresh_request=request.clone();fresh_request.reference=fresh_source.item(&owner.instance,&request.reference.window).unwrap().reference;
+    let fresh=preview(&owner.instance,fresh_request.clone(),&fresh_source,&fresh_page,&fresh_page.packages[0]).unwrap();
+    assert_eq!(fresh.data["annotation_source"],full.data["annotation_source"],"Observation IDs/clocks do not version installed-copy metadata");
+    fresh_page.packages[0].title=Some("Changed recorded purpose".into());
+    let changed=preview(&owner.instance,fresh_request,&fresh_source,&fresh_page,&fresh_page.packages[0]).unwrap();
+    assert_eq!(changed.data["annotation_source"]["source_id"],full.data["annotation_source"]["source_id"]);
+    assert_ne!(changed.data["annotation_source"]["source_version"],full.data["annotation_source"]["source_version"]);
     for field in ["version", "library", "name"] {
         let mut copy = page.packages[0].clone();
         match field {

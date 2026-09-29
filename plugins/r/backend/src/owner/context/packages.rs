@@ -264,7 +264,9 @@ fn preview(
         item: source.item(owner, &request.reference.window)?,
         text,
         truncated,
-        data: json!({"inclusion":"metadata","observation":source.observation,"native_session":source.session,"observed_at_ms":page.observed_at_ms,"scan_complete":page.scan_complete,"notices":page.notices}),
+        data: json!({"inclusion":"metadata","observation":source.observation,"native_session":source.session,"observed_at_ms":page.observed_at_ms,"scan_complete":page.scan_complete,"notices":page.notices,
+            "annotation_version_scope":"installed_copy_metadata",
+            "annotation_source":summary_identity("package-metadata",json!([source.library,source.package]),json!([copy,page.scan_complete,page.notices]))?}),
         resources: vec![],
     };
     check(

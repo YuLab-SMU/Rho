@@ -174,7 +174,7 @@ try {
   for (const name of ['files', 'editor', ...(withScientific ? ['r'] : []), 'annotation', ...(withAgent ? ['agent'] : []), ...(withCaptures ? ['capture'] : [])]) {
     const snapshot = snapshots[name];
     const active = (await invoke('plugins.activate', {revision: snapshot.revision, artifact: snapshot.artifacts[0], target: 'aarch64-apple-darwin', alias: name, configuration: name === 'agent' ? {kimi_home:nativeHome} : name === 'r' ? {ark:fs.realpathSync(process.env.RHO_ARK),r_home:fs.realpathSync(process.env.RHO_R_HOME),execution_timeout_seconds:120} : {},
-      optional_capabilities: name === 'annotation' ? [key('editor.context.preview'), ...(withFiles ? [key('files.context.preview')] : []), ...(withScientific ? ['r.context.help.preview','r.context.viewer.preview','r.context.console.preview','r.context.plots.preview'].map(key) : []), ...(withCaptures ? [key('resources.read')] : [])] : name === 'agent'
+      optional_capabilities: name === 'annotation' ? [key('editor.context.preview'), ...(withFiles ? [key('files.context.preview')] : []), ...(withScientific ? ['r.context.help.preview','r.context.viewer.preview','r.context.console.preview','r.context.plots.preview','r.context.objects.preview','r.context.packages.preview'].map(key) : []), ...(withCaptures ? [key('resources.read')] : [])] : name === 'agent'
         ? ['plugins.instances', 'plugins.inspect', 'annotations.read', 'annotations.write', 'annotations.context.search', 'annotations.context.preview', 'operation.get', 'plugins.delegated_operation', ...(withCaptures ? ['resources.read'] : [])].map(key) : name === 'r' ? ['operation.get','operation.list_recent','resources.read'].map(key) : []})).output.instance.identity;
     if (name === 'editor') editor = active;
     if (name === 'files') files = active;
@@ -214,7 +214,7 @@ try {
   if (withScientific) {
     scientificCase = await annotationScientific({r,notes,window,binding,invoke,pluginQuery,query,port});
     result.scientific = scientificCase.report;
-    result.stages.push('real R Help, saved HTML, Console and Plots → frozen annotation evidence; stable identity and immutable provenance'); save();
+    result.stages.push('real R Help, saved HTML, Console, Plots, Objects and Packages → frozen annotation evidence; stable identity and immutable provenance'); save();
   }
   if (withAgent) {
     agentCase = await annotationAgent({agent, notes, context, notePreview, port, query, invoke, binding, pluginQuery});
@@ -234,7 +234,7 @@ try {
     if (scientificCase) {
       scientificAgentCase = await annotationAgent({agent,notes,port,query,invoke,binding,pluginQuery,cases:scientificCase.cases,id:'scientific-annotation-reader'});
       result.scientific_agent = scientificAgentCase.report;
-      result.stages.push('Help, Viewer, Console and Plots annotation evidence reaches real Agent/Rig through exact note contexts'); save();
+      result.stages.push('Help, Viewer, Console, Plots, Objects and Packages annotation evidence reaches real Agent/Rig through exact note contexts'); save();
     }
     result.native_agent = nativeCase.report;
     result.stages.push('Native Agent exact Send tools: read-only write refusal, authenticated create/update, CAS and original child Operations'); save();

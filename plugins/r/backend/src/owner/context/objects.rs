@@ -99,7 +99,9 @@ fn preview(owner: &InstanceRef, request: PreviewContext, source: &Source, page: 
     let truncated = text.len() > limit;
     if truncated {let mut end=limit;while !text.is_char_boundary(end){end-=1;}text.truncate(end);}
     let result = ContextPreview { item:source.item(owner,&request.reference.window)?,text,truncated,
-        data:json!({"inclusion":"summary","native_session":source.session,"observed_at_ms":page.observed_at_ms,"structure_page_complete":page.complete,"notices":page.notices}),resources:vec![] };
+        data:json!({"inclusion":"summary","native_session":source.session,"observed_at_ms":page.observed_at_ms,"structure_page_complete":page.complete,"notices":page.notices,
+            "annotation_version_scope":"bounded_object_summary",
+            "annotation_source":summary_identity("object-summary",json!([source.session,source.name,source.observed_path,source.path]),json!([page.metadata,page.notices,page.complete]))?}),resources:vec![] };
     check(result.item.reference == request.reference,"Object preview changed the original reference")?;
     result.validate().map_err(|e|e.to_string())?; Ok(result)
 }
@@ -134,6 +136,16 @@ mod tests {
         assert!(!result.truncated); assert!(result.text.contains("not the whole object"));
         assert_eq!(result.data["structure_page_complete"],false);
         assert!(result.text.contains("研究🙂"));
+        let original_identity=result.data["annotation_source"].clone();
+        let mut fresh_source=source.clone();fresh_source.object_ref="fresh-observation".into();
+        let mut fresh_request=request.clone();fresh_request.reference=fresh_source.item(&owner.instance,&request.reference.window).unwrap().reference;
+        let mut fresh_page=page(&fresh_source);fresh_page.observed_at_ms=999;
+        let fresh=preview(&owner.instance,fresh_request.clone(),&fresh_source,fresh_page.clone()).unwrap();
+        assert_eq!(fresh.data["annotation_source"],original_identity,"Observation handles/clocks do not version the summary");
+        fresh_page.metadata.length=Some(200);
+        let changed=preview(&owner.instance,fresh_request,&fresh_source,fresh_page).unwrap();
+        assert_eq!(changed.data["annotation_source"]["source_id"],original_identity["source_id"]);
+        assert_ne!(changed.data["annotation_source"]["source_version"],original_identity["source_version"]);
         let mut bounded=request.clone();bounded.max_bytes=11;
         let result=preview(&owner.instance,bounded,&source,page(&source)).unwrap();assert!(result.truncated);assert!(result.text.len()<=11);
         for changed in ["object_ref","root_name","path","observed_path","kind"] {

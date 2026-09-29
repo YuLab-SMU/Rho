@@ -88,6 +88,8 @@ pub fn manifest() -> PluginManifest {
             requirement("editor.context.preview", &["documents.read"]),
             requirement("files.context.preview", &["project.read"]),
             requirement("r.context.help.preview", &["workspace.read"]),
+            requirement("r.context.objects.preview", &["workspace.read"]),
+            requirement("r.context.packages.preview", &["workspace.read"]),
             requirement("r.context.console.preview", &["workspace.read", "operation.read", "resources.read"]),
             requirement("r.context.plots.preview", &["workspace.read", "operation.read", "resources.read"]),
             requirement(

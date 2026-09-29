@@ -45,6 +45,12 @@ and transcript identity. Plots uses the ordered original outputs and their image
 digests. Metadata and explicit image selections share that plot identity, but
 text freezing accepts only the complete metadata inclusion; it does not capture
 pixels or panel overlays.
+Objects and Packages supply explicitly scoped summary identities: native
+session/name/path and bounded object metadata, or installed library/package and
+observed copy metadata. New observation handles/timestamps do not change those
+versions. The frozen evidence retains `annotation_version_scope`; these are not
+whole-object or whole-package file digests. Original native handle/copy checks
+remain required before freezing.
 
 Freezing requires a complete text inclusion; quote offsets refer to that inclusion
 and preserve UTF-8/UTF-16/scalar boundaries. Exact request replays read the original
@@ -142,11 +148,14 @@ This does not establish browser screenshot/upload capture, real R image provenan
 annotation editor UI or abrupt-crash recovery.
 
 Add `--scientific` with a current `RHO_R_PLUGIN_PACKAGE`, existing `RHO_ARK` and
-`RHO_R_HOME` for real Help/Viewer/Console/Plots sources. R is activated before consumers select
+`RHO_R_HOME` for real Help/Viewer/Console/Plots/Objects/Packages sources. R is activated before consumers select
 its grants; the fixture explicitly starts one disposable session. Native package
 and help pages keep their partial/complete labels, while each frozen annotation
 requires a complete selected inclusion. The flow verifies installed-topic identity,
 original HTML, transcript and plot metadata after a newer run, forged-resource
 refusal and retained notes/retries while R stays suspended after Host restart.
-With `--agent`, all four notes
+The object case checks stable summary versions across new handles, changed-summary
+versions after explicit replacement, and refusal of the old reference. The package
+case checks stable metadata versions across observations and refuses another copy.
+With `--agent`, all six notes
 reach the actual Agent/Rig model input (local deterministic model peer).
