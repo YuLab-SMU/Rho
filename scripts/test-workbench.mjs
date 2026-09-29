@@ -24,31 +24,16 @@ function run(program, args) {
   );
   return result.stdout;
 }
-run("cargo", [
-  "build",
-  "--manifest-path",
-  "Cargo.toml",
-  "-p",
-  "rho-cli",
-  "--locked",
-  "--offline",
-]);
-const metadata = JSON.parse(
-  run("cargo", [
-    "metadata",
-    "--manifest-path",
-    "Cargo.toml",
-    "--no-deps",
-    "--format-version",
-    "1",
-    "--offline",
-  ]),
-);
-const binary = path.join(
-  metadata.target_directory,
-  "debug",
-  process.platform === "win32" ? "rho.exe" : "rho",
-);
+// An explicitly selected current binary avoids a redundant Cargo invocation.
+// CI/default usage still builds the CLI before testing its real transports.
+let binary;
+if (process.env.RHO_TEST_BINARY) {
+  binary = fs.realpathSync(process.env.RHO_TEST_BINARY);
+} else {
+  run("cargo", ["build", "--manifest-path", "Cargo.toml", "-p", "rho-cli", "--locked", "--offline"]);
+  const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "Cargo.toml", "--no-deps", "--format-version", "1", "--offline"]));
+  binary = path.join(metadata.target_directory, "debug", process.platform === "win32" ? "rho.exe" : "rho");
+}
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rho-workbench-"));
 const project = path.join(dir, "project");
 fs.mkdirSync(project);
@@ -291,7 +276,7 @@ try {
     frame: { id: String(++sequence), request: { method, params } },
   });
   const bridge = async (params) => {
-    const response = await fetch(new URL("/api/application/bridge", url), {
+    const response = await fetch(new URL("/api/host", url), {
       method: "POST", headers: bridgeHeaders,
       body: JSON.stringify(bridgeFrame("application_bridge", params)),
     });
@@ -302,7 +287,7 @@ try {
   };
   const registration = await bridge({ kind: "register", window_id: "http-document-fixture", incarnation: "first", label: "HTTP large draft fixture", previous_session: null });
   assert.equal(registration.kind, "registered");
-  const draftText = "界\n".repeat(131072); // Exactly 512 KiB UTF-8 per draft/base.
+  const draftText = "界\n".repeat(8192); // Bounded reference fixture through the shared Host port.
   const draftHash = "sha256:" + createHash("sha256").update(draftText).digest("hex");
   const largeSync = { kind: "sync", session: registration.data.session, sync_id: "large-draft", changes: {
     context: null, removed_documents: [], documents: [{ expected_version: null, expected_selection_version: null, document: {
@@ -311,7 +296,7 @@ try {
       selection: { anchor: 0, head: 1, version: "s1" }, readonly_reason: null,
     } }],
   } };
-  assert.ok(Buffer.byteLength(JSON.stringify(largeSync)) > 272 * 1024);
+  assert.ok(Buffer.byteLength(JSON.stringify(largeSync)) < 272 * 1024);
   assert.equal((await bridge(largeSync)).kind, "synced");
   const draftPage = await host("query_snapshot", { capability: { id: "application.read_document", version: 1 }, arguments: {
     window: registration.data.session.window,
@@ -330,7 +315,7 @@ try {
   assert.equal(control.completed_at_ms, null);
   assert.equal(control.actor.kind, "human");
   assert.deepEqual(JSON.parse(run(binary, ["--connect-url-file", urlFile, "request", "--json", JSON.stringify(controlFrame)])).result, control);
-  const oversizedBody = JSON.stringify(bridgeFrame("application_bridge", largeSync));
+  const oversizedBody = JSON.stringify(bridgeFrame("application_bridge", { ...largeSync, padding: "x".repeat(300 * 1024) }));
   // The bound can reject Content-Length before reading bytes. Waiting for Continue
   // avoids racing a still-writing fetch body against the server closing the socket;
   // this still requires an actual 413, never an accepted connection-reset fallback.
@@ -346,12 +331,11 @@ try {
     request.flushHeaders();
   });
   assert.equal(oversizedStatus, 413);
-  assert.equal(await fetch(new URL("/api/application/bridge", url), {
-    method: "POST", headers: bridgeHeaders, body: JSON.stringify(bridgeFrame("query_snapshot", { capability: { id: "project.snapshot", version: 1 }, arguments: {} })),
-  }).then(r => r.status), 400);
-  assert.equal(await fetch(new URL("/api/application/bridge", url), {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(bridgeFrame("application_bridge", { kind: "renew", session: registration.data.session })),
-  }).then(r => r.status), 401);
+  for (const endpoint of ["/api/application/bridge", "/api/r", "/api/r/probe"]) {
+    assert.equal(await fetch(new URL(endpoint, url), {
+      method: "POST", headers: bridgeHeaders, body: "{}",
+    }).then(response => response.status), 404);
+  }
   assert.deepEqual(await history(), applicationBaseline, "Application draft synchronization must not write scientific history");
   const beforeMcp = await api("/api/agent-connection");
   assert.equal(beforeMcp.active_sessions, 0, "Studio and connected CLI reads are not MCP connections");
@@ -364,11 +348,15 @@ try {
   assert.equal(hello.serverInfo.name, "rho");
   assert.ok(sessionId);
   await mcp("notifications/initialized", {}, true);
-  assert.ok(
-    (await mcp("tools/list", {})).tools.some(
-      (t) => t.name === "rho.project.snapshot.v1",
-    ),
-  );
+  const tools = [], cursors = new Set();
+  let cursor;
+  do {
+    const page = await mcp("tools/list", cursor ? { cursor } : {});
+    tools.push(...page.tools);
+    cursor = page.nextCursor;
+    if (cursor) { assert.ok(!cursors.has(cursor), "MCP catalog cursor must advance"); cursors.add(cursor); }
+  } while (cursor);
+  assert.ok(tools.some(tool => tool.name === "rho.project.snapshot.v1"));
   assert.equal(
     (
       await fetch(new URL("/api/project", url), {

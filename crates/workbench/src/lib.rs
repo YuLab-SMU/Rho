@@ -33,9 +33,6 @@ use tokio_util::sync::CancellationToken;
 use tower_http::limit::RequestBodyLimitLayer;
 
 const MAX_BODY: usize = 272 * 1024;
-// Draft synchronization has its own bounded application quota. It must be able
-// to carry the existing 512 KiB editable document and its captured base together.
-const MAX_BRIDGE_BODY: usize = 32 * 1024 * 1024;
 const MAX_REPLY: usize = 8 * 1024 * 1024;
 
 struct SelectedHost {
@@ -57,7 +54,6 @@ impl SelectedHost {
 struct Hosting {
     selected: Option<SelectedHost>,
     profile: HostProfile,
-    r_configuration: rho_contract::RConfiguration,
 }
 
 impl Hosting {
@@ -304,25 +300,10 @@ async fn select_project_root(state: &AppState, root: PathBuf) -> Response {
             hosting.selected = Some(SelectedHost::new(Arc::new(host), root));
             Json(hosting.info()).into_response()
         }
-        Err(error) => {
-            if matches!(hosting.profile.runtime, rho_host::RuntimeConfiguration::Plugins) {
-                return failure(StatusCode::INTERNAL_SERVER_ERROR, format!("Plugin workspace could not be opened: {error}"));
-            }
-            hosting.r_configuration.error = Some(format!(
-                "R startup failed; previous session memory has ended. {error}"
-            ));
-            hosting.profile.runtime = rho_host::RuntimeConfiguration::Project;
-            match hosting.profile.open_deferred(&root).await {
-                Ok(host) => {
-                    hosting.selected = Some(SelectedHost::new(Arc::new(host), root));
-                    Json(hosting.info()).into_response()
-                }
-                Err(error) => failure(
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Project is unavailable; previous session memory has ended. {error}"),
-                ),
-            }
-        }
+        Err(error) => failure(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Project could not be opened; no replacement profile was selected: {error}"),
+        ),
     }
 }
 
@@ -400,23 +381,6 @@ async fn dispatch(
         ),
         Err(error) => failure(StatusCode::INTERNAL_SERVER_ERROR, error.to_string()),
     }
-}
-
-async fn dispatch_bridge(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(request): Json<WorkbenchFrame>,
-) -> Response {
-    if request.frame.test_project.is_some() {
-        return failure(StatusCode::BAD_REQUEST,"The fixed application bridge is unavailable in a test project");
-    }
-    if !matches!(request.frame.request, HostRequest::ApplicationBridge(_)) {
-        return failure(
-            StatusCode::BAD_REQUEST,
-            "this endpoint accepts only the resident Studio bridge protocol",
-        );
-    }
-    dispatch(State(state), headers, Json(request)).await
 }
 
 async fn shell(State(state): State<AppState>) -> Html<String> {
@@ -541,8 +505,6 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .route("/api/plugin-view", post(plugin_views::dispatch))
         .route("/api/project", post(select_project))
         .route("/api/project/demo", post(select_demo_project))
-        .route("/api/r", get(settings::read_r).post(settings::apply_r))
-        .route("/api/r/probe", post(settings::probe))
         .route("/api/state/read", post(settings::read_state))
         .route("/api/state/write", post(settings::write_state))
         .route(
@@ -554,14 +516,6 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
         .nest_service("/mcp", mcp)
         .layer(DefaultBodyLimit::max(2 * 1024 * 1024 + 8192))
         .layer(RequestBodyLimitLayer::new(2 * 1024 * 1024 + 8192))
-        .merge(
-            Router::new().route(
-                "/api/application/bridge",
-                post(dispatch_bridge)
-                    .layer::<_, std::convert::Infallible>(DefaultBodyLimit::max(MAX_BRIDGE_BODY))
-                    .layer(RequestBodyLimitLayer::new(MAX_BRIDGE_BODY)),
-            ),
-        )
         .layer(middleware::from_fn_with_state(state.clone(), boundary))
         .with_state(state)
 }
@@ -578,7 +532,7 @@ pub async fn serve(
 }
 
 pub async fn serve_with_assets(
-    mut profile: HostProfile,
+    profile: HostProfile,
     project: Option<&Path>,
     port: u16,
     url_file: Option<&Path>,
@@ -588,21 +542,12 @@ pub async fn serve_with_assets(
     let application = Arc::new(rho_host::ApplicationStore::open(
         &profile.database.with_extension("studio.sqlite"),
     )?);
-    let mut r_configuration = settings::configure_startup(&mut profile, &application).await;
     let dev_assets = dev_assets
         .map(|p| p.canonicalize().map_err(|e| e.to_string()))
         .transpose()?;
     let selected = if let Some(project) = project {
         let root = project_root(&project.to_string_lossy())?;
-        let host = match profile.open_deferred(&root).await {
-            Ok(host) => host,
-            Err(error) if plugins_only => return Err(error),
-            Err(error) => {
-                r_configuration.error = Some(format!("R startup failed: {error}"));
-                profile.runtime = rho_host::RuntimeConfiguration::Project;
-                profile.open_deferred(&root).await?
-            }
-        };
+        let host = profile.open_deferred(&root).await?;
         // Opening the project makes files and drafts available; attaching its
         // default R session is a separate lifecycle action.
         let _ = host.continue_default_instance().await;
@@ -617,7 +562,6 @@ pub async fn serve_with_assets(
     let hosting = Arc::new(RwLock::new(Hosting {
         selected,
         profile,
-        r_configuration,
     }));
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port))
         .await
@@ -708,12 +652,6 @@ mod tests {
             Arc::new(rho_host::ApplicationStore::open(&temp.path().join("studio.sqlite")).unwrap());
         let state = AppState {
             hosting: Arc::new(RwLock::new(Hosting {
-                r_configuration: rho_contract::RConfiguration {
-                    source: "test".into(),
-                    current: None,
-                    candidates: Vec::new(),
-                    error: None,
-                },
                 profile,
                 selected: Some(SelectedHost::new(host, root)),
             })),
@@ -760,7 +698,6 @@ mod tests {
     #[tokio::test]
     async fn plugin_workspace_uses_generic_ports_and_never_applies_saved_r_configuration() {
         let (temp, state, app) = fixture_with_runtime(RuntimeConfiguration::Plugins).await;
-        let mut profile = state.hosting.read().await.profile.clone();
         let saved = state.application.read("user", "runtime").unwrap();
         state
             .application
@@ -772,12 +709,6 @@ mod tests {
                 },
             )
             .unwrap();
-        let settings = settings::configure_startup(&mut profile, &state.application).await;
-        assert_eq!(settings.source, "plugins");
-        assert!(settings.current.is_none());
-        assert!(settings.candidates.is_empty());
-        assert!(settings.error.is_none());
-        assert!(matches!(profile.runtime, RuntimeConfiguration::Plugins));
         let info = json_body(request(&app, "/api/info", None).await).await;
         assert_eq!(info["runtime"], "plugins");
         assert!(
@@ -790,21 +721,10 @@ mod tests {
         let body = frame(&state, "query_snapshot", json!({"capability":{"id":"plugins.list","version":1},"arguments":{"after":null,"limit":100}})).await;
         let inventory = json_body(request(&app, "/api/host", Some(body)).await).await;
         assert_eq!(inventory["result"]["data"]["total"], 0);
-        let refusal = request(&app, "/api/r", Some(json!({"selection":{"executable":"/missing/R","ark":"/missing/ark"},"end_session":true}))).await;
-        assert_eq!(refusal.status(), StatusCode::CONFLICT);
-        assert!(
-            json_body(refusal).await["error"]
-                .as_str()
-                .unwrap()
-                .contains("plugin providers")
-        );
-        let probe = request(
-            &app,
-            "/api/r/probe",
-            Some(json!({"executable":"/missing/R","ark":"/missing/ark"})),
-        )
-        .await;
-        assert_eq!(probe.status(), StatusCode::CONFLICT);
+        assert_eq!(request(&app, "/api/r", None).await.status(), StatusCode::NOT_FOUND);
+        for path in ["/api/r", "/api/r/probe", "/api/application/bridge"] {
+            assert_eq!(request(&app, path, Some(json!({}))).await.status(), StatusCode::NOT_FOUND);
+        }
         let other = temp.path().join("other-project");
         std::fs::create_dir(&other).unwrap();
         let switched =
@@ -1128,109 +1048,7 @@ mod tests {
         }
     }
 
-    #[cfg(unix)]
-    #[tokio::test]
-    async fn default_r_selection_validates_without_replacing_a_managed_host() {
-        use std::os::unix::fs::PermissionsExt;
-        let (temp, state, app) = fixture().await;
-        let r = temp.path().join("R");
-        let ark = temp.path().join("ark");
-        std::fs::write(
-            &r,
-            format!(
-                "#!/bin/sh\nprintf 'RHO_PROBE\\n{}\\n4.5.2\\naarch64\\nTRUE\\nTRUE\\n'\n",
-                temp.path().display()
-            ),
-        )
-        .unwrap();
-        std::fs::write(&ark, "#!/bin/sh\nprintf 'ark fixture\\n'\n").unwrap();
-        for path in [&r, &ark] {
-            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
-        }
-        let selection = json!({"executable":r,"ark":ark});
-        let current = {
-            let hosting = state.hosting.read().await;
-            Arc::downgrade(&hosting.selected.as_ref().unwrap().host)
-        };
-        let invalid =
-            json!({"selection":{"executable":"/missing/rho-test-R","ark":ark},"end_session":false});
-        assert_eq!(
-            request(&app, "/api/r", Some(invalid)).await.status(),
-            StatusCode::BAD_REQUEST
-        );
-        assert!(current.upgrade().is_some());
-        // Ending a session stays an explicit per-instance action; choosing the
-        // default R never ends live memory, attached MCP edge or not.
-        let edge = {
-            let hosting = state.hosting.read().await;
-            McpEdge::local(hosting.selected.as_ref().unwrap().host.clone()).unwrap()
-        };
-        let ending = json!({"selection":selection,"end_session":true});
-        let refused = json_body(request(&app, "/api/r", Some(ending.clone())).await).await;
-        assert!(
-            refused["error"].as_str().unwrap().contains("R Sessions"),
-            "{refused}"
-        );
-        assert!(current.upgrade().is_some());
-        drop(edge);
-        let refused = json_body(request(&app, "/api/r", Some(ending)).await).await;
-        assert!(
-            refused["error"].as_str().unwrap().contains("R Sessions"),
-            "{refused}"
-        );
-        assert!(current.upgrade().is_some());
-        // The default R is recorded for sessions created afterwards; the managed
-        // Host and every running instance are left exactly as they were.
-        let saved = json_body(
-            request(
-                &app,
-                "/api/r",
-                Some(json!({"selection":selection,"end_session":false})),
-            )
-            .await,
-        )
-        .await;
-        assert_eq!(saved["source"], "saved");
-        assert!(saved["current"]["usable"].as_bool().unwrap());
-        assert!(
-            saved["current"]["selection"]["executable"]
-                .as_str()
-                .unwrap()
-                .ends_with("/R"),
-            "the recorded default R is the selected one: {saved}"
-        );
-        assert!(current.upgrade().is_some());
-        let info = json_body(request(&app, "/api/info", None).await).await;
-        assert!(info["project_root"].is_string());
-        let capabilities = info["capabilities"].as_array().unwrap();
-        for id in ["runtime.instances", "workspace.run_r"] {
-            assert!(
-                capabilities.iter().any(|c| c["capability"]["id"] == id),
-                "the managed contract stays published: {id}"
-            );
-        }
-        // Missing bridge dependency is rejected before anything is recorded.
-        std::fs::write(
-            &r,
-            format!(
-                "#!/bin/sh\nprintf 'RHO_PROBE\\n{}\\n4.5.2\\naarch64\\nFALSE\\nFALSE\\n'\n",
-                temp.path().display()
-            ),
-        )
-        .unwrap();
-        assert_eq!(
-            request(
-                &app,
-                "/api/r",
-                Some(json!({"selection":selection,"end_session":false}))
-            )
-            .await
-            .status(),
-            StatusCode::BAD_REQUEST
-        );
-        assert!(state.hosting.read().await.selected.is_some());
-        assert!(current.upgrade().is_some());
-    }
+
 }
 
 

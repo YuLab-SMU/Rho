@@ -1771,7 +1771,12 @@ single contributed view. It does not select a scientific client from the Host
 profile. The fixed Studio singleton, built-in panel registry, scientific client
 owners and private Agent/R frontend routes have been removed. The remaining
 fixed Rust composition and HTTP adapters are a separate M6 removal boundary;
-`--fixed-workspace` no longer selects a fixed browser shell.
+`--fixed-workspace` no longer selects a fixed browser shell. Workbench has no
+R configuration field, interpreter discovery/probe, saved runtime selection or
+scientific fallback on open failure. Its former R settings and resident
+application-bridge HTTP endpoints are removed; the shared Host port remains bounded
+at 272 KiB. Ordinary contributed documents use the plugin draft/frame contracts.
+Legacy Application requests and the explicit fixed Host profile still await removal.
 
 The workspace owns window identity, saved generic layout, view connections,
 cooperative closure and explicit suspended-instance recovery. Scientific UI,

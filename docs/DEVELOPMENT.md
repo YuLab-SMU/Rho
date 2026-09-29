@@ -138,9 +138,10 @@ project selection, constrained startup layouts and an empty repository remaining
 empty across reload. `ui/tests/plugin-launcher.test.ts` covers original-request
 retention and receipt recovery. The default startup selector only opens standalone
 UI contributions; richer configuration, native activation and scenarios belong to
-ordinary plugins. Existing fixed-composition browser fixtures now pass the explicit
-temporary `--fixed-workspace` flag. Delete that reference path after M2–M4 replace
-the remaining fixed Agent/context/recovery interactions.
+ordinary plugins. Fixed browser fixtures and private scientific HTTP endpoints
+are retired. The remaining fixed Host reference scripts still use the temporary
+`--fixed-workspace` profile and bounded shared ports; those adapters and the flag
+are part of the remaining M6 deletion, not a fallback for missing plugins.
 
 For frontend-only startup/scientific-window iteration, build the client and set
 `RHO_WORKBENCH_DEV_ASSETS` to the absolute `crates/workbench/assets` directory.
@@ -294,8 +295,10 @@ plugins and the integrated scientific/Agent browser suites. The retained core UI
 checks cover transport, framing, layout, startup, closing and recovery.
 
 Private Agent/annotation/HTML HTTP routes and Workbench-owned service construction
-have also been removed. The fixed Rust composition, R settings and application
-bridge HTTP adapters remain for the next removal stage; `--fixed-workspace` no longer selects a fixed browser UI.
+have also been removed, as have R discovery/settings and the large resident
+application-bridge HTTP endpoint. The fixed Rust composition, shared-port legacy
+Application requests and `--fixed-workspace` remain for the next removal stage;
+the flag no longer selects a fixed browser UI.
 It must not be treated as a fallback when feature packages are absent. Historical
 fixed-renderer test totals do not count as current plugin acceptance.
 
@@ -1522,7 +1525,7 @@ Native/transport verification:
 | `test-real-r.mjs` | Installed Ark and R with jsonlite, rlang, lintr and styler; real R, progressive object/package queries, non-forcing inspections, cancellation and code tools |
 | `test-r-checkpoints.mjs` | Installed R with jsonlite; builds the private native checkpoint component for that R, then exercises the classifier and a capture/cold-restore round trip in disposable `--vanilla` processes. `--print-library` prints the component path for `RHO_CHECKPOINT_HELPER` |
 | `npm run test:browser --prefix ui` | Current `cargo build --locked` binary. Ordinary-plugin cases use explicit package/runtime selections; `scientific-workspace.spec.ts` requires either `RHO_SCIENTIFIC_PACKAGES` or `RHO_SCIENTIFIC_PLUGIN_SET`, plus `RHO_ARK` and `RHO_R_HOME`. Fixed-renderer browser specs have been retired with that implementation. Run the affected cases, not every fixture during iteration. |
-| `test-workbench.mjs`, `test-mcp.mjs` | Real local transports; add `--real-r` for Ark/R and Environment observations |
+| `test-workbench.mjs`, `test-mcp.mjs` | Remaining fixed-Host reference transports; add `--real-r` for explicit Ark/R and Environment observations. `test-workbench.mjs` accepts `RHO_TEST_BINARY=/absolute/current/rho` to reuse the current binary without invoking Cargo. Ordinary-plugin acceptance is separate. |
 | `test-environment.mjs` | R/Ark with pak, renv, ps and jsonlite; installs small local fixtures into temporary libraries, checks user-library preservation and recovery |
 | `test-process-recovery.mjs` | R-free native process crash/reconciliation |
 | `test-remote-protocol.mjs` | Local SSH/Slurm transcript fixtures; does not validate a remote cluster |

@@ -66,7 +66,7 @@ export class FixtureHost {
     const response=await fetch(`${this.origin}${endpoint}`,{method:body?'POST':'GET',headers:{authorization:`Bearer ${this.token}`,'content-type':'application/json','X-Rho-Studio-Window':windowId},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(60000)});
     const value=await response.json();assert.ok(response.ok,JSON.stringify(value));return value;
   }
-  async port(method,params,windowId) {const reply=await this.api(method==='application_bridge'?'/api/application/bridge':'/api/host',{project_root:this.project,frame:{id:randomUUID(),request:{method,params}}},windowId);assert.equal(reply.ok,true,JSON.stringify(reply));return reply.result;}
+  async port(method,params,windowId) {const reply=await this.api('/api/host',{project_root:this.project,frame:{id:randomUUID(),request:{method,params}}},windowId);assert.equal(reply.ok,true,JSON.stringify(reply));return reply.result;}
   query(id,arguments_={}) {return this.port('query_snapshot',{capability:{id,version:1},arguments:{...(id.startsWith('workspace.')&&!INSTANCE_FREE.includes(id)?{workspace_instance_id:INSTANCE}:{}),...arguments_}});}
   async run(code,{id=`fixture-${randomUUID()}`,accepted=false,expect='succeeded'}={}) {
     const record=await this.port('invoke',{client_request_id:id,capability:{id:'workspace.run_r',version:1},arguments:{workspace_instance_id:INSTANCE,code,output_mode:'console'},preconditions:[],...(accepted?{return_after_acceptance:true}:{})});

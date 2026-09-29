@@ -97,7 +97,11 @@ Missing or failed plugins never trigger a fixed-interface fallback. Agent, hando
 annotation and HTML Viewer use ordinary plugin capabilities/resources; their former
 private HTTP routes and Workbench-owned services have been removed. Agent MCP
 credentials belong to its backend endpoint, not the public Workbench `/mcp`.
-Removal of the remaining fixed backend adapters is tracked in Status.
+The old `/api/r`, `/api/r/probe` and `/api/application/bridge` endpoints are also
+removed. Workbench never reads saved R selection, discovers an interpreter or
+substitutes a project-only backend when opening the selected profile fails. Configure
+and start R through its ordinary provider. Shared-port legacy Application requests
+and explicit fixed Host profiles still await removal; see Status.
 
 The native development ports `plugins.test_create`, `plugins.test_project`,
 `plugins.test_projects`, `plugins.test_operation` and `plugins.test_stop` create,
@@ -156,39 +160,22 @@ objects, plot output and Viewer evidence.
 
 ## Select R
 
-Workbench selection uses explicit launch arguments, a saved user choice, available
-R executables on PATH, then the standard macOS installation location. Ark discovery
-checks beside the running binary and on PATH. Settings can select existing absolute
-R and Ark executable paths and probe version, architecture, R home and bridge support.
+In the ordinary Manager, use **Scenarios → New R workspace** to select existing
+absolute Ark and R home paths. The R provider captures this configuration for its
+instance; **Start R** in Console is a separate action. Creating or switching a
+window does not discover interpreters, read saved global R settings or install R.
 
-An invalid explicit or saved choice is reported without silently substituting R.
-The bridge needs jsonlite; rlang enables non-forcing object inspection. Without
-usable R, project browsing and editing remain available. R, Ark and R packages
-are not installed automatically. Optional Ark acquisition scripts live under
-`scripts/bootstrap-ark-*`; they retain upstream notices and return an executable
-path to configure explicitly.
+The provider needs jsonlite; rlang enables non-forcing object inspection. Without
+usable R, file browsing and editing remain available. Optional Ark acquisition
+scripts live under `scripts/bootstrap-ark-*`; they retain upstream notices and
+return an executable path to configure explicitly.
 
-Recovery copies need one more explicit acquisition: the private native component
-built for the exact R that will use it. A launched Workbench discovers it at
-`<ark directory>/recovery-components/<r_version>-<platform>/`, or accepts an absolute
-path through `--checkpoint-helper`. Install it with
-`node scripts/bootstrap-recovery-component.mjs --ark /absolute/path/to/ark [--r /absolute/path/to/R]`,
-which builds through `scripts/test-r-checkpoints.mjs`, rewrites the manifest to the
-installed location and publishes the component last so a partial copy is never
-loadable. Without it no recovery copy is written, so a session that had activity
-returns as `Needs attention` instead of continuing. Opening a catalog or capturing a
-copy never invokes a compiler or installs anything.
-
-A managed project Host owns one R binding per session, so selecting R here records
-the default used by sessions created afterwards. It never drains or replaces the
-running Host; running sessions keep their own binding and memory. Asking this
-endpoint to end a session is refused and points at stopping that session
-individually. An invalid candidate is rejected by probe before anything is recorded.
-
-A Host without managed instances keeps the older behaviour: changing R requires an
-explicit acknowledgement that session memory ends, active requests/work and attached
-MCP sessions prevent switching, and failed startup retains its diagnostic while
-providing a project without R where possible; it does not restore the ended memory.
+Recovery copies need a private native component built for the exact R installation.
+Acquire it explicitly with
+`node scripts/bootstrap-recovery-component.mjs --ark /absolute/path/to/ark [--r /absolute/path/to/R]`
+and configure the ordinary R instance's `checkpoint_helper_path`. Acquisition is
+separate from opening a catalog or requesting a copy; neither starts a compiler.
+No old R-settings HTTP endpoint or browser session-replacement dialog remains.
 
 CLI `invoke`, `session` and stdio `mcp` use explicit runtime flags. Omitting R flags
 there selects Project/Process-only hosting; `--rscript /path/to/Rscript` adds
