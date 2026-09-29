@@ -11,6 +11,7 @@ use sha2::{Digest, Sha256};
 use std::sync::{Arc, Mutex};
 
 mod continuation;
+mod history;
 mod native_tools;
 mod permissions;
 mod policy;
@@ -890,7 +891,8 @@ impl ComponentAgentOwner {
         self.start_with_origin(actor, request, Some(origin), None, now)
     }
     /// Commit already resolved source bytes with native admission and matching
-    /// draft consumption. No source I/O or model work occurs inside this owner.
+    /// draft consumption. Ordinary history is captured from this owner's records
+    /// under the admission gate; no source I/O or model work occurs here.
     pub fn start_native_captured(
         &self,
         actor: &ComponentActor,
@@ -901,8 +903,7 @@ impl ComponentAgentOwner {
     ) -> Result<ComponentRunAdmission, ApplicationError> {
         origin.validate()?;
         native_tools::validate_targets(&request, &origin)?;
-        if context.history.is_some()
-            || context.sources.len() > 16
+        if context.sources.len() > 16
             || serde_json::to_vec(&context).map_err(storage)?.len() > 64 * 1024
         {
             return Err(ApplicationError::Budget(
@@ -1009,6 +1010,29 @@ impl ComponentAgentOwner {
                 .collect();
         }
         let (task_intent, document_grants) = self.continued_authority(&actor.scope, &request)?;
+        let mut captured_context = captured_context;
+        if origin.is_some() && request.continuation.is_none() {
+            // New ordinary turns capture their own history. Original retries
+            // returned above, so later events cannot replace their input.
+            let history = self.conversation_history(&actor.scope, &request.conversation_id)?;
+            if history.is_some() || captured_context.is_some() {
+                captured_context
+                    .get_or_insert(ComponentAgentContext {
+                        history: None,
+                        sources: vec![],
+                    })
+                    .history = history;
+            }
+            if serde_json::to_vec(&captured_context)
+                .map_err(storage)?
+                .len()
+                > 64 * 1024
+            {
+                return Err(ApplicationError::Budget(
+                    "Selected sources and retained history exceed the context budget".into(),
+                ));
+            }
+        }
         let run_id = uuid::Uuid::new_v4().to_string();
         let run = StoredComponentRun {
             request_digest: digest,

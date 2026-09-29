@@ -124,8 +124,23 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
       get('context-footer-note').textContent = 'The input saved with this original message.';
       dialog.showModal();
       run(async current => {
-        const captures = await (kind === 'rho' ? picker.originalRho(originalTask, request) : picker.original(originalTask, request)); if (!current()) return;
-        if (!captures.length) { const empty = document.createElement('p'); empty.textContent = 'No contributed context was included in this message.'; area.append(empty); }
+        const captured = kind === 'rho' ? await picker.originalRho(originalTask, request) : { sources: await picker.original(originalTask, request), history: null }; if (!current()) return;
+        const captures = captured.sources;
+        if (captured.history) {
+          const heading = document.createElement('h3'), note = document.createElement('p');
+          heading.textContent = 'Earlier conversation';
+          note.textContent = `${captured.history.truncated ? 'Some earlier input was omitted. ' : ''}Saved with this message; it does not grant tool access.`;
+          area.append(heading, note);
+          for (const turn of captured.history.turns) {
+            const section = document.createElement('section'), question = document.createElement('h4'), user = document.createElement('pre'), answer = document.createElement('h4'), text = document.createElement('pre'), status = document.createElement('p');
+            question.textContent = 'You'; user.textContent = turn.user_text; answer.textContent = 'Agent'; text.textContent = turn.assistant_text || 'No retained answer text.';
+            status.textContent = [turn.state, ...(turn.history_gap ? ['Some events are missing'] : []), ...(turn.text_truncated ? ['Text was shortened'] : []), ...(turn.references_truncated ? ['Some references were omitted'] : [])].join(' · ');
+            const details = document.createElement('details'), summary = document.createElement('summary'), references = document.createElement('pre');
+            summary.textContent = 'Original record'; references.textContent = JSON.stringify({ run_id: turn.run_id, references: turn.references }, null, 2);
+            details.append(summary, references); section.append(question, user, answer, text, status, details); area.append(section);
+          }
+        }
+        if (!captures.length) { const empty = document.createElement('p'); empty.textContent = 'No selected sources.'; area.append(empty); }
         for (const value of captures) {
           const section = document.createElement('section'), heading = document.createElement('h3'), description = document.createElement('p'), text = document.createElement('pre');
           heading.textContent = value.title; description.textContent = value.description; text.textContent = value.text;

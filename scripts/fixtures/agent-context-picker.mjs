@@ -13,16 +13,18 @@ export async function testContextPicker(ContextPicker, inclusionChoices, root) {
     let preview={item:structuredClone(item),text:'selected_value <- 42 # 中文 Ω',data:{version:7},truncated:false,resources:[]};
     let complete='complete', gate=null;
     const original={request_id:'original-send',task_id:'task-one',contexts:[{selection:{source:'plugin',label:'Saved',reference:structuredClone(reference),inclusion:'{"kind":"selection"}'},title:'Original',description:'At Send',text:'original <- 7',data:{version:7}}]};
+    const rho={run_id:'rho-original',request:{conversation_id:'rho-task',sources:[]},context:{sources:[],history:{kind:'conversation',truncated:false,notice:'Saved input',turns:[{run_id:'earlier',state:'completed',user_text:'Earlier question 中文',assistant_text:'Earlier answer Ω',history_gap:false,text_truncated:false,references:[],references_truncated:false}]}}};
     const client={view:{project:'project',window:'window',instance:{instance:'agent'}},async query(cap,args){
       queries.push(structuredClone({cap,args}));
       if(cap.id==='agent.native.context'){ assert.equal(args.binding.provider.instance,'agent'); return {status:'ready',completeness:'complete',data:structuredClone(original)}; }
+      if(cap.id==='agent.model.run.get'){ assert.equal(args.binding.provider.instance,'agent'); return {status:'ready',completeness:'complete',data:structuredClone(rho)}; }
       if(cap.id==='plugins.instances') { const result=structuredClone(instancePage); if(gate){const wait=gate;gate=null;await wait;}return{status:'ready',completeness:'complete',data:result}; }
       if(cap.id==='plugins.inspect') return{status:'ready',completeness:'complete',data:structuredClone(inspected)};
       assert.deepEqual(args.binding,{project:'project',provider:identity,capability:cap,target:null});assert.equal(args.preconditions,null);
       const data=cap.id.endsWith('search')?page:preview;
       return {status:'ready',completeness:complete,data:structuredClone(data)};
     }};
-    return {picker:new ContextPicker(client),queries,client,page,preview,inspected,instancePage,original,completeness:v=>complete=v,wait:p=>gate=p};
+    return {picker:new ContextPicker(client),queries,client,page,preview,inspected,instancePage,original,rho,completeness:v=>complete=v,wait:p=>gate=p};
   }
   let count=0; async function check(name,fn){try{await fn();count++;}catch(error){throw Error(name,{cause:error});}}
   await check('declared choices come from the actual Editor manifest',async()=>{
@@ -73,6 +75,23 @@ export async function testContextPicker(ContextPicker, inclusionChoices, root) {
     const f=fixture();const captures=await f.picker.original('task-one','original-send');assert.equal(captures[0].text,'original <- 7');
     assert.deepEqual(f.queries.map(q=>q.cap.id),['agent.native.context']);f.original.request_id='another-send';
     await assert.rejects(f.picker.original('task-one','original-send'),/original message/);
+  });
+  await check('original Rho history reads only retained input, including partial flags',async()=>{
+    const f=fixture();f.rho.context.history.turns[0].history_gap=true;f.rho.context.history.truncated=true;
+    const captured=await f.picker.originalRho('rho-task','rho-original');assert.deepEqual(captured.sources,[]);assert.equal(captured.history.turns[0].assistant_text,'Earlier answer Ω');assert.equal(captured.history.truncated,true);assert.equal(captured.history.turns[0].history_gap,true);
+    assert.deepEqual(f.queries.map(q=>q.cap.id),['agent.model.run.get']);
+    f.rho.request.conversation_id='another-task';await assert.rejects(f.picker.originalRho('rho-task','rho-original'),/original Rho message/);
+  });
+  await check('malformed or oversized Rho history is never rendered as complete input',async()=>{
+    for(const fault of ['kind','turns','unicode','missing-flag','budget']){
+      const f=fixture(),history=f.rho.context.history;
+      if(fault==='kind')history.kind='invented';
+      if(fault==='turns')history.turns=Array(9).fill(history.turns[0]);
+      if(fault==='unicode')history.turns[0].assistant_text='中'.repeat(1400);
+      if(fault==='missing-flag')delete history.turns[0].history_gap;
+      if(fault==='budget')history.notice='x'.repeat(24576);
+      await assert.rejects(f.picker.originalRho('rho-task','rho-original'),/incomplete or exceeds/);
+    }
   });
   console.log(`Ordinary context picker: ${count} checks passed; exact source, inclusion, partial/changed input and bounded reads. Native/Host acceptance remains separate.`);
 }

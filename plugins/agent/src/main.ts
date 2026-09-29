@@ -199,7 +199,7 @@ function renderRho(id: string) {
     for (const row of rows) {
       const run = rho.runs.get(row.run_id), history = rho.transcripts.get(row.run_id);
       const input = block('You', run?.request.text ?? row.text_excerpt, `${row.run_id}:user`);
-      if (run?.request.sources?.length) { const sources = document.createElement('button'); sources.className = 'sent-context'; sources.textContent = 'Sent context'; sources.onclick = () => context?.inspectOriginal(id, row.run_id, 'rho'); input.append(sources); }
+      if (run?.context || run?.request.sources?.length) { const sources = document.createElement('button'); sources.className = 'sent-context'; sources.textContent = 'Sent context'; sources.onclick = () => context?.inspectOriginal(id, row.run_id, 'rho'); input.append(sources); }
       if (history?.text) block('Rho', history.text, `${row.run_id}:answer`);
       block('Activity', [row.state.replaceAll('_', ' '), run?.reason, history?.gap ? 'Earlier messages unavailable' : '', history?.partial || run && history && history.cursor < run.event_cursor ? 'Partial history' : ''].filter(Boolean).join(' · '), `${row.run_id}:state`);
     }

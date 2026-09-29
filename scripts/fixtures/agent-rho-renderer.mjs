@@ -60,5 +60,24 @@ export async function testRhoRenderer(page, frame, expect, output) {
   await page.setViewportSize({width:440,height:820});await page.evaluate(()=>window.fixture.reload());
   await expect(frame.getByRole('log')).toContainText('Retained Rho answer · 中文 Ω');await expect(input).toHaveValue('Keep my next Rho draft · 后续输入');
   snapshot=await page.evaluate(()=>window.fixture.snapshot());assert.equal(snapshot.rhoRuns.length,1);
+  await frame.getByRole('button',{name:'Send message'}).click();
+  await expect(frame.getByRole('button',{name:'Stop Agent'})).toBeVisible();
+  await page.evaluate(()=>window.fixture.finishRho('rho-run-1'));
+  await expect(frame.getByRole('button',{name:'Send message'})).toBeVisible();
+  await page.evaluate(()=>window.fixture.reload());
+  await expect(frame.getByRole('button',{name:'Sent context',exact:true})).toHaveCount(2);
+  const beforeHistoryReads=(await page.evaluate(()=>window.fixture.snapshot())).reads['editor.context.preview'];
+  await frame.getByRole('button',{name:'Sent context',exact:true}).last().click();
+  await expect(contextDialog.locator('#context-captures')).toContainText('Earlier conversation');
+  await expect(contextDialog.locator('#context-captures')).toContainText('Explain this captured result · 中文 Ω');
+  await expect(contextDialog.locator('#context-captures')).toContainText('Retained Rho answer · 中文 Ω');
+  await expect(contextDialog.locator('#context-captures')).not.toContainText('RHO_PRIVATE_REASONING');
+  for(const width of [440,220]){
+    await page.setViewportSize({width,height:820});
+    assert.equal(await contextDialog.evaluate(node=>node.scrollWidth>node.clientWidth),false,`Retained history fits ${width}`);
+    await page.screenshot({path:path.join(output,`agent-rho-history-${width}.png`)});
+  }
+  assert.equal((await page.evaluate(()=>window.fixture.snapshot())).reads['editor.context.preview'],beforeHistoryReads);
+  await contextDialog.getByRole('button',{name:'Close context'}).click();await page.setViewportSize({width:440,height:820});
   await tasks.selectOption('native:task-0');await expect(input).toHaveValue('Keep this next draft after reopening');
 }

@@ -83,6 +83,222 @@ fn setup(store: Arc<AgentStore>) -> (ComponentAgentOwner, ComponentActor, Stored
 }
 
 #[test]
+fn native_history_is_bounded_scoped_and_never_inherits_previous_authority() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = Arc::new(AgentStore::open(&directory.path().join("agent.sqlite")).unwrap());
+    let (owner, actor, mut previous) = setup(store.clone());
+    let mut native_origin = origin();
+    native_origin.r = None;
+    for index in 0..10 {
+        let at = 10 + index * 10;
+        owner
+            .claim(actor.scope(), &previous.run.run_id, at)
+            .unwrap();
+        owner
+            .append_text(
+                actor.scope(),
+                &previous.run.run_id,
+                "中文 Ω\n\"".repeat(600),
+                at + 1,
+            )
+            .unwrap();
+        owner
+            .finish(
+                actor.scope(),
+                &previous.run.run_id,
+                ComponentAgentRunState::Completed,
+                None,
+                at + 2,
+            )
+            .unwrap();
+        let conversation = store
+            .component_conversation(actor.scope(), "task")
+            .unwrap()
+            .unwrap();
+        let mut request = previous.run.request.clone();
+        request.request_id = format!("history-{index}");
+        request.conversation_version = conversation.version;
+        request.text = format!("Followup {index}: {}", "Ω\n\"".repeat(900));
+        request.grant.mode = ComponentAgentMode::Explain;
+        request.grant.session = None;
+        let next = owner
+            .start_native(&actor, request, native_origin.clone(), at + 3)
+            .unwrap()
+            .run;
+        let history = next.run.context.as_ref().unwrap().history.as_ref().unwrap();
+        let turns = history["turns"].as_array().unwrap();
+        assert!(!turns.is_empty() && turns.len() <= 8);
+        assert!(serde_json::to_vec(history).unwrap().len() <= 24 * 1024);
+        assert_eq!(turns.last().unwrap()["run_id"], previous.run.run_id);
+        assert_eq!(turns.last().unwrap()["text_truncated"], true);
+        assert!(
+            turns.last().unwrap()["assistant_text"]
+                .as_str()
+                .unwrap()
+                .len()
+                <= 4096
+        );
+        assert!(turns.last().unwrap()["user_text"].as_str().unwrap().len() <= 2048);
+        assert!(next.run.task_intent.is_none());
+        assert!(next.run.document_grants.is_empty());
+        assert!(next.run.request.continuation.is_none());
+        assert!(next.run.request.grant.session.is_none());
+        assert!(next.native_origin.as_ref().unwrap().r.is_none());
+        if index == 9 {
+            assert_eq!(history["truncated"], true);
+        }
+        previous = next;
+    }
+    owner
+        .finish(
+            actor.scope(),
+            &previous.run.run_id,
+            ComponentAgentRunState::Completed,
+            None,
+            115,
+        )
+        .unwrap();
+    let selections = (0..4)
+        .map(|index| AgentContextSelection {
+            source: "plugin".into(),
+            label: format!("Source {index}"),
+            reference: serde_json::json!({"version":7,"item":index}),
+            inclusion: "{}".into(),
+        })
+        .collect::<Vec<_>>();
+    let conversation = store
+        .component_conversation(actor.scope(), "task")
+        .unwrap()
+        .unwrap();
+    let saved = owner
+        .save_draft_content(
+            &actor,
+            "task",
+            conversation.draft_version,
+            AgentDraftContent {
+                text: "Keep this draft if the combined input is too large".into(),
+                context: selections.clone(),
+                assets: vec![],
+            },
+            None,
+            116,
+        )
+        .unwrap();
+    let context = ComponentAgentContext {
+        history: None,
+        sources: selections
+            .iter()
+            .map(|selection| ComponentSourceSnapshot {
+                selection: selection.clone(),
+                title: selection.label.clone(),
+                description: String::new(),
+                text: "x".repeat(15000),
+                native_data: serde_json::Value::Null,
+                truncated: false,
+                observations: vec![],
+                evidence: vec![],
+            })
+            .collect(),
+    };
+    assert!(serde_json::to_vec(&context).unwrap().len() < 65536);
+    let mut oversized = previous.run.request.clone();
+    oversized.request_id = "combined-context-budget".into();
+    oversized.conversation_version = saved.version;
+    oversized.text = saved.draft_content.text.clone();
+    oversized.sources = selections;
+    assert!(matches!(
+        owner.start_native_captured(&actor, oversized, native_origin.clone(), context, 117),
+        Err(ComponentTaskError::Budget(_))
+    ));
+    assert_eq!(
+        encode(
+            &store
+                .component_conversation(actor.scope(), "task")
+                .unwrap()
+                .unwrap()
+        )
+        .unwrap(),
+        encode(&saved).unwrap()
+    );
+    assert!(
+        store
+            .component_run_by_request(actor.scope(), "combined-context-budget")
+            .unwrap()
+            .is_none()
+    );
+    // A different conversation shares the model settings, but no prior input.
+    let isolated = owner
+        .create(&actor, "separate", ComponentAgentProfile::Project, 120)
+        .unwrap();
+    let mut request = previous.run.request.clone();
+    request.request_id = "isolated-request".into();
+    request.conversation_id = isolated.conversation_id;
+    request.conversation_version = isolated.version;
+    let separate = owner
+        .start_native(&actor, request, native_origin, 121)
+        .unwrap()
+        .run;
+    assert!(separate.run.context.is_none());
+}
+
+#[test]
+fn native_history_marks_unread_event_tail_without_inventing_a_storage_gap() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("agent.sqlite");
+    let store = Arc::new(AgentStore::open(&path).unwrap());
+    let (owner, actor, first) = setup(store.clone());
+    owner.claim(actor.scope(), &first.run.run_id, 4).unwrap();
+    owner
+        .finish(
+            actor.scope(),
+            &first.run.run_id,
+            ComponentAgentRunState::Completed,
+            None,
+            5,
+        )
+        .unwrap();
+    let mut saved = store
+        .component_run(actor.scope(), &first.run.run_id)
+        .unwrap()
+        .unwrap();
+    saved.run.event_cursor = 513;
+    // Inject a contiguous oversized event fixture without normal pruning. The
+    // reader's four-page budget must be visible independently of storage gaps.
+    let mut connection = rusqlite::Connection::open(&path).unwrap();
+    let tx = connection.transaction().unwrap();
+    tx.execute(
+        "DELETE FROM component_agent_events WHERE run_id=?1",
+        [&first.run.run_id],
+    )
+    .unwrap();
+    tx.execute(
+        "UPDATE component_agent_runs SET event_cursor=513,value=?1 WHERE run_id=?2",
+        rusqlite::params![encode(&saved).unwrap(), first.run.run_id],
+    )
+    .unwrap();
+    for sequence in 1..=513 {
+        let event = serde_json::json!({"run_id":first.run.run_id,"sequence":sequence,"created_at_ms":5,"content":{"kind":"text","text":"Ω"}}).to_string();
+        tx.execute("INSERT INTO component_agent_events(project,principal,conversation_id,run_id,sequence,bytes,value) VALUES(?1,?2,'task',?3,?4,?5,?6)", rusqlite::params![actor.scope().project,actor.scope().principal,first.run.run_id,sequence,event.len(),event]).unwrap();
+    }
+    tx.commit().unwrap();
+    let conversation = store
+        .component_conversation(actor.scope(), "task")
+        .unwrap()
+        .unwrap();
+    let mut request = first.run.request.clone();
+    request.request_id = "bounded-followup".into();
+    request.conversation_version = conversation.version;
+    let next = owner
+        .start_native(&actor, request, origin(), 6)
+        .unwrap()
+        .run;
+    let history = next.run.context.unwrap().history.unwrap();
+    assert_eq!(history["turns"][0]["history_gap"], false);
+    assert_eq!(history["turns"][0]["text_truncated"], true);
+    assert_eq!(history["turns"][0]["assistant_text"], "Ω".repeat(512));
+}
+
+#[test]
 fn native_parent_and_original_tool_request_survive_stop_late_receipt_and_reopen() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("agent.sqlite");

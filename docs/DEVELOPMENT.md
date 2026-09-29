@@ -123,6 +123,12 @@ including original key/configuration/removal receipt recovery without automatic
 model tests. Rho creation/Send recovery, missing keys, next-draft isolation and
 retained history run through the same opaque iframe. Settings and rename buttons work without `allow-forms`; screenshots
 cover 960/440/320/220 px, with the narrow settings panel scrolled to its diagnostics.
+Rho followup input inspection uses the saved per-Send history after reload; 440/220 px
+captures check its original questions/answers without fresh source queries. This
+renderer fixture is synthetic. The `rho_conversation_history` metadata case checks
+actual Rig input and unchanged original retries; store `native_history` cases cover
+Unicode/JSON byte limits, conversation scope and unread event tails. Run those native
+checks serially with the other affected Agent checks before claiming backend acceptance.
 That fixture does not replace real combined
 Agent/Host acceptance; native manifest changes still require the serial exporter
 and backend checks before snapshotting the package.

@@ -6,6 +6,11 @@ import { type Client, json, same } from './operations.js';
 export interface Inclusion { title: string; value: JsonValue; }
 export interface ContextSource { provider: InstanceRef; title: string; contribution: ContextContribution; inclusions: Inclusion[]; }
 export interface CapturedContext { selection: AgentContextSelection; title: string; description: string; text: string; data: JsonValue; }
+export interface CapturedHistory {
+  kind: 'conversation'; truncated: boolean; notice: string;
+  turns: { run_id: string; state: string; user_text: string; assistant_text: string;
+    history_gap: boolean; text_truncated: boolean; references: JsonValue[]; references_truncated: boolean }[];
+}
 const object = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const bytes = (value: string) => new TextEncoder().encode(value).length;
 
@@ -123,18 +128,28 @@ export class ContextPicker {
       throw Error('The saved context does not match this original message.');
     return data.contexts;
   }
-  async originalRho(task: string, run: string): Promise<CapturedContext[]> {
+  async originalRho(task: string, run: string): Promise<{ sources: CapturedContext[]; history: CapturedHistory | null }> {
     const capability = { id: 'agent.model.run.get', version: 1 };
     const { data } = await this.read<ComponentAgentRun>(capability, {
       binding: { project: this.client.view.project, provider: this.client.view.instance, capability, target: null },
       arguments: { run_id: run }, preconditions: null,
     });
-    const sources = data.context?.sources ?? [];
-    if (data.run_id !== run || data.request.conversation_id !== task || !Array.isArray(sources) || sources.length > 16 || bytes(JSON.stringify(sources)) > 65536 ||
+    const sources = data.context?.sources ?? [], history = data.context?.history;
+    if (data.run_id !== run || data.request.conversation_id !== task || !Array.isArray(sources) || sources.length > 16 || bytes(JSON.stringify(data.context ?? null)) > 65536 ||
       !same(sources.map(value => value.selection), data.request.sources ?? []) ||
       sources.some(value => value.truncated || typeof value.text !== 'string' || bytes(value.text) > 16384))
       throw Error('The saved context does not match this original Rho message.');
-    return sources.map(({ selection, title, description, text, native_data }) => ({ selection, title, description, text, data: native_data }));
+    if (history !== null && history !== undefined) {
+      const value = object(history);
+      if (!value || value.kind !== 'conversation' || typeof value.truncated !== 'boolean' || typeof value.notice !== 'string' ||
+        bytes(JSON.stringify(history)) > 24576 || !Array.isArray(value.turns) || value.turns.length > 8 ||
+        value.turns.some(turn => !object(turn) || typeof turn.run_id !== 'string' || typeof turn.state !== 'string' ||
+          typeof turn.user_text !== 'string' || bytes(turn.user_text) > 2048 || typeof turn.assistant_text !== 'string' || bytes(turn.assistant_text) > 4096 ||
+          typeof turn.history_gap !== 'boolean' || typeof turn.text_truncated !== 'boolean' || typeof turn.references_truncated !== 'boolean' ||
+          !Array.isArray(turn.references) || turn.references.length > 8))
+        throw Error('The retained conversation input is incomplete or exceeds its bounds.');
+    }
+    return { sources: sources.map(({ selection, title, description, text, native_data }) => ({ selection, title, description, text, data: native_data })), history: (history ?? null) as CapturedHistory | null };
   }
   selection(source: ContextSource, preview: ContextPreview, inclusion: JsonValue): AgentContextSelection {
     if (preview.truncated || preview.resources.length) throw Error('This Agent input needs complete text. Choose another inclusion or keep the draft for later.');

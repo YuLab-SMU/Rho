@@ -32,6 +32,102 @@ impl Fixture {
 }
 
 #[tokio::test]
+async fn rho_conversation_history_reaches_followup_and_original_retry_keeps_admitted_bytes() {
+    let mut f = Fixture::start().await;
+    let model = SyntheticModel::start().await;
+    f.model_settings(&model).await;
+    let mut input = f.run_input().await;
+    let first = f.begin_run(input.clone()).await;
+    model.entered().await;
+    let original = f.original_run().await;
+    assert!(original["context"].is_null());
+    model.state.resume.notify_one();
+    let RpcBody::CommitPlan(done) = f.read().await.body else {
+        panic!()
+    };
+    assert_eq!(done.outcome, PluginOutcome::Succeeded);
+    f.settle(&first, done.outcome).await;
+
+    let conversation = f
+        .query(
+            "agent.model.conversation",
+            json!({"conversation_id":"task-one"}),
+        )
+        .await;
+    input["request_id"] = json!("followup-model-run");
+    input["conversation_version"] = conversation["version"].clone();
+    input["text"] = json!("What did you just answer? 中文 Ω");
+    let (second, caller) = f
+        .begin("followup-send", "agent.model.run", input.clone())
+        .await;
+    let done = f.answer(caller, origin("view-one")).await;
+    assert_eq!(done.outcome, PluginOutcome::Succeeded, "{done:?}");
+    let followup = done.output.unwrap();
+    assert_eq!(followup["state"], "completed");
+    let history = &followup["context"]["history"];
+    assert_eq!(history["kind"], "conversation");
+    assert_eq!(history["turns"].as_array().unwrap().len(), 1);
+    assert_eq!(history["turns"][0]["run_id"], original["run_id"]);
+    assert_eq!(history["turns"][0]["user_text"], "Explain this analysis");
+    assert_eq!(
+        history["turns"][0]["assistant_text"],
+        "Fixture model answer 中文"
+    );
+    assert_eq!(history["truncated"], false);
+    assert!(followup["request"]["continuation"].is_null());
+    assert!(followup["request"]["grant"]["session"].is_null());
+    assert!(followup["task_intent"].is_null());
+    let delivered = model.state.bodies.lock().unwrap()[1].to_string();
+    assert!(delivered.contains("Fixture model answer 中文"));
+    assert!(delivered.contains("What did you just answer? 中文 Ω"));
+    assert!(delivered.contains(original["run_id"].as_str().unwrap()));
+    assert_eq!(model.count(), 2);
+    f.settle(&second, done.outcome).await;
+
+    // A later turn changes current history, but cannot change the followup's
+    // original input or cause another model call when its request is retried.
+    let conversation = f
+        .query(
+            "agent.model.conversation",
+            json!({"conversation_id":"task-one"}),
+        )
+        .await;
+    let mut later = input.clone();
+    later["request_id"] = json!("later-model-run");
+    later["conversation_version"] = conversation["version"].clone();
+    later["text"] = json!("A later question");
+    let (third, caller) = f.begin("later-send", "agent.model.run", later).await;
+    let done = f.answer(caller, origin("view-one")).await;
+    assert_eq!(done.outcome, PluginOutcome::Succeeded, "{done:?}");
+    assert_eq!(
+        done.output.as_ref().unwrap()["context"]["history"]["turns"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    f.settle(&third, done.outcome).await;
+    let (directory, environment) = f.release().await;
+    std::fs::remove_file(
+        std::path::Path::new(&environment.data_root).join("model-credentials-v1.json"),
+    )
+    .unwrap();
+    let mut reopened = Fixture::open(directory, environment).await;
+    let (retry, caller) = reopened
+        .begin("retry-followup", "agent.model.run", input)
+        .await;
+    let repeated = reopened.answer(caller, origin("view-one")).await;
+    assert_eq!(repeated.outcome, PluginOutcome::Succeeded, "{repeated:?}");
+    assert_eq!(
+        repeated.output.as_ref().unwrap()["context"],
+        followup["context"]
+    );
+    assert_eq!(model.count(), 3);
+    reopened.settle(&retry, repeated.outcome).await;
+    reopened.release().await;
+}
+
+#[tokio::test]
 async fn model_run_retains_native_parent_text_events_and_original_request_without_replay() {
     let mut f = Fixture::start().await;
     let model = SyntheticModel::start().await;
