@@ -588,6 +588,7 @@ mod tests {
                         InstanceState::Active
                     },
                     diagnostic: None,
+                    suspension: None,
                 },
                 observed_in_this_host: true,
                 process_id: Some(42),

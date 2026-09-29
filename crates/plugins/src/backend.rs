@@ -37,6 +37,7 @@ enum CommandMessage {
         response: Response,
     },
     Release {
+        disposition: crate::runtime::ShutdownDisposition,
         response: Response,
     },
 }
@@ -108,9 +109,12 @@ impl ProcessClient {
         }
     }
     pub async fn release(&self) -> Result<(), PluginError> {
+        self.shutdown(crate::runtime::ShutdownDisposition::Release).await
+    }
+    pub async fn shutdown(&self, disposition: crate::runtime::ShutdownDisposition) -> Result<(), PluginError> {
         let (response, receiver) = oneshot::channel();
         self.sender
-            .send(CommandMessage::Release { response })
+            .send(CommandMessage::Release { disposition, response })
             .await
             .map_err(|_| {
                 PluginError::Unavailable("backend is disconnected; cleanup is unconfirmed".into())
@@ -385,7 +389,7 @@ async fn run(
                         }
                         (RpcBody::OperationSettled(settlement.clone()), Pending { kind: PendingKind::Settlement(settlement), responses: vec![response] })
                     }
-                    CommandMessage::Release { response } => {
+                    CommandMessage::Release { disposition, response } => {
                         if !pending.is_empty() || !reverse.is_empty() {
                             let _ = response.send(Err("backend still has active calls".into())); continue;
                         }
@@ -394,10 +398,11 @@ async fn run(
                             let _ = response.send(Err("backend still has active resource transfers".into())); continue;
                         }
                         let released = release(&mut child, &mut writer, &mut frames, request, &policy).await;
-                        let released = released.and_then(|()| prepared.release_reference().map_err(|e| e.to_string()));
+                        let released = released.and_then(|()| prepared.finish_shutdown(&disposition).map_err(|e| e.to_string()));
                         {
                             let mut state = state.lock().unwrap();
-                            state.record.state = if released.is_ok() { InstanceState::Released } else { InstanceState::CleanupFailed };
+                            if released.is_ok() { disposition.apply(&mut state.record); }
+                            else { state.record.state = InstanceState::CleanupFailed; state.record.suspension = None; }
                             state.record.diagnostic = released.as_ref().err().cloned();
                             state.pid = None;
                         }

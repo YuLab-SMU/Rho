@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "checks": {
+    "plugins.restart-host": {"command":["cargo","test","-p","rho-host","--test","plugin_restart","--locked"],"tier":"L2","sources":["crates/plugins/**","crates/plugin-protocol/**","crates/host/src/lib.rs","crates/host/src/plugin_tests.rs","crates/host/tests/plugin_restart.rs","crates/host/tests/fixtures/plugins.rs"]},
+    "plugins.restart-runtime": {"command":["cargo","test","-p","rho-plugins","--test","backend_runtime","suspension","--locked"],"tier":"L1","sources":["crates/plugin-protocol/src/runtime.rs","crates/plugins/src/runtime.rs","crates/plugins/src/backend.rs","crates/plugins/src/instance_records.rs","crates/plugins/src/repository.rs","crates/plugins/tests/backend_runtime.rs","crates/plugins/tests/fixtures/backend.py"]},
     "plugins.agent-view": {"command":["node","scripts/test-agent-view.mjs","--build-ui"],"tier":"L1","sources":["plugins/agent/src/**","plugins/agent/index.html","plugins/agent/package.json","plugins/agent/dependencies.lock","plugins/agent/tsconfig.json","plugins/agent/build-ui.mjs","plugins/agent/sdk/**","sdk/plugin-ui/**","sdk/plugin-protocol/**","scripts/test-agent-view.mjs"]},
     "plugins.agent-view-browser": {"command":["node","scripts/test-agent-view.mjs","--browser"],"tier":"L2","sources":["plugins/agent/src/**","plugins/agent/index.html","plugins/agent/package.json","plugins/agent/dependencies.lock","plugins/agent/tsconfig.json","plugins/agent/build-ui.mjs","plugins/agent/sdk/**","sdk/plugin-ui/**","sdk/plugin-protocol/**","scripts/test-agent-view.mjs","scripts/agent-view-renderer.mjs","scripts/fixtures/agent-view-container.js"]},
     "plugins.agent-workspace-browser": {"command":["node","scripts/test-agent-plugin-real-r.mjs","--browser"],"tier":"L2","sources":["plugins/agent/**","plugins/r/**","sdk/**","crates/host/**","crates/workbench/**","ui/src/plugin-*.*","ui/src/host-client.ts","ui/e2e/agent-workspace.spec.ts","scripts/test-agent-plugin-real-r.mjs","scripts/build-agent-plugin.mjs","scripts/agent-plugin-artifact.mjs"]},
@@ -486,6 +488,8 @@
         "system.client",
         "plugins.protocol",
         "plugins.repository",
+        "plugins.restart-host",
+        "plugins.restart-runtime",
         "system.project-coverage",
         "plugins.backend-sdk",
         "plugins.external-backend",

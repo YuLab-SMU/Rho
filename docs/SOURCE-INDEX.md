@@ -466,6 +466,10 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `rust-toolchain.toml`, `sdk/**`.
 - `plugins.resource-download-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts","plugin-archive-download.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/e2e/plugin-archive-download.spec.ts`, `ui/e2e/plugin-resource-download.spec.ts`, `ui/src/**`.
+- `plugins.restart-host` (L2): `["cargo","test","-p","rho-host","--test","plugin_restart","--locked"]`
+  Applies to: `crates/host/src/lib.rs`, `crates/host/src/plugin_tests.rs`, `crates/host/tests/fixtures/plugins.rs`, `crates/host/tests/plugin_restart.rs`, `crates/plugin-protocol/**`, `crates/plugins/**`.
+- `plugins.restart-runtime` (L1): `["cargo","test","-p","rho-plugins","--test","backend_runtime","suspension","--locked"]`
+  Applies to: `crates/plugin-protocol/src/runtime.rs`, `crates/plugins/src/backend.rs`, `crates/plugins/src/instance_records.rs`, `crates/plugins/src/repository.rs`, `crates/plugins/src/runtime.rs`, `crates/plugins/tests/backend_runtime.rs`, `crates/plugins/tests/fixtures/backend.py`.
 - `plugins.scenario-ports` (L2): `["cargo","test","-p","rho-host","--test","plugin_scenarios","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
 - `plugins.scientific-workspace` (L2): `["node","scripts/test-scientific-workspace.mjs"]`

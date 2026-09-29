@@ -304,7 +304,7 @@ impl TestProjects {
                     .map_err(|error| after(error, &releases))?;
                 return Err(after(error, &releases));
             }
-            Box::pin(entry.host.drain()).await;
+            Box::pin(entry.host.drain_discarding_plugins()).await;
         }
         record.state = p::PluginTestProjectState::Stopped;
         self.save(&mut record)
@@ -326,7 +326,7 @@ impl TestProjects {
             .collect::<Vec<_>>();
         for (id, entry) in entries {
             entry.closing.store(true, Ordering::Release);
-            Box::pin(entry.host.drain()).await;
+            Box::pin(entry.host.drain_discarding_plugins()).await;
             let outcome = instances(&entry.host, &entry.context).await;
             let Ok(mut record) = self.record(&entry.context, &id) else {
                 continue;

@@ -463,8 +463,8 @@ no generic Host credential. The Host service still enforces capability kind and
 native preconditions before delegating work.
 
 Initialization carries native paths separately from configuration: a normalized
-Host project root and a newly created persistent data directory for the exact
-instance. The generic runtime refuses existing per-instance directories and
+Host project root and a persistent data directory for the exact instance.
+New activation refuses existing per-instance directories and
 symlinked data parents; it never derives the project from the artifact directory.
 Release and failed activation preserve these bytes for owner recovery. Paths
 do not constitute an OS sandbox or grant another owner’s Host capabilities.
@@ -475,6 +475,20 @@ draining until their Operation owner releases them after commit. Generic lifecyc
 records and protecting references are durable; historical records alone do not
 prove that a native process is alive. Cleanup requires both an owner acknowledgement
 and successful process exit before its instance reference can be released.
+
+Normal Host shutdown drains accepted work, detaches runtime views and suspends
+instances after the same acknowledged native cleanup. Suspension retains the
+instance/revision references, original activation grants and acknowledged view
+state/layout. Disposable test-project teardown still permanently releases its
+instances. `plugins.resume` is an explicit Operation consuming the exact confirmed
+suspension token; a later suspension has another token. It reuses the original
+identity, revision, artifact, project, principal, configuration and grants, and
+checks the contained existing data directory and its retained ownership marker.
+Missing/replaced data, released identities and unconfirmed cleanup cannot become
+fresh activation. Queries never resume a provider. Other providers may remain
+suspended; resume does not start dependencies, and subsequent calls still validate
+their exact available provider and contract. Native scientific sessions and
+unfinished work do not resume merely because their owning backend reopens.
 
 Every accepted operation must freeze capability, plugin revision, artifact,
 instance, project, principal and native target before dispatch. Provider choice
@@ -710,7 +724,11 @@ creating a placeholder process. `views.open`, `views.update` and `views.close`
 are ordinary Operations; state updates compare the view's own version and schema.
 Open views retain their exact revision independently of native operation leases.
 Stored view state survives closure and Host restart, but a read never recreates
-its connection. Explicit release can retire a historical UI-only instance because
+its connection. `views.reconnect` requires the retained open view's exact state
+version and an already active original instance. It preserves view/window/state
+identity, creates fresh private transport credentials and returns only the public
+record. An already connected view keeps its existing credentials. Explicit
+release can retire a confirmed suspended instance, or a historical UI-only instance because
 its exact manifest establishes that no native backend was created; native failure
 still requires established cleanup. Closing a view never releases its backend.
 

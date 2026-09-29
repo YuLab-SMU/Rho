@@ -2,6 +2,17 @@ use crate::{PluginError, PluginRepository, ensure};
 use rho_plugin_protocol::*;
 use rusqlite::{OptionalExtension, params};
 
+/// Host-owned activation inputs. They are retained with the original identity,
+/// never reconstructed from a model, a new configuration or current providers.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct StoredActivation {
+    pub target: String,
+    pub grants: Vec<CapabilityRequirement>,
+    pub environment: Option<BackendEnvironment>,
+    pub data_identity: Option<String>,
+}
+
 impl PluginRepository {
     /// All recorded lifecycle states matter, including unavailable and released
     /// owners whose scientific recovery references are interpreted elsewhere.
@@ -16,6 +27,7 @@ impl PluginRepository {
     pub(crate) fn register_instance(
         &mut self,
         instance: &PluginInstance,
+        activation: &StoredActivation,
     ) -> Result<(), PluginError> {
         ensure(
             instance.state == InstanceState::Preparing,
@@ -49,6 +61,8 @@ impl PluginRepository {
                 instance.identity.revision.as_str()
             ],
         )?;
+        transaction.execute("INSERT INTO plugin_instance_activations VALUES(?,?)",
+            params![instance.identity.instance.as_str(), serde_json::to_string(activation)?])?;
         transaction.commit()?;
         Ok(())
     }
@@ -76,6 +90,11 @@ impl PluginRepository {
             old.state != InstanceState::Released || instance.state == InstanceState::Released,
             "released instance cannot be resurrected",
         )?;
+        ensure(old.state != InstanceState::Suspended || instance.state == InstanceState::Released
+            || (instance.state == InstanceState::Suspended && instance.suspension == old.suspension),
+            "suspended instance requires its original resume precondition")?;
+        ensure((instance.state == InstanceState::Suspended) == instance.suspension.is_some(),
+            "only confirmed suspension may retain a resume token")?;
         transaction.execute(
             "UPDATE plugin_instances SET document=? WHERE id=?",
             params![
@@ -92,6 +111,36 @@ impl PluginRepository {
                 ],
             )?;
         }
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub(crate) fn suspended_activation(&self, identity: &InstanceRef, project: &ProjectId,
+        principal: &PrincipalId, suspension: &RequestId) -> Result<(PluginInstance, StoredActivation), PluginError> {
+        let record = self.recorded_instance(identity, project, principal)?;
+        ensure(record.purpose == PluginInstancePurpose::Runtime && record.state == InstanceState::Suspended
+            && record.suspension.as_ref() == Some(suspension), "instance suspension changed or cleanup is unconfirmed")?;
+        let document: String = self.connection.query_row("SELECT document FROM plugin_instance_activations WHERE id=?",
+            [identity.instance.as_str()], |row| row.get(0))?;
+        Ok((record, serde_json::from_str(&document)?))
+    }
+
+    /// Consume exactly one confirmed suspension before any native process starts.
+    /// No ordinary lifecycle write is allowed to perform this transition.
+    pub(crate) fn begin_instance_resume(&mut self, record: &PluginInstance, suspension: &RequestId) -> Result<(), PluginError> {
+        ensure(record.state == InstanceState::Preparing && record.suspension.is_none(), "resume must prepare the original instance")?;
+        let transaction = self.connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let old: String = transaction.query_row("SELECT document FROM plugin_instances WHERE id=?",
+            [record.identity.instance.as_str()], |row| row.get(0))?;
+        let mut expected: PluginInstance = serde_json::from_str(&old)?;
+        ensure(expected.state == InstanceState::Suspended && expected.suspension.as_ref() == Some(suspension),
+            "instance suspension changed before resume")?;
+        expected.state = InstanceState::Preparing;
+        expected.suspension = None;
+        expected.diagnostic = None;
+        ensure(expected == *record, "resume changed the original instance")?;
+        transaction.execute("UPDATE plugin_instances SET document=? WHERE id=?",
+            params![serde_json::to_string(record)?, record.identity.instance.as_str()])?;
         transaction.commit()?;
         Ok(())
     }

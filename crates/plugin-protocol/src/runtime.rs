@@ -32,6 +32,8 @@ pub enum InstanceState {
     Preparing,
     Active,
     Draining,
+    Suspending,
+    Suspended,
     Released,
     Failed,
     CleanupFailed,
@@ -51,6 +53,11 @@ pub struct PluginInstance {
     pub alias: InstanceAlias,
     pub configuration: Value,
     pub state: InstanceState,
+    /// A confirmed Host shutdown incarnation. Explicit resume consumes this
+    /// exact token; an older request cannot resume a later suspension.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub suspension: Option<RequestId>,
     pub diagnostic: Option<String>,
 }
 

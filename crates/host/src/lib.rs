@@ -1460,6 +1460,15 @@ impl NextHost {
 
     /// The caller must first stop accepting new work through every edge.
     pub async fn drain(&self) {
+        self.drain_plugins(true).await;
+    }
+
+    /// Disposable child-project teardown permanently releases its instances.
+    pub(crate) async fn drain_discarding_plugins(&self) {
+        self.drain_plugins(false).await;
+    }
+
+    async fn drain_plugins(&self, retain_plugins: bool) {
         if let Some(instances) = &self.runtime.instances {
             instances.begin_shutdown();
         }
@@ -1469,7 +1478,10 @@ impl NextHost {
         self.tasks.close();
         self.tasks.wait().await;
         if let Some(owner) = &self.runtime.test_projects { Box::pin(owner.drain()).await; }
-        if let Some(plugins) = &self.runtime.plugins { plugins.drain().await; }
+        if let Some(plugins) = &self.runtime.plugins {
+            if retain_plugins { plugins.suspend_for_restart().await; }
+            else { plugins.drain().await; }
+        }
         // Accepted work has drained. The native adapter has no drop teardown, so an
         // exiting Host must end the R processes it started rather than orphan them.
         if let Some(instances) = &self.runtime.instances {

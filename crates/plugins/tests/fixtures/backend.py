@@ -91,6 +91,20 @@ connection = frame["connection"]
 configuration = frame["body"]["data"]["instance"]["configuration"]
 environment = frame["body"]["data"].get("environment")
 resource_channel = frame["body"]["data"].get("resource_channel")
+def retain_count(name):
+    if configuration.get("retained_counts"):
+        path = os.path.join(environment["data_root"], name)
+        try:
+            with open(path) as source:
+                count = int(source.read())
+        except FileNotFoundError:
+            count = 0
+        with open(path, "w") as output:
+            output.write(str(count + 1))
+            output.flush()
+            os.fsync(output.fileno())
+
+retain_count("starts")
 if configuration.get("mode") == "init_hang":
     import time
     time.sleep(60)
@@ -238,6 +252,7 @@ while True:
             send(request, "control_result", {"data":{"submitted":True}})
     elif kind == "invoke":
         invocations += 1
+        retain_count("invocations")
         action = data["arguments"].get("action", "hold")
         if action == "crash":
             with open(data["arguments"]["marker"], "a") as marker:

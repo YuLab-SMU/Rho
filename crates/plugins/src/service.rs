@@ -319,10 +319,25 @@ impl PluginService {
         Ok(())
     }
     pub async fn drain(&self) {
+        self.shutdown(false).await;
+    }
+    /// Normal Host shutdown preserves runtime identities and acknowledged views.
+    /// Disposable test-project teardown continues to use permanent drain.
+    pub async fn suspend_for_restart(&self) {
+        self.shutdown(true).await;
+    }
+    async fn shutdown(&self, retain: bool) {
         self.stopped.cancel();
         let guard = self.gate.lock().await;
-        self.close_live_views();
+        if retain { self.detach_live_views(); } else { self.close_live_views(); }
         for observation in self.runtime.observe() {
+            if retain && observation.instance.state == InstanceState::Active
+                && observation.instance.purpose == PluginInstancePurpose::Runtime {
+                if let Err(error) = self.runtime.suspend(&observation.instance.identity).await {
+                    eprintln!("plugin suspension is unconfirmed: {error}");
+                }
+                continue;
+            }
             if matches!(
                 observation.instance.state,
                 InstanceState::Active | InstanceState::Draining

@@ -41,6 +41,7 @@ impl PluginRepository {
             CREATE TABLE IF NOT EXISTS branches(id TEXT PRIMARY KEY, plugin TEXT NOT NULL, head TEXT NOT NULL REFERENCES revisions(id), name TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS plugin_branch_origins(branch TEXT PRIMARY KEY REFERENCES branches(id), revision TEXT NOT NULL REFERENCES revisions(id));
             CREATE TABLE IF NOT EXISTS plugin_instances(id TEXT PRIMARY KEY, document TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS plugin_instance_activations(id TEXT PRIMARY KEY REFERENCES plugin_instances(id), document TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS plugin_views(id TEXT PRIMARY KEY, project TEXT NOT NULL, principal TEXT NOT NULL, document TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS plugin_window_layouts(project TEXT NOT NULL, principal TEXT NOT NULL, window TEXT NOT NULL, document TEXT NOT NULL, PRIMARY KEY(project,principal,window));")?;
         crate::archives::initialize(&connection)?;

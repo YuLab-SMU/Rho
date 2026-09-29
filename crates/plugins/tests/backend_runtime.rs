@@ -627,3 +627,137 @@ async fn native_environment_rejects_symlinked_data_parent_before_spawn() {
     assert!(runtime.observe().is_empty());
     assert_eq!(fs::read_dir(outside).unwrap().count(), 0);
 }
+
+#[tokio::test]
+async fn suspension_reopens_original_data_and_fences_stale_or_changed_activation() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let archive = fixture(&root.join("package"), "1", true);
+    let mut repository = PluginRepository::open(&root.join("store")).unwrap();
+    repository.import(&archive).unwrap();
+    let repository = Arc::new(Mutex::new(repository));
+    let first = runtime(repository.clone());
+    let request = || {
+        let mut request = activation(&archive, json!({"retained_counts":true}));
+        request.project_root = Some(root.clone());
+        request
+    };
+    let original = first.activate(request()).await.unwrap();
+    let query = resolve(&first, &original, false);
+    let environment = data(query.call(call(&query, json!({"action":"environment"}), false)).await.unwrap());
+    let directory = std::path::PathBuf::from(environment["environment"]["data_root"].as_str().unwrap());
+    assert!(first.suspend(&original.identity).await.is_err(), "an outstanding lease must fence shutdown");
+    assert_eq!(first.observe()[0].instance.state, InstanceState::Active);
+    drop(query);
+    let operation = resolve(&first, &original, true);
+    operation.call(call(&operation, json!({"action":"commit"}), true)).await.unwrap();
+    drop(operation);
+    first.suspend(&original.identity).await.unwrap();
+    let suspended = first.observe()[0].instance.clone();
+    let token = suspended.suspension.clone().unwrap();
+    assert_eq!(suspended.state, InstanceState::Suspended);
+    assert!(repository.lock().unwrap().remove(&archive.revision.id).is_err());
+    assert!(first.resolve(&key("fixture.read"), &original.project, &original.principal, Some(&original.identity)).is_err());
+    drop(first);
+    let reopened = runtime(repository.clone());
+    assert!(reopened.observe().is_empty());
+    assert_eq!(fs::read_to_string(directory.join("starts")).unwrap(), "1");
+    for alteration in ["principal", "project", "configuration", "grants", "target", "token"] {
+        let mut changed = request();
+        match alteration {
+            "principal" => changed.principal = PrincipalId::new("foreign").unwrap(),
+            "project" => changed.project = ProjectId::new("foreign").unwrap(),
+            "configuration" => changed.configuration = json!({"changed":true}),
+            "grants" => changed.grants.clear(),
+            "target" => changed.target = "foreign".into(),
+            _ => {},
+        }
+        let precondition = if alteration == "token" { RequestId::new("stale").unwrap() } else { token.clone() };
+        assert!(reopened.resume_identified(changed, original.identity.instance.clone(), &precondition, true).await.is_err(), "{alteration}");
+        assert_eq!(repository.lock().unwrap().recorded_instance(&original.identity, &original.project, &original.principal).unwrap(), suspended);
+        assert_eq!(fs::read_to_string(directory.join("starts")).unwrap(), "1");
+    }
+    let resumed = reopened.resume_identified(request(), original.identity.instance.clone(), &token, true).await.unwrap();
+    assert_eq!(resumed.identity, original.identity);
+    assert_eq!(resumed.configuration, original.configuration);
+    assert!(resumed.suspension.is_none());
+    assert_eq!(fs::read_to_string(directory.join("starts")).unwrap(), "2");
+    assert_eq!(fs::read_to_string(directory.join("invocations")).unwrap(), "1");
+    let query = resolve(&reopened, &resumed, false);
+    let current = data(query.call(call(&query, json!({"action":"environment"}), false)).await.unwrap());
+    assert_eq!(current["environment"], environment["environment"]);
+    drop(query);
+    reopened.suspend(&resumed.identity).await.unwrap();
+    let next = reopened.observe()[0].instance.suspension.clone().unwrap();
+    assert_ne!(token, next);
+    assert!(reopened.resume_identified(request(), original.identity.instance.clone(), &token, true).await.is_err());
+    reopened.release(&resumed.identity).await.unwrap();
+    assert!(reopened.resume_identified(request(), original.identity.instance.clone(), &next, true).await.is_err());
+    assert_eq!(fs::read_to_string(directory.join("starts")).unwrap(), "2");
+    assert_eq!(fs::read_to_string(directory.join("invocations")).unwrap(), "1");
+    repository.lock().unwrap().remove(&archive.revision.id).unwrap();
+}
+
+#[tokio::test]
+async fn suspension_requires_acknowledged_cleanup_and_retains_uncommitted_operations() {
+    let temp = tempfile::tempdir().unwrap();
+    let archive = fixture(&temp.path().join("package"), "1", false);
+    let mut repository = PluginRepository::open(&temp.path().join("store")).unwrap();
+    repository.import(&archive).unwrap();
+    let repository = Arc::new(Mutex::new(repository));
+    let owner = runtime(repository.clone());
+    let original = owner.activate(activation(&archive, json!({"mode":"cleanup_fail"}))).await.unwrap();
+    repository.lock().unwrap().retain("operation", &format!("{}:uncommitted", original.identity.instance), &original.identity.revision).unwrap();
+    assert!(owner.suspend(&original.identity).await.is_err());
+    assert_eq!(owner.observe()[0].instance.state, InstanceState::Active);
+    repository.lock().unwrap().release_reference("operation", &format!("{}:uncommitted", original.identity.instance), &original.identity.revision).unwrap();
+    assert!(owner.suspend(&original.identity).await.is_err());
+    let record = repository.lock().unwrap().recorded_instance(&original.identity, &original.project, &original.principal).unwrap();
+    assert_eq!(record.state, InstanceState::CleanupFailed);
+    assert!(record.suspension.is_none());
+    let reopened = runtime(repository.clone());
+    assert!(reopened.resume_identified(activation(&archive, json!({"mode":"cleanup_fail"})), original.identity.instance,
+        &RequestId::new("invented").unwrap(), true).await.is_err());
+    assert!(repository.lock().unwrap().remove(&archive.revision.id).is_err());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn suspension_refuses_replaced_or_symlinked_data_without_consuming_its_precondition() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let archive = fixture(&root.join("package"), "1", false);
+    let mut repository = PluginRepository::open(&root.join("store")).unwrap();
+    repository.import(&archive).unwrap();
+    let repository = Arc::new(Mutex::new(repository));
+    let owner = runtime(repository.clone());
+    let request = || {
+        let mut value = activation(&archive, json!({"retained_counts":true}));
+        value.project_root = Some(root.clone());
+        value
+    };
+    let original = owner.activate(request()).await.unwrap();
+    owner.suspend(&original.identity).await.unwrap();
+    let suspended = owner.observe()[0].instance.clone();
+    let token = suspended.suspension.as_ref().unwrap();
+    let directory = root.join("store/instance-data-v1").join(format!("instance-{}", original.identity.instance));
+    let retained = root.join("retained-data");
+    fs::rename(&directory, &retained).unwrap();
+    fs::create_dir(&directory).unwrap();
+    for replacement in ["empty", "marker", "directory"] {
+        if replacement == "marker" {
+            std::os::unix::fs::symlink(retained.join(".rho-instance-owner"), directory.join(".rho-instance-owner")).unwrap();
+        } else if replacement == "directory" {
+            fs::remove_file(directory.join(".rho-instance-owner")).unwrap();
+            fs::remove_dir(&directory).unwrap();
+            std::os::unix::fs::symlink(&retained, &directory).unwrap();
+        }
+        assert!(owner.resume_identified(request(), original.identity.instance.clone(), token, true).await.is_err(), "{replacement}");
+        assert_eq!(repository.lock().unwrap().recorded_instance(&original.identity, &original.project, &original.principal).unwrap(), suspended);
+    }
+    fs::remove_file(&directory).unwrap();
+    fs::rename(&retained, &directory).unwrap();
+    owner.resume_identified(request(), original.identity.instance.clone(), token, true).await.unwrap();
+    assert_eq!(fs::read_to_string(directory.join("starts")).unwrap(), "2");
+    owner.release(&original.identity).await.unwrap();
+}

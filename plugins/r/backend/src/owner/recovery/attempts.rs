@@ -429,6 +429,7 @@ mod tests {
                             alias: InstanceAlias::new("original").unwrap(),
                             configuration: json!({}),
                             state: state.clone(),
+                            suspension: None,
                             diagnostic: None
                         },
                         observed_in_this_host: false,

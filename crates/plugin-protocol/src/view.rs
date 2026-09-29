@@ -84,6 +84,15 @@ pub struct UpdatePluginView {
     pub expected_version: u32,
     pub state: Value,
 }
+
+/// Reattach the retained view of an already active instance without creating a
+/// new document, changing its state or replaying an earlier invocation.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ReconnectPluginView {
+    pub view: ViewInstanceId,
+    pub expected_version: u32,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct PluginViewRecord {

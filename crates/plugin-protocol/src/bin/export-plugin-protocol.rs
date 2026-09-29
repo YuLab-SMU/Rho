@@ -46,6 +46,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     PluginInstanceObservations::export_all(&types)?;
     PluginResolveArguments::export_all(&types)?;
     ActivatePlugin::export_all(&types)?;
+    ResumePlugin::export_all(&types)?;
     BranchPlugin::export_all(&types)?;
     AdvancePluginBranch::export_all(&types)?;
     PluginBranchArguments::export_all(&types)?;
@@ -58,6 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     ResourceTransferResponse::export_all(&types)?;
     OpenPluginView::export_all(&types)?;
     UpdatePluginView::export_all(&types)?;
+    ReconnectPluginView::export_all(&types)?;
     PluginViewArguments::export_all(&types)?;
     ClosePluginView::export_all(&types)?;
     PluginViewLifecycle::export_all(&types)?;
@@ -159,6 +161,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("view-caller", schemars::schema_for!(PluginViewCaller)),
         ("view-presence", schemars::schema_for!(PluginViewPresence)),
         ("view-close", schemars::schema_for!(ClosePluginView)),
+        ("view-reconnect", schemars::schema_for!(ReconnectPluginView)),
+        ("plugin-resume", schemars::schema_for!(ResumePlugin)),
         ("release-view-renderer", schemars::schema_for!(ReleasePluginViewRenderer)),
         ("view-renderer-release", schemars::schema_for!(PluginViewRendererRelease)),
         ("window-layout", schemars::schema_for!(PluginWindowLayout)),

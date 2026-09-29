@@ -36,6 +36,30 @@ fn bounded_state(value: &Value) -> Result<(), OperationError> {
     }
     Ok(())
 }
+fn retained_view_arguments(record: &PluginViewRecord) -> OpenPluginView {
+    OpenPluginView {
+        instance: record.instance.clone(), contribution: record.contribution.clone(),
+        window: record.window.clone(), configuration: record.configuration.clone(),
+        state: record.state.clone(), resource: record.resource.clone(),
+    }
+}
+/// Prepare private transport material before publishing a connection. Nothing
+/// here is included in the public record or the Operation result.
+fn live_view(context: &host::CallContext, record: &PluginViewRecord,
+    contribution: ViewContribution, grants: Vec<CapabilityRequirement>,
+    fixtures: Vec<PluginPreviewQuery>) -> Result<LiveView, OperationError> {
+    let mut delegated = context.clone();
+    delegated.principal = Some(context.principal().clone());
+    delegated.caller = host::CallerIdentity { kind: host::CallerKind::Plugin, id: record.view.to_string() };
+    delegated.scopes = grants.iter().flat_map(|g| g.scopes.iter().cloned()).collect();
+    let connection = PluginViewConnection {
+        view: record.clone(), connection: ConnectionId::new(format!("view-{}", uuid::Uuid::new_v4().simple())).map_err(error)?,
+        next_sequence: 1, asset_token: token(), call_token: token(), entrypoint: contribution.entrypoint, grants,
+    };
+    delegated.connection_id = connection.connection.to_string();
+    Ok(LiveView { connection, context: delegated, sequence: 0,
+        renderers: BTreeSet::new(), closing: None, fixtures })
+}
 impl PluginService {
     /// Native hosting precondition. Closing a project must not strand an open
     /// view behind a release fence before its ordinary close cooperation.
@@ -57,6 +81,45 @@ impl PluginService {
                 eprintln!("plugin view shutdown: {error}");
             }
         }
+    }
+    pub(crate) fn detach_live_views(&self) {
+        // Preview fixtures are disposable. Runtime view identities and their
+        // acknowledged state/layout stay retained; private transport tokens do not.
+        let previews = self.views.lock().unwrap().values()
+            .filter(|live| live.connection.view.purpose == PluginInstancePurpose::FixturePreview)
+            .map(|live| (live.context.clone(), live.connection.view.view.clone())).collect::<Vec<_>>();
+        for (context, id) in previews {
+            if let Err(error) = self.view_record(&context, &id).and_then(|record|
+                self.close_view_at_version(&context, &id, record.state_version, false)) {
+                eprintln!("plugin preview shutdown: {error}");
+            }
+        }
+        self.views.lock().unwrap().clear();
+    }
+
+    pub(crate) fn prepare_view_reconnect(&self, context: &host::CallContext,
+        args: &ReconnectPluginView) -> Result<PluginViewRecord, OperationError> {
+        let record = self.view_record(context, &args.view)?;
+        self.check_window_context(context, &record.window)?;
+        if record.closed || record.state_version != args.expected_version {
+            return Err(OperationError::ContentChanged("view state changed or closed".into()));
+        }
+        if record.purpose != PluginInstancePurpose::Runtime { return Err(invalid("fixture preview cannot be recovered")); }
+        self.prepare_view(context, &retained_view_arguments(&record))?;
+        Ok(record)
+    }
+
+    pub(crate) fn reconnect_view(&self, context: &host::CallContext,
+        args: &ReconnectPluginView) -> Result<PluginViewRecord, OperationError> {
+        let record = self.prepare_view_reconnect(context, args)?;
+        let contribution = self.prepare_view(context, &retained_view_arguments(&record))?;
+        let grants = self.runtime.view_grants(&record.instance).map_err(error)?;
+        let mut views = self.views.lock().unwrap();
+        if views.contains_key(&record.view) { return Ok(record); }
+        if views.len() >= MAX_OPEN_VIEWS { return Err(invalid("open view quota reached")); }
+        let live = live_view(context, &record, contribution, grants, vec![])?;
+        views.insert(record.view.clone(), live);
+        Ok(record)
     }
     pub(crate) fn prepare_view(
         &self,
@@ -194,29 +257,7 @@ impl PluginService {
             state_version: 0,
             closed: false,
         };
-        // Prepare all fallible connection material before committing. No public
-        // result or durable document includes these private credentials.
-        let mut delegated = context.clone();
-        delegated.principal = Some(context.principal().clone());
-        delegated.caller = host::CallerIdentity {
-            kind: host::CallerKind::Plugin,
-            id: record.view.to_string(),
-        };
-        delegated.scopes = grants
-            .iter()
-            .flat_map(|g| g.scopes.iter().cloned())
-            .collect();
-        let connection = PluginViewConnection {
-            view: record.clone(),
-            connection: ConnectionId::new(format!("view-{}", uuid::Uuid::new_v4().simple()))
-                .map_err(error)?,
-            next_sequence: 1,
-            asset_token: token(),
-            call_token: token(),
-            entrypoint: contribution.entrypoint,
-            grants,
-        };
-        delegated.connection_id = connection.connection.to_string();
+        let live = live_view(context, &record, contribution, grants, fixtures)?;
         let transaction = repo
             .connection
             .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
@@ -262,17 +303,7 @@ impl PluginService {
             .transpose()
             .map_err(crate::window_layout::layout_error)?;
         transaction.commit().map_err(error)?;
-        views.insert(
-            record.view.clone(),
-            LiveView {
-                connection,
-                context: delegated,
-                sequence: 0,
-                renderers: BTreeSet::new(),
-                closing: None,
-                fixtures,
-            },
-        );
+        views.insert(record.view.clone(), live);
         Ok((record, layout))
     }
     pub fn view_record(

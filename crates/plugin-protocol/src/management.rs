@@ -81,6 +81,15 @@ pub struct PluginInstancesArguments {
 pub struct PluginInstanceArguments {
     pub instance: InstanceRef,
 }
+
+/// Resume one confirmed Host suspension. Configuration and grants are retained
+/// by the Host; the caller cannot replace them through recovery.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ResumePlugin {
+    pub instance: InstanceRef,
+    pub suspension: RequestId,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct PluginInstanceObservation {

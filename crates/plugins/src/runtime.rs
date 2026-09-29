@@ -1,4 +1,5 @@
 use crate::{PluginError, PluginRepository, backend, ensure, validate_archive};
+use crate::instance_records::StoredActivation;
 use async_trait::async_trait;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use rho_plugin_protocol::*;
@@ -30,6 +31,19 @@ pub struct PluginActivation {
     pub alias: InstanceAlias,
     pub configuration: Value,
     pub grants: Vec<CapabilityRequirement>,
+}
+
+#[derive(Clone)]
+pub(crate) enum ShutdownDisposition {
+    Release,
+    Suspend(RequestId),
+}
+impl ShutdownDisposition {
+    pub(crate) fn apply(&self, record: &mut PluginInstance) {
+        record.state = match self { Self::Release => InstanceState::Released, Self::Suspend(_) => InstanceState::Suspended };
+        record.suspension = match self { Self::Release => None, Self::Suspend(token) => Some(token.clone()) };
+        record.diagnostic = None;
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -151,9 +165,24 @@ impl PluginRuntime {
 
     async fn activate_purpose(&self, request: PluginActivation, identity: PluginInstanceId, publish: bool,
         purpose: PluginInstancePurpose, fixtures: Vec<PluginPreviewQuery>) -> Result<PluginInstance, PluginError> {
-        let mut prepared = PreparedInstance::new(&self.repository, request, identity, purpose)?;
+        let prepared = PreparedInstance::new(&self.repository, request, identity, purpose, None)?;
+        self.start_prepared(prepared, publish, fixtures).await
+    }
+
+    /// Explicitly reopen a confirmed suspension of this exact identity. Every
+    /// activation input must still match its original durable authority.
+    pub async fn resume_identified(&self, request: PluginActivation, identity: PluginInstanceId,
+        suspension: &RequestId, publish: bool) -> Result<PluginInstance, PluginError> {
+        let prepared = PreparedInstance::new(&self.repository, request, identity,
+            PluginInstancePurpose::Runtime, Some(suspension))?;
+        self.start_prepared(prepared, publish, vec![]).await
+    }
+
+    async fn start_prepared(&self, mut prepared: PreparedInstance, publish: bool,
+        fixtures: Vec<PluginPreviewQuery>) -> Result<PluginInstance, PluginError> {
         prepared.lifecycle = Some(self.lifecycle.clone());
         let identity = prepared.record.identity.clone();
+        let purpose = prepared.record.purpose;
         // Failure before readiness has no published registrations. The prepared
         // lease keeps the revision while native code is being initialized.
         let manifest = prepared.manifest.clone();
@@ -172,18 +201,6 @@ impl PluginRuntime {
             process: OnceLock::new(),
             fixtures,
         });
-        {
-            let mut entries = self.entries.lock().unwrap();
-            // Released processes remain in durable history, not in the live quota.
-            entries.retain(|_, entry| {
-                entry.state.lock().unwrap().record.state != InstanceState::Released
-            });
-            ensure(
-                entries.len() < MAX_PLUGIN_INSTANCES,
-                "plugin instance quota reached",
-            )?;
-            entries.insert(identity.instance.clone(), entry.clone());
-        }
         struct ActivationGuard {
             state: SharedBackendState,
             repository: Arc<Mutex<PluginRepository>>,
@@ -209,6 +226,19 @@ impl PluginRuntime {
             state: state.clone(),
             repository: self.repository.clone(),
         };
+        {
+            let mut entries = self.entries.lock().unwrap();
+            // Stopped processes remain in durable history, not in the live quota.
+            entries.retain(|_, entry| {
+                !matches!(entry.state.lock().unwrap().record.state, InstanceState::Released | InstanceState::Suspended)
+            });
+            ensure(!entries.contains_key(&identity.instance), "instance already exists in this Host")?;
+            ensure(
+                entries.len() < MAX_PLUGIN_INSTANCES,
+                "plugin instance quota reached",
+            )?;
+            entries.insert(identity.instance.clone(), entry.clone());
+        }
         if purpose == PluginInstancePurpose::FixturePreview || prepared.manifest.backend.is_none() {
             // UI-only instances own the same durable identity and revision lease.
             // They never spawn a process merely to publish view contributions.
@@ -491,14 +521,15 @@ impl PluginRuntime {
             }
             ensure(
                 state.record.state == InstanceState::Active
-                    || state.record.state == InstanceState::Draining,
+                    || state.record.state == InstanceState::Draining
+                    || state.record.state == InstanceState::Suspended,
                 "instance requires explicit failure recovery; release is not confirmed",
             )?;
-            state.record.state = InstanceState::Draining;
-            self.repository
-                .lock()
-                .unwrap()
-                .record_instance(&state.record)?;
+            let suspended = state.record.state == InstanceState::Suspended;
+            if !suspended {
+                state.record.state = InstanceState::Draining;
+                self.repository.lock().unwrap().record_instance(&state.record)?;
+            }
             ensure(
                 state.pins == 0 && state.pending == 0,
                 "instance still owns accepted calls",
@@ -509,6 +540,14 @@ impl PluginRuntime {
             let prefix = format!("operation:{}:", identity.instance);
             ensure(!self.repository.lock().unwrap().references(&identity.revision)?.iter().any(|reference| reference.starts_with(&prefix)),
                 "instance has an operation awaiting authoritative completion")?;
+            if suspended {
+                let mut record = state.record.clone();
+                ShutdownDisposition::Release.apply(&mut record);
+                self.repository.lock().unwrap().record_instance(&record)?;
+                state.record = record;
+                self.lifecycle.send_modify(|revision| *revision = revision.wrapping_add(1));
+                return Ok(());
+            }
         }
         if let Some(process) = entry.process.get() {
             process.release().await
@@ -517,6 +556,43 @@ impl PluginRuntime {
             let mut state = entry.state.lock().unwrap();
             state.record.state = InstanceState::Released;
             self.repository.lock().unwrap().record_instance(&state.record)?;
+            self.lifecycle.send_modify(|revision| *revision = revision.wrapping_add(1));
+            Ok(())
+        }
+    }
+
+    /// Host shutdown is different from removing an instance. Preserve the
+    /// identity, open-view references and data only after cleanup is confirmed.
+    /// Accepted calls and uncommitted results remain fences, never cancellations.
+    pub async fn suspend(&self, identity: &InstanceRef) -> Result<(), PluginError> {
+        let entry = self.entries.lock().unwrap().get(&identity.instance).cloned()
+            .ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?;
+        let disposition = ShutdownDisposition::Suspend(RequestId::new(format!("suspension-{}", Uuid::new_v4().simple()))?);
+        {
+            let mut state = entry.state.lock().unwrap();
+            ensure(&state.record.identity == identity, "instance revision does not match")?;
+            if state.record.state == InstanceState::Suspended { return Ok(()); }
+            ensure(state.record.state == InstanceState::Active && state.record.purpose == PluginInstancePurpose::Runtime,
+                "only an active runtime instance can be suspended")?;
+            ensure(state.pins == 0 && state.pending == 0, "instance still owns accepted calls")?;
+            let prefix = format!("operation:{}:", identity.instance);
+            let mut repo = self.repository.lock().unwrap();
+            ensure(!repo.references(&identity.revision)?.iter().any(|reference| reference.starts_with(&prefix)),
+                "instance has an operation awaiting authoritative completion")?;
+            let mut record = state.record.clone();
+            record.state = InstanceState::Suspending;
+            repo.record_instance(&record)?;
+            state.record = record;
+        }
+        if let Some(process) = entry.process.get() {
+            process.shutdown(disposition).await
+        } else {
+            ensure(entry.manifest.backend.is_none(), "backend suspension is unconfirmed")?;
+            let mut state = entry.state.lock().unwrap();
+            let mut record = state.record.clone();
+            disposition.apply(&mut record);
+            self.repository.lock().unwrap().record_instance(&record)?;
+            state.record = record;
             self.lifecycle.send_modify(|revision| *revision = revision.wrapping_add(1));
             Ok(())
         }
@@ -749,6 +825,7 @@ impl PreparedInstance {
         request: PluginActivation,
         identity: PluginInstanceId,
         purpose: PluginInstancePurpose,
+        suspension: Option<&RequestId>,
     ) -> Result<Self, PluginError> {
         let mut repo = repository.lock().unwrap();
         let archive = repo.export(&request.revision)?;
@@ -815,11 +892,27 @@ impl PreparedInstance {
             alias: request.alias,
             configuration: request.configuration,
             state: InstanceState::Preparing,
+            suspension: None,
             diagnostic: None,
         };
-        let environment = request.project_root.as_ref().filter(|_| manifest.backend.is_some())
-            .map(|project| prepare_environment(repo.root(), project, &record.identity.instance))
-            .transpose()?;
+        let activation = if let Some(suspension) = suspension {
+            let (_, stored) = repo.suspended_activation(&record.identity, &record.project, &record.principal, suspension)?;
+            ensure(stored.target == request.target && stored.grants == request.grants,
+                "resume must retain the original target and grants")?;
+            verify_environment(repo.root(), request.project_root.as_deref().filter(|_| manifest.backend.is_some()),
+                &record.identity.instance, &stored)?;
+            stored
+        } else {
+            let environment = request.project_root.as_ref().filter(|_| manifest.backend.is_some())
+                .map(|project| prepare_environment(repo.root(), project, &record.identity.instance)).transpose()?;
+            StoredActivation {
+                target: request.target,
+                grants: request.grants.clone(),
+                environment: environment.as_ref().map(|value| value.0.clone()),
+                data_identity: environment.map(|value| value.1),
+            }
+        };
+        let environment = activation.environment.clone();
         preflight_control(
             &record.identity.instance,
             RpcBody::Initialize {
@@ -833,7 +926,8 @@ impl PreparedInstance {
                 }),
             },
         )?;
-        repo.register_instance(&record)?;
+        if let Some(suspension) = suspension { repo.begin_instance_resume(&record, suspension)?; }
+        else { repo.register_instance(&record, &activation)?; }
         Ok(Self {
             record,
             manifest,
@@ -842,16 +936,17 @@ impl PreparedInstance {
             directory,
             executable,
             repository: repository.clone(),
-            retain_after_drop: false,
+            // Recovery failure must not discard the original identity/data pin.
+            retain_after_drop: suspension.is_some(),
             lifecycle: None,
         })
     }
-    pub fn release_reference(&mut self) -> Result<(), PluginError> {
+    pub fn finish_shutdown(&mut self, disposition: &ShutdownDisposition) -> Result<(), PluginError> {
         let mut record = self.record.clone();
-        record.state = InstanceState::Released;
+        disposition.apply(&mut record);
         self.repository.lock().unwrap().record_instance(&record)?;
         self.record = record;
-        self.retain_after_drop = false;
+        self.retain_after_drop = matches!(disposition, ShutdownDisposition::Suspend(_));
         Ok(())
     }
     pub fn persist_state(&self, state: &SharedBackendState) {
@@ -866,7 +961,7 @@ impl PreparedInstance {
     }
 }
 
-fn prepare_environment(root: &std::path::Path, project: &std::path::Path, instance: &PluginInstanceId) -> Result<BackendEnvironment, PluginError> {
+fn prepare_environment(root: &std::path::Path, project: &std::path::Path, instance: &PluginInstanceId) -> Result<(BackendEnvironment, String), PluginError> {
     let project = project.canonicalize()?;
     ensure(project.is_dir(), "native project root must be a directory")?;
     let parent = root.join("instance-data-v1");
@@ -885,10 +980,36 @@ fn prepare_environment(root: &std::path::Path, project: &std::path::Path, instan
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&data, fs::Permissions::from_mode(0o700))?;
     }
-    Ok(BackendEnvironment {
+    let data_identity = Uuid::new_v4().to_string();
+    let mut marker = fs::OpenOptions::new().write(true).create_new(true).open(data.join(".rho-instance-owner"))?;
+    marker.write_all(data_identity.as_bytes())?;
+    marker.sync_all()?;
+    Ok((BackendEnvironment {
         project_root: project.to_str().ok_or_else(|| PluginError::Invalid("project root must be UTF-8".into()))?.into(),
         data_root: data.to_str().ok_or_else(|| PluginError::Invalid("instance data root must be UTF-8".into()))?.into(),
-    })
+    }, data_identity))
+}
+
+fn verify_environment(root: &std::path::Path, project: Option<&std::path::Path>, instance: &PluginInstanceId,
+    activation: &StoredActivation) -> Result<(), PluginError> {
+    let Some(environment) = &activation.environment else {
+        return ensure(project.is_none() && activation.data_identity.is_none(), "resume environment changed");
+    };
+    let project = project.ok_or_else(|| PluginError::Invalid("resume requires its original project root".into()))?.canonicalize()?;
+    ensure(project.is_dir() && project.to_str() == Some(environment.project_root.as_str()), "resume project root changed")?;
+    let parent = root.join("instance-data-v1");
+    let data = parent.join(format!("instance-{instance}"));
+    for directory in [&parent, &data] {
+        let metadata = directory.symlink_metadata()?;
+        ensure(metadata.is_dir() && !metadata.file_type().is_symlink() && directory.canonicalize()? == *directory,
+            "retained instance data must be an existing contained directory")?;
+    }
+    ensure(data.to_str() == Some(environment.data_root.as_str()), "resume data root changed")?;
+    let marker = data.join(".rho-instance-owner");
+    let metadata = marker.symlink_metadata()?;
+    ensure(metadata.is_file() && !metadata.file_type().is_symlink() && metadata.len() == 36,
+        "retained instance data identity is unavailable")?;
+    ensure(activation.data_identity.as_deref() == Some(fs::read_to_string(marker)?.as_str()), "retained instance data identity changed")
 }
 impl Drop for PreparedInstance {
     fn drop(&mut self) {

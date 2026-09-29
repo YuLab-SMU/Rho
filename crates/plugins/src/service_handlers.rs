@@ -99,6 +99,7 @@ pub(crate) fn register(
     }
     for id in [
         "views.open",
+        "views.reconnect",
         "views.update",
         "views.close",
         "windows.update_layout",
@@ -106,6 +107,7 @@ pub(crate) fn register(
         "scenarios.checkpoint",
         "scenarios.apply",
         "plugins.activate",
+        "plugins.resume",
         "plugins.preview",
         "plugins.release",
         "plugins.remove",
@@ -202,6 +204,11 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
             schema_for!(UpdatePluginView).to_value(), schema_for!(PluginViewRecord).to_value(),
             json!({"view":"view-example","expected_version":0,"state":{}}),
             "Save view state with its owner's expected version", true, PLUGINS_RUN_SCOPE,
+        ),
+        "views.reconnect" => (
+            schema_for!(ReconnectPluginView).to_value(), schema_for!(PluginViewRecord).to_value(),
+            json!({"view":"view-example","expected_version":0}),
+            "Reconnect one retained view of an active instance at its acknowledged state version", true, PLUGINS_RUN_SCOPE,
         ),
         "views.close" => (
             schema_for!(ClosePluginView).to_value(), schema_for!(PluginViewRecord).to_value(),
@@ -327,6 +334,11 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
             true,
             PLUGINS_RUN_SCOPE,
         ),
+        "plugins.resume" => (
+            schema_for!(ResumePlugin).to_value(), schema_for!(PluginInstanceObservation).to_value(),
+            json!({"instance":instance(),"suspension":"suspension-example"}),
+            "Resume an exact confirmed Host suspension with its original configuration, grants and retained data", true, PLUGINS_RUN_SCOPE,
+        ),
         "plugins.remove" => (
             schema_for!(PluginRevisionArguments).to_value(),
             json!({"type":"object","properties":{"removed":{"type":"string"}},"required":["removed"],"additionalProperties":false}),
@@ -363,7 +375,7 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
     };
     let mut descriptor = host::CapabilityDescriptor {
         kind:if operation {host::CapabilityKind::Operation}else{host::CapabilityKind::Query},capability:key(id),domain:"plugins".into(),input_schema:input,output_schema:output,recovery_schema:json!({"type":["object","null"]}),
-        required_scopes:BTreeSet::from([scope.into()]),potential_effects:match id {"plugins.activate"=>BTreeSet::from([host::EffectHint::MaySpawnProcess,host::EffectHint::MayMutateRuntime]),"plugins.preview"|"plugins.release"|"plugins.reconcile_references"=>BTreeSet::from([host::EffectHint::MayMutateRuntime]),_=>BTreeSet::new()},
+        required_scopes:BTreeSet::from([scope.into()]),potential_effects:match id {"plugins.activate"|"plugins.resume"=>BTreeSet::from([host::EffectHint::MaySpawnProcess,host::EffectHint::MayMutateRuntime]),"plugins.preview"|"plugins.release"|"plugins.reconcile_references"=>BTreeSet::from([host::EffectHint::MayMutateRuntime]),_=>BTreeSet::new()},
         idempotency:if operation {host::IdempotencyClass::CallerScoped}else{host::IdempotencyClass::Pure},retry:if operation {host::RetryClass::ReconcileFirst}else{host::RetryClass::Safe},cancellation:host::CancellationClass::Unsupported,
         documentation:host::CapabilityDocumentation {
             summary:summary.into(),purpose:summary.into(),when_to_use:vec!["Manage or observe ordinary installed packages through the shared Host ports.".into()],
@@ -435,6 +447,13 @@ fn descriptor(id: &str) -> host::CapabilityDescriptor {
     if id == "plugins.activate" {
         descriptor.documentation.limitations.push("Optional capabilities must be declared by this exact manifest and explicitly selected in optional_capabilities. Selection cannot enlarge declared scopes or caller authority; it does not install or start another provider. The selected grants stay fixed for this instance and its views.".into());
     }
+    if id == "plugins.resume" {
+        descriptor.documentation.limitations = vec![
+            "Only a confirmed Host suspension can resume. Supply its exact suspension token; released, failed, disconnected and uncertain-cleanup instances remain unavailable. An older resume request cannot consume a later suspension.".into(),
+            "Original project, principal, revision, artifact, configuration, grants and contained data directory are retained within the caller's authority. Other providers may remain suspended; a later call still requires its exact available contract. Resume never starts dependencies, replays scientific work or reconnects views; views.reconnect is separate.".into(),
+        ];
+        descriptor.documentation.related_capabilities = vec![key("plugins.instance"), key("views.reconnect"), key("plugins.release")];
+    }
     if id.starts_with("resources.") {
         descriptor.domain = "resources".into();
         descriptor.documentation.owner = "resources".into();
@@ -500,6 +519,7 @@ fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
         "plugins.inspect" | "plugins.remove" => normalize::<PluginRevisionArguments>(value),
         "plugins.instances" => normalize::<PluginInstancesArguments>(value),
         "plugins.instance" | "plugins.release" => normalize::<PluginInstanceArguments>(value),
+        "plugins.resume" => normalize::<ResumePlugin>(value),
         "plugins.resolve" => normalize::<PluginResolveArguments>(value),
         "plugins.source_tree" => normalize::<ListPluginSource>(value),
         "plugins.read_source" => normalize::<ReadPluginSource>(value),
@@ -512,6 +532,7 @@ fn normalized(id: &str, value: &Value) -> Result<Value, OperationError> {
         "views.open" => normalize::<OpenPluginView>(value),
         "plugins.preview" => normalize::<PreviewPlugin>(value),
         "views.update" => normalize::<UpdatePluginView>(value),
+        "views.reconnect" => normalize::<ReconnectPluginView>(value),
         "windows.layout" => normalize::<PluginWindowArguments>(value),
         "windows.update_layout" => normalize::<UpdatePluginWindowLayout>(value),
         "windows.open_view" => normalize::<OpenPluginWindowView>(value),
@@ -842,6 +863,19 @@ impl OperationHandler for Manage {
                 target=host::TargetRef { kind:"plugin_view".into(), identity:view.to_string() };
             }
 
+            "views.reconnect" => {
+                let record = self.service.prepare_view_reconnect(context, &decode(value)?)?;
+                revision = Some(record.instance.revision);
+                target = host::TargetRef { kind: "plugin_view".into(), identity: record.view.to_string() };
+            }
+
+            "plugins.resume" => {
+                let args: ResumePlugin = decode(value)?;
+                self.service.prepare_instance_resume(context, &args)?;
+                revision = Some(args.instance.revision);
+                target = host::TargetRef { kind: "plugin_instance".into(), identity: args.instance.instance.to_string() };
+            }
+
             "plugins.activate" => {
                 let args: ActivatePlugin = decode(value)?;
                 let repo = self.service.repository.lock().unwrap();
@@ -862,31 +896,8 @@ impl OperationHandler for Manage {
                     "configuration",
                 )
                 .map_err(error)?;
-                let registry = self.service.registry()?.snapshot();
                 grants = stored.manifest.activation_requirements(&args.optional_capabilities).map_err(error)?;
-                for grant in &grants {
-                    let capability = host::CapabilityRef::new(
-                        grant.capability.id.as_str(),
-                        grant.capability.version.try_into().map_err(invalid)?,
-                    )?;
-                    let (required_scopes, available) = if let Some(descriptor) = registry.descriptor(&capability) {
-                        (&descriptor.required_scopes, descriptor.kind != host::CapabilityKind::Control
-                            || registry.control_handler(&capability).is_ok())
-                    } else if let Some(own) = stored.manifest.capabilities.iter().find(|own| own.capability == grant.capability) {
-                        // A combined UI/backend package can require its own exact
-                        // contribution before its first instance exists. This is
-                        // only grant validation: publication still waits for Ready
-                        // and every eventual call uses the normal scoped router.
-                        (&own.required_scopes, true)
-                    } else {
-                        return Err(OperationError::UnknownCapability(capability.display_key()));
-                    };
-                    if !available || !required_scopes.is_subset(&grant.scopes)
-                        || !grant.scopes.is_subset(&context.scopes)
-                    {
-                        return Err(OperationError::AccessDenied {capability:capability.display_key(),missing:vec!["declared grant must fit the existing caller authority and an available handler contract".into()]});
-                    }
-                }
+                self.service.validate_instance_grants(context, &stored.manifest, &grants)?;
                 revision = Some(args.revision);
                 target = host::TargetRef {
                     kind: "plugin_instance".into(),
@@ -900,6 +911,7 @@ impl OperationHandler for Manage {
                     .observe_instance(context, &args.instance, false)?;
                 if !observation.observed_in_this_host
                     && observation.instance.state != InstanceState::Released
+                    && observation.instance.state != InstanceState::Suspended
                     && observation.instance.purpose != PluginInstancePurpose::FixturePreview
                     && self.service.repository.lock().unwrap().revision(&args.instance.revision).map_err(error)?.manifest.backend.is_some()
                 {
@@ -1077,6 +1089,10 @@ impl Manage {
                 Ok(json!(service.close_view_cooperatively(&bound.context,
                     OperationId::new(operation.operation_id.as_str()).map_err(error)?, decode(value)?).await?))
             }
+            "views.reconnect" => {
+                let _guard = service.gate.lock().await;
+                Ok(json!(service.reconnect_view(&bound.context, &decode(value)?)?))
+            }
             "views.open" | "views.update" => {
                 let _guard=service.gate.lock().await;
                 let record=match self.id {
@@ -1142,13 +1158,14 @@ impl Manage {
                 if !observation.observed_in_this_host {
                     let mut repo=service.repository.lock().unwrap();
                     let manifest=repo.revision(&args.instance.revision).map_err(error)?.manifest;
-                    if observation.instance.purpose == PluginInstancePurpose::FixturePreview || manifest.backend.is_none() {
+                    if observation.instance.state == InstanceState::Suspended || observation.instance.purpose == PluginInstancePurpose::FixturePreview || manifest.backend.is_none() {
                         let references=repo.references(&args.instance.revision).map_err(error)?;
                         let view_prefix=format!("view:{}:",args.instance.instance);
                         let operation_prefix=format!("operation:{}:",args.instance.instance);
                         if references.iter().any(|r|r.starts_with(&view_prefix)||r.starts_with(&operation_prefix)) { return Err(invalid("instance still has retained views or operations")); }
                         let mut record=observation.instance;
                         record.state=InstanceState::Released;
+                        record.suspension=None;
                         record.diagnostic=None;
                         repo.record_instance(&record).map_err(error)?;
                         drop(repo);
@@ -1163,6 +1180,21 @@ impl Manage {
                     &args.instance,
                     false
                 )?))
+            }
+            "plugins.resume" => {
+                let args: ResumePlugin = decode(value)?;
+                let _guard = service.gate.lock().await;
+                let request = service.prepare_instance_resume(&bound.context, &args)?;
+                service.services.principals.lock().unwrap().insert(request.principal.clone(), bound.context.principal().clone());
+                let instance = service.runtime.resume_identified(request, args.instance.instance,
+                    &args.suspension, false).await.map_err(error)?;
+                if let Err(fault) = service.bridge.publish(service.registry()?.as_ref(), &instance.identity) {
+                    let _ = service.runtime.suspend(&instance.identity).await;
+                    service.refresh_locked()?;
+                    return Err(fault);
+                }
+                service.published();
+                Ok(json!(service.observe_instance(&bound.context, &instance.identity, false)?))
             }
             "plugins.remove" => {
                 let args: PluginRevisionArguments = decode(value)?;

@@ -155,6 +155,16 @@ building the current binary, the existing `plugin-workspace.spec.ts` and
 packages. These establish the generic project substrate, not Studio's
 disposable-project creation or real-R acceptance.
 
+Host restart work uses `cargo test -p rho-plugins --test backend_runtime suspension
+--locked` for confirmed cleanup, original activation/data retention, stale resume
+tokens, authority changes and substituted data directories. After that settles,
+`cargo test -p rho-host --test plugin_restart --locked` exercises the public resume
+and view-reconnect Operations across actual Host reopen with a separate native
+backend, including retained state/layout and original Operation replay refusal.
+Run the existing `plugin_workspace` and `plugin_test_projects` Host targets once
+to check the shared shutdown paths. This does not establish the combined Agent
+browser/real-R restart flow; that acceptance still needs its current artifact.
+
 Disposable-project metadata uses `cargo test -p rho-plugins --test test_projects
 --locked` for exact dependency/configuration selection, scoped byte-bounded paging, immutable
 identity, lifecycle compare-and-swap and transactional source protections. The
