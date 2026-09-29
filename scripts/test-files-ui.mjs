@@ -7,7 +7,7 @@ import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'rho-files-ui-'));
 try {
-  for(const [from,to] of [['plugins/files','.'],['sdk/plugin-ui','public/plugin-ui'],['sdk/plugin-protocol','public/plugin-protocol']])
+  for(const [from,to] of [['plugins/agent/sdk/component-input','public/agent-input'],['plugins/files','.'],['sdk/plugin-ui','public/plugin-ui'],['sdk/plugin-protocol','public/plugin-protocol']])
     fs.cpSync(path.join(root,from),path.join(temporary,to),{recursive:true,filter:source=>!/[\\/](?:node_modules|compiled|dist)(?:[\\/]|$)/.test(source)});
   fs.symlinkSync(path.join(root,'ui/node_modules'),path.join(temporary,'node_modules'),'dir');
   const manifest=JSON.parse(fs.readFileSync(path.join(temporary,'package.json'),'utf8'));

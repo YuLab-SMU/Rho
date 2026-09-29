@@ -400,6 +400,8 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/environment/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `sdk/**`.
 - `plugins.external-backend` (L2): `["node","scripts/test-plugin-backend.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `scripts/test-plugin-backend.mjs`, `sdk/**`, `ui/src/**`.
+- `plugins.files-agent-host` (L2): `["node","scripts/test-files-agent.mjs"]`
+  Applies to: `plugins/agent/**`, `plugins/files/**`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-files-plugin.mjs`, `scripts/test-files-agent.mjs`.
 - `plugins.files-backend` (L1): `["cargo","test","-p","rho-files-backend","--lib","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/files/**`, `rust-toolchain.toml`, `scripts/build-files-plugin.mjs`, `sdk/**`.
 - `plugins.files-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","files-plugin.spec.ts"]`
@@ -417,7 +419,7 @@ Checks:
 - `plugins.files-public-types` (L1): `["node","scripts/test-files-protocol.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/files/**`, `rust-toolchain.toml`, `scripts/build-files-plugin.mjs`, `scripts/test-files-protocol.mjs`, `sdk/**`.
 - `plugins.files-ui` (L1): `["node","scripts/test-files-ui.mjs"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/files/**`, `rust-toolchain.toml`, `scripts/build-files-plugin.mjs`, `scripts/test-files-ui.mjs`, `sdk/**`.
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/sdk/component-input/**`, `plugins/files/**`, `rust-toolchain.toml`, `scripts/build-files-plugin.mjs`, `scripts/test-files-ui.mjs`, `sdk/**`.
 - `plugins.help` (L2): `["node","scripts/test-help-plugin.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/sdk/component-input/**`, `plugins/help/**`, `rust-toolchain.toml`, `scripts/build-help-plugin.mjs`, `scripts/test-help-plugin.mjs`, `sdk/**`.
 - `plugins.help-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","help-plugin.spec.ts"]`

@@ -11,7 +11,7 @@ const workspaceBuild = !process.argv.includes('--independent');
 const output = path.join(fs.realpathSync(path.dirname(path.resolve(process.argv[2]))), path.basename(process.argv[2]));
 assert.ok(output !== root && !output.startsWith(root + path.sep), 'Use a standalone directory');
 fs.mkdirSync(output);
-for (const [from, to] of [['plugins/files', '.'], ['crates/process-engine', 'public/process-engine'], ['crates/plugin-protocol', 'public/plugin-protocol'], ['crates/plugin-sdk', 'public/plugin-sdk'], ['sdk/plugin-ui', 'public/plugin-ui'], ['sdk/plugin-protocol', 'public/plugin-protocol']]) {
+for (const [from, to] of [['plugins/agent/sdk/component-input','public/agent-input'],['plugins/files', '.'], ['crates/process-engine', 'public/process-engine'], ['crates/plugin-protocol', 'public/plugin-protocol'], ['crates/plugin-sdk', 'public/plugin-sdk'], ['sdk/plugin-ui', 'public/plugin-ui'], ['sdk/plugin-protocol', 'public/plugin-protocol']]) {
   fs.cpSync(path.join(root, from), path.join(output, to), { recursive: true, filter: file => !/[\\/](?:target|dist|node_modules)(?:[\\/]|$)/.test(file) });
 }
 fs.copyFileSync(path.join(root, 'LICENSE'), path.join(output, 'LICENSE'));

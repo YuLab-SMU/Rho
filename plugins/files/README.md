@@ -78,3 +78,14 @@ connection and actions. After building the current client and Host, run
 It uses native Files in a disposable project and the actual generic window; the
 Editor destination is explicitly a route fixture, not a document editor. Synthetic
 composition events establish close guards, not native input-method acceptance.
+
+## Agent input
+
+Select a text file and choose **Ask about…** to preview file information or bounded
+text before opening an active ordinary Agent view. Explicitly add it to an editable
+task and Send there. The reference retains path, content digest, native identity,
+size and encoding; subsequent changes cannot replace it silently. Text is limited
+to 16 KiB including its source header; use file information for larger files.
+The context picker lists up to 100 previously read text files for the caller.
+Lost view-opening requests remain recoverable without reopening a fresh request.
+Viewing does not execute a script, start R or modify files.

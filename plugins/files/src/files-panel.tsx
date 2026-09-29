@@ -7,6 +7,7 @@ export interface FilesNavigation {
   createDocument(): unknown;
   openFile(): unknown;
   refresh(): unknown;
+  ask?(path:string):unknown;
 }
 export function FilesPanel({ files: f, navigation }: { files: Files; navigation: FilesNavigation }) {
   useSyncExternalStore(f.subscribe, f.getSnapshot);
@@ -247,6 +248,7 @@ export function FilesPanel({ files: f, navigation }: { files: Files; navigation:
           />{" "}
           Hidden files
         </label>
+        {navigation.ask && <button disabled={navigation.blocked || !selected || ![...f.directories.values()].some(page=>page.entries.some(entry=>entry.path===selected&&entry.kind==='regular')) && !results?.entries.some(entry=>entry.path===selected&&entry.kind==='regular')} onClick={()=>navigation.ask?.(selected)}>Ask about…</button>}
         <button
           disabled={navigation.blocked || !navigation.canOpen || !selected || ![...f.directories.values()].some(page => page.entries.some(entry => entry.path === selected && entry.kind === "regular")) && !results?.entries.some(entry => entry.path === selected && entry.kind === "regular")}
           onClick={() => open(selected)}

@@ -29,7 +29,8 @@ fn capability(id: &str, input: Value, output: Value, example: Value) -> Capabili
             "files.snapshot" => "Observe project files and Git", "files.read_file" => "Read file bytes",
             "files.read_text" => "Read file lines", "files.search_text" => "Search file contents",
             "files.list_directory" => "List a directory", "files.search_files" => "Find files",
-            "files.storage_status" => "Observe project disk capacity", _ => unreachable!(),
+            "files.storage_status" => "Observe project disk capacity",
+            "files.context.search" => "Previously read project files", "files.context.preview" => "Preview the original file", _ => unreachable!(),
         }.into(), description: if operation { "Apply one native project patch using explicit file/Git preconditions; preserve uncertain effects and original settlement. Does not commit Git." } else { "Bounded Files observation in this exact project/provider. Does not start a scientific runtime or install software." }.into(),
         input_schema: input, examples: vec![example], output_schema: output,
         recovery_schema: if operation { schema_for!(ProjectPatchRecovery).to_value() } else { json!({"type":"null"}) },
@@ -40,7 +41,11 @@ fn capability(id: &str, input: Value, output: Value, example: Value) -> Capabili
 }
 pub fn manifest() -> PluginManifest {
     let patch = "diff --git a/example.txt b/example.txt\nnew file mode 100644\n--- /dev/null\n+++ b/example.txt\n@@ -0,0 +1 @@\n+Example\n";
+    let mut preview_schema=schema_for!(PreviewContext).to_value();
+    preview_schema["properties"]["inclusion"]=json!({"oneOf":[{"title":"File information","const":{"kind":"metadata"}},{"title":"Text (up to 16 KiB)","const":{"kind":"text"}}]});
     let capabilities = vec![
+        capability("files.context.search", schema_for!(ContextSearch).to_value(), schema_for!(ContextPage).to_value(), json!({"window":"window","text":"","after":null,"limit":20})),
+        capability("files.context.preview", preview_schema, schema_for!(ContextPreview).to_value(), json!({"reference":{"provider":{"plugin":"org.rho.files","instance":"original-files","revision":format!("sha256:{}","a".repeat(64)),"artifact":format!("sha256:{}","b".repeat(64))},"window":"window","contribution":"files","selector":{"path":"analysis.R","sha256":"copy-original-digest","native_identity":"copy-original-native-identity","byte_size":10,"encoding":"utf-8"}},"inclusion":{"kind":"text"},"max_bytes":16384})),
         capability(
             "files.storage_status",
             schema_for!(Empty).to_value(),
@@ -127,11 +132,16 @@ pub fn manifest() -> PluginManifest {
             ("files.search_files", vec![PROJECT_READ_SCOPE]),
             ("files.storage_status", vec![PROJECT_READ_SCOPE]),
             ("files.snapshot", vec![PROJECT_READ_SCOPE]),
+            ("files.read_text", vec![PROJECT_READ_SCOPE]),
+            ("files.context.preview", vec![PROJECT_READ_SCOPE]),
+            ("plugins.instances", vec!["plugins.read"]),
+            ("plugins.instance", vec!["plugins.read"]),
+            ("plugins.inspect", vec!["plugins.read"]),
             ("windows.layout", vec!["plugins.run"]),
             // Navigation can delegate only these declared scopes, intersected
-            // with its caller. Editor still declares and receives its own exact
+            // with its caller. Editor/Agent still declare and receive their own exact
             // capability grants; Files gets no direct draft/file-write grant.
-            ("windows.open_view", vec!["plugins.run", "project.read", "project.write", "documents.read", "documents.write", "operation.read", "workspace.read", "workspace.run_r", "resources.read"]),
+            ("windows.open_view", vec!["application.control", "application.read", "documents.read", "documents.write", "environment.read", "environment.write", "operation.read", "plugins.read", "plugins.run", "plugins.write", "process.run_local", "project.read", "project.references.read", "project.write", "remote.execute", "resources.read", "skill.read", "slurm.read", "slurm.write", "workspace.read", "workspace.run_r"]),
             ("operation.get", vec!["operation.read"]),
             ("operation.list_recent", vec!["operation.read"]),
         ]
@@ -150,11 +160,11 @@ pub fn manifest() -> PluginManifest {
             id: ContributionId::new("files").unwrap(),
             title: "Files".into(),
             entrypoint: PackagePath::new("dist/ui/index.html").unwrap(),
-            state_schema: json!({"type":"object","properties":{"files":{"type":"object"},"actions":{"type":["object","null"]}},"additionalProperties":false}),
+            state_schema: json!({"type":"object","properties":{"files":{"type":"object"},"actions":{"type":["object","null"]},"agent":{"type":"object","required":["input","pending","opened"],"properties":{"input":{"type":["object","null"]},"pending":{"type":["object","null"]},"opened":{"type":["object","null"]}},"additionalProperties":false}},"additionalProperties":false}),
             configuration_schema: schema_for!(FilesViewConfiguration).to_value(),
             resource_kinds: Default::default(),
         }],
-        contexts: vec![],
+        contexts: vec![ContextContribution {id:ContributionId::new("files").unwrap(),title:"Previously read text files".into(),search:CapabilityKey{id:ContributionId::new("files.context.search").unwrap(),version:1},preview:CapabilityKey{id:ContributionId::new("files.context.preview").unwrap(),version:1}}],
         backend: Some(BackendEntrypoint {
             executable: PackagePath::new("dist/rho-files-backend").unwrap(),
             arguments: vec![],

@@ -56,7 +56,7 @@ fn fixture() -> (tempfile::TempDir, Owner, String) {
 fn manifest_routes_match_exact_message_kinds_and_versions() {
     let manifest = manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 9);
+    assert_eq!(manifest.capabilities.len(), 11);
     for contribution in manifest.capabilities {
         let query = contribution.kind == CapabilityKind::Query;
         assert!(crate::owner::supported(&contribution.capability, query));
@@ -220,4 +220,46 @@ async fn original_settlement_holds_the_lane_and_pending_cancellation_does_not_wr
         })
         .unwrap();
     assert!(owner.ready_to_release());
+}
+
+#[tokio::test]
+async fn file_context_pins_native_identity_and_preserves_bounded_original_text() {
+    let (_temp, owner, root) = fixture();
+    fs::write(format!("{root}/分析.R"), "中文\r\nprint(42)\n").unwrap();
+    let page=owner.query(&call("files.read_text",json!({"path":"分析.R"}),&root,None)).await.unwrap().0;
+    let reference=json!({"provider":identity(),"window":"window","contribution":"files","selector":page["file"]});
+    let args=json!({"reference":reference,"inclusion":{"kind":"text"},"max_bytes":16384});
+    let (preview,complete)=owner.query(&call("files.context.preview",args.clone(),&root,None)).await.unwrap();
+    assert_eq!(complete,ObservationCompleteness::Complete);
+    assert!(preview["text"].as_str().unwrap().ends_with("中文\r\nprint(42)\n"));
+    assert_eq!(preview["truncated"],false);
+    let mut short_args=args.clone();short_args["max_bytes"]=json!(131);
+    let short=owner.query(&call("files.context.preview",short_args,&root,None)).await;
+    // Boundaries must remain valid UTF-8 and report omitted content.
+    let short=short.unwrap().0;
+    assert!(short["text"].as_str().unwrap().len()<=131);assert_eq!(short["truncated"],true);
+    let mut forged=args.clone();forged["reference"]["selector"]["native_identity"]=json!("different-file");
+    assert!(owner.query(&call("files.context.preview",forged,&root,None)).await.is_err());
+    fs::write(format!("{root}/分析.R"),"changed").unwrap();
+    assert!(owner.query(&call("files.context.preview",args,&root,None)).await.is_err());
+}
+
+#[tokio::test]
+async fn file_context_catalog_is_bounded_scoped_and_does_not_read_unselected_paths() {
+    let (_temp,owner,root)=fixture();
+    let args=json!({"window":"one","text":"","after":null,"limit":1});
+    assert_eq!(owner.query(&call("files.context.search",args.clone(),&root,None)).await.unwrap().0["items"],json!([]));
+    for i in 0..102 {
+        let path=format!("file-{i:03}.R");fs::write(format!("{root}/{path}"),"x").unwrap();
+        owner.query(&call("files.read_text",json!({"path":path}),&root,None)).await.unwrap();
+    }
+    let first=owner.query(&call("files.context.search",args.clone(),&root,None)).await.unwrap().0;
+    assert_eq!(first["items"][0]["reference"]["selector"]["path"],"file-002.R");
+    let mut foreign=call("files.context.search",args.clone(),&root,None);foreign.principal=PrincipalId::new("other").unwrap();
+    assert_eq!(owner.query(&foreign).await.unwrap().0["items"],json!([]));
+    foreign.arguments["after"]=first["next"].clone();assert!(owner.query(&foreign).await.is_err());
+    let mut escaped=first["items"][0]["reference"].clone();escaped["selector"]["path"]=json!("../secret");
+    assert!(owner.query(&call("files.context.preview",json!({"reference":escaped,"inclusion":{"kind":"metadata"},"max_bytes":16384}),&root,None)).await.is_err());
+    let mut protected=first["items"][0]["reference"].clone();protected["selector"]["path"]=json!("private.sqlite");
+    assert!(owner.query(&call("files.context.preview",json!({"reference":protected,"inclusion":{"kind":"metadata"},"max_bytes":16384}),&root,None)).await.is_err());
 }

@@ -1,3 +1,4 @@
+import type {AgentState} from '../public/agent-input/input.js';
 import type { InstanceRef, JsonValue, ProviderBinding, WorkspacePaths } from "../public/plugin-protocol/index.js";
 import type { PluginViewClient } from "../public/plugin-ui/index.js";
 import { Files } from "./files.js";
@@ -19,6 +20,7 @@ export class FilesConnection extends Model<Snapshot> {
   private saveError = "";
   private saved: string;
   private actions: JsonValue;
+  private agentState?: AgentState;
   private stopped = false;
   private paused = false;
   private deferred = false;
@@ -29,8 +31,9 @@ export class FilesConnection extends Model<Snapshot> {
   constructor(private readonly client: Client) {
     super();
     this.source = Object.freeze(structuredClone(client.view.instance));
-    const saved = client.view.state as { files?: unknown; actions?: JsonValue } | null;
+    const saved = client.view.state as { files?: unknown; actions?: JsonValue; agent?: AgentState } | null;
     this.actions = structuredClone(saved?.actions ?? null);
+    this.agentState = structuredClone(saved?.agent);
     this.files = new Files({ context: () => this.identity,
       query: async (project, capability, args) => {
         if (project !== this.identity.project) throw new Error("The file request belongs to another project.");
@@ -46,7 +49,9 @@ export class FilesConnection extends Model<Snapshot> {
   get nativeRoot() { return this.identity.project; }
   get actionState() { return structuredClone(this.actions); }
   async saveActions(value: JsonValue) { this.actions = structuredClone(value); await this.flush(); }
-  private state() { return { files: this.files.serialize(), actions: this.actions }; }
+  get savedAgent() { return structuredClone(this.agentState); }
+  async saveAgent(value:AgentState) { this.agentState=structuredClone(value); await this.flush(); }
+  private state() { return { ...(this.agentState?{agent:this.agentState}:{}), files: this.files.serialize(), actions: this.actions }; }
   async read<T>(id: string, arguments_: unknown): Promise<Observation<T>> {
     if (this.stopped || !this.identity.connected || !this.identity.project) throw new Error("The original Files provider is unavailable.");
     const binding: ProviderBinding = { capability: { id, version: 1 }, provider: this.source, project: this.client.view.project, target: this.identity.project };
@@ -74,7 +79,7 @@ export class FilesConnection extends Model<Snapshot> {
       if (this.stopped) throw new Error("The Files connection is closed.");
       const state = this.state(), encoded = JSON.stringify(state);
       if (encoded === this.saved) return;
-      try { await this.client.setState(state as JsonValue); this.saved = encoded; this.saveError = ""; }
+      try { await this.client.setState(state as unknown as JsonValue); this.saved = encoded; this.saveError = ""; }
       catch (error) { this.saveError = `View state was not saved: ${message(error)}`; throw error; }
       finally { if (!this.stopped) this.publish(); }
     });

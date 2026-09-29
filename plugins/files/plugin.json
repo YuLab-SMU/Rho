@@ -71,6 +71,51 @@
     },
     {
       "capability": {
+        "id": "files.read_text",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "files.context.preview",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instances",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instance",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
         "id": "windows.layout",
         "version": 1
       },
@@ -84,13 +129,25 @@
         "version": 1
       },
       "scopes": [
+        "application.control",
+        "application.read",
         "documents.read",
         "documents.write",
+        "environment.read",
+        "environment.write",
         "operation.read",
+        "plugins.read",
         "plugins.run",
+        "plugins.write",
+        "process.run_local",
         "project.read",
+        "project.references.read",
         "project.write",
+        "remote.execute",
         "resources.read",
+        "skill.read",
+        "slurm.read",
+        "slurm.write",
         "workspace.read",
         "workspace.run_r"
       ]
@@ -127,6 +184,35 @@
               "object",
               "null"
             ]
+          },
+          "agent": {
+            "additionalProperties": false,
+            "properties": {
+              "input": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "opened": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "pending": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "input",
+              "pending",
+              "opened"
+            ],
+            "type": "object"
           },
           "files": {
             "type": "object"
@@ -199,6 +285,435 @@
     }
   ],
   "capabilities": [
+    {
+      "capability": {
+        "id": "files.context.search",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Previously read project files",
+      "description": "Bounded Files observation in this exact project/provider. Does not start a scientific runtime or install software.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "description": "Opaque owner cursor; continuation does not imply a frozen multi-page read."
+          },
+          "limit": {
+            "format": "uint16",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "text": {
+            "description": "Empty text lists available sources. Owners document which fields match.",
+            "type": "string"
+          },
+          "window": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "window",
+          "text",
+          "limit"
+        ],
+        "title": "ContextSearch",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "after": null,
+          "limit": 20,
+          "text": "",
+          "window": "window"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "ContextItem": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "kind": {
+                "description": "A presentation hint supplied by the owner, not a closed core view enum.",
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/ContextReference"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "reference",
+              "title",
+              "description",
+              "kind"
+            ],
+            "type": "object"
+          },
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/ContextItem"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "next": true,
+          "notices": {
+            "description": "Explain partial, cached or unavailable observations without concealing\nthem as empty results. Completeness also belongs in the query envelope.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "notices"
+        ],
+        "title": "ContextPage",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "type": "null"
+      },
+      "required_scopes": [
+        "project.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "files.context.preview",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Preview the original file",
+      "description": "Bounded Files observation in this exact project/provider. Does not start a scientific runtime or install software.",
+      "input_schema": {
+        "$defs": {
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "inclusion": {
+            "oneOf": [
+              {
+                "const": {
+                  "kind": "metadata"
+                },
+                "title": "File information"
+              },
+              {
+                "const": {
+                  "kind": "text"
+                },
+                "title": "Text (up to 16 KiB)"
+              }
+            ]
+          },
+          "max_bytes": {
+            "format": "uint32",
+            "maximum": 65536,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "reference": {
+            "$ref": "#/$defs/ContextReference"
+          }
+        },
+        "required": [
+          "reference",
+          "inclusion",
+          "max_bytes"
+        ],
+        "title": "PreviewContext",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "inclusion": {
+            "kind": "text"
+          },
+          "max_bytes": 16384,
+          "reference": {
+            "contribution": "files",
+            "provider": {
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "instance": "original-files",
+              "plugin": "org.rho.files",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "selector": {
+              "byte_size": 10,
+              "encoding": "utf-8",
+              "native_identity": "copy-original-native-identity",
+              "path": "analysis.R",
+              "sha256": "copy-original-digest"
+            },
+            "window": "window"
+          }
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "ContextItem": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "kind": {
+                "description": "A presentation hint supplied by the owner, not a closed core view enum.",
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/ContextReference"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "reference",
+              "title",
+              "description",
+              "kind"
+            ],
+            "type": "object"
+          },
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          },
+          "ResourceReference": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "description": "Owner-defined bounded presentation data. Large artifacts use resources."
+          },
+          "item": {
+            "$ref": "#/$defs/ContextItem"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/$defs/ResourceReference"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          "text": {
+            "description": "Plain text, never executable markup. Truncation must end at a UTF-8 boundary.",
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "item",
+          "text",
+          "truncated",
+          "data",
+          "resources"
+        ],
+        "title": "ContextPreview",
+        "type": "object"
+      },
+      "recovery_schema": {
+        "type": "null"
+      },
+      "required_scopes": [
+        "project.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
     {
       "capability": {
         "id": "files.storage_status",
@@ -2249,7 +2764,20 @@
       }
     }
   ],
-  "contexts": [],
+  "contexts": [
+    {
+      "id": "files",
+      "title": "Previously read text files",
+      "search": {
+        "id": "files.context.search",
+        "version": 1
+      },
+      "preview": {
+        "id": "files.context.preview",
+        "version": 1
+      }
+    }
+  ],
   "backend": {
     "executable": "dist/rho-files-backend",
     "arguments": []

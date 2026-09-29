@@ -282,6 +282,14 @@ without compilation. Reserve `--independent` for an owner/store source audit.
 `node scripts/build-annotation-plugin.mjs /new/path` defaults to the workspace cache;
 only an explicit `--independent` rebuilds standalone source. Native tests, package
 assembly, real-provider/Host acceptance and UI review are separate outcomes.
+For **Files → Agent** acceptance, `node scripts/test-files-agent.mjs` reuses
+`RHO_FILES_PLUGIN_PACKAGE` and `RHO_AGENT_PLUGIN_PACKAGE` with the frozen Host.
+It builds nothing. A disposable Unicode text file supplies the exact native
+identity and digest. Browser Ask → text preview → draft/reload → Rho Send reaches
+one deterministic local model request. Changed source/path escape is refused;
+actual Host restart retains the original run text without replay. Set
+`RHO_FILES_AGENT_EVIDENCE` to retain the report and normal/constrained screenshots.
+Native Files Send and real-model reasoning remain separate coverage.
 For **Packages → Agent** acceptance, `node scripts/test-packages-agent.mjs` reuses
 `RHO_R_PLUGIN_PACKAGE`, `RHO_AGENT_PLUGIN_PACKAGE`, `RHO_PACKAGES_PLUGIN_PACKAGE`
 and existing `RHO_ARK` / `RHO_R_HOME`, without building or installing anything.

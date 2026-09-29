@@ -736,6 +736,12 @@ correlated Operation through the current parent's query grants. It cannot dispat
 another scientific mutation. Attachments are captured by the Agent-owned upload
 ports before admission; original history reads retained bytes and source snapshots.
 
+File context belongs to the Files provider and uses its existing contained text
+reader. References retain path, digest, native file identity, size and encoding;
+preview rechecks all of them before returning metadata or bounded text. The search
+catalog contains only this principal's previously read text files. Binary/skipped,
+protected, changed or replaced files do not become a fresh source implicitly.
+
 Installed-package context retains the original native session, observation, package,
 library and version. Its bounded search catalog holds only previously inspected
 copy identities for the calling principal. Preview pages through that same native

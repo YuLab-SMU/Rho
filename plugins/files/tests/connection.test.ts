@@ -67,3 +67,13 @@ it("unavailable disk capacity does not disable the successfully observed Files p
   expect(f.owner.getSnapshot()).toMatchObject({ connected: true, notice: "Disk capacity unavailable" });
   expect(f.owner.files.getSnapshot().storageError).toBe("Disk capacity unavailable");
 });
+it("retains the original Agent request after lost save and restores without reading a replacement file",async()=>{
+ const f=fixture();const saved={input:{request:'input-one',source_view:'view',title:'Original file',instance:null,
+   reference:{provider:source,window:'window',contribution:'files',selector:{path:'分析.R',sha256:'original',native_identity:'native'}},inclusion:{kind:'text'},preview:{id:'files.context.preview',version:1}},
+   pending:{view:'view',request:'original-opening',operation:'original-operation',capability:{id:'windows.open_view',version:1},arguments:{original:true}},opened:null};
+ f.setState.mockRejectedValueOnce(Error('lost save'));
+ await expect(f.owner.saveAgent(saved)).rejects.toThrow('lost save');await f.owner.flush();
+ const restored=fixture(f.setState.mock.calls.at(-1)![0]);expect(restored.owner.savedAgent).toEqual(saved);
+ const detached=restored.owner.savedAgent!;detached.pending!.request='changed';
+ expect(restored.owner.savedAgent?.pending?.request).toBe('original-opening');expect(restored.query).not.toHaveBeenCalled();
+});

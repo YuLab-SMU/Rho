@@ -1,3 +1,6 @@
+import {componentInputDialog} from '../public/agent-input/dialog.js';
+import {fileContext} from './agent-source.js';
+import type {TextIdentity,TextPage} from '../sdk/index.js';
 import "@fontsource/inter/latin-400.css";
 import "@fontsource/inter/latin-500.css";
 import "@fontsource/inter/latin-600.css";
@@ -35,17 +38,29 @@ try {
   const configuration = client.view.configuration as unknown as { editor: InstanceRef | null; editor_group: string | null; runtime?: InstanceRef | null };
   const connection = new FilesConnection(client);
   const actions = new FilesActions(client, connection, configuration.editor_group ?? null, configuration.editor ?? null, configuration.runtime ?? null);
+  let closingSource=false, capturing=false, selectedSource:TextIdentity|null=null;
+  const sender=componentInputDialog({client,saved:connection.savedAgent,persist:state=>connection.saveAgent(state),
+    guard:()=>{if(closingSource)throw Error('Files is closing. The original request is retained.');},
+    modes:[{value:'metadata',label:'File information'},{value:'text',label:'Text (up to 16 KiB)'}],capture:kind=>fileContext(connection.source,client.view.window,selectedSource,kind)});
   const closing = await client.installCloseHandler({
-    async flush() { await connection.pause(); await actions.settled(); await connection.flush(); },
-    resume() { connection.resume(); },
+    async flush() { closingSource=true;if(sender.busy||capturing)throw Error("Wait for the current Agent request before closing."); await connection.pause(); await actions.settled(); await connection.flush(); },
+    resume() { closingSource=false;connection.resume(); },
   });
   const ignore = (promise: Promise<unknown>) => { void promise.catch(() => undefined); };
   function App() {
     const state = useSyncExternalStore(connection.subscribe, connection.getSnapshot), action = useSyncExternalStore(actions.subscribe, actions.getSnapshot);
     const close = useSyncExternalStore(closing.subscribe, closing.getSnapshot), [open, setOpen] = useState(false);
-    const blocked = close.preparing || action.working || !!action.pending || !state.connected;
+    const [askError,setAskError]=useState(''),[asking,setAsking]=useState(false);
+    const ask=async(path:string)=>{if(capturing||closingSource)return;if(connection.savedAgent?.pending){sender.open();return;}capturing=true;setAsking(true);setAskError('');try {
+      const page=(await connection.read<TextPage>('files.read_text',{path,start_line:1,limit_lines:1})).data;
+      if(!page?.file||page.skipped)throw Error(page?.skipped?.detail??'This file is not available as text.');
+      selectedSource=structuredClone(page.file);sender.open();
+    }catch(error){setAskError(String(error));}finally{capturing=false;setAsking(false);}};
+    const blocked = asking || close.preparing || action.working || !!action.pending || !state.connected;
     return <main className="files-root" inert={close.preparing || undefined}>
-      <FilesPanel files={connection.files} navigation={{ blocked, canOpen: !!configuration.editor,
+      {connection.savedAgent?.pending && <button disabled={close.preparing} onClick={()=>sender.open()}>Recover Agent request</button>}
+      {askError && <p role="alert">{askError}</p>}
+      <FilesPanel files={connection.files} navigation={{ blocked, ask:path=>ignore(ask(path)), canOpen: !!configuration.editor,
         openDocument: path => ignore(actions.openDocument(path)), createDocument: () => ignore(actions.openDocument(null)),
         openFile: () => setOpen(true), refresh: () => ignore(connection.refresh(true)),
       }} />
@@ -62,5 +77,5 @@ try {
   }
   root.render(<App />); ignore(connection.refresh());
   const polling = setInterval(() => { if (!document.hidden) ignore(connection.refresh("directories")); }, 5000);
-  window.addEventListener("pagehide", () => { clearInterval(polling); actions.stop(); connection.stop(); client.dispose(); root.unmount(); }, { once: true });
+  window.addEventListener("pagehide", () => { clearInterval(polling); sender.dispose(); actions.stop(); connection.stop(); client.dispose(); root.unmount(); }, { once: true });
 } catch (error) { root.render(<div className="empty" role="alert">{error instanceof Error ? error.message : String(error)}</div>); }

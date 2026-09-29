@@ -214,6 +214,8 @@ pub(crate) fn scientific_requirements() -> Vec<CapabilityRequirement> {
                 ("files.list_directory", 1),
                 ("files.read_file", 1),
                 ("files.read_text", 1),
+                ("files.context.search", 1),
+                ("files.context.preview", 1),
                 ("files.search_files", 1),
                 ("files.search_text", 1),
                 ("files.snapshot", 1),

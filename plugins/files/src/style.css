@@ -305,7 +305,8 @@ html, body, #root { height: 100%; overflow: hidden; }
 .file-search input { width: 100%; min-width: 0; height: 32px; font-size: 12px; }
 .document-error { padding: 6px 10px; color: var(--color-danger); overflow-wrap: anywhere; font-size: 12px; }
 .filter-notice { margin: 4px 0; overflow-wrap: anywhere; }
-.files-panel .panel-footer { padding-inline: 8px; }
+.files-panel .panel-footer { padding: 2px 8px; height: auto; min-height: 28px; flex-wrap: wrap; }
+.files-panel .panel-footer > * { flex-shrink: 0; }
 .files-panel .panel-footer label { min-width: 0; }
 .dialog { width: min(440px, calc(100vw - 16px)); padding: 16px; }
 .dialog h2 { font-size: 17px; }
