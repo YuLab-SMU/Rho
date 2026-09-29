@@ -514,7 +514,7 @@ fn preview(
         text: text[..end].into(),
         truncated: end < text.len() || document.readonly.is_some(),
         data: json!({"encoding":ENCODING,"path":document.path,"document_version":document.version,"draft_version":draft.version,"inclusion":inclusion_name,
-            "selection":{"anchor":document.anchor,"head":document.head},"read_only":document.readonly,"synchronized":true}),
+            "selection":{"anchor":document.anchor,"head":document.head},"read_only":document.readonly,"synchronized":true,"annotation_source":{"source_id":format!("draft:{}",draft.draft),"source_version":format!("sha256:{:x}",Sha256::digest(document.raw.as_bytes()))}}),
         resources: vec![],
     };
     result.validate().map_err(invalid)?;

@@ -359,7 +359,8 @@ impl Owner {
                     item: source.item(&self.instance, &request.reference.window, &status)?,
                     text,
                     truncated: truncated || clipped,
-                    data: json!({"inclusion":inclusion,"format":"html_source","operation_status":status,"interactive_state":false}),
+                    data: json!({"inclusion":inclusion,"format":"html_source","operation_status":status,"interactive_state":false,
+                        "annotation_source":{"source_id":format!("output:{}:{}",source.operation,source.sequence),"source_version":source.reference.digest}}),
                     resources: vec![],
                 };
                 check(

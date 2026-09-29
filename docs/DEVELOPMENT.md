@@ -273,10 +273,15 @@ separate-connection races, scope isolation and transactional budgets. The retiri
 bridge uses `cargo test -p rho-sqlite --test annotations --locked` for domain
 round-trips, live-window checks and absence of old-table reads; its HTTP checks are
 `cargo test -p rho-workbench --lib annotation_tests --locked`. Run these serially.
-`node scripts/test-annotation-plugin-store.mjs --source-check` validates the copied
-public source closure without compilation. Reserve `--independent` for a source
-boundary milestone; ordinary edits use the focused workspace test. These checks
-do not establish an ordinary annotation backend, contributed source or UI flow.
+`cargo test -p rho-annotation-backend --lib --locked` exercises the actual framed
+native entry with deterministic public context peers, receipts and reopen; it is
+not real Host/Editor/R acceptance. Changed source identities also require the
+focused Editor and R context checks. `node scripts/test-annotation-plugin-store.mjs
+--source-check` validates the actual assembled package's six-crate public closure
+without compilation. Reserve `--independent` for an owner/store source audit.
+`node scripts/build-annotation-plugin.mjs /new/path` defaults to the workspace cache;
+only an explicit `--independent` rebuilds standalone source. Native tests, package
+assembly, real-provider/Host acceptance and UI review are separate outcomes.
 
 The generic plugin-only Host uses `cargo test -p rho-host --test plugin_workspace
 --locked` for canonical project identity, native lease exclusion, empty-catalog

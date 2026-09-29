@@ -18,6 +18,7 @@ pub const MAX_ANNOTATION_PAGE: u32 = 100;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum AnnotationSourceOwner {
+    Plugin,
     Editor,
     Help,
     Console,
@@ -345,6 +346,8 @@ pub struct AnnotationWindowRef {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum AnnotationAuthorKind {
+    /// Authenticated principal; the transport does not claim whether a person or Agent initiated it.
+    Principal,
     Human,
     Agent,
     System,
@@ -357,4 +360,15 @@ pub enum AnnotationAuthorKind {
 pub struct AnnotationAuthor {
     pub kind: AnnotationAuthorKind,
     pub id: String,
+}
+
+/// Optional owner-authored `ContextPreview.data.annotation_source` contract.
+/// The lineage stays stable when content changes; a fresh observation/capture ID
+/// alone is not a content version. The annotation backend namespaces the lineage
+/// by its exact provider and contribution. Missing identity is not inferred.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct AnnotationContextIdentity {
+    pub source_id: String,
+    pub source_version: String,
 }

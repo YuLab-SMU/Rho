@@ -21,7 +21,7 @@ assert.ok(cli, "production CLI is missing");
 assert.deepEqual(metadata.workspace_default_members, [cli.id]);
 assert.deepEqual(cli.targets.filter(target => target.kind.includes("bin")).map(target => target.name), ["rho"]);
 const sqlite = metadata.packages.find(pkg => pkg.name === "rho-sqlite");
-for (const name of ["rho-agent-store", "rho-agent-owner", "rho-application"]) {
+for (const name of ["rho-agent-store", "rho-agent-owner", "rho-application", "rho-annotation-api", "rho-annotation-owner", "rho-annotation-store"]) {
   assert.equal(sqlite.dependencies.find(dep => dep.name === name)?.optional, true,
     `Journal-only SQLite must not require ${name}`);
   assert.ok(sqlite.features["application-store"].includes(`dep:${name}`));
@@ -55,7 +55,7 @@ const allowed = {
   "rho-environment-owner": ["rho-environment-api", "rho-process-engine", "rho-process-owner"],
   "rho-contract": ["rho-agent-api", "rho-plugin-protocol", "rho-r-api", "rho-files-api", "rho-process-api", "rho-remote-api", "rho-environment-api"],
   "rho-operation": ["rho-contract", "rho-plugin-protocol"],
-  "rho-application": ["rho-contract", "rho-agent-owner", "rho-agent-api"],
+  "rho-application": ["rho-contract", "rho-agent-owner", "rho-agent-api", "rho-annotation-api", "rho-annotation-owner"],
   "rho-agents": ["rho-agent-engine", "rho-application", "rho-contract"],
   "rho-skills": ["rho-contract", "rho-operation"],
   "rho-adapter-skills": ["rho-contract", "rho-operation", "rho-skills"],
@@ -67,7 +67,7 @@ const allowed = {
   "rho-ssh": ["rho-contract", "rho-operation", "rho-execution", "rho-remote-owner"],
   "rho-r-environment": ["rho-environment", "rho-operation", "rho-environment-owner"],
   "rho-git": ["rho-files-engine"],
-  "rho-sqlite": ["rho-contract", "rho-operation", "rho-application", "rho-agent-store", "rho-agent-owner"],
+  "rho-sqlite": ["rho-contract", "rho-operation", "rho-application", "rho-agent-store", "rho-agent-owner", "rho-annotation-api", "rho-annotation-owner", "rho-annotation-store"],
   "rho-r-runtime": ["rho-contract", "rho-workspace", "rho-r-api", "rho-r-engine", "rho-plugin-protocol"],
   "rho-host": ["rho-plugin-protocol", "rho-plugins", "rho-agents", "rho-agent-client", "rho-agent-native", "rho-agent-store", "rho-contract", "rho-operation", "rho-application", "rho-skills", "rho-adapter-skills", "rho-sqlite", "rho-workspace", "rho-r-runtime", "rho-project", "rho-git", "rho-environment", "rho-r-environment", "rho-execution", "rho-process", "rho-ssh"],
   "rho-mcp": ["rho-contract", "rho-host"],
@@ -78,10 +78,17 @@ const allowed = {
   "rho-agent-engine": ["rho-agent-api", "rho-agent-owner"],
   "rho-agent-client": ["rho-agent-api"],
   "rho-agent-native": ["rho-agent-api", "rho-agent-owner", "rho-agent-client"],
+  "rho-annotation-api": [],
+  "rho-annotation-owner": ["rho-annotation-api"],
+  "rho-annotation-store": ["rho-annotation-api", "rho-annotation-owner"],
+  "rho-annotation-backend": ["rho-annotation-api", "rho-annotation-owner", "rho-annotation-store", "rho-plugin-sdk"],
   "rho-workbench": ["rho-plugin-protocol", "rho-contract", "rho-host", "rho-mcp"],
   "rho-cli": ["rho-contract", "rho-host", "rho-mcp", "rho-workbench", "rho-plugin-protocol", "rho-plugins"],
 };
 const pluginLibraries = {
+  "rho-annotation-api": "plugins/annotations/api",
+  "rho-annotation-owner": "plugins/annotations/backend/owner",
+  "rho-annotation-store": "plugins/annotations/backend/store",
   "rho-agent-native": "plugins/agent/backend/native",
   "rho-agent-owner": "plugins/agent/backend/owner",
   "rho-agent-store": "plugins/agent/backend/store",

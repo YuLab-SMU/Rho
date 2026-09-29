@@ -275,3 +275,17 @@ fn preview_refuses_changed_scope_version_discard_and_corrupt_or_incomplete_bytes
     mismatch.metadata["selection"]["anchor"] = json!(1);
     assert!(preview(&mismatch, &bytes, "selection", 20).is_err());
 }
+
+#[test]
+fn annotation_lineage_uses_document_bytes_not_selection_or_draft_observation() {
+    let (a, a_bytes) = capture("a🧬中z", 0, 1);
+    let (mut b, b_bytes) = capture("a🧬中z", 1, 3);
+    b.version = 9;
+    let first = preview(&a, &a_bytes, "document", 16384).unwrap();
+    let moved = preview(&b, &b_bytes, "selection", 16384).unwrap();
+    assert_eq!(first["data"]["annotation_source"], moved["data"]["annotation_source"], "moving a selection is not a content revision");
+    let (c, c_bytes) = capture("changed", 0, 1);
+    let changed = preview(&c, &c_bytes, "document", 16384).unwrap();
+    assert_eq!(first["data"]["annotation_source"]["source_id"], changed["data"]["annotation_source"]["source_id"]);
+    assert_ne!(first["data"]["annotation_source"]["source_version"], changed["data"]["annotation_source"]["source_version"]);
+}

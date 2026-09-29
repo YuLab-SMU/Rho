@@ -6077,6 +6077,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-annotation-backend"
+version = "0.1.0"
+dependencies = [
+ "rho-annotation-api",
+ "rho-annotation-owner",
+ "rho-annotation-store",
+ "rho-plugin-sdk",
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "rho-annotation-owner"
 version = "0.1.0"
 dependencies = [

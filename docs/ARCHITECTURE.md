@@ -30,8 +30,13 @@ live window before calling that owner; its SQLite adapter delegates to a separat
 `*.annotations-v1.sqlite` database and never opens/imports the former annotation
 tables. These adapters and the Host's fixed source interpretation are temporary;
 remove them when the ordinary annotation RPC/context flow replaces that entry in
-M4/M6. Extraction alone does not make annotations an installable plugin or establish
-ordinary source resolution, UI or recovery acceptance.
+M4/M6. The ordinary native adapter is now implemented in source: it resolves exact
+public context providers, requires owner-supplied lineage/content versions, and
+rechecks the original live caller before freezing bounded text. Its private
+receipts do not settle the Host Operation. Note context retains frozen evidence
+and leaves current source status unknown. Native compilation, real-provider/Host
+acceptance, captured-image RPC and UI remain incomplete; source extraction and
+metadata closure checks alone do not establish an installable package.
 
 Package transfer bytes have a native scoped owner independent of runtime resources.
 `plugins.archive_*` stages aligned immutable chunks, observes or validates the

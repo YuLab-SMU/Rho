@@ -168,6 +168,9 @@ async fn viewer_metadata_revalidates_original_record_after_reopen_without_r_or_r
     assert!(preview.resources.is_empty());
     assert!(preview.text.contains("failed"));
     assert!(preview.text.contains("not included"));
+    assert_eq!(preview.data["annotation_source"]["source_id"], format!("output:{}:{}", source.operation, source.sequence));
+    assert_eq!(preview.data["annotation_source"]["source_version"], source.reference.digest.as_str());
+
     assert!(owner.runtime.lock().unwrap().is_none());
     assert!(owner.launch_attempt.lock().unwrap().is_none());
     assert!(host.try_recv().is_err());

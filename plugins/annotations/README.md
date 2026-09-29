@@ -5,10 +5,11 @@ compare-and-swap updates, tombstones and durable idempotent receipts belong here
 The API, owner and SQLite store depend on public libraries only; they do not depend
 on an Agent implementation, a scientific owner or a private Host crate.
 
-This directory currently contains the extracted domain and storage components.
-It is **not yet an installable plugin**: the native RPC entry, ordinary capability
-manifest, contributed context and UI remain to be connected. AN01–AN05 remain a
-UI proposal pending user review. See the repository's current Status for evidence.
+The native RPC entry, typed capability manifest, text-source freeze and contributed
+note context are implemented in source. **Native compilation and acceptance are
+incomplete; no installable package has been verified.** Capture/image RPC and UI
+remain unimplemented. AN01–AN05 remain a UI proposal pending user review. See the
+repository's current Status for executed checks and retained timeout evidence.
 
 ## Ownership and admission
 
@@ -20,10 +21,22 @@ claim about a file, document, R session or content version. These crates do not
 read, modify, start or recover any scientific source.
 
 `AnnotationSelection` and `AnnotationSession` are captured reference values, not
-Agent task types or dispatch credentials. The later ordinary RPC adapter must
-resolve contributed sources using their exact provider and window. A visible
-annotation must not grant access to its source; missing current-version evidence
-must stay unknown. That source resolution is not implemented by these crates.
+Agent task types or dispatch credentials. The native adapter resolves contributed
+sources using exact provider, artifact, window and original caller grants. The
+owner supplies `ContextPreview.data.annotation_source` with stable `source_id`
+and content `source_version`; missing identity is refused, never inferred from a
+selector. Editor uses draft lineage and document bytes, Help uses installed-topic
+lineage and retained help-file digests, and Viewer uses the original output and
+resource digest. A fresh observation alone is not a content change.
+
+Freezing requires a complete text inclusion; quote offsets refer to that inclusion
+and preserve UTF-8/UTF-16/scalar boundaries. Exact request replays read the original
+receipt without querying the source again. Note context reads frozen evidence and
+labels the current underlying source status unknown: neither a retained note nor
+a failed read proves current availability. Agent grants and real-provider/Host
+acceptance remain to be connected; deterministic native peer tests do not replace
+that acceptance. The framed principal supplies author identity without guessing
+whether the initiating actor was human or Agent.
 
 `AnnotationStore::open` receives a private data path from its trusted container.
 Each transaction rechecks receipt identity, revision CAS and the total retained
@@ -47,15 +60,15 @@ During iteration, reuse the root workspace cache:
 
 ```sh
 cargo test -p rho-annotation-store --test annotations --locked
+cargo test -p rho-annotation-backend --lib --locked
 cargo test -p rho-sqlite --test annotations --locked
 node scripts/check-plugin-boundaries.mjs
 ```
 
 Run Cargo serially. `node scripts/test-annotation-plugin-store.mjs --source-check`
-checks that the copied component source resolves without private repository crates
-and performs no compilation. An explicit `--independent` also runs its tests from
-that temporary source tree; it is an architecture milestone check, not the routine
-iteration path. The public component closure consists only of `api`,
-`backend/owner`, `backend/store`, the root Cargo lockfile and license, with the
-three crate paths registered in an ordinary Cargo workspace. Registry dependencies
-remain pinned by that lockfile; no registry dependency source is copied here.
+checks the actual assembled package layout without compilation. Its six local
+crates are API, backend, owner, store, public protocol and backend SDK; none import
+private Host or Agent code. An explicit `--independent` additionally runs the
+owner/store tests from that source tree; it does not run native RPC acceptance.
+Use the workspace builder in [BUILD.md](BUILD.md) during iteration. Registry
+dependencies remain pinned by the lockfile; their source is not copied here.
