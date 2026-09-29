@@ -183,6 +183,19 @@ or R execution. Manager then restores the original viewless R backend through a
 lost reply and confirms that its R session stays unstarted. This does not cover abrupt process failure or external-model
 quality. A listed/written browser case is not a passing native result.
 
+Browser acceptance uses the locked Node 22 type declarations in `ui`. Check the
+Agent fixture and its imported helpers without invoking Cargo from the repository
+root:
+
+```sh
+node ui/node_modules/typescript/bin/tsc --noEmit --target es2022 \
+  --module esnext --moduleResolution bundler --skipLibCheck --allowJs \
+  --types node --typeRoots ui/node_modules/@types ui/e2e/agent-workspace.spec.ts
+```
+
+This checks fixture types only; run the browser case with its retained packages
+for actual Host acceptance. `npm run typecheck --prefix ui` covers product code.
+
 ### Status discipline
 
 `docs/STATUS.md` stays under about 300 lines. Update it at milestone boundaries or

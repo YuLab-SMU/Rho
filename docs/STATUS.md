@@ -152,8 +152,8 @@ Browser file capture retains identity, sends bounded Controls and selects a conf
 asset into a separately saved draft. Reload does not repeat import or Send;
 inspection and exact-file reselection remain explicit. Native staging quota,
 checksum/controller and reopen fixtures are written but unrun; no native acceptance claim.
-The combined native/Rho–Editor–real-R/restart fixture is written/discoverable but unrun;
-only its local model peer probe passes. It reuses one Agent artifact from the primary cache.
+The combined native/Rho–Editor–real-R/restart fixture passes type checking and discovery.
+Its model peer probe passes; the actual Host flow awaits one current Agent artifact.
 
 Not done: native acceptance of attachments/settings/Rho drafts/history/Continue, remaining
 context/component input, actual Host restart recovery and Studio Agent flow.
