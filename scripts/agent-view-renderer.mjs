@@ -122,6 +122,8 @@ export async function testAgentRenderer(root, assets) {
     await expect.poll(async () => (await page.evaluate(() => window.fixture.snapshot())).calls.filter(call => call.type === 'prepare_close').length).toBe(1);
     snapshot = await page.evaluate(() => window.fixture.snapshot()); assert.equal(snapshot.calls.filter(call => call.arguments?.arguments?.command?.kind === 'stop').length, 0);
     assert.deepEqual(errors, []);
+    const {testAgentStudioRenderer}=await import('./fixtures/agent-studio-renderer.mjs');
+    await testAgentStudioRenderer(browser,page.url(),expect,output);
     fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify({ status: 'passed', fixture: 'synthetic public MessagePort; no Host or native Agent', checks: ['opaque iframe bootstrap', '960/440/320/220 layout and anchored menu', 'reasoning excluded', 'IME Enter', 'debounced save across task switch', 'explicit tools captured by one Send', 'next draft and original Operation after reload', 'close does not Stop', '8 MiB file selection in bounded chunks', 'lost attachment receipt reload and explicit selection without reimport', 'task pagination', 'earlier history with stable scroll through polling; explicit return to latest'] }, null, 2) + '\n');
     console.log(`Agent renderer, Rho tasks and settings checks passed (960/440/320/220, original create/Send/key/configuration/removal receipt recovery, next drafts and synthetic model history). Evidence: ${output}. Synthetic peer, not native/Host acceptance.`);
   } catch (error) {

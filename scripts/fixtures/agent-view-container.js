@@ -274,6 +274,7 @@ addEventListener('message', event => {
   if (reloaded) { const resolve = reloaded; reloaded = null; resolve(); }
 });
 window.fixture = {
+  studioRequest: configuration => { view.configuration = copy(configuration); },
   snapshot: () => copy({ view, calls, details: [...details], records, reads, rhoTasks:[...rhoTasks], rhoRuns:[...rhoRuns] }),
   contextFault: value => { contextFault=value; },
   loseHandoffReply: () => { loseHandoff=true; },

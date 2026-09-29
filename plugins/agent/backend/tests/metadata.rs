@@ -285,6 +285,11 @@ fn manifest_contains_public_bounded_agent_capabilities() {
     assert_eq!(key.input_schema["properties"]["value"]["maxLength"], 16384);
     assert_eq!(manifest.views.len(), 1);
     assert_eq!(manifest.views[0].entrypoint.as_str(), "dist/ui/index.html");
+    assert!(
+        manifest.views[0].configuration_schema["properties"]
+            .get("studio_request")
+            .is_some()
+    );
     for id in [
         "agent.tasks",
         "agent.native.command",

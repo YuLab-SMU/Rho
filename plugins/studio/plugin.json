@@ -29,7 +29,9 @@
       "src/archive.ts",
       "src/archive-upload.ts",
       "src/archive-export.ts",
-      "src/archive-panel.ts"
+      "src/archive-panel.ts",
+      "src/agent.ts",
+      "src/agent-panel.ts"
     ],
     "lockfiles": [
       "dependencies.lock"

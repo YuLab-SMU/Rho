@@ -72,8 +72,26 @@ inspectable through the parent journal port after stop. Failed activation and
 uncertain cleanup retain their original evidence; no replacement is automatic.
 The fixture preview and backend test have separate instances and state.
 
-The inert editing canvas is separate from executable fixture preview. Agent tasks
-and default delivery remain unfinished.
+The inert editing canvas is separate from executable fixture preview. Default
+delivery remains unfinished.
+
+Ask Agent captures a saved development branch and its exact checkpoint. Source
+edits must be checkpointed first. Choose a current active ordinary Agent instance
+with the optional management grants enabled; Studio does not activate one or
+restore a suspended instance. The branch head is checked before opening the view.
+The opened Agent view receives a reviewed text request and six scoped tools:
+checkpoint inspection, source listing/read, branch-head observation, source check
+and checkpoint creation. Source reads stay on the captured revision; check and
+checkpoint also fix the branch and expected head. A later branch change requires
+a newly prepared request. Build, preview and scenario application stay in Studio.
+
+Opening only creates an ordinary Agent view. In that view, choose or create a
+native task and explicitly add the request to its draft, then review and Send.
+Insertion preserves existing text, assets and references, selects only those
+Studio tools, and persists a marker with the draft to prevent duplicate insertion
+after reload. Rho's management-tool input is not yet composed. The original view
+opening request is saved before dispatch; lost replies can be inspected without
+opening another view. Source edits and Agent task state keep their own owners.
 
 Apply to scenario reads named scenario heads and their immutable parent history.
 Choose the source checkpoint, its exact built artifact and an alias of the same

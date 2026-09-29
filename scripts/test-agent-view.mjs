@@ -304,6 +304,45 @@ try {
     const state = f.client.view.state; state.uploads[0].instance.instance = 'other-agent'; await f.client.setState(state);
     const before = f.calls.length; assert.throws(() => f.open(), /another Agent view or instance/); assert.equal(f.calls.length, before);
   });
+  const { addStudioRequest, studioRequest } = await import(pathToFileURL(path.join(temporary, 'compiled/src/studio-request.js')));
+  const studioInput = {request_id: crypto.randomUUID(), branch: 'branch', revision: 'sha256:'+'e'.repeat(64), title:'Studio · 中文 Ω', text:'Change this checkpoint only.'};
+  const studioTools = [{name:'checkpoint', target:{type:'host', project:'project', capability:{id:'plugins.checkpoint',version:1},fixed_arguments:{branch:'branch',expected_head:studioInput.revision}}}];
+  await check('Studio request appends once and preserves selected sources', async () => {
+    const f=fixture(),m=f.open(); await m.create('kimi','fixture',null);
+    m.edit('task-0',{text:'Existing draft Ω',assets:['asset'],context:[{source:'retained'}]});
+    const before=f.calls.length; await addStudioRequest(m,'task-0',studioInput,studioTools);
+    assert.equal(f.calls.length,before+1); assert.equal(f.calls.at(-1).args.arguments.command.kind,'save_draft');
+    assert.deepEqual(m.draft('task-0'),{text:'Existing draft Ω\n\n'+studioInput.text,assets:['asset'],context:[{source:'retained'}]});
+    const reopened=f.open();await reopened.observe('task-0');await assert.rejects(addStudioRequest(reopened,'task-0',studioInput,studioTools),/already added/);
+    assert.deepEqual(reopened.state.tools,studioTools);
+  });
+  await check('Studio save acknowledgement loss never duplicates the insertion', async () => {
+    const f=fixture(),m=f.open();await m.create('kimi','fixture',null);f.loseSave();const before=f.calls.length;
+    await assert.rejects(addStudioRequest(m,'task-0',studioInput,studioTools),/Lost state/);assert.equal(f.calls.length,before);
+    const restored=f.open();await restored.observe('task-0');assert.equal(restored.draft('task-0').text,studioInput.text);
+    await assert.rejects(addStudioRequest(restored,'task-0',studioInput,studioTools),/already added/);
+    await restored.flush('task-0');assert.equal(f.calls.length,before+1);
+  });
+  await check('Studio owner acknowledgement loss keeps original draft operation', async () => {
+    const f=fixture(),m=f.open();await m.create('kimi','fixture',null);f.lose('save_draft');
+    await assert.rejects(addStudioRequest(m,'task-0',studioInput,studioTools),/Lost operation/);const before=f.calls.length;
+    const restored=f.open();await restored.observe('task-0');await restored.inspect(restored.state.pending[0].intent.request);
+    assert.equal(f.calls.length,before);assert.equal(restored.draft('task-0').text,studioInput.text);
+  });
+  await check('Studio cannot append to foreign control or conflicting/oversized drafts', async () => {
+    for(const failure of ['control','conflict','size']) {
+      const f=fixture(),m=f.open();await m.create('kimi','fixture',null);const before=f.calls.length;
+      if(failure==='control')m.details.get('task-0').summary.attachment.controller.incarnation='view:other';
+      if(failure==='conflict')m.state.drafts['task-0'].conflict=blank();
+      if(failure==='size')m.edit('task-0',{...blank(),text:'中'.repeat(10923)});
+      await assert.rejects(addStudioRequest(m,'task-0',studioInput,studioTools));assert.equal(f.calls.length,before);assert.equal(m.state.studioRequestApplied,undefined);
+    }
+  });
+  await check('Studio configuration is bounded and does not modify the caller', async () => {
+    assert.equal(studioRequest({}),null);const captured=studioRequest({studio_request:studioInput});captured.text='changed';assert.equal(studioInput.text,'Change this checkpoint only.');
+    assert.throws(()=>studioRequest({studio_request:{...studioInput,text:'中'.repeat(3000)}}));
+    assert.throws(()=>studioRequest({studio_request:{...studioInput,revision:'other'}}));
+  });
   console.log(`Ordinary Agent view: ${count} checks passed; original requests, draft concurrency, next-turn input, read-only control and disposal. No native/UI acceptance claimed.`);
   const { ModelSettings } = await import(pathToFileURL(path.join(temporary, 'compiled/src/model-settings.js')));
   const { testModelSettings } = await import('./fixtures/agent-model-settings.mjs');

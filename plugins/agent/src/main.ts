@@ -9,9 +9,11 @@ import { mountContext } from './context-view.js';
 import { mountSettings } from './settings-view.js';
 import { RhoModel, rhoBusy } from './rho-model.js';
 import { mountHandoff } from './handoff-view.js';
+import { studioRequest, addStudioRequest } from './studio-request.js';
 
 const get = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const client = await connectPluginView();
+const studioInput = studioRequest(client.view.configuration);
 let disposed = false, closing = false, composing = false, compositionEnded = -Infinity, renderedTask: string | null = null;
 let polling = false, model: NativeAgentModel, rho: RhoModel, context: ReturnType<typeof mountContext> | undefined, handoff: ReturnType<typeof mountHandoff> | undefined;
 const draftTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -54,6 +56,14 @@ function render() {
   const id = selected(), detail = id ? model.details.get(id) : null, controlled = !!id && model.canControl(id), editable = controlled && !detail?.summary.task.archived;
   const running = !!detail && agentBusy(detail.summary.attachment.state), local = id ? model.state.drafts[id] : null;
   const rid = rhoSelected(), conversation = rid ? rho.conversations.get(rid) : null;
+  get('studio-request').hidden = !studioInput;
+  if (studioInput) {
+    get('studio-request-title').textContent = studioInput.title;
+    get('studio-request-text').textContent = studioInput.text;
+    const applied = model.state.studioRequestApplied?.request === studioInput.request_id;
+    get('studio-request-status').textContent = applied ? 'Added to a task draft. Review it before Send.' : 'Choose or create a Codex, Kimi Code or DeepSeek task. Adding this request selects its scoped Studio tools.';
+    get<HTMLButtonElement>('add-studio-request').disabled = !!rid || !editable || closing || composing || model.busy || applied || !!local?.conflict || model.state.pending.some(p => p.task === id);
+  }
   const activeKey = rid ? `rho:${rid}` : id ? `native:${id}` : '';
   const tasks = model.page?.tasks ?? [];
   const selector = get<HTMLSelectElement>('task-selector'), list = get('task-list');
@@ -363,11 +373,13 @@ get('cancel-rename').onclick = () => get<HTMLDialogElement>('rename-dialog').clo
 get('save-title').onclick = () => { if (!get<HTMLFormElement>('rename-form').reportValidity()) return; const title = get<HTMLInputElement>('title').value, id = rhoSelected() ?? selected(), target = rhoSelected() ? rho : model; get<HTMLDialogElement>('rename-dialog').close(); if (id) action(() => target.rename(id, title)); };
 get('rename-form').onkeydown = event => { if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) { event.preventDefault(); get<HTMLButtonElement>('save-title').click(); } };
 const tools = (client.view.configuration as { tools?: AgentNativeToolSelection[] }).tools ?? [];
+get('add-studio-request').onclick = () => { const id = selected(); if (id && studioInput && !rhoSelected()) action(() => addStudioRequest(model, id, studioInput, tools)); };
 get<HTMLButtonElement>('tools').disabled = !tools.length;
 for (const tool of tools) {
   const label = document.createElement('label'), checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = model.state.tools.some(item => JSON.stringify(item) === JSON.stringify(tool));
   label.append(checkbox, document.createTextNode(tool.name)); get('tools-menu').append(label);
   checkbox.onchange = () => action(async () => { model.state.tools = model.state.tools.filter(item => JSON.stringify(item) !== JSON.stringify(tool)); if (checkbox.checked) model.state.tools.push(structuredClone(tool)); await model.save(); });
+  get('tools-menu').addEventListener('toggle', () => { checkbox.checked = model.state.tools.some(item => JSON.stringify(item) === JSON.stringify(tool)); });
 }
 await client.installCloseHandler({
   async flush() {

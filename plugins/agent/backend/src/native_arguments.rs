@@ -54,6 +54,21 @@ pub struct AgentViewConfiguration {
     #[serde(default)]
     #[schemars(length(max = 16))]
     pub tools: Vec<AgentNativeToolSelection>,
+    /// A reviewed Studio request remains input text until the user adds it to a
+    /// controlled task draft. Opening the view never creates or sends a task.
+    pub studio_request: Option<StudioRequest>,
+}
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct StudioRequest {
+    #[schemars(length(min = 36, max = 36))]
+    pub request_id: String,
+    pub branch: rho_plugin_sdk::protocol::BranchId,
+    pub revision: rho_plugin_sdk::protocol::RevisionId,
+    #[schemars(length(min = 1, max = 160))]
+    pub title: String,
+    #[schemars(length(min = 1, max = 8192))]
+    pub text: String,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]

@@ -1,6 +1,7 @@
 import {testScenario} from './fixtures/studio-scenario.mjs';
 import {testArchives} from './fixtures/studio-archive.mjs';
 import {testBackendTest} from './fixtures/studio-backend-test.mjs';
+import {testStudioAgent} from './fixtures/studio-agent.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -102,5 +103,10 @@ try {
  await testBackendTest(module,operationRequestId,ViewRequestError);
  await testScenario(module,operationRequestId,ViewRequestError);
  await testArchives(module,operationRequestId);
+ await testStudioAgent(module,operationRequestId,ViewRequestError);
+ if(process.argv.includes('--browser-agent')) {
+  const {testStudioAgentRenderer}=await import('./studio-agent-renderer.mjs');
+  await testStudioAgentRenderer(path.resolve(import.meta.dirname,'..'),plugin);
+ }
  completed=true;console.log('Studio model: source/canvas shared undo, invalid drafts, opaque custom source, atomic inventory edits, native receipts, lost acknowledgements, reopen recovery, source integrity and bounded pagination passed.');
 }finally{if(completed)fs.rmSync(directory,{recursive:true,force:true});else console.error(`Studio test retained at ${directory}`);}

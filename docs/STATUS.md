@@ -33,7 +33,7 @@ written deletion condition. Internal pieces are not reported as milestones.
 | M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Native/Rho views and attachment source/renderer checked; combined native/Host path pending |
 | M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Lifecycle, explicit view recovery and four runtime suspension cases pass; Host acceptance pending |
 | M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Text/history, Continue and handoff implemented; renderer checked, native/restart acceptance pending |
-| M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Branch checkpoint via Agent verified; Studio UI not started |
+| M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Branch checkpoint via Agent verified; Studio request UI/model/renderer checked, combined Host flow pending |
 | M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Not started |
 
 M1 is deliberately first: the ordinary scenario must become the integration target
@@ -118,6 +118,9 @@ Implemented in `plugins/agent` (public APIs/SDK only, no private core imports):
   results commit through core Operation.
 - Management tools freeze project, capability and caller-chosen fields including
   the development branch; exact-branch checkpointing through Agent is verified.
+  Studio now prepares an ordinary Agent draft with that branch/checkpoint and six
+  bounded tools. Model/renderer checks pass for lost view receipts, one-time draft
+  insertion and 1440/960/440/390/220 layouts; combined Host acceptance is pending.
 - `agent.native.assets.import` reads a controlled resource up to 8 MiB through an
   explicit `resources.read` grant, checks ranges/length/digest, and retains the
   original receipt; repeats observe the original. Inline attachments stay ≤ 524288
@@ -137,7 +140,7 @@ Stable view/controller identities survive private connection rotation. Rho setti
 provide key save/removal, versioned configuration and explicit synthetic tests;
 keys stay out of saved view state and Operations. Rho now submits text and contributed
 references and explicit continuation; attachments and tool selection remain to compose.
-The UI build and 84 model cases (24 native, 13 settings, 23 Rho, 13 context, 11 handoff) pass, as does
+The UI build and 89 model cases (29 native, 13 settings, 23 Rho, 13 context, 11 handoff) pass, as does
 the synthetic public MessagePort browser fixture: opaque iframe, IME Enter, task
 switching, one Send, next drafts, 8 MiB selection, lost creation/Send/import/key
 replies, actual reload, history and close without Stop. Settings/rename work without
@@ -148,15 +151,12 @@ regeneration, backend checks and activation of the new combined package remain
 pending: the native metadata run reached 53 passes/6 failures; fixture fixes are under rerun. `plugin.json` still
 describes the prior backend-only package until regeneration. No new Agent native
 package was built for the frontend iterations.
-Browser file capture retains identity, sends bounded Controls and selects a confirmed
-asset into a separately saved draft. Reload does not repeat import or Send;
-inspection and exact-file reselection remain explicit. Native staging quota,
-checksum/controller and reopen fixtures are written but unrun; no native acceptance claim.
+Browser file capture/import/reselection retains identity; native staging/import cases passed, while corrected context fixtures remain under rerun.
 The combined native/Rho–Editor–real-R/restart fixture, including handoff receipts, passes type checking and discovery.
 Its model peer probe passes; the actual Host flow awaits one current Agent artifact.
 
 Not done: native acceptance of attachments/settings/Rho drafts/history/Continue/handoffs,
-remaining context/component input, actual Host restart recovery and Studio Agent flow.
+remaining context/component input, actual Host restart recovery and combined Studio Agent acceptance.
 Synthetic peers for Process/Remote/Environment do not establish execution through those plugins.
 
 Agent evidence in `target/plugin-refactor/`: `agent-handoff-ui-results.json`, `rho-continue-results.json`, `agent-assets-results-v3.json` and
