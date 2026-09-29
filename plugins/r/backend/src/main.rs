@@ -229,6 +229,9 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 fn supported_call(capability: &CapabilityKey, is_query: bool) -> bool {
+    if owner::context::is_query(capability.id.as_str()) {
+        return is_query && capability.version == 1;
+    }
     if owner::recovery::is_operation(capability.id.as_str()) || owner::recovery::is_query(capability.id.as_str()) {
         return owner::recovery::supported_version(capability) && owner::recovery::is_query(capability.id.as_str()) == is_query;
     }

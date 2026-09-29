@@ -14,6 +14,7 @@ use std::{
 };
 use tokio::sync::{Mutex as Lane, watch};
 pub(crate) mod recovery;
+pub(crate) mod context;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -57,6 +58,8 @@ pub struct Owner {
     selected_environment: Mutex<Option<RSessionEnvironment>>,
     recovery_grants: recovery::Grants,
     recovery_pending: Mutex<std::collections::BTreeMap<OperationId, recovery::Pending>>,
+    help_context: Mutex<context::HelpCatalog>,
+    context_grants: context::Grants,
 }
 impl Owner {
     pub fn new(
@@ -112,6 +115,8 @@ impl Owner {
             selected_environment: Mutex::new(None),
             recovery_grants: recovery::Grants::new(grants),
             recovery_pending: Mutex::new(std::collections::BTreeMap::new()),
+            help_context: Mutex::new(context::HelpCatalog::default()),
+            context_grants: context::Grants::new(grants),
         })
     }
     fn admitted_environment(&self, call: &PluginCall, target: &str) -> Result<Option<EnvironmentLibrary>, String> {
@@ -261,6 +266,9 @@ impl Owner {
         }
     }
     pub async fn query(&self, call: &PluginCall) -> Result<Value, String> {
+        if context::is_query(call.binding.capability.id.as_str()) {
+            return self.query_context(call).await;
+        }
         if recovery::is_query(call.binding.capability.id.as_str()) {
             return self.query_recovery(call).await;
         }
@@ -513,6 +521,9 @@ impl Owner {
                     message: preview(&message).to_owned(),
                 });
             }
+        }
+        if call.binding.capability.id.as_str() == "r.read_help" {
+            self.help_context.lock().unwrap().observe(&call.arguments, &observation);
         }
         inspection_value(observation)
     }

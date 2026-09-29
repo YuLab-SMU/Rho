@@ -111,7 +111,7 @@ Implemented in `plugins/agent` (public APIs/SDK only, no private core imports):
   takeover, model settings/diagnostics, scoped credential Control, component model
   runs, native task commands, attachment Control and original-request observations.
 - Native Send captures explicit Query/Operation targets and scopes. Optional grants
-  cover 83 public R, Files, Process, Remote, Environment and Editor contracts plus
+  cover 87 public R, Files, Process, Remote, Environment and Editor contracts plus
   31 native management contracts (not Control/Runtime). Tool requests are durably
   admitted before dispatch; later turns, Stop and dropped observers cannot redirect
   or replay them. Unverified or oversized replies stay uncertain. All scientific
@@ -140,7 +140,7 @@ Stable view/controller identities survive private connection rotation. Rho setti
 provide key save/removal, versioned configuration and explicit synthetic tests;
 keys stay out of saved view state and Operations. Rho now submits text and contributed
 references and explicit continuation; attachments and tool selection remain to compose.
-The UI build and 89 model cases (29 native, 13 settings, 23 Rho, 13 context, 11 handoff) pass, as does
+The UI build and 90 model cases (29 native, 13 settings, 23 Rho, 14 context, 11 handoff) pass, as does
 the synthetic public MessagePort browser fixture: opaque iframe, IME Enter, task
 switching, one Send, next drafts, 8 MiB selection, lost creation/Send/import/key
 replies, actual reload, history and close without Stop. Settings/rename work without
@@ -155,8 +155,8 @@ Browser file capture/import/reselection retains identity; native staging/import 
 The combined native/Rho–Editor–real-R/restart fixture, including handoff receipts, passes type checking and discovery.
 Its model peer probe passes; the actual Host flow awaits one current Agent artifact.
 
-Not done: native acceptance of attachments/settings/Rho drafts/history/Continue/handoffs,
-remaining context/component input, actual Host restart recovery and combined Studio Agent acceptance.
+R now declares observed Help topics and saved HTML contexts; exact-copy/file checks, journal paging and native tests are written. Public Agent picker/grant/type checks pass; R native and Host acceptance remain unrun.
+Not done: native/Host acceptance of Agent input, Continue/handoff and the new sources; annotations/component input, actual Host restart recovery and combined Studio Agent acceptance.
 Synthetic peers for Process/Remote/Environment do not establish execution through those plugins.
 
 Agent evidence in `target/plugin-refactor/`: `agent-handoff-ui-results.json`, `rho-continue-results.json`, `agent-assets-results-v3.json` and

@@ -31,6 +31,33 @@ export async function testContextPicker(ContextPicker, inclusionChoices, root) {
     const choices=inclusionChoices(manifest.capabilities.find(c=>c.capability.id==='editor.context.preview').input_schema);
     assert.deepEqual(choices.map(c=>c.value),[{kind:'document'},{kind:'selection'}]);assert.equal(inclusionChoices({properties:{inclusion:{}}}).length,0);
   });
+  await check('ordinary Help and Viewer use their actual owner declarations and keep exact selected references',async()=>{
+    const r=JSON.parse(fs.readFileSync(root+'/plugins/r/plugin.json','utf8'));
+    const provider={...identity,plugin:r.id,instance:'r-source'};
+    const calls=[];
+    const client={view:{project:'project',window:'window',instance:{instance:'agent'}},async query(cap,args){
+      calls.push(structuredClone({cap,args}));
+      if(cap.id==='plugins.instances')return{status:'ready',completeness:'complete',data:{instances:[{identity:provider,project:'project',state:'active',alias:'R'}],next:null}};
+      if(cap.id==='plugins.inspect')return{status:'ready',completeness:'complete',data:{summary:{revision:provider.revision},manifest:r,artifacts:[{id:provider.artifact}]}};
+      const contribution=r.contexts.find(c=>c.search.id===cap.id||c.preview.id===cap.id);assert.ok(contribution);
+      const declaration=r.capabilities.find(c=>c.capability.id===contribution.preview.id);
+      const reference={...structuredClone(declaration.examples[0].reference),provider,window:'window'};
+      const item={reference,title:contribution.id==='help'?'base::sum':'HTML output 1',description:'Original source 中文',kind:'text'};
+      assert.deepEqual(args.binding,{project:'project',provider,capability:cap,target:null});
+      return{status:'ready',completeness:'complete',data:cap.id.endsWith('.search')?{items:[item],next:null,notices:[]}:
+        {item,text:contribution.id==='help'?'Exact topic 中文':'<h1>Original HTML Ω</h1>',truncated:false,data:{original:true},resources:[]}};
+    }};
+    const picker=new ContextPicker(client);await picker.discover();assert.equal(picker.sources.length,2);
+    for(const source of picker.sources){
+      assert.deepEqual(source.inclusions.map(choice=>choice.value.kind),source.contribution.id==='help'?['text','excerpt']:['text','metadata']);
+      const page=await picker.search(source,'');
+      const preview=await picker.preview(source,page.items[0].reference,{kind:'text'});
+      const selected=picker.selection(source,preview,{kind:'text'});
+      assert.deepEqual(selected.reference,page.items[0].reference);assert.match(preview.text,/中文|Ω/);
+      assert.deepEqual((await picker.retained(selected)).preview.item.reference,selected.reference);
+    }
+    assert.ok(calls.every(call=>call.cap.id.startsWith('r.context.')||['plugins.instances','plugins.inspect'].includes(call.cap.id)));
+  });
   await check('discovery and preview keep exact owner identity and never mutate or acquire tools',async()=>{
     const f=fixture();await f.picker.discover();const source=f.picker.sources[0];await f.picker.search(source,'分析');
     const preview=await f.picker.preview(source,reference,{kind:'selection'});const selected=f.picker.selection(source,preview,{kind:'selection'});

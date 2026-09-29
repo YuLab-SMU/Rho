@@ -159,6 +159,7 @@ makeActiveBinding('inspection_active', function() { inspection_forced <<- inspec
     let help_next = ready(host, owner, "r.read_help", continuation).await;
     assert_eq!(help_next["help_files"], help["help_files"]);
     assert_eq!(help_next["offset_utf8"], help["next_offset_utf8"]);
+    context::help(host, owner, session, &help).await;
     let mut changed = help_args;
     changed["expected_index_files"][0]["digest"] = json!("changed-file-identity");
     let rejected = native_query(host, owner, "r.read_help", changed).await;

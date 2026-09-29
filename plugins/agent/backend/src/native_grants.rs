@@ -10,6 +10,13 @@ pub(crate) fn scientific_requirements() -> Vec<CapabilityRequirement> {
             &[("editor.context.preview", 1), ("editor.context.search", 1)],
         ),
         (
+            &["operation.read", "resources.read", "workspace.read"],
+            &[
+                ("r.context.viewer.preview", 1),
+                ("r.context.viewer.search", 1),
+            ],
+        ),
+        (
             &[
                 "environment.read",
                 "environment.write",
@@ -209,6 +216,8 @@ pub(crate) fn scientific_requirements() -> Vec<CapabilityRequirement> {
         (
             &["workspace.read"],
             &[
+                ("r.context.help.preview", 1),
+                ("r.context.help.search", 1),
                 ("r.check_code", 1),
                 ("r.console", 1),
                 ("r.inspect_object", 1),

@@ -68,6 +68,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     RCheckpointPurgeOutput::export_all(&types)?;
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
+        ("context-search", schemars::schema_for!(rho_plugin_protocol::ContextSearch)),
+        ("context-page", schemars::schema_for!(rho_plugin_protocol::ContextPage)),
+        ("context-preview", schemars::schema_for!(rho_plugin_protocol::ContextPreview)),
+        ("preview-context", schemars::schema_for!(rho_plugin_protocol::PreviewContext)),
         ("prepare", schemars::schema_for!(rho_plugin_protocol::PluginPreflightRequest)),
         ("prepared", schemars::schema_for!(rho_plugin_protocol::PluginPreflightResult)),
         ("capture-checkpoint", schemars::schema_for!(CheckpointCaptureArguments)),

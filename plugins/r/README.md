@@ -11,6 +11,29 @@ Explicit `r.format` Operations use installed `styler` in the selected existing
 session, share execution's queue and original-result retention, and never evaluate
 the supplied text or save it to a project file. Oversized inline values remain
 available in the complete retained report; Editor application is a separate action.
+
+The R owner also declares ordinary `help` and `viewer` context contributions:
+
+- Help searches a bounded index of the last 100 observed topic identities. Open a
+  topic in Help first. Preview rereads text from its exact native session, package
+  observation and original index/help file identities; it never selects another
+  installed copy. Choose topic text or its first twelve lines. Changed, busy or
+  incomplete reads do not become complete Agent input. The index contains no
+  content bytes and is cleared when the R instance restarts.
+- Viewer searches five visible journal entries per page and retains continuation
+  within an operation with multiple outputs. It includes original terminal
+  `r.execute` HTML from this exact instance, including failed/cancelled/uncertain
+  runs with retained output. Preview verifies the original result and resource;
+  text is inert HTML source. Artifact-record inclusion explicitly excludes content
+  availability and interactive browser state. It can inspect original records
+  after reopening the instance without starting R.
+
+Viewer context requires the R instance's optional `operation.get`,
+`operation.list_recent` and `resources.read` grants. Context references never grant
+access or acquire scientific tools. Agent exposes these as optional grants too;
+activation and each input still select their scope explicitly.
+Run `cargo test -p rho-r-backend --bin rho-r-backend owner::context --locked` for
+the owner checks. Current native and combined Host acceptance remain in Status.
 `node scripts/build-r-plugin.mjs DEST` assembles and builds a self-contained package
 outside the checkout; see [build instructions](BUILD.md). Current acceptance and
 the remaining migration are recorded in `docs/STATUS.md` at the repository root.

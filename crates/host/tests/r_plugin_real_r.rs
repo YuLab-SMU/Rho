@@ -12,6 +12,8 @@ mod queue;
 mod console;
 #[path = "fixtures/r_inspection.rs"]
 mod inspection;
+#[path = "fixtures/r_context.rs"]
+mod context;
 
 async fn query(host: &NextHost, id: &str, args: Value) -> Value {
     host.query_snapshot(
@@ -60,6 +62,8 @@ async fn native_query(host: &NextHost, instance: &InstanceRef, id: &str, args: V
 }
 async fn activate(host: &NextHost, archive: &PluginArchive, alias: &str) -> InstanceRef {
     let record = run(host, alias, "plugins.activate", json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,
+        "optional_capabilities":[{"id":"operation.get","version":1},
+            {"id":"operation.list_recent","version":1}, {"id":"resources.read","version":1}],
         "target":backend_target(),"alias":alias,"configuration":{"ark":fs::canonicalize(std::env::var_os("RHO_ARK").unwrap()).unwrap(),
             "r_home":fs::canonicalize(std::env::var_os("RHO_R_HOME").unwrap()).unwrap(),"execution_timeout_seconds":30}})).await;
     serde_json::from_value::<PluginInstanceObservation>(record.output.unwrap())
@@ -324,6 +328,7 @@ async fn independent_r_plugin_uses_original_operations_and_retains_revision_scop
         assert!(resources.iter().any(|item|item["reference"]["media_type"]=="image/png"));
         assert_eq!(html["owner"], json!(left));
         for item in resources { assert_eq!(item["native"]["operation_id"], json!(record.operation.operation_id)); }
+        context::viewer(&host, &left, &html, &record.operation.operation_id).await;
         let events = host.events(&NextHost::local_context(), &record.operation.operation_id).await.unwrap();
         assert!(events.iter().any(|event|event.kind=="effect.observed" && event.payload["kind"]=="plugin.evidence"));
         let snapshot = native_query(&host, &left, "r.snapshot", json!({"expected_session":session,"limit":100})).await;

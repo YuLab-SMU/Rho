@@ -147,11 +147,13 @@ Sources:
 - `scripts/fixtures/plugin-ui.mjs`
 - `scripts/fixtures/scientific-workspace.mjs`
 - `scripts/fixtures/ssh-slurm.mjs`
+- `scripts/fixtures/studio-agent*`
 - `scripts/fixtures/studio-archive.mjs`
 - `scripts/fixtures/studio-backend-test.mjs`
 - `scripts/fixtures/studio-development.mjs`
 - `scripts/generate-editor-context.mjs`
 - `scripts/plugin-protocol.mjs`
+- `scripts/studio-agent-renderer.mjs`
 - `scripts/test-agent-core-tools.mjs`
 - `scripts/test-agent-plugin-client.mjs`
 - `scripts/test-agent-plugin-engine.mjs`
@@ -226,6 +228,7 @@ Sources:
 - `ui/e2e/r-plugin-packages.spec.ts`
 - `ui/e2e/r-plugin-plots.spec.ts`
 - `ui/e2e/scientific-workspace.spec.ts`
+- `ui/e2e/studio-agent.spec.ts`
 - `ui/e2e/studio-archive.spec.ts`
 - `ui/e2e/studio-backend-test.spec.ts`
 - `ui/e2e/studio-plugin.spec.ts`
@@ -418,6 +421,8 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `scripts/test-plugin-protocol.mjs`, `sdk/**`, `ui/src/**`.
 - `plugins.r-console` (L2): `["node","scripts/test-r-console.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/console/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-console-plugin.mjs`, `scripts/build-r-plugin.mjs`, `scripts/test-r-console.mjs`, `sdk/**`.
+- `plugins.r-context` (L1): `["cargo","test","-p","rho-r-backend","--bin","rho-r-backend","owner::context","--locked"]`
+  Applies to: `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/r/api/**`, `plugins/r/backend/**`, `plugins/r/context-manifest.mjs`, `plugins/r/plugin.json`.
 - `plugins.r-engine` (L1): `["cargo","test","-p","rho-r-engine","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/r/**`, `rust-toolchain.toml`, `scripts/build-r-plugin.mjs`, `sdk/**`.
 - `plugins.r-environment` (L2): `["node","scripts/test-r-environment.mjs"]`
@@ -476,6 +481,10 @@ Checks:
   Applies to: `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugins/**`, `crates/workbench/**`, `plugins/**`, `scripts/test-scientific-workspace.mjs`, `sdk/**`, `ui/e2e/scientific-workspace.spec.ts`, `ui/src/plugin*`.
 - `plugins.self-requirements` (L2): `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.studio-agent-host` (L2): `["node","scripts/test-agent-core-tools.mjs","--browser"]`
+  Applies to: `crates/host/**`, `crates/workbench/**`, `plugins/agent/**`, `plugins/studio/**`, `scripts/agent-plugin-artifact.mjs`, `scripts/test-agent-core-tools.mjs`, `sdk/**`, `ui/e2e/studio-agent.spec.ts`, `ui/src/host-client.ts`, `ui/src/plugin-*.*`.
+- `plugins.studio-agent-renderer` (L1): `["node","scripts/test-studio-plugin.mjs","--browser-agent"]`
+  Applies to: `plugins/studio/**`, `scripts/build-studio-plugin.mjs`, `scripts/fixtures/studio-agent*`, `scripts/studio-agent-renderer.mjs`, `scripts/test-studio-plugin.mjs`, `sdk/plugin-protocol/**`, `sdk/plugin-ui/**`.
 - `plugins.studio-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts","studio-backend-test.spec.ts","studio-scenario.spec.ts","studio-archive.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/studio/**`, `rust-toolchain.toml`, `scripts/build-studio-plugin.mjs`, `sdk/**`, `ui/e2e/studio-archive.spec.ts`, `ui/e2e/studio-backend-test.spec.ts`, `ui/e2e/studio-plugin.spec.ts`, `ui/e2e/studio-scenario.spec.ts`.
 - `plugins.studio-model` (L2): `["node","scripts/test-studio-plugin.mjs"]`

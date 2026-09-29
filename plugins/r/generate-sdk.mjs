@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {contextContributions} from './context-manifest.mjs';
 const root=path.dirname(fileURLToPath(import.meta.url)),check=process.argv.includes('--check');
 assert.ok(process.argv.slice(2).every(arg=>arg==='--check'),'Use no arguments to generate, or --check');
 const temporary=fs.mkdtempSync(path.join(os.tmpdir(),'rho-r-protocol-'));
@@ -44,6 +45,7 @@ try{
   const reference={project:'copy-original-project',provider:{plugin:'org.rho.r',instance:'copy-original-instance',revision:'sha256:'+'a'.repeat(64),artifact:'sha256:'+'b'.repeat(64)},operation_id:'copy-original-capture-operation',digest:'sha256:'+'c'.repeat(64),bytes:1024};
   const attemptRead=['workspace.read','operation.read','plugins.read','project.references.read'];
   const additions=[
+    ...contextContributions(schema).capabilities,
     {capability:{id:'r.prepare_capture_disposal',version:1},kind:'query',title:'Prepare capture disposal',description:'Qualify an original unsuccessful capture, confirmed owner release and exact native material preview. Never starts R or disposes material.',input_schema:schema('prepare'),output_schema:schema('prepared'),examples:[{capability:{id:'r.discard_capture',version:1},arguments:{source_operation_id:'original-capture',expected_fingerprint:'sha256:'+'a'.repeat(64)},target:null,preconditions:null}],recovery_schema:true,required_scopes:['workspace.run_r',...attemptRead],effects:[],cancellation:'unsupported',preflight:null},
     {capability:{id:'r.capture_attempt',version:1},kind:'query',title:'Inspect unpublished capture material',description:'Observe bounded native file metadata, original terminal outcome, confirmed provider release and committed disposal. Missing bytes alone never confirm disposal. Does not hash full graphs or start R.',input_schema:schema('capture-attempt-arguments'),output_schema:schema('capture-attempt-observation'),examples:[{source_operation_id:'original-capture'}],recovery_schema:true,required_scopes:attemptRead,effects:[],cancellation:'unsupported',preflight:null},
     {capability:{id:'r.discard_capture',version:1},kind:'operation',title:'Discard unpublished capture material',description:'Explicitly remove only graph/staging bytes for an original unsuccessful capture or adoption after its provider is confirmed released. Requires an exact native preview; preserves metadata and original outcomes. A lost commit requires fresh inspection and an explicit new request. Published copies use normal deletion.',input_schema:schema('discard-capture'),output_schema:schema('capture-discard-output'),examples:[{source_operation_id:'original-capture',expected_fingerprint:'sha256:'+'a'.repeat(64)}],recovery_schema:true,required_scopes:['workspace.run_r',...attemptRead],effects:['recovery.discard'],cancellation:'unsupported',preflight:{id:'r.prepare_capture_disposal',version:1}},
@@ -89,6 +91,7 @@ try{
     ].map(([id,title,description,input,output,example])=>({capability:{id,version:1},kind:'query',title,description,input_schema:schema(input),examples:[example],output_schema:schema(output),recovery_schema:true,required_scopes:['workspace.read'],effects:[],cancellation:'unsupported',preflight:null})),
   ];
   for(const addition of additions){const index=manifest.capabilities.findIndex(item=>item.capability.id===addition.capability.id&&item.capability.version===addition.capability.version);if(index<0)manifest.capabilities.push(addition);else manifest.capabilities[index]=addition;}
+  manifest.contexts=contextContributions(schema).contexts;
   manifest.optional_requires??=[];
   for(const requirement of [
     {capability:{id:'environment.library',version:2},scopes:['project.read','environment.read','operation.read','resources.read']},
