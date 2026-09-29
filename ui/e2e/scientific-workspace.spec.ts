@@ -4,6 +4,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { scientificContinuity } from './fixtures/scientific-continuity';
 import { installPluginSet } from '../../scripts/plugin-set.mjs';
 import { buildManagerPlugin } from '../../scripts/build-manager-plugin.mjs';
 import { buildConsolePlugin } from '../../scripts/build-console-plugin.mjs';
@@ -208,9 +209,10 @@ test('Manager prepares the ordinary scientific scene; Files opens a runnable Edi
     expect(await executions()).toHaveLength(1);
     await page.screenshot({path:info.outputPath('default-studio.png')});
   }
+  const continuity = full ? await scientificContinuity({page, info, query, port, mapping, editorView, project, windowId, nativeSession}) : null;
   if (process.env.RHO_SCIENTIFIC_EVIDENCE) writeFileSync(process.env.RHO_SCIENTIFIC_EVIDENCE, JSON.stringify({completed:true,full_delivery:full,
     set:process.env.RHO_SCIENTIFIC_PLUGIN_SET ?? null,instances:mapping.instances,views:mapping.views,scenario:mapping.revision,
-    original_execution:id,native_session:nativeSession,agent_tools_offered_unchecked:full,studio_opened:full,
+    original_execution:id,native_session:nativeSession,agent_tools_offered_unchecked:full,studio_opened:full,continuity,
     screenshots:info.outputDir,limits:['No new model/tool execution or native service operation acceptance; no user installation or Host restart.']},null,2)+'\n');
   completed = true;
 });

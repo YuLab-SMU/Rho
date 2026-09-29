@@ -98,7 +98,13 @@ paths exercise the expanded recipe. For the actual default delivery, use
 archives into its disposable catalog and builds nothing, including Manager.
 It exercises initial installation through the same repository, exact preparation,
 lost first-provider activation/reload recovery, real R, Agent's unchecked tools and
-the Studio tab. `RHO_SCIENTIFIC_EVIDENCE` selects a successful-run JSON report;
+the Studio tab. Full-set acceptance also holds one real R operation at a bounded
+file gate while switching to a Manager-only scene and back, closing and reopening
+Console/Editor, and retaining their unsent/unsaved drafts. The fixture releases
+its own gate even on failure, then checks the original provider/session, exactly
+one file effect, unchanged source file and browser reload without replay. Scenario
+checkpoints/application and reopening use public Host ports; browser clicks cover
+script submission, editing and cooperative closure. `RHO_SCIENTIFIC_EVIDENCE` selects a successful-run JSON report;
 Playwright retains failure traces. This is composition acceptance, not a replacement
 for individual Agent tool, remote cluster or Environment operation checks.
 In `--packages` mode, the runner builds only missing UI packages and the current Manager. Both modes open a fresh plugin-only Host and
@@ -1457,7 +1463,7 @@ Native/transport verification:
 | --- | --- |
 | `test-real-r.mjs` | Installed Ark and R with jsonlite, rlang, lintr and styler; real R, progressive object/package queries, non-forcing inspections, cancellation and code tools |
 | `test-r-checkpoints.mjs` | Installed R with jsonlite; builds the private native checkpoint component for that R, then exercises the classifier and a capture/cold-restore round trip in disposable `--vanilla` processes. `--print-library` prints the component path for `RHO_CHECKPOINT_HELPER` |
-| `npm run test:browser --prefix ui` | Current `cargo build --locked` binary. Ordinary-plugin cases use explicit package/runtime selections; `scientific-workspace.spec.ts` requires `RHO_SCIENTIFIC_PACKAGES`, `RHO_ARK` and `RHO_R_HOME`. Fixed-composition reference specs pass `--fixed-workspace`; their R discovery needs installed R and `ark` **beside that binary** or on PATH. Run the affected cases, not every fixture during iteration. |
+| `npm run test:browser --prefix ui` | Current `cargo build --locked` binary. Ordinary-plugin cases use explicit package/runtime selections; `scientific-workspace.spec.ts` requires either `RHO_SCIENTIFIC_PACKAGES` or `RHO_SCIENTIFIC_PLUGIN_SET`, plus `RHO_ARK` and `RHO_R_HOME`. Fixed-composition reference specs pass `--fixed-workspace`; their R discovery needs installed R and `ark` **beside that binary** or on PATH. Run the affected cases, not every fixture during iteration. |
 | `test-workbench.mjs`, `test-mcp.mjs` | Real local transports; add `--real-r` for Ark/R and Environment observations |
 | `test-environment.mjs` | R/Ark with pak, renv, ps and jsonlite; installs small local fixtures into temporary libraries, checks user-library preservation and recovery |
 | `test-process-recovery.mjs` | R-free native process crash/reconciliation |
