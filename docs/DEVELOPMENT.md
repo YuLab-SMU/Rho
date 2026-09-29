@@ -282,6 +282,14 @@ without compilation. Reserve `--independent` for an owner/store source audit.
 `node scripts/build-annotation-plugin.mjs /new/path` defaults to the workspace cache;
 only an explicit `--independent` rebuilds standalone source. Native tests, package
 assembly, real-provider/Host acceptance and UI review are separate outcomes.
+For **Plots → Agent** acceptance, `node scripts/test-plots-agent.mjs` reuses
+`RHO_R_PLUGIN_PACKAGE`, `RHO_AGENT_PLUGIN_PACKAGE` and `RHO_PLOTS_PLUGIN_PACKAGE`,
+plus existing `RHO_ARK` / `RHO_R_HOME`. It builds nothing and uses a disposable
+Host, two real R outputs and a local deterministic image-model peer. The browser
+selects originals, previews images or metadata, adds the pair to a draft and sends
+explicitly. Image diagnostics, digest-preserving delivery, text-only follow-up and
+same-instance Host restart are covered together. Set `RHO_PLOTS_AGENT_EVIDENCE`
+for the report and screenshot paths. This does not measure model reasoning quality.
 For **Objects → Agent** acceptance, `node scripts/test-object-agent.mjs` reuses
 `RHO_R_PLUGIN_PACKAGE`, `RHO_AGENT_PLUGIN_PACKAGE` and `RHO_OBJECTS_PLUGIN_PACKAGE`,
 plus existing `RHO_ARK` / `RHO_R_HOME`. It checks build receipts before starting a

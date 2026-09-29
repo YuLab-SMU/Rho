@@ -1,3 +1,6 @@
+import {componentInputDialog} from "../public/agent-input/dialog.js";
+import {plotContext} from "./agent-source.js";
+import type {SavedPlot} from "./outputs.js";
 import '@fontsource/inter/latin-400.css';
 import '@fontsource/inter/latin-500.css';
 import '@fontsource/inter/latin-600.css';
@@ -22,11 +25,16 @@ try{
  const cache=new MediaCache(client,{create:(bytes,mime)=>URL.createObjectURL(new Blob([bytes],{type:mime})),revoke:url=>URL.revokeObjectURL(url)});
  const actions=new PlotsActions(client,connection,configuration.plot_group);
  const exporting=new PlotsExport(client,reference=>connection.history.find(reference));
- const closing=await client.installCloseHandler({async flush(){connection.pause();await actions.settled();await connection.flush();},resume(){connection.resume();}});
+ let closingSource=false,asking:SavedPlot[]=[];
+ const sender=componentInputDialog({client,saved:connection.savedAgent,persist:state=>connection.saveAgent(state),
+  guard:()=>{if(closingSource)throw Error('Plots is closing. The original request is retained.');},
+  modes:[{value:'images',label:'Original images'},{value:'metadata',label:'Artifact metadata only'}],
+  capture:kind=>plotContext(connection.source,client.view.window,asking,kind)});
+ const closing=await client.installCloseHandler({async flush(){closingSource=true;if(sender.busy)throw Error("Wait for the current Agent request before closing.");connection.pause();await actions.settled();await connection.flush();},resume(){closingSource=false;connection.resume();}});
  const ignore=(promise:Promise<unknown>)=>{void promise.catch(()=>undefined);};
  function App(){
   const download=useSyncExternalStore(exporting.subscribe,exporting.getSnapshot),state=useSyncExternalStore(connection.subscribe,connection.getSnapshot),action=useSyncExternalStore(actions.subscribe,actions.getSnapshot),close=useSyncExternalStore(closing.subscribe,closing.getSnapshot);
-  return <PlotViewContext.Provider value={{connection,cache,navigation:{blocked:close.preparing||action.working||!!action.pending||download.busy,
+  return <PlotViewContext.Provider value={{connection,cache,agent:{ask:plots=>{asking=structuredClone(plots??connection.selectedForAgent);sender.open();}},navigation:{blocked:close.preparing||action.working||!!action.pending||download.busy,
    openComparison:reference=>ignore(actions.openComparison(reference)),exportAvailable:client.initialization.features?.includes('resource_download_v1')===true,exportStatus:download,exportOriginal:reference=>ignore(exporting.original(reference))}}}>
    <main className="plots-root"><PlotPanel/>
     {(download.busy||download.error||download.notice||state.notice||state.saveError||close.error||action.error||action.pending||action.receipt)&&<aside className="plots-status" aria-label="Plots status">
@@ -42,5 +50,5 @@ try{
  }
  root.render(<App/>);ignore(connection.initialize());
  const polling=setInterval(()=>ignore(connection.refresh()),3000);
- window.addEventListener('pagehide',()=>{clearInterval(polling);exporting.stop();actions.stop();connection.stop();cache.stop();client.dispose();root.unmount();},{once:true});
+ window.addEventListener('pagehide',()=>{clearInterval(polling);closingSource=true;sender.dispose();exporting.stop();actions.stop();connection.stop();cache.stop();client.dispose();root.unmount();},{once:true});
 }catch(error){root.render(<div className="empty" role="alert">{error instanceof Error?error.message:String(error)}</div>);}

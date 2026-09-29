@@ -1,3 +1,5 @@
+import type {AgentState} from "../public/agent-input/input.js";
+import type {SavedPlot} from "./outputs.js";
 import type {InstanceRef,JsonValue} from '../public/plugin-protocol/index.js';
 import type {PluginViewClient} from '../public/plugin-ui/index.js';
 import {Model} from './shared/model.js';
@@ -20,13 +22,18 @@ export class PlotsConnection extends Model<Snapshot>{
   private saveTimer:ReturnType<typeof setTimeout>|undefined;
   private subscriptions:(()=>void)[]=[];
   private actions:JsonValue=null;
+  private agentState?:AgentState;
+  private agentPlots:SavedPlot[]=[];
   private useConfiguredSelection=false;
   constructor(private client:Client,source:InstanceRef,private configured:PlotSelection|null=null,readonly pinned=false){
     super();this.source=Object.freeze(structuredClone(source));
     this.history=new PlotHistory(client,this.source);
     this.plots=new Plots({outputs:this.history,changed:()=>this.changed()});
-    const saved=client.view.state as {plots?:unknown;selection?:PlotSelection|null;actions?:JsonValue}|null;
+    const saved=client.view.state as {plots?:unknown;selection?:PlotSelection|null;actions?:JsonValue;agent?:AgentState;agentPlots?:SavedPlot[]}|null;
     this.plots.restore(saved?.plots);
+    this.agentState=structuredClone(saved?.agent);
+    if(saved?.agentPlots && (!Array.isArray(saved.agentPlots)||saved.agentPlots.length>2))throw Error("The retained plot comparison exceeds two images.");
+    this.agentPlots=structuredClone(saved?.agentPlots??[]);
     this.selection=structuredClone(saved?.selection??configured??null);this.actions=structuredClone(saved?.actions??null);
     this.useConfiguredSelection=!saved?.plots&&configured!==null;
     if(pinned&&!this.selection)throw new Error('Select an original plot for this pinned view.');
@@ -36,12 +43,21 @@ export class PlotsConnection extends Model<Snapshot>{
   protected readSnapshot():Snapshot{return{notice:this.notice,saveError:this.saveError};}
   get actionState(){return structuredClone(this.actions);}
   async saveActions(value:JsonValue){this.actions=structuredClone(value);await this.flush();}
+  get savedAgent(){return structuredClone(this.agentState);}
+  get selectedForAgent(){return structuredClone(this.agentPlots);}
+  addForAgent(plot:SavedPlot){
+    if(this.agentPlots.some(old=>old.reference.resource===plot.reference.resource))return;
+    if(this.agentPlots.length>=2)throw Error('Remove a selected plot before adding another.');
+    this.agentPlots.push(structuredClone(plot));this.changed();this.publish();
+  }
+  removeForAgent(index:number){this.agentPlots=this.agentPlots.filter((_,i)=>i!==index);this.changed();this.publish();}
+  async saveAgent(state:AgentState){this.agentState=structuredClone(state);await this.flush();}
   private state(){
     const selected=this.plots.view('plots').selected;
     const plot=this.history.getSnapshot().plots.find(plot=>mediaKey(plot.native)===selected);
     if(plot)this.selection={operation_id:plot.operation,resource_id:plot.reference.resource};
     this.history.selected(this.selection);
-    return{plots:this.plots.serialize(),selection:structuredClone(this.selection),actions:this.actions};
+    return{plots:this.plots.serialize(),selection:structuredClone(this.selection),actions:this.actions,agentPlots:this.agentPlots,...(this.agentState?{agent:this.agentState}:{})};
   }
   private changed(){
     if(this.stopped||this.paused)return;

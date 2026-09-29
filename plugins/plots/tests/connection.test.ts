@@ -37,3 +37,15 @@ it('reopens the acknowledged pinned selection rather than replacing it with the 
  const reopened=new PlotsConnection(f.client,owner,{operation_id:'initial',resource_id:'initial-resource'},true);await reopened.initialize();
  expect(observed).toEqual(['chosen-later']);expect(reopened.plots.view('plots')).toMatchObject({selected:'chosen-later:1:'+native.sha256,pinned:true,history:false});reopened.stop();f.connection.stop();
 });
+it('retains a bounded independent comparison across reload and later selection changes',async()=>{
+ const f=fixture();const plot=(id:string)=>({operation:id,reference:{owner,resource:id},native:{sequence:1}} as any);
+ f.connection.addForAgent(plot('first'));f.connection.addForAgent(plot('second'));f.connection.addForAgent(plot('first'));
+ expect(()=>f.connection.addForAgent(plot('third'))).toThrow('Remove');
+ const selected=f.connection.selectedForAgent;selected[0].reference.resource='changed';
+ await f.connection.flush();(f.client.view as any).state=f.writes.at(-1);
+ const reopened=new PlotsConnection(f.client,owner);
+ expect(reopened.selectedForAgent.map(p=>p.reference.resource)).toEqual(['first','second']);
+ reopened.removeForAgent(0);reopened.addForAgent(plot('third'));await reopened.flush();
+ expect((f.writes.at(-1) as any).agentPlots.map((p:any)=>p.operation)).toEqual(['second','third']);
+ expect(f.calls).toEqual([]);reopened.stop();f.connection.stop();
+});

@@ -3,7 +3,11 @@
 export function contextContributions(schema) {
   const owner = {plugin:'org.rho.r',instance:'copy-original-r-instance',revision:'sha256:'+'a'.repeat(64),artifact:'sha256:'+'b'.repeat(64)};
   const files = name => [1,2,3,4].map(index => ({path:`original-${name}-${index}`,digest:'copy-original-file-digest'}));
-  const sources = [{id:'objects',title:'Observed objects',scopes:['workspace.read'],
+  const sources = [{id:'plots',title:'Saved plots',scopes:['workspace.read','operation.read','resources.read'],
+    description:'Search original terminal R outputs. Explicitly include one or two original PNG/JPEG images up to 2 MiB each, or artifact metadata only. Rechecks original operation, session, output and digest. Never starts R, rerenders a plot or captures panel transforms.',
+    choices:[['Original images','images'],['Artifact metadata only','metadata']],
+    selector:{plots:[{operation:'copy-original-operation',sequence:1,session:'copy-original-native-session',reference:{owner,resource:'copy-original-resource',digest:'sha256:'+'c'.repeat(64),media_type:'image/png',bytes:100}}]}},
+    {id:'objects',title:'Observed objects',scopes:['workspace.read'],
     description:'Search up to 100 previously opened object observations. Preview rechecks the exact native handle, session and structural path; never starts R, evaluates a binding or observes a replacement. Includes bounded metadata and recognition sample, not the whole object.',
     choices:[['Metadata and recognition sample','summary']],
     selector:{session:'copy-original-native-session',name:'copy-original-object-name',object_ref:'copy-original-object-reference',observed_path:[],path:[]}},

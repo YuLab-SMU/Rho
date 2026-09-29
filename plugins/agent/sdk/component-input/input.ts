@@ -1,6 +1,6 @@
 /** Public component-input sender. Source owners supply exact references; only view opening mutates. */
 import type { ContextReference, ContextPreview, InstanceRef, PluginInspection, PluginInstanceObservation, PluginInstanceObservations, PluginWindowLayout, PluginViewRecord, OpenedPluginWindowView } from '../plugin-protocol/index.js';
-import { ViewRequestError } from '../plugin-ui/index.js';
+import { ViewRequestError, readResource, isResourceReference } from '../plugin-ui/index.js';
 import { type Client, type Intent, type RecordReply, json, same, verifyOriginal, inspectOriginal } from './operations.js';
 export interface ComponentSource { reference: ContextReference; title: string; inclusion: unknown; preview: {id:string;version:number}; }
 export interface AgentInput extends ComponentSource { request: string; source_view: string; instance: InstanceRef | null; }
@@ -16,6 +16,7 @@ export class ComponentAgent {
   candidates: PluginInstanceObservation[]=[];
   next: string|null=null;
   preview='';
+  images:Blob[]=[];
   busy=false;
   constructor(private client:Client, saved:AgentState|undefined, private persist:(state:AgentState)=>Promise<void>, private guard:()=>void, private changed:()=>void) {
     this.data=structuredClone(saved??empty());this.validate();
@@ -52,9 +53,20 @@ export class ComponentAgent {
     const capability=input.preview;
     const value=await read<ContextPreview>(this.client,capability.id,{binding:{provider:input.reference.provider,project:this.client.view.project,capability,target:null},
       arguments:{reference:input.reference,inclusion:input.inclusion,max_bytes:16384},preconditions:null});this.guard();
-    if(!same(value.item.reference,input.reference)||value.truncated||value.resources.length||new TextEncoder().encode(value.text).length>16384)
+    if(!same(value.item.reference,input.reference)||value.truncated||value.resources.length>2||new TextEncoder().encode(value.text).length>16384)
       throw Error('This source is changed, partial or unavailable. Choose a smaller inclusion and prepare the current input.');
-    this.preview=value.text;
+    const images:Blob[]=[];
+    for(const reference of value.resources){
+      if(!isResourceReference(reference)||!same(reference.owner,input.reference.provider)||!['image/png','image/jpeg'].includes(reference.media_type)||reference.bytes<1||reference.bytes>2*1024*1024)
+        throw Error('Select original PNG/JPEG images up to 2 MiB each, or choose metadata only.');
+      const bytes=await readResource(this.client,reference,{maxBytes:2*1024*1024});this.guard();
+      const blob=new Blob([bytes],{type:reference.media_type});
+      if(typeof createImageBitmap!=='function')throw Error('This view cannot decode the original images. Choose metadata only.');
+      const bitmap=await createImageBitmap(blob);
+      try{if(bitmap.width<1||bitmap.height<1||bitmap.width*bitmap.height>16*1024*1024)throw Error('The original image exceeds the preview pixel limit.');}finally{bitmap.close();}
+      this.guard();images.push(blob);
+    }
+    this.preview=value.text;this.images=images;
   }
   prepare(source:ComponentSource){return this.act(async()=>{
     if(this.data.pending)throw Error('Inspect the original Agent view request before preparing another input.');

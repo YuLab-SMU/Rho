@@ -36,7 +36,9 @@
       "tests/outputs.test.ts",
       "tests/plot-viewport.test.ts",
       "tests/plots.test.ts",
-      "tsconfig.json"
+      "tsconfig.json",
+      "src/agent-source.ts",
+      "tests/agent-source.test.ts"
     ],
     "lockfiles": [
       "dependencies.lock"
@@ -93,7 +95,63 @@
         "version": 1
       },
       "scopes": [
+        "application.control",
+        "application.read",
+        "documents.read",
+        "documents.write",
+        "environment.read",
+        "environment.write",
+        "operation.read",
+        "plugins.read",
         "plugins.run",
+        "plugins.write",
+        "process.run_local",
+        "project.read",
+        "project.references.read",
+        "project.write",
+        "remote.execute",
+        "resources.read",
+        "skill.read",
+        "slurm.read",
+        "slurm.write",
+        "workspace.read",
+        "workspace.run_r"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instances",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instance",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.context.plots.preview",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read",
         "operation.read",
         "resources.read"
       ]
@@ -105,7 +163,45 @@
       "title": "Plots",
       "entrypoint": "dist/index.html",
       "state_schema": {
-        "type": "object"
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "object",
+            "required": [
+              "input",
+              "pending",
+              "opened"
+            ],
+            "properties": {
+              "input": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "pending": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "opened": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "agentPlots": {
+            "type": "array",
+            "maxItems": 2,
+            "items": {
+              "type": "object"
+            }
+          }
+        }
       },
       "configuration_schema": {
         "type": "object",

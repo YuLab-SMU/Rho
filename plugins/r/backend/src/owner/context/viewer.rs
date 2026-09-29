@@ -3,17 +3,20 @@ use super::*;
 const SEARCH: &str = "r.context.viewer.search";
 const PREVIEW: &str = "r.context.viewer.preview";
 const CONTRIBUTION: &str = "viewer";
+const PLOT_SEARCH: &str = "r.context.plots.search";
+const PLOT_PREVIEW: &str = "r.context.plots.preview";
+mod plots;
 pub(super) fn is_query(id: &str) -> bool {
-    matches!(id, SEARCH | PREVIEW)
+    matches!(id, SEARCH | PREVIEW | PLOT_SEARCH | PLOT_PREVIEW)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Source {
-    operation: OperationId,
-    sequence: u64,
-    session: String,
-    reference: ResourceReference,
+pub(super) struct Source {
+    pub(super) operation: OperationId,
+    pub(super) sequence: u64,
+    pub(super) session: String,
+    pub(super) reference: ResourceReference,
 }
 impl Source {
     fn item(
@@ -49,6 +52,11 @@ struct Cursor {
     text: String,
     before: Option<u64>,
     within: Option<(OperationId, u64)>,
+    #[serde(default = "viewer_contribution")]
+    contribution: String,
+}
+fn viewer_contribution() -> String {
+    "viewer".into()
 }
 #[derive(Deserialize)]
 struct JournalPage {
@@ -73,6 +81,14 @@ fn outputs(
     owner: &InstanceRef,
     operation: &OperationId,
     record: &Value,
+) -> Result<(Vec<Source>, String), String> {
+    outputs_for(owner, operation, record, &["text/html"])
+}
+fn outputs_for(
+    owner: &InstanceRef,
+    operation: &OperationId,
+    record: &Value,
+    media_types: &[&str],
 ) -> Result<(Vec<Source>, String), String> {
     let original = &record["operation"];
     let capability: CapabilityKey = decode(original["capability"].clone())?;
@@ -110,17 +126,17 @@ fn outputs(
     let mut result = vec![];
     let mut previous = None;
     for item in media {
-        if item.reference.media_type != "text/html" {
+        if !media_types.contains(&item.reference.media_type.as_str()) {
             continue;
         }
         check(
             item.reference.owner == *owner
                 && item.native.operation_id == *operation
-                && item.native.mime_type == "text/html"
+                && item.native.mime_type == item.reference.media_type
                 && item.native.byte_size == item.reference.bytes
                 && item.native.sha256 == item.reference.digest.as_str()
                 && previous.is_none_or(|seq| seq < item.native.sequence),
-            "Saved HTML identity or sequence differs from its original R result",
+            "Saved output identity or sequence differs from its original R result",
         )?;
         ResourceRead {
             reference: item.reference.clone(),
@@ -168,12 +184,18 @@ impl Owner {
             .ok_or("Missing original Viewer observation".into())
     }
     pub(super) async fn query_viewer_context(&self, call: &PluginCall) -> Result<Value, String> {
+        let plot = matches!(
+            call.binding.capability.id.as_str(),
+            PLOT_SEARCH | PLOT_PREVIEW
+        );
+        let contribution = if plot { "plots" } else { "viewer" };
         check(
             self.context_grants.get && call.scopes.contains("operation.read"),
             "Viewer context requires the selected original-operation read grant",
         )?;
         match call.binding.capability.id.as_str() {
-            SEARCH => {
+            PLOT_PREVIEW => self.query_plot_context(call).await,
+            SEARCH | PLOT_SEARCH => {
                 check(
                     self.context_grants.list,
                     "Viewer search requires the selected operation listing grant",
@@ -189,7 +211,8 @@ impl Owner {
                     check(
                         cursor.owner == self.instance
                             && cursor.window == request.window
-                            && cursor.text == request.text,
+                            && cursor.text == request.text
+                            && cursor.contribution == contribution,
                         "Viewer continuation belongs to another provider, window or search",
                     )?;
                 }
@@ -234,7 +257,8 @@ impl Owner {
                         window: request.window.clone(),
                         text: request.text.clone(),
                         before: Some(before),
-                        within: None
+                        within: None,
+                        contribution: contribution.into()
                     })
                 });
                 'records: for row in page.operations {
@@ -249,8 +273,12 @@ impl Owner {
                             json!({"operation_id":row.operation_id}),
                         )
                         .await?;
-                    let (sources, status) =
-                        outputs(&self.instance, &row.operation_id, &observed["record"])?;
+                    let (sources, status) = outputs_for(
+                        &self.instance,
+                        &row.operation_id,
+                        &observed["record"],
+                        if plot { plots::TYPES } else { &["text/html"] },
+                    )?;
                     check(
                         status == row.status,
                         "Original Viewer operation status changed",
@@ -260,7 +288,15 @@ impl Owner {
                         if after_sequence.is_some_and(|sequence| source.sequence <= sequence) {
                             continue;
                         }
-                        let item = source.item(&self.instance, &request.window, &status)?;
+                        let item = if plot {
+                            plots::item(
+                                &self.instance,
+                                &request.window,
+                                std::slice::from_ref(&source),
+                            )?
+                        } else {
+                            source.item(&self.instance, &request.window, &status)?
+                        };
                         if !format!("{} {}", item.title, item.description)
                             .to_lowercase()
                             .contains(&text)
@@ -278,7 +314,8 @@ impl Owner {
                                         .filter(|v| *v <= i64::MAX as u64)
                                         .ok_or("Viewer cursor exceeds the journal bound")?
                                 ),
-                                within: last.map(|sequence| (row.operation_id, sequence))
+                                within: last.map(|sequence| (row.operation_id, sequence)),
+                                contribution: contribution.into()
                             }));
                             break 'records;
                         }
@@ -286,7 +323,15 @@ impl Owner {
                         items.push(item);
                     }
                 }
-                let page = ContextPage { items, next, notices: vec!["Saved HTML from terminal R operations only. Interactive browser state is not captured. A journal page can have no matches and still have more results.".into()] };
+                let page = ContextPage {
+                    items,
+                    next,
+                    notices: vec![if plot {
+                        "Saved original plots only; PNG/JPEG image inclusion is explicit. A journal page can be empty and still have more results.".into()
+                    } else {
+                        "Saved HTML from terminal R operations only. Interactive browser state is not captured. A journal page can have no matches and still have more results.".into()
+                    }],
+                };
                 page.validate().map_err(|e| e.to_string())?;
                 Ok(json!(page))
             }

@@ -72,5 +72,29 @@ export async function checkComponentAgent({ComponentAgent,sdk}) {
     const f=fixture(),agent=await prepare(f);f.lose();await assert.rejects(agent.open());f.records[0].output.view.configuration.component_request.sources[0].reference.selector.session='other-session';
     await assert.rejects(agent.inspect(),/differs from the original/);assert.ok(agent.data.pending);assert.equal(agent.data.opened,null);
   });
+  await check('original image bytes are verified and decoded before any request or persistence',async()=>{
+    const originalDecoder=globalThis.createImageBitmap;
+    try {
+      for(const fault of [null,'digest','owner','size','decode','pixels']) {
+        const f=fixture(),baseQuery=f.client.query,bytes=new Uint8Array([1,2,3]);let closed=0,reads=0;
+        const reference={owner:{...editor,plugin:'org.rho.r',instance:'r-source'},resource:'original-image',media_type:'image/png',bytes:3,
+          digest:'sha256:'+Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex')};
+        const source={title:'Plot 1',reference:{provider:clone(reference.owner),window:'window',contribution:'plots',selector:{}},inclusion:{kind:'images'},preview:{id:'r.context.plots.preview',version:1}};
+        if(fault==='owner')reference.owner.instance='foreign';if(fault==='size')reference.bytes=2*1024*1024+1;
+        f.client.query=async(cap,args)=>{
+          if(cap.id==='r.context.plots.preview')return {status:'ready',completeness:'complete',data:{item:{reference:clone(source.reference)},text:'Original plot',truncated:false,resources:[clone(reference)]}};
+          if(cap.id==='resources.read'){reads++;return {data:{reference:clone(reference),offset:0,next:null,base64:Buffer.from(fault==='digest'?[4,5,6]:bytes).toString('base64')}};}
+          return baseQuery(cap,args);
+        };
+        globalThis.createImageBitmap=async()=>{if(fault==='decode')throw Error('Undecodable image');return {width:fault==='pixels'?20000:2,height:2000,close(){closed++;}};};
+        const sender=f.open();
+        if(fault){await assert.rejects(sender.prepare(source));assert.equal(f.state(),undefined);assert.equal(sender.images.length,0);}
+        else{await sender.prepare(source);assert.equal(sender.images.length,1);assert.deepEqual(new Uint8Array(await sender.images[0].arrayBuffer()),bytes);assert.equal(closed,1);assert.ok(!JSON.stringify(f.state()).includes('base64'));}
+        if(['owner','size'].includes(fault))assert.equal(reads,0);
+        if(fault==='pixels')assert.equal(closed,1);
+        assert.equal(f.calls.length,0);
+      }
+    }finally{globalThis.createImageBitmap=originalDecoder;}
+  });
   console.log(`Public component Agent sender: ${count} checks passed; exact capture, observed target, original view request and failure/reload recovery. No Host acceptance claimed.`);
 }

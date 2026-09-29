@@ -194,6 +194,7 @@ Sources:
 - `scripts/test-object-agent.mjs`
 - `scripts/test-objects-plugin.mjs`
 - `scripts/test-packages-plugin.mjs`
+- `scripts/test-plots-agent.mjs`
 - `scripts/test-plots-plugin.mjs`
 - `scripts/test-plugin-backend.mjs`
 - `scripts/test-plugin-protocol.mjs`
@@ -433,8 +434,10 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/packages/**`, `rust-toolchain.toml`, `scripts/build-packages-plugin.mjs`, `scripts/test-packages-plugin.mjs`, `sdk/**`.
 - `plugins.packages-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","packages-plugin.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/packages/**`, `rust-toolchain.toml`, `scripts/build-packages-plugin.mjs`, `sdk/**`, `ui/e2e/packages-plugin.spec.ts`.
-- `plugins.plots` (L2): `["node","scripts/test-plots-plugin.mjs"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/plots/**`, `rust-toolchain.toml`, `scripts/build-plots-plugin.mjs`, `scripts/test-plots-plugin.mjs`, `sdk/**`.
+- `plugins.plots` (L1): `["node","scripts/test-plots-plugin.mjs"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/sdk/component-input/**`, `plugins/plots/**`, `rust-toolchain.toml`, `scripts/build-plots-plugin.mjs`, `scripts/test-plots-plugin.mjs`, `sdk/**`.
+- `plugins.plots-agent-host` (L2): `["node","scripts/test-plots-agent.mjs"]`
+  Applies to: `plugins/agent/**`, `plugins/plots/**`, `plugins/r/backend/**`, `plugins/r/context-manifest.mjs`, `plugins/r/plugin.json`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-plots-plugin.mjs`, `scripts/r-plugin-artifact.mjs`, `scripts/test-plots-agent.mjs`.
 - `plugins.plots-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plots-plugin.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/plots/**`, `rust-toolchain.toml`, `scripts/build-plots-plugin.mjs`, `sdk/**`, `ui/e2e/plots-plugin.spec.ts`.
 - `plugins.preview-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-preview.spec.ts"]`
@@ -547,7 +550,7 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `scripts/test-plugin-ui.mjs`, `sdk/**`, `ui/src/**`.
 - `plugins.view-delegation` (L2): `["cargo","test","-p","rho-host","--test","plugin_view_delegation","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
-- `plugins.viewer` (L2): `["node","scripts/test-viewer-plugin.mjs"]`
+- `plugins.viewer` (L1): `["node","scripts/test-viewer-plugin.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/sdk/component-input/**`, `plugins/viewer/**`, `rust-toolchain.toml`, `scripts/build-viewer-plugin.mjs`, `scripts/fixtures/component-agent.mjs`, `scripts/test-viewer-plugin.mjs`, `sdk/**`.
 - `plugins.window-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-workspace.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/e2e/plugin-workspace.spec.ts`, `ui/src/**`.

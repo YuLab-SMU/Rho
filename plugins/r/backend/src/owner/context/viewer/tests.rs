@@ -168,8 +168,14 @@ async fn viewer_metadata_revalidates_original_record_after_reopen_without_r_or_r
     assert!(preview.resources.is_empty());
     assert!(preview.text.contains("failed"));
     assert!(preview.text.contains("not included"));
-    assert_eq!(preview.data["annotation_source"]["source_id"], format!("output:{}:{}", source.operation, source.sequence));
-    assert_eq!(preview.data["annotation_source"]["source_version"], source.reference.digest.as_str());
+    assert_eq!(
+        preview.data["annotation_source"]["source_id"],
+        format!("output:{}:{}", source.operation, source.sequence)
+    );
+    assert_eq!(
+        preview.data["annotation_source"]["source_version"],
+        source.reference.digest.as_str()
+    );
 
     assert!(owner.runtime.lock().unwrap().is_none());
     assert!(owner.launch_attempt.lock().unwrap().is_none());
@@ -198,7 +204,8 @@ async fn viewer_refuses_missing_authority_and_foreign_cursors_before_host_reads(
         window: WindowId::new("other").unwrap(),
         text: "".into(),
         before: Some(10),
-        within: None
+        within: None,
+        contribution: "viewer".into(),
     });
     assert!(owner.query(&call).await.is_err());
     assert!(host.try_recv().is_err());
@@ -293,4 +300,145 @@ async fn viewer_text_uses_the_original_scoped_resource_channel_and_checks_full_d
         }
         assert!(owner.runtime.lock().unwrap().is_none());
     }
+}
+
+fn plot_record(owner: &InstanceRef, mime: &str, count: u64) -> Value {
+    let mut value = record(owner, "original", count);
+    for output in value["output"]["outputs"].as_array_mut().unwrap() {
+        output["native"]["mime_type"] = json!(mime);
+        output["reference"]["media_type"] = json!(mime);
+    }
+    value
+}
+#[tokio::test]
+async fn plots_preview_pair_checks_originals_and_never_starts_r() {
+    for kind in ["images", "metadata"] {
+        let (_directory, owner, mut call, mut host) = fixture();
+        let original = plot_record(&owner.instance, "image/png", 2);
+        let sources = outputs_for(
+            &owner.instance,
+            &operation("original"),
+            &original,
+            plots::TYPES,
+        )
+        .unwrap()
+        .0;
+        let reference = plots::item(&owner.instance, &WindowId::new("window").unwrap(), &sources)
+            .unwrap()
+            .reference;
+        call.binding.capability = environment_binding::key(PLOT_PREVIEW, 1);
+        call.arguments = json!({"reference":reference,"inclusion":{"kind":kind},"max_bytes":16384});
+        let (result, ()) = tokio::join!(owner.query(&call), async {
+            for _ in 0..2 {
+                let read = host.recv().await.unwrap();
+                assert_eq!(read.capability.id.as_str(), "operation.get");
+                read.reply
+                    .send(Ok(reply(json!({"record":original}))))
+                    .unwrap();
+            }
+        });
+        let preview: ContextPreview = decode(result.unwrap()).unwrap();
+        assert_eq!(
+            preview.resources.len(),
+            if kind == "images" { 2 } else { 0 }
+        );
+        assert_eq!(preview.item.reference, reference);
+        assert!(preview.text.contains("Producing run: original"));
+        assert!(preview.text.contains("failed"));
+        assert!(!preview.truncated);
+        assert!(owner.runtime.lock().unwrap().is_none());
+        assert!(owner.launch_attempt.lock().unwrap().is_none());
+        assert!(host.try_recv().is_err());
+    }
+}
+#[tokio::test]
+async fn plots_reject_changed_source_duplicate_missing_resource_grant_and_svg_images() {
+    for fault in [
+        "session",
+        "digest",
+        "owner",
+        "duplicate",
+        "scope",
+        "grant",
+        "svg",
+    ] {
+        let (_directory, mut owner, mut call, mut host) = fixture();
+        let original = plot_record(
+            &owner.instance,
+            if fault == "svg" {
+                "image/svg+xml"
+            } else {
+                "image/png"
+            },
+            1,
+        );
+        let mut sources = outputs_for(
+            &owner.instance,
+            &operation("original"),
+            &original,
+            plots::TYPES,
+        )
+        .unwrap()
+        .0;
+        match fault {
+            "session" => sources[0].session = "replacement".into(),
+            "digest" => {
+                sources[0].reference.digest =
+                    decode(json!(format!("sha256:{}", "d".repeat(64)))).unwrap()
+            }
+            "owner" => sources[0].reference.owner.instance = decode(json!("foreign")).unwrap(),
+            "duplicate" => sources.push(sources[0].clone()),
+            "scope" => {
+                call.scopes.remove("resources.read");
+            }
+            "grant" => owner.context_grants.resources = false,
+            _ => {}
+        }
+        let reference = plots::item(&owner.instance, &WindowId::new("window").unwrap(), &sources)
+            .unwrap()
+            .reference;
+        call.binding.capability = environment_binding::key(PLOT_PREVIEW, 1);
+        call.arguments =
+            json!({"reference":reference,"inclusion":{"kind":"images"},"max_bytes":16384});
+        let (result, ()) = tokio::join!(owner.query(&call), async {
+            let read = host.recv().await.unwrap();
+            read.reply
+                .send(Ok(reply(json!({"record":original}))))
+                .unwrap();
+        });
+        assert!(result.is_err(), "{fault}");
+        assert!(owner.runtime.lock().unwrap().is_none());
+        assert!(host.try_recv().is_err());
+    }
+}
+#[tokio::test]
+async fn plots_search_pages_originals_and_refuses_viewer_cursor() {
+    let (_directory, owner, mut call, mut host) = fixture();
+    call.binding.capability = environment_binding::key(PLOT_SEARCH, 1);
+    call.arguments["limit"] = json!(1);
+    let original = plot_record(&owner.instance, "image/png", 2);
+    let (result, ()) = tokio::join!(owner.query(&call), async {
+        host.recv()
+            .await
+            .unwrap()
+            .reply
+            .send(Ok(reply(
+                json!({"operations":[row("original",10)],"next_cursor":null}),
+            )))
+            .unwrap();
+        host.recv()
+            .await
+            .unwrap()
+            .reply
+            .send(Ok(reply(json!({"record":original}))))
+            .unwrap();
+    });
+    let page: ContextPage = decode(result.unwrap()).unwrap();
+    assert_eq!(page.items.len(), 1);
+    assert_eq!(page.items[0].reference.contribution.as_str(), "plots");
+    call.arguments["after"] = page.next.unwrap();
+    assert_eq!(call.arguments["after"]["contribution"], "plots");
+    call.arguments["after"]["contribution"] = json!("viewer");
+    assert!(owner.query(&call).await.is_err());
+    assert!(host.try_recv().is_err());
 }

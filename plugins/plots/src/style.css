@@ -362,3 +362,5 @@ html,body,#root{height:100%;width:100%;overflow:hidden}
  .plot-toolbar .icon-button{width:28px;min-width:28px}
  .panel-footer{padding-inline:6px}.panel-footer span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 }
+
+.plot-agent-selection{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 8px;border-bottom:1px solid #d8dfe7;font-size:12px}.plot-agent-selection span{display:inline-flex;align-items:center;gap:4px}.plot-agent-selection button{font:inherit;white-space:normal}
