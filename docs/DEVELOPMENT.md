@@ -220,6 +220,15 @@ view or Send. Supply retained `RHO_EDITOR_PLUGIN_PACKAGE`, `RHO_AGENT_PLUGIN_PAC
 and `RHO_FILES_PLUGIN_PACKAGE` paths; the new case refuses missing package inputs.
 Existing Agent views are not silently taken over, and other component senders still
 need their own integration.
+`component-agent.spec.ts` drives the Help and Viewer sender buttons through a
+real disposable Host/R session and the ordinary Agent receiver. Supply retained
+`RHO_R_PLUGIN_PACKAGE`, `RHO_AGENT_PLUGIN_PACKAGE`, `RHO_HELP_PLUGIN_PACKAGE` and
+`RHO_VIEWER_PLUGIN_PACKAGE`, plus existing `RHO_ARK` and `RHO_R_HOME`; it compiles
+nothing. Help sends the exact observed installed topic; Viewer retains the
+original HTML even when a newer output arrives. The case checks draft insertion,
+reload and a lost open reply without Agent Send. Shared sender recovery checks run
+with `node scripts/test-viewer-plugin.mjs`; Help source/serial-state checks run with
+`node scripts/test-help-plugin.mjs`. These do not replace other component acceptance.
 
 For a Rho tool-selection change, use the smaller real-R browser case:
 `npm run test:browser --prefix ui -- agent-rho-tools.spec.ts`, with retained

@@ -1,3 +1,4 @@
+import type { AgentState } from '../public/agent-input/input.js';
 import type { InstanceRef, JsonValue, ProviderBinding } from "../public/plugin-protocol/index.js";
 import type { PluginViewClient } from "../public/plugin-ui/index.js";
 import type { RInspection, RInspectionState } from "../public/r-protocol/index.js";
@@ -21,6 +22,7 @@ export class HelpConnection extends Model<ConnectionSnapshot> {
   private paused = false;
   private deferred = false;
   private saved: string;
+  private agentState: AgentState | undefined;
   private refreshing: Promise<void> | null = null;
   private saveQueue: Promise<void> = Promise.resolve();
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
@@ -30,7 +32,8 @@ export class HelpConnection extends Model<ConnectionSnapshot> {
     if (!source || ![source.instance, source.plugin, source.revision, source.artifact].every(value => typeof value === "string" && value.length > 0))
       throw new Error("Select an exact R plugin instance.");
     this.source = Object.freeze(structuredClone(source));
-    const saved = client.view.state as { choices?: unknown } | null;
+    const saved = client.view.state as { choices?: unknown; agent?: AgentState } | null;
+    this.agentState = saved?.agent;
     this.help = new Help({ session: () => this.help.copy.nativeSession,
       query: async (id, args) => {
         try {
@@ -43,7 +46,13 @@ export class HelpConnection extends Model<ConnectionSnapshot> {
     this.saved = JSON.stringify(this.state());
   }
   protected readSnapshot(): ConnectionSnapshot { return { notice: this.notice, saveError: this.saveError, connected: this.connected, ready: this.ready }; }
-  private state() { return { choices: { ...this.help.serialize() } }; }
+  private state() { return { choices: { ...this.help.serialize() }, ...(this.agentState ? {agent:this.agentState} : {}) }; }
+  get savedAgent() { return structuredClone(this.agentState); }
+  saveAgent(state:AgentState):Promise<void> {
+    const captured=structuredClone(state);
+    const task=this.saveQueue.then(async()=>{this.agentState=captured;await this.persist();});
+    this.saveQueue=task.catch(()=>undefined);return task;
+  }
   private async query<T>(id: string, arguments_: unknown): Promise<T> {
     const binding: ProviderBinding = { capability: { id, version: 1 }, provider: this.source,
       project: this.client.view.project, target: this.help.copy.nativeSession };
@@ -69,7 +78,7 @@ export class HelpConnection extends Model<ConnectionSnapshot> {
     if (this.stopped) throw new Error("The Help view connection is closed.");
     const state = this.state(), encoded = JSON.stringify(state);
     if (encoded === this.saved) return;
-    try { await this.client.setState(state as JsonValue); this.saved = encoded; this.saveError = ""; }
+    try { await this.client.setState(state as unknown as JsonValue); this.saved = encoded; this.saveError = ""; }
     catch (error) { this.saveError = `View state was not saved: ${message(error)}`; throw error; }
     finally { if (!this.stopped) this.publish(); }
   }

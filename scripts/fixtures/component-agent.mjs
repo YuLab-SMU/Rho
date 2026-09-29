@@ -1,22 +1,21 @@
 import assert from 'node:assert/strict';
-export async function checkEditorAgent({EditorAgent,sdk}) {
+export async function checkComponentAgent({ComponentAgent,sdk}) {
   const clone=structuredClone,digest=letter=>'sha256:'+letter.repeat(64);
   const editor={instance:'editor',plugin:'org.rho.editor',revision:digest('a'),artifact:digest('b')};
   const target={instance:'agent',plugin:'org.rho.agent',revision:digest('c'),artifact:digest('d')};
-  const draft={draft:'draft-one',project:'project',principal:'principal',window:'window',source:{revision:editor.revision,contribution:'editor'},version:4,discarded:false,
-    content:{digest:digest('e'),bytes:12,chunks:[]},metadata:{name:'分析 Ω.R',selection:{anchor:0,head:3}}};
   function fixture(){
     let saved,early=false,failSave=false,lost=false,fault=null,closed=false;const records=[],calls=[],queries=[];
     const observation={instance:{identity:target,alias:'Agent',project:'project',principal:'principal',state:'active',purpose:'runtime'},observed_in_this_host:true};
     const client={view:{view:'editor-view',instance:editor,window:'window',project:'project',principal:'principal'},
       async query(cap,args){queries.push(clone({cap,args}));let data;
-        if(cap.id==='editor.context.preview'){
+        if(cap.id==='r.context.help.preview'){
           if(fault==='source')throw Error('Source changed');
           data={item:{reference:clone(args.arguments.reference)},text:'Selected 中文',truncated:fault==='partial',resources:[]};
         }else if(cap.id==='plugins.instances')data={instances:[observation,{...observation,instance:{...observation.instance,identity:{...target,instance:'foreign'},principal:'other'}}],next:null};
         else if(cap.id==='plugins.instance')data=fault==='inactive'?{...observation,instance:{...observation.instance,state:'suspended'}}:observation;
         else if(cap.id==='plugins.inspect')data={summary:{revision:target.revision},manifest:{id:target.plugin,views:[{id:'agent',configuration_schema:{properties:fault==='old'?{}:{component_request:{}}}}]}};
         else if(cap.id==='windows.layout')data={window:'window',project:'project',principal:fault==='layout'?'other':'principal',version:7,layout:{kind:'tabs',id:'group'}};
+        else if(cap.id==='operation.get')data={record:records.find(record=>record.operation.operation_id===args.operation_id)};
         else if(cap.id==='operation.list_recent')data={operations:records.filter(record=>record.operation.client_request_id===args.client_request_id).map(record=>({operation_id:record.operation.operation_id}))};
         else throw Error('Unexpected query '+cap.id);return{status:'ready',completeness:'complete',data:clone(data)};
       },
@@ -27,16 +26,16 @@ export async function checkEditorAgent({EditorAgent,sdk}) {
           output:{view:{...clone(args.view),view:'opened-view',project:'project',principal:'principal',state_version:0,purpose:'runtime',closed:false}}};records.push(record);}
         if(lost){lost=false;throw Error('Lost original reply');}if(early){early=false;return{...clone(record),status:'accepted',outcome:null,output:null};}return clone(record);
       },async operation(id){return clone(records.find(record=>record.operation.operation_id===id));}};
-    const open=()=>new EditorAgent(client,saved,async state=>{if(failSave)throw Error('Unconfirmed view save');saved=clone(state);},()=>{if(closed)throw Error('Closing');},()=>{});
+    const open=()=>new ComponentAgent(client,saved,async state=>{if(failSave)throw Error('Unconfirmed view save');saved=clone(state);},()=>{if(closed)throw Error('Closing');},()=>{});
     return{client,records,calls,queries,open,state:()=>clone(saved),lose:()=>lost=true,acceptEarly:()=>early=true,saveFailure:()=>failSave=true,fault:value=>fault=value,close:()=>closed=true};
   }
   let count=0;const check=async(name,work)=>{try{await work();count++;}catch(error){throw Error(name,{cause:error});}};
-  async function prepare(f){const agent=f.open();await agent.prepare(draft);await agent.select(target);return agent;}
+  async function prepare(f){const agent=f.open();await agent.prepare({title:'Help demo::topic',reference:{provider:{...editor,plugin:'org.rho.r',instance:'r-source'},window:'window',contribution:'help',selector:{session:'native',topic:'topic'}},inclusion:{kind:'text'},preview:{id:'r.context.help.preview',version:1}});await agent.select(target);return agent;}
   await check('capture preserves exact source and selection; only public view opening mutates',async()=>{
     const f=fixture(),agent=await prepare(f);assert.equal(f.calls.length,0);assert.equal(agent.candidates.length,1);assert.equal(agent.preview,'Selected 中文');
     await agent.open();assert.equal(f.calls.length,1);const config=f.calls[0].args.view.configuration;
-    assert.equal(config.tools,undefined);assert.equal(config.component_request.sources[0].inclusion,'{"kind":"selection"}');
-    assert.deepEqual(config.component_request.sources[0].reference.selector,{draft:draft.draft,version:4,digest:draft.content.digest});
+    assert.equal(config.tools,undefined);assert.equal(config.component_request.sources[0].inclusion,'{"kind":"text"}');
+    assert.deepEqual(config.component_request.sources[0].reference.selector,{session:'native',topic:'topic'});
     assert.equal(f.calls[0].cap.id,'windows.open_view');assert.equal(agent.data.opened.view,'opened-view');
     await assert.rejects(agent.open(),/prepare a new input/);
     const reopened=f.open();assert.equal(reopened.data.opened.view,'opened-view');assert.equal(f.calls.length,1);
@@ -61,12 +60,17 @@ export async function checkEditorAgent({EditorAgent,sdk}) {
   await check('failed request persistence and closing never dispatch',async()=>{
     for(const close of [false,true]){const f=fixture(),agent=await prepare(f);if(close)f.close();else f.saveFailure();await assert.rejects(agent.open());assert.equal(f.calls.length,0);}
   });
-  await check('another Editor cannot recover or retry the captured view request',async()=>{
-    const f=fixture(),agent=await prepare(f);f.lose();await assert.rejects(agent.open());f.client.view.instance={...editor,instance:'other'};assert.throws(()=>f.open(),/another Editor/);
+  await check('another source view cannot recover or retry the captured view request',async()=>{
+    const f=fixture(),agent=await prepare(f);f.lose();await assert.rejects(agent.open());f.client.view.window='other-window';assert.throws(()=>f.open(),/another source view/);
+  });
+  await check('reopened source view can inspect but cannot replay the old view request',async()=>{
+    const f=fixture(),agent=await prepare(f);f.lose();await assert.rejects(agent.open());f.client.view.view='reopened';
+    const reopened=f.open();await assert.rejects(reopened.retry(),/original source view/);await reopened.inspect();
+    assert.equal(reopened.data.opened.view,'opened-view');assert.equal(f.calls.length,1);
   });
   await check('a forged successful view receipt cannot acknowledge the original input',async()=>{
-    const f=fixture(),agent=await prepare(f);f.lose();await assert.rejects(agent.open());f.records[0].output.view.configuration.component_request.sources[0].reference.selector.version=5;
+    const f=fixture(),agent=await prepare(f);f.lose();await assert.rejects(agent.open());f.records[0].output.view.configuration.component_request.sources[0].reference.selector.session='other-session';
     await assert.rejects(agent.inspect(),/differs from the original/);assert.ok(agent.data.pending);assert.equal(agent.data.opened,null);
   });
-  console.log(`Editor Agent sender: ${count} checks passed; exact capture, observed target, original view request and failure/reload recovery. No Host acceptance claimed.`);
+  console.log(`Public component Agent sender: ${count} checks passed; exact capture, observed target, original view request and failure/reload recovery. No Host acceptance claimed.`);
 }

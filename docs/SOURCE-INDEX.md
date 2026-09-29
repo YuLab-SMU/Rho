@@ -382,9 +382,9 @@ Checks:
 - `plugins.files-ui` (L1): `["node","scripts/test-files-ui.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/files/**`, `rust-toolchain.toml`, `scripts/build-files-plugin.mjs`, `scripts/test-files-ui.mjs`, `sdk/**`.
 - `plugins.help` (L2): `["node","scripts/test-help-plugin.mjs"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/help/**`, `rust-toolchain.toml`, `scripts/build-help-plugin.mjs`, `scripts/test-help-plugin.mjs`, `sdk/**`.
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/sdk/component-input/**`, `plugins/help/**`, `rust-toolchain.toml`, `scripts/build-help-plugin.mjs`, `scripts/test-help-plugin.mjs`, `sdk/**`.
 - `plugins.help-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","help-plugin.spec.ts"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/help/**`, `rust-toolchain.toml`, `scripts/build-help-plugin.mjs`, `sdk/**`, `ui/e2e/help-plugin.spec.ts`.
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/sdk/component-input/**`, `plugins/help/**`, `rust-toolchain.toml`, `scripts/build-help-plugin.mjs`, `sdk/**`, `ui/e2e/help-plugin.spec.ts`.
 - `plugins.manager-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","manager-plugin.spec.ts","manager-archive.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/manager/**`, `rust-toolchain.toml`, `scripts/build-manager-plugin.mjs`, `sdk/**`, `ui/e2e/manager-archive.spec.ts`, `ui/e2e/manager-plugin.spec.ts`.
 - `plugins.manager-model` (L1): `["node","scripts/test-manager-plugin.mjs"]`
@@ -512,7 +512,7 @@ Checks:
 - `plugins.view-delegation` (L2): `["cargo","test","-p","rho-host","--test","plugin_view_delegation","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
 - `plugins.viewer` (L2): `["node","scripts/test-viewer-plugin.mjs"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/viewer/**`, `rust-toolchain.toml`, `scripts/build-viewer-plugin.mjs`, `scripts/test-viewer-plugin.mjs`, `sdk/**`.
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/sdk/component-input/**`, `plugins/viewer/**`, `rust-toolchain.toml`, `scripts/build-viewer-plugin.mjs`, `scripts/fixtures/component-agent.mjs`, `scripts/test-viewer-plugin.mjs`, `sdk/**`.
 - `plugins.window-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-workspace.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/e2e/plugin-workspace.spec.ts`, `ui/src/**`.
 - `plugins.workspace-cli` (L1): `["cargo","test","-p","rho-cli","--bin","rho","plugin_workspace","--locked"]`

@@ -1,17 +1,26 @@
+import {componentInputDialog} from '../public/agent-input/dialog.js';
+import type {AgentState} from '../public/agent-input/input.js';
+import {viewerContext} from './agent-source.js';
 import { connectPluginView, readResource } from "../public/plugin-ui/index.js";
 import type { InstanceRef } from "../public/plugin-protocol/index.js";
 import { key, matches, mergeHistory, readHistory, readOperation, type SavedOutput, type Selection } from "./outputs.js";
 
 const client = await connectPluginView();
 const source = (client.view.configuration as { source: InstanceRef }).source;
-const initial = client.view.state as { selected?: Selection | null; history?: boolean; follow?: boolean };
-let state = { selected: initial.selected ?? null, history: initial.history !== false, follow: initial.follow !== false };
+const initial = client.view.state as { selected?: Selection | null; history?: boolean; follow?: boolean; agent?:AgentState };
+let state: {selected:Selection|null;history:boolean;follow:boolean;agent?:AgentState} = {...(initial.agent?{agent:initial.agent}:{}), selected: initial.selected ?? null, history: initial.history !== false, follow: initial.follow !== false };
 const find = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const history = find("history"), message = find("message"), surface = find("surface"), sourceDetails = find("source-details");
 const refresh = find<HTMLButtonElement>("refresh"), earlier = find<HTMLButtonElement>("earlier"), follow = find<HTMLButtonElement>("follow");
 let outputs: SavedOutput[] = [], current: SavedOutput | null = null, cursor: number | null = null;
 let initialized = false, fetching = false, stopped = false, generation = 0, controller: AbortController | null = null;
-let closing = false;
+let closing = false, stateQueue:Promise<unknown>=Promise.resolve();
+function persistState(){const next=stateQueue.then(async()=>{await client.setState(structuredClone(state) as never);});stateQueue=next.catch(()=>undefined);return next;}
+const sender=componentInputDialog({client,saved:initial.agent,persist:async value=>{state.agent=structuredClone(value);await persistState();},
+  guard:()=>{if(stopped||closing)throw Error('Viewer is closing. The original request is retained.');},
+  modes:[{value:'text',label:'Saved HTML source'},{value:'metadata',label:'Output details'}],
+  capture:kind=>{if(!current)throw Error('Select a saved output first.');return viewerContext(source,client.view.window,current,kind);}});
+find('ask-agent').onclick=()=>sender.open();
 function notice(text: string, error = false) { message.textContent = text; message.className = error ? "notice error" : "notice"; message.hidden = !text; }
 function releaseSurface() {
   controller?.abort(); controller = null; surface.replaceChildren();
@@ -30,12 +39,13 @@ function renderHistory() {
   }
 }
 async function saveState() {
-  try { await client.setState(structuredClone(state)); find("state-error").hidden = true; }
+  try { await persistState(); find("state-error").hidden = true; }
   catch (error) { if (!stopped) { const warning = find("state-error"); warning.textContent = `View choice was not saved: ${String(error instanceof Error ? error.message : error)}`; warning.hidden = false; } }
 }
 async function select(output: SavedOutput, save = false, force = false) {
   if (!force && current && key(current) === key(output)) { if (save) { renderHistory(); await saveState(); } return; }
   const selectedGeneration = ++generation; releaseSurface(); current = output;
+  find<HTMLButtonElement>("ask-agent").disabled=false;
   state.selected = { operation_id: output.operation, resource_id: output.reference.resource };
   find("identity").textContent = `Output ${output.sequence} · Run ${output.operation.slice(0, 8)}`;
   find("status").textContent = `Saved HTML · ${output.status === "succeeded" ? "Completed run" : `${output.status} run`}`;
@@ -87,11 +97,11 @@ follow.onclick = () => { state.follow = !state.follow; renderHistory(); if (stat
 refresh.onclick = () => { if (current) void select(current, false, true); void update(); };
 renderHistory();
 const close = await client.installCloseHandler({
-  async flush() { closing = true; await client.setState(structuredClone(state)); },
+  async flush() { closing = true;if(sender.busy)throw Error('Wait for the current Agent request before closing.');await persistState(); },
   resume() { closing = false; void update(); },
 });
 close.subscribe(() => { const error = close.getSnapshot().error; if (error) notice(error, true); });
 const timer = setInterval(() => { if (!document.hidden) void update(); }, 3000);
-window.addEventListener("pagehide", () => { stopped = true; generation++; clearInterval(timer); releaseSurface(); client.dispose(); }, { once: true });
+window.addEventListener("pagehide", () => { stopped = true; sender.dispose();generation++; clearInterval(timer); releaseSurface(); client.dispose(); }, { once: true });
 
 await update();

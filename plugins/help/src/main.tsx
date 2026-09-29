@@ -1,3 +1,5 @@
+import { componentInputDialog } from '../public/agent-input/dialog.js';
+import { helpContext } from './agent-source.js';
 import "@fontsource/inter/latin-400.css";
 import "@fontsource/inter/latin-500.css";
 import "@fontsource/inter/latin-600.css";
@@ -22,13 +24,18 @@ try {
     window.addEventListener('pagehide', () => { client.dispose(); root.unmount(); }, { once: true });
   } else {
     const connection = new HelpConnection(client, configuration.source, configuration.copy, configuration.topic);
-    const closing = await client.installCloseHandler({ async flush() { await connection.pause(); await connection.flush(); }, resume() { connection.resume(); } });
+    let closingSource=false;
+    const sender=componentInputDialog({client,saved:connection.savedAgent,persist:state=>connection.saveAgent(state),
+      guard:()=>{if(closingSource)throw Error('Help is closing. The original request is retained.');},
+      modes:[{value:'text',label:'Whole topic'},{value:'excerpt',label:'Opening excerpt (first 12 lines)'}],
+      capture:kind=>helpContext(connection.source,client.view.window,connection.help.getSnapshot(),kind)});
+    const closing = await client.installCloseHandler({ async flush() { closingSource=true;if(sender.busy)throw Error('Wait for the current Agent request before closing.');await connection.pause(); await connection.flush(); }, resume() { closingSource=false;connection.resume(); } });
     const ignore = (promise: Promise<unknown>) => { void promise.catch(() => undefined); };
     function App() {
       const state = useSyncExternalStore(connection.subscribe, connection.getSnapshot);
       const close = useSyncExternalStore(closing.subscribe, closing.getSnapshot);
       return <main className="help-root">
-        <HelpView help={connection.help} copyText={text => client.copyText(text)} openExternal={url => client.openExternal(url)} />
+        <HelpView askAgent={()=>sender.open()} help={connection.help} copyText={text => client.copyText(text)} openExternal={url => client.openExternal(url)} />
         {(close.error || state.notice || state.saveError) && <aside className="help-status" aria-label="Help status">
           {close.error && <p role="alert">{close.error}</p>}{state.notice && <p role="status">{state.notice}</p>}
           {state.saveError && <p role="alert">{state.saveError}<button onClick={() => ignore(connection.flush())}>Retry Save</button></p>}
@@ -37,6 +44,6 @@ try {
     }
     root.render(<App />); ignore(connection.refresh());
     const polling = setInterval(() => ignore(connection.refresh()), 1500);
-    window.addEventListener("pagehide", () => { clearInterval(polling); connection.stop(); client.dispose(); root.unmount(); }, { once: true });
+    window.addEventListener("pagehide", () => { clearInterval(polling); closingSource=true;sender.dispose();connection.stop(); client.dispose(); root.unmount(); }, { once: true });
   }
 } catch (error) { root.render(<div className="empty" role="alert">{error instanceof Error ? error.message : String(error)}</div>); }

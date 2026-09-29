@@ -315,3 +315,25 @@ read that capture without contacting the provider. The common picker edits each
 native/Rho task through its own draft owner; a delayed Send cannot remove newer
 reference selections. Sent context inspects the original run. Native framed and
 store acceptance for this new composition remains pending.
+
+## Component input sender SDK
+
+`sdk/component-input/` is a public source helper for ordinary plugin views.
+Package it as `public/agent-input/` alongside `public/plugin-ui/` and
+`public/plugin-protocol/`; it has no private core imports or runtime dependency on
+an installed Agent. Help and Viewer demonstrate its assembly and use.
+
+The source plugin supplies an exact owner `ContextReference`, explicit inclusion,
+preview capability and title. `ComponentAgent` previews/rechecks that source,
+selects an observed active Agent instance, and retains the exact original
+`windows.open_view` request before dispatch. `componentInputDialog` supplies the
+small optional chooser UI. Neither starts an instance, creates a task nor sends.
+A reopened source can inspect the original view result, but only its original
+view identity may retry. An accepted opening is observed for a bounded interval;
+if it has not settled, its original identity remains available for inspection. Persist `AgentState` through the source's existing serial
+view-state writer so background reading choices cannot erase the request.
+
+Declare public instance inspection, window layout/opening, original-operation
+reads, and the source owner's preview contract with its actual required scopes.
+Window opening follows the same target-view grant containment as Studio. The
+caller still needs each individual capability to execute any scientific operation.

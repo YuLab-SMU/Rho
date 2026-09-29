@@ -1,8 +1,9 @@
-/** Editor-owned capture and ordinary Agent view launch. No task or model calls. */
-import type { ContextReference, ContextPreview, DocumentDraft, InstanceRef, PluginInspection, PluginInstanceObservation, PluginInstanceObservations, PluginWindowLayout, PluginViewRecord, OpenedPluginWindowView } from '../public/plugin-protocol/index.js';
-import { ViewRequestError } from '../public/plugin-ui/index.js';
+/** Public component-input sender. Source owners supply exact references; only view opening mutates. */
+import type { ContextReference, ContextPreview, InstanceRef, PluginInspection, PluginInstanceObservation, PluginInstanceObservations, PluginWindowLayout, PluginViewRecord, OpenedPluginWindowView } from '../plugin-protocol/index.js';
+import { ViewRequestError } from '../plugin-ui/index.js';
 import { type Client, type Intent, type RecordReply, json, same, verifyOriginal, inspectOriginal } from './operations.js';
-export interface AgentInput { request: string; reference: ContextReference; title: string; kind: 'document' | 'selection'; instance: InstanceRef | null; }
+export interface ComponentSource { reference: ContextReference; title: string; inclusion: unknown; preview: {id:string;version:number}; }
+export interface AgentInput extends ComponentSource { request: string; source_view: string; instance: InstanceRef | null; }
 export interface AgentState { input: AgentInput | null; pending: Intent | null; opened: PluginViewRecord | null; }
 const empty = (): AgentState => ({input:null,pending:null,opened:null});
 async function read<T>(client: Client, id: string, args: unknown): Promise<T> {
@@ -10,7 +11,7 @@ async function read<T>(client: Client, id: string, args: unknown): Promise<T> {
   if(reply.status!=='ready'||reply.completeness&&reply.completeness!=='complete'||reply.data==null)throw Error(`${id} is not fully available.`);
   return reply.data;
 }
-export class EditorAgent {
+export class ComponentAgent {
   data: AgentState;
   candidates: PluginInstanceObservation[]=[];
   next: string|null=null;
@@ -21,9 +22,8 @@ export class EditorAgent {
   }
   private validate() {
     const {input,pending,opened}=this.data,args=pending?.arguments as any;
-    if(input&&(!input.request||!['document','selection'].includes(input.kind)||input.reference.window!==this.client.view.window||
-      !same(input.reference.provider,this.client.view.instance)||input.reference.contribution!=='documents'))throw Error('The retained Agent input belongs to another Editor or window.');
-    if(pending&&(!input||pending.capability.id!=='windows.open_view'||pending.capability.version!==1||
+    if(input&&(!input.request||typeof input.source_view!=='string'||!input.source_view||input.reference.window!==this.client.view.window))throw Error('The retained Agent input belongs to another source view or window.');
+    if(pending&&(!input||pending.view!==input.source_view||pending.capability.id!=='windows.open_view'||pending.capability.version!==1||
       !same(args?.view?.instance,input.instance)||args.view.window!==this.client.view.window||args.view.contribution!=='agent'||
       !same(args.view.configuration,this.configuration(input))))throw Error('The retained Agent view request differs from its captured source.');
     if(opened)this.verifyView(opened);
@@ -49,26 +49,21 @@ export class EditorAgent {
     this.data.input.instance=structuredClone(instance);await this.save();
   });}
   private async checkSource(input:AgentInput){
-    const capability={id:'editor.context.preview',version:1};
-    const value=await read<ContextPreview>(this.client,capability.id,{binding:{provider:this.client.view.instance,project:this.client.view.project,capability,target:null},
-      arguments:{reference:input.reference,inclusion:{kind:input.kind},max_bytes:16384},preconditions:null});this.guard();
+    const capability=input.preview;
+    const value=await read<ContextPreview>(this.client,capability.id,{binding:{provider:input.reference.provider,project:this.client.view.project,capability,target:null},
+      arguments:{reference:input.reference,inclusion:input.inclusion,max_bytes:16384},preconditions:null});this.guard();
     if(!same(value.item.reference,input.reference)||value.truncated||value.resources.length||new TextEncoder().encode(value.text).length>16384)
-      throw Error('This source is changed, partial or unavailable. Select a smaller text range and prepare the current input.');
+      throw Error('This source is changed, partial or unavailable. Choose a smaller inclusion and prepare the current input.');
     this.preview=value.text;
   }
-  prepare(draft:DocumentDraft){return this.act(async()=>{
+  prepare(source:ComponentSource){return this.act(async()=>{
     if(this.data.pending)throw Error('Inspect the original Agent view request before preparing another input.');
-    if(draft.window!==this.client.view.window||draft.project!==this.client.view.project||draft.principal!==this.client.view.principal||draft.discarded||
-      draft.source.revision!==this.client.view.instance.revision||draft.source.contribution!=='editor')throw Error('Synchronize this Editor before capturing its input.');
-    const metadata=draft.metadata as {name?:string;selection?:{anchor:number;head:number}};
-    const selection=metadata?.selection;
-    const kind=selection&&selection.anchor!==selection.head?'selection':'document';
-    const input:AgentInput={request:crypto.randomUUID(),reference:{provider:structuredClone(this.client.view.instance),contribution:'documents',window:this.client.view.window,
-      selector:{draft:draft.draft,version:draft.version,digest:draft.content.digest}},title:`${kind==='selection'?'Selection from':'Document'} ${metadata?.name??'Untitled.R'}`.slice(0,160),kind,instance:null};
+    if(source.reference.window!==this.client.view.window||!source.title||source.title.length>160)throw Error('Select an exact source from this window.');
+    const input:AgentInput={...structuredClone(source),request:crypto.randomUUID(),source_view:this.client.view.view,instance:null};
     await this.checkSource(input);this.data={input,pending:null,opened:null};await this.save();await this.listPage(false);
   });}
   private configuration(input:AgentInput){return {component_request:{request_id:input.request,title:`Ask about ${input.title}`.slice(0,160),
-    sources:[{source:'plugin',label:input.title,reference:input.reference,inclusion:JSON.stringify({kind:input.kind})}]}};}
+    sources:[{source:'plugin',label:input.title,reference:input.reference,inclusion:JSON.stringify(input.inclusion)}]}};}
   open(){return this.act(async()=>{
     if(this.data.pending||this.data.opened)throw Error('Inspect the original request or prepare a new input before opening another view.');
     const input=structuredClone(this.data.input);if(!input?.instance)throw Error('Choose an active Agent instance.');
@@ -87,7 +82,7 @@ export class EditorAgent {
     await this.dispatch(true);
   });}
   private async dispatch(first=false){this.validate();const pending=this.data.pending;
-    if(!pending||pending.view!==this.client.view.view)throw Error('Only the original Editor view can retry this request.');
+    if(!pending||pending.view!==this.client.view.view)throw Error('Only the original source view can retry this request.');
     await this.save();let result:unknown;
     try{result=await this.client.invoke(pending.capability,pending.arguments,{requestId:pending.request});}
     catch(error){

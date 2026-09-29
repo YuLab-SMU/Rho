@@ -51,3 +51,12 @@ it("failed state writes remain unsaved and can be retried without reading scienc
   await expect(f.owner.flush()).rejects.toThrow("disk"); expect(f.owner.getSnapshot().saveError).toContain("not saved");
   await f.owner.flush(); expect(f.owner.getSnapshot().saveError).toBe(""); expect(f.setState).toHaveBeenCalledTimes(2); expect(f.query).not.toHaveBeenCalled();
 });
+it("Agent request saves retain later Help reading choices through the same serial queue", async()=>{
+ const f=fixture();await f.owner.refresh();let finish!:()=>void;
+ f.setState.mockImplementationOnce(value=>new Promise(resolve=>{finish=()=>resolve({state:value});}));
+ f.owner.help.setScroll(20);const first=f.owner.flush();await Promise.resolve();
+ const agent={input:null,pending:null,opened:null};const saving=f.owner.saveAgent(agent);f.owner.help.setScroll(90);
+ finish();await first;await saving;await f.owner.flush();
+ expect(f.setState.mock.calls.at(-1)?.[0]).toMatchObject({choices:{scrollTop:90},agent});
+ expect(f.owner.savedAgent).toEqual(agent);
+});

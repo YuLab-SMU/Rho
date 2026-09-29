@@ -7,11 +7,23 @@ import {buildViewerPlugin} from './build-viewer-plugin.mjs';
 const directory=fs.mkdtempSync(path.join(os.tmpdir(),'rho-viewer-unit-'));
 try {
   const plugin=buildViewerPlugin(path.join(directory,'viewer'));
+  const manifest=JSON.parse(fs.readFileSync(path.join(plugin,'plugin.json'),'utf8'));
+  const rManifest=JSON.parse(fs.readFileSync(new URL('../plugins/r/plugin.json',import.meta.url),'utf8'));
+  for(const grant of manifest.requires.filter(g=>g.capability.id.startsWith('r.')))
+    assert.deepEqual([...grant.scopes].sort(),[...rManifest.capabilities.find(cap=>JSON.stringify(cap.capability)===JSON.stringify(grant.capability)).required_scopes].sort(),'Viewer grants must match the real R public contract');
   const {outputsFrom,readHistory,mergeHistory}=await import(pathToFileURL(path.join(plugin,'dist/src/outputs.js')));
+  const {ComponentAgent}=await import(pathToFileURL(path.join(plugin,'dist/public/agent-input/input.js')));
+  const sdk=await import(pathToFileURL(path.join(plugin,'dist/public/plugin-ui/index.js')));
+  const {checkComponentAgent}=await import('./fixtures/component-agent.mjs');await checkComponentAgent({ComponentAgent,sdk});
+  const {viewerContext}=await import(pathToFileURL(path.join(plugin,'dist/src/agent-source.js')));
   const owner={instance:'r-instance',plugin:'org.rho.r',revision:'sha256:'+'a'.repeat(64),artifact:'sha256:'+'b'.repeat(64)};
   const reference={owner,resource:'html-resource',digest:'sha256:'+'c'.repeat(64),bytes:20,media_type:'text/html'};
   const record={operation:{operation_id:'original-run',capability:{id:'r.execute',version:1},normalized_arguments:{binding:{provider:owner}},accepted_at_ms:42},status:'succeeded',output:{operation_id:'original-run',session_id:'session',outputs:[{reference,native:{operation_id:'original-run',sequence:3,mime_type:'text/html',byte_size:20,sha256:reference.digest}}]}};
   assert.equal(outputsFrom(record,owner)[0].reference.resource,'html-resource');
+  const selected=outputsFrom(record,owner)[0],context=viewerContext(owner,'window',selected,'text');
+  assert.deepEqual(context.reference.selector,{operation:'original-run',sequence:3,session:'session',reference});
+  selected.reference.resource='later';assert.equal(context.reference.selector.reference.resource,'html-resource');
+  assert.throws(()=>viewerContext(owner,'window',selected,'unknown'),/Choose/);
   const versioned=structuredClone(record);versioned.operation.capability.version=2;
   const inputSource={view_id:'script-view',label:'分析.R',kind:'file'};
   versioned.operation.normalized_arguments.arguments={run:{code:'1',source:inputSource}};versioned.output.source=structuredClone(inputSource);

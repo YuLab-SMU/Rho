@@ -711,11 +711,19 @@ core does not interpret this Agent-specific configuration.
 Editor captures the acknowledged document/selection version before discovering an
 active Agent instance. Its exact source and original `windows.open_view` request
 live in outer view state, serialized alongside document synchronization, so they
-do not change the source bytes or disappear during a later draft save. A lost
-reply is recovered from that original Operation. Window opening carries the
+do not change the source bytes or disappear during a later draft save. An accepted opening is briefly observed until it settles; slow or lost
+replies retain that original Operation for explicit inspection. Window opening carries the
 existing management contract's scopes for the target view; it grants no new
 scientific call to Editor. The new Agent view still requires explicit task choice,
 context insertion and Send.
+Help and Viewer use the Agent plugin's public `sdk/component-input` source helper.
+Help captures its displayed native session, installed-copy observation, topic and
+index/help file identities; text and a first-twelve-lines excerpt are explicit
+inclusions. Viewer captures the original Operation, output sequence, session and
+saved resource identity. Text means the saved HTML source, never the iframe's live
+interactive state; metadata is a separate inclusion. Background navigation or a
+new output cannot replace a prepared reference. Both serialize the opening request
+alongside their own reading choices and use the owner's existing preview queries.
 
 `views.caller` exposes only the original native view/window/connection identity
 captured at authenticated ingress. Backend delegation retains that private capture;
