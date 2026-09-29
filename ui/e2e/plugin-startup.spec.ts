@@ -6,7 +6,8 @@ import { join, resolve } from 'node:path';
 let directory: string, project: string, host: ReturnType<typeof spawn>, url: URL, completed = false;
 test.beforeAll(async () => {
   directory = realpathSync(mkdtempSync(join(tmpdir(), 'rho-default-startup-'))); project = join(directory, '项目'); mkdirSync(project);
-  host = spawn(resolve('../target/debug/rho'), ['--database', join(directory, 'state.sqlite'), 'workbench'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const assets = process.env.RHO_WORKBENCH_DEV_ASSETS;
+  host = spawn(resolve('../target/debug/rho'), ['--database', join(directory, 'state.sqlite'), 'workbench', ...(assets ? ['--dev-assets', realpathSync(assets)] : [])], { stdio: ['ignore', 'pipe', 'pipe'] });
   url = new URL(await new Promise<string>((done, reject) => {
     let output = '', errors = ''; const timer = setTimeout(() => reject(Error(`Default Host launch timed out: ${errors}`)), 60000);
     host.stderr!.on('data', bytes => errors += bytes);

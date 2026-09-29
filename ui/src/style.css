@@ -2761,6 +2761,7 @@ button {
 .plugin-start h1, .plugin-start p { margin: 0; }
 .plugin-start form { display: flex; flex-direction: column; gap: 16px; }
 .plugin-start label { display: flex; flex-direction: column; gap: 8px; }
+.plugin-start-field { display: flex; flex-direction: column; gap: 8px; }
 .plugin-start input, .plugin-start select { width: 100%; min-width: 0; padding: 8px; }
 .plugin-start button { align-self: flex-start; max-width: 100%; white-space: normal; }
 @media (max-width: 500px) { .plugin-start { margin: 16px auto; padding: 20px; } }

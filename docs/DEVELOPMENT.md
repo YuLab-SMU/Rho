@@ -105,6 +105,15 @@ ordinary plugins. Existing fixed-composition browser fixtures now pass the expli
 temporary `--fixed-workspace` flag. Delete that reference path after M2–M4 replace
 the remaining fixed Agent/context/recovery interactions.
 
+For frontend-only startup/scientific-window iteration, build the client and set
+`RHO_WORKBENCH_DEV_ASSETS` to the absolute `crates/workbench/assets` directory.
+Those two fixtures use the existing Host's `--dev-assets` option, so a label/layout
+fix does not need a new native binary. Record this as current-client integration
+with a retained Host; it does not verify new Host capabilities or updated embedded
+assets. Omit the variable for embedded-artifact acceptance. Preserve each settled
+run's browser evidence before another run replaces `target/studio-browser`, or
+pass Playwright a dedicated `--output` directory.
+
 For ordinary Agent UI iteration, `node scripts/test-agent-view.mjs --build-ui`
 checks the task/draft model and builds just the UI from public SDK copies. It uses
 the already installed client dependencies and never invokes Cargo. Add `--browser`

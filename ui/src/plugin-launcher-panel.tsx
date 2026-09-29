@@ -25,10 +25,11 @@ export function PluginLauncherPanel({ client, project, refresh }: { client: Host
         <button disabled={busy} onClick={() => void act(() => launcher.reset())}>{launcher.launch.instance ? 'Keep instance and choose another view' : 'Choose another view'}</button>
       </div>}
     </> : launcher.choices.length ? <form onSubmit={event => { event.preventDefault(); void act(() => launcher.choose(choice)); }}>
-      <label>Installed workspace view<select value={choice} disabled={busy} onChange={event => setChoice(event.target.value)}>
+      <div className="plugin-start-field"><label htmlFor="workspace-view">Installed workspace view</label>
+      <select id="workspace-view" value={choice} disabled={busy} onChange={event => setChoice(event.target.value)}>
         <option value="">Select a view…</option>
         {launcher.choices.map(item => <option key={item.id} value={item.id}>{item.title} · {item.inspection.manifest.version} · {item.inspection.summary.revision.slice(7, 15)} · {item.artifact.slice(7, 15)}</option>)}
-      </select></label>
+      </select></div>
       <p>{launcher.choices.find(item => item.id === choice)?.description}</p>
       <button className="primary" disabled={busy || !choice}>Open view</button>
     </form> : !busy && <p>No standalone workspace views are installed. Import a workspace plugin with the Rho recovery CLI, then refresh. Packages are never installed automatically.</p>}

@@ -29,7 +29,7 @@ written deletion condition. Internal pieces are not reported as milestones.
 
 | # | Milestone (user flow) | Replaces / deletes | State |
 | --- | --- | --- | --- |
-| M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Ordinary scientific flow verified; default entry CLI cases pass, Host/browser acceptance incomplete; delivery remains |
+| M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Default entry and real-R browser flow verified; Rust HTTP check pending; delivery remains |
 | M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Native view and attachment source/renderer checked; combined native/Host path pending |
 | M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Same-instance lifecycle recovery missing; not verified |
 | M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Not started |
@@ -67,9 +67,16 @@ activation and view requests before dispatch. The startup model/window checks
 pass (25 frontend cases), including no fixed Studio construction in ordinary
 startup. The three CLI argument cases also pass, and the current Host binary was
 built. The broader CLI command was interrupted while starting unrelated filtered
-targets; it is not reported as a complete pass. Host/browser acceptance remains
-incomplete: the browser run timed out before the Host became ready and a snapshot
-subprocess also stalled; no new default-entry visual acceptance is claimed.
+targets; it is not reported as a complete pass. After executable startup recovered,
+four default-entry/generic-window/fixed-reference browser cases passed. The real-R
+flow now also starts through browser project selection and the installed Manager
+selector, including recovery from a lost activation reply with one instance.
+That run found and fixed the selector's accessible label; the passing rerun used
+current client assets with the retained Host and native plugin artifacts. It
+verified one execution, Objects/Plots output and reload without replay. Evidence:
+`target/plugin-refactor/default-entry-results.json`; earlier startup timeouts and
+the label failure remain retained. The Rust HTTP check is still compiling; the
+client generated-asset check and embedded-binary refresh remain pending behind it.
 Existing fixed-composition acceptance explicitly uses `--fixed-workspace`. Remove
 that temporary reference and shell after M2–M4 replace the remaining fixed flows;
 missing plugins cannot select it as a fallback. Default package delivery remains.

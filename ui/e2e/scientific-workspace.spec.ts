@@ -26,11 +26,12 @@ test.beforeAll(async () => {
   directory = realpathSync(mkdtempSync(join(tmpdir(), 'rho-scientific-window-'))); project = join(directory, 'project'); mkdirSync(project);
   writeFileSync(join(project, filename), 'answer <- 1L\n'); execFileSync('git', ['init', '-q', project]);
   const binary = resolve('../target/debug/rho'), database = join(directory, 'state.sqlite');
-  const snapshot = (path: string, target: string) => JSON.parse(execFileSync(binary, ['--database', database, 'plugins', 'snapshot', path, '--target', target], { encoding: 'utf8' })).result;
+  const snapshot = (path: string, target: string) => JSON.parse(execFileSync(binary, ['--database', database, 'plugins', 'snapshot', path, '--target', target], { encoding: 'utf8', timeout: 60000, killSignal: 'SIGKILL' })).result;
   for (const key of ['r', 'files', 'editor']) snapshot(native[key], 'aarch64-apple-darwin');
   for (const [key, build] of Object.entries({ console: buildConsolePlugin, objects: buildObjectsPlugin, plots: buildPlotsPlugin, viewer: buildViewerPlugin, packages: buildPackagesPlugin, help: buildHelpPlugin })) snapshot(native[key] ?? build(join(directory, key)), 'ui-web');
   snapshot(buildManagerPlugin(join(directory, 'manager')), 'ui-web');
-  host = spawn(binary, ['--database', database, 'workbench'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const assets = process.env.RHO_WORKBENCH_DEV_ASSETS;
+  host = spawn(binary, ['--database', database, 'workbench', ...(assets ? ['--dev-assets', realpathSync(assets)] : [])], { stdio: ['ignore', 'pipe', 'pipe'] });
   url = new URL(await new Promise<string>((done, reject) => {
     let output = '', errors = ''; const timer = setTimeout(() => reject(Error(`Generic Host startup deadline: ${errors}`)), 60000);
     host.stderr!.on('data', bytes => errors += bytes); host.stdout!.on('data', bytes => {
