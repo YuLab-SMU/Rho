@@ -6,9 +6,10 @@ import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve, delimiter } from 'node:path';
 import { verifyAgentBuild, agentBuildMode } from '../../scripts/agent-plugin-artifact.mjs';
+import { buildManagerPlugin } from '../../scripts/build-manager-plugin.mjs';
 
 let directory: string, project: string, url: URL, host: ReturnType<typeof spawn>, agent: any, r: any, view: any, session: string;
-let completed = false, database: string, hostEnvironment: NodeJS.ProcessEnv;
+let completed = false, database: string, hostEnvironment: NodeJS.ProcessEnv, managerView: any;
 const windowId = 'agent-scientific-workspace', binary = resolve('../target/debug/rho');
 const hash = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex');
 async function port(method: string, params: unknown) {
@@ -66,8 +67,9 @@ test.beforeAll(async () => {
   writeFileSync(join(nativeBin, 'rho-science-fixture'), 'disposable');
   copyFileSync(resolve('../crates/host/tests/fixtures/agent-science.cjs'), join(nativeBin, 'kimi')); chmodSync(join(nativeBin, 'kimi'), 0o700);
   database = join(directory, 'state.sqlite');
-  const snapshot = (path: string) => JSON.parse(execFileSync(binary, ['--database', database, 'plugins', 'snapshot', path, '--target', 'aarch64-apple-darwin'], { encoding: 'utf8', timeout: 90000, killSignal: 'SIGKILL' })).result;
+  const snapshot = (path: string, target = 'aarch64-apple-darwin') => JSON.parse(execFileSync(binary, ['--database', database, 'plugins', 'snapshot', path, '--target', target], { encoding: 'utf8', timeout: 90000, killSignal: 'SIGKILL' })).result;
   const sources = { agent: snapshot(agentPackage), r: snapshot(realpathSync(process.env.RHO_R_PLUGIN_PACKAGE!)) };
+  const managerPackage = snapshot(buildManagerPlugin(join(directory, 'manager')), 'ui-web');
   hostEnvironment = { ...process.env, PATH: nativeBin + delimiter + process.env.PATH, KIMI_CODE_HOME: nativeHome };
   const started = await startHost(); host = started.process; url = started.address;
   const info = await fetch(new URL('/api/info', url), { headers: { Authorization: `Bearer ${url.hash.slice(7)}` } }).then(response => response.json());
@@ -84,8 +86,14 @@ test.beforeAll(async () => {
   writeFileSync(join(project, 'native-science-input.json'), JSON.stringify({ expected_session: session, run: {
     code: 'counter <- if (exists("counter", inherits=FALSE)) counter + 1L else 1L; writeLines(as.character(counter), "counter-value.txt"); while (!file.exists("release-r")) Sys.sleep(0.01); cat("browser-original-r-result\\n"); counter',
   } }));
+  const manager = (await invoke('plugins.activate', { revision: managerPackage.revision, artifact: managerPackage.artifacts[0],
+    target: 'ui-web', alias: 'manager', configuration: {} })).instance.identity;
+  const initialLayout = await query('windows.layout', { window: windowId });
+  managerView = (await invoke('windows.open_view', { expected_layout_version: initialLayout.version, group: null,
+    view: { instance: manager, contribution: 'manager', window: windowId, configuration: {}, state: {} },
+  })).view;
   const layout = await query('windows.layout', { window: windowId });
-  view = (await invoke('windows.open_view', { expected_layout_version: layout.version, group: null,
+  view = (await invoke('windows.open_view', { expected_layout_version: layout.version, group: layout.layout.id,
     view: { instance: agent, contribution: 'agent', window: windowId, configuration: { tools: [{ name: 'execute', target: { type: 'provider', binding: rBinding } }] }, state: {} },
   })).view;
 });
@@ -206,11 +214,11 @@ test('ordinary Agent attachments and one original Send reach real R; reload and 
   await page.route('**/api/host', async route => {
     const request = route.request().postDataJSON()?.frame?.request;
     if (request?.method === 'invoke') {
-      if (request.params.capability.id === 'plugins.resume') {
+      if (request.params.capability.id === 'plugins.resume' && request.params.arguments.instance.instance === agent.instance) {
         resumeCalls++; resumeRequest ||= request.params.client_request_id;
         if (loseResume) { loseResume = false; await route.fetch(); await route.abort(); return; }
       }
-      if (request.params.capability.id === 'views.reconnect') reconnectCalls++;
+      if (request.params.capability.id === 'views.reconnect' && request.params.arguments.view === view.view) reconnectCalls++;
     }
     await route.continue();
   });
@@ -255,9 +263,43 @@ test('ordinary Agent attachments and one original Send reach real R; reload and 
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.screenshot({ path: info.outputPath('agent-host-restored.png') });
   expect((await query('operation.list_recent', { client_request_id: resumeRequest, limit: 10 })).operations).toHaveLength(1);
+  // A backend without its own view is restored explicitly in the ordinary
+  // Manager. Restoring the R owner must not start a new R session or replay work.
+  await page.getByRole('tab', { name: 'Plugins', exact: true }).click();
+  await page.getByRole('button', { name: 'Restore saved view', exact: true }).click();
+  const managerFrame = page.locator(`[data-plugin-frame="${managerView.view}"]`).frameLocator('iframe');
+  await managerFrame.getByRole('button', { name: 'Instances', exact: true }).click();
+  await managerFrame.getByRole('button', { name: /^r org\.rho\.r / }).click();
+  await expect(managerFrame.getByRole('button', { name: 'Open view', exact: true })).toBeDisabled();
+  for (const width of [1440, 390, 220]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await managerFrame.locator('body').evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+    await page.screenshot({ path: info.outputPath(`manager-restore-instance-${width}.png`) });
+  }
+  let rResumes = 0, rResumeRequest = '';
+  await page.route('**/api/plugin-view', async route => {
+    const body = route.request().postDataJSON()?.message?.body;
+    if (body?.type === 'invoke' && body.capability.id === 'plugins.resume') {
+      rResumes++; rResumeRequest = body.request_id;
+      await route.fetch(); await route.abort(); return;
+    }
+    await route.continue();
+  });
+  await managerFrame.getByRole('button', { name: 'Restore instance', exact: true }).click();
+  await expect(managerFrame.getByRole('button', { name: 'Inspect original request', exact: true })).toBeVisible();
+  await page.reload();
+  await managerFrame.getByRole('button', { name: 'Inspect original request', exact: true }).click();
+  await expect(managerFrame.locator('#recovery')).toBeHidden();
+  expect(rResumes).toBe(1); expect(rResumeRequest).toBeTruthy();
+  const restoredR = await query('plugins.instance', { instance: r });
+  expect(restoredR.instance.identity).toEqual(r); expect(restoredR.instance.state).toBe('active');
+  expect(await sessionState()).toMatchObject({ state: 'unstarted', session_id: null });
+  expect(await executions()).toHaveLength(1); expect(readFileSync(join(project, 'counter-value.txt'), 'utf8')).toBe('1\n');
+  expect((await detail()).summary.task.native_session_id).toBe(nativeSession);
   writeFileSync(info.outputPath('agent-native-result.json'), JSON.stringify({ status: 'passed', build_mode: agentBuildMode(process.env.RHO_AGENT_PLUGIN_PACKAGE!), original_send: evidence.invocation.send_request,
     child: childId, native_session: nativeSession, r_session: session, cached_history_messages: 120,
     host_restart: { instance: agent, task, view: view.view, resume_request: resumeRequest, resume_calls: resumeCalls, reconnect_calls: reconnectCalls, native_resume_without_prompt: true },
+    manager_restore: { instance: r, resume_calls: rResumes, native_r_remains_unstarted: true },
     assets: saved.assets.map((a: any) => ({ name: a.name, bytes: a.bytes, sha256: a.sha256 })),
     limits: ['Local ACP fixture, no external model', 'Graceful Host restart after the original turn settled; no abrupt crash recovery', 'No installation or publication'],
   }, null, 2));

@@ -9,6 +9,12 @@ dependencies, requested scopes and protecting-reference counts. Branch creation
 and removal use journaled operations. Instances distinguish a current Host
 observation from a stored historical record; release remains explicit. Views
 can be opened with explicit configuration and initial state.
+Confirmed Host suspensions expose **Restore instance**, including backends with
+no view of their own. It retains the original identity, artifact, configuration
+and data, using the observed suspension token. It neither starts dependencies
+nor reconnects views or replays scientific work. A missing reply retains the
+original request for inspection or an explicit identical retry. Released,
+unconfirmed and fixture-preview instances cannot use this path.
 The instance list explicitly includes fixture previews, labels their disabled
 backend, and permits ordinary view closure/release. Previews never qualify as
 runtime instances or reusable scenario views.
@@ -45,8 +51,8 @@ Preparation does not switch the window or start R; use the existing Switch actio
 then Start R in Console. Missing packages are never installed automatically.
 Choices and partial preparation survive view reload. Each original request is
 recovered separately; continuing is explicit, and unavailable prepared instances
-are not silently replaced. This is a starter in the ordinary Manager, not yet the
-default `rho workbench` launch path or the final default delivery mechanism.
+are not silently replaced. This starter runs in the ordinary default workbench;
+the final default package delivery mechanism remains under development.
 With no unconfirmed request, **Keep instances and start over** resets the setup
 form so paths and selections can be corrected; created instances, views and
 checkpoints remain available through their normal inspection and cleanup controls.

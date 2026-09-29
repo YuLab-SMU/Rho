@@ -90,12 +90,12 @@ connection for the retained open view. Queries do neither. Permanent release and
 disposable-test teardown remain distinct. Stale tokens, changed authority/data and
 unconfirmed cleanup have refusal fixtures. A publication conflict during resume
 preserves the original instance with a new confirmed suspension token.
-The generic window saves each recovery request before dispatch; lost replies offer
+The generic window and Manager's instance details save recovery requests before dispatch; lost replies offer
 explicit inspection/retry of the original request, with no next-step dispatch on
-reload. All 566 frontend tests pass, including 42 recovery/view cases. The focused
+reload. All 566 core frontend tests pass, including 42 recovery/view cases. The focused
 native test is compiling; the Host-reopen fixture and combined Agent/real-R browser
 restart flow are written but unrun. Rust syntax, boundary and governance checks
-pass; public type generation, client checks and native acceptance remain.
+pass; public type generation, Manager model/client checks and native acceptance remain.
 Evidence: `target/plugin-refactor/restart-lifecycle-results.json`. No user Host was
 replaced, installation or publication ran.
 

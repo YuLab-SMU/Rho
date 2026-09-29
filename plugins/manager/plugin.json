@@ -205,6 +205,35 @@
     },
     {
       "capability": {
+        "id": "plugins.resume",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read",
+        "application.read",
+        "application.control",
+        "skill.read",
+        "plugins.read",
+        "plugins.write",
+        "plugins.run",
+        "resources.read",
+        "documents.read",
+        "documents.write",
+        "workspace.run_r",
+        "workspace.read",
+        "project.read",
+        "project.write",
+        "environment.read",
+        "environment.write",
+        "process.run_local",
+        "remote.execute",
+        "slurm.read",
+        "slurm.write"
+      ]
+    },
+    {
+      "capability": {
         "id": "views.open",
         "version": 1
       },

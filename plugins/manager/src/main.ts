@@ -1,7 +1,7 @@
 import {connectPluginView} from '../public/plugin-ui/index.js';
 import type {PluginCatalogPage, PluginInspection, PluginInstanceObservation, PluginInstanceObservations, ScenarioPage,
   ScenarioRevision, PluginViewRecord, PluginWindowNode, WindowScenarioSnapshot, SaveScenario} from '../public/plugin-protocol/index.js';
-import {Manager, initial, read, short, same, matches, viewsOf, viewMatches, checkpointInput, own, type Saved} from './model.js';
+import {Manager, initial, read, short, same, matches, canResume, viewsOf, viewMatches, checkpointInput, own, type Saved} from './model.js';
 import {archiveExportPanel} from './export-panel.js';
 import {workspacePanel} from './workspace-panel.js';
 const client = await connectPluginView();
@@ -109,7 +109,7 @@ function renderList(){
     labels.append(...(section==='installed'?['PLUGIN','REVISION','REFERENCES']:['INSTANCE / REVISION','STATE','WORK']).map(label=>node('span',label)));list.append(labels);
   }
   const items=section==='installed'?catalog.items.map(p=>({id:p.revision,name:p.name,description:p.description,revision:`${p.version} · ${short(p.revision)}`,usage:`${p.reference_count} protecting references`})):
-    section==='instances'?instances.instances.map(p=>({id:p.instance.identity.instance,name:p.instance.alias,description:`${p.instance.purpose==='fixture_preview'?'Fixture preview · ':''}${p.instance.identity.plugin} · ${short(p.instance.identity.revision)}`,revision:p.observed_in_this_host?p.instance.state.replaceAll('_',' '):'Recorded · unavailable in this Host',usage:p.retained_calls===null?'Work count unavailable':`${p.retained_calls} retained calls`})):
+    section==='instances'?instances.instances.map(p=>({id:p.instance.identity.instance,name:p.instance.alias,description:`${p.instance.purpose==='fixture_preview'?'Fixture preview · ':''}${p.instance.identity.plugin} · ${short(p.instance.identity.revision)}`,revision:canResume(p)?'Suspended · Restore available':p.observed_in_this_host?p.instance.state.replaceAll('_',' '):'Recorded · unavailable in this Host',usage:p.retained_calls===null?'Work count unavailable':`${p.retained_calls} retained calls`})):
     scenes.scenarios.map(p=>({id:p.revision,name:p.name,description:current?.scenario?.revision===p.revision?'Current window':`Checkpoint ${short(p.revision)}`,revision:'',usage:''}));
   for(const item of items){const row=button('',()=>select(item.id),'row'+(section==='scenarios'?' scenario-row':''),true);row.setAttribute('aria-pressed',String(manager.state.selected===item.id));const title=node('span');title.append(node('span',item.name,'name'),node('span',item.description,'sub'));row.append(title);if(section!=='scenarios')row.append(node('span',item.revision),node('span',item.usage));list.append(row);}
   if(!items.length)list.append(node('p','No items on this page.','empty'));
@@ -159,12 +159,15 @@ function renderInstance(){
   const p=instance!,i=p.instance,out=get('contents');out.replaceChildren(heading(i.alias,node('p',`${i.identity.plugin} · ${short(i.identity.revision)}`)));
   out.append(block('Actual instance',identity(i.identity.instance),identity(i.identity.revision),identity(i.identity.artifact)),
     block('Purpose',node('p',i.purpose==='fixture_preview'?'Fixture preview · Backend disabled':'Runtime instance')),
-    block('State',node('p',p.observed_in_this_host?i.state.replaceAll('_',' '):'Recorded instance; unavailable in this Host'),node('p',i.diagnostic??'')),
+    block('State',node('p',canResume(p)?'Suspended · Ready to restore':p.observed_in_this_host?i.state.replaceAll('_',' '):'Recorded instance; unavailable in this Host'),node('p',i.diagnostic??'')),
     block('Retained work',node('p',p.retained_calls===null?'No current Host observation.':`${p.retained_calls} calls; ${p.pending_messages??'unknown'} pending messages.`)),detail('Configuration',i.configuration));
-  const actions=node('div','','actions');actions.append(button('Open view',()=>openInstance()));
+  const actions=node('div','','actions');
+  if(canResume(p))actions.append(button('Restore instance',async()=>{await manager.resume(p);await refresh();notice='Original instance restored. Open or reconnect its views separately.';}));
+  const open=button('Open view',()=>openInstance());if(!p.observed_in_this_host||i.state!=='active')open.dataset.protected='true';actions.append(open);
   const release=button(i.state==='cleanup_failed'?'Retry cleanup':'Release instance',async()=>{await manager.invoke('plugins.release',{instance:i.identity});await refresh();},'danger');
   if(same(i.identity,client.view.instance))release.dataset.selfRelease='true';actions.append(release);out.append(actions);
   out.append(node('p','Release stops new calls and requests cleanup. Retained work or native resources can keep the instance draining. Closing a view does not release this instance.','small'));
+  if(canResume(p))out.append(node('p','Restore reopens this exact plugin instance and its retained data. It does not start dependencies or repeat previous work.','small'));
   if(p.stderr)out.append(detail('Backend diagnostics',p.stderr));
 }
 function renderScenario(diagnostics:string[]=[]){

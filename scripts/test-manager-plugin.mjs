@@ -7,12 +7,14 @@ import {buildManagerPlugin} from './build-manager-plugin.mjs';
 import {checkManagerArchive} from './fixtures/manager-archive.mjs';
 import {checkManagerExport} from './fixtures/manager-export.mjs';
 import {checkScientificWorkspace} from './fixtures/scientific-workspace.mjs';
+import {checkManagerRestart} from './fixtures/manager-restart.mjs';
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'rho-manager-model-'));
 try {
   const plugin=buildManagerPlugin(path.join(dir,'manager'));
-  const {Manager,checkpointInput,matches,viewMatches}=await import(pathToFileURL(path.join(plugin,'dist/src/model.js')));
+  const {Manager,checkpointInput,matches,canResume,viewMatches}=await import(pathToFileURL(path.join(plugin,'dist/src/model.js')));
   const {operationRequestId,ViewRequestError}=await import(pathToFileURL(path.join(plugin,'dist/public/plugin-ui/index.js')));
   const {scientificWorkspace,scientificScenario}=await import(pathToFileURL(path.join(plugin,'dist/src/scientific-workspace.js')));
+  await checkManagerRestart({Manager,canResume,operationRequestId});
   await checkScientificWorkspace({Manager,scientificWorkspace,scientificScenario,operationRequestId});
   await checkManagerArchive({Manager,operationRequestId});
   await checkManagerExport({Manager,operationRequestId});

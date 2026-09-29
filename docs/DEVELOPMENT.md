@@ -133,7 +133,8 @@ the latest messages without another Send. After the turn settles it restarts the
 disposable Host against the same storage, restores the original instance/view
 through a lost resume reply, and explicitly resumes the same native Agent session.
 It checks the original result, attachments and unsent draft without another prompt
-or R execution. This does not cover abrupt process failure or external-model
+or R execution. Manager then restores the original viewless R backend through a
+lost reply and confirms that its R session stays unstarted. This does not cover abrupt process failure or external-model
 quality. A listed/written browser case is not a passing native result.
 
 ### Status discipline

@@ -71,6 +71,9 @@ resumes a confirmed suspended instance and reconnects its original view. A lost
 reply offers **Check recovery status** and **Retry original request**; inspection
 does not advance to the next action. Startup never creates replacements or replays
 scientific operations. Restoring an R backend does not restore R memory.
+For a backend with no view, use **Instances → Restore instance** in the ordinary
+Manager. This restores only the selected instance; its dependencies remain as they
+were. If the Manager itself is suspended, restore its saved view first.
 
 The old fixed scientific composition is available only as the temporary development
 reference: `rho --fixed-workspace ... workbench`. Its R/remote/Skill startup flags

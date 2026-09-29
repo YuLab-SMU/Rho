@@ -7,7 +7,7 @@ import { ArchiveUpload, verifyArchiveImport, type ArchiveUploadState } from './a
 import { ArchiveExport, type ArchiveExportState } from './export.js';
 import { scientificPlugins, scientificScenario, type ScientificWorkspace } from './scientific-workspace.js';
 export { same, json } from './operations.js';
-export type Purpose = { kind: 'activate' | 'view' | 'workspace_instance'; key: string } | { kind: 'apply' | 'checkpoint' | 'workspace_checkpoint' | 'archive_import' | 'archive_export' | 'other' };
+export type Purpose = { kind: 'activate' | 'view' | 'workspace_instance'; key: string } | { kind: 'apply' | 'checkpoint' | 'workspace_checkpoint' | 'archive_import' | 'archive_export' | 'resume' | 'other' };
 export interface Preparation { definition: ScenarioRevision; request: ApplyScenario; ready: boolean; }
 export interface Saved {
   section: 'installed' | 'instances' | 'scenarios'; selected: string; detail: boolean; scroll: number;
@@ -45,6 +45,10 @@ export function matches(instance: PluginInstanceObservation, wanted: ScenarioRev
   return instance.observed_in_this_host && (found.purpose??'runtime') === 'runtime' && found.state === 'active' && found.identity.plugin === wanted.plugin &&
     found.identity.revision === wanted.revision && found.identity.artifact === wanted.artifact && same(found.configuration, wanted.configuration);
 }
+export function canResume(observation: PluginInstanceObservation) {
+  const instance = observation.instance;
+  return (instance.purpose ?? 'runtime') === 'runtime' && instance.state === 'suspended' && !!instance.suspension;
+}
 export function viewMatches(view: PluginViewRecord, wanted: ScenarioView, instance: InstanceRef, window: string) {
   return !view.closed && (view.purpose??'runtime') === 'runtime' && view.window === window && same(view.instance, instance) && view.contribution === wanted.contribution &&
     same(view.configuration, wanted.configuration) && same(view.resource ?? null, wanted.resource);
@@ -70,6 +74,10 @@ export class Manager {
     }, args => this.invoke('plugins.archive_export', args, {kind:'archive_export'}));
   }
   save() { return this.client.setState(json(structuredClone(this.state))); }
+  async resume(observation: PluginInstanceObservation) {
+    if (!canResume(observation)) throw Error('Only a confirmed suspended runtime instance can be restored.');
+    return this.invoke('plugins.resume', { instance: observation.instance.identity, suspension: observation.instance.suspension! }, { kind: 'resume' });
+  }
   async importArchive() {
     const upload = this.state.upload;
     if (!upload?.inspection || upload.received !== upload.reference.bytes || upload.imported) throw Error('Inspect a complete archive before importing it.');
@@ -130,7 +138,13 @@ export class Manager {
       await this.save(); throw new Error(record.error || `Original request is ${record.status}.`);
     }
     const prep = this.state.preparation;
-    if (pending.purpose.kind === 'workspace_instance') {
+    if (pending.purpose.kind === 'resume') {
+      const output = record.output as PluginInstanceObservation, args = pending.intent.arguments as unknown as { instance: InstanceRef };
+      if (pending.intent.capability.id !== 'plugins.resume' || !output.observed_in_this_host || output.instance.state !== 'active' ||
+        !same(output.instance.identity, args.instance) || output.instance.project !== this.client.view.project ||
+        output.instance.principal !== this.client.view.principal || (output.instance.purpose ?? 'runtime') !== 'runtime' || output.instance.suspension)
+        throw Error('The recovery returned a different or unavailable instance.');
+    } else if (pending.purpose.kind === 'workspace_instance') {
       const setup = this.state.workspace, key = pending.purpose.key, output = record.output as PluginInstanceObservation;
       if (!setup || !setup.packages[key] || !matches(output, setup.packages[key])) throw Error('The workspace activation returned another instance.');
       put(setup.instances, key, output.instance.identity);
