@@ -15,6 +15,7 @@ assert.ok(options.build || process.env.RHO_R_PLUGIN_PACKAGE,
   'Reuse also requires RHO_R_PLUGIN_PACKAGE; use --build only when a new independent R package is due');
 assert.ok(process.env.RHO_ARK && process.env.RHO_R_HOME, 'Set RHO_ARK and RHO_R_HOME for disposable R acceptance');
 if (options.browser) {
+  assert.ok(process.env.RHO_EDITOR_PLUGIN_PACKAGE && process.env.RHO_FILES_PLUGIN_PACKAGE, 'Browser context acceptance requires retained RHO_EDITOR_PLUGIN_PACKAGE and RHO_FILES_PLUGIN_PACKAGE; it does not build them implicitly');
   execFileSync('npm', ['run', 'test:browser', '--prefix', 'ui', '--', 'agent-workspace.spec.ts'], {
     cwd: root, stdio: 'inherit', env: {...process.env, RHO_AGENT_PLUGIN_PACKAGE: options.packagePath},
   });

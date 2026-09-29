@@ -9,7 +9,8 @@ import { verifyAgentBuild, agentBuildMode } from '../../scripts/agent-plugin-art
 import { buildManagerPlugin } from '../../scripts/build-manager-plugin.mjs';
 
 let directory: string, project: string, url: URL, host: ReturnType<typeof spawn>, agent: any, r: any, view: any, session: string;
-let completed = false, database: string, hostEnvironment: NodeJS.ProcessEnv, managerView: any;
+let completed = false, database: string, hostEnvironment: NodeJS.ProcessEnv, managerView: any, editor: any, sourceDraft: any;
+const sourceText = 'context_value <- 42L # 中文 Ω\n';
 const windowId = 'agent-scientific-workspace', binary = resolve('../target/debug/rho');
 const hash = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex');
 async function port(method: string, params: unknown) {
@@ -28,6 +29,18 @@ async function invoke(id: string, args: unknown) {
 async function nativeQuery(id: string, args: unknown) { return query(id, { binding: await binding(agent, id), arguments: args }); }
 async function sessionState() { return query('r.session', { binding: await binding(r, 'r.session'), arguments: {} }); }
 async function executions() { return (await query('operation.list_recent', { limit: 100 })).operations.filter((record: any) => record.capability.id === 'r.execute'); }
+
+// Seed the real public document owner; the actual Editor backend resolves this
+// synchronized capture during picker preview and Native Send.
+async function saveContextSource(text: string) {
+  const draft = sourceDraft?.draft ?? crypto.randomUUID(), upload = crypto.randomUUID();
+  const version = crypto.randomUUID(), name = '上下文 Ω.R';
+  const bytes = Buffer.from(JSON.stringify({schema:1,document:{path:name,raw:text,version,anchor:0,head:text.length,readonly:null}}));
+  const digest = 'sha256:' + hash(bytes);
+  await port('control', {capability:{id:'documents.stage',version:1},arguments:{window:windowId,draft,upload,digest,base64:bytes.toString('base64')}});
+  sourceDraft = await invoke('documents.save', {window:windowId,draft,upload,source:{revision:editor.revision,contribution:'editor'},expected_version:sourceDraft?.version ?? null,
+    content:{digest,bytes:bytes.length,chunks:[{digest,bytes:bytes.length}]},metadata:{encoding:'org.rho.editor.document.v1',path:name,name,document_version:version,selection:{anchor:0,head:text.length},read_only:false}});
+}
 
 async function startHost() {
   const started = spawn(binary, ['--database', database, '--project', project, 'workbench'], {
@@ -58,7 +71,7 @@ async function stopHost(process_: ReturnType<typeof spawn>) {
 
 test.beforeAll(async () => {
   test.setTimeout(180000);
-  expect(process.env.RHO_AGENT_PLUGIN_PACKAGE).toBeTruthy(); expect(process.env.RHO_R_PLUGIN_PACKAGE).toBeTruthy();
+  expect(process.env.RHO_AGENT_PLUGIN_PACKAGE).toBeTruthy(); expect(process.env.RHO_R_PLUGIN_PACKAGE).toBeTruthy(); expect(process.env.RHO_EDITOR_PLUGIN_PACKAGE).toBeTruthy(); expect(process.env.RHO_FILES_PLUGIN_PACKAGE).toBeTruthy();
   expect(process.env.RHO_ARK).toBeTruthy(); expect(process.env.RHO_R_HOME).toBeTruthy();
   const agentPackage = verifyAgentBuild(process.env.RHO_AGENT_PLUGIN_PACKAGE!);
   directory = realpathSync(mkdtempSync(join(tmpdir(), 'rho-agent-window-'))); project = join(directory, 'project'); mkdirSync(project);
@@ -68,17 +81,20 @@ test.beforeAll(async () => {
   copyFileSync(resolve('../crates/host/tests/fixtures/agent-science.cjs'), join(nativeBin, 'kimi')); chmodSync(join(nativeBin, 'kimi'), 0o700);
   database = join(directory, 'state.sqlite');
   const snapshot = (path: string, target = 'aarch64-apple-darwin') => JSON.parse(execFileSync(binary, ['--database', database, 'plugins', 'snapshot', path, '--target', target], { encoding: 'utf8', timeout: 90000, killSignal: 'SIGKILL' })).result;
-  const sources = { agent: snapshot(agentPackage), r: snapshot(realpathSync(process.env.RHO_R_PLUGIN_PACKAGE!)) };
+  const sources = { agent: snapshot(agentPackage), r: snapshot(realpathSync(process.env.RHO_R_PLUGIN_PACKAGE!)), editor: snapshot(realpathSync(process.env.RHO_EDITOR_PLUGIN_PACKAGE!)), files: snapshot(realpathSync(process.env.RHO_FILES_PLUGIN_PACKAGE!)) };
   const managerPackage = snapshot(buildManagerPlugin(join(directory, 'manager')), 'ui-web');
   hostEnvironment = { ...process.env, PATH: nativeBin + delimiter + process.env.PATH, KIMI_CODE_HOME: nativeHome };
   const started = await startHost(); host = started.process; url = started.address;
   const info = await fetch(new URL('/api/info', url), { headers: { Authorization: `Bearer ${url.hash.slice(7)}` } }).then(response => response.json());
   for (const id of ['plugins.resume', 'views.reconnect']) expect(info.capabilities.some((item: any) => item.capability.id === id), `Build the current Host before ${id} acceptance`).toBe(true);
-  const activate = async (name: 'agent' | 'r', configuration: unknown, optional_capabilities: any[] = []) =>
+  const activate = async (name: 'agent' | 'r' | 'editor' | 'files', configuration: unknown, optional_capabilities: any[] = []) =>
     (await invoke('plugins.activate', { revision: sources[name].revision, artifact: sources[name].artifacts[0], target: 'aarch64-apple-darwin', alias: name, configuration, optional_capabilities })).instance.identity;
   r = await activate('r', { ark: realpathSync(process.env.RHO_ARK!), r_home: realpathSync(process.env.RHO_R_HOME!), execution_timeout_seconds: 120 });
   session = (await invoke('r.create_session', { binding: await binding(r, 'r.create_session'), arguments: {} })).session_id;
+  await activate('files', {});
+  editor = await activate('editor', {}); await saveContextSource(sourceText);
   agent = await activate('agent', {}, [
+    { id: 'plugins.instances', version: 1 }, { id: 'editor.context.search', version: 1 }, { id: 'editor.context.preview', version: 1 },
     { id: 'plugins.inspect', version: 1 }, { id: 'r.execute', version: 2 },
     { id: 'operation.get', version: 1 }, { id: 'plugins.delegated_operation', version: 1 },
   ]);
@@ -104,7 +120,7 @@ test.afterAll(async () => {
   else if (directory) console.error(`Agent browser acceptance retained at ${directory}`);
 });
 
-test('ordinary Agent attachments and one original Send reach real R; reload and explicit Host restart preserve the task and original result', async ({ page }, info) => {
+test('ordinary Agent attachments and Editor context reach real R; reload and Host restart preserve original input and result', async ({ page }, info) => {
   test.setTimeout(360000);
   const address = new URL(url); address.searchParams.set('window', windowId); await page.goto(address.href);
   const frame = page.locator(`[data-plugin-frame="${view.view}"]`).frameLocator('iframe');
@@ -117,6 +133,16 @@ test('ordinary Agent attachments and one original Send reach real R; reload and 
   expect(selection).toMatch(/^native:/);
   const task = selection.slice(7);
   const detail = () => nativeQuery('agent.native.task', { task_id: task });
+  await frame.getByRole('button', {name:'Choose context',exact:true}).click();
+  const picker = frame.getByRole('dialog', {name:'Choose context'});
+  await picker.getByRole('button', {name:/上下文 Ω.R/}).click();
+  await expect(picker.locator('#context-preview')).toHaveText(sourceText.trim());
+  await picker.getByRole('button', {name:'Add to draft',exact:true}).click();
+  await expect.poll(async () => (await detail()).draft.content.context.length).toBe(1);
+  const contextSelection = (await detail()).draft.content.context[0], capturedDraft = structuredClone(sourceDraft);
+  expect(contextSelection.reference.provider).toEqual(editor);
+  expect(contextSelection.reference.selector.version).toBe(capturedDraft.version);
+  writeFileSync(join(project,'native-science-context.json'),JSON.stringify({selection:contextSelection,text:sourceText}));
   const prompt = 'Run the authorized R counter once, using the selected attachments 中文';
   writeFileSync(join(project, 'native-science-history.json'), JSON.stringify({ messages: 120 }));
   await composer.fill(prompt);
@@ -155,6 +181,7 @@ test('ordinary Agent attachments and one original Send reach real R; reload and 
   await expect.poll(() => existsSync(join(project, 'counter-value.txt')), { timeout: 60000 }).toBe(true);
   expect(readFileSync(join(project, 'counter-value.txt'), 'utf8')).toBe('1\n');
   await expect.poll(async () => (await executions()).length).toBe(1);
+  await saveContextSource('changed_after_send <- TRUE\n');
   const childId = (await executions())[0].operation_id;
   const original = (await query('operation.get', { operation_id: childId })).record;
   const nativeSession = (await detail()).summary.task.native_session_id;
@@ -172,6 +199,15 @@ test('ordinary Agent attachments and one original Send reach real R; reload and 
   const saved = await detail(), evidence = JSON.parse(readFileSync(join(project, 'native-science-evidence.json'), 'utf8'));
   expect(saved.assets).toHaveLength(2); expect(saved.receipts.filter((r: any) => r.input_assets.length === 2)).toHaveLength(1);
   expect(evidence.prompts).toBe(1); expect(evidence.attachments).toHaveLength(2);
+  expect(evidence.contexts).toHaveLength(1); expect(evidence.contexts[0].selection).toEqual(contextSelection); expect(evidence.contexts[0].text).toBe(sourceText);
+  const originalContext = await nativeQuery('agent.native.context', {request_id:evidence.invocation.send_request});
+  expect(originalContext.contexts).toEqual(evidence.contexts);
+  expect(originalContext.contexts[0].data.draft_version).toBe(capturedDraft.version);
+  await frame.getByRole('button', {name:'Sent context',exact:true}).click();
+  await expect(picker.locator('#context-captures')).toContainText(sourceText.trim());
+  await expect(picker.locator('#context-captures')).not.toContainText('changed_after_send');
+  await picker.getByRole('button', {name:'Close context',exact:true}).click();
+
   expect((await sessionState()).session_id).toBe(session); expect(await executions()).toHaveLength(1);
   await expect(composer).toHaveValue(next);
   await page.screenshot({ path: info.outputPath('agent-native-result.png') });
@@ -250,6 +286,10 @@ test('ordinary Agent attachments and one original Send reach real R; reload and 
   expect(currentConnection.connection).not.toBe(priorConnection.connection);
   expect(currentConnection.call_token).not.toBe(priorConnection.call_token);
   const afterRestart = await detail();
+  expect((await query('plugins.instance',{instance:editor})).instance.state).toBe('suspended');
+  expect(await nativeQuery('agent.native.context',{request_id:evidence.invocation.send_request})).toEqual(originalContext);
+  expect((await query('plugins.instance',{instance:editor})).instance.state).toBe('suspended');
+
   expect(afterRestart.summary.task.task_id).toBe(task); expect(afterRestart.summary.task.native_session_id).toBe(nativeSession);
   expect(afterRestart.draft.content.text).toBe(next); expect(afterRestart.assets).toEqual(saved.assets);
   expect(afterRestart.summary.attachment.state).toBe('disconnected');
@@ -302,6 +342,7 @@ test('ordinary Agent attachments and one original Send reach real R; reload and 
     child: childId, native_session: nativeSession, r_session: session, cached_history_messages: 120,
     host_restart: { instance: agent, task, view: view.view, resume_request: resumeRequest, resume_calls: resumeCalls, reconnect_calls: reconnectCalls, native_resume_without_prompt: true },
     manager_restore: { instance: r, resume_calls: rResumes, native_r_remains_unstarted: true },
+    context: {provider:editor,reference:contextSelection.reference,sha256:hash(sourceText),preserved_after_source_change_and_host_restart:true},
     assets: saved.assets.map((a: any) => ({ name: a.name, bytes: a.bytes, sha256: a.sha256 })),
     limits: ['Local ACP fixture, no external model', 'Graceful Host restart after the original turn settled; no abrupt crash recovery', 'No installation or publication'],
   }, null, 2));

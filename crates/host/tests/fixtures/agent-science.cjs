@@ -59,6 +59,15 @@ async function prompt(message) {
   }));
   const expectedAttachments = path.join(cwd, 'native-science-attachments.json');
   if (fs.existsSync(expectedAttachments)) assert.deepEqual(attachments, JSON.parse(fs.readFileSync(expectedAttachments, 'utf8')));
+  let contexts = [];
+  const expectedContext = path.join(cwd, 'native-science-context.json');
+  if (fs.existsSync(expectedContext)) {
+    const captured = message.params.prompt.find(part => part.type === 'text' && part.text.startsWith('User-selected source context for this original Send.'));
+    assert.ok(captured, 'The actual captured source bytes must reach native Agent input');
+    contexts = JSON.parse(captured.text.slice(captured.text.indexOf('[')));
+    const expected = JSON.parse(fs.readFileSync(expectedContext, 'utf8'));
+    assert.equal(contexts.length, 1); assert.deepEqual(contexts[0].selection, expected.selection); assert.equal(contexts[0].text, expected.text);
+  }
   if (!mcpSession) {
     await rpc('initialize', {protocolVersion:'2025-06-18', capabilities:{}, clientInfo:{name:'rho-science-fixture', version:'1'}});
     await rpc('notifications/initialized', {}, null);
@@ -74,7 +83,7 @@ async function prompt(message) {
   assert.equal(catalog.structuredContent.tools[0].selection.name, 'execute');
   const input = JSON.parse(fs.readFileSync(path.join(cwd, 'native-science-input.json'), 'utf8'));
   const invocation = {send_request:sendRequest, tool_request:randomUUID(), tool:'execute', arguments:input, preconditions:null};
-  const evidence = {session, prompts, invocation, attachments};
+  const evidence = {session, prompts, invocation, attachments, contexts};
   save(evidence);
   const original = await rpc('tools/call', {name:'rho_call', arguments:invocation});
   assert.notEqual(original.isError, true);

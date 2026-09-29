@@ -152,7 +152,7 @@ Browser file capture retains identity, sends bounded Controls and selects a conf
 asset into a separately saved draft. Reload does not repeat import or Send;
 inspection and exact-file reselection remain explicit. Native staging quota,
 checksum/controller and reopen fixtures are written but unrun; no native acceptance claim.
-The combined real-R browser fixture is written/discoverable but unrun; it reuses one
+The combined Editor/real-R browser fixture is written/discoverable but unrun; it reuses one
 Agent artifact built through the primary cache and records this as integration evidence.
 
 Not done: native acceptance of attachments/settings/Rho drafts/history, full context

@@ -129,10 +129,14 @@ and backend checks before snapshotting the package.
 
 Once the combined package is current, run the existing real-R runner with
 `--browser --package /absolute/retained/package` and explicit `RHO_R_PLUGIN_PACKAGE`,
-`RHO_ARK` and `RHO_R_HOME`. This mode never invokes Cargo: `agent-workspace.spec.ts`
-uses the current Host, ordinary Agent/R packages and a local ACP peer. It checks
-browser attachment capture, lost import receipts, one original Send, real R work
-and reload during that work. It also pages a long native observation history,
+`RHO_EDITOR_PLUGIN_PACKAGE`, `RHO_FILES_PLUGIN_PACKAGE`, `RHO_ARK` and `RHO_R_HOME`. This mode never invokes Cargo: `agent-workspace.spec.ts`
+uses the current Host, retained ordinary Agent/R/Editor/Files packages and a local
+ACP peer. It checks browser attachment capture, lost import receipts, a real Editor
+context preview, one original Send, real R work and reload during that work.
+The public document owner is seeded with a synchronized Editor capture; the real
+Editor backend resolves it. The peer verifies the actual source bytes in native
+input; changing that source and restarting Host must leave the original readable
+without resuming Editor. This does not test editing through the Editor UI. It also pages a long native observation history,
 keeps its earlier reading position through background refreshes and returns to
 the latest messages without another Send. After the turn settles it restarts the
 disposable Host against the same storage, restores the original instance/view
