@@ -267,6 +267,17 @@ verify.
 
 ## Testing SOP
 
+Annotation ownership checks reuse the workspace: `cargo test -p rho-annotation-store
+--test annotations --locked` covers immutable evidence, revisions, idempotency,
+separate-connection races, scope isolation and transactional budgets. The retiring
+bridge uses `cargo test -p rho-sqlite --test annotations --locked` for domain
+round-trips, live-window checks and absence of old-table reads; its HTTP checks are
+`cargo test -p rho-workbench --lib annotation_tests --locked`. Run these serially.
+`node scripts/test-annotation-plugin-store.mjs --source-check` validates the copied
+public source closure without compilation. Reserve `--independent` for a source
+boundary milestone; ordinary edits use the focused workspace test. These checks
+do not establish an ordinary annotation backend, contributed source or UI flow.
+
 The generic plugin-only Host uses `cargo test -p rho-host --test plugin_workspace
 --locked` for canonical project identity, native lease exclusion, empty-catalog
 startup, retained history after package removal, and two independently running

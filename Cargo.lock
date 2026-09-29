@@ -6067,12 +6067,48 @@ dependencies = [
 ]
 
 [[package]]
+name = "rho-annotation-api"
+version = "0.1.0"
+dependencies = [
+ "schemars 1.2.1",
+ "serde",
+ "serde_json",
+ "ts-rs",
+]
+
+[[package]]
+name = "rho-annotation-owner"
+version = "0.1.0"
+dependencies = [
+ "rho-annotation-api",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.20",
+ "uuid",
+]
+
+[[package]]
+name = "rho-annotation-store"
+version = "0.1.0"
+dependencies = [
+ "rho-annotation-api",
+ "rho-annotation-owner",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "rho-application"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "rho-agent-api",
  "rho-agent-owner",
+ "rho-annotation-api",
+ "rho-annotation-owner",
  "rho-contract",
  "serde",
  "serde_json",
@@ -6599,6 +6635,9 @@ dependencies = [
  "async-trait",
  "rho-agent-owner",
  "rho-agent-store",
+ "rho-annotation-api",
+ "rho-annotation-owner",
+ "rho-annotation-store",
  "rho-application",
  "rho-contract",
  "rho-operation",

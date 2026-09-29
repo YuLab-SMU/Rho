@@ -169,6 +169,7 @@ Sources:
 - `scripts/test-agent-plugin.mjs`
 - `scripts/test-agent-tool-grants.mjs`
 - `scripts/test-agent-view.mjs`
+- `scripts/test-annotation-plugin-store.mjs`
 - `scripts/test-console-plugin.mjs`
 - `scripts/test-editor-plugin.mjs`
 - `scripts/test-environment-plugin-owner.mjs`
@@ -301,6 +302,16 @@ Checks:
   Applies to: `plugins/agent/build-ui.mjs`, `plugins/agent/dependencies.lock`, `plugins/agent/index.html`, `plugins/agent/package.json`, `plugins/agent/sdk/**`, `plugins/agent/src/**`, `plugins/agent/tsconfig.json`, `scripts/agent-view-renderer.mjs`, `scripts/fixtures/agent-view-container.js`, `scripts/test-agent-view.mjs`, `sdk/plugin-protocol/**`, `sdk/plugin-ui/**`.
 - `plugins.agent-workspace-browser` (L2): `["node","scripts/test-agent-plugin-real-r.mjs","--browser"]`
   Applies to: `crates/host/**`, `crates/workbench/**`, `plugins/agent/**`, `plugins/r/**`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-real-r.mjs`, `sdk/**`, `ui/e2e/agent-workspace.spec.ts`, `ui/src/host-client.ts`, `ui/src/plugin-*.*`.
+- `plugins.annotation-adapter` (L1): `["cargo","test","-p","rho-sqlite","--test","annotations","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/adapters/sqlite/Cargo.toml`, `crates/adapters/sqlite/src/annotations.rs`, `crates/adapters/sqlite/src/application.rs`, `crates/adapters/sqlite/tests/annotations.rs`, `crates/application/Cargo.toml`, `crates/application/src/annotations.rs`, `plugins/annotations/**`.
+- `plugins.annotation-http` (L2): `["cargo","test","-p","rho-workbench","--lib","annotation_tests","--locked"]`
+  Applies to: `crates/adapters/sqlite/src/annotations.rs`, `crates/adapters/sqlite/src/application.rs`, `crates/application/src/annotations.rs`, `crates/host/src/annotations.rs`, `crates/workbench/src/annotation_tests.rs`, `crates/workbench/src/annotations.rs`, `plugins/annotations/**`.
+- `plugins.annotation-independent` (L2): `["node","scripts/test-annotation-plugin-store.mjs","--independent"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `plugins/annotations/**`, `scripts/test-annotation-plugin-store.mjs`.
+- `plugins.annotation-source` (L0): `["node","scripts/test-annotation-plugin-store.mjs","--source-check"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `plugins/annotations/**`, `scripts/test-annotation-plugin-store.mjs`.
+- `plugins.annotation-store` (L1): `["cargo","test","-p","rho-annotation-store","--test","annotations","--locked"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `plugins/annotations/**`.
 - `plugins.archive-owner` (L1): `["cargo","test","-p","rho-plugins","--test","archive_transfers","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
 - `plugins.archive-ports` (L2): `["cargo","test","-p","rho-host","--test","plugin_archives","--locked"]`

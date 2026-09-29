@@ -10,9 +10,12 @@ repository.workspace = true
 # Host application persistence still includes the retiring fixed Agent bridge.
 # Journal-only users opt out without pulling those owners into their build graph.
 default = ["application-store"]
-application-store = ["dep:rho-agent-store", "dep:rho-agent-owner", "dep:rho-application"]
+application-store = ["dep:rho-annotation-api", "dep:rho-annotation-owner", "dep:rho-annotation-store", "dep:rho-agent-store", "dep:rho-agent-owner", "dep:rho-application"]
 
 [dependencies]
+rho-annotation-api = { path = "../../../plugins/annotations/api", optional = true }
+rho-annotation-owner = { path = "../../../plugins/annotations/backend/owner", optional = true }
+rho-annotation-store = { path = "../../../plugins/annotations/backend/store", optional = true }
 rho-agent-store = { path = "../../../plugins/agent/backend/store", optional = true }
 rho-agent-owner = { path = "../../../plugins/agent/backend/owner", optional = true }
 rho-application = { path = "../../application", optional = true }

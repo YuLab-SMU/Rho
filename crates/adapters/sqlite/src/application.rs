@@ -7,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use std::{path::Path, sync::Mutex, time::Duration};
 
 /// Local application state, never part of the scientific journal or outbox.
-pub struct ApplicationStore(pub(crate) Mutex<Connection>, pub(crate) rho_agent_store::AgentStore);
+pub struct ApplicationStore(pub(crate) Mutex<Connection>, pub(crate) rho_agent_store::AgentStore, pub(crate) rho_annotation_store::AnnotationStore);
 
 impl ApplicationStore {
     pub fn open(path: &Path) -> Result<Self, String> {
@@ -46,11 +46,12 @@ impl ApplicationStore {
                 PRIMARY KEY(project,principal,receipt_key));",
             )
             .map_err(err)?;
-        crate::annotations::initialize(&connection)?;
         crate::runtime_instances::initialize(&connection)?;
         // The new Agent namespace never reads or imports the previous Application tables.
         let agents = rho_agent_store::AgentStore::open(&path.with_extension("agent-v1.sqlite"))?;
-        Ok(Self(Mutex::new(connection), agents))
+        // No migration or reads of the former core-owned annotation tables.
+        let annotations = rho_annotation_store::AnnotationStore::open(&path.with_extension("annotations-v1.sqlite"))?;
+        Ok(Self(Mutex::new(connection), agents, annotations))
     }
 
     pub fn read(&self, scope: &str, key: &str) -> Result<ApplicationState, String> {

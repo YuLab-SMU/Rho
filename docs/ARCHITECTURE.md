@@ -23,6 +23,16 @@ plugins. Management and Plugin Studio are ordinary plugins too; core CLI remains
 the recovery entry when they are absent. Default delivery imports the same package
 format and never introduces source-based validation exceptions or silent reinstall.
 
+Annotation records, frozen evidence, capture bytes, revision CAS and receipt transactions
+now live in `plugins/annotations/api` and `backend/{owner,store}` without private
+core or Agent dependencies. The remaining fixed Application adapter validates its
+live window before calling that owner; its SQLite adapter delegates to a separate
+`*.annotations-v1.sqlite` database and never opens/imports the former annotation
+tables. These adapters and the Host's fixed source interpretation are temporary;
+remove them when the ordinary annotation RPC/context flow replaces that entry in
+M4/M6. Extraction alone does not make annotations an installable plugin or establish
+ordinary source resolution, UI or recovery acceptance.
+
 Package transfer bytes have a native scoped owner independent of runtime resources.
 `plugins.archive_*` stages aligned immutable chunks, observes or validates the
 complete encoded archive, imports exact content, and exports explicit source and

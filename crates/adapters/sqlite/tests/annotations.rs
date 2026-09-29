@@ -222,7 +222,7 @@ fn captures_store_verified_bytes_and_marks_require_captured_views() {
 fn storage_failure_rolls_back_and_other_principals_see_nothing() {
     let f = Fixture::new();
     let evidence_id = f.freeze("freeze-1", "sha256:v1", AnnotationAnchor::WholeItem);
-    let raw = rusqlite::Connection::open(f.directory.path().join("state.sqlite")).unwrap();
+    let raw = rusqlite::Connection::open(f.directory.path().join("state.annotations-v1.sqlite")).unwrap();
     raw.execute_batch("CREATE TRIGGER fail_receipt BEFORE INSERT ON annotation_receipts WHEN NEW.request_id='create-1' BEGIN SELECT RAISE(ABORT,'injected receipt failure'); END;").unwrap();
     let create = f.command("create-1", AnnotationCommand::Create { evidence_id: evidence_id.clone(), note: "n".into(), labels: vec![], marks: vec![], continued_from: None });
     assert!(matches!(f.owner.write(&f.actor, &f.context.caller, &create, 20), Err(ApplicationError::Storage(_))));
@@ -238,4 +238,23 @@ fn storage_failure_rolls_back_and_other_principals_see_nothing() {
     other_window.window.incarnation = "elsewhere".into();
     assert!(matches!(f.owner.write(&f.actor, &f.context.caller, &other_window, 22), Err(ApplicationError::Conflict)));
     let _ = &f.store;
+}
+
+#[test]
+fn adapter_keeps_live_window_checks_and_does_not_open_old_annotation_tables() {
+    let f = Fixture::new();
+    let evidence = f.freeze("freeze", "v1", AnnotationAnchor::WholeItem);
+    let command = f.command("create", AnnotationCommand::Create {
+        evidence_id: evidence, note: "n".into(), labels: vec![], marks: vec![], continued_from: None,
+    });
+    assert!(matches!(f.owner.write(&f.actor, &f.context.caller, &command, OFFLINE_AFTER_MS + 2), Err(ApplicationError::Offline)));
+    let application_db = rusqlite::Connection::open(f.directory.path().join("state.sqlite")).unwrap();
+    let count: i64 = application_db.query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name LIKE 'annotation_%'", [], |r| r.get(0)).unwrap();
+    assert_eq!(count, 0, "new core application databases contain no annotation tables");
+    assert!(f.directory.path().join("state.annotations-v1.sqlite").is_file());
+    // Even an old table that would fail on read is not queried or imported on reopen.
+    application_db.execute_batch("CREATE VIEW annotation_receipts AS SELECT * FROM nonexistent_retired_table;").unwrap();
+    let reopened = ApplicationStore::open(&f.directory.path().join("state.sqlite")).unwrap();
+    let owner = AnnotationOwner::new(Arc::new(reopened));
+    assert_eq!(owner.evidence(f.actor.scope(), &match command.command { AnnotationCommand::Create { evidence_id, .. } => evidence_id, _ => unreachable!() }).unwrap().source.source_version, "v1");
 }

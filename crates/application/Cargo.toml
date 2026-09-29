@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+rho-annotation-api = { path = "../../plugins/annotations/api" }
+rho-annotation-owner = { path = "../../plugins/annotations/backend/owner" }
 rho-agent-api = { path = "../../plugins/agent/api" }
 rho-agent-owner = { path = "../../plugins/agent/backend/owner" }
 async-trait.workspace = true

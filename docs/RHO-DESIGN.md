@@ -1741,11 +1741,11 @@ It does not establish runtime implementation, product acceptance or Host restart
 
 ### A shared layer with component-owned sources
 
-Annotations belong to Application and refer to content from its existing owner.
-Files, documents, native R observations, help topics, executions and artifacts
-retain their current ownership and identities. Saving a note or stroke does not
-alter their contents or scientific records. The shared layer uses the existing
-component registration and validated Host ports, with source-specific anchoring
+Under the approved unified-plugin boundary, annotations belong to an ordinary
+plugin and refer to content from its existing owner. Files, documents, native R
+observations, help topics, executions and artifacts retain their ownership and
+identities. Saving a note or stroke does not alter their contents or scientific
+records. The shared layer uses public context contributions and validated Host ports, with source-specific anchoring
 and reading supplied by each component; it does not create another scientific
 result database or an independent context platform.
 
