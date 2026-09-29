@@ -28,3 +28,10 @@ before closure. The generic window mounts opened Help views and the native
 cross-package acceptance passes. Default scenario composition remains in progress. Independent compilation, component and native-browser evidence are recorded
 in the repository's current Status; assembling this package alone does not retire
 the fixed workbench.
+
+**Ask about…** previews the selected installed copy’s metadata through the R
+context provider, retaining native session, observation, library and version.
+It opens a selected active Agent; adding to a task draft and Send remain explicit.
+Expired observations are refused without rescanning or loading the package.
+Recorded source fields retain their meaning; missing provenance stays unknown.
+Pending view-opening requests remain available through Recover Agent request.

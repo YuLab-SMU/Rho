@@ -3,7 +3,10 @@
 export function contextContributions(schema) {
   const owner = {plugin:'org.rho.r',instance:'copy-original-r-instance',revision:'sha256:'+'a'.repeat(64),artifact:'sha256:'+'b'.repeat(64)};
   const files = name => [1,2,3,4].map(index => ({path:`original-${name}-${index}`,digest:'copy-original-file-digest'}));
-  const sources = [{id:'console',title:'Original R runs',scopes:['workspace.read','operation.read','resources.read'],
+  const sources = [{id:'packages',title:'Inspected installed packages',scopes:['workspace.read'],
+    description:'Search up to 100 previously inspected installed copies. Preview only metadata from the exact session and original package observation. Never refreshes inventory, installs, loads or attaches a package; missing provenance stays unknown.',
+    choices:[['Installed-copy metadata','metadata']],selector:{session:'copy-original-native-session',observation:'copy-original-package-observation',package:'base',library:'/original/library',version:'copy-original-version'}},
+    {id:'console',title:'Original R runs',scopes:['workspace.read','operation.read','resources.read'],
     description:'Search terminal original R executions. Preview original code or code with complete retained event text (resource up to 2 MiB). Checks exact provider, operation, session, resource and digest; never starts R or repeats execution. Partial output must use code only.',
     choices:[['Code and recorded output','transcript'],['Original code only','code']],
     selector:{operation:'copy-original-operation',session:'copy-original-native-session',events:{owner,resource:'copy-original-events',digest:'sha256:'+'c'.repeat(64),media_type:'application/json',bytes:100}}},

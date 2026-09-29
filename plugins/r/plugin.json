@@ -32,6 +32,18 @@
   "views": [],
   "contexts": [
     {
+      "id": "packages",
+      "title": "Inspected installed packages",
+      "search": {
+        "id": "r.context.packages.search",
+        "version": 1
+      },
+      "preview": {
+        "id": "r.context.packages.preview",
+        "version": 1
+      }
+    },
+    {
       "id": "console",
       "title": "Original R runs",
       "search": {
@@ -10672,6 +10684,425 @@
           },
           "inclusion": {
             "kind": "transcript"
+          },
+          "max_bytes": 16384
+        }
+      ]
+    },
+    {
+      "kind": "query",
+      "description": "Search up to 100 previously inspected installed copies. Preview only metadata from the exact session and original package observation. Never refreshes inventory, installs, loads or attaches a package; missing provenance stays unknown.",
+      "required_scopes": [
+        "workspace.read"
+      ],
+      "recovery_schema": true,
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null,
+      "capability": {
+        "id": "r.context.packages.search",
+        "version": 1
+      },
+      "title": "Find Inspected installed packages",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ContextSearch",
+        "type": "object",
+        "properties": {
+          "after": {
+            "description": "Opaque owner cursor; continuation does not imply a frozen multi-page read."
+          },
+          "limit": {
+            "type": "integer",
+            "format": "uint16",
+            "maximum": 20,
+            "minimum": 1
+          },
+          "text": {
+            "description": "Empty text lists available sources. Owners document which fields match.",
+            "type": "string"
+          },
+          "window": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "window",
+          "text",
+          "limit"
+        ]
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ContextPage",
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ContextItem"
+            },
+            "maxItems": 20
+          },
+          "next": true,
+          "notices": {
+            "description": "Explain partial, cached or unavailable observations without concealing\nthem as empty results. Completeness also belongs in the query envelope.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "notices"
+        ],
+        "$defs": {
+          "ContextItem": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "kind": {
+                "description": "A presentation hint supplied by the owner, not a closed core view enum.",
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/ContextReference"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "reference",
+              "title",
+              "description",
+              "kind"
+            ]
+          },
+          "ContextReference": {
+            "type": "object",
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ]
+          },
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "window": "copy-original-window",
+          "text": "",
+          "after": null,
+          "limit": 20
+        }
+      ]
+    },
+    {
+      "kind": "query",
+      "description": "Search up to 100 previously inspected installed copies. Preview only metadata from the exact session and original package observation. Never refreshes inventory, installs, loads or attaches a package; missing provenance stays unknown.",
+      "required_scopes": [
+        "workspace.read"
+      ],
+      "recovery_schema": true,
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null,
+      "capability": {
+        "id": "r.context.packages.preview",
+        "version": 1
+      },
+      "title": "Preview Inspected installed packages",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PreviewContext",
+        "type": "object",
+        "properties": {
+          "inclusion": {
+            "oneOf": [
+              {
+                "title": "Installed-copy metadata",
+                "const": {
+                  "kind": "metadata"
+                }
+              }
+            ]
+          },
+          "max_bytes": {
+            "type": "integer",
+            "format": "uint32",
+            "maximum": 65536,
+            "minimum": 1
+          },
+          "reference": {
+            "$ref": "#/$defs/ContextReference"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "reference",
+          "inclusion",
+          "max_bytes"
+        ],
+        "$defs": {
+          "ContextReference": {
+            "type": "object",
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ]
+          },
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          }
+        }
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ContextPreview",
+        "type": "object",
+        "properties": {
+          "data": {
+            "description": "Owner-defined bounded presentation data. Large artifacts use resources."
+          },
+          "item": {
+            "$ref": "#/$defs/ContextItem"
+          },
+          "resources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ResourceReference"
+            },
+            "maxItems": 8
+          },
+          "text": {
+            "description": "Plain text, never executable markup. Truncation must end at a UTF-8 boundary.",
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "item",
+          "text",
+          "truncated",
+          "data",
+          "resources"
+        ],
+        "$defs": {
+          "ContextItem": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "kind": {
+                "description": "A presentation hint supplied by the owner, not a closed core view enum.",
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/ContextReference"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "reference",
+              "title",
+              "description",
+              "kind"
+            ]
+          },
+          "ContextReference": {
+            "type": "object",
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ]
+          },
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "ResourceReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "reference": {
+            "provider": {
+              "plugin": "org.rho.r",
+              "instance": "copy-original-r-instance",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "contribution": "packages",
+            "window": "copy-original-window",
+            "selector": {
+              "session": "copy-original-native-session",
+              "observation": "copy-original-package-observation",
+              "package": "base",
+              "library": "/original/library",
+              "version": "copy-original-version"
+            }
+          },
+          "inclusion": {
+            "kind": "metadata"
           },
           "max_bytes": 16384
         }

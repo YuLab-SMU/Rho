@@ -736,6 +736,12 @@ correlated Operation through the current parent's query grants. It cannot dispat
 another scientific mutation. Attachments are captured by the Agent-owned upload
 ports before admission; original history reads retained bytes and source snapshots.
 
+Installed-package context retains the original native session, observation, package,
+library and version. Its bounded search catalog holds only previously inspected
+copy identities for the calling principal. Preview pages through that same native
+observation, never a fresh inventory; busy/expired/missing copies remain unavailable.
+Source, delivery and project-link fields keep their owner-defined meanings.
+
 Console context belongs to the R provider. It fixes a terminal original execution,
 native session and retained event resource. Preview reads original code or complete
 digest-verified event text (up to 2 MiB), labels omitted media and refuses partial

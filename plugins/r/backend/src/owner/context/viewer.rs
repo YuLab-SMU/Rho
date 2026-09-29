@@ -427,7 +427,7 @@ enum Inclusion {
     Text {},
     Metadata {},
 }
-fn bounded_text(text: &str, limit: usize) -> (String, bool) {
+pub(super) fn bounded_text(text: &str, limit: usize) -> (String, bool) {
     let mut end = limit.min(text.len());
     while !text.is_char_boundary(end) {
         end -= 1;

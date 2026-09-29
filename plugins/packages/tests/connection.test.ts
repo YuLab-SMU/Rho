@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { PackagesConnection } from "../src/connection.js";
+import type { AgentState } from "../public/agent-input/input.js";
 const source = { instance: "r-one", plugin: "org.rho.r", revision: "revision", artifact: "artifact" };
 const connections: PackagesConnection[] = [];
 afterEach(() => { for (const owner of connections.splice(0)) owner.stop(); vi.useRealTimers(); });
@@ -49,4 +50,18 @@ it("final capture pauses observations and saves choices after earlier writes set
   await f.owner.refresh(); await vi.advanceTimersByTimeAsync(3000);
   expect(f.query).toHaveBeenCalledTimes(reads); expect(f.setState).toHaveBeenCalledTimes(saves);
   f.owner.resume(); await f.owner.refresh(); expect(f.query.mock.calls.length).toBeGreaterThan(reads);
+});
+it("retains an Agent opening request through failed saves and new connection state", async () => {
+  const f=fixture(),agent:AgentState={input:{request:'input-original',source_view:'packages-view',title:'Package stats',instance:null,
+    reference:{provider:source,window:'window',contribution:'packages',selector:{session:'original',observation:'packages_1',package:'stats',library:'/R/library',version:'4.5'}},
+    inclusion:{kind:'metadata'},preview:{id:'r.context.packages.preview',version:1}},
+    pending:{view:'packages-view',request:'open-original',operation:'operation-original',capability:{id:'windows.open_view',version:1},arguments:{original:true}},opened:null};
+  f.setState.mockRejectedValueOnce(new Error('lost save'));
+  await expect(f.owner.saveAgent(agent)).rejects.toThrow('lost save');
+  expect(f.owner.savedAgent).toEqual(agent);await f.owner.flush();
+  const saved=f.setState.mock.calls.at(-1)![0];expect(saved.agent).toEqual(agent);
+  const next=fixture(saved);expect(next.owner.savedAgent).toEqual(agent);
+  const detached=next.owner.savedAgent!;detached.pending!.request='different';
+  expect(next.owner.savedAgent?.pending?.request).toBe('open-original');
+  expect(next.query).not.toHaveBeenCalled();
 });

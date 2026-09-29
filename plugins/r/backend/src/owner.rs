@@ -60,6 +60,7 @@ pub struct Owner {
     recovery_pending: Mutex<std::collections::BTreeMap<OperationId, recovery::Pending>>,
     help_context: Mutex<context::HelpCatalog>,
     object_context: Mutex<context::ObjectCatalog>,
+    package_context: Mutex<context::PackageCatalog>,
     context_grants: context::Grants,
 }
 impl Owner {
@@ -118,6 +119,7 @@ impl Owner {
             recovery_pending: Mutex::new(std::collections::BTreeMap::new()),
             help_context: Mutex::new(context::HelpCatalog::default()),
             object_context: Mutex::new(context::ObjectCatalog::default()),
+            package_context: Mutex::new(context::PackageCatalog::default()),
             context_grants: context::Grants::new(grants),
         })
     }
@@ -523,6 +525,9 @@ impl Owner {
                     message: preview(&message).to_owned(),
                 });
             }
+        }
+        if call.binding.capability.id.as_str() == "r.packages" {
+            self.package_context.lock().unwrap().observe(call.principal.as_str(), &call.arguments, &observation);
         }
         if call.binding.capability.id.as_str() == "r.read_help" {
             self.help_context.lock().unwrap().observe(&call.arguments, &observation);

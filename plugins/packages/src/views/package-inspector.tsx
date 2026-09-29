@@ -1,4 +1,4 @@
-import { usePackages, useSession, useNavigation } from "../view-services.js";
+import { usePackages, useSession, useNavigation, useAgent } from "../view-services.js";
 import { packageCopyKey, packageLink } from "../packages.js";
 import type { PackageEntry } from "../../public/r-protocol/index.js";
 import type { PackageGroup } from "../../public/r-protocol/index.js";
@@ -137,7 +137,7 @@ export function PackageInspector({
   inline?: boolean;
 }) {
   const p = usePackages(), session = useSession();
-  const navigation = useNavigation();
+  const navigation = useNavigation(), agent = useAgent();
   const detail = p.details.get(group.name);
   const copies = detail?.copies ?? [];
   const primary =
@@ -407,6 +407,8 @@ export function PackageInspector({
       {inline && selectedCopy && <button className="package-doc-button" title="View documentation for this installed copy"
         disabled={!selectedCopy.library_path || !p.session || p.expired || navigation.blocked || !navigation.canOpenDocumentation}
         onClick={() => navigation.openDocumentation(selectedCopy)}>Documentation · {selectedCopy.version}</button>}
+      {agent && <button className="package-doc-button" disabled={agent.blocked || !agent.recovering && (!selectedCopy || !p.session || p.expired || p.stale)}
+        onClick={() => {if(selectedCopy)agent.ask(selectedCopy);}}>Ask about…</button>}
       {detail?.next !== null && detail?.next !== undefined && (
         <button
           className="package-more-copies"

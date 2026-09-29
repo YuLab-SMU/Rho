@@ -1,3 +1,4 @@
+import type {AgentState} from '../public/agent-input/input.js';
 import type { InstanceRef, JsonValue, ProviderBinding } from "../public/plugin-protocol/index.js";
 import type { PluginViewClient } from "../public/plugin-ui/index.js";
 import type { RInspection, RInspectionState } from "../public/r-protocol/index.js";
@@ -27,6 +28,7 @@ export class PackagesConnection extends Model<ConnectionSnapshot> {
   private saveError = "";
   private saved = "";
   private actions: JsonValue = null;
+  private agentState?: AgentState;
   private stopped = false;
   private paused = false;
   private refreshing: Promise<void> | null = null;
@@ -39,8 +41,9 @@ export class PackagesConnection extends Model<ConnectionSnapshot> {
     this.source = Object.freeze(structuredClone(source));
     if (![source.instance, source.plugin, source.revision, source.artifact].every(value => typeof value === "string" && value.length > 0))
       throw new Error("Select an exact R plugin instance.");
-    const saved = client.view.state as { nativeSession?: unknown; packages?: unknown; actions?: JsonValue } | null;
+    const saved = client.view.state as { nativeSession?: unknown; packages?: unknown; actions?: JsonValue; agent?: AgentState } | null;
     this.actions = structuredClone(saved?.actions ?? null);
+    this.agentState = structuredClone(saved?.agent);
     const session = typeof saved?.nativeSession === "string" && saved.nativeSession ? saved.nativeSession : null;
     this.identity = { epoch: 1, project: client.view.project, session, runtimeState: null, connected: false, capabilities };
     this.packages = new Packages({ context: () => this.identity,
@@ -65,7 +68,13 @@ export class PackagesConnection extends Model<ConnectionSnapshot> {
   get nativeSession() { return this.identity.session; }
   get actionState(): JsonValue { return structuredClone(this.actions); }
   async saveActions(value: JsonValue) { this.actions = structuredClone(value); await this.flush(); }
-  private state() { return { nativeSession: this.identity.session, packages: this.packages.serialize(), actions: this.actions }; }
+  get savedAgent() { return structuredClone(this.agentState); }
+  saveAgent(value: AgentState): Promise<void> {
+    const captured = structuredClone(value);
+    const task = this.saveQueue.then(async () => { this.agentState = captured; await this.persist(); });
+    this.saveQueue = task.catch(() => undefined); return task;
+  }
+  private state() { return { ...(this.agentState ? {agent:this.agentState} : {}), nativeSession: this.identity.session, packages: this.packages.serialize(), actions: this.actions }; }
   private binding(id: string, target: string | null): ProviderBinding {
     return { capability: { id, version: 1 }, provider: this.source, project: this.identity.project!, target };
   }
@@ -99,7 +108,7 @@ export class PackagesConnection extends Model<ConnectionSnapshot> {
     if (this.stopped) throw new Error("The Packages view connection is closed.");
     const state = this.state(), encoded = JSON.stringify(state);
     if (encoded === this.saved) return;
-    try { await this.client.setState(state as JsonValue); this.saved = encoded; this.saveError = ""; }
+    try { await this.client.setState(state as unknown as JsonValue); this.saved = encoded; this.saveError = ""; }
     catch (error) { this.saveError = `View state was not saved: ${message(error)}`; throw error; }
     finally { if (!this.stopped) this.publish(); }
   }

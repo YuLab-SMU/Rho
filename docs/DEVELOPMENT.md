@@ -282,6 +282,16 @@ without compilation. Reserve `--independent` for an owner/store source audit.
 `node scripts/build-annotation-plugin.mjs /new/path` defaults to the workspace cache;
 only an explicit `--independent` rebuilds standalone source. Native tests, package
 assembly, real-provider/Host acceptance and UI review are separate outcomes.
+For **Packages → Agent** acceptance, `node scripts/test-packages-agent.mjs` reuses
+`RHO_R_PLUGIN_PACKAGE`, `RHO_AGENT_PLUGIN_PACKAGE`, `RHO_PACKAGES_PLUGIN_PACKAGE`
+and existing `RHO_ARK` / `RHO_R_HOME`, without building or installing anything.
+A disposable real R session supplies the selected installed `splines` copy. Browser
+Ask → draft/reload → explicit Rho Send reaches a deterministic local model peer.
+Loaded-package observations before/after verify that viewing did not load the
+package; changed libraries are refused. After actual Host restart, the original
+Send survives and the old native observation cannot start R. Set
+`RHO_PACKAGES_AGENT_EVIDENCE` for reports/screenshots; Native Send and model
+reasoning quality are separate coverage.
 For **Console → Agent** acceptance, `node scripts/test-console-agent.mjs` reuses
 `RHO_R_PLUGIN_PACKAGE`, `RHO_AGENT_PLUGIN_PACKAGE`, `RHO_CONSOLE_PLUGIN_PACKAGE`
 and existing `RHO_ARK` / `RHO_R_HOME`. It builds nothing. A disposable real R
