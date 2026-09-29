@@ -1312,7 +1312,9 @@ impl ComponentAgentOwner {
                         action.capability(),
                         match &action {
                             ComponentToolAction::PluginInvoke(request) => {
-                                request.binding.capability.version
+                                u16::try_from(request.binding.capability.version).map_err(|_| {
+                                    invalid("Previous-result capability version exceeds the Agent reference range")
+                                })?
                             }
                             _ => 1,
                         },
