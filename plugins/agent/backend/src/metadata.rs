@@ -292,6 +292,12 @@ impl Metadata {
         caller: PluginViewCaller,
         host: rho_plugin_sdk::HostCallClient,
     ) -> Result<Value, Failure> {
+        if call.binding.capability.id.as_str() == "agent.native.assets.stage" {
+            return self.native.stage_upload(self, call, caller);
+        }
+        if call.binding.capability.id.as_str() == "agent.native.assets.finish" {
+            return self.native.finish_staged_upload(self, call, caller).await;
+        }
         if call.binding.capability.id.as_str() == "agent.native.assets.import" {
             return self.native.import_asset(self, call, caller, host).await;
         }

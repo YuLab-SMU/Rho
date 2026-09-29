@@ -73,8 +73,18 @@ separate `agent.native.assets.import` Control with an exact resource reference a
 an explicit `resources.read@1` optional grant. Only small inline uploads use
 `agent.native.assets.upload`. Neither path starts a native Agent or journals bytes;
 select the resulting asset with a separate versioned draft write. Import retries
-observe the original receipt without another resource read. Browser local-file
-capture/staging remains separate implementation work.
+observe the original receipt without another resource read. Browser file capture
+uses `agent.native.assets.stage` Controls of at most 64 KiB decoded data. The
+transient instance cache reserves at most 32 MiB across 16 transfers. Each chunk
+checks the exact task controller, original file metadata and byte range; an
+identical chunk may be repeated. `agent.native.assets.finish` verifies the full
+SHA-256 and admits the existing AddAsset owner command with the original UUID.
+Staging does not create assets, start an Agent or journal bytes. Incomplete cache
+entries may expire and disappear on process restart; reselecting the exact file
+can continue the same request. Completed assets and their receipts remain in the
+single Agent-owned store. The view saves the descriptor before transferring any
+bytes, inspects the original receipt after a missing finish reply, and separately
+selects the confirmed asset into the draft. Send remains explicit.
 Importing the package does not activate it. Installing or activating a development
 package is an explicit plugin lifecycle operation.
 
@@ -139,5 +149,6 @@ public MessagePort peer: layout, IME, task switching, original Send, next draft,
 reload and closure. Its screenshots and result are under
 `target/plugin-refactor/agent-view-renderer/`. This is renderer evidence, not
 real Host/native acceptance. The combined package manifest and native connection
-need the serial native checks. Rho component tasks, attachments, contributed
-context, settings and full history navigation remain subsequent work.
+need the serial native checks. Rho component tasks, contributed context, settings and full history navigation
+remain subsequent work. The staged attachment backend and combined native/Host
+flow still need native acceptance; renderer/model checks alone do not prove them.

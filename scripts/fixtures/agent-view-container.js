@@ -19,7 +19,8 @@ events.set('task-0', [
   { cursor: 2, kind: 'text', role: 'assistant', text: 'The selected calculation returned 42. Its original record remains available.\n\nYou can continue this conversation or start a separate task.' },
   { cursor: 3, kind: 'reasoning', role: 'assistant', text: 'RENDERER_PRIVATE_REASONING' },
 ]);
-let close = { phase: 'open' }, saveDelay = 0;
+let close = { phase: 'open' }, saveDelay = 0, loseFinish = false;
+const staged = new Map();
 async function requestId(request) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('agent-view:' + request));
   return 'sha256:' + Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2, '0')).join('');
@@ -39,16 +40,39 @@ async function handle(body) {
     if (id === 'operation.list_recent') data = { operations: records.filter(r => r.operation.client_request_id === body.arguments.client_request_id).map(r => ({ operation_id: r.operation.operation_id })) };
     else if (id === 'agent.tasks') data = { tasks: [...details.values()].filter(d => d.summary.task.archived === args.archived).map(d => ({ reference: { kind: 'native', task_id: d.summary.task.task_id }, title: d.summary.task.title, provider: d.summary.task.provider, state: d.summary.attachment.state })), next: null };
     else if (id === 'agent.native.task') data = details.get(args.task_id);
+    else if (id === 'agent.native.receipt') data = [...details.values()].flatMap(d => d.receipts).find(r => r.request_id === args.request_id);
     else if (id === 'agent.native.events') data = { task_id: args.task_id, events: events.get(args.task_id) ?? [], history_generation: 1, has_more: false, history_gap: false, next_cursor: 3, durable_cursor: 3, oldest_cursor: 1 };
     else throw Error('Unexpected query ' + id);
     return { status: 'ready', completeness: 'complete', data: copy(data) };
+  }
+  if (body.type === 'control') {
+    const { upload, offset, data } = body.arguments.arguments;
+    if (!view.state.uploads.some(p => JSON.stringify(p.upload) === JSON.stringify(upload))) throw Error('Attachment identity was not retained');
+    calls.push({ ...copy(body), arguments: { upload: copy(upload), offset, encoded_bytes: data?.length ?? 0 } });
+    if (body.capability.id === 'agent.native.assets.stage') {
+      const part = Uint8Array.from(atob(data), c => c.charCodeAt(0));
+      let entry = staged.get(upload.request_id);
+      if (!entry) { entry = { bytes: new Uint8Array(upload.bytes), received: 0 }; staged.set(upload.request_id, entry); }
+      if (part.length > 65536 || offset > entry.received) throw Error('Invalid chunk range');
+      entry.bytes.set(part, offset); entry.received = Math.max(entry.received, offset + part.length);
+      return { upload: copy(upload), received: entry.received, complete: entry.received === upload.bytes };
+    }
+    if (body.capability.id !== 'agent.native.assets.finish') throw Error('Unexpected attachment Control');
+    const entry = staged.get(upload.request_id); if (entry?.received !== upload.bytes) throw Error('Incomplete file');
+    const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', entry.bytes)), n => n.toString(16).padStart(2, '0')).join('');
+    if (digest !== upload.sha256) throw Error('Changed file bytes');
+    const detail = details.get(upload.control.task_id), receipt = { request_id: upload.request_id, task_id: upload.control.task_id, command: 'add_asset', status: 'succeeded' };
+    detail.assets.push({ asset_id: upload.request_id, name: upload.name, mime_type: upload.mime_type, bytes: upload.bytes, sha256: upload.sha256 });
+    detail.receipts.push(receipt); detail.summary.observation_version++; staged.delete(upload.request_id);
+    if (loseFinish) { loseFinish = false; throw Error('Lost attachment reply'); }
+    return copy({ receipt, detail });
   }
   if (body.type === 'invoke') {
     calls.push(copy(body));
     if (!view.state.pending.some(p => p.intent.request === body.request_id)) throw Error('Original intent was not retained');
     const scoped = await requestId(body.request_id), original = records.find(r => r.operation.client_request_id === scoped);
     if (original) return copy(original);
-    const command = body.arguments.arguments.command, task = command?.control?.task_id ?? 'task-' + details.size;
+    const command = body.arguments.arguments.command, sentAssets = command?.kind === 'send' ? copy(details.get(command.control.task_id).draft.content.assets) : [], task = command?.control?.task_id ?? 'task-' + details.size;
     let d = details.get(task), output;
     if (body.capability.id === 'agent.native.discover') {
       output = { provider: body.arguments.arguments.provider, selected_model: 'fixture-model', selected_effort: null, models: [{ id: 'fixture-model', name: 'Fixture model' }], error: null };
@@ -59,13 +83,13 @@ async function handle(body) {
         d.draft = { version: d.draft.version + 1, content: copy(command.content) };
       } else if (command.kind === 'send') {
         if (command.draft_version !== d.draft.version) throw Error('Stale sent draft');
-        events.set(task, [...(events.get(task) ?? []), { cursor: 4, kind: 'text', role: 'user', text: d.draft.content.text }]);
+        events.set(task, [...(events.get(task) ?? []), { cursor: 4, kind: 'text', role: 'user', request_id: body.request_id, text: d.draft.content.text }]);
         d.draft = { version: d.draft.version + 1, content: blank() }; d.summary.attachment.state = 'running';
       } else if (command.kind === 'rename') d.summary.task.title = command.title;
       else if (command.kind === 'archive') d.summary.task.archived = command.archived;
       else if (command.kind === 'stop') d.summary.attachment.state = 'stopping';
       else throw Error('Unexpected fixture command ' + command.kind);
-      const receipt = { request_id: body.request_id, command: command.kind, task_id: task, status: command.kind === 'send' ? 'submitted' : 'succeeded', submitted_draft_version: command.kind === 'send' ? command.draft_version : null };
+      const receipt = { request_id: body.request_id, command: command.kind, task_id: task, input_assets: sentAssets, status: command.kind === 'send' ? 'submitted' : 'succeeded', submitted_draft_version: command.kind === 'send' ? command.draft_version : null };
       d.summary.observation_version++; d.receipts.push(receipt); output = { receipt, detail: copy(d) };
     }
     const running = command?.kind === 'send';
@@ -91,6 +115,7 @@ addEventListener('message', event => {
 window.fixture = {
   snapshot: () => copy({ view, calls, details: [...details], records }),
   delaySave: milliseconds => { saveDelay = milliseconds; },
+  loseAttachmentReply: () => { loseFinish = true; },
   close: () => { close = { phase: 'requested', operation: 'close-original' }; },
   reload: () => { frame.src = '/index.html#rho-view-nonce=fixture-nonce'; },
 };

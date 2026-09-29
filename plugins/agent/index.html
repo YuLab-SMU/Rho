@@ -16,8 +16,8 @@
     <div id="recovery" hidden><span id="recovery-status">An original request needs inspection.</span><button id="inspect-original">Check status</button><button id="continue-original" hidden>Continue original request</button></div>
     <div id="draft-conflict" hidden><span>The saved draft changed. Your edits are retained.</span><button id="keep-draft">Keep my draft</button><button id="use-draft">Use saved draft</button></div>
     <div id="error" role="alert" hidden></div>
-    <footer class="composer"><textarea id="message" rows="3" maxlength="32768" aria-label="Agent message" placeholder="Ask about your work…" disabled></textarea>
-      <div class="composer-tools"><button id="tools" popovertarget="tools-menu">Tools</button><div id="tools-menu" popover></div>
+    <footer class="composer"><div id="attachments" aria-label="Selected attachments"></div><div id="uploads" aria-label="Attachment transfers"></div><input id="attachment-file" type="file" multiple hidden><textarea id="message" rows="3" maxlength="32768" aria-label="Agent message" placeholder="Ask about your work…" disabled></textarea>
+      <div class="composer-tools"><button id="attach" aria-label="Attach files">Attach</button><button id="tools" popovertarget="tools-menu">Tools</button><div id="tools-menu" popover></div>
         <select id="model" aria-label="Agent model"></select><button id="send" class="primary" aria-label="Send message" disabled>Send</button><button id="stop" hidden>Stop Agent</button></div>
       <div class="composer-meta"><span id="draft-status"></span><button id="save-draft" hidden>Save draft</button><button id="archived">Archived tasks</button></div>
     </footer>

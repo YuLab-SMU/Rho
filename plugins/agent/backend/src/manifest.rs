@@ -37,7 +37,11 @@ pub fn is_mutation(id: &str) -> bool {
 pub fn kind(id: &str) -> CapabilityKind {
     if matches!(
         id,
-        "agent.model.key.store" | "agent.native.assets.upload" | "agent.native.assets.import"
+        "agent.model.key.store"
+            | "agent.native.assets.upload"
+            | "agent.native.assets.import"
+            | "agent.native.assets.stage"
+            | "agent.native.assets.finish"
     ) {
         CapabilityKind::Control
     } else if is_mutation(id) {
@@ -63,6 +67,10 @@ fn capability(
             "Explicitly inspect one installed native Agent and its model catalog in this instance's project. May start and close a bounded discovery CLI; does not install software, start a model turn or change an existing task. Opening a view and reading tasks do not perform discovery. Repeated original Operations only observe their original result."
         } else if id == "agent.native.command" {
             "Admit a native Agent command with the original caller and task generation. Send may select exact ordinary-plugin query/Operation tools under existing grants; immutable manifests supply their contracts. Retains the original parent until the native turn and accepted scientific children settle. Identical requests only observe original receipts. Tool retries require the same Send and semantic request identity. Does not install an Agent. Attachment bytes are excluded and contributed context is not yet composed."
+        } else if id == "agent.native.assets.stage" {
+            "Stage bounded browser file chunks in transient instance memory under an exact task controller and original transfer identity. Identical chunks are idempotent; changed bytes, controllers and quotas are rejected. Does not create an asset, start an Agent or journal bytes. Incomplete data may expire; reselect the original file to continue."
+        } else if id == "agent.native.assets.finish" {
+            "Verify the complete staged file up to 8 MiB and admit its original attachment request through the native task owner. Does not start an Agent or select the asset into a draft. Inspect agent.native.receipt after a lost reply; incomplete staging can be reselected with the same identity. Bytes never enter the Operation journal."
         } else if id == "agent.native.assets.import" {
             "Import an exact controlled resource up to 8 MiB into a native task under its current controller. Reads bounded granted chunks and verifies the complete digest before admission. Retains the original resource identity atomically with its receipt; retries only observe that receipt without reading or importing again. Does not start an Agent or journal attachment bytes."
         } else if id == "agent.native.assets.upload" {
@@ -87,7 +95,7 @@ fn capability(
         input_schema: input, output_schema: output, examples: vec![example],
         recovery_schema: json!({"type":"object","additionalProperties":false,"properties":{"code":{"type":"string"}},"required":["code"]}),
         required_scopes: if id == "agent.native.assets.import" { ["application.control".into(), "plugins.read".into(), "resources.read".into()].into() } else if operation || control { ["application.control".into(), "plugins.read".into()].into() } else if matches!(id, "agent.model.tool.operation" | "agent.native.tool.operation") { ["application.read".into(), "operation.read".into()].into() } else { ["application.read".into()].into() },
-        effects: if id == "agent.native.discover" { ["agent.native.discovery".into()].into() } else if id == "agent.native.command" { ["agent.native.command".into()].into() } else if matches!(id, "agent.native.assets.upload" | "agent.native.assets.import") { ["agent.assets".into()].into() } else if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
+        effects: if id == "agent.native.discover" { ["agent.native.discovery".into()].into() } else if id == "agent.native.command" { ["agent.native.command".into()].into() } else if matches!(id, "agent.native.assets.upload" | "agent.native.assets.import" | "agent.native.assets.stage" | "agent.native.assets.finish") { ["agent.assets".into()].into() } else if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
         cancellation: CancellationSupport::Unsupported, preflight: None,
     }
 }
@@ -152,6 +160,20 @@ pub fn manifest() -> PluginManifest {
             grants
         },
         capabilities: vec![
+            capability(
+                "agent.native.assets.stage",
+                "Stage a browser attachment chunk",
+                schema_for!(crate::native_uploads::Chunk).to_value(),
+                schema_for!(crate::native_uploads::Progress).to_value(),
+                json!({"upload":{"request_id":"11111111-1111-4111-8111-111111111111","control":{"task_id":"task-example","generation":1},"name":"empty.txt","mime_type":"text/plain","bytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},"offset":0,"data":""}),
+            ),
+            capability(
+                "agent.native.assets.finish",
+                "Finish the original browser attachment",
+                schema_for!(crate::native_uploads::Finish).to_value(),
+                schema_for!(AgentTaskCommandResult).to_value(),
+                json!({"upload":{"request_id":"11111111-1111-4111-8111-111111111111","control":{"task_id":"task-example","generation":1},"name":"empty.txt","mime_type":"text/plain","bytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}}),
+            ),
             capability(
                 "agent.native.discover",
                 "Inspect an installed native Agent",
@@ -399,6 +421,8 @@ pub fn manifest() -> PluginManifest {
         "agent.native.receipt",
         "agent.native.events",
         "agent.native.history",
+        "agent.native.assets.stage",
+        "agent.native.assets.finish",
     ] {
         let own = manifest
             .capabilities

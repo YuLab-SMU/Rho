@@ -53,11 +53,31 @@ export async function testAgentRenderer(root, assets) {
     await expect(input).toHaveValue('');
     await expect.poll(async () => (await page.evaluate(() => window.fixture.snapshot())).details[0][1].draft.content.text).toBe('Draft belongs to the first task');
     await frame.getByRole('combobox', { name: 'Select task' }).selectOption('task-0'); await expect(input).toHaveValue('Draft belongs to the first task');
-    await frame.getByRole('button', { name: 'Tools', exact: true }).click(); await frame.getByRole('checkbox', { name: 'run_selected_r' }).check(); await input.click();
+    await frame.locator('#attachment-file').setInputFiles({ name: '完整附件.txt', mimeType: 'text/plain', buffer: Buffer.alloc(8 * 1024 * 1024, 82) });
+    await expect(frame.locator('#attachments')).toContainText('完整附件.txt'); await expect(frame.locator('#draft-status')).toHaveText('Draft saved');
+    snapshot = await page.evaluate(() => window.fixture.snapshot());
+    assert.equal(snapshot.calls.filter(call => call.capability?.id === 'agent.native.assets.stage').length, 128);
+    assert.ok(snapshot.calls.filter(call => call.capability?.id === 'agent.native.assets.stage').every(call => call.arguments.encoded_bytes <= 87384));
+    await page.evaluate(() => window.fixture.loseAttachmentReply());
+    await frame.locator('#attachment-file').setInputFiles({ name: 'lost-reply.txt', mimeType: 'text/plain', buffer: Buffer.from('Preserve the original import.') });
+    await expect(frame.getByRole('alert')).toContainText('Lost attachment reply');
+    await page.evaluate(() => window.fixture.reload()); await expect(frame.locator('#uploads')).toContainText('lost-reply.txt');
+    await frame.locator('#uploads').getByRole('button', { name: 'Check status' }).click();
+    await expect(frame.locator('#uploads')).toContainText('Ready to add'); await expect(frame.locator('#attachments')).not.toContainText('lost-reply.txt');
+    await frame.locator('#uploads').getByRole('button', { name: 'Add to draft' }).click();
+    await expect(frame.locator('#attachments')).toContainText('lost-reply.txt'); await expect(frame.locator('#draft-status')).toHaveText('Draft saved');
+    snapshot = await page.evaluate(() => window.fixture.snapshot()); assert.equal(snapshot.calls.filter(call => call.capability?.id === 'agent.native.assets.finish').length, 2);
+    for (const width of [440, 320, 220]) {
+      await page.setViewportSize({ width, height: 820 }); await page.screenshot({ path: path.join(output, `agent-attachments-${width}.png`) });
+      assert.equal(await frame.locator('body').evaluate(node => node.scrollWidth > innerWidth), false);
+    }
+    await page.setViewportSize({ width: 440, height: 820 });
+    await frame.getByRole('button', { name: 'Tools', exact: true }).click(); await frame.getByRole('checkbox', { name: 'run_selected_r' }).check(); await frame.getByRole('button', { name: 'Tools', exact: true }).click();
     await frame.getByRole('button', { name: 'Send message' }).click(); await expect(frame.getByRole('button', { name: 'Stop Agent' })).toBeVisible();
-    await expect(input).toHaveValue(''); await input.fill('Keep this next draft after reopening'); await expect(frame.locator('#draft-status')).toHaveText('Draft saved');
+    await expect(input).toHaveValue(''); await expect(frame.getByRole('log')).toContainText('完整附件.txt · lost-reply.txt'); await input.fill('Keep this next draft after reopening'); await expect(frame.locator('#draft-status')).toHaveText('Draft saved');
     snapshot = await page.evaluate(() => window.fixture.snapshot()); const send = snapshot.calls.filter(call => call.arguments?.arguments?.command?.kind === 'send');
     assert.equal(send.length, 1); assert.equal(send[0].arguments.arguments.tools.length, 1);
+    assert.equal(snapshot.details[0][1].receipts.find(r => r.command === 'send').input_assets.length, 2);
     await page.evaluate(() => window.fixture.reload()); await expect(input).toHaveValue('Keep this next draft after reopening');
     await expect(frame.getByRole('button', { name: 'Stop Agent' })).toBeVisible();
     await page.screenshot({ path: path.join(output, 'agent-running-reopened.png') });
@@ -66,7 +86,7 @@ export async function testAgentRenderer(root, assets) {
     await expect.poll(async () => (await page.evaluate(() => window.fixture.snapshot())).calls.filter(call => call.type === 'prepare_close').length).toBe(1);
     snapshot = await page.evaluate(() => window.fixture.snapshot()); assert.equal(snapshot.calls.filter(call => call.arguments?.arguments?.command?.kind === 'stop').length, 0);
     assert.deepEqual(errors, []);
-    fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify({ status: 'passed', fixture: 'synthetic public MessagePort; no Host or native Agent', checks: ['opaque iframe bootstrap', '960/440/320/220 layout and anchored menu', 'reasoning excluded', 'IME Enter', 'debounced save across task switch', 'explicit tools captured by one Send', 'next draft and original Operation after reload', 'close does not Stop'] }, null, 2) + '\n');
+    fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify({ status: 'passed', fixture: 'synthetic public MessagePort; no Host or native Agent', checks: ['opaque iframe bootstrap', '960/440/320/220 layout and anchored menu', 'reasoning excluded', 'IME Enter', 'debounced save across task switch', 'explicit tools captured by one Send', 'next draft and original Operation after reload', 'close does not Stop', '8 MiB file selection in bounded chunks', 'lost attachment receipt reload and explicit selection without reimport'] }, null, 2) + '\n');
     console.log(`Agent renderer checks passed. Evidence: ${output}. Synthetic peer, not native/Host acceptance.`);
   } catch (error) { await page?.screenshot({ path: path.join(output, 'failure.png') }).catch(() => {}); throw error; }
   finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }

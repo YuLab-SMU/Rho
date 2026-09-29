@@ -1,11 +1,12 @@
 import type { AgentDraftContent, AgentTaskCommand, AgentTaskCommandResult, AgentTaskDetail, AgentTaskEvent,
-  AgentTaskEventPage, AgentNativeToolSelection, AgentProvider, LocalAgent, ProjectAgentTaskPage } from '../sdk/index.js';
+  AgentTaskEventPage, AgentNativeToolSelection, AgentProvider, LocalAgent, ProjectAgentTaskPage, AgentCommandReceipt } from '../sdk/index.js';
+import { captureFile, attachmentChunk, verifyProgress, verifyUploaded, ATTACHMENT_CHUNK_BYTES, type PendingUpload, type UploadProgress } from './uploads.js';
 import { type Client, type Intent, type RecordReply, json, same, terminal, verifyOriginal, inspectOriginal } from './operations.js';
 
 type Command = Exclude<AgentTaskCommand, { kind: 'add_asset' }>;
 interface LocalDraft { content: AgentDraftContent; base: number; revision: number; dirty: boolean; conflict: AgentDraftContent | null; }
 interface Pending { intent: Intent; task: string | null; kind: Command['kind'] | 'discover'; draftRevision: number | null; status: string | null; }
-interface Saved { schema: 1; selected: string | null; archived: boolean; drafts: Record<string, LocalDraft>; pending: Pending[]; tools: AgentNativeToolSelection[]; catalogs: Partial<Record<AgentProvider, LocalAgent>>; }
+interface Saved { schema: 1; selected: string | null; archived: boolean; drafts: Record<string, LocalDraft>; pending: Pending[]; tools: AgentNativeToolSelection[]; catalogs: Partial<Record<AgentProvider, LocalAgent>>; uploads?: PendingUpload[]; }
 const empty = (): AgentDraftContent => ({ text: '', assets: [], context: [] });
 export const agentBusy = (state: string) => ['running', 'waiting_for_permission', 'connecting', 'resuming', 'stopping', 'queued', 'waiting_for_r', 'needs_input'].includes(state);
 
@@ -27,6 +28,10 @@ export class NativeAgentModel {
     if (Object.keys(saved).length && (saved.schema !== 1 || !saved.drafts || !Array.isArray(saved.pending) || !Array.isArray(saved.tools)))
       throw Error('The saved Agent view has an unsupported state. Its contents were retained.');
     this.state = saved.schema === 1 ? structuredClone(saved as Saved) : { schema: 1, selected: null, archived: false, drafts: {}, pending: [], tools: [], catalogs: {} };
+    for (const pending of this.state.uploads ?? []) {
+      if (pending.view !== client.view.view || !same(pending.instance, client.view.instance))
+        throw Error('A retained attachment belongs to another Agent view or instance.');
+    }
     for (const pending of this.state.pending) {
       const original = pending.intent, args = original.arguments as unknown as { binding: unknown; arguments: { request_id?: string }; preconditions: unknown };
       if (original.view !== client.view.view || original.capability.version !== 1 ||
@@ -37,6 +42,7 @@ export class NativeAgentModel {
     }
   }
   get busy() { return this.admission; }
+  get uploads() { return this.state.uploads ?? []; }
   private live() { if (this.stopped) throw Error('The Agent view is closed. Accepted work is retained.'); }
   private notify() { if (!this.stopped) this.changed(); }
   private binding(id: string) { return { provider: this.client.view.instance, project: this.client.view.project, capability: { id, version: 1 }, target: null }; }
@@ -159,6 +165,67 @@ export class NativeAgentModel {
     if (!keepLocal) local.content = structuredClone(detail.draft.content);
     local.base = detail.draft.version; local.dirty = keepLocal; local.conflict = null; local.revision++;
     await this.save(); this.notify();
+  }
+  async attachFile(task: string, file: Blob, name: string) {
+    this.live(); if (this.admission) throw Error('Wait for the current Agent request.');
+    if (this.uploads.length >= 16) throw Error('Resolve existing attachment transfers before selecting more files.');
+    this.admission = true; this.notify();
+    try {
+      const capture = await captureFile(file, name, this.control(task)); this.live();
+      const pending: PendingUpload = { upload: capture.upload, view: this.client.view.view, instance: this.client.view.instance, received: 0, phase: 'uploading' };
+      (this.state.uploads ??= []).push(pending);
+      await this.save();
+      await this.transfer(pending, capture.blob);
+      await this.addUploaded(pending.upload.request_id);
+    } finally { this.admission = false; this.notify(); }
+  }
+  private async uploadControl<T>(id: string, args: unknown): Promise<T> {
+    this.live();
+    const result = await this.client.control<T>({ id, version: 1 }, json({ binding: this.binding(id), arguments: args, preconditions: null }));
+    this.live(); return result;
+  }
+  private async transfer(pending: PendingUpload, blob: Blob) {
+    const upload = pending.upload;
+    // Retrying a reselected immutable file uses the same complete descriptor.
+    // Chunks may repeat; finish is still one owner request, never a model turn.
+    for (let offset = 0; offset < upload.bytes || offset === 0; offset += ATTACHMENT_CHUNK_BYTES) {
+      const data = await attachmentChunk(blob, offset);
+      const reply = await this.uploadControl<UploadProgress>('agent.native.assets.stage', { upload, offset, data });
+      verifyProgress(reply, upload, Math.min(offset + ATTACHMENT_CHUNK_BYTES, upload.bytes));
+      pending.received = reply.received; this.notify();
+    }
+    pending.phase = 'finishing'; await this.save();
+    const result = await this.uploadControl<AgentTaskCommandResult>('agent.native.assets.finish', { upload });
+    verifyUploaded(upload, result); pending.phase = 'imported'; this.merge(result.detail); await this.save();
+  }
+  async inspectUpload(request: string) {
+    this.live(); const pending = this.uploads.find(p => p.upload.request_id === request);
+    if (!pending) throw Error('The original attachment is no longer pending.');
+    const receipt = await this.read<AgentCommandReceipt>('agent.native.receipt', { request_id: request });
+    await this.observe(pending.upload.control.task_id);
+    verifyUploaded(pending.upload, { receipt, detail: this.details.get(pending.upload.control.task_id)! });
+    pending.phase = 'imported'; await this.save(); this.notify();
+    // Inspection never selects an attachment into the draft or sends it.
+  }
+  async resumeUpload(request: string, file: Blob, name: string) {
+    this.live(); if (this.admission) throw Error('Wait for the current Agent request.');
+    const pending = this.uploads.find(p => p.upload.request_id === request);
+    if (!pending || pending.phase === 'imported') throw Error('Inspect or add the already imported attachment.');
+    this.admission = true; this.notify();
+    try {
+      const capture = await captureFile(file, name, pending.upload.control, request);
+      if (!same(capture.upload, pending.upload)) throw Error('Reselect the same filename, type and bytes as the original attachment.');
+      await this.save(); await this.transfer(pending, capture.blob); await this.addUploaded(request);
+    } finally { this.admission = false; this.notify(); }
+  }
+  async addUploaded(request: string) {
+    this.live(); const pending = this.uploads.find(p => p.upload.request_id === request);
+    if (!pending || pending.phase !== 'imported') throw Error('Inspect the original attachment before adding it.');
+    const task = pending.upload.control.task_id, draft = this.draft(task);
+    this.edit(task, { ...draft, assets: [...new Set([...draft.assets, request])] });
+    // Retain the imported intent until the selected draft is confirmed saved
+    // in this view. A lost acknowledgement can be re-inspected without upload.
+    await this.save(); this.state.uploads = this.uploads.filter(p => p !== pending); await this.save(); this.notify();
   }
   private async command(command: Command, task: string | null, revision: number | null = null) {
     const request = crypto.randomUUID();

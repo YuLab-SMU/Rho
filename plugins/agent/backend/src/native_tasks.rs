@@ -31,6 +31,7 @@ pub struct NativeTasks {
     endpoints: Endpoints,
     closing: Mutex<BTreeSet<String>>,
     tools: Arc<crate::native_tools::NativeTools>,
+    uploads: crate::native_uploads::Uploads,
 }
 impl From<AgentTaskError> for Failure {
     fn from(error: AgentTaskError) -> Self {
@@ -73,6 +74,7 @@ impl NativeTasks {
             endpoints: Default::default(),
             closing: Default::default(),
             tools: Default::default(),
+            uploads: Default::default(),
         }
     }
     fn receipt(

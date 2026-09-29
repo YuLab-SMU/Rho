@@ -8,6 +8,74 @@ use rho_plugin_sdk::{
 use serde_json::json;
 
 impl NativeTasks {
+    fn upload_controller(
+        &self,
+        metadata: &Metadata,
+        upload: &crate::native_uploads::Upload,
+        caller: PluginViewCaller,
+    ) -> Result<AgentControllerRef, Failure> {
+        upload.validate()?;
+        if self.runtime.is_stopped() {
+            return Err(Failure::invalid("This native Agent instance is closing"));
+        }
+        let controller = Self::controller(metadata, caller);
+        let task = self.owner.get(&metadata.scope, &upload.control.task_id)?;
+        if task.attachment.generation != upload.control.generation
+            || task.attachment.controller != controller
+            || task.attachment.control_frozen
+            || task.task.archived
+        {
+            return Err(Failure::invalid(
+                "The attachment's original task controller is no longer editable",
+            ));
+        }
+        Ok(controller)
+    }
+    pub fn stage_upload(
+        &self,
+        metadata: &Metadata,
+        call: &PluginCall,
+        caller: PluginViewCaller,
+    ) -> Result<Value, Failure> {
+        let input: crate::native_uploads::Chunk = decode(&call.arguments)?;
+        let controller = self.upload_controller(metadata, &input.upload, caller)?;
+        if input.data.len() > 87384 {
+            return Err(Failure::invalid("Attachment chunk exceeds its byte limit"));
+        }
+        let bytes = STANDARD
+            .decode(input.data)
+            .map_err(|_| Failure::invalid("Invalid attachment chunk encoding"))?;
+        encoded(
+            self.uploads
+                .stage(input.upload, controller, input.offset, &bytes)?,
+        )
+    }
+    pub async fn finish_staged_upload(
+        &self,
+        metadata: &Metadata,
+        call: &PluginCall,
+        caller: PluginViewCaller,
+    ) -> Result<Value, Failure> {
+        let input: crate::native_uploads::Finish = decode(&call.arguments)?;
+        let controller = self.upload_controller(metadata, &input.upload, caller)?;
+        let bytes = self.uploads.take(&input.upload, &controller)?;
+        let request = AgentTaskRequest {
+            project_root: metadata.scope.project.clone(),
+            window: controller,
+            request_id: input.upload.request_id,
+            command: AgentTaskCommand::AddAsset {
+                control: input.upload.control,
+                name: input.upload.name,
+                mime_type: input.upload.mime_type,
+                data: STANDARD.encode(bytes),
+            },
+        };
+        // Same original owner receipt/digest as a bounded inline upload. No
+        // await separates fresh native preconditions from owner admission.
+        let admission = self.owner.admit(&metadata.scope, &request, now())?;
+        self.finish_upload(metadata, request, admission).await
+    }
+
     pub async fn import_asset(
         &self,
         metadata: &Metadata,

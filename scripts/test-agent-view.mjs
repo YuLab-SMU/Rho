@@ -18,7 +18,7 @@ try {
   function fixture() {
     let saved = {}, stateVersion = 0, lost = '', saveLost = false, gate = null;
     const instance = { instance: 'agent', plugin: 'org.rho.agent', revision: 'sha256:' + 'a'.repeat(64), artifact: 'sha256:' + 'b'.repeat(64) };
-    const calls = [], records = [], details = new Map();
+    const calls = [], records = [], details = new Map(), staged = new Map();
     const client = {
       get view() { return { view: 'agent-view', window: 'window', project: 'project', instance, state: clone(saved), state_version: stateVersion }; },
       async setState(value) { saved = clone(value); stateVersion++; if (saveLost) { saveLost = false; throw Error('Lost state reply'); } return this.view; },
@@ -30,10 +30,39 @@ try {
           const input = args.arguments;
           if (cap.id === 'agent.tasks') data = { tasks: [], running: 0, permissions: 0, attention_count: 0, attention: [], next: null };
           else if (cap.id === 'agent.native.task') data = details.get(input.task_id);
+          else if (cap.id === 'agent.native.receipt') data = [...details.values()].flatMap(d => d.receipts).find(r => r.request_id === input.request_id);
           else if (cap.id === 'agent.native.events') data = { task_id: input.task_id, history_generation: 1, events: [], next_cursor: 0, has_more: false, history_gap: false, oldest_cursor: 0, durable_cursor: 0 };
           else throw Error('Unexpected query ' + cap.id);
         }
         return { status: 'ready', completeness: 'complete', data: clone(data) };
+      },
+      async control(cap, args) {
+        const upload = args.arguments.upload;
+        assert.ok(saved.uploads.some(p => JSON.stringify(p.upload) === JSON.stringify(upload)), 'Attachment identity is saved before bytes are transferred');
+        assert.equal(args.binding.provider.instance, 'agent'); assert.equal(args.preconditions, null);
+        calls.push(clone({ cap, args, control: true }));
+        if (cap.id === 'agent.native.assets.stage') {
+          const part = Buffer.from(args.arguments.data, 'base64'), before = staged.get(upload.request_id) ?? Buffer.alloc(0);
+          assert.ok(part.length <= 65536);
+          if (args.arguments.offset === before.length) staged.set(upload.request_id, Buffer.concat([before, part]));
+          else assert.deepEqual(before.subarray(args.arguments.offset, args.arguments.offset + part.length), part);
+          if (lost === 'stage') { lost = ''; throw Error('Lost chunk reply'); }
+          return { upload: clone(upload), received: staged.get(upload.request_id).length, complete: staged.get(upload.request_id).length === upload.bytes };
+        }
+        assert.equal(cap.id, 'agent.native.assets.finish');
+        const bytes = staged.get(upload.request_id); assert.equal(bytes.length, upload.bytes);
+        const actual = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), n => n.toString(16).padStart(2, '0')).join('');
+        assert.equal(actual, upload.sha256);
+        const detail = details.get(upload.control.task_id);
+        let receipt = detail.receipts.find(r => r.request_id === upload.request_id);
+        if (!receipt) {
+          receipt = { request_id: upload.request_id, task_id: upload.control.task_id, command: 'add_asset', status: 'succeeded' };
+          detail.receipts.push(receipt); detail.summary.observation_version++;
+          detail.assets.push({ asset_id: upload.request_id, name: upload.name, mime_type: upload.mime_type, bytes: upload.bytes, sha256: upload.sha256 });
+        }
+        staged.delete(upload.request_id);
+        if (lost === 'finish') { lost = ''; throw Error('Lost attachment reply'); }
+        return clone({ receipt, detail });
       },
       async invoke(cap, args, options) {
         const pending = saved.pending.find(p => p.intent.request === options.requestId);
@@ -154,6 +183,62 @@ try {
     const f = fixture(), m = f.open(); f.lose('create'); await assert.rejects(m.create('kimi', 'fixture', null));
     const state = f.client.view.state; state.pending[0].intent.arguments.binding.provider.instance = 'other-agent';
     await f.client.setState(state); assert.throws(() => f.open(), /another Agent view or instance/);
+  });
+  await check('eight MiB attachments use bounded Controls and preserve text until an explicit Send', async () => {
+    const f = fixture(), m = f.open(); await m.create('kimi', 'fixture', null);
+    m.edit('task-0', { ...blank(), text: 'Keep this text' });
+    const blob = new Blob([new Uint8Array(8 * 1024 * 1024).fill(82)], { type: 'text/plain' });
+    await m.attachFile('task-0', blob, '完整数据.txt');
+    const controls = f.calls.filter(c => c.control); assert.equal(controls.length, 129);
+    assert.ok(controls.filter(c => c.cap.id.endsWith('.stage')).every(c => c.args.arguments.data.length <= 87384));
+    assert.equal(m.draft('task-0').text, 'Keep this text'); assert.equal(m.draft('task-0').assets.length, 1);
+    assert.equal(f.details.get('task-0').draft.content.assets.length, 0); // Asset selection is a distinct native draft save.
+    assert.equal(f.records.length, 1); await m.flush('task-0');
+    assert.equal(f.details.get('task-0').draft.content.assets.length, 1);
+    assert.ok(!JSON.stringify(f.client.view.state).includes('data:')); assert.equal(m.uploads.length, 0);
+    assert.ok(!f.calls.some(c => c.args.arguments.command?.kind === 'send'));
+  });
+  await check('lost final attachment reply reopens with metadata and only inspects the original receipt', async () => {
+    const f = fixture(), m = f.open(); await m.create('kimi', 'fixture', null);
+    f.lose('finish'); await assert.rejects(m.attachFile('task-0', new Blob(['original bytes']), 'notes.txt'), /Lost attachment/);
+    const before = f.calls.length, next = f.open(); await next.refresh(); assert.equal(f.calls.length, before);
+    const original = next.uploads[0].upload.request_id; await next.inspectUpload(original);
+    assert.equal(f.calls.length, before); assert.equal(next.draft('task-0').assets.length, 0);
+    await next.addUploaded(original); assert.deepEqual(next.draft('task-0').assets, [original]);
+    assert.equal(f.details.get('task-0').assets.length, 1);
+  });
+  await check('a lost chunk uses the same identity only after the original file is reselected', async () => {
+    const f = fixture(), m = f.open(); await m.create('kimi', 'fixture', null);
+    const blob = new Blob([new Uint8Array(130000).fill(79)]); f.lose('stage');
+    await assert.rejects(m.attachFile('task-0', blob, 'original.bin'), /Lost chunk/);
+    const next = f.open(); await next.refresh(); const upload = clone(next.uploads[0].upload), before = f.calls.length;
+    await assert.rejects(next.resumeUpload(upload.request_id, new Blob(['changed']), 'original.bin'), /same filename/); assert.equal(f.calls.length, before);
+    await next.resumeUpload(upload.request_id, blob, 'original.bin');
+    assert.deepEqual(f.calls.filter(c => c.control).map(c => c.args.arguments.upload), Array(f.calls.filter(c => c.control).length).fill(upload));
+    assert.equal(f.details.get('task-0').assets.length, 1); assert.deepEqual(next.draft('task-0').assets, [upload.request_id]);
+  });
+  await check('unconfirmed attachment intent and oversize files never transfer bytes', async () => {
+    const f = fixture(), m = f.open(); await m.create('kimi', 'fixture', null);
+    await assert.rejects(m.attachFile('task-0', new Blob([new Uint8Array(8 * 1024 * 1024 + 1)]), 'large.bin'), /8 MiB/);
+    f.loseSave(); await assert.rejects(m.attachFile('task-0', new Blob(['small']), 'small.txt'), /Lost state/);
+    assert.equal(f.calls.length, 1); assert.equal(f.open().uploads.length, 1);
+  });
+  await check('a successful-looking attachment with different bytes cannot enter the draft', async () => {
+    const f = fixture(), m = f.open(); await m.create('kimi', 'fixture', null);
+    const original = f.client.control;
+    f.client.control = async (cap, args) => {
+      const result = await original.call(f.client, cap, args);
+      if (cap.id.endsWith('.finish')) result.detail.assets[0].sha256 = '0'.repeat(64);
+      return result;
+    };
+    await assert.rejects(m.attachFile('task-0', new Blob(['captured']), 'notes.txt'), /not confirmed/);
+    assert.equal(m.draft('task-0').assets.length, 0); assert.equal(m.uploads.length, 1);
+  });
+  await check('retained attachment metadata cannot retarget another plugin instance', async () => {
+    const f = fixture(), m = f.open(); await m.create('kimi', 'fixture', null);
+    f.lose('stage'); await assert.rejects(m.attachFile('task-0', new Blob(['captured']), 'notes.txt'));
+    const state = f.client.view.state; state.uploads[0].instance.instance = 'other-agent'; await f.client.setState(state);
+    const before = f.calls.length; assert.throws(() => f.open(), /another Agent view or instance/); assert.equal(f.calls.length, before);
   });
   console.log(`Ordinary Agent view: ${count} checks passed; original requests, draft concurrency, next-turn input, read-only control and disposal. No native/UI acceptance claimed.`);
   if (process.argv.includes('--build-ui') || process.argv.includes('--browser')) execFileSync(process.execPath, [path.join(temporary, 'build-ui.mjs')], {

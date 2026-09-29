@@ -18,6 +18,7 @@ mod native_host_selection;
 mod native_result;
 mod native_selection;
 mod native_tasks;
+mod native_uploads;
 mod native_tool_observation;
 mod native_tools;
 mod tools;

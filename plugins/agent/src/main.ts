@@ -21,6 +21,8 @@ function action(work: () => Promise<unknown>) {
   void track(Promise.resolve().then(work)).then(() => refresh()).catch(report).finally(render);
 }
 function selected() { return model.state.selected; }
+let resumingUpload: string | null = null;
+const fileInput = get<HTMLInputElement>('attachment-file');
 function clearDraftTimers() { for (const timer of draftTimers.values()) clearTimeout(timer); draftTimers.clear(); }
 function saveDraftSoon(task: string) {
   clearTimeout(draftTimers.get(task));
@@ -67,7 +69,8 @@ function render() {
   get('draft-status').textContent = !editable ? '' : local?.conflict ? 'Draft conflict' : local?.dirty ? 'Draft not saved yet' : 'Draft saved';
   const saveDraft = get<HTMLButtonElement>('save-draft'); saveDraft.hidden = !editable || !local?.dirty || !!local.conflict;
   saveDraft.disabled = model.busy || closing || model.state.pending.some(p => p.task === id && p.kind === 'save_draft');
-  const send = get<HTMLButtonElement>('send'); send.hidden = running; send.disabled = !editable || model.busy || !!local?.conflict || !message.value.trim() || closing;
+  renderAttachments(id, editable);
+  const send = get<HTMLButtonElement>('send'); send.hidden = running; send.disabled = !editable || model.busy || !!local?.conflict || !(message.value.trim() || (id && model.draft(id).assets.length)) || closing;
   get('stop').hidden = !running; get<HTMLButtonElement>('stop').disabled = !editable || model.busy || closing;
   get('draft-conflict').hidden = !local?.conflict;
   const pending = model.state.pending.find(p => p.task === id || p.task === null);
@@ -84,7 +87,7 @@ function render() {
   }
   modelSelect.value = detail?.summary.task.model ?? ''; modelSelect.disabled = !editable || model.busy || running;
   const transcript = get('transcript'), events = id ? model.events.get(id) ?? [] : [];
-  const eventKey = `${id}:${JSON.stringify(events)}`;
+  const eventKey = `${id}:${JSON.stringify([events, detail?.assets, detail?.receipts.map(r => [r.request_id, r.input_assets])])}`;
   if (transcript.dataset.content !== eventKey) {
     const following = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 45;
     transcript.dataset.content = eventKey; transcript.replaceChildren();
@@ -92,7 +95,13 @@ function render() {
       if (!event.text || ['reasoning', 'analysis', 'usage'].includes(event.kind) || ['reasoning', 'analysis'].includes(event.role ?? '')) continue;
       const block = document.createElement('div'); block.className = `event ${event.role === 'user' ? 'user' : event.role === 'assistant' ? 'assistant' : 'activity'}`;
       const role = document.createElement('span'); role.className = 'role'; role.textContent = event.role === 'user' ? 'You' : event.role === 'assistant' ? 'Agent' : 'Activity';
-      block.append(role, document.createTextNode(event.text)); transcript.append(block);
+      block.append(role, document.createTextNode(event.text));
+      const receipt = event.role === 'user' ? detail?.receipts.find(item => item.request_id === event.request_id) : null;
+      if (receipt?.input_assets.length) {
+        const files = document.createElement('small'); files.className = 'sent-attachments';
+        files.textContent = receipt.input_assets.map(asset => detail?.assets.find(item => item.asset_id === asset)?.name ?? 'Attachment unavailable').join(' · '); block.append(files);
+      }
+      transcript.append(block);
     }
     if (!transcript.childNodes.length) { const empty = document.createElement('p'); empty.className = 'empty'; empty.textContent = detail ? 'Write a message to start this conversation.' : 'Choose or create a task.'; transcript.append(empty); }
     if (following) transcript.scrollTop = transcript.scrollHeight;
@@ -107,6 +116,50 @@ function render() {
   get('session-details').textContent = detail ? `Native session: ${detail.summary.task.native_session_id ?? 'Created on first Send'}\n${detail.summary.unconfirmed} unconfirmed request(s)\n${detail.summary.attachment.capabilities.history ?? 'Observation cache'}` : '';
   get('archived').textContent = model.state.archived ? 'Active tasks' : 'Archived tasks';
   get('archive-task').textContent = detail?.summary.task.archived ? 'Unarchive' : 'Archive';
+}
+function renderAttachments(task: string | null, editable: boolean) {
+  get<HTMLButtonElement>('attach').disabled = !editable || model.busy || closing;
+  const area = get('attachments'), selectedAssets = task ? model.draft(task).assets : [];
+  const assets = task ? model.details.get(task)?.assets ?? [] : [];
+  const key = JSON.stringify([selectedAssets, assets, editable, model.busy, closing]);
+  if (area.dataset.content !== key) {
+    area.dataset.content = key; area.replaceChildren();
+    for (const id of selectedAssets) {
+      const asset = assets.find(item => item.asset_id === id), row = document.createElement('div'); row.className = 'attachment';
+      const label = document.createElement('span'); label.textContent = asset ? `${asset.name} · ${Math.ceil(asset.bytes / 1024)} KiB` : 'Attachment unavailable';
+      const remove = document.createElement('button'); remove.textContent = '×'; remove.setAttribute('aria-label', `Remove ${asset?.name ?? 'attachment'} from draft`);
+      remove.disabled = !editable || model.busy || closing;
+      remove.onclick = () => { model.edit(task!, { ...model.draft(task!), assets: model.draft(task!).assets.filter(item => item !== id) }); saveDraftSoon(task!); };
+      row.append(label, remove); area.append(row);
+    }
+  }
+  const transfers = get('uploads'), pending = model.uploads.filter(p => p.upload.control.task_id === task);
+  const transferKey = JSON.stringify([pending, model.busy, editable, closing]);
+  if (transfers.dataset.content === transferKey) return;
+  transfers.dataset.content = transferKey; transfers.replaceChildren();
+  for (const item of pending) {
+    const row = document.createElement('div'); row.className = 'upload';
+    const label = document.createElement('span'); label.textContent = `${item.upload.name} · ${item.phase === 'imported' ? 'Ready to add' : model.busy ? 'Uploading…' : 'Transfer needs review'}`;
+    const status = document.createElement('button'); status.textContent = 'Check status'; status.disabled = model.busy || closing;
+    status.onclick = () => action(() => model.inspectUpload(item.upload.request_id));
+    const resume = document.createElement('button'); resume.textContent = item.phase === 'imported' ? 'Add to draft' : 'Reselect original file'; resume.disabled = model.busy || !editable || closing;
+    resume.onclick = () => {
+      if (item.phase === 'imported') action(async () => { await model.addUploaded(item.upload.request_id); await model.flush(item.upload.control.task_id); });
+      else { resumingUpload = item.upload.request_id; fileInput.multiple = false; fileInput.click(); }
+    };
+    row.append(label, status, resume); transfers.append(row);
+  }
+}
+function attachFiles(files: File[]) {
+  const task = selected(); if (!task || !files.length) return;
+  const original = resumingUpload; resumingUpload = null;
+  action(async () => {
+    if (files.length > 16) throw Error('Select at most 16 files at a time.');
+    for (const file of files) {
+      if (original) await model.resumeUpload(original, file, file.name); else await model.attachFile(task, file, file.name);
+      await model.flush(task);
+    }
+  });
 }
 async function refresh() {
   if (polling || disposed || closing) return;
@@ -135,6 +188,11 @@ message.addEventListener('keydown', event => {
     const id = selected(); if (id && !get<HTMLButtonElement>('send').disabled && !get('send').hidden) action(() => model.send(id));
   }
 });
+get('attach').onclick = () => { resumingUpload = null; fileInput.multiple = true; fileInput.click(); };
+fileInput.onchange = () => { attachFiles(Array.from(fileInput.files ?? [])); fileInput.value = ''; };
+get('agent').addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('Files')) event.preventDefault(); });
+get('agent').addEventListener('drop', event => { event.preventDefault(); if (event.dataTransfer?.files.length) { resumingUpload = null; attachFiles(Array.from(event.dataTransfer.files)); } });
+message.addEventListener('paste', event => { if (event.clipboardData?.files.length) { event.preventDefault(); resumingUpload = null; attachFiles(Array.from(event.clipboardData.files)); } });
 get('send').onclick = () => { const id = selected(); if (id) action(() => model.send(id)); };
 get('save-draft').onclick = () => { const id = selected(); if (id) action(async () => { await model.save(); await model.flush(id); }); };
 get('stop').onclick = () => { const id = selected(); if (id) action(() => model.stop(id)); };
