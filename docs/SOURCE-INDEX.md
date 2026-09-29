@@ -137,6 +137,7 @@ Sources:
 - `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
 - `scripts/fixtures/agent-annotation-tools.cjs`
+- `scripts/fixtures/agent-environment-tools.cjs`
 - `scripts/fixtures/agent-process-tools.cjs`
 - `scripts/fixtures/agent-view-container.js`
 - `scripts/fixtures/annotation-agent-browser.mjs`
@@ -173,6 +174,7 @@ Sources:
 - `scripts/rho-bundle.mjs`
 - `scripts/studio-agent-renderer.mjs`
 - `scripts/test-agent-core-tools.mjs`
+- `scripts/test-agent-environment.mjs`
 - `scripts/test-agent-plugin-client.mjs`
 - `scripts/test-agent-plugin-engine.mjs`
 - `scripts/test-agent-plugin-native.mjs`
@@ -275,6 +277,8 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/engine/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
 - `plugins.agent-engine-independent` (L2): `["node","scripts/test-agent-plugin-engine.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-engine.mjs`, `sdk/**`.
+- `plugins.agent-environment` (L2): `["node","scripts/test-agent-environment.mjs"]`
+  Applies to: `crates/host/tests/fixtures/agent-science.cjs`, `crates/host/tests/fixtures/rhonextfixture/**`, `plugins/agent/**`, `plugins/environment/**`, `scripts/fixtures/agent-environment-tools.cjs`, `scripts/test-agent-environment.mjs`.
 - `plugins.agent-handoff` (L1): `["cargo","test","-p","rho-agent-owner","-p","rho-application","--lib","handoff","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/application/**`, `crates/contract/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
 - `plugins.agent-handoff-store` (L1): `["cargo","test","-p","rho-sqlite","--test","agent_handoffs","--locked"]`

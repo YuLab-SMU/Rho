@@ -735,6 +735,22 @@ selects the frozen core and `RHO_AGENT_PROCESS_EVIDENCE` selects the report. Thi
 is real plugin/native-process composition with a deterministic ACP peer, not
 real-model quality, Rho-model execution, remote-cluster or browser acceptance.
 
+`RHO_PLUGIN_SET_PACKAGE=/absolute/set node scripts/test-agent-environment.mjs`
+uses the retained Agent and Environment archives with an existing R installation
+(`RHO_R_HOME`, defaulting to the macOS framework). Existing pak/renv/ps/jsonlite
+are required; the runner never installs prerequisites or builds Rho/plugin binaries. Its
+local ACP peer exercises native read-only preflight, explicit refresh → pak plan
+of the local fixture → isolated realization → verification → inventory/library
+selection and original bounded report reads. Cached or unavailable inventory
+remains a partial observation even when the selected library is listed. The fixture package is installed
+only into the disposable Environment library. Changed DESCRIPTION bytes produce
+a failed verification, retained separately from the successful Send. Repeated
+native tools and Sends reuse original outcomes; actual namespace-load evidence
+must stay unchanged across Send replay and same-instance Host restart with
+Environment suspended. `RHO_AGENT_ENVIRONMENT_EVIDENCE` selects the report.
+This does not establish real-model quality, Rho-model Environment execution,
+remote package resolution, renv restoration, material cleanup or browser behavior.
+
 Native Host tool capture uses the `native_host` filters in owner/store/backend
 checks and the ordinary framed `metadata` suite. These cover fixed branches,
 model-field override refusal, explicit optional grants, foreign project/version

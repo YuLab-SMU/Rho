@@ -137,18 +137,15 @@ switching, native/Rho attachment recovery and retained context, next drafts, 8 M
 replies, actual reload, history and close without Stop. Settings/rename work without
 form permission. Continue preserves next drafts through lost replies/reload and original context
 at 960/440/220 px. Handoff also preserves edited text, references and lost receipts at those widths.
-Current checks pass 64 framed backend, 33 native client, one configuration and
-32 native owner/store cases: context/history/Continue, handoff, uploads and reopen.
-Earlier interrupted attempts remain incomplete evidence, not passes. The 45-capability manifest includes all attachment ports; schema annotations/local
-names are compacted without weakening validation. The current source manifest remains within the 256 KiB limit.
-A current workspace-built Agent package and reuse receipt are available. The picker
-reads instance observations; a view calling its exact own backend retains selected
-activation scopes. Reverse calls still require individual grants; foreign
-providers, current caller restrictions and Query-only boundaries stay enforced.
-Eleven Host delegation/test-project checks pass, including Query refusal. Immediate
-task selection prevents handoff from using the prior task while saving. Native
-Resume evidence covers Kimi through a local ACP peer; no other provider or abrupt
-crash recovery claim. Post-restart records retain the original real R result.
+Current scoped checks cover context/history/Continue, handoff, uploads and reopen;
+interrupted attempts remain incomplete evidence. The 45-capability manifest includes
+all attachment ports and stays within 256 KiB. Workspace-built Agent artifacts are
+reused. Own-backend calls retain selected activation scopes; reverse calls still
+require individual grants and enforce caller, foreign-provider and Query boundaries.
+Eleven Host delegation/test-project checks pass. Immediate task selection fences
+handoff from the prior task while saving. Native Resume uses Kimi with a local ACP
+peer; original real-R results survive restart. Other providers and abrupt crashes
+remain unverified.
 R declares observed Help topics, bounded object summaries and saved HTML/plot contexts; previews check original native handles/sessions, installed files or output records.
 Twenty-four context tests and real-R Host flows pass. The Agent picker has actual Host/browser evidence: Help excerpts and saved HTML join Editor input/attachments,
 reach the model, and survive Continue, reload and Host restart while R stays suspended. Normal/390/220 layouts are checked.
@@ -160,7 +157,8 @@ Packages Ask now retains the selected installed copy’s native session, origina
 Files Ask now captures the original contained text file by path, digest and native identity. Metadata/text preview → chosen Agent → Rho draft/reload → Send → actual same-instance Host restart passes in 72s. Unrelated file edits preserve the source; changed originals and path escapes are refused, while the saved run retains its original text without replay. Normal/960/390/220 layouts are inspected, including a wrapped narrow footer. Five Files backend cases, 30 UI/model cases and 103 scientific grant contracts pass. Evidence: `target/plugin-refactor/files-context-results.json`; Native Files Send and model quality are not newly verified.
 Remaining: annotation browser capture and editor UI. Evidence: `component-senders-results.json`, `editor-agent-input-results.json`, `agent-component-input-results.json`,
 `agent-scientific-context-current-results.json` and `studio-agent-current-results.json` in `target/plugin-refactor/`.
-Native Agent → private MCP → real Process preflight/run/resource-read now passes read-only and forged-provider refusal, Unicode stdin/stdout/stderr, one-effect tool/Send retries, Stop waiting for its accepted child, and actual same-instance Host restart while Process stays suspended. This exposed and fixed successful Process results being misreported as uncertain when preflight normalized a null target to the project root. Normalized replies now require the original Host reverse-request mapping plus unchanged provider/project/capability/preconditions and parent identity; malformed or unconfirmed replies still refuse. Four Agent library and 66 framed checks pass. Only Agent was assembled using the workspace cache (3s); fifteen archives and the frozen Host were reused, and real-process acceptance took 74s with zero builds. Evidence: `target/plugin-refactor/agent-process-results.json`; `agent-process-before-fix.json` retains the real failure and earlier fixture attempts remain. The peer is deterministic; this does not establish real-model quality or Rho-model Process execution. Remote/Environment synthetic peers still do not establish Agent execution through those plugins.
+Native Agent → private MCP → real Process preflight/run/resource-read now passes read-only and forged-provider refusal, Unicode stdin/stdout/stderr, one-effect tool/Send retries, Stop waiting for its accepted child, and actual same-instance Host restart while Process stays suspended. This exposed and fixed successful Process results being misreported as uncertain when preflight normalized a null target to the project root. Normalized replies now require the original Host reverse-request mapping plus unchanged provider/project/capability/preconditions and parent identity; malformed or unconfirmed replies still refuse. Four Agent library and 66 framed checks pass. Only Agent was assembled using the workspace cache (3s); fifteen archives and the frozen Host were reused, and real-process acceptance took 74s with zero builds. Evidence: `target/plugin-refactor/agent-process-results.json`; `agent-process-before-fix.json` retains the real failure and earlier fixture attempts remain. The peer is deterministic; this does not establish real-model quality or Rho-model Process execution. Remote synthetic peers still do not establish Agent execution through that plugin.
+Native Agent now also reaches the real Environment plugin and installed R/pak: read-only preflight refuses unselected work, explicit refresh → local-package plan → isolated realization → verification → inventory/library selection and bounded report reads pass. Cached/unavailable inventory remains partial. Tampered library metadata produces a genuine failed verification; Send can finish while retaining that scientific failure. Tool/Send retries and actual same-instance Host restart retain original success/failure records while Environment stays suspended, with no additional native namespace loads. All sixteen archives and the frozen core are reused with zero builds; the combined flow passes in 86s. Evidence: `target/plugin-refactor/agent-environment-results.json`; the initial two fixture assertions about partial observations remain retained, and `agent-environment-attempt3.json` is the first passing baseline. This covers a deterministic ACP peer and a local dependency-free package, not real-model quality, Rho-model Environment execution, remote package resolution, renv restoration or material cleanup through Agent.
 Agent evidence in `target/plugin-refactor/`: `agent-current-native-results.json`, `agent-handoff-ui-results.json`, `rho-continue-results.json`, `agent-assets-results-v3.json` and
 `agent-assets-combined-v1.json` (20 owner/35 store/42 framed cases; five frozen-Host
 cases including real 8 MiB import), `agent-core-combined-v2.json` (management/checkpoint),
