@@ -37,6 +37,7 @@ export async function exerciseRhoInput(page: Page, frame: FrameLocator, info: Te
   const composer=frame.getByRole('textbox',{name:'Agent message',exact:true});
   await frame.getByRole('button',{name:'New task',exact:true}).click();
   await frame.getByRole('button',{name:'Rho',exact:true}).click();
+  await expect(frame.getByLabel('Select task',{exact:true})).toHaveValue(/^rho:/);
   await expect(composer).toBeEnabled();
   const selected=await frame.getByLabel('Select task',{exact:true}).inputValue(); expect(selected).toMatch(/^rho:/); const task=selected.slice(4);
   const conversation=()=>query('agent.model.conversation',{conversation_id:task});
@@ -69,7 +70,10 @@ export async function exerciseRhoInput(page: Page, frame: FrameLocator, info: Te
     const body=route.request().postDataJSON()?.message?.body;
     if(body?.type==='query'&&body.capability.id==='editor.context.preview')sourceReads++;
     if(body?.type==='invoke'&&body.capability.id==='agent.model.run'){
-      sends++;if(sends===1||sends===3){await route.fetch();await route.abort();return;}
+      sends++;if(sends===1||sends===3){
+        const response=await route.fetch(),reply=await response.json();expect(reply.ok).toBe(true);
+        await route.fulfill({response,json:{id:reply.id,ok:false,error:'Fixture lost original Rho Send reply'}});return;
+      }
     }
     await route.continue();
   };
@@ -106,6 +110,10 @@ export async function exerciseRhoInput(page: Page, frame: FrameLocator, info: Te
   await expect.poll(async()=>(await run(originalId)).recovery?.unresolved_mutations).toBe(0);
   await composer.fill('Continue the checked original task · 续接');await expect(frame.locator('#draft-status')).toHaveText('Draft saved');
   await frame.getByRole('button',{name:'Continue task',exact:true}).click();
+  // Continue first checks the frozen original admission. Editing during those
+  // reads correctly cancels submission; exercise lost dispatch replies here.
+  await expect(frame.getByRole('alert')).toContainText('Fixture lost original Rho Send reply');
+  expect(sends).toBe(3);
   const draft='Keep this Rho draft across the Host restart';
   await composer.fill(draft);await expect.poll(async()=>(await conversation()).draft).toBe(draft);
   await page.reload();await frame.locator('#inspect-original').click();await expect(frame.locator('#recovery')).toBeHidden();
@@ -121,7 +129,7 @@ export async function exerciseRhoInput(page: Page, frame: FrameLocator, info: Te
   await expect(picker.locator('#context-captures')).toContainText(sourceText.trim());
   for(const width of [1440,390,220]){
     await page.setViewportSize({width,height:900});
-    expect(await picker.evaluate(node=>node.scrollWidth>node.clientWidth)).toBe(false);
+    await expect.poll(()=>picker.evaluate(node=>node.scrollWidth>node.clientWidth)).toBe(false);
     await page.screenshot({path:info.outputPath(`agent-rho-continued-${width}.png`)});
   }
   await picker.getByRole('button',{name:'Close context'}).click();await page.setViewportSize({width:1440,height:900});

@@ -1,6 +1,14 @@
 use super::super::tests::fixture;
 use super::*;
 
+#[test]
+fn viewer_inclusion_refuses_unknown_fields() {
+    for kind in ["text", "metadata"] {
+        assert!(decode::<Inclusion>(json!({"kind":kind})).is_ok());
+        assert!(decode::<Inclusion>(json!({"kind":kind,"run":true})).is_err());
+    }
+}
+
 fn record(owner: &InstanceRef, id: &str, count: u64) -> Value {
     json!({"operation":{"operation_id":id,"capability":{"id":"r.execute","version":2},"normalized_arguments":{"binding":{"provider":owner}}},
         "status":"failed","output":{"operation_id":id,"session_id":"original-native-session","outputs":(1..=count).map(|sequence| {

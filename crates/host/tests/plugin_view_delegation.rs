@@ -1,5 +1,7 @@
 #[path = "fixtures/plugins.rs"]
 mod fixture;
+#[path = "fixtures/view_authority.rs"]
+mod authority;
 use rho_contract::*;
 use rho_host::{NextHost, OperationError};
 use rho_plugin_protocol::{PluginArchive, PluginViewConnection};

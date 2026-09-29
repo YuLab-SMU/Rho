@@ -55,6 +55,8 @@ try {
         assert.equal(observed.kind, independent ? 'independent' : 'workspace');
         assert.equal(observed.cwd, independent ? output : root);
         if (!independent) assert.ok(observed.args.includes(`rho-${plugin}-backend`));
+        assert.ok(fs.statSync(path.join(output, 'plugin.json')).size <= 256 * 1024,
+          `${plugin}: copied source manifest must fit the Host limit before native build dispatch`);
       }
     }
   }

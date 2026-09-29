@@ -111,7 +111,8 @@ export class NativeAgentModel {
   }
   async select(task: string) {
     if (this.state.rho) this.state.rho.selected = null;
-    this.live(); this.state.selected = task; await this.save(); await this.observe(task); this.notify();
+    this.live(); this.state.selected = task; this.notify();
+    await this.save(); await this.observe(task); this.notify();
   }
   canControl(task: string) {
     const attachment = this.details.get(task)?.summary.attachment;

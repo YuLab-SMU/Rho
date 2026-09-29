@@ -74,7 +74,7 @@ async function handle(body) {
       const reference=copy(contextReference);reference.selector.version=6;
       data={request_id:args.request_id,task_id:'task-0',contexts:[{selection:{source:'plugin',label:'Captured selection',reference,inclusion:'{"kind":"selection"}'},title:'分析 Ω.R · selection',description:'Original synchronized version 6',text:'original_value <- 7 # 中文 Ω',data:{version:6}}]};
     }
-    else if (id === 'plugins.instances') data = {instances:[{identity:contextProvider,project:'project',state:'active',alias:'Editor'}],next:null,total:1};
+    else if (id === 'plugins.instances') data = {instances:[{instance:{identity:contextProvider,project:'project',state:'active',alias:'Editor'},observed_in_this_host:true,process_id:null,retained_calls:0,pending_messages:0,stderr:null}],next:null,total:1};
     else if (id === 'plugins.inspect') {
       contextManifest ??= await fetch('/editor-context-manifest.json').then(r=>r.json());
       data={summary:{revision:contextProvider.revision},manifest:contextManifest,artifacts:[{id:contextProvider.artifact}]};

@@ -5,7 +5,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {agentSourceCopies, excludedAgentSource, agentBuildInputDigest, recordAgentBuild, verifyAgentBuild} from './agent-plugin-artifact.mjs';
-import {assembleAgentArtifact} from '../plugins/agent/build.mjs';
+import {agentPackageManifest, assembleAgentArtifact} from '../plugins/agent/build.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Resolve in the checkout before entering a temporary independent package, where
 // rustup otherwise selects the user's unrelated default toolchain.
@@ -40,6 +40,9 @@ export function buildAgentPlugin(destination, {workspace = true} = {}) {
   }
   fs.writeFileSync(path.join(output, 'Cargo.toml'), '[workspace]\nresolver = "3"\nmembers = ["api", "backend", "backend/owner", "backend/store", "backend/engine", "backend/client", "backend/native", "public/r-api", "public/plugin-protocol", "public/plugin-sdk"]\n');
   fs.copyFileSync(path.join(root, 'Cargo.lock'), path.join(output, 'Cargo.lock'));
+  // Include the complete copied source inventory before paying for a native build.
+  // The assembler checks the freshly exported manifest again after compilation.
+  agentPackageManifest(output);
   const env = agentPluginBuildEnvironment();
   const target = execFileSync(env.RUSTC, ['-vV'], {encoding: 'utf8'}).match(/^host: (.+)$/m)?.[1];
   assert.ok(target);

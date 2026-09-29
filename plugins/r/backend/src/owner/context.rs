@@ -228,8 +228,8 @@ impl HelpCursor {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 enum HelpInclusion {
-    Text,
-    Excerpt,
+    Text {},
+    Excerpt {},
 }
 
 impl Owner {
@@ -328,8 +328,8 @@ fn help_preview(
         "Help content differs from its original identities or bounded continuation",
     )?;
     let (text, truncated, name) = match inclusion {
-        HelpInclusion::Text => (page.text.clone(), !page.complete, "text"),
-        HelpInclusion::Excerpt => {
+        HelpInclusion::Text {} => (page.text.clone(), !page.complete, "text"),
+        HelpInclusion::Excerpt {} => {
             // A complete first-twelve-lines inclusion can come from a larger
             // topic. A byte-limited partial line is never presented as complete.
             let lines: Vec<_> = page.text.split_inclusive('\n').take(12).collect();

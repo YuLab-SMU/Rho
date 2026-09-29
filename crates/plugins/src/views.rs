@@ -535,13 +535,14 @@ impl PluginService {
         view: &ViewInstanceId,
         sequence: u32,
         capability: Option<&host::CapabilityRef>,
+        provider: Option<&ProviderBinding>,
         selecting_test: bool,
     ) -> Result<host::CallContext, OperationError> {
         let mut changed = self.view_sequences.subscribe();
         tokio::time::timeout(std::time::Duration::from_secs(10), async {
             loop {
                 match self.try_view_context(
-                    parent, connection, token, window, view, sequence, capability, selecting_test,
+                    parent, connection, token, window, view, sequence, capability, provider, selecting_test,
                 ) {
                     Ok(None) => {
                         changed.changed().await.map_err(invalid)?;
@@ -566,6 +567,7 @@ impl PluginService {
         view: &ViewInstanceId,
         sequence: u32,
         capability: Option<&host::CapabilityRef>,
+        provider: Option<&ProviderBinding>,
         selecting_test: bool,
     ) -> Result<Option<host::CallContext>, OperationError> {
         let mut views = self.views.lock().unwrap();
@@ -655,7 +657,19 @@ impl PluginService {
                             && g.capability.version == u32::from(cap.version)
                     })
                     .ok_or_else(|| invalid("capability is not granted to this view"))?;
-                context.scopes = grant.scopes.clone();
+                // A combined plugin's view and its exact backend share the
+                // activation grants. Keep that authority for backend-owned
+                // composition; each reverse call still checks its own grant.
+                // Foreign providers and disposable projects get only this
+                // capability's scopes, never the view's other grants.
+                let own_backend = !selecting_test && provider.is_some_and(|binding|
+                    binding.project == live.connection.view.project
+                        && binding.provider == live.connection.view.instance
+                        && binding.capability == grant.capability
+                        && self.runtime.owns_active_capability(binding));
+                if !own_backend {
+                    context.scopes = grant.scopes.clone();
+                }
             }
         }
         context.scopes = context

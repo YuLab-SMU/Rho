@@ -73,7 +73,10 @@ export class RhoModel {
       return value.draft_version === args.draft_version + 1 && same(value.draft_content, args.content);
     })) local.conflict = structuredClone(value.draft_content);
   }
-  async select(task: string) { this.state.selected = task; this.owner.state.selected = null; await this.save(); await this.observe(task); }
+  async select(task: string) {
+    this.state.selected = task; this.owner.state.selected = null; this.notify();
+    await this.save(); await this.observe(task);
+  }
   async create() {
     if (this.state.pending.some(p => p.kind === 'create')) throw Error('Inspect the original task creation before creating another task.');
     const task = crypto.randomUUID(); await this.issue('create', task, { conversation_id: task, profile: 'project' });

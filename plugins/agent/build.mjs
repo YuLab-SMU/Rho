@@ -3,12 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-// Package the same immutable source/UI/native artifact after either the normal
-// standalone build or a workspace build used for rapid integration.
-export function assembleAgentArtifact(root, target, env = process.env) {
-  assert.ok(fs.existsSync(path.join(root, 'Cargo.toml')), 'Assemble the standalone Agent source package before building.');
-  execFileSync(path.join(target, 'debug/export-agent-manifest'), [path.join(root, 'plugin.json')], {cwd: root, env, stdio: 'inherit'});
-  execFileSync(process.execPath, [path.join(root, 'build-ui.mjs')], {cwd: root, env, stdio: 'inherit'});
+export function agentPackageManifest(root) {
   const walk = directory => fs.readdirSync(directory, {withFileTypes: true}).flatMap(entry => {
     assert.ok(!entry.isSymbolicLink(), 'Package sources must not contain symlinks');
     if (['target', 'dist', 'compiled', 'node_modules', '.git'].includes(entry.name)) return [];
@@ -20,7 +15,16 @@ export function assembleAgentArtifact(root, target, env = process.env) {
   const encoded = JSON.stringify(manifest) + '\n';
   // Match the public protocol's 256 KiB raw manifest limit after adding sources.
   assert.ok(Buffer.byteLength(encoded) <= 256 * 1024, 'Agent manifest exceeds the public protocol byte limit');
+  return encoded;
+}
+// Package the same immutable source/UI/native artifact after either the normal
+// standalone build or a workspace build used for rapid integration.
+export function assembleAgentArtifact(root, target, env = process.env) {
+  assert.ok(fs.existsSync(path.join(root, 'Cargo.toml')), 'Assemble the standalone Agent source package before building.');
+  execFileSync(path.join(target, 'debug/export-agent-manifest'), [path.join(root, 'plugin.json')], {cwd: root, env, stdio: 'inherit'});
+  const encoded = agentPackageManifest(root);
   fs.writeFileSync(path.join(root, 'plugin.json'), encoded);
+  execFileSync(process.execPath, [path.join(root, 'build-ui.mjs')], {cwd: root, env, stdio: 'inherit'});
   fs.mkdirSync(path.join(root, 'dist'), {recursive: true});
   fs.copyFileSync(path.join(target, 'debug/rho-agent-backend'), path.join(root, 'dist/rho-agent-backend'));
   fs.chmodSync(path.join(root, 'dist/rho-agent-backend'), 0o755);

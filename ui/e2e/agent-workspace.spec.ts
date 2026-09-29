@@ -31,7 +31,16 @@ async function invoke(id: string, args: unknown) {
 }
 async function nativeQuery(id: string, args: unknown) { return query(id, { binding: await binding(agent, id), arguments: args }); }
 async function sessionState() { return query('r.session', { binding: await binding(r, 'r.session'), arguments: {} }); }
-async function executions() { return (await query('operation.list_recent', { limit: 100 })).operations.filter((record: any) => record.capability.id === 'r.execute'); }
+async function executions() {
+  const records: any[] = []; let before_cursor: number | null = null;
+  for (let pageNumber = 0; pageNumber < 20; pageNumber++) {
+    const page = await query('operation.list_recent', { limit: 100, before_cursor });
+    records.push(...page.operations.filter((record: any) => record.capability.id === 'r.execute'));
+    if (page.next_cursor === null) return records;
+    before_cursor = page.next_cursor;
+  }
+  throw Error('Agent acceptance exceeded its bounded Operation history.');
+}
 
 // Seed the real public document owner; the actual Editor backend resolves this
 // synchronized capture during picker preview and Native Send.
@@ -165,7 +174,9 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
   });
   await frame.locator('#attachment-file').setInputFiles({ name: '补充说明.txt', mimeType: 'text/plain', buffer: small });
   await expect.poll(async () => (await detail()).assets.length).toBe(2);
-  await expect(frame.getByRole('button', { name: 'Reselect original file', exact: true })).toBeEnabled();
+  // Losing the HTTP connection fences the containing renderer. Reopen the
+  // acknowledged view before inspecting its saved upload; no finish is replayed.
+  await expect(page.getByRole('button', { name: 'Reconnect this view', exact: true })).toBeVisible();
   await page.reload();
   await frame.locator('#uploads').getByRole('button', { name: 'Check status', exact: true }).click();
   await expect(frame.getByRole('button', { name: 'Add to draft', exact: true })).toBeEnabled();
@@ -175,7 +186,7 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
   expect(finishes).toBe(1); expect((await detail()).draft.content.text).toBe(prompt);
   for (const width of [1440, 390, 220]) {
     await page.setViewportSize({ width, height: 900 });
-    expect(await composer.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+    await expect.poll(() => composer.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
     await page.screenshot({ path: info.outputPath(`agent-native-attachments-${width}.png`) });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -261,13 +272,18 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
   expect((await query('plugins.instance', { instance: r })).instance.state).toBe('suspended');
   expect(await query('views.inspect', { view: view.view })).toEqual(retainedView);
   expect(await query('windows.layout', { window: windowId })).toEqual(priorLayout);
-  let resumeRequest = '', resumeCalls = 0, reconnectCalls = 0, loseResume = true;
+  let resumeRequest = '', resumeCalls = 0, reconnectCalls = 0, loseResume = true, resumeReplyLost = false;
   await page.route('**/api/host', async route => {
     const request = route.request().postDataJSON()?.frame?.request;
     if (request?.method === 'invoke') {
       if (request.params.capability.id === 'plugins.resume' && request.params.arguments.instance.instance === agent.instance) {
         resumeCalls++; resumeRequest ||= request.params.client_request_id;
-        if (loseResume) { loseResume = false; await route.fetch(); await route.abort(); return; }
+        if (loseResume) {
+          loseResume = false;
+          const reply = await (await route.fetch({ timeout: 60000 })).json();
+          expect(reply.ok).toBe(true); expect(reply.result.status).toBe('succeeded');
+          await route.abort(); resumeReplyLost = true; return;
+        }
       }
       if (request.params.capability.id === 'views.reconnect' && request.params.arguments.view === view.view) reconnectCalls++;
     }
@@ -278,6 +294,7 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
   await expect(page.getByRole('button', { name: 'Restore saved view', exact: true })).toBeVisible();
   expect(resumeCalls).toBe(0); expect(reconnectCalls).toBe(0);
   await page.getByRole('button', { name: 'Restore saved view', exact: true }).click();
+  await expect.poll(() => resumeReplyLost, { timeout: 60000 }).toBe(true);
   await expect(page.getByRole('button', { name: 'Check recovery status', exact: true })).toBeVisible();
   expect(resumeCalls).toBe(1); expect(reconnectCalls).toBe(0);
   await page.reload();
@@ -286,7 +303,7 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
   expect(resumeCalls).toBe(1); expect(reconnectCalls).toBe(0);
   for (const width of [1440, 390, 220]) {
     await page.setViewportSize({ width, height: 900 });
-    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
     await page.screenshot({ path: info.outputPath(`agent-host-recovery-${width}.png`) });
   }
   await page.getByRole('button', { name: 'Restore saved view', exact: true }).click();
@@ -334,7 +351,7 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
   await expect(managerFrame.getByRole('button', { name: 'Open view', exact: true })).toBeDisabled();
   for (const width of [1440, 390, 220]) {
     await page.setViewportSize({ width, height: 900 });
-    expect(await managerFrame.locator('body').evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+    await expect.poll(() => managerFrame.locator('body').evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
     await page.screenshot({ path: info.outputPath(`manager-restore-instance-${width}.png`) });
   }
   let rResumes = 0, rResumeRequest = '';
@@ -342,12 +359,13 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
     const body = route.request().postDataJSON()?.message?.body;
     if (body?.type === 'invoke' && body.capability.id === 'plugins.resume') {
       rResumes++; rResumeRequest = body.request_id;
-      await route.fetch(); await route.abort(); return;
+      const response = await route.fetch({ timeout: 60000 }), reply = await response.json(); expect(reply.ok).toBe(true);
+      await route.fulfill({response,json:{id:reply.id,ok:false,error:'Fixture lost original instance recovery reply'}}); return;
     }
     await route.continue();
   });
   await managerFrame.getByRole('button', { name: 'Restore instance', exact: true }).click();
-  await expect(managerFrame.getByRole('button', { name: 'Inspect original request', exact: true })).toBeVisible();
+  await expect(managerFrame.getByRole('button', { name: 'Inspect original request', exact: true })).toBeEnabled({ timeout: 60000 });
   await page.reload();
   await managerFrame.getByRole('button', { name: 'Inspect original request', exact: true }).click();
   await expect(managerFrame.locator('#recovery')).toBeHidden();

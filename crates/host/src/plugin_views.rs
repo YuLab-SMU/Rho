@@ -52,6 +52,13 @@ impl NextHost {
             PluginViewRequest::OpenTestWorkspace { .. } => Some(CapabilityRef::new("plugins.test_project", 1)?),
             _ => None,
         };
+        let provider = match &message.body {
+            PluginViewRequest::Query { arguments, .. }
+            | PluginViewRequest::Control { arguments, .. }
+            | PluginViewRequest::Invoke { arguments, .. } => arguments.get("binding")
+                .and_then(|value| serde_json::from_value::<ProviderBinding>(value.clone()).ok()),
+            _ => None,
+        };
         let mut context = service
             .view_context(
                 parent,
@@ -61,6 +68,7 @@ impl NextHost {
                 &message.view,
                 message.sequence,
                 cap.as_ref(),
+                provider.as_ref(),
                 message.test_project.is_some() || matches!(&message.body, PluginViewRequest::OpenTestWorkspace { .. }),
             )
             .await?;

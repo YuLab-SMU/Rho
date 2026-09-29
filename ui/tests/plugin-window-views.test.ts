@@ -25,6 +25,20 @@ it('joins one connection attempt and ignores a reply after the window stops',asy
  const f=fixture();let finish!:(value:PluginViewConnection)=>void;f.ports.connect.mockImplementation(()=>new Promise(resolve=>finish=resolve));f.owner.observe(layout);
  const pending=f.owner.connect('view');expect(f.owner.connect('view')).toBe(pending);await Promise.resolve();f.owner.stop();finish(connection);await pending;expect(f.owner.connection('view')).toBeNull();
 });
+it('names a detached saved tab from scoped metadata without reconnecting or concealing its failure',async()=>{
+ const f=fixture();f.ports.connect.mockRejectedValue(new Error('Instance suspended'));f.owner.observe(layout);
+ await expect(f.owner.connect('view')).rejects.toThrow('Instance suspended');
+ expect(f.owner.getSnapshot().get('view')).toMatchObject({title:'Custom View',connected:false,error:'Instance suspended'});
+ expect(f.owner.connection('view')).toBeNull();expect(f.ports.connect).toHaveBeenCalledOnce();expect(f.ports.inspect).toHaveBeenCalledWith('view');f.owner.stop();
+});
+it('does not borrow a detached title from another authority or publish it after disposal',async()=>{
+ const f=fixture();f.ports.connect.mockRejectedValue(new Error('Detached'));f.ports.inspect.mockResolvedValue({...view,project:'foreign'});f.owner.observe(layout);
+ await expect(f.owner.connect('view')).rejects.toThrow('Detached');expect(f.ports.title).not.toHaveBeenCalled();expect(f.owner.getSnapshot().get('view')?.title).toBe('view');f.owner.stop();
+ const g=fixture();g.ports.connect.mockRejectedValue(new Error('Detached'));let finish!:(title:string)=>void;
+ g.ports.title.mockImplementation(()=>new Promise(resolve=>finish=resolve));g.owner.observe(layout);
+ const pending=g.owner.connect('view');await vi.waitFor(()=>expect(g.ports.title).toHaveBeenCalledOnce());g.owner.stop();finish('Late title');
+ await expect(pending).rejects.toThrow('Detached');expect(g.owner.getSnapshot().get('view')?.title).toBe('view');
+});
 it('refuses to reinterpret the same retained view as a different instance purpose',async()=>{
  const f=fixture();f.owner.observe(layout);await f.owner.connect('view');f.owner.failed('view','frame stopped');
  f.ports.inspect.mockResolvedValueOnce({...view,purpose:'fixture_preview'});

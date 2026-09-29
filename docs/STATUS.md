@@ -1,9 +1,7 @@
 # Rho: current state and focus
 
 Updated: 2026-09-29. This is the single current status summary: current behavior,
-the evidence that still applies, open problems and the next milestone. Git and
-`target/` logs retain history, failed attempts and superseded evidence; do not copy
-them here. Keep this page under about 300 lines (see [Development § Status
+the evidence that still applies, open problems and the next milestone. Git and `target/` retain history and failed attempts. Keep this page under about 300 lines (see [Development § Status
 discipline](DEVELOPMENT.md#status-discipline)).
 
 ## Current focus: unified plugin refactor
@@ -30,15 +28,11 @@ written deletion condition. Internal pieces are not reported as milestones.
 | # | Milestone (user flow) | Replaces / deletes | State |
 | --- | --- | --- | --- |
 | M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Default entry, real-R browser flow and Rust HTTP checks pass; delivery remains |
-| M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Native/Rho views and attachment source/renderer checked; combined native/Host path pending |
-| M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Lifecycle, explicit view recovery and four runtime suspension cases pass; Host acceptance pending |
+| M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Real Host Native/Rho input, real R, reload and handoff pass within the combined flow; final restart check remains |
+| M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Actual Host/view/record recovery reached; native CLI Resume fails because its home is not configured |
 | M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Text/history, Continue and handoff pass renderer/framed checks; new sources and actual Host acceptance pending |
 | M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Branch checkpoint via Agent verified; Studio request UI/model/renderer checked, combined Host flow pending |
 | M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Not started |
-
-M1 is deliberately first: the ordinary scenario must become the integration target
-before more Agent surface is built, so composition problems surface continuously.
-M3 is pulled forward because it is the least certain boundary.
 
 ### Scientific scenario: current integration
 
@@ -60,24 +54,15 @@ artifact reuse and limits; browser evidence is retained beside it. Current R and
 Editor native artifacts were reused, and Files was built once through the primary
 workspace cache. This is integration evidence, not a new independent-source build.
 
-Default entry is now implemented in source: `rho workbench` selects the ordinary
-plugin profile, accepts project selection in the browser, and offers installed
-standalone UI views in an empty window. Opening a view retains its original
-activation and view requests before dispatch. The startup model/window checks
-pass (25 frontend cases), including no fixed Studio construction in ordinary
-startup. The three CLI argument cases also pass, and the current Host binary was
-built. The broader CLI command was interrupted while starting unrelated filtered
-targets; it is not reported as a complete pass. After executable startup recovered,
-four default-entry/generic-window/fixed-reference browser cases passed. The real-R
-flow now also starts through browser project selection and the installed Manager
-selector, including recovery from a lost activation reply with one instance.
-That run found and fixed the selector's accessible label; the passing rerun used
-current client assets with the retained Host and native plugin artifacts. It
-verified one execution, Objects/Plots output and reload without replay. Evidence:
-`target/plugin-refactor/default-entry-results.json`; earlier startup timeouts and
-the label failure remain retained. Both Rust HTTP cases now pass (58 minutes of
-compilation, 0.52 seconds of test execution). Current client generation and build pass; embedded-binary refresh remains
-pending, and that earlier browser run does not cover M3 edits.
+Default entry is implemented: `rho workbench` selects the ordinary plugin profile,
+accepts browser project selection and offers installed standalone views in an
+empty window. It retains activation/open requests before dispatch. The 25 frontend
+startup cases, three CLI cases, four default-entry/window browser cases and two
+Rust HTTP cases pass. The real-R flow uses browser project/Manager selection and
+recovers a lost activation reply without duplicating the instance or execution.
+Current client generation, build/check and the embedded Host rebuild pass.
+Evidence: `target/plugin-refactor/default-entry-results.json`; interrupted broader
+CLI checks and earlier startup failures remain retained, not passes.
 Existing fixed-composition acceptance explicitly uses `--fixed-workspace`. Remove
 that temporary reference and shell after M2–M4 replace the remaining fixed flows;
 missing plugins cannot select it as a fallback. Default package delivery remains.
@@ -95,9 +80,14 @@ explicit inspection/retry of the original request, with no next-step dispatch on
 reload. All 566 core frontend tests pass, including 42 recovery/view cases. The focused
 native current-source run passes all four suspension cases, including publication
 conflict (34m11s compilation, 1s tests); the earlier pre-fix failure remains in evidence.
-Host-reopen and combined Agent/real-R browser restart fixtures remain unrun.
-Public/core client generation, client build and Manager restore/model checks pass.
-Client check and actual Host acceptance remain.
+Host-reopen, workspace and disposable-test Host checks now pass (10 cases);
+public/core generation, client build/check and Manager restore/model checks pass.
+Actual Host restart restores the same Agent instance/view, Native/Rho records,
+attachments and handoff receipt without replay. The combined case still fails
+at native CLI Resume: the isolated backend has no Kimi home. Add explicit
+Agent-owned native directory configuration; do not widen Host environment
+inheritance. `agent-workspace-current-v11.log` retains this failed acceptance.
+Detached tabs now read scoped contribution names; 36 recovery/window checks pass.
 Evidence: `target/plugin-refactor/restart-lifecycle-results.json`. No user Host was replaced or package installed/published.
 
 ### Agent migration: current state
@@ -147,16 +137,28 @@ switching, native/Rho attachment recovery and retained context, next drafts, 8 M
 replies, actual reload, history and close without Stop. Settings/rename work without
 form permission. Continue preserves next drafts through lost replies/reload and original context
 at 960/440/220 px. Handoff also preserves edited text, references and lost receipts at those widths.
-The current framed backend passes all 64 cases: exact context/history/Continue,
-atomic handoff, native 8 MiB uploads, Rho attachments and original-request reopen
-without replay. After cache maintenance, compilation took 12.94s and tests 5.19s;
-the two interrupted attempts remain incomplete evidence, not passes.
-The checked-in 42-capability manifest still awaits the three validated attachment ports.
-This does **not** establish combined Host acceptance or a current packaged artifact. The combined native/Rho–Editor–real-R/restart fixture now includes Rho attachments; type checking passes, and its prior cases passed discovery.
-Its model peer probe passes; the actual Host flow awaits one current Agent artifact.
+Current checks pass 64 framed backend and 32 native owner/store cases, covering
+context/history/Continue, handoff, 8 MiB uploads, Rho attachments and reopen.
+Earlier interrupted attempts remain incomplete evidence, not passes.
+The current 45-capability manifest includes all attachment ports. Generated schema
+annotations/local definition names are compacted without weakening validation;
+the full 648-file source manifest is 246,732 bytes, within the 256 KiB limit.
+A current workspace-built Agent package and its reuse receipt are available.
+The real Host exposed and fixed two integration gaps: the picker now reads
+instance observations, and a view calling its exact own backend retains selected
+activation scopes. Reverse calls still require individual grants; foreign
+providers, current caller restrictions and Query-only boundaries stay enforced.
+Eleven Host delegation/test-project checks pass, including the Query refusal.
+Task selection now updates immediately, preventing handoff from using the prior
+task while its selection is saving. The combined case is not yet a full pass.
 
-R now declares observed Help topics and saved HTML contexts; exact-copy/file checks, journal paging and native tests are written. Manager now captures the Viewer contribution's read grants in new scenarios and lost-reply recovery; model checks pass. Public Agent picker/grant/type checks pass; R native and Host acceptance remain unrun.
-Not done: actual Host acceptance of Agent input/Continue/handoff and native/Host checks for the new R sources; annotations/component input, Host restart recovery and combined Studio Agent acceptance.
+R declares observed Help topics and saved HTML contexts with exact-copy/file
+checks and bounded journal paging. All 12 context tests and the real-R Host case
+pass, including rejection of undeclared inclusion fields. The complete R package
+manifest uses compact JSON and is checked before native compilation. Manager
+captures Viewer read grants in new scenarios; picker/grant/type checks pass.
+Not done: native CLI Resume after Host restart and Studio browser acceptance;
+annotations/component input, Help/Viewer picker integration and Rho tool selection.
 Synthetic peers for Process/Remote/Environment do not establish execution through those plugins.
 
 Agent evidence in `target/plugin-refactor/`: `agent-current-native-results.json`, `agent-handoff-ui-results.json`, `rho-continue-results.json`, `agent-assets-results-v3.json` and
@@ -197,8 +199,7 @@ and `agent-native-tools-combined-v1.json` / `agent-native-tools-native-rerun-v2.
   Objects with explicit set-aside, Packages, Help, Plots with original export,
   Viewer.
 
-Per-plugin checks are mapped in `governance/source-map.json`; run
-`node scripts/governance.mjs impact --changed-auto` for the affected set.
+Per-plugin checks: `node scripts/governance.mjs impact --changed-auto`.
 
 ### Known open problems
 
@@ -224,9 +225,9 @@ Per-plugin checks are mapped in `governance/source-map.json`; run
 
 Existing user Hosts and R memory have not been restarted by this work. New Host
 capabilities require the rebuilt binary; a client refresh alone cannot add them.
-New plugin revisions need explicit package snapshot/activation; existing instances
-keep immutable assets. Inspect live work before any separately authorized
-replacement. All native acceptance uses disposable projects and explicit Ark/R.
+New revisions need explicit snapshot/activation; existing instances keep immutable
+assets. Inspect live work before authorized replacement. Acceptance uses disposable
+projects and explicit Ark/R.
 
 ## Established product surfaces (fixed composition)
 
@@ -269,8 +270,7 @@ Architecture and Git history.
 
 ## Verified baselines
 
-These baselines apply to their recorded source only; later changes need their own
-evidence.
+These baselines apply only to their recorded source.
 
 - **Agent interface acceptance** at `4bcd3090`: independent Codex 30/30 core and
   4/4 Skills runs passed (`gpt-6-astra`, Codex 0.153.4). Manifest:

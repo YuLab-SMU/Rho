@@ -1,6 +1,6 @@
 import type { AgentContextSelection, ComponentAgentRun, ComponentSourceSnapshot } from '../sdk/index.js';
 import type { CapabilityKey, ContextContribution, ContextPage, ContextPreview, ContextReference,
-  InstanceRef, JsonValue, PluginInspection, PluginInstancePage } from '../public/plugin-protocol/index.js';
+  InstanceRef, JsonValue, PluginInspection, PluginInstanceObservations } from '../public/plugin-protocol/index.js';
 import { type Client, json, same } from './operations.js';
 
 export interface Inclusion { title: string; value: JsonValue; }
@@ -69,14 +69,15 @@ export class ContextPicker {
     if (!more) { this.discovery++; this.sources = []; this.notices = []; this.nextInstances = null; this.cursors.clear(); }
     const discovery = this.discovery;
     const after = more ? this.nextInstances : null;
-    const { data } = await this.read<PluginInstancePage>({ id: 'plugins.instances', version: 1 }, { after, limit: 20, include_previews: false });
+    const { data } = await this.read<PluginInstanceObservations>({ id: 'plugins.instances', version: 1 }, { after, limit: 20, include_previews: false });
     if (discovery !== this.discovery) return;
     if (!Array.isArray(data.instances) || data.instances.length > 20 || data.next && (data.next === after || this.cursors.has(data.next)))
       throw Error('The source listing did not return a bounded next page.');
     if (data.next) this.cursors.add(data.next);
     this.nextInstances = data.next;
-    for (const instance of data.instances) {
-      if (instance.project !== this.client.view.project || instance.state !== 'active' || instance.purpose === 'fixture_preview') continue;
+    for (const observation of data.instances) {
+      const instance = observation.instance;
+      if (!observation.observed_in_this_host || instance.project !== this.client.view.project || instance.state !== 'active' || instance.purpose === 'fixture_preview') continue;
       try {
         const inspection = await this.inspect(instance.identity);
         if (discovery !== this.discovery) return;

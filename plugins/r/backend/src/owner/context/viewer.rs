@@ -314,7 +314,7 @@ impl Owner {
                     "Viewer selection differs from its original committed output",
                 )?;
                 let (text, truncated, inclusion) = match inclusion {
-                    Inclusion::Metadata => (
+                    Inclusion::Metadata {} => (
                         format!(
                             "Saved HTML artifact record · {} bytes · R session {} · run {} · output {} · {status}. Content availability and interactive selection, zoom or filter state are not included.",
                             source.reference.bytes,
@@ -325,7 +325,7 @@ impl Owner {
                         false,
                         "metadata",
                     ),
-                    Inclusion::Text => {
+                    Inclusion::Text {} => {
                         check(
                             self.context_grants.resources && call.scopes.contains("resources.read"),
                             "Viewer text requires the selected resource read grant",
@@ -376,8 +376,8 @@ impl Owner {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 enum Inclusion {
-    Text,
-    Metadata,
+    Text {},
+    Metadata {},
 }
 fn bounded_text(text: &str, limit: usize) -> (String, bool) {
     let mut end = limit.min(text.len());

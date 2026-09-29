@@ -4,7 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {agentAcceptanceOptions, agentBuildInputDigest, agentBuildMode, agentSourceCopies, recordAgentBuild, verifyAgentBuild} from './agent-plugin-artifact.mjs';
+import {agentAcceptanceOptions, agentBuildInputDigest, agentBuildMode, agentSourceCopies, excludedAgentSource, recordAgentBuild, verifyAgentBuild} from './agent-plugin-artifact.mjs';
+import {agentPackageManifest} from '../plugins/agent/build.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const parse = (args, extra = {}) => agentAcceptanceOptions(args, {environment: {}, ...extra});
@@ -22,6 +23,19 @@ assert.throws(() => parse(['--package', '/tmp/example', '--browser']), /Unknown 
 
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-workflow-'));
 try {
+  // Native metadata tests see the small development source declaration. The
+  // actual distributed source list is much larger and must fit the same limit.
+  const assembled = path.join(temporary, 'assembled-source');
+  for (const [from, to] of agentSourceCopies)
+    fs.cpSync(path.join(root, from), path.join(assembled, to), {recursive:true, filter:source => !excludedAgentSource(source)});
+  for (const file of ['Cargo.toml','Cargo.lock','LICENSE']) fs.copyFileSync(path.join(root,file), path.join(assembled,file));
+  const packaged = agentPackageManifest(assembled);
+  assert.ok(Buffer.byteLength(packaged) <= 256 * 1024);
+  const declared = JSON.parse(packaged).source.files;
+  assert.ok(declared.includes('backend/src/manifest_schema.rs'));
+  assert.ok(declared.includes('public/plugin-protocol/src/lib.rs'));
+  assert.ok(declared.every(file => !file.startsWith('dist/')));
+  console.log(`Complete Agent source manifest: ${Buffer.byteLength(packaged)} bytes, ${declared.length} files.`);
   const checkout = path.join(temporary, 'checkout'), pkg = path.join(temporary, 'external');
   const write = (file, text) => {fs.mkdirSync(path.dirname(file), {recursive: true}); fs.writeFileSync(file, text);};
   for (const [source] of agentSourceCopies) write(path.join(checkout, source, 'source.rs'), source);

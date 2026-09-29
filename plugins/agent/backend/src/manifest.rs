@@ -14,6 +14,9 @@ use rho_plugin_sdk::protocol::*;
 use schemars::schema_for;
 use serde_json::{Value, json};
 
+#[path = "manifest_schema.rs"]
+mod schema;
+
 pub fn key(id: &str) -> CapabilityKey {
     CapabilityKey {
         id: ContributionId::new(id).unwrap(),
@@ -121,7 +124,7 @@ fn capability(
         } else {
             "Read scoped Agent-owned metadata without starting a model, reconnecting a native Agent or recovering work."
         }.into(),
-        input_schema: input, output_schema: output, examples: vec![example],
+        input_schema: schema::compact(input), output_schema: schema::compact(output), examples: vec![example],
         recovery_schema: json!({"type":"object","additionalProperties":false,"properties":{"code":{"type":"string"}},"required":["code"]}),
         required_scopes: if id == "agent.native.assets.import" { ["application.control".into(), "plugins.read".into(), "resources.read".into()].into() } else if operation || control { ["application.control".into(), "plugins.read".into()].into() } else if id == "agent.handoff.target" { ["application.read".into(), "plugins.read".into()].into() } else if matches!(id, "agent.model.tool.operation" | "agent.native.tool.operation") { ["application.read".into(), "operation.read".into()].into() } else { ["application.read".into()].into() },
         effects: if id == "agent.native.discover" { ["agent.native.discovery".into()].into() } else if id == "agent.native.command" { ["agent.native.command".into()].into() } else if matches!(id, "agent.native.assets.upload" | "agent.native.assets.import" | "agent.native.assets.stage" | "agent.native.assets.finish" | "agent.model.assets.stage" | "agent.model.assets.finish") { ["agent.assets".into()].into() } else if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },

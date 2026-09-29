@@ -817,6 +817,14 @@ iframe or backend package. Plugins use `views.inspect` for public metadata/state
 The core checks principal/window/connection/message ordering and declared grants,
 then delegates to the same Host ports. HTTP arrival reordering has a bounded wait;
 acceptance order does not serialize completion or block controls behind slow reads.
+A view calling a capability of its own exact active backend retains the scopes
+of its frozen activation grants, intersected with the authenticated caller. This
+allows backend-owned context capture and explicitly selected tools. The binding
+must match the view's project, instance, revision, artifact and contributed
+capability. Every reverse call still needs its own selected grant; Query cannot
+delegate a mutation. Calls to other providers, core capabilities and disposable
+test projects retain only the addressed capability's scopes. Neither an unselected
+optional grant nor authority removed from the current caller can be recovered.
 The Host carries the originating window and any close-time draft-source restriction
 through backend queries, controls, admission preflight and accepted execution.
 These restrictions are pending-call state, outside the public RPC payload; reverse

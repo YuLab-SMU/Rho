@@ -27,7 +27,10 @@ export async function prepareRetainedHandoff(page: Page, frame: FrameLocator, in
     const call=route.request().postDataJSON()?.message?.body;
     if(call?.type==='invoke'&&call.capability.id==='agent.handoff.append') {
       count++;request ||= call.arguments.arguments.request_id;
-      if(count===1){await route.fetch();await route.abort();return;}
+      if(count===1){
+        const response=await route.fetch(),reply=await response.json();expect(reply.ok).toBe(true);
+        await route.fulfill({response,json:{id:reply.id,ok:false,error:'Fixture lost original handoff reply'}});return;
+      }
     }
     await route.continue();
   };

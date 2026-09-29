@@ -49,7 +49,19 @@ export class PluginWindowViews extends Model<ReadonlyMap<string,WindowView>> {
     if(this.stopped||!this.entries.has(id))return Promise.reject(new Error('The view is not present in this window.'));
     if(this.connections.has(id))return Promise.resolve();
     return this.run(id,async()=>{
-      const connection=await this.ports.connect(id);if(this.stopped)return;this.scoped(connection.view,id);
+      let connection:PluginViewConnection;
+      try { connection=await this.ports.connect(id); }
+      catch(error) {
+        // Detached views still have immutable contribution metadata. Reading
+        // it names the saved tab without resuming its backend or connection.
+        try {
+          const record=await this.ports.inspect(id);if(this.stopped)throw error;this.scoped(record,id);
+          const title=await this.ports.title(record).catch(()=>record.contribution);
+          if(!this.stopped&&this.entries.has(id))this.entries.set(id,{...this.entries.get(id)!,title:title||record.contribution});
+        } catch { /* Preserve the original connection failure when metadata is unavailable. */ }
+        throw error;
+      }
+      if(this.stopped)return;this.scoped(connection.view,id);
       if(connection.view.closed)throw new Error('This view is already closed.');
       this.connections.set(id,connection);
       const title=await this.ports.title(connection.view).catch(()=>connection.view.contribution);if(this.stopped)return;

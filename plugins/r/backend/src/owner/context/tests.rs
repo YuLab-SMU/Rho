@@ -219,7 +219,7 @@ fn help_preview_retains_original_identity_and_marks_incomplete_excerpts() {
         &owner.instance,
         request.clone(),
         source,
-        HelpInclusion::Excerpt,
+        HelpInclusion::Excerpt {},
         page.clone(),
     )
     .unwrap();
@@ -235,7 +235,7 @@ fn help_preview_retains_original_identity_and_marks_incomplete_excerpts() {
             &owner.instance,
             request.clone(),
             source,
-            HelpInclusion::Excerpt,
+            HelpInclusion::Excerpt {},
             partial
         )
         .unwrap()
@@ -248,7 +248,7 @@ fn help_preview_retains_original_identity_and_marks_incomplete_excerpts() {
             &owner.instance,
             request,
             source,
-            HelpInclusion::Text,
+            HelpInclusion::Text {},
             changed
         )
         .is_err()
@@ -278,7 +278,10 @@ async fn context_scope_identity_and_inclusion_are_checked_before_native_reads() 
         }
         assert!(owner.query(&call).await.is_err());
     }
-    assert!(decode::<HelpInclusion>(json!({"kind":"text","run":true})).is_err());
+    for kind in ["text", "excerpt"] {
+        assert!(decode::<HelpInclusion>(json!({"kind":kind})).is_ok());
+        assert!(decode::<HelpInclusion>(json!({"kind":kind,"run":true})).is_err());
+    }
     assert!(host.try_recv().is_err());
     assert!(owner.runtime.lock().unwrap().is_none());
 }

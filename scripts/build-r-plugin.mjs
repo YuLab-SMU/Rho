@@ -55,7 +55,9 @@ const walk=dir=>fs.readdirSync(dir,{withFileTypes:true}).flatMap(entry=>{
 });
 const manifest=JSON.parse(fs.readFileSync(path.join(output,"plugin.json"),"utf8"));
 manifest.source.files=walk(output).filter(file=>file!=="plugin.json" && file!=="Cargo.lock").sort();
-fs.writeFileSync(path.join(output,"plugin.json"),JSON.stringify(manifest,null,2)+"\n");
+const encoded=JSON.stringify(manifest)+"\n";
+assert.ok(Buffer.byteLength(encoded)<=256*1024,'R manifest exceeds the public protocol byte limit');
+fs.writeFileSync(path.join(output,"plugin.json"),encoded);
 if(workspace) {
   execFileSync(env.RHO_PLUGIN_CARGO,['build','--locked','--offline','-p','rho-r-backend','--bin','rho-r-backend'],{cwd:root,env,stdio:'inherit'});
   fs.mkdirSync(path.join(output,'dist'),{recursive:true});

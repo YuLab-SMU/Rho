@@ -50,7 +50,9 @@ while (frame := read()) is not None:
         # Native restrictions are deliberately absent from the public wire.
         assert 'view_scope' not in data
         action = data['arguments'].get('action')
-        if kind == 'invoke' and action == 'hold':
+        if action == 'scope_snapshot':
+            query(request, {'scopes': data['scopes']})
+        elif kind == 'invoke' and action == 'hold':
             held[request] = frame
         elif action == 'crash':
             sys.exit(4)

@@ -5,9 +5,10 @@ export async function testContextPicker(ContextPicker, inclusionChoices, root) {
   const identity = {instance:'source',plugin:manifest.id,revision:'sha256:'+'c'.repeat(64),artifact:'sha256:'+'d'.repeat(64)};
   const reference = {provider:identity,contribution:'documents',window:'window',selector:{draft:'draft-one',version:7,digest:'sha256:'+'e'.repeat(64)}};
   const item = {reference,title:'分析 Ω.R',description:'Synchronized version 7',kind:'document'};
+  const observed = instance => ({instance,observed_in_this_host:true,process_id:null,retained_calls:0,pending_messages:0,stderr:null});
   function fixture() {
     const queries=[];
-    let instancePage={instances:[{identity,project:'project',state:'active',alias:'Editor'}],next:null,total:1};
+    let instancePage={instances:[observed({identity,project:'project',state:'active',alias:'Editor'})],next:null,total:1};
     let inspected={summary:{revision:identity.revision},manifest,artifacts:[{id:identity.artifact}]};
     let page={items:[structuredClone(item)],notices:[],next:null};
     let preview={item:structuredClone(item),text:'selected_value <- 42 # 中文 Ω',data:{version:7},truncated:false,resources:[]};
@@ -37,7 +38,7 @@ export async function testContextPicker(ContextPicker, inclusionChoices, root) {
     const calls=[];
     const client={view:{project:'project',window:'window',instance:{instance:'agent'}},async query(cap,args){
       calls.push(structuredClone({cap,args}));
-      if(cap.id==='plugins.instances')return{status:'ready',completeness:'complete',data:{instances:[{identity:provider,project:'project',state:'active',alias:'R'}],next:null}};
+      if(cap.id==='plugins.instances')return{status:'ready',completeness:'complete',data:{instances:[observed({identity:provider,project:'project',state:'active',alias:'R'})],next:null}};
       if(cap.id==='plugins.inspect')return{status:'ready',completeness:'complete',data:{summary:{revision:provider.revision},manifest:r,artifacts:[{id:provider.artifact}]}};
       const contribution=r.contexts.find(c=>c.search.id===cap.id||c.preview.id===cap.id);assert.ok(contribution);
       const declaration=r.capabilities.find(c=>c.capability.id===contribution.preview.id);
@@ -64,8 +65,8 @@ export async function testContextPicker(ContextPicker, inclusionChoices, root) {
     assert.deepEqual(selected.reference,reference);assert.equal(selected.inclusion,'{"kind":"selection"}');assert.match(selected.label,/Editor.*分析 Ω/);
     assert.equal(f.queries.at(-1).args.arguments.max_bytes,16384);assert.equal(f.queries[0].args.include_previews,false);
   });
-  await check('inactive, preview and different-project instances are not queried or resumed',async()=>{
-    const f=fixture();f.instancePage.instances.push(...['suspended','failed','disconnected'].map(state=>({identity,project:'project',state,alias:state})),{identity,project:'other',state:'active'},{identity,project:'project',state:'active',purpose:'fixture_preview'});
+  await check('inactive, historical, preview and different-project observations are not queried or resumed',async()=>{
+    const f=fixture();f.instancePage.instances.push(...[...['suspended','failed','disconnected'].map(state=>({identity,project:'project',state,alias:state})),{identity,project:'other',state:'active'},{identity,project:'project',state:'active',purpose:'fixture_preview'}].map(observed),{...observed({identity,project:'project',state:'active'}),observed_in_this_host:false});
     await f.picker.discover();assert.equal(f.picker.sources.length,1);assert.equal(f.queries.filter(q=>q.cap.id==='plugins.inspect').length,1);
   });
   await check('partial searches retain notices but partial previews cannot be selected',async()=>{

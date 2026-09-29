@@ -111,7 +111,7 @@ export function PluginWorkspace({ client, project, testName }: { client: HostCli
     return { id, title: entry.title, content: <div style={{ position: 'relative', height: '100%', width: '100%' }}>
       {connection && <ConnectedFrame client={client} project={project} connection={connection} failed={error => owners.views.failed(id, error)} refresh={() => refresh.current()} />}
       {(!connection || entry.error) && <div className="empty" role={entry.error ? 'alert' : 'status'} style={{ position: 'absolute', inset: 0, background: 'var(--color-surface)' }}>
-        {recovering?.busy ? <span role="status">Restoring saved view…</span> : recovering?.error || recovering?.message || entry.error || 'Connecting view…'}
+        {recovering?.busy ? <span role="status">Restoring saved view…</span> : <span>{recovering?.error || recovering?.message || entry.error || 'Connecting view…'}</span>}
         {entry.error && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
           <button disabled={recovering?.busy} onClick={() => void restoreView(id)}>{recovering?.pending ? 'Check recovery status' : connection ? 'Reconnect this view' : 'Restore saved view'}</button>
           {recovering?.pending && <button disabled={recovering.busy} onClick={() => void restoreView(id, true)}>Retry original request</button>}

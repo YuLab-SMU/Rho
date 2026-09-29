@@ -334,6 +334,17 @@ impl PluginRuntime {
             "view requires the exact active instance")?;
         Ok(entry.grants.clone())
     }
+    pub(crate) fn owns_active_capability(&self, binding: &ProviderBinding) -> bool {
+        let entries = self.entries.lock().unwrap();
+        entries.get(&binding.provider.instance).is_some_and(|entry| {
+            let state = entry.state.lock().unwrap();
+            state.record.identity == binding.provider && state.record.project == binding.project
+                && state.record.state == InstanceState::Active
+                && state.record.purpose == PluginInstancePurpose::Runtime
+                && entry.published.load(Ordering::Acquire)
+                && entry.manifest.capabilities.iter().any(|cap| cap.capability == binding.capability)
+        })
+    }
     pub(crate) fn view_fixtures(&self, identity: &InstanceRef) -> Result<Vec<PluginPreviewQuery>, PluginError> {
         let entries = self.entries.lock().unwrap();
         let entry = entries.get(&identity.instance).ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?;
