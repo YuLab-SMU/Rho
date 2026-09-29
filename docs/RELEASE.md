@@ -33,6 +33,50 @@ For a requested distribution, report the exact source commit, artifact paths, si
 hashes, signatures actually present and checks that ran. Build, signing, installation
 and publication are separate outcomes. Do not install or publish automatically.
 
+## Ordinary plugin delivery sets
+
+`scripts/plugin-set.mjs` assembles **already built** source/artifact directories
+through the existing CLI's snapshot, export and validation commands. It never
+compiles, activates an instance, starts R or changes a scenario. The output holds
+ordinary `.rho-plugin` archives, a bounded `plugin-set.json` index with exact
+revisions/artifacts/byte sizes/SHA-256 hashes, and the standalone Node utility.
+The assembler's CLI hash is recorded; it is not a signature or a claim that the
+CLI was rebuilt from the same checkout as each independent plugin revision.
+
+The input JSON has `name`, `profile` and `packages`. Each package supplies a
+`directory` (relative to the input file or absolute) and `target` (`ui-web` for a
+UI-only package, `aarch64-apple-darwin` for the current native target).
+`profile: "rho-default"` requires exactly Agent, Annotations, Console, Editor,
+Environment, Files, Help, Manager, Objects, Packages, Plots, Process, R, Remote,
+Studio and Viewer. `profile: "custom"` supports selected revisions, including two
+versions of one plugin. These are assembly checks, not runtime privileges.
+
+```sh
+node scripts/plugin-set.mjs pack --rho /absolute/rho --input /absolute/packages.json --out /absolute/new-set
+node /absolute/new-set/plugin-set.mjs verify --rho /absolute/rho --set /absolute/new-set
+# Installation is an explicit, separate operator action:
+node /absolute/new-set/plugin-set.mjs install --rho /absolute/rho --set /absolute/new-set --database /absolute/catalog/host.sqlite
+```
+
+Installation pins and validates all archive bytes before the first destination
+import, then uses the normal repository beside the selected database. It does not
+grant capabilities or create running instances. An interrupted import reports
+acknowledged revisions and the attempted revision with an unknown outcome; it
+does not claim transactional rollback or that a lost reply means nothing changed. An
+explicit retry is idempotent. No startup hook invokes this installer, and removed
+plugins stay removed until another explicit import. Treat the source packages and
+utility as trusted local code; checksums do not authenticate their publisher.
+
+`node scripts/test-plugin-set.mjs` exercises real CLI archive validation,
+preflight failures, coexisting revisions, import/remove/reimport and an empty
+generic Host startup using a disposable repository and retained binary. Set
+`RHO_TEST_BINARY` and `RHO_PLUGIN_SET_EVIDENCE` to select the binary and report.
+Set `RHO_PLUGIN_SET_PACKAGE` to additionally verify an assembled default set's
+sixteen actual archives: import, remove all, start the empty Host, and explicitly
+restore identical source/capability/permission declarations and artifacts.
+This does not establish signing, complete default scenario integration, final
+fixed-composition removal or a user installation; see Status for actual evidence.
+
 See [current validation scope](STATUS.md), [artifact trust](../CODE_SIGNING_POLICY.md),
 [license](../LICENSE), [third-party notices](../LICENSES.md) and
 [security reporting](../SECURITY.md).

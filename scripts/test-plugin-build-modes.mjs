@@ -28,6 +28,9 @@ require('node:child_process').execFileSync = (file, args, options) => {
 require('node:module').syncBuiltinESMExports();
 `);
 const packages = {
+  process: ['rho-plugin-protocol','rho-plugin-sdk','rho-process-api','rho-process-backend','rho-process-engine','rho-process-owner'],
+  remote: ['rho-plugin-protocol','rho-plugin-sdk','rho-process-api','rho-process-engine','rho-remote-api','rho-remote-backend','rho-remote-owner'],
+  environment: ['rho-environment-api','rho-environment-backend','rho-environment-owner','rho-plugin-protocol','rho-plugin-sdk','rho-process-api','rho-process-engine','rho-process-owner','rho-r-api'],
   editor: ['rho-editor-backend','rho-plugin-protocol','rho-plugin-sdk'],
   agent: ['rho-agent-api','rho-agent-backend','rho-agent-client','rho-agent-engine','rho-agent-native','rho-agent-owner','rho-agent-store','rho-plugin-protocol','rho-plugin-sdk','rho-r-api'],
   r: ['rho-environment-api','rho-plugin-protocol','rho-plugin-sdk','rho-process-api','rho-r-api','rho-r-backend','rho-r-engine'],
@@ -80,4 +83,4 @@ try {
     if (!independent) assert.equal(observed.cwd, root);
   }
 } finally { fs.rmSync(directory, {recursive: true, force: true}); }
-console.log('Agent/R/Files/Editor default to workspace builds; independent builds require an explicit flag; invalid modes stop before assembly. No native tools ran.');
+console.log('Agent/R/Files/Editor/Process/Remote/Environment default to workspace builds; independent builds require an explicit flag; invalid modes stop before assembly. No native tools ran.');

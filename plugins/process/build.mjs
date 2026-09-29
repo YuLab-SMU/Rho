@@ -4,8 +4,10 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 const root = path.dirname(fileURLToPath(import.meta.url));
+const reuse = process.argv.includes('--reuse-native');
+assert.ok(process.argv.length <= 3 && process.argv.slice(2).every(arg => arg === '--reuse-native'), 'Usage: node build.mjs [--reuse-native]');
 assert.ok(fs.existsSync(path.join(root, 'Cargo.toml')), 'Assemble a standalone Process source package before building.');
-execFileSync(process.env.RHO_PLUGIN_CARGO ?? 'cargo', ['build', '--locked', '--offline', '-p', 'rho-process-backend', '--bins'], {cwd: root, stdio: 'inherit'});
+if (!reuse) execFileSync(process.env.RHO_PLUGIN_CARGO ?? 'cargo', ['build', '--locked', '--offline', '-p', 'rho-process-backend', '--bins'], {cwd: root, stdio: 'inherit'});
 const target = process.env.CARGO_TARGET_DIR ? path.resolve(root, process.env.CARGO_TARGET_DIR) : path.join(root, 'target');
 execFileSync(path.join(target, 'debug/export-process-manifest'), [path.join(root, 'plugin.json')], {cwd: root, stdio: 'inherit'});
 const walk = directory => fs.readdirSync(directory, {withFileTypes: true}).flatMap(entry => {

@@ -50,3 +50,9 @@ observation of visible tagged work. Reconciliation creates its own Operation,
 preserves the original outcome and never re-executes the source command. This
 cleanup has no cancellation capability; it finishes its bounded native inspection.
 SSH/Slurm and default scenario composition remain under implementation.
+
+Repository assembly defaults to the primary workspace's incremental native build
+and copies that artifact into the standalone source package. Use the explicit
+`--independent` option on `scripts/build-process-plugin.mjs` for independent-source
+compilation; `--workspace` spells the default. Both validate the same public source
+closure. Inside a distributed package, `node build.mjs` still builds its own source.

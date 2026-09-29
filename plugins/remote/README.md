@@ -29,7 +29,8 @@ stopping an active local SSH transport cannot confirm that remote work stopped.
 Slurm request acceptance and native job state remain separate observations.
 
 From the repository, `node scripts/build-remote-plugin.mjs /absolute/new/package`
-assembles seven public/plugin Rust crates and builds offline outside the checkout.
+assembles seven public/plugin Rust crates outside the checkout and defaults to the
+primary workspace build; use `--independent` for standalone compilation.
 All first-party sources, lockfile and [build instructions](BUILD.md) travel with
 the package. Rebuild with `node build.mjs` in that standalone directory.
 Generate declarations and manifest with `node plugins/remote/generate-sdk.mjs`

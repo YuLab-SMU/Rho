@@ -4,7 +4,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export function buildEnvironmentPlugin(destination) {
+export function buildEnvironmentPlugin(destination, {workspace = true} = {}) {
   assert.ok(destination, 'Specify a new package directory outside the checkout');
   const output = path.join(fs.realpathSync(path.dirname(path.resolve(destination))), path.basename(destination));
   assert.ok(output !== root && !output.startsWith(root + path.sep), 'Use an independent source directory');
@@ -32,13 +32,19 @@ export function buildEnvironmentPlugin(destination) {
   fs.writeFileSync(path.join(output, 'Cargo.toml'), '[workspace]\nresolver = "3"\nmembers = ["api", "r/api", "backend", "backend/owner", "process/api", "public/process-engine", "process/backend/owner", "public/plugin-protocol", "public/plugin-sdk"]\n');
   fs.copyFileSync(path.join(root, 'Cargo.lock'), path.join(output, 'Cargo.lock'));
   const installed = name => fs.realpathSync(execFileSync('rustup', ['which', name], {encoding: 'utf8'}).trim());
-  const env = {...process.env, RHO_PLUGIN_CARGO: installed('cargo'), RUSTC: installed('rustc'), RUSTDOC: installed('rustdoc'), CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '4', CARGO_TARGET_DIR: path.join(root, 'target')};
+  const env = {...process.env, RHO_PLUGIN_CARGO: installed('cargo'), RUSTC: installed('rustc'), RUSTDOC: installed('rustdoc'), CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '1', CARGO_TARGET_DIR: path.join(root, 'target')};
   const target = execFileSync(env.RUSTC, ['-vV'], {encoding: 'utf8'}).match(/^host: (.+)$/m)?.[1]; assert.ok(target);
   const metadata = JSON.parse(execFileSync(env.RHO_PLUGIN_CARGO, ['metadata', '--offline', '--filter-platform', target, '--format-version', '1'], {cwd: output, env, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024}));
   const packages = metadata.packages.filter(pkg => metadata.workspace_members.includes(pkg.id));
   assert.deepEqual(packages.map(pkg => pkg.name).sort(), ['rho-environment-api', 'rho-environment-backend', 'rho-environment-owner', 'rho-plugin-protocol', 'rho-plugin-sdk', 'rho-process-api', 'rho-process-engine', 'rho-process-owner', 'rho-r-api']);
   for (const pkg of packages) for (const dependency of pkg.dependencies) if (dependency.path) assert.ok(dependency.path.startsWith(output + path.sep), `${pkg.name}: dependency leaves standalone source`);
-  execFileSync(process.execPath, [path.join(output, 'build.mjs')], {cwd: output, env, stdio: 'inherit'});
+  if (workspace) execFileSync(env.RHO_PLUGIN_CARGO, ['build', '-p', 'rho-environment-backend', '--bins', '--locked', '--offline'], {cwd: root, env, stdio: 'inherit'});
+  execFileSync(process.execPath, [path.join(output, 'build.mjs'), ...(workspace ? ['--reuse-native'] : [])], {cwd: output, env, stdio: 'inherit'});
   return output;
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) console.log(`Independent Environment package: ${buildEnvironmentPlugin(process.argv[2])}`);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  assert.ok(process.argv.length <= 4 && process.argv.slice(3).every(arg => ['--workspace', '--independent'].includes(arg)),
+    'Usage: node scripts/build-environment-plugin.mjs DEST [--workspace | --independent]');
+  const workspace = !process.argv.includes('--independent');
+  console.log(`${workspace ? 'Workspace-built' : 'Independent'} Environment package: ${buildEnvironmentPlugin(process.argv[2], {workspace})}`);
+}

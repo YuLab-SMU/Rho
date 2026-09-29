@@ -12,8 +12,8 @@ public SDKs and Plugin Studio as an ordinary plugin. PS01–PS07 are approved in
 Paper; see [Design section 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved).
 **The fixed scientific composition is still present.** Ordinary packages exist
 for R, Files/Git, Process, Remote, Environment, Editor, Console, Objects, Packages,
-Help, Plots, Viewer, Manager, Studio and Agent (`plugins/`). Each has individual acceptance evidence. Final scenario integration, cross-plugin
-workflows, default delivery and removal of the fixed composition remain.
+Help, Plots, Viewer, Manager, Studio, Agent and Annotations (`plugins/`). Each has individual acceptance evidence. Sixteen-plugin archive delivery now passes; final scenario integration, cross-plugin
+workflows, default setup and removal of the fixed composition remain.
 
 ### Work order (reset 2026-09-28)
 
@@ -29,7 +29,7 @@ written deletion condition. Internal pieces are not reported as milestones.
 | M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Graceful Host restart, same instance/view/tasks, original receipts and native session Resume pass without replay |
 | M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Editor/Help/Viewer snapshots, history, Continue and handoff pass real Host/browser checks; Rho exact-session tools and Editor/Help/Viewer/Objects/Plots/Console/Packages/Files Ask → Agent input pass; annotation text/context and Native/Rho Send pass real Editor and real-R Help/Viewer/Console/Plots/Objects/Packages source flows with same-instance restart; the picker and Native read/write tools also pass; resource-image import/read, explicit Native/Rho image context, picker thumbnails and restart pass; browser capture, annotation editor and component annotation controls remain |
 | M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Combined real Host/browser flow passes: exact-branch Agent checkpoint, explicit build, preview and scenario application |
-| M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Not started |
+| M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Sixteen ordinary archives pass import, removal, empty Host startup without reinstall, and exact export after explicit restoration; default setup, fixed-path removal and final matrix remain |
 
 ### Scientific scenario: current integration
 
@@ -62,7 +62,7 @@ Evidence: `target/plugin-refactor/default-entry-results.json`; interrupted broad
 CLI checks and earlier startup failures remain retained, not passes.
 Existing fixed-composition acceptance explicitly uses `--fixed-workspace`. Remove
 that temporary reference and shell after M2–M4 replace the remaining fixed flows;
-missing plugins cannot select it as a fallback. Default package delivery remains.
+missing plugins cannot select it as a fallback. `scripts/plugin-set.mjs` now assembles retained source/artifacts without compilation and explicitly imports through the ordinary CLI repository. The full sixteen-package set is 296,412,841 bytes; assembly took 73.3s. Disposable-catalog import/remove/empty-Host/reimport passes, with every restored archive matching its original SHA-256 (including source, grants and artifacts). Damaged archives fail before imports; a lost import reply retains its uncertain revision and explicit retry does not duplicate it. Evidence and exact archive inventory: `target/plugin-refactor/default-delivery-results.json`. This is local debug delivery acceptance, not user installation, signing, publication or complete default-scenario setup.
 
 Restart lifecycle is now implemented in source: normal Host drain suspends exact
 runtime instances after acknowledged native cleanup, preserving original grants,
@@ -210,7 +210,7 @@ Per-plugin checks: `node scripts/governance.mjs impact --changed-auto`.
   listed 243,020 entries in 29.9s, built R in 115.6s, and hit pre-test startup
   timeouts even for an identical executable copied elsewhere. The OS cause remains
   unproven; no cache/security changes were made in that run. Preserve the macro-cache symlink and backups. Evidence: `target/plugin-refactor/annotation-output-results.json`, `files-context-results.json`; earlier diagnostics remain retained.
-  Agent/R/Files/Editor default to workspace reuse; native browser runners reuse retained packages. Plugin tests exclude unused Application/Agent owner/store dependencies.
+  Agent/R/Files/Editor/Process/Remote/Environment default to workspace reuse; native browser runners reuse retained packages. Process/Remote/Environment actual assembly passes in 89.9/81.7/114.1s; build-mode dispatch and public-boundary checks pass. Independent compilation requires an explicit flag. Plugin tests exclude unused Application/Agent owner/store dependencies.
 - Plugin backend native initialization occasionally exceeded ten seconds before
   reaching the program entry (Studio backend browser runs); cause not established.
   Agent context tests also timed out before entry (180s); a byte/attribute-identical copy outside `target/debug` passed all five in 2.1s. Original timeout remains; underlying loading issue is unresolved.

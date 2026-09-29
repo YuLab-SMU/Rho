@@ -46,3 +46,9 @@ Checkpoint dependencies use the public R recovery contract and an active read-on
 provider. Configure `checkpoint_reader` with an exact instance identity when several
 replacement readers are available; see README.md for selection and retention rules.
 Uncertain original attempts stay retained. Fixed composition remains under migration.
+
+Repository assembly defaults to the primary workspace's incremental native build
+and copies that artifact into the standalone source package. Use the explicit
+`--independent` option on `scripts/build-environment-plugin.mjs` for independent-source
+compilation; `--workspace` spells the default. Both validate the same public source
+closure. Inside a distributed package, `node build.mjs` still builds its own source.

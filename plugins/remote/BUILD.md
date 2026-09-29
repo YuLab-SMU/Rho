@@ -21,3 +21,9 @@ Activation validates local configuration and never connects to SSH.
 The scripts under `tests/` exercise public RPC using disposable local fixtures.
 They do not establish behavior on a real remote cluster. A missing native tool,
 connection or scheduler is reported without installation or automatic replay.
+
+Repository assembly defaults to the primary workspace's incremental native build
+and copies that artifact into the standalone source package. Use the explicit
+`--independent` option on `scripts/build-remote-plugin.mjs` for independent-source
+compilation; `--workspace` spells the default. Both validate the same public source
+closure. Inside a distributed package, `node build.mjs` still builds its own source.

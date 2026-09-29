@@ -167,6 +167,7 @@ Sources:
 - `scripts/fixtures/studio-development.mjs`
 - `scripts/generate-editor-context.mjs`
 - `scripts/plugin-protocol.mjs`
+- `scripts/plugin-set.mjs`
 - `scripts/studio-agent-renderer.mjs`
 - `scripts/test-agent-core-tools.mjs`
 - `scripts/test-agent-plugin-client.mjs`
@@ -199,6 +200,7 @@ Sources:
 - `scripts/test-plots-plugin.mjs`
 - `scripts/test-plugin-backend.mjs`
 - `scripts/test-plugin-protocol.mjs`
+- `scripts/test-plugin-set.mjs`
 - `scripts/test-plugin-ui.mjs`
 - `scripts/test-process-plugin-owner.mjs`
 - `scripts/test-process-plugin.mjs`
@@ -359,6 +361,8 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/console/**`, `rust-toolchain.toml`, `scripts/build-console-plugin.mjs`, `sdk/**`, `ui/e2e/console-editor.spec.ts`.
 - `plugins.delegated-operation` (L2): `["cargo","test","-p","rho-host","--test","plugin_delegated_operations","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
+- `plugins.delivery-set` (L2): `["node","scripts/test-plugin-set.mjs"]`
+  Applies to: `crates/cli/src/plugins.rs`, `crates/plugins/src/archives.rs`, `crates/plugins/src/package.rs`, `crates/plugins/src/repository.rs`, `scripts/plugin-set.mjs`, `scripts/test-plugin-set.mjs`.
 - `plugins.development-host` (L2): `["cargo","test","-p","rho-host","--test","plugin_development","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
 - `plugins.development-owner` (L1): `["cargo","test","-p","rho-plugins","--test","source_development","--locked"]`

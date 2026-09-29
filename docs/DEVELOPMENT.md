@@ -110,7 +110,7 @@ native Host stage. The Help, Viewer, Console, Objects, Plots and Packages browse
 The native runner's explicit `--build` remains available for independent acceptance.
 Reuse rejects stale sources or modified package bytes and retains packages after
 later-stage failures. `node scripts/test-r-workflow.mjs` checks this without Cargo.
-`node scripts/test-plugin-build-modes.mjs` observes the actual Agent/R/Files/Editor build
+`node scripts/test-plugin-build-modes.mjs` observes the actual Agent/R/Files/Editor/Process/Remote/Environment build
 entry points with sentinel tools: default workspace dispatch, explicit independent
 dispatch and invalid-option refusal, without compiling anything.
 
