@@ -105,11 +105,13 @@ Implemented in `plugins/agent` (public APIs/SDK only, no private core imports):
 
 The ordinary native-task view is implemented in source: task selection and
 creation, model selection, draft CAS/conflict handling, explicit tool selection,
-Send/Stop, native permissions and original-request inspection. Its independent UI
-build and 18 model cases pass. The production UI also passes a synthetic public
+Send/Stop, native permissions and original-request inspection. Task lists and
+cached/native history now page through bounded reads, preserving earlier reading
+positions during refresh and retaining native provenance and partial status.
+Its independent UI build and 24 model cases pass. The production UI also passes a synthetic public
 MessagePort browser fixture (opaque iframe, IME Enter, task-switch saving, one Send,
-next draft, 8 MiB file selection, lost import receipt, reload and close without
-Stop); 960/440/320/220 px screenshots were
+next draft, 8 MiB file selection, lost import receipt, reload, task/history paging
+and close without Stop); 960/440/320/220 px screenshots were
 inspected. Evidence: `target/plugin-refactor/agent-view-results.json`.
 This does **not** establish combined native/Host acceptance: native manifest
 regeneration, backend checks and activation of the new combined package remain
@@ -127,8 +129,8 @@ It will use the same retained Agent artifact built through the primary workspace
 cache; build receipts distinguish that integration evidence from independent
 compilation. Mapped acceptance checks reuse the explicitly selected package.
 
-Not done: native acceptance of browser attachments, Rho tasks/settings and complete history
-in the ordinary Agent view, contributed context and component input/continuation,
+Not done: native acceptance of browser attachments and history navigation, Rho
+tasks/settings in the ordinary Agent view, contributed context and component input/continuation,
 actual Host restart recovery, Studio Agent flow.
 Synthetic peer tests for Process/Remote/Environment do not establish actual
 execution through those plugins.

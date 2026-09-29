@@ -5,7 +5,7 @@ const instance = { instance: 'agent', plugin: 'org.rho.agent', revision: 'sha256
 const tool = { name: 'run_selected_r', target: { type: 'provider', binding: { project: 'project', provider: { ...instance, instance: 'r', plugin: 'org.rho.r' }, capability: { id: 'r.execute', version: 2 }, target: 'session-one' } } };
 let view = { view: 'agent-view', window: 'window', project: 'project', instance, state_version: 1,
   configuration: { tools: [tool] }, state: { schema: 1, selected: 'task-0', archived: false, drafts: {}, pending: [], tools: [], catalogs: {} } };
-const details = new Map(), records = [], calls = [], events = new Map();
+const details = new Map(), records = [], calls = [], events = new Map(), reads = {};
 function detail(task, title) {
   return { summary: { observation_version: 1, history_generation: 1, task: { task_id: task, provider: 'kimi', title, archived: false, model: 'fixture-model', mode: null, native_session_id: null },
     attachment: { generation: 1, controller: { window_id: 'window', incarnation: 'view:agent-view' }, state: 'idle', control_frozen: false,
@@ -19,6 +19,7 @@ events.set('task-0', [
   { cursor: 2, kind: 'text', role: 'assistant', text: 'The selected calculation returned 42. Its original record remains available.\n\nYou can continue this conversation or start a separate task.' },
   { cursor: 3, kind: 'reasoning', role: 'assistant', text: 'RENDERER_PRIVATE_REASONING' },
 ]);
+const originalEvents = copy(events.get('task-0'));
 let close = { phase: 'open' }, saveDelay = 0, loseFinish = false;
 const staged = new Map();
 async function requestId(request) {
@@ -36,12 +37,24 @@ async function handle(body) {
   if (body.type === 'get_operation') return copy(records.find(r => r.operation.operation_id === body.operation_id));
   if (body.type === 'query') {
     const id = body.capability.id, args = body.arguments.arguments;
+    reads[id] = (reads[id] ?? 0) + 1;
     let data;
     if (id === 'operation.list_recent') data = { operations: records.filter(r => r.operation.client_request_id === body.arguments.client_request_id).map(r => ({ operation_id: r.operation.operation_id })) };
-    else if (id === 'agent.tasks') data = { tasks: [...details.values()].filter(d => d.summary.task.archived === args.archived).map(d => ({ reference: { kind: 'native', task_id: d.summary.task.task_id }, title: d.summary.task.title, provider: d.summary.task.provider, state: d.summary.attachment.state })), next: null };
+    else if (id === 'agent.tasks') {
+      const tasks = [...details.values()].filter(d => d.summary.task.archived === args.archived).map(d => ({ reference: { kind: 'native', task_id: d.summary.task.task_id }, title: d.summary.task.title, provider: d.summary.task.provider, state: d.summary.attachment.state, archived: d.summary.task.archived }));
+      const before = Number(args.before ?? 0), end = before + args.limit;
+      data = { tasks: tasks.slice(before,end), next: end < tasks.length ? String(end) : null };
+    }
     else if (id === 'agent.native.task') data = details.get(args.task_id);
     else if (id === 'agent.native.receipt') data = [...details.values()].flatMap(d => d.receipts).find(r => r.request_id === args.request_id);
-    else if (id === 'agent.native.events') data = { task_id: args.task_id, events: events.get(args.task_id) ?? [], history_generation: 1, has_more: false, history_gap: false, next_cursor: 3, durable_cursor: 3, oldest_cursor: 1 };
+    else if (id === 'agent.native.events') {
+      const all = (events.get(args.task_id) ?? []).map(event => ({ ...event, sequence: event.cursor, event_id: `${args.task_id}:${event.cursor}`, observed_at_ms: event.cursor,
+        native_session_id: 'fixture-session', source: 'observation' }));
+      const available = all.filter(event => (args.after === null || event.sequence > args.after) && (args.before === null || event.sequence < args.before));
+      const page = args.after === null ? available.slice(-args.limit) : available.slice(0,args.limit);
+      data = { task_id: args.task_id, events: page, history_generation: details.get(args.task_id).summary.history_generation, has_more: available.length > page.length, history_gap: false,
+        next_cursor: args.after === null ? page[0]?.sequence ?? 0 : page.at(-1)?.sequence ?? args.after, durable_cursor: all.at(-1)?.sequence ?? 0, oldest_cursor: all[0]?.sequence ?? 0 };
+    }
     else throw Error('Unexpected query ' + id);
     return { status: 'ready', completeness: 'complete', data: copy(data) };
   }
@@ -113,7 +126,16 @@ addEventListener('message', event => {
   frame.contentWindow.postMessage({ type: 'rho:view:connect', nonce: 'fixture-nonce', protocol_version: 1, connection, view: copy(view), features: ['view_close_v1'] }, '*', [channel.port2]);
 });
 window.fixture = {
-  snapshot: () => copy({ view, calls, details: [...details], records }),
+  snapshot: () => copy({ view, calls, details: [...details], records, reads }),
+  pagedTasks: enabled => {
+    for (let index = 2; index < 25; index++) {
+      const id = `task-${index}`; if (enabled) details.set(id, detail(id, `Earlier task ${index}`)); else details.delete(id);
+    }
+  },
+  pagedHistory: enabled => {
+    events.set('task-0', enabled ? Array.from({ length: 220 }, (_, i) => ({ cursor: i+1, role: i % 2 ? 'assistant' : 'user', kind: 'text', text: `Retained message ${i+1} · 中文 Ω` })) : copy(originalEvents));
+    const d = details.get('task-0'); d.summary.history_generation++; d.summary.observation_version++;
+  },
   delaySave: milliseconds => { saveDelay = milliseconds; },
   loseAttachmentReply: () => { loseFinish = true; },
   close: () => { close = { phase: 'requested', operation: 'close-original' }; },

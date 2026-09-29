@@ -38,6 +38,32 @@ export async function testAgentRenderer(root, assets) {
       await input.click();
     }
     await page.setViewportSize({ width: 440, height: 820 });
+    await page.evaluate(() => { window.fixture.pagedTasks(true); window.fixture.pagedHistory(true); });
+    await expect(frame.getByRole('button', {name:'Older tasks',exact:true})).toBeEnabled();
+    await frame.getByRole('button', {name:'Older tasks',exact:true}).click();
+    await expect(frame.getByRole('combobox', {name:'Select task'}).locator('option').filter({hasText:'Earlier task 24'})).toHaveCount(1);
+    await expect(frame.getByRole('button', {name:'Newer tasks',exact:true})).toBeEnabled();
+    await frame.getByRole('button', {name:'Newer tasks',exact:true}).click();
+    await expect(frame.getByRole('combobox', {name:'Select task'})).toHaveValue('task-0');
+    await expect(frame.getByRole('log')).toContainText('Retained message 220');
+    await expect(frame.getByRole('log')).not.toContainText('Retained message 21 ·');
+    await frame.getByRole('button', {name:'Earlier messages',exact:true}).click();
+    await expect(frame.getByRole('log')).toContainText('Retained message 21 ·');
+    await frame.getByRole('log').evaluate(node => node.scrollTop = 0);
+    const historyReads = (await page.evaluate(() => window.fixture.snapshot())).reads['agent.native.task'];
+    await page.waitForFunction(before => window.fixture.snapshot().reads['agent.native.task'] > before, historyReads);
+    assert.ok(await frame.getByRole('log').evaluate(node => node.scrollTop < 2), 'Polling preserves earlier reading position');
+    for (const width of [440, 220]) {
+      await page.setViewportSize({width,height:820});
+      await page.screenshot({path:path.join(output,`agent-history-${width}.png`)});
+      assert.equal(await frame.locator('body').evaluate(node=>node.scrollWidth>innerWidth),false);
+    }
+    await frame.getByRole('button', {name:'Latest messages',exact:true}).click();
+    await expect(frame.getByRole('log')).not.toContainText('Retained message 21 ·');
+    await expect(frame.getByRole('log')).toContainText('Retained message 220');
+    await page.evaluate(() => { window.fixture.pagedTasks(false); window.fixture.pagedHistory(false); });
+    await expect(frame.getByRole('log')).toContainText('selected calculation returned 42');
+    await page.setViewportSize({width:440,height:820});
     // Native composition event and Enter must neither save partial text nor Send.
     await input.dispatchEvent('compositionstart'); await input.fill('中文 Ω');
     await input.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 229, isComposing: true });
@@ -86,7 +112,7 @@ export async function testAgentRenderer(root, assets) {
     await expect.poll(async () => (await page.evaluate(() => window.fixture.snapshot())).calls.filter(call => call.type === 'prepare_close').length).toBe(1);
     snapshot = await page.evaluate(() => window.fixture.snapshot()); assert.equal(snapshot.calls.filter(call => call.arguments?.arguments?.command?.kind === 'stop').length, 0);
     assert.deepEqual(errors, []);
-    fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify({ status: 'passed', fixture: 'synthetic public MessagePort; no Host or native Agent', checks: ['opaque iframe bootstrap', '960/440/320/220 layout and anchored menu', 'reasoning excluded', 'IME Enter', 'debounced save across task switch', 'explicit tools captured by one Send', 'next draft and original Operation after reload', 'close does not Stop', '8 MiB file selection in bounded chunks', 'lost attachment receipt reload and explicit selection without reimport'] }, null, 2) + '\n');
+    fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify({ status: 'passed', fixture: 'synthetic public MessagePort; no Host or native Agent', checks: ['opaque iframe bootstrap', '960/440/320/220 layout and anchored menu', 'reasoning excluded', 'IME Enter', 'debounced save across task switch', 'explicit tools captured by one Send', 'next draft and original Operation after reload', 'close does not Stop', '8 MiB file selection in bounded chunks', 'lost attachment receipt reload and explicit selection without reimport', 'task pagination', 'earlier history with stable scroll through polling; explicit return to latest'] }, null, 2) + '\n');
     console.log(`Agent renderer checks passed. Evidence: ${output}. Synthetic peer, not native/Host acceptance.`);
   } catch (error) { await page?.screenshot({ path: path.join(output, 'failure.png') }).catch(() => {}); throw error; }
   finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }

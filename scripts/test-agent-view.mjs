@@ -18,17 +18,19 @@ try {
   function fixture() {
     let saved = {}, stateVersion = 0, lost = '', saveLost = false, gate = null;
     const instance = { instance: 'agent', plugin: 'org.rho.agent', revision: 'sha256:' + 'a'.repeat(64), artifact: 'sha256:' + 'b'.repeat(64) };
-    const calls = [], records = [], details = new Map(), staged = new Map();
+    const calls = [], records = [], details = new Map(), staged = new Map(), readers = new Map(), queries = [];
     const client = {
       get view() { return { view: 'agent-view', window: 'window', project: 'project', instance, state: clone(saved), state_version: stateVersion }; },
       async setState(value) { saved = clone(value); stateVersion++; if (saveLost) { saveLost = false; throw Error('Lost state reply'); } return this.view; },
       async query(cap, args) {
+        queries.push(clone({ cap, args }));
         let data;
         if (cap.id === 'operation.list_recent') data = { operations: records.filter(r => r.operation.client_request_id === args.client_request_id).map(r => ({ operation_id: r.operation.operation_id })) };
         else {
           assert.deepEqual(args.binding, { provider: instance, project: 'project', capability: cap, target: null }); assert.equal(args.preconditions, null);
           const input = args.arguments;
-          if (cap.id === 'agent.tasks') data = { tasks: [], running: 0, permissions: 0, attention_count: 0, attention: [], next: null };
+          if (readers.has(cap.id)) data = await readers.get(cap.id)(input);
+          else if (cap.id === 'agent.tasks') data = { tasks: [], running: 0, permissions: 0, attention_count: 0, attention: [], next: null };
           else if (cap.id === 'agent.native.task') data = details.get(input.task_id);
           else if (cap.id === 'agent.native.receipt') data = [...details.values()].flatMap(d => d.receipts).find(r => r.request_id === input.request_id);
           else if (cap.id === 'agent.native.events') data = { task_id: input.task_id, history_generation: 1, events: [], next_cursor: 0, has_more: false, history_gap: false, oldest_cursor: 0, durable_cursor: 0 };
@@ -76,7 +78,7 @@ try {
           const task = command.kind === 'create' ? 'task-' + details.size : command.control.task_id;
           let detail = details.get(task);
           if (command.kind === 'create') {
-            detail = { summary: { observation_version: 1, history_generation: 1, task: { task_id: task, provider: command.provider, title: 'New task', archived: false, model: command.model },
+            detail = { summary: { observation_version: 1, history_generation: 1, task: { task_id: task, provider: command.provider, title: 'New task', archived: false, model: command.model, native_session_id: null },
               attachment: { generation: 1, controller: { window_id: 'window', incarnation: 'view:agent-view' }, state: 'idle', control_frozen: false, capabilities: {}, decisions: [] } },
               draft: { version: 1, content: blank() }, assets: [], receipts: [] };
             details.set(task, detail);
@@ -97,10 +99,72 @@ try {
       },
       async operation(id) { return clone(records.find(r => r.operation.operation_id === id)); },
     };
-    return { client, calls, records, details, open: () => new NativeAgentModel(client), lose: kind => lost = kind, loseSave: () => saveLost = true, wait: promise => gate = promise };
+    return { client, calls, records, details, readers, queries, open: () => new NativeAgentModel(client), lose: kind => lost = kind, loseSave: () => saveLost = true, wait: promise => gate = promise };
   }
   let count = 0;
   async function check(name, work) { try { await work(); count++; } catch (error) { throw Error(name, { cause: error }); } }
+  const event = (sequence, text = `Message ${sequence}`) => ({ sequence, event_id: `event-${sequence}`, generation: 1, native_session_id: 'native-0', native_turn_id: null, native_item_id: null,
+    request_id: null, kind: 'text', role: 'assistant', text, status: 'completed', source: 'observation', observed_at_ms: sequence });
+  function eventPage(all, input, generation = 1) {
+    const after = input.after, before = input.before, available = all.filter(e => (after === null || e.sequence > after) && (before === null || e.sequence < before));
+    const events = after === null ? available.slice(-input.limit) : available.slice(0, input.limit);
+    return { task_id: input.task_id, events, history_generation: generation, has_more: available.length > events.length, history_gap: false,
+      next_cursor: after === null ? events[0]?.sequence ?? 0 : events.at(-1)?.sequence ?? after,
+      oldest_cursor: all[0]?.sequence ?? 0, durable_cursor: all.at(-1)?.sequence ?? 0 };
+  }
+  await check('task pagination keeps the selected page across refresh and rejects a repeated cursor', async () => {
+    const f = fixture(), m = f.open(), row = (id, archived) => ({ reference: {kind:'native',task_id:id}, archived, title:id, state:'idle' });
+    f.readers.set('agent.tasks', input => ({ tasks: input.before ? [row('old',input.archived)] : [row('new',input.archived)], next: input.before ? null : 'older' }));
+    await m.refresh(); await m.olderTasks(); assert.equal(m.page.tasks[0].title, 'old');
+    await m.refresh(); assert.equal(m.page.tasks[0].title, 'old'); assert.equal(m.newerTasksAvailable, true);
+    await m.newerTasks(); assert.equal(m.page.tasks[0].title, 'new');
+    f.readers.set('agent.tasks', () => ({ tasks: [], next: 'older' }));
+    await assert.rejects(m.olderTasks(), /no longer matches/); assert.equal(m.page.tasks[0].title, 'new');
+    assert.equal(f.calls.length, 0);
+  });
+  await check('a late task page cannot overwrite an archive filter change', async () => {
+    const f = fixture(), m = f.open(); let release;
+    f.readers.set('agent.tasks', input => input.archived ? {tasks:[],next:null} : new Promise(done => release = done));
+    const reading = m.refresh(); await m.setArchived(true); release({ tasks: [{reference:{kind:'native',task_id:'old'},archived:false}], next:null }); await reading;
+    assert.equal(m.state.archived, true); assert.deepEqual(m.page.tasks, []);
+  });
+  await check('earlier cached messages remain visible until Latest messages is explicitly requested', async () => {
+    const f = fixture(), m = f.open(); await m.create('kimi','fixture',null);
+    const all = Array.from({length:200},(_,n)=>event(n+1)); f.readers.set('agent.native.events', input => eventPage(all,input));
+    await m.observe('task-0'); assert.equal(m.events.get('task-0')[0].sequence,101);
+    await m.history.earlier(m.details.get('task-0')); assert.equal(m.events.get('task-0').length,200);
+    const reads = f.queries.filter(q=>q.cap.id==='agent.native.events').length;
+    all.push(event(201)); await m.observe('task-0'); assert.equal(m.events.get('task-0').at(-1).sequence,200);
+    assert.equal(f.queries.filter(q=>q.cap.id==='agent.native.events').length,reads);
+    await m.history.latest(m.details.get('task-0')); assert.equal(m.events.get('task-0').at(-1).sequence,201);
+    assert.equal(m.history.states.get('task-0').browsing,false); assert.equal(f.calls.length,1);
+  });
+  await check('native history uses its own cursor, retains provenance and cannot replace a newer observation', async () => {
+    const f = fixture(), m = f.open(); await m.create('codex','fixture',null);
+    f.details.get('task-0').summary.task.native_session_id='native-0';
+    f.readers.set('agent.native.events', input=>eventPage([event(5,'Current observation')],input)); await m.observe('task-0');
+    const historical=(n,text)=>({...event(n,text),sequence:0,source:'native_history'});
+    f.readers.set('agent.native.history', input=>({task_id:input.task_id,events:input.cursor ? [historical(1,'Earlier native turn')] : [historical(5,'Old copy'),historical(2,'Native turn')],next_cursor:input.cursor?null:'next',source:'native_paginated',partial:true}));
+    await m.history.earlier(m.details.get('task-0')); assert.equal(m.events.get('task-0').find(e=>e.event_id==='event-5').text,'Current observation');
+    await m.history.earlier(m.details.get('task-0')); assert.equal(m.events.get('task-0')[0].source,'native_history');
+    assert.deepEqual(f.queries.filter(q=>q.cap.id==='agent.native.history').map(q=>q.args.arguments.cursor),[null,'next']);
+    assert.equal(m.history.states.get('task-0').nativeDone,true); assert.equal(m.history.states.get('task-0').partial,true); assert.equal(f.calls.length,1);
+  });
+  await check('native history rejects a cursor cycle and a different native session', async () => {
+    const f=fixture(),m=f.open();await m.create('codex','fixture',null);f.details.get('task-0').summary.task.native_session_id='native-0';await m.observe('task-0');
+    f.readers.set('agent.native.history',input=>({task_id:input.task_id,events:[],next_cursor:input.cursor==='a'?'b':'a',source:'native_paginated',partial:false}));
+    await m.history.earlier(m.details.get('task-0'));await m.history.earlier(m.details.get('task-0'));
+    await assert.rejects(m.history.earlier(m.details.get('task-0')),/changed identity or did not advance/);
+    f.readers.set('agent.native.history',input=>({task_id:input.task_id,events:[{...event(1),sequence:0,source:'native_history',native_session_id:'other-session'}],next_cursor:null,source:'native_paginated',partial:false}));
+    await assert.rejects(m.history.earlier(m.details.get('task-0')),/changed identity/);assert.equal(f.calls.length,1);
+  });
+  await check('an old native page cannot repopulate a changed history generation', async () => {
+    const f=fixture(),m=f.open();await m.create('codex','fixture',null);f.details.get('task-0').summary.task.native_session_id='native-0';await m.observe('task-0');
+    let release;f.readers.set('agent.native.history',()=>new Promise(done=>release=done));const old=m.history.earlier(m.details.get('task-0'));
+    f.details.get('task-0').summary.history_generation=2;f.readers.set('agent.native.events',input=>eventPage([event(8,'New history')],input,2));await m.observe('task-0');
+    release({task_id:'task-0',events:[{...event(1,'Old history'),sequence:0,source:'native_history'}],next_cursor:null,source:'native_paginated',partial:false});await old;
+    assert.deepEqual(m.events.get('task-0').map(e=>e.text),['New history']);assert.equal(m.history.states.get('task-0').generation,2);
+  });
   await check('opening is observation only and creation retains its original request', async () => {
     const f = fixture(), m = f.open(); await m.refresh(); assert.equal(f.calls.length, 0);
     await m.create('kimi', 'fixture', null); assert.equal(m.state.selected, 'task-0'); assert.equal(m.state.pending.length, 0);

@@ -1,5 +1,6 @@
-import type { AgentDraftContent, AgentTaskCommand, AgentTaskCommandResult, AgentTaskDetail, AgentTaskEvent,
-  AgentTaskEventPage, AgentNativeToolSelection, AgentProvider, LocalAgent, ProjectAgentTaskPage, AgentCommandReceipt } from '../sdk/index.js';
+import type { AgentDraftContent, AgentTaskCommand, AgentTaskCommandResult, AgentTaskDetail,
+  AgentNativeToolSelection, AgentProvider, LocalAgent, ProjectAgentTaskPage, AgentCommandReceipt } from '../sdk/index.js';
+import { NativeHistory } from './history.js';
 import { captureFile, attachmentChunk, verifyProgress, verifyUploaded, ATTACHMENT_CHUNK_BYTES, type PendingUpload, type UploadProgress } from './uploads.js';
 import { type Client, type Intent, type RecordReply, json, same, terminal, verifyOriginal, inspectOriginal } from './operations.js';
 
@@ -17,7 +18,11 @@ export class NativeAgentModel {
   readonly state: Saved;
   page: ProjectAgentTaskPage | null = null;
   readonly details = new Map<string, AgentTaskDetail>();
-  readonly events = new Map<string, AgentTaskEvent[]>();
+  readonly history = new NativeHistory(<T>(id: string, args: unknown) => this.read<T>(id, args), () => this.notify());
+  readonly events = this.history.events;
+  private taskCursors: (string | null)[] = [null];
+  private taskRead = 0;
+  taskLoading = false;
   private writes: Promise<unknown> = Promise.resolve();
   private admission = false;
   private stopped = false;
@@ -71,9 +76,34 @@ export class NativeAgentModel {
     return write;
   }
   async refresh() {
-    this.page = await this.read('agent.tasks', { archived: this.state.archived, before: null, limit: 20 });
+    await this.readTasks();
     if (this.state.selected) await this.observe(this.state.selected);
     this.notify();
+  }
+  get newerTasksAvailable() { return this.taskCursors.length > 1; }
+  private async readTasks(cursors = this.taskCursors) {
+    if (this.taskLoading) return;
+    const token = ++this.taskRead, archived = this.state.archived, before = cursors.at(-1)!;
+    this.taskLoading = true; this.notify();
+    try {
+      const page = await this.read<ProjectAgentTaskPage>('agent.tasks', { archived, before, limit: 20 });
+      if (token !== this.taskRead || archived !== this.state.archived) return;
+      if (page.tasks.length > 20 || page.tasks.some(task => task.archived !== archived) || page.next && cursors.includes(page.next))
+        throw Error('The task list no longer matches this page. Refresh the task list.');
+      this.page = page; this.taskCursors = cursors;
+    } finally { if (token === this.taskRead) { this.taskLoading = false; this.notify(); } }
+  }
+  async olderTasks() {
+    if (this.taskLoading || !this.page?.next) throw Error('There is no next task page ready.');
+    await this.readTasks([...this.taskCursors, this.page.next]);
+  }
+  async newerTasks() {
+    if (this.taskLoading || !this.newerTasksAvailable) throw Error('There is no newer task page ready.');
+    await this.readTasks(this.taskCursors.slice(0, -1));
+  }
+  async setArchived(archived: boolean) {
+    this.state.archived = archived; this.taskRead++; this.taskLoading = false;
+    this.taskCursors = [null]; this.page = null; await this.save(); await this.readTasks();
   }
   async select(task: string) {
     this.live(); this.state.selected = task; await this.save(); await this.observe(task); this.notify();
@@ -110,9 +140,7 @@ export class NativeAgentModel {
     const detail = await this.read<AgentTaskDetail>('agent.native.task', { task_id: task });
     if (detail.summary.task.task_id !== task) throw Error('The Agent returned a different task.');
     this.merge(detail);
-    const page = await this.read<AgentTaskEventPage>('agent.native.events', { task_id: task, after: null, before: null, limit: 100 });
-    if (page.task_id !== task) throw Error('The conversation belongs to another task.');
-    this.events.set(task, page.events); this.notify();
+    await this.history.observe(this.details.get(task)!); this.notify();
   }
   private control(task: string) {
     if (!this.canControl(task)) throw Error('Take control of this task before changing it.');

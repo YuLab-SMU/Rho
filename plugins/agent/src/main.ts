@@ -12,6 +12,7 @@ let disposed = false, closing = false, composing = false, compositionEnded = -In
 let polling = false, model: NativeAgentModel;
 const draftTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const flights = new Set<Promise<unknown>>(), message = get<HTMLTextAreaElement>('message');
+const positions = new Map<string, { event: string; offset: number }>();
 const providers: Record<AgentProvider, string> = { codex: 'Codex', kimi: 'Kimi Code', deepseek: 'DeepSeek Harness' };
 function report(error: unknown) { if (!disposed) { get('error').textContent = error instanceof Error ? error.message : String(error); get('error').hidden = false; } }
 function track<T>(work: Promise<T>) { flights.add(work); void work.then(() => flights.delete(work), () => flights.delete(work)); return work; }
@@ -40,7 +41,7 @@ function render() {
   const running = !!detail && agentBusy(detail.summary.attachment.state), local = id ? model.state.drafts[id] : null;
   const tasks = model.page?.tasks.filter(task => task.reference.kind === 'native') ?? [];
   const selector = get<HTMLSelectElement>('task-selector'), list = get('task-list');
-  const key = JSON.stringify(tasks.map(task => [task.reference, task.title, task.state]));
+  const key = JSON.stringify([tasks.map(task => [task.reference, task.title, task.state]), id, detail?.summary.task.title]);
   if (selector.dataset.content !== key) {
     selector.dataset.content = key; selector.replaceChildren(new Option('Choose a task', '')); list.replaceChildren();
     for (const task of tasks) {
@@ -51,9 +52,14 @@ function render() {
       meta.textContent = `${task.provider ? providers[task.provider] : 'Rho'} · ${task.state.replaceAll('_', ' ')}`;
       button.append(name, meta); button.onclick = () => action(() => model.select(taskId)); list.append(button);
     }
+    if (id && detail && !tasks.some(task => task.reference.kind === 'native' && task.reference.task_id === id))
+      selector.add(new Option(detail.summary.task.title, id));
   }
   selector.value = id ?? ''; for (const button of list.querySelectorAll<HTMLElement>('[data-task]')) button.setAttribute('aria-current', String(button.dataset.task === id));
   selector.disabled = model.busy || closing;
+  get('task-pages').hidden = !model.page?.next && !model.newerTasksAvailable;
+  get<HTMLButtonElement>('newer-tasks').disabled = model.taskLoading || !model.newerTasksAvailable || closing;
+  get<HTMLButtonElement>('older-tasks').disabled = model.taskLoading || !model.page?.next || closing;
   get<HTMLButtonElement>('new-task').disabled = model.busy || closing || model.state.pending.some(p => p.kind === 'create' || p.kind === 'discover');
   get<HTMLButtonElement>('task-actions').disabled = !detail;
   get('task-state').textContent = !detail ? 'Choose or create a task' : detail.summary.task.archived ? 'Archived task' : !controlled ? 'Read-only · Another view' :
@@ -87,14 +93,29 @@ function render() {
   }
   modelSelect.value = detail?.summary.task.model ?? ''; modelSelect.disabled = !editable || model.busy || running;
   const transcript = get('transcript'), events = id ? model.events.get(id) ?? [] : [];
+  const history = id ? model.history.states.get(id) : null;
+  const earlier = !!detail && model.history.canReadEarlier(detail);
+  get('history-controls').hidden = !earlier && !history?.browsing && !history?.gap && !history?.partial;
+  get('earlier-messages').hidden = !earlier;
+  get<HTMLButtonElement>('earlier-messages').disabled = !!history?.loading || closing;
+  get('latest-messages').hidden = !history?.browsing;
+  get<HTMLButtonElement>('latest-messages').disabled = !!history?.loading || closing;
+  get('history-note').textContent = history?.gap ? 'Earlier messages unavailable' : history?.partial ? 'Partial history' : '';
   const eventKey = `${id}:${JSON.stringify([events, detail?.assets, detail?.receipts.map(r => [r.request_id, r.input_assets])])}`;
   if (transcript.dataset.content !== eventKey) {
     const following = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 45;
+    const top = transcript.getBoundingClientRect().top, oldTask = transcript.dataset.task;
+    const visible = [...transcript.querySelectorAll<HTMLElement>('[data-event]')].find(event => event.getBoundingClientRect().bottom > top);
+    if (oldTask && visible) positions.set(oldTask, { event: visible.dataset.event!, offset: visible.getBoundingClientRect().top - top });
+    const position = id ? positions.get(id) : null;
+    transcript.dataset.task = id ?? '';
     transcript.dataset.content = eventKey; transcript.replaceChildren();
     for (const event of events) {
       if (!event.text || ['reasoning', 'analysis', 'usage'].includes(event.kind) || ['reasoning', 'analysis'].includes(event.role ?? '')) continue;
       const block = document.createElement('div'); block.className = `event ${event.role === 'user' ? 'user' : event.role === 'assistant' ? 'assistant' : 'activity'}`;
+      block.dataset.event = event.event_id;
       const role = document.createElement('span'); role.className = 'role'; role.textContent = event.role === 'user' ? 'You' : event.role === 'assistant' ? 'Agent' : 'Activity';
+      if (event.source === 'native_history') role.textContent += ' · Native history';
       block.append(role, document.createTextNode(event.text));
       const receipt = event.role === 'user' ? detail?.receipts.find(item => item.request_id === event.request_id) : null;
       if (receipt?.input_assets.length) {
@@ -104,7 +125,11 @@ function render() {
       transcript.append(block);
     }
     if (!transcript.childNodes.length) { const empty = document.createElement('p'); empty.className = 'empty'; empty.textContent = detail ? 'Write a message to start this conversation.' : 'Choose or create a task.'; transcript.append(empty); }
-    if (following) transcript.scrollTop = transcript.scrollHeight;
+    if (!history?.browsing && (following || oldTask !== id)) transcript.scrollTop = transcript.scrollHeight;
+    else if (position) {
+      const anchor = [...transcript.querySelectorAll<HTMLElement>('[data-event]')].find(event => event.dataset.event === position.event);
+      if (anchor) transcript.scrollTop += anchor.getBoundingClientRect().top - top - position.offset;
+    }
   }
   const permissions = get('permissions'), decisions = detail?.summary.attachment.decisions ?? [];
   permissions.hidden = !decisions.length; permissions.replaceChildren();
@@ -113,7 +138,7 @@ function render() {
     for (const option of decision.options) { const button = document.createElement('button'); button.textContent = option.label; button.disabled = !editable || model.busy;
       button.onclick = () => action(() => model.decide(id!, decision.id, option.id)); permissions.append(button); }
   }
-  get('session-details').textContent = detail ? `Native session: ${detail.summary.task.native_session_id ?? 'Created on first Send'}\n${detail.summary.unconfirmed} unconfirmed request(s)\n${detail.summary.attachment.capabilities.history ?? 'Observation cache'}` : '';
+  get('session-details').textContent = detail ? `Native session: ${detail.summary.task.native_session_id ?? 'Created on first Send'}\n${detail.summary.unconfirmed} unconfirmed request(s)\n${history?.source ?? detail.summary.attachment.capabilities.history ?? 'Observation cache'}` : '';
   get('archived').textContent = model.state.archived ? 'Active tasks' : 'Archived tasks';
   get('archive-task').textContent = detail?.summary.task.archived ? 'Unarchive' : 'Archive';
 }
@@ -202,7 +227,11 @@ get('inspect-original').onclick = () => { const pending = model.state.pending.fi
 get('continue-original').onclick = () => { const pending = model.state.pending.find(p => p.task === selected() || p.task === null); if (pending) action(() => model.continueOriginal(pending.intent.request)); };
 get('keep-draft').onclick = () => { if (selected()) action(() => model.resolveDraft(selected()!, true)); };
 get('use-draft').onclick = () => { if (selected()) action(() => model.resolveDraft(selected()!, false)); };
-get('archived').onclick = () => action(async () => { model.state.archived = !model.state.archived; await model.save(); });
+get('archived').onclick = () => action(() => model.setArchived(!model.state.archived));
+get('older-tasks').onclick = () => action(() => model.olderTasks());
+get('newer-tasks').onclick = () => action(() => model.newerTasks());
+get('earlier-messages').onclick = () => { const detail = model.details.get(selected()!); if (detail) action(() => model.history.earlier(detail)); };
+get('latest-messages').onclick = () => { const detail = model.details.get(selected()!); if (detail) action(() => model.history.latest(detail)); };
 get('show-details').onclick = () => { get('session-details').hidden = !get('session-details').hidden; get('actions-menu').hidePopover(); };
 get('archive-task').onclick = () => { get('actions-menu').hidePopover(); if (selected()) action(() => model.archive(selected()!, !model.details.get(selected()!)?.summary.task.archived)); };
 get<HTMLSelectElement>('task-selector').onchange = event => { const id = (event.target as HTMLSelectElement).value; if (id) action(() => model.select(id)); };

@@ -155,6 +155,13 @@ explicit original-request inspection/continuation after missing replies. Tools
 are exact selections from the view configuration, captured separately at Send.
 Closing the view does not stop its Agent. Closure refuses an unsaved native draft
 and keeps its local copy; use Save draft or the original-request recovery action.
+Task lists page through the selected active/archive filter. Earlier messages read
+bounded observation pages, then available Codex native history, preserving its
+source and partial-history status. Display is limited to 500 events or 1 MiB per
+task. Background refresh preserves an earlier reading position until Latest
+messages is selected; history reads never reconnect or resume a native task.
+Native history cannot replace a newer observed message, and responses from an
+old session/history generation cannot repopulate the current display.
 
 `node scripts/test-agent-view.mjs --build-ui` checks the model and builds the UI
 in a temporary package using public SDK copies, with no Cargo or native launch.
@@ -163,6 +170,6 @@ public MessagePort peer: layout, IME, task switching, original Send, next draft,
 reload and closure. Its screenshots and result are under
 `target/plugin-refactor/agent-view-renderer/`. This is renderer evidence, not
 real Host/native acceptance. The combined package manifest and native connection
-need the serial native checks. Rho component tasks, contributed context, settings and full history navigation
-remain subsequent work. The staged attachment backend and combined native/Host
+need the serial native checks. Rho component tasks, contributed context, settings
+and native acceptance of history navigation remain subsequent work. The staged attachment backend and combined native/Host
 flow still need native acceptance; renderer/model checks alone do not prove them.

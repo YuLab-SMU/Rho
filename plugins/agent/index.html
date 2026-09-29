@@ -9,8 +9,10 @@
       <button id="task-actions" popovertarget="actions-menu" aria-label="Task actions">•••</button>
       <div id="actions-menu" popover><button id="rename-task">Rename</button><button id="archive-task">Archive</button><button id="show-details">Session details</button></div>
     </header>
+    <div id="task-pages" hidden><button id="newer-tasks">Newer tasks</button><button id="older-tasks">Older tasks</button></div>
     <div class="task-state"><span id="task-state">Choose or create a task</span><button id="take-over" hidden>Take over</button><button id="resume" hidden>Resume</button></div>
     <section id="session-details" hidden aria-label="Agent session details"></section>
+    <div id="history-controls" hidden><button id="earlier-messages">Earlier messages</button><button id="latest-messages" hidden>Latest messages</button><span id="history-note"></span></div>
     <div id="transcript" role="log" aria-label="Agent conversation"><p class="empty">Your conversation appears here.</p></div>
     <div id="permissions" aria-label="Agent permissions" hidden></div>
     <div id="recovery" hidden><span id="recovery-status">An original request needs inspection.</span><button id="inspect-original">Check status</button><button id="continue-original" hidden>Continue original request</button></div>

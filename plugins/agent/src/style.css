@@ -7,3 +7,4 @@
 #attachments,#uploads{display:flex;flex-wrap:wrap;gap:5px;max-height:150px;overflow:auto}.attachment{display:flex;align-items:center;gap:5px;min-width:0;max-width:100%;padding:3px 5px 3px 8px;background:#f1f5fa;border-radius:5px;font-size:11px}.attachment span{overflow-wrap:anywhere;min-width:0}.attachment button{border:0;padding:1px 4px;background:transparent}.upload{width:100%;font-size:11px;padding:5px 0}.upload span{display:block;overflow-wrap:anywhere;margin-bottom:4px}.upload button{font-size:11px;margin-right:4px}.composer-tools{flex-wrap:wrap}
 
 .sent-attachments{display:block;font-size:11px;color:var(--muted);margin-top:7px;overflow-wrap:anywhere}
+#task-pages,#history-controls{display:flex;gap:7px;flex-wrap:wrap;align-items:center;padding:4px 12px 7px;font-size:11px;color:var(--muted)}#task-pages button,#history-controls button{font-size:11px;padding:3px 6px}
