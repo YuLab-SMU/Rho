@@ -191,7 +191,10 @@ Per-plugin checks are mapped in `governance/source-map.json`; run
   The CLI build took 104 minutes, while its selected tests ran in under a second;
   fresh Host startup subsequently exceeded its 60-second deadline. System logs
   repeat `syspolicyd: Unable to initialize qtn_proc: 3`; this is diagnostic evidence,
-  not a proven cause. Logs and incomplete checks remain in `target/plugin-refactor`.
+  not a proven cause. Read-only signature verification of the compiler's open
+  `libtracing_attributes` library also timed out after 20 seconds in both Codex
+  and a separate system Terminal. This is not isolated to a Rho test body; the
+  cause remains unconfirmed. Logs and incomplete checks remain in `target/plugin-refactor`.
 - Plugin backend native initialization occasionally exceeded ten seconds before
   reaching the program entry (Studio backend browser runs); cause not established.
   Treat a repeat as an infrastructure issue to investigate, not a product pass.
