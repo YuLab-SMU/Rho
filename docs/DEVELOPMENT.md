@@ -96,6 +96,15 @@ builds the current backend in the primary Cargo workspace and packages that arti
 with its source and UI. It is integration evidence; omit `--workspace` only when
 independent-source build acceptance is actually due. Keep Cargo invocations serial.
 
+R uses the same cadence: `node scripts/build-r-plugin.mjs /new/package --workspace`
+builds once through the primary cache and records an adjacent source/artifact receipt.
+Run `node scripts/test-r-plugin.mjs --package /absolute/retained/package` for the
+native Host stage. The Help, Viewer and Console browser runners require
+`RHO_R_PLUGIN_PACKAGE` and verify that receipt; they never compile another R package.
+The native runner's explicit `--build` remains available for independent acceptance.
+Reuse rejects stale sources or modified package bytes and retains packages after
+later-stage failures. `node scripts/test-r-workflow.mjs` checks this without Cargo.
+
 `npm run test:browser --prefix ui -- plugin-startup.spec.ts` covers default
 project selection, constrained startup layouts and an empty repository remaining
 empty across reload. `ui/tests/plugin-launcher.test.ts` covers original-request
@@ -783,8 +792,8 @@ The ordinary Console package has an independent build/model check,
 only a public MessagePort fixture and establishes no native R behavior. Build the
 current client and Host before the browser checks. The real R package path is
 `RHO_ARK=/absolute/existing/ark RHO_R_HOME=/absolute/existing/R/home node
-scripts/test-r-console.mjs`. It builds the native and Console packages outside the
-checkout, exercises the current Host, and checks that those package builds did not
+scripts/test-r-console.mjs`, with `RHO_R_PLUGIN_PACKAGE` selecting the retained R
+package. It builds only the Console UI, exercises the current Host, and checks that the package build did not
 change the Host binary. Synthetic composition events cover submission guards;
 they do not establish native input-method acceptance.
 
@@ -1029,15 +1038,15 @@ cargo test -p rho-host --lib --locked
 node scripts/test-process-recovery.mjs
 ```
 
-Real R acceptance uses disposable projects and explicit bindings. The independently
-packaged R backend path is checked with explicit existing
-`RHO_ARK` and `RHO_R_HOME` using `node scripts/test-r-plugin.mjs`. Native queue changes
+Real R acceptance uses disposable projects and explicit bindings. The retained
+R backend path is checked with explicit existing
+`RHO_ARK` and `RHO_R_HOME` using `node scripts/test-r-plugin.mjs --package DEST`. Native queue changes
 also use `cargo test -p rho-r-backend queue::tests --locked`. Session routing changes
 use `cargo test -p rho-cli --test session --locked`, including an external plugin
 that fills execution/query capacity while transient controls remain responsive.
 The real-R acceptance injects an original journal commit fault, verifies FIFO
-recovery, failed/pending-cancel pauses and resuming accepted work during draining. It assembles
-public SDKs plus R sources outside the checkout and tests original Operations,
+recovery, failed/pending-cancel pauses and resuming accepted work during draining. The package contains
+public SDKs plus R sources outside the checkout; the fixture tests original Operations,
 coexisting revisions, cancellation, native stdin and retained resources through
 the Host. The input case waits for an actual native prompt, rejects stale identity,
 oversized UTF-8 and duplicate answers, then completes the original execution while
@@ -1086,7 +1095,7 @@ failure log when the prerequisite is missing.
 
 The ordinary Help package uses `node scripts/test-help-plugin.mjs` for independent
 model/connection/static-content checks and the isolated `help-plugin.spec.ts` browser
-case. `node scripts/test-r-help.mjs` builds the packages and runs its disposable
+case. `node scripts/test-r-help.mjs` reuses `RHO_R_PLUGIN_PACKAGE`, builds Help and runs its disposable
 native browser case with explicit `RHO_ARK` and `RHO_R_HOME`. An explicitly selected
 existing `RHO_R_PLUGIN_PACKAGE` reuses that native artifact when R sources have not
 changed; this establishes no new native build. Pass a distinct `--output` directory
@@ -1358,7 +1367,7 @@ R-owned public declarations and capability schemas are generated with
 The generator invokes Cargo and runs serially. Generate before backend checks so
 the transport-routing test checks the current contributed manifest. R Console protocol changes require
 `cargo test -p rho-r-api -p rho-r-backend --locked` and the existing real-R
-`node scripts/test-r-plugin.mjs`, whose Console fixture checks parser nonexecution,
+`node scripts/test-r-plugin.mjs --package DEST`, whose Console fixture checks parser nonexecution,
 source retention, visible Console output, live event pagination during stdin,
 pending cancellation and exact instance boundaries. Full Application document
 capture and Console UI acceptance remain separate migration work.
@@ -1434,11 +1443,10 @@ and checksum refusal without establishing Host admission. The Plots native case
 separately checks original PNG export before and after releasing its R provider.
 `node scripts/test-viewer-plugin.mjs` independently builds the ordinary Viewer and
 checks original Operation/resource identities. `node scripts/test-r-viewer.mjs`
-requires explicit existing `RHO_ARK`, `RHO_R_HOME`, the R package `DT`, Chrome and a
-current `target/debug/rho`. It builds R and Viewer outside the checkout, then runs
+requires explicit existing `RHO_ARK`, `RHO_R_HOME`, retained `RHO_R_PLUGIN_PACKAGE`, the R package `DT`, Chrome and a
+current `target/debug/rho`. It builds only Viewer outside the checkout, then runs
 `r-plugin-viewer.spec.ts` with disposable native sessions and unchanged core binary
-hashes. It invokes Cargo for the external R backend, so run it serially with other
-Cargo commands. The browser case covers interactive retained HTML, separate R
+hashes. It never starts Cargo or rebuilds the retained R package. The browser case covers interactive retained HTML, separate R
 revisions, history/refresh, closure during execution, removal/restart recovery and
 normal/wide/narrow screenshots. Inspect those screenshots before claiming visual
 acceptance; programmatic Unicode input does not verify native IME composition.

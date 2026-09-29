@@ -1,10 +1,20 @@
 # Build the R backend package
 
-The repository source is assembled with `node scripts/build-r-plugin.mjs DEST`.
+During development use `node scripts/build-r-plugin.mjs DEST --workspace` once
+after focused checks settle. This compiles the current backend in the primary
+workspace cache and copies that exact executable into the external package. It
+establishes integration, not independent-source compilation. Omit `--workspace`
+only when the independent build boundary is due.
 Use a new destination outside the repository. The assembly includes the complete
 R API, engine, backend, public Environment/Process contracts, Rust SDK/protocol, pinned Jet source and licenses,
 a standalone Cargo workspace and dependency lock. No private core crate is used.
 The manifest source inventory is generated from these exact files.
+An adjacent `DEST.build.json` receipt records the mode, build inputs and complete
+package digest. Reuse it with `node scripts/test-r-plugin.mjs --package DEST` or
+`RHO_R_PLUGIN_PACKAGE=DEST` for the Help/Viewer/Console browser runners. Missing,
+changed or stale receipts fail before execution; they never trigger a rebuild.
+The native runner's explicit `--build` creates and retains a new independent
+package. Packages and receipts survive test failures for the next acceptance stage.
 The package's `sdk/` directory contains public R TypeScript declarations and JSON
 Schemas. `node generate-sdk.mjs` regenerates these and the versioned manifest
 contracts from the R API; `node generate-sdk.mjs --check` verifies them. These

@@ -34,8 +34,9 @@ access or acquire scientific tools. Agent exposes these as optional grants too;
 activation and each input still select their scope explicitly.
 Run `cargo test -p rho-r-backend --bin rho-r-backend owner::context --locked` for
 the owner checks. Current native and combined Host acceptance remain in Status.
-`node scripts/build-r-plugin.mjs DEST` assembles and builds a self-contained package
-outside the checkout; see [build instructions](BUILD.md). Current acceptance and
+`node scripts/build-r-plugin.mjs DEST --workspace` reuses the primary Cargo cache
+and assembles the complete package outside the checkout. Omit `--workspace` for
+explicit independent-build acceptance; see [build instructions](BUILD.md). Current acceptance and
 the remaining migration are recorded in `docs/STATUS.md` at the repository root.
 
 - `api/` owns R data contracts and the native owner port. It depends on the public
@@ -76,8 +77,8 @@ With `--real-r`, explicitly configured `RHO_ARK` and `RHO_R_HOME` additionally r
 native R in a disposable project, verify retained HTML output and confirm shutdown.
 The test never connects to an existing user session.
 
-Run `node scripts/test-r-plugin.mjs` with explicit `RHO_ARK` and `RHO_R_HOME`
-to build the complete backend outside the checkout and exercise it through the
+Run `node scripts/test-r-plugin.mjs --package DEST` with explicit `RHO_ARK` and `RHO_R_HOME`
+to reuse the retained backend and exercise it through the
 shared Host Operation/Query ports in disposable projects. The test covers two
 coexisting revisions, session fencing, Unicode, HTML/PNG retention, Console input
 and queue controls, cancellation and original records after package removal and
