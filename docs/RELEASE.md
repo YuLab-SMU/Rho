@@ -77,6 +77,48 @@ restore identical source/capability/permission declarations and artifacts.
 This does not establish signing, complete default scenario integration, final
 fixed-composition removal or a user installation; see Status for actual evidence.
 
+## Portable local development bundle
+
+To reuse a retained macOS arm64 core and a settled default plugin set, assemble a
+new directory without running Cargo, frontend builds or independent plugin builds:
+
+```sh
+node scripts/build-rho-bundle.mjs --rho /absolute/retained/rho --set /absolute/plugin-set --out /absolute/new-bundle
+```
+
+The assembler refuses an existing destination and checks the core's architecture
+and system-only dynamic libraries, then validates the sixteen ordinary archives.
+The directory contains the core, archives, standalone import utilities, getting
+started instructions and license summaries. `rho-bundle.json` records every
+payload's size/hash and executable flag. Its assembly checkout is distinct from
+core provenance: the retained core's source commit is explicitly unknown. This is
+an internal development artifact, not a public release provenance/licensing audit;
+`LICENSES.md` is not a complete redistribution notice bundle.
+
+Move the whole directory, then use an existing Node.js 22+ for verification/import:
+
+```sh
+node /absolute/bundle/rho-bundle.mjs verify
+node /absolute/bundle/rho-bundle.mjs install --database /absolute/state/rho.sqlite
+/absolute/bundle/rho --database /absolute/state/rho.sqlite workbench
+```
+
+Verification pins and hashes all payloads, rejects symlinks and escaping names,
+and runs ordinary archive validation using the copied core. Import requires an
+explicit absolute database path; launch must use the same database. Daily launch
+needs no Node or installer. R and Ark remain separately configured existing
+runtimes. Assembly does not sign, notarize, install on the user's system or publish.
+Checksums detect changed files, not trusted publishers; these utilities and native
+plugins are trusted local code.
+
+`RHO_PLUGIN_SET_PACKAGE=/absolute/set node scripts/test-rho-bundle.mjs` exercises
+relocation to a path with spaces/Unicode, preflight failures before destination
+writes, explicit import/retry, complete removal, empty default Host startup and
+explicit restoration. It uses a disposable catalog and retained core, and never
+builds missing inputs. `RHO_TEST_BINARY` selects that core;
+`RHO_BUNDLE_EVIDENCE` selects the results file. The original default scenario's
+browser/scientific checks remain separate evidence.
+
 See [current validation scope](STATUS.md), [artifact trust](../CODE_SIGNING_POLICY.md),
 [license](../LICENSE), [third-party notices](../LICENSES.md) and
 [security reporting](../SECURITY.md).

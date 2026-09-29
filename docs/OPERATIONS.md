@@ -33,6 +33,11 @@ ends the R processes this Host started; an exiting Host cannot leave them reacha
 and they are not reattached by a later one. Closing a browser page cancels nothing and
 leaves R running.
 
+For a [portable local development bundle](RELEASE.md#portable-local-development-bundle),
+run its explicit import once against your chosen absolute database path, then run
+the bundled `rho` with that same database. Moving the complete bundle directory
+does not require a rebuild. Startup never runs the import utility.
+
 ### Ordinary plugin startup and scientific scenario
 
 Use a separate project and database directory when testing plugin composition:
