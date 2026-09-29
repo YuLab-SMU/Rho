@@ -3,7 +3,11 @@
 export function contextContributions(schema) {
   const owner = {plugin:'org.rho.r',instance:'copy-original-r-instance',revision:'sha256:'+'a'.repeat(64),artifact:'sha256:'+'b'.repeat(64)};
   const files = name => [1,2,3,4].map(index => ({path:`original-${name}-${index}`,digest:'copy-original-file-digest'}));
-  const sources = [{id:'plots',title:'Saved plots',scopes:['workspace.read','operation.read','resources.read'],
+  const sources = [{id:'console',title:'Original R runs',scopes:['workspace.read','operation.read','resources.read'],
+    description:'Search terminal original R executions. Preview original code or code with complete retained event text (resource up to 2 MiB). Checks exact provider, operation, session, resource and digest; never starts R or repeats execution. Partial output must use code only.',
+    choices:[['Code and recorded output','transcript'],['Original code only','code']],
+    selector:{operation:'copy-original-operation',session:'copy-original-native-session',events:{owner,resource:'copy-original-events',digest:'sha256:'+'c'.repeat(64),media_type:'application/json',bytes:100}}},
+    {id:'plots',title:'Saved plots',scopes:['workspace.read','operation.read','resources.read'],
     description:'Search original terminal R outputs. Explicitly include one or two original PNG/JPEG images up to 2 MiB each, or artifact metadata only. Rechecks original operation, session, output and digest. Never starts R, rerenders a plot or captures panel transforms.',
     choices:[['Original images','images'],['Artifact metadata only','metadata']],
     selector:{plots:[{operation:'copy-original-operation',sequence:1,session:'copy-original-native-session',reference:{owner,resource:'copy-original-resource',digest:'sha256:'+'c'.repeat(64),media_type:'image/png',bytes:100}}]}},

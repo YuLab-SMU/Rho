@@ -29,6 +29,8 @@ pub(crate) fn scientific_requirements() -> Vec<CapabilityRequirement> {
         (
             &["operation.read", "resources.read", "workspace.read"],
             &[
+                ("r.context.console.preview", 1),
+                ("r.context.console.search", 1),
                 ("r.context.plots.preview", 1),
                 ("r.context.plots.search", 1),
                 ("r.context.viewer.preview", 1),

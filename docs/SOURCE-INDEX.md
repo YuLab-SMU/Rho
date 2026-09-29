@@ -348,8 +348,10 @@ Checks:
   Applies to: `scripts/check-plugin-boundaries.mjs`.
 - `plugins.build-owner` (L1): `["cargo","test","-p","rho-plugins","--test","build_operations","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
-- `plugins.console` (L2): `["node","scripts/test-console-plugin.mjs"]`
+- `plugins.console` (L1): `["node","scripts/test-console-plugin.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/console/**`, `rust-toolchain.toml`, `scripts/build-console-plugin.mjs`, `scripts/test-console-plugin.mjs`, `sdk/**`.
+- `plugins.console-agent-host` (L2): `["node","scripts/test-console-agent.mjs"]`
+  Applies to: `plugins/agent/**`, `plugins/console/**`, `plugins/r/backend/**`, `plugins/r/context-manifest.mjs`, `plugins/r/plugin.json`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-console-plugin.mjs`, `scripts/r-plugin-artifact.mjs`, `scripts/test-console-agent.mjs`.
 - `plugins.console-editor` (L2): `["npm","run","test:browser","--prefix","ui","--","console-editor.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/console/**`, `rust-toolchain.toml`, `scripts/build-console-plugin.mjs`, `sdk/**`, `ui/e2e/console-editor.spec.ts`.
 - `plugins.delegated-operation` (L2): `["cargo","test","-p","rho-host","--test","plugin_delegated_operations","--locked"]`

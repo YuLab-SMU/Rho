@@ -1,3 +1,5 @@
+import {componentInputDialog} from '../public/agent-input/dialog.js';
+import {consoleContext} from './agent-source.js';
 import { EditorState, Compartment } from "@codemirror/state";
 import { EditorView, keymap, Decoration } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, insertNewline } from "@codemirror/commands";
@@ -17,6 +19,13 @@ const state = model.state, message = get("message"), status = get("status"), tra
 let initialScroll: { top: number; follow: boolean } | null = { top: state.scrollTop, follow: state.follow };
 let stopped = false, saving: ReturnType<typeof setTimeout> | undefined, submitting = false, refreshing = false, lastHistory = 0;
 let closing = false;
+let selectedAgentRun: Run | null = null;
+const sender = componentInputDialog({client,saved:state.agent,persist:async value=>{state.agent=structuredClone(value);await model.save();},
+  guard:()=>{if(closing||stopped)throw Error('Console is closing. The original request is retained.');},
+  modes:[{value:'transcript',label:'Code and recorded output'},{value:'code',label:'Original code only'}],
+  capture:kind=>consoleContext(model.source,client.view.window,selectedAgentRun,kind)});
+get('agent-request').hidden=!state.agent?.pending;
+get('agent-request').onclick=()=>sender.open();
 const localWork = new Set<Promise<unknown>>();
 function tracked<T>(work: Promise<T>): Promise<T> {
   localWork.add(work);
@@ -163,6 +172,7 @@ function renderTranscript() {
 }
 function render() {
   if (closing || stopped) return;
+  get("agent-request").hidden=!state.agent?.pending;
   const queue = model.queue, session = model.session;
   get<HTMLButtonElement>("earlier").disabled = model.historyLoaded && (model.cursor === null || model.historyLimited);
   get("history-limit").hidden = !model.historyLimited;
@@ -235,6 +245,8 @@ get("records").onclick = () => {
     details.append(summary, code(run.code), code(JSON.stringify({ operation: run.id, session: run.session, provider: model.source,
       input_label: run.source, status: run.status, cancellation_requested: run.cancellationRequested, diagnostics: run.record.diagnostics,
       error: run.record.error, recovery: run.record.recovery, output: run.record.output }, null, 2)), button("Copy to Console", () => copyToInput(run.code)));
+    const ask=button("Ask about…",()=>{selectedAgentRun=structuredClone(run);dialog.close();sender.open();});
+    ask.disabled=!state.agent?.pending&&(!terminal(run.status)||!run.retained);details.append(ask);
     content.append(details);
   }
 };
@@ -289,6 +301,7 @@ render();
 const close = await client.installCloseHandler({
   async flush() {
     closing = true; clearTimeout(saving);
+    if(sender.busy)throw Error("Wait for the current Agent request before closing.");
     // Wait only for local capture/acceptance and bounded reads. An accepted R
     // execution keeps running after its Console view has closed.
     await Promise.allSettled([...localWork]);
@@ -301,5 +314,5 @@ const close = await client.installCloseHandler({
 });
 close.subscribe(() => { const error = close.getSnapshot().error; if (error) notice(error); });
 const timer = setInterval(() => { if (!document.hidden) void refresh(); }, 1000);
-window.addEventListener("pagehide", () => { stopped = true; clearInterval(timer); clearTimeout(saving); model.dispose(); input.destroy(); transcript.destroy(); get<HTMLInputElement>("answer").value = ""; }, { once: true });
+window.addEventListener("pagehide", () => { stopped = true; clearInterval(timer); clearTimeout(saving); sender.dispose(); model.dispose(); input.destroy(); transcript.destroy(); get<HTMLInputElement>("answer").value = ""; }, { once: true });
 await refresh();

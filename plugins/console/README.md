@@ -23,6 +23,13 @@ acknowledgement retains its code and request identity for explicit retry.
 The retained request also fixes its originating view identity. Copying that state
 to a newly opened view cannot replay the original request under a different caller.
 
-This package is under implementation. Full Console migration, cross-plugin plot
-navigation, context contributions and native keyboard/IME acceptance remain part of
-the unified-plugin work; standalone source does not establish those acceptance results.
+Run Details offers **Ask about…** for an original terminal run with retained events.
+The shared sender previews code plus recorded output, or original code only, and
+opens a selected active Agent without creating a task or sending a message. It
+retains the original view-opening request for explicit recovery after a lost reply.
+The R context provider verifies the original execution/session and event digest;
+partial output cannot be sent as a complete transcript. This does not capture a
+selected subrange, current terminal rendering, unfinished run or transient stdin.
+
+Full cross-plugin navigation and native keyboard/IME acceptance remain part of the
+unified-plugin work; standalone source does not establish those acceptance results.

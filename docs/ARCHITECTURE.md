@@ -736,6 +736,12 @@ correlated Operation through the current parent's query grants. It cannot dispat
 another scientific mutation. Attachments are captured by the Agent-owned upload
 ports before admission; original history reads retained bytes and source snapshots.
 
+Console context belongs to the R provider. It fixes a terminal original execution,
+native session and retained event resource. Preview reads original code or complete
+digest-verified event text (up to 2 MiB), labels omitted media and refuses partial
+transcripts. It does not capture the current Console buffer, stdin, panel rendering
+or start a runtime. Oversized/partial output can use an explicit code-only inclusion.
+
 Captured context data may declare up to eight `artifacts` entries, each with a
 `label`, a full `resource` reference owned by the context provider, and its original
 producing `operation` ID. These are optional owner-authored inspection links, not

@@ -1,3 +1,4 @@
+import type {AgentState} from '../public/agent-input/input.js';
 /** Console scientific semantics use public R messages and original Operations. */
 import type { InstanceRef, JsonValue, ProviderBinding } from "../public/plugin-protocol/index.js";
 import type { ConsoleState, OutputEvent, OutputEvents, REventsObservation, RunSource } from "../public/r-protocol/index.js";
@@ -9,6 +10,7 @@ export interface QueueObservation {
 export interface Session { state: string; session_id: string | null; queue_target: string; }
 export interface Submission { request: string; code: string; session: string; view: string; }
 export interface SavedState {
+  agent?: AgentState;
   input: string; anchor: number; head: number; hiddenBefore: number; follow: boolean; scrollTop: number;
   history: string[]; submission: Submission | null; clearPositions: Record<string, number>;
 }
@@ -31,7 +33,7 @@ export function validateCode(code: string) {
 }
 export function initialState(value: unknown): SavedState {
   const saved = object(value) ?? {}, input = typeof saved.input === "string" ? saved.input : "";
-  return { input, anchor: Math.max(0, Math.min(saved.anchor || 0, input.length)), head: Math.max(0, Math.min(saved.head || 0, input.length)),
+  return { ...(saved.agent ? {agent:saved.agent} : {}), input, anchor: Math.max(0, Math.min(saved.anchor || 0, input.length)), head: Math.max(0, Math.min(saved.head || 0, input.length)),
     hiddenBefore: saved.hiddenBefore || 0, follow: saved.follow !== false, scrollTop: saved.scrollTop || 0,
     history: Array.isArray(saved.history) ? saved.history.filter((item: unknown) => typeof item === "string") : [], submission: saved.submission ?? null,
     clearPositions: object(saved.clearPositions) ?? {} };

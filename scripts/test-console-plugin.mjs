@@ -7,13 +7,14 @@ import {buildConsolePlugin} from './build-console-plugin.mjs';
 const directory=fs.mkdtempSync(path.join(os.tmpdir(),'rho-console-unit-'));
 try {
   const plugin=buildConsolePlugin(path.join(directory,'console'));
-  const {ConsoleModel,runFrom,mergeEvents,addHistory,validateCode,visibleRun}=await import(pathToFileURL(path.join(plugin,'compiled/src/model.js')));
+  const {ConsoleModel,runFrom,mergeEvents,addHistory,validateCode,visibleRun,initialState}=await import(pathToFileURL(path.join(plugin,'compiled/src/model.js')));
   const {observedText}=await import(pathToFileURL(path.join(plugin,'compiled/src/terminal.js')));
   const {operationRequestId}=await import(pathToFileURL(path.join(plugin,'compiled/public/plugin-ui/index.js')));
   const owner={instance:'r-instance',plugin:'org.rho.r',revision:'sha256:'+'a'.repeat(64),artifact:'sha256:'+'b'.repeat(64)};
   const reference={owner,resource:'events-resource',digest:'sha256:'+'c'.repeat(64),bytes:20,media_type:'application/json'};
   const source={view_id:'console-view',label:'Console',kind:'console'};
   const record={operation:{operation_id:'original-run',capability:{id:'r.execute',version:2},normalized_arguments:{binding:{provider:owner},arguments:{expected_session:'session',run:{code:'11;22',output_mode:'console',source}}},accepted_at_ms:42},status:'succeeded',cancellation_requested:false,output:{operation_id:'original-run',session_id:'session',events:reference,source}};
+  const {consoleContext}=await import(pathToFileURL(path.join(plugin,'compiled/src/agent-source.js')));
   const run=runFrom(record,owner);assert.equal(run.id,'original-run');assert.equal(run.code,'11;22');
   assert.equal(runFrom(record,{...owner,revision:'sha256:'+'d'.repeat(64)}),null);
   const unknown=structuredClone(record);unknown.operation.capability.version=3;assert.equal(runFrom(unknown,owner),null);
@@ -33,6 +34,16 @@ try {
   assert.throws(()=>mergeEvents(run,{...page([event(3,'a')]),operation_id:'foreign'}));
   assert.throws(()=>validateCode('中'.repeat(100000)));assert.throws(()=>validateCode('1\0'));validateCode('中文 <- 42');
   assert.deepEqual(addHistory(['1','2'],'2'),['1','2']);assert.ok(addHistory(['中'.repeat(40000)],'文'.repeat(40000)).length===1);
+  const selected=consoleContext(owner,'window',run,'transcript');
+  assert.equal(selected.reference.selector.operation,run.id);assert.deepEqual(selected.reference.selector.events,reference);
+  run.code='later';run.retained.resource='later';assert.equal(selected.reference.selector.events.resource,'events-resource');
+  run.code='11;22';run.retained.resource='events-resource';
+  for(const invalid of [null,{...run,status:'running'},{...run,retained:null}])assert.throws(()=>consoleContext(owner,'window',invalid,'transcript'));
+  assert.throws(()=>consoleContext({...owner,instance:'other'},'window',run,'code'));
+  assert.throws(()=>consoleContext(owner,'window',run,'execute'));
+  const pendingAgent={input:{request:'retained-source'},pending:{request:'original-view-request'},opened:null};
+  assert.deepEqual(initialState({input:'new command',agent:pendingAgent}).agent,pendingAgent);
+  assert.ok(!Object.hasOwn(initialState({}), 'agent'));
   const calls=[],saved=[];
   let release;
   const client={view:{view:'console-view',project:'project',state:{input:'11;22'}},setState:async state=>{saved.push(structuredClone(state));return state;},

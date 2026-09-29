@@ -32,6 +32,18 @@
   "views": [],
   "contexts": [
     {
+      "id": "console",
+      "title": "Original R runs",
+      "search": {
+        "id": "r.context.console.search",
+        "version": 1
+      },
+      "preview": {
+        "id": "r.context.console.preview",
+        "version": 1
+      }
+    },
+    {
       "id": "plots",
       "title": "Saved plots",
       "search": {
@@ -10222,6 +10234,444 @@
           },
           "inclusion": {
             "kind": "images"
+          },
+          "max_bytes": 16384
+        }
+      ]
+    },
+    {
+      "kind": "query",
+      "description": "Search terminal original R executions. Preview original code or code with complete retained event text (resource up to 2 MiB). Checks exact provider, operation, session, resource and digest; never starts R or repeats execution. Partial output must use code only.",
+      "required_scopes": [
+        "workspace.read",
+        "operation.read",
+        "resources.read"
+      ],
+      "recovery_schema": true,
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null,
+      "capability": {
+        "id": "r.context.console.search",
+        "version": 1
+      },
+      "title": "Find Original R runs",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ContextSearch",
+        "type": "object",
+        "properties": {
+          "after": {
+            "description": "Opaque owner cursor; continuation does not imply a frozen multi-page read."
+          },
+          "limit": {
+            "type": "integer",
+            "format": "uint16",
+            "maximum": 20,
+            "minimum": 1
+          },
+          "text": {
+            "description": "Empty text lists available sources. Owners document which fields match.",
+            "type": "string"
+          },
+          "window": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "window",
+          "text",
+          "limit"
+        ]
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ContextPage",
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ContextItem"
+            },
+            "maxItems": 20
+          },
+          "next": true,
+          "notices": {
+            "description": "Explain partial, cached or unavailable observations without concealing\nthem as empty results. Completeness also belongs in the query envelope.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "items",
+          "notices"
+        ],
+        "$defs": {
+          "ContextItem": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "kind": {
+                "description": "A presentation hint supplied by the owner, not a closed core view enum.",
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/ContextReference"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "reference",
+              "title",
+              "description",
+              "kind"
+            ]
+          },
+          "ContextReference": {
+            "type": "object",
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ]
+          },
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "window": "copy-original-window",
+          "text": "",
+          "after": null,
+          "limit": 20
+        }
+      ]
+    },
+    {
+      "kind": "query",
+      "description": "Search terminal original R executions. Preview original code or code with complete retained event text (resource up to 2 MiB). Checks exact provider, operation, session, resource and digest; never starts R or repeats execution. Partial output must use code only.",
+      "required_scopes": [
+        "workspace.read",
+        "operation.read",
+        "resources.read"
+      ],
+      "recovery_schema": true,
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null,
+      "capability": {
+        "id": "r.context.console.preview",
+        "version": 1
+      },
+      "title": "Preview Original R runs",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "PreviewContext",
+        "type": "object",
+        "properties": {
+          "inclusion": {
+            "oneOf": [
+              {
+                "title": "Code and recorded output",
+                "const": {
+                  "kind": "transcript"
+                }
+              },
+              {
+                "title": "Original code only",
+                "const": {
+                  "kind": "code"
+                }
+              }
+            ]
+          },
+          "max_bytes": {
+            "type": "integer",
+            "format": "uint32",
+            "maximum": 65536,
+            "minimum": 1
+          },
+          "reference": {
+            "$ref": "#/$defs/ContextReference"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "reference",
+          "inclusion",
+          "max_bytes"
+        ],
+        "$defs": {
+          "ContextReference": {
+            "type": "object",
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ]
+          },
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          }
+        }
+      },
+      "output_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "ContextPreview",
+        "type": "object",
+        "properties": {
+          "data": {
+            "description": "Owner-defined bounded presentation data. Large artifacts use resources."
+          },
+          "item": {
+            "$ref": "#/$defs/ContextItem"
+          },
+          "resources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ResourceReference"
+            },
+            "maxItems": 8
+          },
+          "text": {
+            "description": "Plain text, never executable markup. Truncation must end at a UTF-8 boundary.",
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "item",
+          "text",
+          "truncated",
+          "data",
+          "resources"
+        ],
+        "$defs": {
+          "ContextItem": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "kind": {
+                "description": "A presentation hint supplied by the owner, not a closed core view enum.",
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/ContextReference"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "reference",
+              "title",
+              "description",
+              "kind"
+            ]
+          },
+          "ContextReference": {
+            "type": "object",
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ]
+          },
+          "InstanceRef": {
+            "type": "object",
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ]
+          },
+          "ResourceReference": {
+            "type": "object",
+            "properties": {
+              "bytes": {
+                "type": "integer",
+                "format": "uint64",
+                "minimum": 0
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ]
+          }
+        }
+      },
+      "examples": [
+        {
+          "reference": {
+            "provider": {
+              "plugin": "org.rho.r",
+              "instance": "copy-original-r-instance",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            "contribution": "console",
+            "window": "copy-original-window",
+            "selector": {
+              "operation": "copy-original-operation",
+              "session": "copy-original-native-session",
+              "events": {
+                "owner": {
+                  "plugin": "org.rho.r",
+                  "instance": "copy-original-r-instance",
+                  "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                },
+                "resource": "copy-original-events",
+                "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "media_type": "application/json",
+                "bytes": 100
+              }
+            }
+          },
+          "inclusion": {
+            "kind": "transcript"
           },
           "max_bytes": 16384
         }
