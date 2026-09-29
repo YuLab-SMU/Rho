@@ -284,6 +284,20 @@ failed attempts, compile errors and harness corrections stay in logs and Git.
 Commits that only record a verification result are folded into the change they
 verify.
 
+## Client composition
+
+The browser entry renders only the generic plugin workspace or an explicitly
+selected contributed view. The fixed Studio container, builtin panel registry,
+scientific/Agent panels, private browser transport helpers and their dedicated
+styles and tests have been deleted. Their replacement checks live with the ordinary
+plugins and the integrated scientific/Agent browser suites. The retained core UI
+checks cover transport, framing, layout, startup, closing and recovery.
+
+The Rust fixed-composition adapters and HTTP acceptance scripts still remain for
+the next removal stage; `--fixed-workspace` no longer selects a fixed browser UI.
+It must not be treated as a fallback when feature packages are absent. Historical
+fixed-renderer test totals do not count as current plugin acceptance.
+
 ## Testing SOP
 
 Annotation ownership checks reuse the workspace: `cargo test -p rho-annotation-store
@@ -1249,8 +1263,8 @@ Rscript --vanilla scripts/test-r-tools.R
 RHO_ARK="$PWD/target/debug/ark" \
 RHO_R_HOME=/Library/Frameworks/R.framework/Resources \
 cargo test -p rho-host --test html_widgets_real_r --locked -- --ignored --nocapture
-npm run test --prefix ui -- viewer.test.ts
-npm run test:browser --prefix ui -- e2e/widget.spec.ts
+node scripts/test-viewer-plugin.mjs
+npm run test:browser --prefix ui -- r-plugin-viewer.spec.ts r-plugin-plots.spec.ts
 ```
 
 Runtime/recovery changes should cover the focused Host tests and the R-free process
@@ -1448,26 +1462,23 @@ storage. Check ordinary/wide/constrained layouts and copying, not only snapshots
 | --- | --- |
 | Rust behavior | `cargo test -p <crate> <filter> --locked` |
 | Shared capability contracts and result validation | `cargo test -p rho-contract --locked`, then `cargo test -p rho-operation --locked` |
-| Application windows, captures and CAS receipts | `cargo test -p rho-application --locked`, SQLite tests and `ui/tests/application-bridge.test.ts` |
+| Application windows, captures and CAS receipts | `cargo test -p rho-application --locked`, SQLite tests and the ordinary Editor/Agent plugin draft and input checks |
 | Skill sources, resource identity and method binding | `cargo test -p rho-adapter-skills --locked`, then `cargo test -p rho-host --test skills --locked` |
 | Frontend model/component behavior | `npm run test --prefix ui` |
 | Client types and embedded assets | Generate, build, then check as above |
 | Studio interaction and real local R | `npm run test:browser --prefix ui` |
 | Rust architecture/dependency ownership | `node scripts/check-architecture.mjs` |
-| Component assistant Studio | `npm run test:browser --prefix ui -- component-agents.spec.ts` (build current client and binary first); local Anthropic fixture, native context, IME, control/recovery and performance comparison |
+| Component assistant Studio | `npm run test:browser --prefix ui -- agent-workspace.spec.ts agent-rho-tools.spec.ts` with retained packages; local model fixture, native context, attachments and recovery |
 | Component Agent integration | `node scripts/test-component-agents.mjs`; Rig HTTP/SSE, SQLite admission and direct Host project-query checks; real R remains separate |
 | Frontend ownership and dependency boundaries | `npm run check:boundaries --prefix ui` and `npm run test:boundaries --prefix ui` |
 | Vendored Jet snapshot / verifier | `node scripts/vendor-jet.mjs check` and `node scripts/test-vendor-jet.mjs` |
 | Documentation/map only | `node scripts/governance.mjs check` and `node scripts/test-governance.mjs` |
 
-The component browser suite defaults to a local Anthropic protocol fixture and
-starts an isolated Host/project. Its real-model cases are opt-in: supply
-`RHO_COMPONENT_BROWSER_URL`, `RHO_COMPONENT_BROWSER_REAL_MODEL` (the model ID), and
-`RHO_COMPONENT_BROWSER_SECRET` through the process environment, then run
-`npm run test:browser --prefix ui -- component-agents.spec.ts --grep "opt-in real model"`.
-These cases verify a native file read and an actual resident Editor edit/save/R run.
-Keep credentials out of tracked files and command logs. Use a distinct Playwright
-`--output` directory to retain each run's traces and performance report.
+The ordinary Agent browser suites use explicit retained package selections and a
+local model-protocol fixture. Their prerequisite map is documented with the Agent
+plugin checks above. No browser case may silently select a fixed scientific shell.
+Keep credentials out of tracked files and command logs, and use a distinct
+Playwright `--output` directory to preserve evidence.
 
 Broader Rust checks, run sequentially when affected:
 
@@ -1509,7 +1520,7 @@ Native/transport verification:
 | --- | --- |
 | `test-real-r.mjs` | Installed Ark and R with jsonlite, rlang, lintr and styler; real R, progressive object/package queries, non-forcing inspections, cancellation and code tools |
 | `test-r-checkpoints.mjs` | Installed R with jsonlite; builds the private native checkpoint component for that R, then exercises the classifier and a capture/cold-restore round trip in disposable `--vanilla` processes. `--print-library` prints the component path for `RHO_CHECKPOINT_HELPER` |
-| `npm run test:browser --prefix ui` | Current `cargo build --locked` binary. Ordinary-plugin cases use explicit package/runtime selections; `scientific-workspace.spec.ts` requires either `RHO_SCIENTIFIC_PACKAGES` or `RHO_SCIENTIFIC_PLUGIN_SET`, plus `RHO_ARK` and `RHO_R_HOME`. Fixed-composition reference specs pass `--fixed-workspace`; their R discovery needs installed R and `ark` **beside that binary** or on PATH. Run the affected cases, not every fixture during iteration. |
+| `npm run test:browser --prefix ui` | Current `cargo build --locked` binary. Ordinary-plugin cases use explicit package/runtime selections; `scientific-workspace.spec.ts` requires either `RHO_SCIENTIFIC_PACKAGES` or `RHO_SCIENTIFIC_PLUGIN_SET`, plus `RHO_ARK` and `RHO_R_HOME`. Fixed-renderer browser specs have been retired with that implementation. Run the affected cases, not every fixture during iteration. |
 | `test-workbench.mjs`, `test-mcp.mjs` | Real local transports; add `--real-r` for Ark/R and Environment observations |
 | `test-environment.mjs` | R/Ark with pak, renv, ps and jsonlite; installs small local fixtures into temporary libraries, checks user-library preservation and recovery |
 | `test-process-recovery.mjs` | R-free native process crash/reconciliation |
@@ -1531,7 +1542,7 @@ pause, including duplicate-request identity and explicit queue recovery.
 These scripts live in `scripts/`. R tests accept `RHO_ARK` and `RHO_R_HOME` where
 applicable. Ignored or unavailable checks are not passes; optional third-party Agent
 observations are separate from required Rho checks and do not block their completion.
-The shell scenarios are in `ui/e2e/shell.spec.ts`, with their own disposable Host.
+The generic shell scenarios are in `ui/e2e/plugin-startup.spec.ts` and `ui/e2e/plugin-workspace.spec.ts`, with their own disposable Hosts.
 Keep independent suites isolated rather than raising the product's retained-window
 budget for tests. Geometry checks wait for ResizeObserver layout to settle.
 
@@ -1540,7 +1551,7 @@ and `rho` binary before running it. Keep real interactive workbench sessions in
 the integration checkout, separate from disposable test projects.
 
 The approved workspace Agent task UI is in Design section 13. Focused Chrome tests
-are `ui/e2e/agent-tasks.spec.ts`; local native protocol fixtures never call a model.
+are `ui/e2e/agent-workspace.spec.ts`; local native protocol fixtures never call a model.
 Rho acceptance covers connection identity, protocol delivery, permission handling,
 drafts, original receipts, Rho's recovery behavior and faithful native-usage display.
 Deterministic protocol fixtures and HTTP/browser tests can establish these contracts.

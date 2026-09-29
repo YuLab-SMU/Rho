@@ -1091,6 +1091,10 @@ All displayed versions, metrics, runs and failures are illustrative fixtures.
 
 ### What the implementation supports
 
+The following investigation describes the fixed-composition baseline at its
+design date; referenced private frontend files have since been retired in M6.
+Current implementation and evidence are recorded in Status.
+
 The important distinction is between management foundations and a multiple-runtime
 product. Host currently composes one live R Workspace per selected project.
 Several Console views share it. Several native Agent tasks have independent Agent

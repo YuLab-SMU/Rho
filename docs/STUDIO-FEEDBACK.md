@@ -554,6 +554,8 @@ in [STATUS.md](STATUS.md).
 
 The fixed CSV fixture and analysis script live in `ui/e2e/fixtures/gapminder/`.
 The analysis dependencies are already installed; the scenario does not install
-packages. Browser regression scenarios are in `ui/e2e/studio.spec.ts`, model
-checks in `ui/tests/`, and native ownership/queue/input checks in the Host tests.
+packages. The fixed `studio.spec.ts` regression was retired with the fixed browser
+client. Current plugin scenarios live in `ui/e2e/scientific-workspace.spec.ts` and
+the individual plugin browser suites; model checks belong to their plugin packages,
+and native ownership/queue/input checks remain in the owner and Host tests.
 Report synthetic composition coverage separately from OS input-method testing.

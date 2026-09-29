@@ -10,10 +10,10 @@ The user authorized the entire unified-plugin plan on 2026-09-23: all scientific
 owners and views as ordinary plugins, coexisting versions, project scenarios,
 public SDKs and Plugin Studio as an ordinary plugin. PS01–PS07 are approved in
 Paper; see [Design section 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved).
-**The fixed scientific composition is still present.** Ordinary packages exist
+**The fixed browser client has been removed; fixed Rust/HTTP composition remains.** Ordinary packages exist
 for R, Files/Git, Process, Remote, Environment, Editor, Console, Objects, Packages,
 Help, Plots, Viewer, Manager, Studio, Agent and Annotations (`plugins/`). Each has individual acceptance evidence. Sixteen-plugin archive delivery now passes; final scenario integration, cross-plugin
-workflows and removal of the fixed composition remain; the portable internal development bundle now passes relocation/import/startup acceptance.
+workflows and removal of the remaining fixed backend composition remain; the portable internal development bundle now passes relocation/import/startup acceptance.
 
 ### Work order (reset 2026-09-28)
 
@@ -24,12 +24,14 @@ written deletion condition. Internal pieces are not reported as milestones.
 
 | # | Milestone (user flow) | Replaces / deletes | State |
 | --- | --- | --- | --- |
-| M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Default entry, full delivered-set setup, real-R browser flow and Rust HTTP checks pass |
-| M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Combined real Host/browser flow passes: Native/Rho input, attachments, real R, reload, continuation and handoff |
+| M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels and their private client models deleted | Default entry, full delivered-set setup, real-R browser flow and Rust HTTP checks pass |
+| M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel and private frontend endpoints deleted | Combined real Host/browser flow passes: Native/Rho input, attachments, real R, reload, continuation and handoff |
 | M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Graceful Host restart, same instance/view/tasks, original receipts and native session Resume pass without replay |
 | M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Editor/Help/Viewer snapshots, history, Continue and handoff pass real Host/browser checks; Rho exact-session tools and Editor/Help/Viewer/Objects/Plots/Console/Packages/Files Ask → Agent input pass; annotation text/context and Native/Rho Send pass real Editor and real-R Help/Viewer/Console/Plots/Objects/Packages source flows with same-instance restart; the picker and Native read/write tools also pass; resource-image import/read, explicit Native/Rho image context, picker thumbnails and restart pass; browser capture, annotation editor and component annotation controls remain |
 | M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Combined real Host/browser flow passes: exact-branch Agent checkpoint, explicit build, preview and scenario application |
-| M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Sixteen ordinary archives pass import/remove/empty Host/explicit restoration; delivered-set → Manager → full scene passes real R/browser and activation-reply recovery. Portable development bundle passes relocation/import/empty startup; real-R running-scene switch/close/reopen/draft continuity also passes. Fixed-path removal and remaining final matrix remain |
+| M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Sixteen ordinary archives pass import/remove/empty Host/explicit restoration; delivered-set → Manager → full scene passes real R/browser and activation-reply recovery. Portable development bundle passes relocation/import/empty startup; real-R running-scene switch/close/reopen/draft continuity also passes. Fixed frontend removed; fixed Rust/HTTP removal and remaining final matrix remain |
+
+The frontend removal passes 135 retained core UI tests, typecheck, client build/check, boundary checks (including 27 checker fixtures), and four Chrome flows in 2.6 minutes: default/empty startup, frame layout, close/recovery and the sixteen-plugin real-R scene with running-scene/draft continuity. Normal/1920/390 startup, setup and generic frames plus resulting scientific views were inspected. Embedded JavaScript shrank from 1,579,165 to 480,991 bytes (69.5%); CSS from 367,234 to 250,413 bytes (31.8%). One necessary Host build took 4 minutes; all sixteen packages were reused without builds. Evidence: `target/plugin-refactor/fixed-client-results.json`. The retired 41 fixed-client unit files and seven fixed browser specs are deleted coverage, not passes; scientific acceptance now belongs to the ordinary plugin suites. No user Host was restarted and the older portable bundle was not replaced.
 
 ### Scientific scenario: current integration
 
@@ -60,9 +62,7 @@ recovers a lost activation reply without duplicating the instance or execution.
 Current client generation, build/check and the embedded Host rebuild pass.
 Evidence: `target/plugin-refactor/default-entry-results.json`; interrupted broader
 CLI checks and earlier startup failures remain retained, not passes.
-Existing fixed-composition acceptance explicitly uses `--fixed-workspace`. Remove
-that temporary reference and shell after M2–M4 replace the remaining fixed flows;
-missing plugins cannot select it as a fallback. `scripts/plugin-set.mjs` now assembles retained source/artifacts without compilation and explicitly imports through the ordinary CLI repository. Disposable-catalog import/remove/empty-Host/reimport passes, with every restored archive matching its original SHA-256 (including source, grants and artifacts). Damaged archives fail before imports; a lost import reply retains its uncertain revision and explicit retry does not duplicate it. Evidence and exact archive inventory: `target/plugin-refactor/default-delivery-results.json`. A portable macOS arm64 development bundle now combines the retained core and all sixteen archives with explicit import and integrity checks. Relocation to a path with spaces/Unicode, corrupt payload/symlink/path refusal before catalog writes, import/retry, complete removal, empty default Host startup and explicit restoration pass in 153 seconds with zero builds. Evidence: `target/plugin-refactor/local-bundle-results.json`; the retained directory is `target/plugin-refactor/local-bundle-macos-arm64-20260929`. Core source provenance remains unknown; assembly records that explicitly. This is internal development delivery, not a user install, public release licensing/signing audit, notarized installer or publication.
+The generic browser entry now serves all profiles; the fixed Studio singleton, panel registry, 94 private source/style files and their obsolete renderer tests have been deleted. `--fixed-workspace` remains only for fixed Rust/HTTP reference checks and is not a missing-plugin fallback. `scripts/plugin-set.mjs` now assembles retained source/artifacts without compilation and explicitly imports through the ordinary CLI repository. Disposable-catalog import/remove/empty-Host/reimport passes, with every restored archive matching its original SHA-256 (including source, grants and artifacts). Damaged archives fail before imports; a lost import reply retains its uncertain revision and explicit retry does not duplicate it. Evidence and exact archive inventory: `target/plugin-refactor/default-delivery-results.json`. A portable macOS arm64 development bundle now combines the retained core and all sixteen archives with explicit import and integrity checks. Relocation to a path with spaces/Unicode, corrupt payload/symlink/path refusal before catalog writes, import/retry, complete removal, empty default Host startup and explicit restoration pass in 153 seconds with zero builds. Evidence: `target/plugin-refactor/local-bundle-results.json`; the retained directory is `target/plugin-refactor/local-bundle-macos-arm64-20260929`. Core source provenance remains unknown; assembly records that explicitly. This is internal development delivery, not a user install, public release licensing/signing audit, notarized installer or publication.
 
 Restart lifecycle is now implemented in source: normal Host drain suspends exact
 runtime instances after acknowledged native cleanup, preserving original grants,
@@ -74,7 +74,7 @@ unconfirmed cleanup have refusal fixtures. A publication conflict during resume
 preserves the original instance with a new confirmed suspension token.
 The generic window and Manager's instance details save recovery requests before dispatch; lost replies offer
 explicit inspection/retry of the original request, with no next-step dispatch on
-reload. All 566 core frontend tests pass, including 42 recovery/view cases. The focused
+reload. The pre-removal baseline passed 566 core frontend tests, including 42 recovery/view cases; retired renderer tests do not count as current plugin coverage. The focused
 native current-source run passes all four suspension cases, including publication
 conflict (34m11s compilation, 1s tests); the earlier pre-fix failure remains in evidence.
 Host-reopen, workspace and disposable-test Host checks now pass (10 cases);
@@ -228,11 +228,11 @@ New revisions need explicit snapshot/activation; existing instances keep immutab
 assets. Inspect live work before authorized replacement. Acceptance uses disposable
 projects and explicit Ark/R.
 
-## Established product surfaces (fixed composition)
+## Product behavior and remaining migration boundaries
 
-These are implemented in the current fixed composition and remain the reference
-behavior that the plugin composition must preserve. Details live in Design,
-Architecture and Git history.
+These describe preserved behavior and remaining UI gaps. Fixed frontend source
+has been removed; remaining backend adapters and plugin verification are separated
+below. Details live in Design, Architecture and Git history.
 
 - **Demo project.** Welcome page and `rho --demo-project workbench` materialize a
   writable base-R Gapminder project; opening it does not run R, install packages or

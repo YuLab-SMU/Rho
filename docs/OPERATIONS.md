@@ -89,11 +89,12 @@ For a backend with no view, use **Instances → Restore instance** in the ordina
 Manager. This restores only the selected instance; its dependencies remain as they
 were. If the Manager itself is suspended, restore its saved view first.
 
-The old fixed scientific composition is available only as the temporary development
-reference: `rho --fixed-workspace ... workbench`. Its R/remote/Skill startup flags
-apply only there. This flag and the fixed browser shell will be removed after their
-remaining Agent/context/recovery flows have ordinary-plugin replacements; it is not
-a fallback for missing or failed plugins.
+The browser always uses the ordinary plugin window. The temporary
+`rho --fixed-workspace ... workbench` profile retains fixed Rust/HTTP adapters for
+remaining backend reference checks; it no longer provides the retired fixed
+browser shell. Its R/remote/Skill startup flags apply only to that backend profile.
+Missing or failed plugins never trigger a fixed-interface fallback. Removal of
+these remaining backend adapters is tracked in Status.
 
 The native development ports `plugins.test_create`, `plugins.test_project`,
 `plugins.test_projects`, `plugins.test_operation` and `plugins.test_stop` create,

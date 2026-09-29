@@ -3,73 +3,24 @@ import { requestExternalNavigation } from "./plugin-external";
 import type { HostRequest } from "./generated/HostRequest";
 import type { SessionReply } from "./generated/SessionReply";
 import type { WorkbenchInfo } from "./generated/WorkbenchInfo";
-import type { WorkbenchAgentConnection } from "./generated/WorkbenchAgentConnection";
-import type { LocalAgent } from "./generated/LocalAgent";
-import type { SetupAgent } from "./generated/SetupAgent";
-import type { DiscoverAgent } from "./generated/DiscoverAgent";
-import type { AgentConfigurationFormat } from "./agent-ports";
 import type { WorkbenchFrame } from "./generated/WorkbenchFrame";
 import type { QuerySnapshot } from "./generated/QuerySnapshot";
 import type { Invocation } from "./generated/Invocation";
 import type { OperationRecord } from "./generated/OperationRecord";
 import type { OutboxRecord } from "./generated/OutboxRecord";
 import type { ApplicationState } from "./generated/ApplicationState";
-import type { RConfiguration } from "./generated/RConfiguration";
-import type { RSelection } from "./generated/RSelection";
-import type { RProbe } from "./generated/RProbe";
-import type { HtmlViewToken } from "./generated/HtmlViewToken";
-import type { MediaReference } from "./generated/MediaReference";
 import type { JsonValue } from "./generated/serde_json/JsonValue";
-import type { ApplicationBridgeSession } from "./generated/ApplicationBridgeSession";
-import type { ApplicationBridgeRequest } from "./generated/ApplicationBridgeRequest";
-import type { ApplicationBridgeReply } from "./generated/ApplicationBridgeReply";
-import type { ApplicationCommandRequest } from "./generated/ApplicationCommandRequest";
-import type { ApplicationCommandReceipt } from "./generated/ApplicationCommandReceipt";
-import type { ApplicationExecuteRequest } from "./generated/ApplicationExecuteRequest";
-import type { ApplicationExecuteReply } from "./generated/ApplicationExecuteReply";
-import type { ApplicationCommandStatusArguments } from "./generated/ApplicationCommandStatusArguments";
-import type { ApplicationReadDocumentArguments } from "./generated/ApplicationReadDocumentArguments";
-import type { ApplicationDocumentPage } from "./generated/ApplicationDocumentPage";
-import type { AgentTasksQuery } from "./generated/AgentTasksQuery";
-import type { AgentTaskQueryResult } from "./generated/AgentTaskQueryResult";
-import type { AgentTasksCommand } from "./generated/AgentTasksCommand";
-import type { AgentTaskCommandResult } from "./generated/AgentTaskCommandResult";
-import type { AgentHandoffsQuery } from "./generated/AgentHandoffsQuery";
-import type { AgentHandoffQueryResult } from "./generated/AgentHandoffQueryResult";
-import type { AgentHandoffCommand } from "./generated/AgentHandoffCommand";
-import type { AgentHandoffReceipt } from "./generated/AgentHandoffReceipt";
-import type { TestAgent } from "./generated/TestAgent";
-import type { AgentDiagnostic } from "./generated/AgentDiagnostic";
-import type { ReadAgentAsset } from "./generated/ReadAgentAsset";
-import type { ComponentQueryReplies, ComponentCommandReplies } from "./component-agent-ports";
-import type { ComponentAgentQuery } from "./generated/ComponentAgentQuery";
-import type { ComponentAgentCommand } from "./generated/ComponentAgentCommand";
-import type { ComponentAgentsQuery } from "./generated/ComponentAgentsQuery";
-import type { ComponentAgentsCommand } from "./generated/ComponentAgentsCommand";
-import type { ComponentSourcePreviewRequest } from "./generated/ComponentSourcePreviewRequest";
-import type { ComponentSourcePreview } from "./generated/ComponentSourcePreview";
-import type { ComponentSourceSearch } from "./generated/ComponentSourceSearch";
-import type { ComponentSourceSearchResult } from "./generated/ComponentSourceSearchResult";
-import type { ReadComponentAgentAsset } from "./generated/ReadComponentAgentAsset";
-import type { ComponentLocalCredential } from "./generated/ComponentLocalCredential";
-import type { ComponentCredentialRef } from "./generated/ComponentCredentialRef";
-import type { ComponentModelTestRequest } from "./generated/ComponentModelTestRequest";
-import type { ComponentModelDiagnostic } from "./generated/ComponentModelDiagnostic";
 
-import type { ComponentRequestFailure } from "./generated/ComponentRequestFailure";
 import type { Diagnostic } from "./generated/Diagnostic";
+
+interface HostHttpFailure { error?: string; diagnostic?: Diagnostic; diagnostics?: string[] }
 
 export class HostRequestError extends Error {
   readonly status: number;
   readonly diagnostic?: Diagnostic;
-  readonly submission?: ComponentRequestFailure["submission"];
-  readonly requestId?: string;
-  readonly existingRequestId?: string;
-  constructor(status: number, detail: Partial<ComponentRequestFailure> & { diagnostics?: string[] } | null) {
+  constructor(status: number, detail: HostHttpFailure | null) {
     super(detail?.diagnostic?.message ?? detail?.error ?? detail?.diagnostics?.join("\n") ?? `Host HTTP ${status}`);
     this.name = "HostRequestError"; this.status = status; this.diagnostic = detail?.diagnostic;
-    this.submission = detail?.submission; this.requestId = detail?.request_id ?? undefined;
-    this.existingRequestId = detail?.existing_request_id ?? undefined;
   }
 }
 
@@ -98,17 +49,6 @@ export class HostClient {
     const windowKey = testProject ? `rho-test-window:${testProject}` : "rho-window-id";
     this.windowId = windowId ?? sessionStorage.getItem(windowKey) ?? crypto.randomUUID();
     if (!windowId) sessionStorage.setItem(windowKey, this.windowId);
-  }
-  previousBridgeSession(project: string): ApplicationBridgeSession | undefined {
-    const saved = sessionStorage.getItem(`rho-application-session:${project}`);
-    if (!saved) return undefined;
-    try {
-      const value = JSON.parse(saved) as ApplicationBridgeSession;
-      return value.window?.window_id === this.windowId && typeof value.window.incarnation === "string" && typeof value.bridge_token === "string" ? value : undefined;
-    } catch { return undefined; }
-  }
-  rememberBridgeSession(project: string, session: ApplicationBridgeSession) {
-    sessionStorage.setItem(`rho-application-session:${project}`, JSON.stringify(session));
   }
   static fromLocation() {
     const address = new URL(location.href);
@@ -164,8 +104,7 @@ export class HostClient {
     if (path === "/api/plugin-view" && body !== undefined)
       body = { ...(body as object), test_project: this.testProject ?? null };
     const method = (body as WorkbenchFrame | undefined)?.frame?.request?.method;
-    const reading = body === undefined || path === "/api/state/read" || path === "/api/r/probe" || path === "/api/agents/tasks/query" ||
-      ["/api/agents/components/query", "/api/agents/components/context", "/api/agents/components/context/search", "/api/agents/handoff/query"].includes(path) ||
+    const reading = body === undefined || path === "/api/state/read" ||
       (path === "/api/host" && ["query_snapshot", "get_operation", "subscribe"].includes(method ?? ""));
     const controller = reading ? new AbortController() : undefined;
     if (controller) this.reads.add(controller);
@@ -184,7 +123,7 @@ export class HostClient {
     });
     const value: unknown = await response.json();
     if (!response.ok) {
-      throw new HostRequestError(response.status, value as Partial<ComponentRequestFailure> & { diagnostics?: string[] } | null);
+      throw new HostRequestError(response.status, value as HostHttpFailure | null);
     }
     return value as T;
     } finally {
@@ -196,47 +135,6 @@ export class HostClient {
     for (const controller of this.reads) controller.abort(new Error("Client stopped reading"));
     this.reads.clear();
   }
-  agentConnection() { return this.request<WorkbenchAgentConnection>("/api/agent-connection"); }
-  discoverAgent(request: DiscoverAgent) { return this.request<LocalAgent>("/api/agents/discover", request); }
-  setupAgent(request: SetupAgent) { return this.request<LocalAgent>("/api/agents/setup", request); }
-  agentTaskQuery(request: AgentTasksQuery) { return this.request<AgentTaskQueryResult>("/api/agents/tasks/query", request); }
-  agentTaskCommand(request: AgentTasksCommand) { return this.request<AgentTaskCommandResult>("/api/agents/tasks/command", request); }
-  agentHandoffQuery(request: AgentHandoffsQuery) { return this.request<AgentHandoffQueryResult>("/api/agents/handoff/query", request); }
-  agentHandoffCommand(request: AgentHandoffCommand) { return this.request<AgentHandoffReceipt>("/api/agents/handoff/command", request); }
-  componentQuery<Q extends ComponentAgentQuery>(request: ComponentAgentsQuery & { query: Q }) {
-    return this.request<ComponentQueryReplies[Q["kind"]]>("/api/agents/components/query", request);
-  }
-  componentCommand<C extends ComponentAgentCommand>(request: ComponentAgentsCommand & { command: C }) {
-    return this.request<ComponentCommandReplies[C["kind"]]>(request.command.kind === "add_asset" ? "/api/agents/components/asset/upload" : "/api/agents/components/command", request);
-  }
-  async componentAsset(request: ReadComponentAgentAsset) {
-    this.assertEndpoint("/api/agents/components/asset");
-    const response = await fetch("/api/agents/components/asset", { method: "POST", headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" }, body: JSON.stringify(request) });
-    if (!response.ok) throw new HostRequestError(response.status, await response.json());
-    return response.blob();
-  }
-  componentSourcePreview(request: ComponentSourcePreviewRequest) { return this.request<ComponentSourcePreview>("/api/agents/components/context", request); }
-  componentSourceSearch(request: ComponentSourceSearch) { return this.request<ComponentSourceSearchResult>("/api/agents/components/context/search", request); }
-  componentCredential(request: ComponentLocalCredential) { return this.request<{ credential: ComponentCredentialRef }>("/api/agents/components/credential", request); }
-  componentModelTest(request: ComponentModelTestRequest) { return this.request<{ diagnostic: ComponentModelDiagnostic }>("/api/agents/components/test", request); }
-  testAgent(request: TestAgent) { return this.request<AgentDiagnostic>("/api/agents/test", request); }
-  async agentAsset(request: ReadAgentAsset) {
-    this.assertEndpoint("/api/agents/tasks/asset");
-    const response = await fetch("/api/agents/tasks/asset", { method: "POST", headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" }, body: JSON.stringify(request) });
-    if (!response.ok) throw new Error((await response.json() as {error?: string}).error ?? "Attachment is unavailable.");
-    return response.blob();
-  }
-  agentConfiguration(data: WorkbenchAgentConnection, format: AgentConfigurationFormat, masked: boolean) {
-    const endpoint = new URL(data.endpoint);
-    if (endpoint.origin !== location.origin || endpoint.pathname !== "/mcp" || endpoint.search || endpoint.hash ||
-      endpoint.username || endpoint.password || !/^rho_[0-9]+$/.test(data.suggested_server_name))
-      throw new Error("The connection endpoint does not belong to this Workbench.");
-    const authorization = `Bearer ${masked ? "<private-workbench-token>" : this.token}`;
-    if (format === "codex") return `[mcp_servers.${data.suggested_server_name}]\n` +
-      `url = ${JSON.stringify(data.endpoint)}\nhttp_headers = { Authorization = ${JSON.stringify(authorization)} }\n` +
-      "startup_timeout_sec = 30\ntool_timeout_sec = 90\n";
-    return JSON.stringify({ transport: "streamable-http", url: data.endpoint, headers: { Authorization: authorization } }, null, 2);
-  }
   info() {
     return this.request<WorkbenchInfo>("/api/info");
   }
@@ -245,19 +143,6 @@ export class HostClient {
   }
   selectDemoProject() {
     return this.request<WorkbenchInfo>("/api/project/demo", {});
-  }
-  htmlViewToken(project_root: string, reference: MediaReference) {
-    return this.request<HtmlViewToken>("/api/html/token", { project_root, reference });
-  }
-  rConfiguration() {
-    return this.request<RConfiguration>("/api/r");
-  }
-  quitWorkbench(project_root: string) { return this.request<{ quitting: boolean }>("/api/quit", { project_root }); }
-  probeR(selection: RSelection) {
-    return this.request<RProbe>("/api/r/probe", selection);
-  }
-  applyR(selection: RSelection, end_session: boolean) {
-    return this.request<RConfiguration>("/api/r", { selection, end_session });
   }
   readState(project_root: string | null, key: string) {
     return this.request<ApplicationState>("/api/state/read", {
@@ -276,7 +161,7 @@ export class HostClient {
       project_root,
       frame: { id: crypto.randomUUID(), ...(testProject ? { test_project: testProject } : {}), request: structuredClone(request) },
     };
-    const reply = await this.request<SessionReply>(request.method === "application_bridge" ? "/api/application/bridge" : "/api/host", frame, keepalive);
+    const reply = await this.request<SessionReply>("/api/host", frame, keepalive);
     if (!reply || typeof reply.ok !== "boolean")
       throw new Error("Invalid Host reply");
     if (!reply.ok) {
@@ -292,25 +177,6 @@ export class HostClient {
       method: "query_snapshot",
       params: { capability: { id, version: 1 }, arguments: json(args) },
     });
-  }
-  applicationBridge(project: string, params: ApplicationBridgeRequest) {
-    return this.port<ApplicationBridgeReply>(project, { method: "application_bridge", params });
-  }
-  applicationControl(project: string, params: ApplicationCommandRequest) {
-    return this.port<ApplicationCommandReceipt>(project, { method: "application_control", params });
-  }
-  applicationExecute(project: string, params: ApplicationExecuteRequest) {
-    return this.port<ApplicationExecuteReply>(project, { method: "application_execute", params });
-  }
-  async applicationStatus(project: string, args: ApplicationCommandStatusArguments) {
-    const reply = await this.query(project, "application.command_status", args);
-    if (reply.status !== "ready") throw new Error(reply.notices.join("\n") || "Application command status is unavailable.");
-    return reply.data as unknown as ApplicationCommandReceipt;
-  }
-  async applicationReadDocument(project: string, args: ApplicationReadDocumentArguments) {
-    const reply = await this.query(project, "application.read_document", args);
-    if (reply.status !== "ready") throw new Error(reply.notices.join("\n") || "The synchronized document is unavailable.");
-    return reply.data as unknown as ApplicationDocumentPage;
   }
   invoke(
     project: string,

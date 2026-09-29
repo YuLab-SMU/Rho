@@ -152,8 +152,9 @@ and reviews do not require edits, builds, status updates, or commits.
 - Rust contracts generate TypeScript DTOs through ts-rs. Keep generated bindings
   and embedded assets current; use the shared Host ports.
 - Studio starts in `ui/src/app.ts`; tokens live in `ui/src/style.css`.
-  `crates/workbench/assets/` is generated. Panels use the shared Studio/Document
-  models and HostClient; preserve document state across layout changes.
+  `crates/workbench/assets/` is generated. The entry mounts generic plugin windows;
+  scientific views and document models belong to ordinary plugins through the
+  public SDK. Preserve document state across layout changes.
 - Product-authored UI uses English. Preserve Unicode user content and native output.
 - Skills use standard `.agents/skills` sources and explicit host-provided references.
   Validate each source root and package/resource symlink containment; project links

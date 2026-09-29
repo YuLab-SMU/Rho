@@ -122,7 +122,7 @@ flowchart TB
 
 Host 负责装配实现与生命周期；上图不是要求每个 domain 再新增 Host 业务函数。
 
-拟修改位置：
+原始固定组合的实施位置（下表为设计时边界；固定客户端已删除，当前 Agent 界面和模型位于 `plugins/agent/`，不得按此表恢复旧界面）：
 
 | 文件/模块 | 具体工作 |
 | --- | --- |
@@ -416,7 +416,8 @@ fixtures 验证。Kimi 图片回答等第三方表现不阻塞 Rho 完成；已�
 | A13 | 旧能力不回归 | 原生 CLI 接入的确定性协议 fixtures、MCP、R 运行、包/对象观察、Rho 恢复与草稿的既有测试；没有导入或改写原生用户配置 |
 
 对应测试位置：`crates/agents/tests/`、`crates/host/tests/component_agents.rs`、
-`ui/tests/component-agents.test.ts`、`ui/e2e/component-agents.spec.ts`。
+普通插件的 `plugins/agent/tests/`、`ui/e2e/agent-workspace.spec.ts` 与
+`ui/e2e/agent-rho-tools.spec.ts`；原固定客户端测试随其实现删除。
 新增 `scripts/test-component-agents.mjs`：默认 fake provider；`--real-model` 为显式真实模型验收，
 使用临时项目/Host，输出原始模型请求摘要、工具轨迹、Operation 回读、图像摘要与判定。
 后端与脚本现已实现；`--real-sources` 还会运行真实 R 来源、文档修复、Continue 和生成图像验收。

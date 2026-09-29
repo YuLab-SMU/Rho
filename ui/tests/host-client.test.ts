@@ -79,15 +79,10 @@ afterEach(() => { for (const host of clients.splice(0)) host.stopReads(); vi.cle
 
 it.each([
   ["Host health", (host: HostClient) => host.info()],
-  ["Agent connections", (host: HostClient) => host.agentConnection()],
-  ["component conversations", (host: HostClient) => host.componentQuery({ project_root: "/project", query: { kind: "conversations", after: null, limit: 32 } })],
-  ["handoff receipts", (host: HostClient) => host.agentHandoffQuery({ project_root: "/project", window: { window_id: "w", incarnation: "i" }, query: { kind: "receipt", request_id: "handoff" } })],
-  ["component source search", (host: HostClient) => host.componentSourceSearch({ project_root: "/project", window: { window_id: "w", incarnation: "i" }, session: null, text: "", source: "plots", limit: 10 })],
   ["application state", (host: HostClient) => host.readState("/project", "studio")],
   ["scientific query", (host: HostClient) => host.query("/project", "workspace.snapshot")],
   ["operation record", (host: HostClient) => host.getOperation("/project", "operation-1")],
   ["event page", (host: HostClient) => host.subscribe("/project", 100)],
-  ["R probe", (host: HostClient) => host.probeR({ executable: "/R", ark: "/ark" })],
 ])("bounds %s reads to ten seconds without retrying transport", async (_label, read) => {
   const fetch = vi.fn((_url: unknown, options?: RequestInit) => pendingRead(options?.signal));
   vi.stubGlobal("fetch", fetch);
@@ -157,41 +152,6 @@ it("propagates malformed JSON and HTTP failures with no implicit retry and relea
   await expect(host.subscribe("/project", 10)).rejects.toThrow("not visible");
   expect(fetch).toHaveBeenCalledTimes(2);
   expect(vi.getTimerCount()).toBe(0);
-});
-
-it("routes full draft/base synchronization through the dedicated application bridge boundary only", async () => {
-  const fetch = vi.fn(async (_url: unknown, _options?: RequestInit) => response({ id: "frame", ok: true, result: { kind: "synced", data: {} } })); vi.stubGlobal("fetch", fetch);
-  const host = client(), text = "x".repeat(512 * 1024), window = { window_id: host.windowId, incarnation: "incarnation" };
-  await host.applicationBridge("/project", { kind: "sync", session: { window, bridge_token: "test-only-bridge-token" }, sync_id: "large-draft-sync", changes: { context: null, removed_documents: [], documents: [{ expected_version: null, expected_selection_version: null,
-    document: { document_id: "document", version: "draft-version", path: "large.R", text, base_text: text, base_hash: `sha256:${"0".repeat(64)}`, selection: { anchor: 0, head: 0, version: "selection-version" }, readonly_reason: null } }] } });
-  expect(fetch.mock.calls[0][0]).toBe("/api/application/bridge"); const options = fetch.mock.calls[0][1] as RequestInit;
-  expect(new TextEncoder().encode(String(options.body)).length).toBeGreaterThan(272 * 1024);
-  expect(JSON.parse(String(options.body))).toMatchObject({ project_root: "/project", frame: { request: { method: "application_bridge", params: { kind: "sync", sync_id: "large-draft-sync" } } } });
-  expect(options.headers).toMatchObject({ Authorization: "Bearer test-only-token", "X-Rho-Studio-Window": host.windowId });
-  await host.applicationControl("/project", { window, request_id: "ordinary-control", action: { kind: "open_view", view_type: "files", view_id: null, expected_context_version: "context" } }); expect(fetch.mock.calls[1][0]).toBe("/api/host");
-  await host.invoke("/project", invocation, true); expect(fetch.mock.calls[2][0]).toBe("/api/host");
-});
-
-it("prepares masked Codex and generic MCP configuration only for this Workbench origin", () => {
-  const host = client(), data = { project_root: "/project", endpoint: `${location.origin}/mcp`, suggested_server_name: "rho_12345", observed_at_ms: 1, active_sessions: 0, sessions: [], history_truncated: false };
-  const preview = host.agentConfiguration(data, "codex", true);
-  expect(preview).toContain("[mcp_servers.rho_12345]");
-  expect(preview).not.toContain("test-only-token");
-  expect(host.agentConfiguration(data, "codex", false)).toContain('Authorization = "Bearer test-only-token"');
-  expect(JSON.parse(host.agentConfiguration(data, "mcp", false))).toEqual({ transport: "streamable-http", url: data.endpoint, headers: { Authorization: "Bearer test-only-token" } });
-  for (const endpoint of ["https://foreign.example/mcp", `${location.origin}/mcp#token=bad`, `${location.origin}/api/host`]) {
-    expect(() => host.agentConfiguration({ ...data, endpoint }, "codex", false)).toThrow("does not belong");
-  }
-  expect(() => host.agentConfiguration({ ...data, suggested_server_name: 'rho_12345]\nmalicious = "x"' }, "codex", false)).toThrow();
-});
-
-it("retains structured component failures without reducing recovery decisions to HTTP status", async () => {
-  const diagnostic = { code: "busy", message: "A model test is already running", continuation: "inspect_original", next_reads: [] };
-  vi.stubGlobal("fetch", vi.fn(async () => response({ error: "legacy detail", diagnostic, submission: "rejected", request_id: "new-test", existing_request_id: "original-test" }, false, 429)));
-  await expect(client().componentModelTest({ project_root: "/study", window: { window_id: "w", incarnation: "i" }, request_id: "new-test", model_settings_version: 1, kind: "connection" })).rejects.toMatchObject({
-    message: diagnostic.message, diagnostic, status: 429, submission: "rejected", requestId: "new-test", existingRequestId: "original-test",
-  });
-  expect(fetch).toHaveBeenCalledTimes(1);
 });
 
 it('keeps a test selection across refresh without replacing the parent window or credentials', async () => {
