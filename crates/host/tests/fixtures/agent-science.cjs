@@ -82,6 +82,17 @@ async function prompt(message) {
   const stopped = pending !== id;
   if (!stopped) {
     assert.deepEqual(await rpc('tools/call', {name:'rho_call', arguments:invocation}), original);
+    const history = path.join(cwd, 'native-science-history.json');
+    if (fs.existsSync(history)) {
+      const {messages} = JSON.parse(fs.readFileSync(history, 'utf8'));
+      assert.ok(Number.isInteger(messages) && messages > 0 && messages <= 120);
+      for (let index = 1; index <= messages; index++) {
+        send({jsonrpc:'2.0', method:'session/update', params:{sessionId:session, update:{sessionUpdate:'agent_message_chunk', content:{type:'text', text:`History sample ${String(index).padStart(3, '0')} 中文`}}}});
+        // Distinct native activity separates adjacent ACP message chunks. This
+        // reports local fixture activity and never issues another scientific call.
+        send({jsonrpc:'2.0', method:'session/update', params:{sessionId:session, update:{sessionUpdate:'tool_call', toolCallId:`history-${index}`, title:`Local history marker ${index}`, status:'completed'}}});
+      }
+    }
     send({jsonrpc:'2.0', method:'session/update', params:{sessionId:session, update:{sessionUpdate:'agent_message_chunk', content:{type:'text', text:'Original scientific result observed 中文'}}}});
     result(id, {stopReason:'end_turn'});
     pending = null;

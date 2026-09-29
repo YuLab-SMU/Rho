@@ -127,7 +127,9 @@ Once the combined package is current, run the existing real-R runner with
 `RHO_ARK` and `RHO_R_HOME`. This mode never invokes Cargo: `agent-workspace.spec.ts`
 uses the current Host, ordinary Agent/R packages and a local ACP peer. It checks
 browser attachment capture, lost import receipts, one original Send, real R work
-and reload during that work. It does not establish external-model quality or Host
+and reload during that work. It also pages a long native observation history,
+keeps its earlier reading position through background refreshes and returns to
+the latest messages without another Send. It does not establish external-model quality or Host
 restart recovery. A listed/written browser case is not a passing native result.
 
 ### Status discipline

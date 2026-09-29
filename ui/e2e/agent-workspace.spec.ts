@@ -35,13 +35,14 @@ test.beforeAll(async () => {
   const agentPackage = verifyAgentBuild(process.env.RHO_AGENT_PLUGIN_PACKAGE!);
   directory = realpathSync(mkdtempSync(join(tmpdir(), 'rho-agent-window-'))); project = join(directory, 'project'); mkdirSync(project);
   const nativeBin = join(directory, 'native-bin'); mkdirSync(nativeBin);
+  const nativeHome = join(directory, 'native-home'); mkdirSync(nativeHome);
   writeFileSync(join(nativeBin, 'rho-science-fixture'), 'disposable');
   copyFileSync(resolve('../crates/host/tests/fixtures/agent-science.cjs'), join(nativeBin, 'kimi')); chmodSync(join(nativeBin, 'kimi'), 0o700);
   const database = join(directory, 'state.sqlite');
   const snapshot = (path: string) => JSON.parse(execFileSync(binary, ['--database', database, 'plugins', 'snapshot', path, '--target', 'aarch64-apple-darwin'], { encoding: 'utf8', timeout: 90000, killSignal: 'SIGKILL' })).result;
   const sources = { agent: snapshot(agentPackage), r: snapshot(realpathSync(process.env.RHO_R_PLUGIN_PACKAGE!)) };
   host = spawn(binary, ['--database', database, '--project', project, 'workbench'], {
-    stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, PATH: nativeBin + delimiter + process.env.PATH },
+    stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, PATH: nativeBin + delimiter + process.env.PATH, KIMI_CODE_HOME: nativeHome },
   });
   url = new URL(await new Promise<string>((done, reject) => {
     let output = '', errors = ''; const timer = setTimeout(() => reject(Error(`Agent Host startup deadline: ${errors}`)), 60000);
@@ -92,6 +93,7 @@ test('ordinary Agent attachments and one original Send reach real R; reload pres
   const task = await frame.getByLabel('Select task', { exact: true }).inputValue();
   const detail = () => nativeQuery('agent.native.task', { task_id: task });
   const prompt = 'Run the authorized R counter once, using the selected attachments 中文';
+  writeFileSync(join(project, 'native-science-history.json'), JSON.stringify({ messages: 120 }));
   await composer.fill(prompt);
   const large = Buffer.alloc(8 * 1024 * 1024, 'R'), small = Buffer.from('原始附件 Ω\n');
   writeFileSync(join(project, 'native-science-attachments.json'), JSON.stringify([large, small].map(bytes => ({ mime_type: 'text/plain', bytes: bytes.length, sha256: hash(bytes) }))));
@@ -148,8 +150,33 @@ test('ordinary Agent attachments and one original Send reach real R; reload pres
   expect((await sessionState()).session_id).toBe(session); expect(await executions()).toHaveLength(1);
   await expect(composer).toHaveValue(next);
   await page.screenshot({ path: info.outputPath('agent-native-result.png') });
+  // Query the real Agent store after reopening; the first page must be bounded.
+  await page.reload();
+  const transcript = frame.getByRole('log', { name: 'Agent conversation' });
+  await expect(transcript).toContainText('Original scientific result observed 中文');
+  await expect(transcript).not.toContainText('History sample 001 中文');
+  await frame.getByRole('button', { name: 'Earlier messages', exact: true }).click();
+  await frame.getByRole('button', { name: 'Earlier messages', exact: true }).click();
+  await expect(transcript).toContainText('History sample 001 中文');
+  const first = transcript.locator('[data-event]').filter({ hasText: 'History sample 001 中文' });
+  await first.scrollIntoViewIfNeeded();
+  const position = await first.evaluate(element => element.getBoundingClientRect().top);
+  // Observe two actual background task refreshes before checking the anchor.
+  for (let i = 0; i < 2; i++) await page.waitForResponse(response => {
+    if (!response.url().endsWith('/api/plugin-view')) return false;
+    const body = response.request().postDataJSON()?.message?.body;
+    return body?.type === 'query' && body.capability?.id === 'agent.native.task';
+  });
+  expect(Math.abs(await first.evaluate(element => element.getBoundingClientRect().top) - position)).toBeLessThan(2);
+  await page.screenshot({ path: info.outputPath('agent-native-history.png') });
+  await frame.getByRole('button', { name: 'Latest messages', exact: true }).click();
+  await expect(transcript).toContainText('Original scientific result observed 中文');
+  await expect(transcript).not.toContainText('History sample 001 中文');
+  await expect(composer).toHaveValue(next);
+  expect(await executions()).toHaveLength(1);
   writeFileSync(info.outputPath('agent-native-result.json'), JSON.stringify({ status: 'passed', build_mode: agentBuildMode(process.env.RHO_AGENT_PLUGIN_PACKAGE!), original_send: evidence.invocation.send_request,
-    child: childId, native_session: nativeSession, r_session: session, assets: saved.assets.map((a: any) => ({ name: a.name, bytes: a.bytes, sha256: a.sha256 })),
+    child: childId, native_session: nativeSession, r_session: session, cached_history_messages: 120,
+    assets: saved.assets.map((a: any) => ({ name: a.name, bytes: a.bytes, sha256: a.sha256 })),
     limits: ['Local ACP fixture, no external model', 'Browser reload, not Host restart', 'No installation or publication'],
   }, null, 2));
   completed = true;
