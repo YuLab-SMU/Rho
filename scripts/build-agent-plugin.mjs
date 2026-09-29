@@ -11,6 +11,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export function agentPluginBuildEnvironment() {
   const installed = name => fs.realpathSync(execFileSync('rustup', ['which', name], {cwd: root, encoding: 'utf8'}).trim());
   return {...process.env, RHO_PLUGIN_CARGO: installed('cargo'), RUSTC: installed('rustc'), RUSTDOC: installed('rustdoc'),
+    RHO_PLUGIN_NODE_MODULES: path.join(root, 'ui/node_modules'),
     CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '2', CARGO_TARGET_DIR: path.join(root, 'target')};
 }
 export function buildAgentPlugin(destination) {

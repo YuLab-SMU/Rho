@@ -30,7 +30,7 @@ written deletion condition. Internal pieces are not reported as milestones.
 | # | Milestone (user flow) | Replaces / deletes | State |
 | --- | --- | --- | --- |
 | M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Ordinary scientific flow verified; default entry implemented, native/browser checks pending; delivery remains |
-| M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Backend done; view not started |
+| M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Native view source and renderer checked; combined native/Host path and attachments pending |
 | M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Same-instance lifecycle recovery missing; not verified |
 | M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Not started |
 | M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Branch checkpoint via Agent verified; Studio UI not started |
@@ -99,8 +99,22 @@ Implemented in `plugins/agent` (public APIs/SDK only, no private core imports):
   original receipt; repeats observe the original. Inline attachments stay ≤ 524288
   encoded bytes per Control.
 
-Not done: browser file capture/staging, ordinary Agent views, contributed context
-and component input/continuation, actual Host restart recovery, Studio Agent flow.
+The ordinary native-task view is implemented in source: task selection and
+creation, model selection, draft CAS/conflict handling, explicit tool selection,
+Send/Stop, native permissions and original-request inspection. Its independent UI
+build and 12 model cases pass. The production UI also passes a synthetic public
+MessagePort browser fixture (opaque iframe, IME Enter, task-switch saving, one Send,
+next draft, reload and close without Stop); 960/440/320/220 px screenshots were
+inspected. Evidence: `target/plugin-refactor/agent-view-results.json`.
+This does **not** establish combined native/Host acceptance: native manifest
+regeneration, backend checks and activation of the new combined package remain
+pending behind the current serial build. The checked-in `plugin.json` still
+describes the prior backend-only package until regeneration. No new Agent native
+package was built for the frontend iterations.
+
+Not done: browser file capture/staging, Rho tasks/settings and complete history
+in the ordinary Agent view, contributed context and component input/continuation,
+actual Host restart recovery, Studio Agent flow.
 Synthetic peer tests for Process/Remote/Environment do not establish actual
 execution through those plugins.
 

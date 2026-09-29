@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Agent</title></head>
+<body><main id="agent" aria-label="Agent panel">
+  <aside id="task-rail" aria-label="Project tasks"><header><strong>Tasks</strong></header><nav id="task-list"></nav></aside>
+  <section class="conversation">
+    <header class="task-header"><select id="task-selector" aria-label="Select task"><option value="">Choose a task</option></select>
+      <button id="new-task" popovertarget="new-menu" aria-label="New task">New task</button>
+      <div id="new-menu" popover><button data-provider="codex">Codex</button><button data-provider="kimi">Kimi Code</button><button data-provider="deepseek">DeepSeek Harness</button></div>
+      <button id="task-actions" popovertarget="actions-menu" aria-label="Task actions">•••</button>
+      <div id="actions-menu" popover><button id="rename-task">Rename</button><button id="archive-task">Archive</button><button id="show-details">Session details</button></div>
+    </header>
+    <div class="task-state"><span id="task-state">Choose or create a task</span><button id="take-over" hidden>Take over</button><button id="resume" hidden>Resume</button></div>
+    <section id="session-details" hidden aria-label="Agent session details"></section>
+    <div id="transcript" role="log" aria-label="Agent conversation"><p class="empty">Your conversation appears here.</p></div>
+    <div id="permissions" aria-label="Agent permissions" hidden></div>
+    <div id="recovery" hidden><span id="recovery-status">An original request needs inspection.</span><button id="inspect-original">Check status</button><button id="continue-original" hidden>Continue original request</button></div>
+    <div id="draft-conflict" hidden><span>The saved draft changed. Your edits are retained.</span><button id="keep-draft">Keep my draft</button><button id="use-draft">Use saved draft</button></div>
+    <div id="error" role="alert" hidden></div>
+    <footer class="composer"><textarea id="message" rows="3" maxlength="32768" aria-label="Agent message" placeholder="Ask about your work…" disabled></textarea>
+      <div class="composer-tools"><button id="tools" popovertarget="tools-menu">Tools</button><div id="tools-menu" popover></div>
+        <select id="model" aria-label="Agent model"></select><button id="send" class="primary" aria-label="Send message" disabled>Send</button><button id="stop" hidden>Stop Agent</button></div>
+      <div class="composer-meta"><span id="draft-status"></span><button id="save-draft" hidden>Save draft</button><button id="archived">Archived tasks</button></div>
+    </footer>
+  </section>
+  <dialog id="rename-dialog"><form id="rename-form"><label>Task title<input id="title" maxlength="160" required></label><div><button type="button" id="cancel-rename">Cancel</button><button class="primary">Save title</button></div></form></dialog>
+</main><script type="module" src="/src/main.ts"></script></body></html>

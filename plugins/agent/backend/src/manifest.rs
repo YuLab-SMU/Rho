@@ -22,6 +22,7 @@ pub fn is_mutation(id: &str) -> bool {
     matches!(
         id,
         "agent.native.command"
+            | "agent.native.discover"
             | "agent.model.create"
             | "agent.model.draft"
             | "agent.model.update"
@@ -58,7 +59,9 @@ fn capability(
     CapabilityContribution {
         capability: key(id), kind,
         title: title.into(),
-        description: if id == "agent.native.command" {
+        description: if id == "agent.native.discover" {
+            "Explicitly inspect one installed native Agent and its model catalog in this instance's project. May start and close a bounded discovery CLI; does not install software, start a model turn or change an existing task. Opening a view and reading tasks do not perform discovery. Repeated original Operations only observe their original result."
+        } else if id == "agent.native.command" {
             "Admit a native Agent command with the original caller and task generation. Send may select exact ordinary-plugin query/Operation tools under existing grants; immutable manifests supply their contracts. Retains the original parent until the native turn and accepted scientific children settle. Identical requests only observe original receipts. Tool retries require the same Send and semantic request identity. Does not install an Agent. Attachment bytes are excluded and contributed context is not yet composed."
         } else if id == "agent.native.assets.import" {
             "Import an exact controlled resource up to 8 MiB into a native task under its current controller. Reads bounded granted chunks and verifies the complete digest before admission. Retains the original resource identity atomically with its receipt; retries only observe that receipt without reading or importing again. Does not start an Agent or journal attachment bytes."
@@ -84,13 +87,13 @@ fn capability(
         input_schema: input, output_schema: output, examples: vec![example],
         recovery_schema: json!({"type":"object","additionalProperties":false,"properties":{"code":{"type":"string"}},"required":["code"]}),
         required_scopes: if id == "agent.native.assets.import" { ["application.control".into(), "plugins.read".into(), "resources.read".into()].into() } else if operation || control { ["application.control".into(), "plugins.read".into()].into() } else if matches!(id, "agent.model.tool.operation" | "agent.native.tool.operation") { ["application.read".into(), "operation.read".into()].into() } else { ["application.read".into()].into() },
-        effects: if id == "agent.native.command" { ["agent.native.command".into()].into() } else if matches!(id, "agent.native.assets.upload" | "agent.native.assets.import") { ["agent.assets".into()].into() } else if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
+        effects: if id == "agent.native.discover" { ["agent.native.discovery".into()].into() } else if id == "agent.native.command" { ["agent.native.command".into()].into() } else if matches!(id, "agent.native.assets.upload" | "agent.native.assets.import") { ["agent.assets".into()].into() } else if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
         cancellation: CancellationSupport::Unsupported, preflight: None,
     }
 }
 pub fn manifest() -> PluginManifest {
     let conversation = schema_for!(ComponentAgentConversation).to_value();
-    PluginManifest {
+    let mut manifest = PluginManifest {
         protocol_version: PLUGIN_PROTOCOL_VERSION,
         id: PluginId::new("org.rho.agent").unwrap(),
         name: "Agent".into(),
@@ -102,9 +105,16 @@ pub fn manifest() -> PluginManifest {
             files: [
                 PackagePath::new("backend/src/main.rs").unwrap(),
                 PackagePath::new("build.mjs").unwrap(),
+                PackagePath::new("build-ui.mjs").unwrap(),
+                PackagePath::new("index.html").unwrap(),
+                PackagePath::new("src/main.ts").unwrap(),
             ]
             .into(),
-            lockfiles: [PackagePath::new("Cargo.lock").unwrap()].into(),
+            lockfiles: [
+                PackagePath::new("Cargo.lock").unwrap(),
+                PackagePath::new("dependencies.lock").unwrap(),
+            ]
+            .into(),
             build_instructions: PackagePath::new("BUILD.md").unwrap(),
             build: Some(BuildRecipe {
                 command: vec!["node".into(), "build.mjs".into()],
@@ -142,6 +152,13 @@ pub fn manifest() -> PluginManifest {
             grants
         },
         capabilities: vec![
+            capability(
+                "agent.native.discover",
+                "Inspect an installed native Agent",
+                schema_for!(DiscoverNative).to_value(),
+                schema_for!(rho_agent_api::LocalAgent).to_value(),
+                json!({"provider":"kimi","model":null}),
+            ),
             capability(
                 "agent.native.tool",
                 "Read an original native tool receipt",
@@ -356,7 +373,14 @@ pub fn manifest() -> PluginManifest {
                 json!({"conversation_id":"task-example","expected_version":1}),
             ),
         ],
-        views: vec![],
+        views: vec![ViewContribution {
+            id: ContributionId::new("agent").unwrap(),
+            title: "Agent".into(),
+            entrypoint: PackagePath::new("dist/ui/index.html").unwrap(),
+            state_schema: json!({"type":"object"}),
+            configuration_schema: schema_for!(AgentViewConfiguration).to_value(),
+            resource_kinds: Default::default(),
+        }],
         contexts: vec![],
         backend: Some(BackendEntrypoint {
             executable: PackagePath::new("dist/rho-agent-backend").unwrap(),
@@ -364,5 +388,31 @@ pub fn manifest() -> PluginManifest {
         }),
         configuration_schema: schema_for!(Empty).to_value(),
         default_configuration: json!({}),
+    };
+    // Combined UI/backend packages use the same declared calls as any external
+    // view. These grants expose only this Agent's ordinary task capabilities.
+    for id in [
+        "agent.tasks",
+        "agent.native.command",
+        "agent.native.discover",
+        "agent.native.task",
+        "agent.native.receipt",
+        "agent.native.events",
+        "agent.native.history",
+    ] {
+        let own = manifest
+            .capabilities
+            .iter()
+            .find(|c| c.capability.id.as_str() == id)
+            .unwrap();
+        manifest.requires.push(CapabilityRequirement {
+            capability: own.capability.clone(),
+            scopes: own.required_scopes.clone(),
+        });
     }
+    manifest.requires.push(CapabilityRequirement {
+        capability: key("operation.list_recent"),
+        scopes: ["operation.read".into()].into(),
+    });
+    manifest
 }

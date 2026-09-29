@@ -5,10 +5,13 @@ not install tools, fetch models or contact model providers.
 
 From the Rho source checkout, `node scripts/build-agent-plugin.mjs /absolute/new-directory`
 assembles a source package outside the checkout. It copies the public protocol,
-backend SDK and R media API, rewrites their dependency paths within the package,
+backend and UI SDKs and R media API, rewrites their dependency paths within the package,
 prunes the copied lockfile for the native target and verifies source containment.
 Inside that standalone package, run `node build.mjs` to reproduce `plugin.json`
-and `dist/rho-agent-backend`. All first-party sources, dependency locks, license
+and `dist/rho-agent-backend` plus `dist/ui/`. The UI needs the exact dependencies
+from `dependencies.lock`; select an already installed matching directory with
+`RHO_PLUGIN_NODE_MODULES`. The repository assembler selects `ui/node_modules`.
+The build validates dependency versions and includes third-party notices. All first-party sources, dependency locks, license
 and these instructions are included in the package inventory.
 The generated manifest uses compact JSON so the complete encoded file, including
 its source inventory, remains within the public protocol's 256 KiB read limit.
@@ -51,7 +54,7 @@ model does not cancel or roll back R: its containing Operation waits for already
 issued native work, retaining late results. After disconnect, `agent.model.run.tools`
 and `agent.model.tool.operation` observe original evidence without replay or task
 store updates. Missing evidence remains partial. General context contributions,
-component-model attachments/continuation and ordinary views remain implementation work.
+component-model attachments/continuation remain implementation work.
 
 `agent.native.command` composes the same native task owner, store and scheduler.
 Send can capture explicit ordinary-plugin Query/Operation tools. Enable
@@ -114,3 +117,27 @@ isolated PATH and disposable files; it does not need forwarded Host environment
 variables. These checks do not contact external models, use existing user sessions
 or establish native model quality/full Host restart. Required runtimes must already
 be installed.
+
+## Ordinary Agent view (first slice)
+
+The package source contributes an ordinary isolated `agent` view. It lists and
+controls native tasks through its own public capabilities. Explicit New task
+performs `agent.native.discover` as an Operation, then creates the selected native
+task; opening/reloading the view only reads. Discovery uses the instance project
+and may start a bounded CLI probe; it never installs an Agent or starts a turn.
+The view retains each original Operation input before dispatch, preserves edits
+made during a draft save and the next draft during a running turn, and shows
+explicit original-request inspection/continuation after missing replies. Tools
+are exact selections from the view configuration, captured separately at Send.
+Closing the view does not stop its Agent. Closure refuses an unsaved native draft
+and keeps its local copy; use Save draft or the original-request recovery action.
+
+`node scripts/test-agent-view.mjs --build-ui` checks the model and builds the UI
+in a temporary package using public SDK copies, with no Cargo or native launch.
+`--browser` also checks the production UI in an opaque iframe using a synthetic
+public MessagePort peer: layout, IME, task switching, original Send, next draft,
+reload and closure. Its screenshots and result are under
+`target/plugin-refactor/agent-view-renderer/`. This is renderer evidence, not
+real Host/native acceptance. The combined package manifest and native connection
+need the serial native checks. Rho component tasks, attachments, contributed
+context, settings and full history navigation remain subsequent work.

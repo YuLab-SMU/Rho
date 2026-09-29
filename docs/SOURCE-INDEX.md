@@ -113,6 +113,7 @@ Sources:
 - `crates/process-engine/**`
 - `crates/workbench/src/plugin_test_project_tests.rs`
 - `plugins/**`
+- `scripts/agent-view-renderer.mjs`
 - `scripts/build-agent-plugin.mjs`
 - `scripts/build-console-plugin.mjs`
 - `scripts/build-editor-plugin.mjs`
@@ -129,6 +130,7 @@ Sources:
 - `scripts/build-studio-plugin.mjs`
 - `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
+- `scripts/fixtures/agent-view-container.js`
 - `scripts/fixtures/editor-code.mjs`
 - `scripts/fixtures/editor-controller.mjs`
 - `scripts/fixtures/editor-format.mjs`
@@ -160,6 +162,7 @@ Sources:
 - `scripts/test-agent-plugin-types.mjs`
 - `scripts/test-agent-plugin.mjs`
 - `scripts/test-agent-tool-grants.mjs`
+- `scripts/test-agent-view.mjs`
 - `scripts/test-console-plugin.mjs`
 - `scripts/test-editor-plugin.mjs`
 - `scripts/test-environment-plugin-owner.mjs`
@@ -283,6 +286,10 @@ Checks:
   Applies to: `plugins/*/plugin.json`, `plugins/agent/backend/src/native_core_grants.rs`, `plugins/agent/backend/src/native_grants.rs`, `scripts/test-agent-tool-grants.mjs`.
 - `plugins.agent-types` (L1): `["node","scripts/test-agent-plugin-types.mjs"]`
   Applies to: `plugins/agent/sdk/**`, `scripts/test-agent-plugin-types.mjs`, `sdk/plugin-protocol/**`.
+- `plugins.agent-view` (L1): `["node","scripts/test-agent-view.mjs","--build-ui"]`
+  Applies to: `plugins/agent/build-ui.mjs`, `plugins/agent/dependencies.lock`, `plugins/agent/index.html`, `plugins/agent/package.json`, `plugins/agent/sdk/**`, `plugins/agent/src/**`, `plugins/agent/tsconfig.json`, `scripts/test-agent-view.mjs`, `sdk/plugin-protocol/**`, `sdk/plugin-ui/**`.
+- `plugins.agent-view-browser` (L2): `["node","scripts/test-agent-view.mjs","--browser"]`
+  Applies to: `plugins/agent/build-ui.mjs`, `plugins/agent/dependencies.lock`, `plugins/agent/index.html`, `plugins/agent/package.json`, `plugins/agent/sdk/**`, `plugins/agent/src/**`, `plugins/agent/tsconfig.json`, `scripts/agent-view-renderer.mjs`, `scripts/fixtures/agent-view-container.js`, `scripts/test-agent-view.mjs`, `sdk/plugin-protocol/**`, `sdk/plugin-ui/**`.
 - `plugins.archive-owner` (L1): `["cargo","test","-p","rho-plugins","--test","archive_transfers","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
 - `plugins.archive-ports` (L2): `["cargo","test","-p","rho-host","--test","plugin_archives","--locked"]`

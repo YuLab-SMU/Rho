@@ -348,6 +348,19 @@ impl Metadata {
         host: rho_plugin_sdk::HostCallClient,
     ) -> Result<Value, Failure> {
         match call.binding.capability.id.as_str() {
+            "agent.native.discover" => {
+                let args: crate::native_arguments::DiscoverNative = decode(&call.arguments)?;
+                // This is an admitted Operation, not a task-list query. The
+                // existing adapter bounds discovery and closes its probe CLI.
+                encoded(
+                    rho_agent_client::discover_agent(
+                        args.provider,
+                        Path::new(&self.scope.project),
+                        args.model.as_deref(),
+                    )
+                    .await,
+                )
+            }
             "agent.native.command" => self.native.command(self, call, caller, host).await,
             "agent.model.run" => self.runs.start(self, call, caller, host).await,
             "agent.model.run.stop" => self.runs.stop(self, call, caller),

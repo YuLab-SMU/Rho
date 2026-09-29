@@ -8,9 +8,10 @@ assert.ok(fs.existsSync(path.join(root, 'Cargo.toml')), 'Assemble the standalone
 execFileSync(process.env.RHO_PLUGIN_CARGO ?? 'cargo', ['build', '--locked', '--offline', '-p', 'rho-agent-backend', '--bins'], {cwd: root, stdio: 'inherit'});
 const target = process.env.CARGO_TARGET_DIR ? path.resolve(root, process.env.CARGO_TARGET_DIR) : path.join(root, 'target');
 execFileSync(path.join(target, 'debug/export-agent-manifest'), [path.join(root, 'plugin.json')], {cwd: root, stdio: 'inherit'});
+execFileSync(process.execPath, [path.join(root, 'build-ui.mjs')], {cwd: root, stdio: 'inherit'});
 const walk = directory => fs.readdirSync(directory, {withFileTypes: true}).flatMap(entry => {
   assert.ok(!entry.isSymbolicLink(), 'Package sources must not contain symlinks');
-  if (['target', 'dist', 'node_modules', '.git'].includes(entry.name)) return [];
+  if (['target', 'dist', 'compiled', 'node_modules', '.git'].includes(entry.name)) return [];
   const location = path.join(directory, entry.name);
   return entry.isDirectory() ? walk(location) : [path.relative(root, location).split(path.sep).join('/')];
 });

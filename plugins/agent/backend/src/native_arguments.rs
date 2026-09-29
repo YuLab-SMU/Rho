@@ -37,6 +37,24 @@ native_commands! {
     Decision { control: AgentTaskControl, decision_id: u64, option_id: String },
     RemoveAsset { control: AgentTaskControl, asset_id: String, draft_version: u64 },
 }
+/// Explicit discovery may start a short-lived local CLI, but never a model turn.
+/// The native instance supplies the project directory; callers cannot select it.
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DiscoverNative {
+    pub provider: AgentProvider,
+    #[schemars(length(min = 1, max = 512))]
+    pub model: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AgentViewConfiguration {
+    /// Offered exact tools, selected explicitly in the composer before Send.
+    #[serde(default)]
+    #[schemars(length(max = 16))]
+    pub tools: Vec<AgentNativeToolSelection>,
+}
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct NativeAction {

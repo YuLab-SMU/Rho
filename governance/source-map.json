@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "checks": {
+    "plugins.agent-view": {"command":["node","scripts/test-agent-view.mjs","--build-ui"],"tier":"L1","sources":["plugins/agent/src/**","plugins/agent/index.html","plugins/agent/package.json","plugins/agent/dependencies.lock","plugins/agent/tsconfig.json","plugins/agent/build-ui.mjs","plugins/agent/sdk/**","sdk/plugin-ui/**","sdk/plugin-protocol/**","scripts/test-agent-view.mjs"]},
+    "plugins.agent-view-browser": {"command":["node","scripts/test-agent-view.mjs","--browser"],"tier":"L2","sources":["plugins/agent/src/**","plugins/agent/index.html","plugins/agent/package.json","plugins/agent/dependencies.lock","plugins/agent/tsconfig.json","plugins/agent/build-ui.mjs","plugins/agent/sdk/**","sdk/plugin-ui/**","sdk/plugin-protocol/**","scripts/test-agent-view.mjs","scripts/agent-view-renderer.mjs","scripts/fixtures/agent-view-container.js"]},
     "plugins.agent-backend": {"command":["cargo","test","-p","rho-agent-backend","--test","metadata","--locked"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","plugins/agent/backend/**","crates/plugin-sdk/**"]},
     "plugins.agent-manifest": {"command":["node","plugins/agent/generate-manifest.mjs","--check"],"tier":"L1","sources":["Cargo.toml","Cargo.lock","rust-toolchain.toml","plugins/agent/api/**","plugins/r/api/**","crates/plugin-protocol/**","plugins/agent/plugin.json","plugins/agent/generate-manifest.mjs","plugins/agent/backend/src/manifest.rs","plugins/agent/backend/src/arguments.rs","plugins/agent/backend/src/native_arguments.rs","plugins/agent/backend/src/native_grants.rs","plugins/agent/backend/src/native_core_grants.rs","plugins/agent/backend/src/bin/export-agent-manifest.rs"]},
     "plugins.agent-tool-grants": {"command":["node","scripts/test-agent-tool-grants.mjs"],"tier":"L1","sources":["plugins/*/plugin.json","plugins/agent/backend/src/native_grants.rs","plugins/agent/backend/src/native_core_grants.rs","scripts/test-agent-tool-grants.mjs"]},
@@ -423,6 +425,9 @@
         "scripts/test-agent-plugin-native.mjs",
         "scripts/test-agent-plugin-client.mjs",
         "scripts/test-agent-plugin-types.mjs",
+        "scripts/test-agent-view.mjs",
+        "scripts/agent-view-renderer.mjs",
+        "scripts/fixtures/agent-view-container.js",
         "scripts/test-agent-tool-grants.mjs",
         "scripts/test-environment-plugin-owner.mjs",
         "scripts/build-environment-plugin.mjs",
@@ -444,6 +449,8 @@
         "plugins.agent-store",
         "plugins.agent-store-independent",
         "plugins.agent-backend",
+        "plugins.agent-view",
+        "plugins.agent-view-browser",
         "plugins.agent-manifest",
         "plugins.agent-tool-grants",
         "plugins.agent-host",

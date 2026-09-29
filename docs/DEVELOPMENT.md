@@ -94,6 +94,14 @@ ordinary plugins. Existing fixed-composition browser fixtures now pass the expli
 temporary `--fixed-workspace` flag. Delete that reference path after M2–M4 replace
 the remaining fixed Agent/context/recovery interactions.
 
+For ordinary Agent UI iteration, `node scripts/test-agent-view.mjs --build-ui`
+checks the task/draft model and builds just the UI from public SDK copies. It uses
+the already installed client dependencies and never invokes Cargo. Add `--browser`
+when the interaction settles to check the production UI in an opaque iframe with
+a synthetic public MessagePort peer. That fixture does not replace real combined
+Agent/Host acceptance; native manifest changes still require the serial exporter
+and backend checks before snapshotting the package.
+
 ### Status discipline
 
 `docs/STATUS.md` stays under about 300 lines. Update it at milestone boundaries or

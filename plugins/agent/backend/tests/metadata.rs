@@ -253,7 +253,7 @@ impl Fixture {
 fn manifest_contains_public_bounded_agent_capabilities() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 30);
+    assert_eq!(manifest.capabilities.len(), 31);
     assert_eq!(
         manifest.requires[0].capability,
         manifest::key("views.caller")
@@ -283,6 +283,32 @@ fn manifest_contains_public_bounded_agent_capabilities() {
         .unwrap();
     assert_eq!(key.kind, CapabilityKind::Control);
     assert_eq!(key.input_schema["properties"]["value"]["maxLength"], 16384);
+    assert_eq!(manifest.views.len(), 1);
+    assert_eq!(manifest.views[0].entrypoint.as_str(), "dist/ui/index.html");
+    for id in [
+        "agent.tasks",
+        "agent.native.command",
+        "agent.native.discover",
+        "agent.native.task",
+        "agent.native.events",
+    ] {
+        let own = manifest
+            .capabilities
+            .iter()
+            .find(|cap| cap.capability.id.as_str() == id)
+            .unwrap();
+        assert!(
+            manifest
+                .requires
+                .iter()
+                .any(|grant| grant.capability == own.capability
+                    && grant.scopes == own.required_scopes)
+        );
+    }
+    assert_eq!(
+        manifest::kind("agent.native.discover"),
+        CapabilityKind::Operation
+    );
 }
 
 #[tokio::test]

@@ -10,8 +10,9 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const agentSourceCopies = [
   ['plugins/agent', '.'], ['crates/plugin-protocol', 'public/plugin-protocol'],
   ['crates/plugin-sdk', 'public/plugin-sdk'], ['plugins/r/api', 'public/r-api'],
+  ['sdk/plugin-ui', 'public/plugin-ui'], ['sdk/plugin-protocol', 'public/plugin-protocol'],
 ];
-export const excludedAgentSource = source => /[\\/](?:target|dist|node_modules|\.git)(?:[\\/]|$)/.test(source);
+export const excludedAgentSource = source => /[\\/](?:target|dist|compiled|node_modules|\.git)(?:[\\/]|$)/.test(source);
 
 function treeDigest(directory, entries, exclude = () => false) {
   const hash = createHash('sha256');
