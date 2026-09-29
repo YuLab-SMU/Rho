@@ -92,7 +92,16 @@ where
     R: AsyncRead + Unpin + Send + 'static,
     W: AsyncWrite + Unpin + Send + 'static,
 {
-    serve_with_native_factory(connection, Arc::new(rho_agent_client::LocalNativeAgents)).await
+    let options = crate::metadata::decode::<crate::arguments::AgentConfiguration>(
+        &connection.instance.configuration,
+    )
+    .map_err(|e| e.message)?
+    .native_options()?;
+    serve_with_native_factory(
+        connection,
+        Arc::new(rho_agent_client::ConfiguredNativeAgents(options)),
+    )
+    .await
 }
 /// The same production composition with an explicit native adapter, used by
 /// deterministic framed tests without invoking installed Agents or user keys.

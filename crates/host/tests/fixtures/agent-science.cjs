@@ -133,7 +133,18 @@ lines.on('line', line => {
       const resumed = path.join(cwd, 'native-science-resumes.json');
       const count = fs.existsSync(resumed) ? JSON.parse(fs.readFileSync(resumed, 'utf8')).resumes : 0;
       fs.writeFileSync(resumed, JSON.stringify({session, resumes:count + 1, prompts}));
-    } else if (endpoint) fs.writeFileSync(retainedSession, JSON.stringify({session}));
+    } else if (endpoint) {
+      fs.writeFileSync(retainedSession, JSON.stringify({session}));
+      // Model the native CLI's project-bound metadata inside this fixture's
+      // explicitly configured home. Resume must pass the production preflight.
+      const home = process.env.KIMI_CODE_HOME;
+      if (home) {
+        const directory = path.join(home, 'sessions', 'science-fixture', session);
+        fs.mkdirSync(directory, {recursive:true});
+        fs.writeFileSync(path.join(home, 'workspaces.json'), JSON.stringify({version:1,workspaces:{'science-fixture':{root:cwd}}}));
+        fs.writeFileSync(path.join(directory, 'state.json'), JSON.stringify({version:2,id:session,cwd}));
+      }
+    }
     result(message.id, {sessionId:session, configOptions:config()});
   } else if (message.method === 'session/set_config_option') result(message.id, {configOptions:config()});
   else if (message.method === 'session/prompt') void prompt(message).catch(error => {

@@ -78,6 +78,26 @@ pub trait NativeAgentFactory: Send + Sync {
     async fn recover_process(&self, proof: &NativeProcessProof) -> Result<(), String>;
 }
 pub struct LocalNativeAgents;
+#[derive(Clone, Default)]
+pub struct NativeAgentOptions {
+    /// Explicit native state location; never a model-supplied path or secret.
+    pub kimi_home: Option<PathBuf>,
+}
+pub struct ConfiguredNativeAgents(pub NativeAgentOptions);
+#[async_trait]
+impl NativeAgentFactory for LocalNativeAgents {
+    async fn open(
+        &self,
+        request: NativeOpenRequest,
+    ) -> Result<Arc<dyn NativeAgentSession>, NativeOpenFailure> {
+        ConfiguredNativeAgents(NativeAgentOptions::default())
+            .open(request)
+            .await
+    }
+    async fn recover_process(&self, proof: &NativeProcessProof) -> Result<(), String> {
+        stop_owned_process(proof).await
+    }
+}
 #[derive(Debug, Clone)]
 pub struct NativeOpenFailure {
     pub error: String,
@@ -150,7 +170,7 @@ pub(crate) fn capabilities(
 
 /// Exact Rho-created Kimi session metadata only. No native session enumeration,
 /// imports or historical-format readers. Kimi ACP 0.41 ignores cwd on load.
-fn verify_kimi_project(root: &Path, id: &str) -> Result<(), String> {
+fn verify_kimi_project(root: &Path, id: &str, options: &NativeAgentOptions) -> Result<(), String> {
     if id.is_empty()
         || id.len() > 160
         || !id
@@ -193,8 +213,10 @@ fn verify_kimi_project(root: &Path, id: &str) -> Result<(), String> {
         slug = "workspace".into();
     }
     let hash = format!("{:x}", Sha256::digest(normalized.as_bytes()));
-    let home = std::env::var_os("KIMI_CODE_HOME")
-        .map(PathBuf::from)
+    let home = options
+        .kimi_home
+        .clone()
+        .or_else(|| std::env::var_os("KIMI_CODE_HOME").map(PathBuf::from))
         .or_else(|| {
             std::env::var_os("HOME")
                 .or_else(|| std::env::var_os("USERPROFILE"))
@@ -278,7 +300,7 @@ fn kimi_state_path(home: &Path, root: &Path, derived: &str, id: &str) -> Result<
 }
 
 #[async_trait]
-impl NativeAgentFactory for LocalNativeAgents {
+impl NativeAgentFactory for ConfiguredNativeAgents {
     async fn open(
         &self,
         r: NativeOpenRequest,
@@ -287,9 +309,9 @@ impl NativeAgentFactory for LocalNativeAgents {
         if r.provider == AgentProvider::Kimi
             && let Some(id) = &r.native_session_id
         {
-            verify_kimi_project(&r.root, id)?;
+            verify_kimi_project(&r.root, id, &self.0)?;
         }
-        let rpc = Rpc::spawn(&program, r.provider, &r.root, &r.token).await?;
+        let rpc = Rpc::spawn_with_options(&program, r.provider, &r.root, &r.token, &self.0).await?;
         let init = match initialize(&rpc, r.provider).await {
             Ok(v) => v,
             Err(e) => {
@@ -675,7 +697,7 @@ impl NativeAgentSession for Connection {
                 );
                 bytes += bounded.len();
                 events.push(NativeEvent {
-            usage: None,
+                    usage: None,
                     cursor: 0,
                     key: format!("native:{turn_id}:{item_id}"),
                     request_id: None,

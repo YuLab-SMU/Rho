@@ -96,7 +96,7 @@ test.beforeAll(async () => {
   const snapshot = (path: string, target = 'aarch64-apple-darwin') => JSON.parse(execFileSync(binary, ['--database', database, 'plugins', 'snapshot', path, '--target', target], { encoding: 'utf8', timeout: 90000, killSignal: 'SIGKILL' })).result;
   const sources = { agent: snapshot(agentPackage), r: snapshot(realpathSync(process.env.RHO_R_PLUGIN_PACKAGE!)), editor: snapshot(realpathSync(process.env.RHO_EDITOR_PLUGIN_PACKAGE!)), files: snapshot(realpathSync(process.env.RHO_FILES_PLUGIN_PACKAGE!)) };
   const managerPackage = snapshot(buildManagerPlugin(join(directory, 'manager')), 'ui-web');
-  hostEnvironment = { ...process.env, PATH: nativeBin + delimiter + process.env.PATH, KIMI_CODE_HOME: nativeHome };
+  hostEnvironment = { ...process.env, PATH: nativeBin + delimiter + process.env.PATH };
   const started = await startHost(); host = started.process; url = started.address;
   const info = await fetch(new URL('/api/info', url), { headers: { Authorization: `Bearer ${url.hash.slice(7)}` } }).then(response => response.json());
   for (const id of ['plugins.resume', 'views.reconnect']) expect(info.capabilities.some((item: any) => item.capability.id === id), `Build the current Host before ${id} acceptance`).toBe(true);
@@ -106,7 +106,7 @@ test.beforeAll(async () => {
   session = (await invoke('r.create_session', { binding: await binding(r, 'r.create_session'), arguments: {} })).session_id;
   await activate('files', {});
   editor = await activate('editor', {}); await saveContextSource(sourceText);
-  agent = await activate('agent', {}, [
+  agent = await activate('agent', { kimi_home: nativeHome }, [
     { id: 'plugins.instances', version: 1 }, { id: 'editor.context.search', version: 1 }, { id: 'editor.context.preview', version: 1 },
     { id: 'plugins.inspect', version: 1 }, { id: 'r.execute', version: 2 },
     { id: 'operation.get', version: 1 }, { id: 'plugins.delegated_operation', version: 1 },

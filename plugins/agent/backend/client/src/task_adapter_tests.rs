@@ -2,6 +2,83 @@
 //! never call a provider, read another user's sessions, or start an R runtime.
 use super::*;
 use std::{fs, os::unix::fs::PermissionsExt};
+
+#[test]
+fn configured_kimi_home_checks_only_the_exact_native_session_and_project() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("project");
+    fs::create_dir(&root).unwrap();
+    let home = dir.path().join("native-home");
+    let session = home.join("sessions/fixture/session-one");
+    fs::create_dir_all(&session).unwrap();
+    fs::write(
+        home.join("workspaces.json"),
+        json!({"version":1,"workspaces":{"fixture":{"root":root}}}).to_string(),
+    )
+    .unwrap();
+    fs::write(
+        session.join("state.json"),
+        json!({"version":2,"id":"session-one","cwd":root}).to_string(),
+    )
+    .unwrap();
+    let options = NativeAgentOptions {
+        kimi_home: Some(home),
+    };
+    verify_kimi_project(&root, "session-one", &options).unwrap();
+    assert!(verify_kimi_project(&root, "missing-session", &options).is_err());
+    fs::write(
+        session.join("state.json"),
+        json!({"version":2,"id":"session-one","cwd":"another-project"}).to_string(),
+    )
+    .unwrap();
+    assert!(
+        verify_kimi_project(&root, "session-one", &options)
+            .unwrap_err()
+            .contains("different project")
+    );
+    fs::remove_file(session.join("state.json")).unwrap();
+    let outside = dir.path().join("outside.json");
+    fs::write(
+        &outside,
+        json!({"version":2,"id":"session-one","cwd":root}).to_string(),
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(outside, session.join("state.json")).unwrap();
+    assert!(
+        verify_kimi_project(&root, "session-one", &options)
+            .unwrap_err()
+            .contains("escaped")
+    );
+}
+
+#[tokio::test]
+async fn configured_kimi_home_is_local_to_each_native_child() {
+    let dir = tempfile::tempdir().unwrap();
+    let program = dir.path().join("fixture");
+    fs::write(&program, r#"#!/usr/bin/env node
+require('node:readline').createInterface({input:process.stdin}).on('line',line=>{
+const m=JSON.parse(line);process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result:{home:process.env.KIMI_CODE_HOME}})+'\n');
+});
+"#).unwrap();
+    fs::set_permissions(&program, fs::Permissions::from_mode(0o700)).unwrap();
+    let original = std::env::var_os("KIMI_CODE_HOME");
+    for name in ["first-native-home", "second-native-home"] {
+        let home = dir.path().join(name);
+        fs::create_dir(&home).unwrap();
+        let options = NativeAgentOptions {
+            kimi_home: Some(home.clone()),
+        };
+        let rpc = Rpc::spawn_with_options(&program, AgentProvider::Kimi, dir.path(), "", &options)
+            .await
+            .unwrap();
+        assert_eq!(
+            rpc.call("fixture/home", json!({}), 2).await.unwrap()["home"],
+            home.to_string_lossy().as_ref()
+        );
+        rpc.close().await;
+    }
+    assert_eq!(std::env::var_os("KIMI_CODE_HOME"), original);
+}
 async fn fixture() -> (tempfile::TempDir, Arc<Rpc>) {
     let dir = tempfile::tempdir().unwrap();
     let program = dir.path().join("fixture");

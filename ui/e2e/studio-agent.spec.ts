@@ -54,15 +54,15 @@ test.beforeAll(async()=>{
   manifest.requires=manifest.requires.filter((r:any)=>r.capability.id!=='fixture.answer');manifest.name='Agent-assisted report';
   writeFileSync(join(subjectPath,'plugin.json'),JSON.stringify(manifest,null,2));subject=snapshot(subjectPath);
   originalSource=readFileSync(join(subjectPath,'src/index.html'),'utf8');
-  host=spawn(binary,['--database',database,'--project',project,'workbench'],{stdio:['ignore','pipe','pipe'],env:{...process.env,PATH:nativeBin+delimiter+process.env.PATH,KIMI_CODE_HOME:nativeHome}});
+  host=spawn(binary,['--database',database,'--project',project,'workbench'],{stdio:['ignore','pipe','pipe'],env:{...process.env,PATH:nativeBin+delimiter+process.env.PATH}});
   url=new URL(await new Promise<string>((done,reject)=>{
     let output='',errors='';const timer=setTimeout(()=>reject(Error(`Disposable Studio Host startup deadline: ${errors}`)),60000);
     host.stderr!.on('data',b=>errors+=b);host.stdout!.on('data',b=>{output+=b;const match=output.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/);if(match){clearTimeout(timer);done(match[0]);}});
     host.once('exit',code=>{clearTimeout(timer);reject(Error(`Disposable Studio Host exited ${code}: ${errors}`));});
   }));
-  const activate=async(source:any,target:string,alias:string,optional_capabilities:any[]=[]) => (await invoke('plugins.activate',{revision:source.revision,artifact:source.artifacts[0],target,alias,configuration:{},optional_capabilities})).instance.identity;
+  const activate=async(source:any,target:string,alias:string,optional_capabilities:any[]=[],configuration:unknown={}) => (await invoke('plugins.activate',{revision:source.revision,artifact:source.artifacts[0],target,alias,configuration,optional_capabilities})).instance.identity;
   const studioInstance=await activate(studio,'ui-web','studio'),report=await activate(subject,'ui-web','report');
-  agent=await activate(agentSource,'aarch64-apple-darwin','agent',['host.core_contract','plugins.inspect','plugins.branch_head','plugins.source_tree','plugins.read_source','plugins.check_source','plugins.checkpoint','operation.get','plugins.delegated_operation'].map(id=>({id,version:1})));
+  agent=await activate(agentSource,'aarch64-apple-darwin','agent',['host.core_contract','plugins.inspect','plugins.branch_head','plugins.source_tree','plugins.read_source','plugins.check_source','plugins.checkpoint','operation.get','plugins.delegated_operation'].map(id=>({id,version:1})),{kimi_home:nativeHome});
   studioView=await invoke('views.open',{instance:studioInstance,window:windowId,contribution:'studio',configuration:{},state:{}});
   oldView=await invoke('views.open',{instance:report,window:windowId,contribution:'view',configuration:{},state:{text:'Original report note'}});
   const selection=(value:any)=>({plugin:value.plugin,revision:value.revision,artifact:value.artifact,configuration:{},dependencies:{}});

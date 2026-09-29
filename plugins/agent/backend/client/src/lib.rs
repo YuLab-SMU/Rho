@@ -11,7 +11,7 @@ mod protocol_tests;
 mod rpc;
 pub use deepseek::install as install_deepseek_component;
 use rho_agent_api::{
-    AgentClientSession, AgentMessage, AgentModel, AgentProvider, AgentControllerRef, LocalAgent,
+    AgentClientSession, AgentControllerRef, AgentMessage, AgentModel, AgentProvider, LocalAgent,
 };
 use rpc::{Rpc, bounded};
 use serde_json::{Value, json};
@@ -190,6 +190,14 @@ pub async fn discover_agent(
     root: &Path,
     model: Option<&str>,
 ) -> LocalAgent {
+    discover_agent_with_options(provider, root, model, &NativeAgentOptions::default()).await
+}
+pub async fn discover_agent_with_options(
+    provider: AgentProvider,
+    root: &Path,
+    model: Option<&str>,
+    options: &NativeAgentOptions,
+) -> LocalAgent {
     let start = Instant::now();
     let mut result = LocalAgent {
         provider,
@@ -214,7 +222,7 @@ pub async fn discover_agent(
         result.discovery_ms = start.elapsed().as_millis() as u64;
         return result;
     }
-    let rpc = match Rpc::spawn(&path, provider, root, "").await {
+    let rpc = match Rpc::spawn_with_options(&path, provider, root, "", options).await {
         Ok(r) => r,
         Err(e) => {
             result.error = Some(e);

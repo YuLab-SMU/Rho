@@ -157,6 +157,22 @@ impl Rpc {
         root: &Path,
         secret: &str,
     ) -> Result<Arc<Self>, String> {
+        Self::spawn_with_options(
+            program,
+            provider,
+            root,
+            secret,
+            &crate::NativeAgentOptions::default(),
+        )
+        .await
+    }
+    pub async fn spawn_with_options(
+        program: &Path,
+        provider: AgentProvider,
+        root: &Path,
+        secret: &str,
+        options: &crate::NativeAgentOptions,
+    ) -> Result<Arc<Self>, String> {
         let launch = if provider == AgentProvider::Deepseek {
             Some(crate::deepseek::prepare()?)
         } else {
@@ -185,6 +201,11 @@ impl Rpc {
             .kill_on_drop(true);
         if provider == AgentProvider::Codex {
             command.env("RHO_AGENT_MCP_TOKEN", secret);
+        }
+        if provider == AgentProvider::Kimi
+            && let Some(home) = &options.kimi_home
+        {
+            command.env("KIMI_CODE_HOME", home);
         }
         let mut child = command.spawn().map_err(|e| {
             if let Some(launch) = &launch {
@@ -265,8 +286,16 @@ impl Rpc {
                             rpc.changes.notify_waiters();
                         } else if reply.method == "session/prompt" {
                             let mut observer = rpc.observer.lock().unwrap();
-                            if observer.session == reply.session && observer.request == reply.request {
-                                if let Ok(value) = &result { observer.observe_usage("acp.prompt_response", "turn_total", &value["usage"]); }
+                            if observer.session == reply.session
+                                && observer.request == reply.request
+                            {
+                                if let Ok(value) = &result {
+                                    observer.observe_usage(
+                                        "acp.prompt_response",
+                                        "turn_total",
+                                        &value["usage"],
+                                    );
+                                }
                                 observer.finish();
                             }
                         }

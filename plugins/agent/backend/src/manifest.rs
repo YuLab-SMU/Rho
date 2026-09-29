@@ -531,7 +531,7 @@ pub fn manifest() -> PluginManifest {
             executable: PackagePath::new("dist/rho-agent-backend").unwrap(),
             arguments: vec![],
         }),
-        configuration_schema: schema_for!(Empty).to_value(),
+        configuration_schema: schema_for!(AgentConfiguration).to_value(),
         default_configuration: json!({}),
     };
     // Combined UI/backend packages use the same declared calls as any external

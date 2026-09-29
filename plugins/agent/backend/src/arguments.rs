@@ -10,6 +10,73 @@ pub struct Empty {}
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct AgentConfiguration {
+    /// Existing Kimi Code state directory, used for discovery, new sessions and
+    /// exact-project resume. Contains a path only; credentials stay native.
+    #[serde(default)]
+    #[schemars(length(min = 1, max = 4096))]
+    pub kimi_home: Option<String>,
+}
+impl AgentConfiguration {
+    pub fn native_options(&self) -> Result<rho_agent_client::NativeAgentOptions, String> {
+        let kimi_home = self
+            .kimi_home
+            .as_ref()
+            .map(|value| -> Result<std::path::PathBuf, String> {
+                let path = std::path::Path::new(value);
+                if value.len() > 4096 || !path.is_absolute() || !path.is_dir() {
+                    return Err(
+                        "Agent kimi_home must name an existing absolute native directory".into(),
+                    );
+                }
+                path.canonicalize()
+                    .map_err(|_| "Agent kimi_home is unavailable".into())
+            })
+            .transpose()?;
+        Ok(rho_agent_client::NativeAgentOptions { kimi_home })
+    }
+}
+
+#[cfg(test)]
+mod configuration_tests {
+    use super::*;
+    #[test]
+    fn native_configuration_accepts_only_an_existing_absolute_directory() {
+        let parse = |value| serde_json::from_value::<AgentConfiguration>(value);
+        assert!(
+            parse(serde_json::json!({}))
+                .unwrap()
+                .native_options()
+                .unwrap()
+                .kimi_home
+                .is_none()
+        );
+        assert!(parse(serde_json::json!({"environment":{"API_KEY":"not-a-path"}})).is_err());
+        assert!(
+            parse(serde_json::json!({"kimi_home":"relative"}))
+                .unwrap()
+                .native_options()
+                .is_err()
+        );
+        let dir = tempfile::tempdir().unwrap();
+        let config = parse(serde_json::json!({"kimi_home":dir.path()})).unwrap();
+        assert_eq!(
+            config.native_options().unwrap().kimi_home.unwrap(),
+            dir.path().canonicalize().unwrap()
+        );
+        let file = dir.path().join("file");
+        std::fs::write(&file, "native config stays here").unwrap();
+        assert!(
+            parse(serde_json::json!({"kimi_home":file}))
+                .unwrap()
+                .native_options()
+                .is_err()
+        );
+    }
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CredentialRequest {
     #[schemars(length(min = 1, max = 160))]
     pub request_id: String,

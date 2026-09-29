@@ -29,6 +29,7 @@ pub struct Metadata {
     pub(crate) instance: PluginInstance,
     pub(crate) scope: AgentTaskScope,
     pub(crate) grants: Vec<CapabilityRequirement>,
+    native_options: rho_agent_client::NativeAgentOptions,
 }
 
 pub fn now() -> u64 {
@@ -135,7 +136,9 @@ impl Metadata {
         grants: Vec<CapabilityRequirement>,
         factory: Arc<dyn rho_agent_client::NativeAgentFactory>,
     ) -> Result<Self, String> {
-        decode::<Empty>(&instance.configuration).map_err(|e| e.message)?;
+        let native_options = decode::<AgentConfiguration>(&instance.configuration)
+            .map_err(|e| e.message)?
+            .native_options()?;
         for directory in [&environment.project_root, &environment.data_root] {
             let path = Path::new(directory);
             if !path.is_absolute()
@@ -162,6 +165,7 @@ impl Metadata {
             factory,
         );
         Ok(Self {
+            native_options,
             owner,
             native,
             handoffs: rho_agent_owner::handoff::AgentHandoffOwner::new(store.clone()),
@@ -431,10 +435,11 @@ impl Metadata {
                 // This is an admitted Operation, not a task-list query. The
                 // existing adapter bounds discovery and closes its probe CLI.
                 encoded(
-                    rho_agent_client::discover_agent(
+                    rho_agent_client::discover_agent_with_options(
                         args.provider,
                         Path::new(&self.scope.project),
                         args.model.as_deref(),
+                        &self.native_options,
                     )
                     .await,
                 )

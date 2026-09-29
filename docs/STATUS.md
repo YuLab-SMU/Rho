@@ -28,10 +28,10 @@ written deletion condition. Internal pieces are not reported as milestones.
 | # | Milestone (user flow) | Replaces / deletes | State |
 | --- | --- | --- | --- |
 | M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Default entry, real-R browser flow and Rust HTTP checks pass; delivery remains |
-| M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Real Host Native/Rho input, real R, reload and handoff pass within the combined flow; final restart check remains |
-| M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Actual Host/view/record recovery reached; native CLI Resume fails because its home is not configured |
-| M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Text/history, Continue and handoff pass renderer/framed checks; new sources and actual Host acceptance pending |
-| M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Branch checkpoint via Agent verified; Studio request UI/model/renderer checked, combined Host flow pending |
+| M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Combined real Host/browser flow passes: Native/Rho input, attachments, real R, reload, continuation and handoff |
+| M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Graceful Host restart, same instance/view/tasks, original receipts and native session Resume pass without replay |
+| M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Editor input, text/history, Continue and handoff pass real Host/browser checks; additional sources and tool selection remain |
+| M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Combined real Host/browser flow passes: exact-branch Agent checkpoint, explicit build, preview and scenario application |
 | M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Not started |
 
 ### Scientific scenario: current integration
@@ -82,13 +82,14 @@ native current-source run passes all four suspension cases, including publicatio
 conflict (34m11s compilation, 1s tests); the earlier pre-fix failure remains in evidence.
 Host-reopen, workspace and disposable-test Host checks now pass (10 cases);
 public/core generation, client build/check and Manager restore/model checks pass.
-Actual Host restart restores the same Agent instance/view, Native/Rho records,
-attachments and handoff receipt without replay. The combined case still fails
-at native CLI Resume: the isolated backend has no Kimi home. Add explicit
-Agent-owned native directory configuration; do not widen Host environment
-inheritance. `agent-workspace-current-v11.log` retains this failed acceptance.
-Detached tabs now read scoped contribution names; 36 recovery/window checks pass.
-Evidence: `target/plugin-refactor/restart-lifecycle-results.json`. No user Host was replaced or package installed/published.
+Actual graceful Host restart restores the same Agent instance/view, Native/Rho
+records, attachments and handoff receipt without replay. An explicit Agent-owned
+`kimi_home` supplies the same native directory to discovery, launch and exact-session
+Resume without widening Host environment inheritance. The original native session
+resumes with zero prompts; Manager restores R without starting its native runtime.
+The complete browser flow passes in 2.3 minutes; earlier failures remain retained.
+Detached tabs read scoped contribution names; 36 recovery/window checks pass.
+Evidence: `target/plugin-refactor/agent-workspace-current-results.json`. No user Host was replaced or package installed/published.
 
 ### Agent migration: current state
 
@@ -110,16 +111,18 @@ Implemented in `plugins/agent` (public APIs/SDK only, no private core imports):
   the development branch; exact-branch checkpointing through Agent is verified.
   Studio now prepares an ordinary Agent draft with that branch/checkpoint and six
   bounded tools. Model/renderer checks pass for lost view receipts, one-time draft
-  insertion and 1440/960/440/390/220 layouts; combined Host acceptance is pending.
+  insertion and 1440/960/440/390/220 layouts. The real Host/browser flow now passes
+  checkpoint → explicit build → preview → scenario application in 56 seconds. It
+  retains the old instance/other branch; screenshots were inspected. Toolbar actions wait for initialization.
 - `agent.native.assets.import` reads a controlled resource up to 8 MiB through an
   explicit `resources.read` grant, checks ranges/length/digest, and retains the
   original receipt; repeats observe the original. Inline attachments stay ≤ 524288
   encoded bytes per Control.
-
-Native/Rho captures exact previews and bounded history without inheriting tool authority;
-Check tool outcomes and Continue retain exact providers and reuse confirmed results.
+Native/Rho captures previews and bounded history without inheriting tool authority;
+Check tool outcomes and Continue retain providers and reuse confirmed results.
 Ordinary handoff source/target/receipt/append APIs now reuse the atomic draft owner in source,
-with exact view control and reference checks. Renderer and framed native checks pass; actual Host acceptance remains.
+with exact view control and reference checks. Renderer, framed native and actual
+Host/browser checks pass, including lost receipts recovered after Host restart.
 The ordinary native/Rho task view is implemented in source: shared task selection,
 creation, draft CAS/conflicts, Send/Stop, explicit control and original-request
 inspection. Native tasks also support model/tool selection, permissions and
@@ -130,37 +133,34 @@ Stable view/controller identities survive private connection rotation. Rho setti
 provide key save/removal, versioned configuration and explicit synthetic tests;
 keys stay out of saved view state and Operations. Rho now submits text and contributed
 references, attachments and explicit continuation in source; tool selection remains to compose.
-Rho uploads preserve original identity through lost replies/reselection; text ≤32 KiB and PNG/JPEG ≤2 MiB are captured before Send. The five new framed backend cases pass; actual Host acceptance remains pending.
+Rho uploads preserve original identity through lost replies/reselection; text ≤32 KiB and PNG/JPEG ≤2 MiB are captured before Send. The five framed backend cases and the complete actual Host/browser flow pass.
 The UI build and 97 model cases (29 native, 13 settings, 29 Rho, 15 context, 11 handoff) pass, as does
 the synthetic public MessagePort browser fixture: opaque iframe, IME Enter, task
 switching, native/Rho attachment recovery and retained context, next drafts, 8 MiB selection, lost creation/Send/import/key
 replies, actual reload, history and close without Stop. Settings/rename work without
 form permission. Continue preserves next drafts through lost replies/reload and original context
 at 960/440/220 px. Handoff also preserves edited text, references and lost receipts at those widths.
-Current checks pass 64 framed backend and 32 native owner/store cases, covering
-context/history/Continue, handoff, 8 MiB uploads, Rho attachments and reopen.
-Earlier interrupted attempts remain incomplete evidence, not passes.
-The current 45-capability manifest includes all attachment ports. Generated schema
-annotations/local definition names are compacted without weakening validation;
-the full 648-file source manifest is 246,732 bytes, within the 256 KiB limit.
-A current workspace-built Agent package and its reuse receipt are available.
-The real Host exposed and fixed two integration gaps: the picker now reads
-instance observations, and a view calling its exact own backend retains selected
+Current checks pass 64 framed backend, 33 native client, one configuration and
+32 native owner/store cases: context/history/Continue, handoff, uploads and reopen.
+Earlier interrupted attempts remain incomplete evidence, not passes. The 45-capability manifest includes all attachment ports; schema annotations/local
+names are compacted without weakening validation. The 648-file source manifest
+is 247,004 bytes, within the 256 KiB limit.
+A current workspace-built Agent package and reuse receipt are available. The picker
+reads instance observations; a view calling its exact own backend retains selected
 activation scopes. Reverse calls still require individual grants; foreign
 providers, current caller restrictions and Query-only boundaries stay enforced.
-Eleven Host delegation/test-project checks pass, including the Query refusal.
-Task selection now updates immediately, preventing handoff from using the prior
-task while its selection is saving. The combined case is not yet a full pass.
-
+Eleven Host delegation/test-project checks pass, including Query refusal. Immediate
+task selection prevents handoff from using the prior task while saving. Native
+Resume evidence covers Kimi through a local ACP peer; no other provider or abrupt
+crash recovery claim. Post-restart records retain the original real R result.
 R declares observed Help topics and saved HTML contexts with exact-copy/file
 checks and bounded journal paging. All 12 context tests and the real-R Host case
 pass, including rejection of undeclared inclusion fields. The complete R package
 manifest uses compact JSON and is checked before native compilation. Manager
 captures Viewer read grants in new scenarios; picker/grant/type checks pass.
-Not done: native CLI Resume after Host restart and Studio browser acceptance;
-annotations/component input, Help/Viewer picker integration and Rho tool selection.
+Not done: annotations/component input, Help/Viewer picker integration and Rho tool
+selection. Studio evidence: `target/plugin-refactor/studio-agent-current-results.json`.
 Synthetic peers for Process/Remote/Environment do not establish execution through those plugins.
-
 Agent evidence in `target/plugin-refactor/`: `agent-current-native-results.json`, `agent-handoff-ui-results.json`, `rho-continue-results.json`, `agent-assets-results-v3.json` and
 `agent-assets-combined-v1.json` (20 owner/35 store/42 framed cases; five frozen-Host
 cases including real 8 MiB import), `agent-core-combined-v2.json` (management/checkpoint),

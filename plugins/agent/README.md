@@ -146,6 +146,14 @@ both project and principal. Missing-file observations do not create a directory.
 The temporary Host adapter supplies the existing user configuration location. Raw
 keys are never included in task metadata, source revisions, diagnostics or archives.
 
+Ordinary instances may configure `kimi_home` as an existing absolute Kimi Code
+state directory. The Agent passes it only to Kimi discovery/session processes and
+uses that same directory for exact-project resume checks. It does not modify the
+Host environment or copy native credentials into configuration or task records.
+Without this setting the client uses its existing native environment lookup;
+an isolated backend may have no such environment and will refuse resume. The
+directory and original session metadata must remain available after Host restart.
+
 `CredentialFile::put_for_request` atomically stores the secret and its scoped
 original request reference in that same credential file. Repeating identical
 input returns the original reference; changed reuse is refused. Read-only
