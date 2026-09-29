@@ -78,6 +78,7 @@ pub(crate) async fn resolve(
         &["plugins.read".into()].into(),
     )?;
     let mut captures = vec![];
+    let mut images = vec![];
     for selection in selections {
         if selection.source != "plugin" {
             return Err(Failure::invalid(
@@ -160,21 +161,32 @@ pub(crate) async fn resolve(
         preview
             .validate()
             .map_err(|error| Failure::invalid(&error.to_string()))?;
-        if preview.item.reference != reference
-            || preview.text.len() > 16384
-            || preview.truncated
-            || !preview.resources.is_empty()
-        {
+        if preview.item.reference != reference || preview.text.len() > 16384 || preview.truncated {
             return Err(Failure::invalid(
-                "The selected context is changed, incomplete or needs unsupported resource input. Choose a complete text inclusion; the draft is retained",
+                "The selected context is changed or incomplete; choose a complete inclusion. The draft is retained",
             ));
         }
+        let captured_images = crate::context_images::capture(
+            metadata,
+            call,
+            host,
+            &reference.provider,
+            &preview.resources,
+            2 - images.len(),
+        )
+        .await?;
+        let image_refs = captured_images
+            .iter()
+            .map(|(image, _)| image.clone())
+            .collect();
+        images.extend(captured_images);
         captures.push(AgentNativeContextSnapshot {
             selection: selection.clone(),
             title: preview.item.title,
             description: preview.item.description,
             text: preview.text,
             data: preview.data,
+            images: image_refs,
         });
         if serde_json::to_vec(&captures)
             .map_err(|error| Failure::invalid(&error.to_string()))?
@@ -198,6 +210,13 @@ pub(crate) async fn resolve(
         return Err(Failure::invalid(
             "The caller changed before context admission; the draft is retained",
         ));
+    }
+    if !images.is_empty() {
+        metadata
+            .native
+            .owner
+            .store
+            .put_agent_context_images(&metadata.scope, &images)?;
     }
     Ok(captures)
 }

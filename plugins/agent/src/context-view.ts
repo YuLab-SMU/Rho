@@ -1,6 +1,6 @@
 import type { AgentContextSelection } from '../sdk/index.js';
 import type { ContextItem, ContextPreview, JsonValue } from '../public/plugin-protocol/index.js';
-import { ContextPicker, type ContextSource } from './context-model.js';
+import { ContextPicker, contextInputIssue, type ContextSource } from './context-model.js';
 import { same, type Client } from './operations.js';
 import type { NativeAgentModel } from './native-model.js';
 
@@ -8,6 +8,9 @@ type DraftOwner = Pick<NativeAgentModel, 'draft' | 'edit'>;
 export function mountContext(client: Client, model: NativeAgentModel, save: (task: string, kind: 'native' | 'rho') => void) {
   const get = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const dialog = get<HTMLDialogElement>('context-dialog'), picker = new ContextPicker(client);
+  const imageArea = document.createElement('div'); imageArea.className = 'context-images';
+  get('context-preview-area').append(imageArea);
+  let imageUrls: string[] = [];
   const sourceSelect = get<HTMLSelectElement>('context-source'), inclusionSelect = get<HTMLSelectElement>('context-inclusion');
   let task: string | null = null, editable = false, blocked = false, disposed = false, busy = false, epoch = 0;
   let target: string | null = null, inspecting = false, source: ContextSource | null = null, item: ContextItem | null = null;
@@ -21,7 +24,7 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
     get<HTMLButtonElement>('context-search-button').disabled = busy || inspecting || !source;
     get<HTMLButtonElement>('context-more-sources').disabled = busy;
     get<HTMLButtonElement>('context-more-items').disabled = busy;
-    get<HTMLButtonElement>('context-add').disabled = busy || inspecting || !preview || preview.truncated || !!preview.resources.length || !editable || blocked || target !== task || targetOwner !== draftOwner;
+    get<HTMLButtonElement>('context-add').disabled = busy || inspecting || !preview || !!contextInputIssue(preview) || !editable || blocked || target !== task || targetOwner !== draftOwner;
     for (const button of get('context-items').querySelectorAll<HTMLButtonElement>('button')) button.disabled = busy;
   }
   function run(work: (current: () => boolean) => Promise<void>) {
@@ -30,17 +33,27 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
       if (ticket === epoch && !disposed) { get('context-error').textContent = error instanceof Error ? error.message : String(error); get('context-error').hidden = false; }
     }).finally(() => { if (ticket === epoch && !disposed) { busy = false; controls(); } });
   }
-  function clearPreview() { preview = null; get('context-preview').textContent = ''; get('context-preview-note').textContent = ''; controls(); }
+  function clearPreview() { for (const url of imageUrls) URL.revokeObjectURL(url); imageUrls = []; imageArea.replaceChildren(); preview = null; get('context-preview').textContent = ''; get('context-preview-note').textContent = ''; controls(); }
   function showPreview(value: ContextPreview) {
     preview = value; get('context-preview').textContent = value.text || 'No text in this inclusion.';
-    get('context-preview-note').textContent = value.truncated ? 'Partial preview · choose a smaller inclusion before adding.' : value.resources.length ? 'This source includes files that this input cannot accept yet.' :
-      `${new TextEncoder().encode(value.text).length.toLocaleString()} bytes · ${inspecting ? 'Current preview of the saved reference' : 'Complete text'} · ${value.item.description}`;
+    get('context-preview-note').textContent = contextInputIssue(value) ?? (value.resources.length ? `${value.resources.length} captured image(s) · included only when this source is selected for Send.` :
+      `${new TextEncoder().encode(value.text).length.toLocaleString()} bytes · ${inspecting ? 'Current preview of the saved reference' : 'Complete text'} · ${value.item.description}`);
+  }
+  async function showImages(value: ContextPreview, current: () => boolean) {
+    if (contextInputIssue(value)) return;
+    let images: Blob[];
+    try { images = await picker.imagePreviews(value); } catch (error) { if (current()) clearPreview(); throw error; }
+    if (!current()) return;
+    for (const [index, blob] of images.entries()) {
+      const img = document.createElement('img'), url = URL.createObjectURL(blob); imageUrls.push(url);
+      img.src = url; img.alt = `Selected captured image ${index + 1}`; imageArea.append(img);
+    }
   }
   function setSource(value: ContextSource) {
     source = value; item = null; items = []; next = null; cursors.clear(); clearPreview();
     inclusionSelect.replaceChildren(...value.inclusions.map((choice, index) => new Option(choice.title, String(index))));
     inclusion = value.inclusions[0]?.value ?? null;
-    get('context-inclusion-note').textContent = value.inclusions.length ? '' : 'This source has no supported text inclusion choices.';
+    get('context-inclusion-note').textContent = value.inclusions.length ? '' : 'This source has no supported inclusion choices.';
     get('context-items').replaceChildren(); get('context-more-items').hidden = true;
   }
   function renderSources() {
@@ -51,7 +64,7 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
   async function readPreview(current: () => boolean) {
     if (!source || !item || !source.inclusions.length) return;
     clearPreview(); const value = await picker.preview(source, item.reference, inclusion);
-    if (current()) showPreview(value);
+    if (current()) { showPreview(value); await showImages(value, current); }
   }
   async function search(current: () => boolean, more = false) {
     if (!source) return;
@@ -85,7 +98,7 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
       if (saved) {
         const retained = await picker.retained(saved); if (!current()) return;
         setSource(retained.source); inclusion = retained.inclusion;
-        inclusionSelect.value = String(retained.source.inclusions.findIndex(choice => same(choice.value, inclusion))); showPreview(retained.preview);
+        inclusionSelect.value = String(retained.source.inclusions.findIndex(choice => same(choice.value, inclusion))); showPreview(retained.preview); await showImages(retained.preview, current);
       } else {
         get<HTMLInputElement>('context-search').value = ''; await picker.discover(); if (!current()) return;
         renderSources(); if (picker.sources[0]) { setSource(picker.sources[0]); await search(current); }
@@ -154,7 +167,7 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
           const section = document.createElement('section'), heading = document.createElement('h3'), description = document.createElement('p'), text = document.createElement('pre');
           heading.textContent = value.title; description.textContent = value.description; text.textContent = value.text;
           const details = document.createElement('details'), summary = document.createElement('summary'), reference = document.createElement('pre');
-          summary.textContent = 'Source details'; reference.textContent = JSON.stringify({ reference: value.selection.reference, inclusion: value.selection.inclusion, data: value.data }, null, 2);
+          summary.textContent = 'Source details'; reference.textContent = JSON.stringify({ reference: value.selection.reference, inclusion: value.selection.inclusion, data: value.data, images: 'images' in value ? value.images : undefined }, null, 2);
           details.append(summary, reference); section.append(heading, description, text, details); area.append(section);
         }
       });
@@ -177,6 +190,6 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
       }
       controls();
     },
-    dispose() { disposed = true; epoch++; },
+    dispose() { disposed = true; epoch++; clearPreview(); },
   };
 }

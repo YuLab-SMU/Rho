@@ -316,6 +316,11 @@ pub fn validate_images(
     settings: &rho_agent_api::ComponentModelSettings,
     images: &[AgentModelImage],
 ) -> Result<(), Failure> {
+    if images.len() > 2 {
+        return Err(Failure::invalid(
+            "Select at most two images across attachments and context for one Rho Send",
+        ));
+    }
     if images.is_empty() {
         return Ok(());
     }

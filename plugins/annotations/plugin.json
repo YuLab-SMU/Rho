@@ -1855,6 +1855,19 @@
                 ],
                 "title": "Note and frozen text evidence",
                 "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "note_evidence_and_image"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "title": "Note, evidence and captured image",
+                "type": "object"
               }
             ]
           },

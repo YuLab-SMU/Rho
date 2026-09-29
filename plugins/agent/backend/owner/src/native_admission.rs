@@ -24,6 +24,8 @@ pub struct AgentNativeContextSnapshot {
     pub description: String,
     pub text: String,
     pub data: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<crate::AgentContextImage>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -81,6 +83,21 @@ impl StoredAgentNativeAdmission {
     ) -> Result<(), AgentTaskError> {
         self.origin.validate(scope)?;
         crate::native_tools::validate_grants(&self.origin)?;
+        if self
+            .origin
+            .contexts
+            .iter()
+            .map(|c| c.images.len())
+            .sum::<usize>()
+            > 2
+        {
+            return Err(AgentTaskError::Budget(
+                "Select at most two context images".into(),
+            ));
+        }
+        for image in self.origin.contexts.iter().flat_map(|c| &c.images) {
+            image.validate()?;
+        }
         if self.origin.contexts.len() > 20
             || serde_json::to_vec(&self.origin.contexts)
                 .map_err(|e| AgentTaskError::Storage(e.to_string()))?

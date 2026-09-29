@@ -11,7 +11,7 @@ use rho_agent_owner::component::{
     ComponentNativeRunOrigin, ComponentTaskError, MAX_COMPONENT_RUNNING_RUNS, StoredComponentRun,
 };
 use rho_plugin_sdk::protocol::{PluginCall, PluginViewCaller};
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
@@ -308,6 +308,25 @@ impl Runs {
             let captures =
                 crate::native_context::resolve(metadata, call, &caller, &request.sources, &host)
                     .await?;
+            for capture in &captures {
+                for image in &capture.images {
+                    let bytes = metadata
+                        .native
+                        .owner
+                        .store
+                        .agent_context_image(&metadata.scope, image)?;
+                    attachment_input
+                        .images
+                        .push(rho_agent_engine::AgentModelImage {
+                            label: format!("{} ({})", capture.title, image.sha256),
+                            mime_type: image.mime_type.clone(),
+                            base64: base64::Engine::encode(
+                                &base64::engine::general_purpose::STANDARD,
+                                bytes,
+                            ),
+                        });
+                }
+            }
             Some(ComponentAgentContext {
                 history: None,
                 sources: captures
@@ -317,7 +336,9 @@ impl Runs {
                         title: capture.title,
                         description: capture.description,
                         text: capture.text,
-                        native_data: capture.data,
+                        native_data: if capture.images.is_empty() { capture.data } else {
+                            json!({"contribution":capture.data,"agent_context_images":capture.images})
+                        },
                         truncated: false,
                         observations: vec![],
                         evidence: vec![],

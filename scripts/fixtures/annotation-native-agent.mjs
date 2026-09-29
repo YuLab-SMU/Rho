@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {randomUUID} from 'node:crypto';
 
-export async function annotationNativeAgent({agent, notes, original, evidenceId, project, invoke, binding, pluginQuery, query, port}) {
+export async function annotationNativeAgent({agent, notes, original, evidenceId, image, project, invoke, binding, pluginQuery, query, port}) {
   const control = value => ({task_id:value.detail.summary.task.task_id, generation:value.detail.summary.attachment.generation});
   const commandBinding = await binding(agent, 'agent.native.command');
   const command = async command => (await invoke('agent.native.command', {binding:commandBinding, arguments:{request_id:randomUUID(), command}})).output;
@@ -13,8 +13,8 @@ export async function annotationNativeAgent({agent, notes, original, evidenceId,
   const nativeEvidence = () => JSON.parse(fs.readFileSync(path.join(project, 'native-science-evidence.json'), 'utf8'));
   for (const writable of [false, true]) {
     task = await command({kind:'save_draft', control:control(task), version:task.detail.draft.version,
-      content:{text:writable ? 'Read the original note, create a related note, then revise that new note.' : 'Read the selected note only.', assets:[], context:[]}});
-    fs.writeFileSync(path.join(project, 'native-annotation-input.json'), JSON.stringify({write:writable, provider:notes, original, evidence_id:evidenceId}));
+      content:{text:writable ? 'Read the original note, create a related note, then revise that new note.' : 'Read the selected note only.', assets:[], context:!writable && image ? [image.selection] : []}});
+    fs.writeFileSync(path.join(project, 'native-annotation-input.json'), JSON.stringify({write:writable, provider:notes, original, evidence_id:evidenceId, image:!writable && image ? {sha256:image.context.resources[0].digest,bytes:image.bytes.length} : null}));
     const tools = [{name:'read', target:{type:'provider', binding:await binding(notes, 'annotations.read')}}];
     if (writable) tools.push({name:'write', target:{type:'provider', binding:await binding(notes, 'annotations.write')}});
     const input = {binding:commandBinding, arguments:{request_id:randomUUID(), command:{kind:'send', control:control(task), draft_version:task.detail.draft.version}, tools}};
@@ -23,6 +23,7 @@ export async function annotationNativeAgent({agent, notes, original, evidenceId,
     assert.equal(evidence.error, undefined, JSON.stringify(evidence));
     assert.equal(evidence.send_request, input.arguments.request_id);
     assert.equal(evidence.prompts, writable ? 2 : 1);
+    if (!writable && image) assert.equal(evidence.image_verified,true);
     assert.equal(parent.output.receipt.status, 'succeeded');
     assert.equal(writable ? evidence.forged_author_refused : evidence.unselected_write_refused, true);
     if (!writable) assert.equal((await pluginQuery(notes, 'annotations.read', {kind:'receipt', request_id:'native-note-create'})).receipt, null);

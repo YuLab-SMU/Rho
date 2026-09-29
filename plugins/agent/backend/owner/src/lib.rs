@@ -4,6 +4,8 @@
 use rho_agent_api::*;
 mod asset_import;
 pub use asset_import::*;
+mod context_images;
+pub use context_images::*;
 mod native_admission;
 pub use native_admission::*;
 mod native_host;
@@ -58,6 +60,24 @@ pub struct AgentTaskWrite<'a> {
 }
 
 pub trait AgentTaskRepository: Send + Sync {
+    fn put_agent_context_images(
+        &self,
+        _scope: &AgentTaskScope,
+        _images: &[(AgentContextImage, Vec<u8>)],
+    ) -> Result<(), AgentTaskError> {
+        Err(AgentTaskError::Storage(
+            "Context image storage is unavailable".into(),
+        ))
+    }
+    fn agent_context_image(
+        &self,
+        _scope: &AgentTaskScope,
+        _image: &AgentContextImage,
+    ) -> Result<Vec<u8>, AgentTaskError> {
+        Err(AgentTaskError::Storage(
+            "Context image reading is unavailable".into(),
+        ))
+    }
     /// Bounded projection of the two existing task owners in one read snapshot.
     fn project_agent_tasks(
         &self,

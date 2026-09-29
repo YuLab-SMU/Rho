@@ -141,6 +141,7 @@ Sources:
 - `scripts/fixtures/annotation-agent.mjs`
 - `scripts/fixtures/annotation-capture-source.py`
 - `scripts/fixtures/annotation-captures.mjs`
+- `scripts/fixtures/annotation-image-agent.mjs`
 - `scripts/fixtures/annotation-native-agent.mjs`
 - `scripts/fixtures/editor-code.mjs`
 - `scripts/fixtures/editor-controller.mjs`
@@ -313,13 +314,15 @@ Checks:
 - `plugins.annotation-adapter` (L1): `["cargo","test","-p","rho-sqlite","--test","annotations","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/adapters/sqlite/Cargo.toml`, `crates/adapters/sqlite/src/annotations.rs`, `crates/adapters/sqlite/src/application.rs`, `crates/adapters/sqlite/tests/annotations.rs`, `crates/application/Cargo.toml`, `crates/application/src/annotations.rs`, `plugins/annotations/**`.
 - `plugins.annotation-agent-browser` (L2): `["node","scripts/test-annotation-plugin.mjs","--agent","--browser"]`
-  Applies to: `crates/host/tests/fixtures/agent-science.cjs`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `plugins/agent/**`, `plugins/annotations/**`, `plugins/editor/backend/**`, `scripts/agent-plugin-artifact.mjs`, `scripts/fixtures/agent-annotation-tools.cjs`, `scripts/fixtures/annotation-agent-browser.mjs`, `scripts/fixtures/annotation-agent.mjs`, `scripts/fixtures/annotation-native-agent.mjs`, `scripts/test-annotation-plugin.mjs`, `ui/src/plugin-*.*`.
+  Applies to: `crates/host/tests/fixtures/agent-science.cjs`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `plugins/agent/**`, `plugins/annotations/**`, `plugins/editor/backend/**`, `scripts/agent-plugin-artifact.mjs`, `scripts/fixtures/agent-annotation-tools.cjs`, `scripts/fixtures/annotation-agent-browser.mjs`, `scripts/fixtures/annotation-agent.mjs`, `scripts/fixtures/annotation-image-agent.mjs`, `scripts/fixtures/annotation-native-agent.mjs`, `scripts/test-annotation-plugin.mjs`, `ui/src/plugin-*.*`.
 - `plugins.annotation-backend` (L1): `["cargo","test","-p","rho-annotation-backend","--lib","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/annotations/**`.
 - `plugins.annotation-capture-host` (L2): `["node","scripts/test-annotation-plugin.mjs","--captures"]`
   Applies to: `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `plugins/annotations/**`, `plugins/editor/backend/**`, `scripts/fixtures/annotation-capture-source.py`, `scripts/fixtures/annotation-captures.mjs`, `scripts/test-annotation-plugin.mjs`.
 - `plugins.annotation-http` (L2): `["cargo","test","-p","rho-workbench","--lib","annotation_tests","--locked"]`
   Applies to: `crates/adapters/sqlite/src/annotations.rs`, `crates/adapters/sqlite/src/application.rs`, `crates/application/src/annotations.rs`, `crates/host/src/annotations.rs`, `crates/workbench/src/annotation_tests.rs`, `crates/workbench/src/annotations.rs`, `plugins/annotations/**`.
+- `plugins.annotation-image-agent` (L2): `["node","scripts/test-annotation-plugin.mjs","--agent","--captures","--browser"]`
+  Applies to: `crates/host/tests/fixtures/agent-science.cjs`, `plugins/agent/**`, `plugins/annotations/**`, `scripts/fixtures/agent-annotation-tools.cjs`, `scripts/fixtures/annotation-agent-browser.mjs`, `scripts/fixtures/annotation-captures.mjs`, `scripts/fixtures/annotation-image-agent.mjs`, `scripts/fixtures/annotation-native-agent.mjs`, `scripts/test-annotation-plugin.mjs`.
 - `plugins.annotation-independent` (L2): `["node","scripts/test-annotation-plugin-store.mjs","--independent"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/annotations/**`, `scripts/build-annotation-plugin.mjs`, `scripts/test-annotation-plugin-store.mjs`.
 - `plugins.annotation-native-host` (L2): `["node","scripts/test-annotation-plugin.mjs"]`

@@ -9,6 +9,7 @@ import {execFileSync, spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {verifyAgentBuild} from './agent-plugin-artifact.mjs';
 import {annotationAgent} from './fixtures/annotation-agent.mjs';
+import {annotationImageAgent} from './fixtures/annotation-image-agent.mjs';
 import {annotationNativeAgent} from './fixtures/annotation-native-agent.mjs';
 import {buildCaptureSource, annotationCaptures} from './fixtures/annotation-captures.mjs';
 
@@ -77,7 +78,7 @@ const result = {host_sha256: hostHash, packages, directory, stages: [], complete
     return [name, {sha256: hash(bytes), bytes: bytes.length}];
   })), started_at: new Date().toISOString()};
 const evidence = process.env.RHO_ANNOTATION_EVIDENCE ?? path.join(directory, 'result.json');
-let host, exited, url, editor, notes, agent, agentCase, nativeCase, captureSource, captureCase;
+let host, exited, url, editor, notes, agent, agentCase, nativeCase, captureSource, captureCase, imageCase;
 const key = id => ({id, version: 1});
 const save = () => fs.writeFileSync(evidence, JSON.stringify(result, null, 2) + '\n');
 const safe = text => String(text).replace(/token=[a-z0-9]+/g, 'token=[redacted]');
@@ -93,7 +94,7 @@ async function start() {
   let output = '', errors = '';
   url = new URL(await deadline(new Promise((resolve, reject) => {
     host.on('error', reject);
-    host.stderr.on('data', bytes => { errors += safe(bytes); });
+    host.stderr.on('data', bytes => { const text = safe(bytes); errors += text; fs.appendFileSync(path.join(directory, 'host-stderr.log'), text); });
     host.stdout.on('data', bytes => {
       output += bytes;
       const found = output.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/);
@@ -166,7 +167,7 @@ try {
     const snapshot = snapshots[name];
     const active = (await invoke('plugins.activate', {revision: snapshot.revision, artifact: snapshot.artifacts[0], target: 'aarch64-apple-darwin', alias: name, configuration: name === 'agent' ? {kimi_home:nativeHome} : {},
       optional_capabilities: name === 'annotation' ? [key('editor.context.preview'), ...(withCaptures ? [key('resources.read')] : [])] : name === 'agent'
-        ? ['plugins.instances', 'plugins.inspect', 'annotations.read', 'annotations.write', 'annotations.context.search', 'annotations.context.preview', 'operation.get', 'plugins.delegated_operation'].map(key) : []})).output.instance.identity;
+        ? ['plugins.instances', 'plugins.inspect', 'annotations.read', 'annotations.write', 'annotations.context.search', 'annotations.context.preview', 'operation.get', 'plugins.delegated_operation', ...(withCaptures ? ['resources.read'] : [])].map(key) : []})).output.instance.identity;
     if (name === 'editor') editor = active;
     if (name === 'annotation') notes = active;
     if (name === 'agent') agent = active;
@@ -190,24 +191,30 @@ try {
   assert.ok(context.text.includes(create.note));
   assert.equal(context.data.source_status, 'unknown');
   result.stages.push('real Editor freeze → note → contributed context'); save();
+  if (withCaptures) {
+    captureCase = await annotationCaptures({notes,captureSource,reference:first.reference,pluginQuery,invoke,binding,query});
+    result.captures = captureCase.report;
+    result.stages.push('public PNG resource → validated capture → frozen Editor evidence and marks → bounded image reads; damaged image refused'); save();
+  }
   if (withAgent) {
     agentCase = await annotationAgent({agent, notes, context, notePreview, port, query, invoke, binding, pluginQuery});
     result.agent = agentCase.report;
     result.stages.push('real Agent Rho Send captures the exact annotation and delivers it through Rig to a local model peer'); save();
     if (withBrowser) {
       const {annotationAgentBrowser} = await import('./fixtures/annotation-agent-browser.mjs');
-      result.browser = await annotationAgentBrowser({url, window, agent, query, invoke, pluginQuery, notePreview, directory});
+      result.browser = await annotationAgentBrowser({url, window, agent, query, invoke, pluginQuery, notePreview, image:captureCase?.image, directory});
       result.stages.push('ordinary Agent picker previews and adds the exact note to an editable draft, retained after reload without Send'); save();
     }
-    nativeCase = await annotationNativeAgent({agent, notes, original, evidenceId:frozen.output.outcome.evidence_id, project, invoke, binding, pluginQuery, query, port});
+    nativeCase = await annotationNativeAgent({agent, notes, original, evidenceId:frozen.output.outcome.evidence_id, image:captureCase?.image, project, invoke, binding, pluginQuery, query, port});
+    if (captureCase) {
+      imageCase=await annotationImageAgent({agent,notes,image:captureCase.image,port,query,invoke,binding,pluginQuery});
+      result.image_agent=imageCase.report;
+      result.stages.push('explicit captured image reaches Rho model; subsequent text-only Send does not resend it');save();
+    }
     result.native_agent = nativeCase.report;
     result.stages.push('Native Agent exact Send tools: read-only write refusal, authenticated create/update, CAS and original child Operations'); save();
   }
-  if (withCaptures) {
-    captureCase = await annotationCaptures({notes,captureSource,reference:first.reference,pluginQuery,invoke,binding,query});
-    result.captures = captureCase.report;
-    result.stages.push('public PNG resource → validated capture → frozen Editor evidence and marks → bounded image reads; damaged image refused'); save();
-  }
+
 
   await draft('a🧬中z changed\n', initial.version);
   const second = await selected();
@@ -230,6 +237,7 @@ try {
   if (agentCase) {
     await agentCase.afterRestart();
     await nativeCase.afterRestart();
+    if (imageCase) await imageCase.afterRestart();
     result.stages.push('same Agent instance retains Send context and receipt while its annotation source stays suspended'); save();
   }
   const resumed = (await invoke('plugins.resume', {instance: notes, suspension: suspended.instance.suspension})).output.instance;
@@ -259,6 +267,7 @@ try {
     }
   }
   if (agentCase) await agentCase.close();
+  if (imageCase) await imageCase.close();
   assert.equal(hash(fs.readFileSync(binary)), hostHash, 'Acceptance must not replace the Host');
   result.finished_at = new Date().toISOString();
   save(); console.log(JSON.stringify({completed: result.completed, evidence, directory, stages: result.stages}));

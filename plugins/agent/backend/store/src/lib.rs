@@ -3,6 +3,7 @@
 //! No scientific journal connection, legacy lookup, runtime startup or replay.
 use rusqlite::{Connection, OptionalExtension};
 use std::{path::Path, sync::Mutex, time::Duration};
+mod context_images;
 mod credentials;
 pub use credentials::CredentialFile;
 mod agent_assets;
@@ -61,6 +62,7 @@ impl AgentStore {
             .execute_batch("PRAGMA synchronous = FULL;")
             .map_err(|e| e.to_string())?;
         agent_tasks::initialize(&connection)?;
+        context_images::initialize(&connection)?;
         native_tools::initialize(&connection)?;
         component_agents::initialize(&connection)?;
         agent_handoffs::initialize(&connection)?;

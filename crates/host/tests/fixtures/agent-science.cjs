@@ -74,7 +74,7 @@ async function prompt(message) {
   }
   const catalog = await rpc('tools/call', {name:'rho_tools', arguments:{send_request:sendRequest}});
   if (fs.existsSync(path.join(cwd, 'native-annotation-input.json'))) {
-    await require('./agent-annotation-tools.cjs')({cwd, sendRequest, catalog, rpc, save, session, prompts});
+    await require('./agent-annotation-tools.cjs')({cwd, sendRequest, catalog, rpc, save, session, prompts, prompt:message.params.prompt});
     result(id, {stopReason:'end_turn'});
     pending = null;
     return;
@@ -124,7 +124,7 @@ async function prompt(message) {
 const lines = readline.createInterface({input:process.stdin});
 lines.on('line', line => {
   const message = JSON.parse(line), p = message.params || {};
-  if (message.method === 'initialize') result(message.id, {protocolVersion:1, agentInfo:{name:'Local scientific fixture', version:'1'}, agentCapabilities:{loadSession:true, promptCapabilities:{embeddedContext:true}, sessionCapabilities:{close:{}}}});
+  if (message.method === 'initialize') result(message.id, {protocolVersion:1, agentInfo:{name:'Local scientific fixture', version:'1'}, agentCapabilities:{loadSession:true, promptCapabilities:{embeddedContext:true,image:true}, sessionCapabilities:{close:{}}}});
   else if (message.method === 'session/new' || message.method === 'session/load') {
     cwd = p.cwd; session = message.method === 'session/load' ? p.sessionId : randomUUID();
     assert.ok(p.mcpServers.length <= 1);

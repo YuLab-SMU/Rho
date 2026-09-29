@@ -71,6 +71,7 @@ where
             .clone()
             .ok_or("Annotations require native instance storage")?,
         connection.grants.clone(),
+        connection.resource_channel.clone(),
     )?);
     let (host, mut pump) = host_call_channel(CAPACITY).map_err(|e| e.to_string())?;
     connection.ready().await.map_err(|e| e.to_string())?;

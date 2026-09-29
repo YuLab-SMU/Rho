@@ -58,7 +58,7 @@ fn capability(
 pub fn manifest() -> PluginManifest {
     let example_ref = json!({"provider":{"plugin":"org.rho.annotations","instance":"annotations-example","revision":format!("sha256:{}","a".repeat(64)),"artifact":format!("sha256:{}","b".repeat(64))},"contribution":"annotations","window":"window-example","selector":{"annotation_id":"annotation-example","revision":1}});
     let mut preview = schema_for!(PreviewContext).to_value();
-    preview["properties"]["inclusion"] = json!({"oneOf":[{"title":"Note and frozen text evidence","type":"object","additionalProperties":false,"required":["kind"],"properties":{"kind":{"const":"note_and_evidence"}}}]});
+    preview["properties"]["inclusion"] = json!({"oneOf":[{"title":"Note and frozen text evidence","type":"object","additionalProperties":false,"required":["kind"],"properties":{"kind":{"const":"note_and_evidence"}}},{"title":"Note, evidence and captured image","type":"object","additionalProperties":false,"required":["kind"],"properties":{"kind":{"const":"note_evidence_and_image"}}}]});
     PluginManifest {
         protocol_version: PLUGIN_PROTOCOL_VERSION,
         id: PluginId::new("org.rho.annotations").unwrap(),

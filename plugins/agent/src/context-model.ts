@@ -5,7 +5,7 @@ import { type Client, json, same } from './operations.js';
 
 export interface Inclusion { title: string; value: JsonValue; }
 export interface ContextSource { provider: InstanceRef; title: string; contribution: ContextContribution; inclusions: Inclusion[]; }
-export interface CapturedContext { selection: AgentContextSelection; title: string; description: string; text: string; data: JsonValue; }
+export interface CapturedContext { selection: AgentContextSelection; title: string; description: string; text: string; data: JsonValue; images?: JsonValue[]; }
 export interface CapturedHistory {
   kind: 'conversation' | 'continuation'; truncated: boolean; notice: string;
   previous_run_id?: string; recovery?: JsonValue; tools?: JsonValue[]; tools_truncated?: boolean;
@@ -15,6 +15,16 @@ export interface CapturedHistory {
 }
 const object = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 const bytes = (value: string) => new TextEncoder().encode(value).length;
+
+export function contextInputIssue(preview: ContextPreview): string | null {
+  if (preview.truncated) return 'Choose a complete text and image inclusion before adding.';
+  if (preview.resources.length > 2 || preview.resources.some(resource => !resource ||
+    !same(resource.owner, preview.item?.reference?.provider) || !['image/png', 'image/jpeg'].includes(resource.media_type) ||
+    !Number.isSafeInteger(resource.bytes) || resource.bytes < 1 || resource.bytes > 2 * 1024 * 1024 ||
+    typeof resource.digest !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(resource.digest)))
+    return 'Choose complete text or up to two PNG/JPEG images, each at most 2 MiB.';
+  return null;
+}
 
 /** Owners declare finite inclusion values in their public query schema. Never
  * infer document/selection semantics from a plugin name or source kind. */
@@ -110,6 +120,26 @@ export class ContextPicker {
       typeof data.truncated !== 'boolean' || !Array.isArray(data.resources)) throw Error('The preview differs from the selected source.');
     return data;
   }
+  async imagePreviews(preview: ContextPreview): Promise<Blob[]> {
+    const issue = contextInputIssue(preview); if (issue) throw Error(issue);
+    const images: Blob[] = [];
+    for (const reference of preview.resources) {
+      const bytes = new Uint8Array(reference.bytes); let offset = 0;
+      while (offset < bytes.length) {
+        const { data } = await this.read<{ reference: unknown; offset: number; base64: string; next: number | null }>({ id: 'resources.read', version: 1 }, { reference, offset, limit: 65536 });
+        const expected = Math.min(65536, bytes.length - offset), end = offset + expected;
+        if (!same(data.reference, reference) || data.offset !== offset || data.next !== (end < bytes.length ? end : null) || typeof data.base64 !== 'string' || data.base64.length > Math.ceil(expected / 3) * 4)
+          throw Error('The image preview differs from its selected source.');
+        const part = Uint8Array.from(atob(data.base64), c => c.charCodeAt(0));
+        if (part.length !== expected) throw Error('The image preview is incomplete.');
+        bytes.set(part, offset); offset = end;
+      }
+      const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), n => n.toString(16).padStart(2, '0')).join('');
+      if ('sha256:' + digest !== reference.digest) throw Error('The image preview failed its content check.');
+      images.push(new Blob([bytes], { type: reference.media_type }));
+    }
+    return images;
+  }
   async retained(selection: AgentContextSelection) {
     if (selection.source !== 'plugin') throw Error('This saved source is not available in the plugin picker.');
     const reference = selection.reference as ContextReference;
@@ -171,7 +201,7 @@ export class ContextPicker {
     return { sources: sources.map(({ selection, title, description, text, native_data }) => ({ selection, title, description, text, data: native_data })), history: (history ?? null) as CapturedHistory | null };
   }
   selection(source: ContextSource, preview: ContextPreview, inclusion: JsonValue): AgentContextSelection {
-    if (preview.truncated || preview.resources.length) throw Error('This Agent input needs complete text. Choose another inclusion or keep the draft for later.');
+    const issue = contextInputIssue(preview); if (issue) throw Error(issue);
     if (!same(preview.item.reference.provider, source.provider) || preview.item.reference.contribution !== source.contribution.id || !source.inclusions.some(i => same(i.value, inclusion)))
       throw Error('Preview this exact source and inclusion before adding it.');
     return { source: 'plugin', label: `${source.title} · ${preview.item.title}`, reference: json(structuredClone(preview.item.reference)), inclusion: JSON.stringify(inclusion) };

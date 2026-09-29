@@ -56,11 +56,17 @@ export async function annotationCaptures({notes, captureSource, reference, plugi
     throw Error('Capture read exceeded its bounded page count');
   };
   const bytes=await imageBytes();
+  const imagePreview={...contextInput,inclusion:{kind:'note_evidence_and_image'}};
+  const imageContext=await pluginQuery(notes,'annotations.context.preview',imagePreview);
+  assert.equal(imageContext.resources.length,1);
+  assert.deepEqual(imageContext.resources[0].owner,notes);
+  assert.equal(imageContext.resources[0].digest,capture.sha256);
+  const selection={source:'plugin',label:imageContext.item.title,reference:imagePreview.reference,inclusion:JSON.stringify(imagePreview.inclusion)};
   const damaged=await pluginQuery(captureSource,'fixture.capture.resource',{damaged:true});
   await importImage({request_id:'damaged-image',reference:damaged.reference},'host-damaged-image','failed');
   assert.equal((await pluginQuery(notes,'annotations.read',{kind:'receipt',request_id:'damaged-image'})).receipt,null);
   const report={capture,resource:source.reference,annotation,original_operation:imported.operation.operation_id,damaged_image_refused:true,restart_verified:false};
-  return {report, async afterRestart() {
+  return {report, image:{selection,context:imageContext,preview:imagePreview,bytes}, async afterRestart() {
     assert.equal((await query('plugins.instance',{instance:captureSource})).instance.state,'suspended');
     assert.deepEqual((await importImage(input)).output,imported.output);
     assert.equal((await importImage(input,'host-image-original')).operation.operation_id,imported.operation.operation_id);

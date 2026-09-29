@@ -62,12 +62,14 @@ pub struct Metadata {
     pub(crate) scope: AnnotationScope,
     pub(crate) grants: Vec<CapabilityRequirement>,
     pub(crate) owner: AnnotationOwner,
+    pub(crate) resources: Option<rho_plugin_sdk::ResourceClient>,
 }
 impl Metadata {
     pub fn new(
         instance: PluginInstance,
         environment: BackendEnvironment,
         grants: Vec<CapabilityRequirement>,
+        resources: Option<ResourceChannel>,
     ) -> Result<Self, String> {
         decode::<Empty>(&instance.configuration).map_err(|e| e.message)?;
         for directory in [&environment.project_root, &environment.data_root] {
@@ -95,6 +97,10 @@ impl Metadata {
             },
             instance,
             grants,
+            resources: resources
+                .map(rho_plugin_sdk::ResourceClient::new)
+                .transpose()
+                .map_err(|e| e.to_string())?,
             owner,
         })
     }
@@ -167,7 +173,7 @@ impl Metadata {
                     crate::contexts::search(self, decode(&call.arguments)?, &caller)
                 }
                 "annotations.context.preview" => {
-                    crate::contexts::preview(self, decode(&call.arguments)?, &caller)
+                    crate::contexts::preview(self, call, decode(&call.arguments)?, &caller).await
                 }
                 _ => Err(Failure::invalid("Unknown annotation query")),
             };

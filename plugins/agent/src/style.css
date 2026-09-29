@@ -23,3 +23,6 @@
 #studio-request pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 #studio-request p, #component-request p { overflow-wrap: anywhere; }
 #studio-request button, #component-request button { white-space: normal; max-width: 100%; }
+
+.context-images { display: grid; gap: 12px; min-width: 0; }
+.context-images img { display: block; width: 100%; max-width: 480px; max-height: 240px; object-fit: contain; border-radius: 6px; }

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import {createHash} from 'node:crypto';
 export async function testContextPicker(ContextPicker, inclusionChoices, root) {
   const manifest = JSON.parse(fs.readFileSync(root + '/plugins/editor/plugin.json', 'utf8'));
   const identity = {instance:'source',plugin:manifest.id,revision:'sha256:'+'c'.repeat(64),artifact:'sha256:'+'d'.repeat(64)};
@@ -82,6 +83,20 @@ export async function testContextPicker(ContextPicker, inclusionChoices, root) {
       if(fault==='truncated')f.preview.truncated=true;
       if(['version','size'].includes(fault))await assert.rejects(f.picker.preview(source,reference,{kind:'selection'}),/differs/);
       else assert.throws(()=>f.picker.selection(source,f.preview,{kind:'selection'}),/complete text/);
+    }
+  });
+  await check('image selection and chunk previews keep exact bytes and reject changes',async()=>{
+    const f=fixture();await f.picker.discover();const source=f.picker.sources[0];
+    const bytes=Buffer.alloc(70000,17),resource={owner:identity,resource:'image-one',digest:'sha256:'+createHash('sha256').update(bytes).digest('hex'),bytes:bytes.length,media_type:'image/png'};
+    f.preview.resources=[resource];assert.deepEqual(f.picker.selection(source,f.preview,{kind:'selection'}).reference,reference);
+    let corrupt=false,reads=0;
+    f.client.query=async(cap,args)=>{assert.equal(cap.id,'resources.read');assert.deepEqual(args.reference,resource);assert.equal(args.limit,65536);reads++;
+      const end=Math.min(bytes.length,args.offset+args.limit),part=Buffer.from(bytes.subarray(args.offset,end));if(corrupt)part[0]^=1;
+      return {status:'ready',completeness:'complete',data:{reference:resource,offset:args.offset,base64:part.toString('base64'),next:end<bytes.length?end:null}};};
+    const [blob]=await f.picker.imagePreviews(f.preview);assert.deepEqual(Buffer.from(await blob.arrayBuffer()),bytes);assert.equal(reads,2);
+    corrupt=true;await assert.rejects(f.picker.imagePreviews(f.preview),/content check/);
+    for(const changed of [{bytes:2097153},{media_type:'application/pdf'},{owner:{...identity,instance:'other'}}]){
+      f.preview.resources=[{...resource,...changed}];assert.throws(()=>f.picker.selection(source,f.preview,{kind:'selection'}),/PNG/);
     }
   });
   await check('saved contexts retain their original window and declared inclusion',async()=>{

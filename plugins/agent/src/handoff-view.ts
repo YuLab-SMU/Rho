@@ -1,7 +1,7 @@
 import type { AgentContextSelection, ProjectAgentTaskPage, ProjectAgentTaskRef, ProjectAgentTaskSummary } from '../sdk/index.js';
 import type { NativeAgentModel } from './native-model.js';
 import type { RhoModel } from './rho-model.js';
-import { ContextPicker } from './context-model.js';
+import { ContextPicker, contextInputIssue } from './context-model.js';
 import { HandoffModel, handoffKey } from './handoff-model.js';
 import { same, type Client } from './operations.js';
 
@@ -44,7 +44,7 @@ export function mountHandoff(client: Client, native: NativeAgentModel, rho: RhoM
       if (disposed || ticket !== previewRead) return;
       get('handoff-preview-title').textContent = preview.item.title;
       get('handoff-preview').textContent = preview.text;
-      get('handoff-preview-note').textContent = preview.truncated || preview.resources.length ? 'This source cannot be transferred as complete text. Remove it or refresh it in the source task.' : preview.item.description;
+      get('handoff-preview-note').textContent = contextInputIssue(preview) ?? (preview.resources.length ? 'The selected images will be checked again when the target task sends.' : preview.item.description);
     } catch (value) {
       if (!disposed && ticket === previewRead) { get('handoff-preview').textContent = value instanceof Error ? value.message : String(value); get('handoff-preview-note').textContent = 'The original reference is retained. Remove it or refresh it in the source task.'; }
     }

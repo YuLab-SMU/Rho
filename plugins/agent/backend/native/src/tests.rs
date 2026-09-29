@@ -24,6 +24,7 @@ struct Session {
     closes: Arc<AtomicUsize>,
     refuse_stop: Arc<AtomicBool>,
     hold: bool,
+    omit_turn: AtomicBool,
     changed: Notify,
 }
 #[async_trait]
@@ -65,6 +66,7 @@ impl NativeAgentFactory for Factory {
             closes: self.closes.clone(),
             refuse_stop: self.refuse_stop.clone(),
             hold: self.hold.load(Ordering::SeqCst),
+            omit_turn: AtomicBool::new(false),
             changed: Notify::new(),
         });
         self.sessions.lock().unwrap().push(s.clone());
@@ -113,6 +115,9 @@ impl NativeAgentSession for Session {
         }
     }
     fn native_turn_id(&self) -> Option<String> {
+        if self.omit_turn.load(Ordering::SeqCst) {
+            return None;
+        }
         self.state
             .lock()
             .unwrap()
@@ -973,4 +978,56 @@ async fn failed_registration_retires_connection_and_keeps_uncertain_process_evid
         }
         fixture.service.close().await;
     }
+}
+
+// ACP may finish a fast, silent turn between observer ticks. Its terminal state
+// is still ready, with no turn id or new output cursor; only Send identity changes.
+#[tokio::test]
+async fn silent_acp_completion_settles_a_new_send_with_unchanged_state_and_cursor() {
+    let f = Fixture::new().await;
+    let d = f.draft(&f.create().await, "silent turn").await;
+    let connect = f.request(&f.window, AgentTaskCommand::Connect { control: ctl(&d) });
+    let admitted = f.service.owner.admit(&f.scope(), &connect, now()).unwrap();
+    f.service
+        .launch(f.scope(), connect, admitted, f.port.clone())
+        .unwrap()
+        .await
+        .unwrap();
+    let session = f.factory.sessions.lock().unwrap()[0].clone();
+    session.omit_turn.store(true, Ordering::SeqCst);
+    // Let the observer retain the initial ready state and empty cursor.
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    let d = f
+        .service
+        .owner
+        .detail(&f.scope(), &d.summary.task.task_id)
+        .unwrap();
+    let request = f.request(
+        &f.window,
+        AgentTaskCommand::Send {
+            control: ctl(&d),
+            draft_version: d.draft.version,
+        },
+    );
+    f.service.owner.admit(&f.scope(), &request, now()).unwrap();
+    session.state.lock().unwrap().last_request_id = Some(request.request_id.clone());
+    session.changed.notify_waiters();
+    wait_for_native_observation(|| {
+        f.store
+            .agent_receipt(&f.scope(), &request.request_id)
+            .unwrap()
+            .is_some_and(|r| r.status == "succeeded")
+    })
+    .await;
+    assert!(
+        f.service
+            .owner
+            .detail(&f.scope(), &d.summary.task.task_id)
+            .unwrap()
+            .draft
+            .content
+            .text
+            .is_empty()
+    );
+    f.service.close().await;
 }

@@ -169,7 +169,11 @@ async fn start(factory: Arc<Factory>) -> Fixture {
     Fixture::open_with_factory(
         directory,
         environment,
-        &["plugins.inspect", "editor.context.preview"],
+        &[
+            "plugins.inspect",
+            "editor.context.preview",
+            "resources.read",
+        ],
         factory,
     )
     .await
@@ -475,4 +479,82 @@ async fn rho_contributed_context_refusal_preserves_draft_before_model_admission(
         f.settle(&native, plan.outcome).await;
         f.release().await;
     }
+}
+
+#[tokio::test]
+async fn contributed_image_bytes_reach_native_send_and_survive_reopen_without_source_reads() {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    use sha2::{Digest, Sha256};
+    let factory = Arc::new(Factory::default());
+    let mut f = start(factory.clone()).await;
+    let saved = draft(&mut f).await;
+    let input = send(&saved);
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    image::RgbImage::from_pixel(3, 2, image::Rgb([20, 40, 60]))
+        .write_to(&mut bytes, image::ImageFormat::Png)
+        .unwrap();
+    let bytes = bytes.into_inner();
+    let resource = json!({"owner":reference()["provider"],"resource":"context-image","digest":format!("sha256:{:x}",Sha256::digest(&bytes)),"bytes":bytes.len(),"media_type":"image/png"});
+    let mut native = call(
+        "captured-context-send",
+        "agent.native.command",
+        input.clone(),
+        true,
+    );
+    native
+        .scopes
+        .extend(["documents.read".into(), "resources.read".into()]);
+    f.writer
+        .send(native.request.clone(), RpcBody::Invoke(native.clone()))
+        .await
+        .unwrap();
+    answer(&mut f, "views.caller", origin("view-one"), true).await;
+    answer(&mut f, "plugins.inspect", inspection(), true).await;
+    let mut value = preview();
+    value["resources"] = json!([resource]);
+    answer(&mut f, "editor.context.preview", value, true).await;
+    let requested = answer(
+        &mut f,
+        "resources.read",
+        json!({"reference":resource,"offset":0,"base64":STANDARD.encode(&bytes),"next":null}),
+        true,
+    )
+    .await;
+    assert_eq!(requested["reference"], resource);
+    assert_eq!(requested["limit"], 65536);
+    answer(&mut f, "views.caller", origin("view-one"), true).await;
+    let RpcBody::CommitPlan(plan) = f.read().await.body else {
+        panic!()
+    };
+    assert_eq!(plan.outcome, PluginOutcome::Succeeded, "{plan:?}");
+    f.settle(&native, plan.outcome).await;
+    assert!(factory.inputs.lock().unwrap().iter().flatten().any(|part|matches!(part,NativeInput::Image{mime_type,data} if mime_type=="image/png" && data==&bytes)));
+    let store =
+        AgentStore::open(&std::path::Path::new(&f.environment.data_root).join("agent-v1.sqlite"))
+            .unwrap();
+    let scope = AgentTaskScope {
+        project: f.environment.project_root.clone(),
+        principal: instance().principal.to_string(),
+    };
+    let captured = store
+        .agent_native_admission(&scope, input["request_id"].as_str().unwrap())
+        .unwrap()
+        .unwrap();
+    let image = captured.origin.contexts[0].images[0].clone();
+    assert_eq!(image.reference, resource);
+    assert_eq!(store.agent_context_image(&scope, &image).unwrap(), bytes);
+    drop(store);
+    let (directory, environment) = f.release().await;
+    let mut reopened =
+        Fixture::open_with_factory(directory, environment, &[], factory.clone()).await;
+    reopened.native_action("image-replay", input).await;
+    let retained = reopened
+        .query(
+            "agent.native.context",
+            json!({"request_id":captured.request.request_id}),
+        )
+        .await;
+    assert_eq!(retained["contexts"][0]["images"][0]["reference"], resource);
+    assert_eq!(factory.sends.load(Ordering::SeqCst), 1);
+    reopened.release().await;
 }

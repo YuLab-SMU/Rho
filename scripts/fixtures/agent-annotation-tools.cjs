@@ -1,5 +1,5 @@
 // Deterministic external ACP peer; the Agent, MCP, Host and note owner are real.
-module.exports = async ({cwd, sendRequest, catalog, rpc, save, session, prompts}) => {
+module.exports = async ({cwd, sendRequest, catalog, rpc, save, session, prompts, prompt}) => {
   const assert = require('node:assert/strict');
   const fs = require('node:fs');
   const path = require('node:path');
@@ -17,6 +17,12 @@ module.exports = async ({cwd, sendRequest, catalog, rpc, save, session, prompts}
   assert.notEqual(original.isError, true);
   assert.equal(original.structuredContent.result.data.revision.note, 'Check the original 🧬 result');
   const evidence = {session, prompts, send_request:sendRequest, original:original.structuredContent.result.data, writes:[]};
+  if (input.image) {
+    const images=prompt.filter(part=>part.type==='image');assert.equal(images.length,1);
+    assert.equal(images[0].mimeType,'image/png');const bytes=Buffer.from(images[0].data,'base64');
+    assert.equal(bytes.length,input.image.bytes);assert.equal('sha256:'+require('node:crypto').createHash('sha256').update(bytes).digest('hex'),input.image.sha256);
+    evidence.image_verified=true;
+  } else assert.equal(prompt.filter(part=>part.type==='image').length,0);
   const create = {request_id:'native-note-create', command:{kind:'create', evidence_id:input.evidence_id, note:'Agent-authored note 中文 🧬', labels:[], marks:[], continued_from:null}};
   if (!input.write) {
     await rpc('tools/call', {name:'rho_call', arguments:invocation('write', create)}, randomUUID(), -32602);

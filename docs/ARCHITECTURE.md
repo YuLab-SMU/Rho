@@ -44,7 +44,10 @@ grants, verifies its digest and fully decodes bounded PNG/JPEG bytes. The owner 
 actual dimensions and image bytes separately, always with `original_media: false`;
 a captured-view anchor does not certify scientific provenance or a source rendering.
 Import replay uses the original receipt without rereading the provider. Exact capture
-readback is bounded; contributed note text identifies the image but omits its bytes.
+readback is bounded. The default note/text inclusion omits image bytes; explicit
+`note_evidence_and_image` publishes the retained image through the ordinary resource
+channel. Publishing the owner's evidence uses annotation read authority; consumers
+separately need `resources.read` to read those immutable bytes.
 Other real source flows, browser capture and annotation UI remain incomplete. Metadata authorization
 reuses public application read/control scopes; it does not add a scientific
 annotation branch to the generic Host.
@@ -711,7 +714,17 @@ native children until their correlated replies return; late receipts remain on t
 original task. Disconnect retains uncertainty. `agent.model.tool.operation` reads
 the original delegated request and Operation through public queries, without
 restarting work or rewriting task storage. An absent match is partial evidence.
-Explicit contributed text is checked and captured before admission. Ordinary
+Explicit contributed text and up to two PNG/JPEG resources are checked before
+admission. Each image must belong to its exact context provider, hold at most 2 MiB,
+match every bounded chunk and digest, and fully decode within the image budget.
+The Agent store retains immutable bytes separately (64 MiB/4096 images per project),
+while Native/Rho admissions retain original references and content identities.
+Caller revalidation precedes storage and admission; corrupt/missing resources do
+not consume drafts. Rho shares its two-image limit with explicit attachments and
+requires the current connection's image diagnostic. Original retries observe saved
+input without source/model replay; history and Continue do not automatically resend
+pixels. The existing picker previews validated resource bytes and saves only the
+explicit source/inclusion in its draft. Ordinary
 Continue rechecks the selected recovery digest through original-owner queries,
 then retains the same Agent and R provider/artifact/session under the owner's
 admission gate. Explain may narrow to observation without changing the target.

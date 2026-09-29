@@ -79,16 +79,18 @@ pub fn search(
     page.validate().map_err(Failure::invalid)?;
     encoded(page)
 }
-pub fn preview(
+pub async fn preview(
     metadata: &Metadata,
+    call: &PluginCall,
     request: PreviewContext,
     caller: &PluginViewCaller,
 ) -> Result<Value, Failure> {
     request.validate().map_err(Failure::invalid)?;
     sources::window(caller, &request.reference.window)?;
+    let include_image = request.inclusion == json!({"kind":"note_evidence_and_image"});
     if request.reference.provider != metadata.instance.identity
         || request.reference.contribution.as_str() != "annotations"
-        || request.inclusion != json!({"kind":"note_and_evidence"})
+        || (!include_image && request.inclusion != json!({"kind":"note_and_evidence"}))
     {
         return Err(Failure::invalid(
             "Annotation preview differs from its exact source or inclusion",
@@ -96,10 +98,55 @@ pub fn preview(
     }
     let reference: AnnotationRevisionRef = decode(&request.reference.selector)?;
     let (revision, evidence) = metadata.owner.read(&metadata.scope, &reference)?;
+    let mut resources = vec![];
+    if include_image {
+        // This query exposes the annotation owner's own evidence. Reading the
+        // returned public resource separately requires resources.read.
+        let AnnotationAnchor::CapturedView { capture } = &evidence.anchor else {
+            return Err(Failure::invalid(
+                "This annotation has no captured image; select note and evidence",
+            ));
+        };
+        let (retained, bytes) = metadata
+            .owner
+            .capture(&metadata.scope, &capture.capture_id)?;
+        if retained != *capture {
+            return Err(Failure::invalid(
+                "The retained capture differs from this annotation",
+            ));
+        }
+        let client = metadata
+            .resources
+            .as_ref()
+            .ok_or_else(|| Failure::invalid("Image resource transport is unavailable"))?;
+        let resource = client
+            .put(
+                call.request.clone(),
+                ResourceDeclaration {
+                    bytes: capture.byte_size,
+                    digest: ContentDigest::new(&capture.sha256).map_err(Failure::invalid)?,
+                    media_type: capture.mime_type.clone(),
+                },
+                bytes.as_slice(),
+            )
+            .await
+            .map_err(Failure::invalid)?;
+        if resource.owner != metadata.instance.identity {
+            return Err(Failure::invalid("Image publication changed its owner"));
+        }
+        resources.push(resource);
+    }
     let image_notice = match &evidence.anchor {
         AnnotationAnchor::CapturedView { capture } => format!(
-            "\nCaptured view: {} × {} {}. Image bytes are retained separately and are not included in this text context.\n",
-            capture.width, capture.height, capture.mime_type
+            "\nCaptured view: {} × {} {}. {} This image is a captured view, not verified original scientific media.\n",
+            capture.width,
+            capture.height,
+            capture.mime_type,
+            if include_image {
+                "The explicitly selected image is included as an immutable resource; region marks are in the accompanying evidence."
+            } else {
+                "Image bytes are retained separately and are not included in this text context."
+            }
         ),
         _ => String::new(),
     };
@@ -131,7 +178,7 @@ pub fn preview(
         text,
         truncated,
         data: json!({"annotation":reference,"author":revision.author,"source":evidence.source,"anchor":evidence.anchor,"marks":revision.marks,"deleted":revision.deleted,"source_status":"unknown","source_availability":"unknown","frozen_evidence":true,"annotation_source":{"source_id":reference.annotation_id,"source_version":reference.revision.to_string()}}),
-        resources: vec![],
+        resources,
     };
     preview.validate().map_err(Failure::invalid)?;
     encoded(preview)

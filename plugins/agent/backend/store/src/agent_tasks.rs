@@ -58,6 +58,20 @@ fn decode_task(value: String, cursor: u64, gap: bool) -> Result<StoredAgentTask,
 }
 mod asset_imports;
 impl AgentTaskRepository for AgentStore {
+    fn put_agent_context_images(
+        &self,
+        scope: &AgentTaskScope,
+        images: &[(rho_agent_owner::AgentContextImage, Vec<u8>)],
+    ) -> Result<(), AgentTaskError> {
+        self.store_context_images(scope, images)
+    }
+    fn agent_context_image(
+        &self,
+        scope: &AgentTaskScope,
+        image: &rho_agent_owner::AgentContextImage,
+    ) -> Result<Vec<u8>, AgentTaskError> {
+        self.read_context_image(scope, image)
+    }
     fn agent_asset_import(
         &self,
         scope: &AgentTaskScope,

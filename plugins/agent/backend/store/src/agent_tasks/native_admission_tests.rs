@@ -337,6 +337,7 @@ fn native_context_bytes_survive_reopen_and_cannot_be_replaced_by_original_retry(
             description: "Original selection".into(),
             text: "Captured source 中文 Ω".into(),
             data: serde_json::json!({"source_version":7}),
+            images: vec![],
         });
     let sending = request(AgentTaskCommand::Send {
         control: control(&saved.task),

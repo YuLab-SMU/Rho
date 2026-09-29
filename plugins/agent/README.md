@@ -66,18 +66,22 @@ the existing 8 MiB/file and 32 MiB/task limits. Resource import does not provide
 browser file picker or stage local files; ordinary view file capture uses the
 separate bounded stage/finish Controls.
 
-Native Send now resolves selected text context through the exact provider's
+Native and Rho Send resolve selected context through the exact provider's
 declared public preview Query. A `plugin` selection retains its `ContextReference`
 and a JSON-encoded owner-defined inclusion. The backend verifies the immutable
 manifest/artifact, inherited read grants, reference and complete preview, then
 revalidates the original live caller before admission. Each inclusion is at most
-16 KiB and the combined capture at most 64 KiB; truncated or resource-bearing input
-is refused with the draft retained. The task owner saves resolved source text,
+16 KiB and the combined capture metadata at most 64 KiB. Truncated input is refused
+with the draft retained. Explicit resource inclusions support up to two PNG/JPEG
+images of at most 2 MiB each, with exact provider identity, resource read authority,
+chunk ranges, digest and bounded full decoding checked before admission. Bytes are
+retained separately in the scoped Agent store (64 MiB per project). Rho also checks
+the combined attachment/context image count and the current model image diagnostic. The task owner saves resolved source text,
 provenance and original selections atomically with Send. Replay reads that capture
 without querying current sources. `agent.native.context` exposes the original
-capture after reopen. Context adds no scientific/tool authority. The ordinary
-picker, Rho context composition and actual Editor/Host acceptance remain pending;
-the framed source fixtures use a synthetic public context provider.
+capture after reopen. Context adds no scientific/tool authority. Text history and
+Continue preserve provenance without automatically resending prior pixels. See
+`docs/STATUS.md` for actual Host/browser evidence and outstanding flows.
 
 Send can explicitly select up to 16 Query/Operation tools. Provider targets retain
 an exact ordinary-plugin binding and immutable public manifest; Host targets retain
@@ -286,13 +290,15 @@ The ordinary native composer now has a generic @ picker. It reads active runtime
 instances, discovers their declared context contributions and derives finite
 inclusion choices from each preview query's schema. Search and preview are bounded
 reads; opening the picker never starts or resumes a provider. Partial listings are
-labeled. Only a complete supported text preview can be added, retaining its exact
+labeled. Only a complete supported preview can be added, retaining its exact
 provider, original window, selector/version and inclusion in the ordinary draft.
 Saved references remain removable and inspectable when a source changes. Send
 revalidates them through the backend capture path. The message's **Sent context**
 action reads the original Agent-owned capture, including its source details,
-without querying the current provider. These renderer/model fixtures use synthetic
-peers; actual Editor-to-Agent/Host acceptance remains pending.
+without querying the current provider. Explicit captured-image inclusions display
+thumbnails after chunk/digest validation. Preview failure leaves Add unavailable;
+closing the dialog releases temporary image URLs. Existing actual Editor/Host
+acceptance and focused renderer fixtures are tracked in `docs/STATUS.md`.
 
 Rho attachment input is implemented through `agent.model.assets.stage` and
 `.finish` Controls and the bounded `agent.model.assets` metadata query. It uses

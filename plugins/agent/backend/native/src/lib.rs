@@ -884,6 +884,10 @@ impl NativeTaskRuntime {
                 let page = live.session.events(cursor);
                 let next_signature = serde_json::to_string(&(
                     &snapshot.state,
+                    // ACP can finish silently between ticks with the same ready
+                    // state, no turn id and an already-consumed event cursor.
+                    // A new original Send still needs its terminal receipt.
+                    &snapshot.last_request_id,
                     &snapshot.decisions,
                     &snapshot.error,
                     live.session.native_turn_id(),

@@ -55,7 +55,11 @@ actual dimensions. Imports are at most 8 MiB; retained captures are always label
 they do not certify the pixels as a scientific original or as the context source's
 rendering. Import replay reads its original receipt without contacting the resource
 provider. `annotations.capture.read` returns bounded chunks of that exact stored
-capture. Text context identifies the capture but does not include image bytes.
+capture. Default `note_and_evidence` context identifies the capture without pixels.
+Explicit `note_evidence_and_image` publishes the exact retained capture as an
+annotation-owned public resource, alongside the note, frozen evidence and marks.
+Consumers must separately validate resource read authority, owner, bytes and digest;
+the image remains a captured view, not certified scientific original media.
 The framed principal supplies author identity without guessing
 whether the initiating actor was human or Agent.
 
@@ -118,6 +122,8 @@ Add `--captures` for a language-independent Python resource peer publishing a re
 multi-chunk PNG through the generic native resource channel. It checks import,
 Editor-bound captured-view evidence and marks, exact chunk readback, damaged-image
 refusal and same-instance restart while the resource provider remains suspended.
-This is resource transport/owner acceptance, not a browser screenshot/upload flow,
-real R image provenance, image bytes in Agent context, annotation editor UI or
-abrupt-crash recovery.
+Together with `--agent`, this also checks explicit captured-image context through
+Native and Rho Send, the Rho image diagnostic, text-only followup and restart with
+no image/source/model replay. `--browser` checks the actual thumbnail and draft.
+This does not establish browser screenshot/upload capture, real R image provenance,
+annotation editor UI or abrupt-crash recovery.

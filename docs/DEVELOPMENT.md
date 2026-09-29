@@ -299,8 +299,13 @@ cover annotation editor UI or abrupt-crash recovery.
 Add `--captures` for a Python-only public resource producer, actual PNG decode/import,
 Editor-bound captured evidence and marks, bounded byte readback, damaged-image refusal
 and replay after same-instance restart while that producer remains suspended. This
-can run without `--agent`; it does not validate browser screenshot/upload, real R
-image provenance or image bytes in Agent context.
+can run without `--agent`. Add `--agent --captures` to check exact image bytes in
+Native ACP input and Rho/Rig input, refusal before the image diagnostic, text-only
+follow-up without image replay and retained context after Host restart. Add
+`--browser` to select the explicit image inclusion in the ordinary picker, inspect
+its thumbnail at 1440/960/390/220 px and preserve both selections across reload.
+The ACP and HTTP model peers are fixtures; these checks do not validate browser
+screenshot/upload, real R image provenance or an annotation editor.
 
 The generic plugin-only Host uses `cargo test -p rho-host --test plugin_workspace
 --locked` for canonical project identity, native lease exclusion, empty-catalog

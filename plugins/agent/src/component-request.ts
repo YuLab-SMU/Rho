@@ -1,7 +1,7 @@
 import type { AgentContextSelection, ProjectAgentTaskRef } from '../sdk/index.js';
 import type { NativeAgentModel } from './native-model.js';
 import type { RhoModel } from './rho-model.js';
-import { ContextPicker } from './context-model.js';
+import { ContextPicker, contextInputIssue } from './context-model.js';
 import { same } from './operations.js';
 
 export interface ComponentRequest { request_id: string; title: string; sources: AgentContextSelection[]; }
@@ -34,8 +34,8 @@ export async function addComponentRequest(owner: NativeAgentModel, rho: RhoModel
   check();
   for (const source of request.sources) {
     const retained = await picker.retained(source); check();
-    if (retained.preview.truncated || retained.preview.resources.length)
-      throw Error('This source is partial or includes unsupported files. Choose a smaller text inclusion; the draft is retained.');
+    const issue = contextInputIssue(retained.preview);
+    if (issue) throw Error('This source is partial or includes unsupported files. ' + issue + ' The draft is retained.');
   }
   check();
   // Read after previews so text typed during those observations is preserved.
