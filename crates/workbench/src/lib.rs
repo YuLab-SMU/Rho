@@ -1,9 +1,4 @@
 #![forbid(unsafe_code)]
-mod agent_tasks;
-mod agent_handoffs;
-mod annotations;
-mod component_agents;
-mod agents;
 mod settings;
 mod mcp_sessions;
 mod demo_project;
@@ -47,7 +42,6 @@ struct SelectedHost {
     host: Arc<NextHost>,
     root: PathBuf,
     connections: Arc<rho_mcp::McpConnections>,
-    agents: Arc<agents::AgentClients>,
 }
 
 impl SelectedHost {
@@ -56,7 +50,6 @@ impl SelectedHost {
             host,
             root,
             connections: Arc::default(),
-            agents: Arc::default(),
         }
     }
 }
@@ -89,14 +82,8 @@ struct AppState {
     authority: String,
     origin: String,
     authorization: String,
-    native_mcp_authorization: String,
     mcp_sessions: Arc<mcp_sessions::HttpMcpSessions>,
     mcp_manager: Arc<LocalSessionManager>,
-    task_agents: Arc<rho_host::AgentTaskService>,
-    component_agents: Arc<rho_host::ComponentAgentService>,
-    handoffs: Arc<rho_host::AgentHandoffService>,
-    annotations: Arc<rho_host::AnnotationService>,
-    html_views: Arc<rho_host::HtmlViewTokens>,
     calls: Arc<Semaphore>,
     observations: Arc<Semaphore>,
     application: Arc<rho_host::ApplicationStore>,
@@ -133,17 +120,12 @@ async fn boundary(State(state): State<AppState>, mut request: Request, next: Nex
     {
         return failure(StatusCode::FORBIDDEN, "foreign Origin");
     }
-    let html_view = request.method() == axum::http::Method::GET
-        && request.uri().path().starts_with("/view/html/");
-    let public_asset = matches!(request.uri().path(), "/" | "/app.js" | "/style.css") || html_view || plugin_asset;
+    let public_asset = matches!(request.uri().path(), "/" | "/app.js" | "/style.css") || plugin_asset;
     let credential = headers
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok());
     let mcp_request = request.uri().path() == "/mcp" || request.uri().path().starts_with("/mcp/");
-    let managed = mcp_request.then(|| credential.and_then(|value| value.strip_prefix("Bearer "))
-        .and_then(|token| state.task_agents.mcp_connections.resolve(token))).flatten();
-    let native_mcp = mcp_request && (managed.is_some() || credential == Some(state.native_mcp_authorization.as_str()));
-    if !public_asset && credential != Some(state.authorization.as_str()) && !native_mcp {
+    if !public_asset && credential != Some(state.authorization.as_str()) {
         return failure(StatusCode::UNAUTHORIZED, "local bearer token required");
     }
     let mut session_access = None;
@@ -151,9 +133,6 @@ async fn boundary(State(state): State<AppState>, mut request: Request, next: Nex
         let hosting = state.hosting.read().await;
         let Some(selected) = &hosting.selected else { return failure(StatusCode::CONFLICT, "Select a project first"); };
         let project = selected.root.to_string_lossy().into_owned();
-        if managed.as_ref().is_some_and(|identity| identity.project != project || !identity.is_valid()) {
-            return failure(StatusCode::UNAUTHORIZED, "MCP attachment is no longer active in this project");
-        }
         if request.headers().get_all("x-rho-test-project").iter().count() > 1 {
             return failure(StatusCode::BAD_REQUEST,"Duplicate test project selection");
         }
@@ -165,13 +144,14 @@ async fn boundary(State(state): State<AppState>, mut request: Request, next: Nex
             },
         };
         if let Some(id) = &test_project {
-            let context = managed.as_ref().map(|identity| identity.context.clone()).unwrap_or_else(NextHost::local_context);
+            let context = NextHost::local_context();
             if let Err(error) = selected.host.plugin_test_host(&context,id) {
                 return failure(StatusCode::CONFLICT,error.to_string());
             }
         }
-        let identity = managed.as_ref().map(|value| value.context.connection_id.clone()).unwrap_or_else(|| "manual-mcp".into());
-        let identity = rho_mcp::McpRequestIdentity { project, identity, test_project, managed };
+        let identity = rho_mcp::McpRequestIdentity {
+            project, identity: "manual-mcp".into(), test_project, managed: None,
+        };
         if request.headers().get_all("mcp-session-id").iter().count() > 1 {
             return failure(StatusCode::BAD_REQUEST, "Duplicate MCP session identity");
         }
@@ -186,8 +166,8 @@ async fn boundary(State(state): State<AppState>, mut request: Request, next: Nex
         request.extensions_mut().insert(identity);
     }
     if let Some(access) = &mut session_access {
-        // Reclaim only transports whose trusted attachment was revoked. Native
-        // science already accepted through those transports keeps its own owner.
+        // Reclaim transports belonging to a previous selected project. Accepted
+        // plugin operations retain their own lifecycle and are not cancelled.
         let mut cleanup = tokio::task::JoinSet::new();
         for id in access.take_expired() {
             let manager = state.mcp_manager.clone();
@@ -290,8 +270,6 @@ async fn select_project_root(state: &AppState, root: PathBuf) -> Response {
         }
         if !selected.host.is_idle()
             || Arc::strong_count(&selected.host) != 1
-            || state.task_agents.has_live().await
-            || state.component_agents.has_live().await
         {
             return failure(
                 StatusCode::CONFLICT,
@@ -551,7 +529,6 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
                         if let Err(error) = selected.host.prepare_workbench_quit().await {
                             return failure(StatusCode::CONFLICT, error.to_string());
                         }
-                        state.component_agents.close().await;
                         quit_signal.cancel();
                         Json(serde_json::json!({"quitting":true})).into_response()
                     }
@@ -559,27 +536,9 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
             ),
         )
         .route("/api/agent-connection", get(agent_connection))
-        .route("/api/agents/discover", post(agents::discover))
-        .route("/api/agents/setup", post(agents::setup))
-        .route("/api/agents/test", post(agent_tasks::test))
-        .route("/api/agents/tasks/query", post(agent_tasks::query))
-        .route("/api/agents/tasks/asset", post(agent_tasks::asset))
-        .route("/api/agents/handoff/query", post(agent_handoffs::query))
-        .route("/api/agents/handoff/command", post(agent_handoffs::command))
-        .route("/api/annotations/query", post(annotations::query))
-        .route("/api/annotations/capture", post(annotations::capture))
-        .route("/api/html/token", post(annotations::html_token))
-        .route("/view/html/{token}", get(annotations::html_view))
         .route("/view/plugin/{connection}/{token}/{*path}", get(plugin_views::asset))
         .route("/view/plugin-test/{test_project}/{connection}/{token}/{*path}", get(plugin_views::test_asset))
         .route("/api/plugin-view", post(plugin_views::dispatch))
-        .route("/api/agents/components/query", post(component_agents::query))
-        .route("/api/agents/components/command", post(component_agents::command))
-        .route("/api/agents/components/credential", post(component_agents::credential))
-        .route("/api/agents/components/context", post(component_agents::preview_source))
-        .route("/api/agents/components/context/search", post(component_agents::search_sources))
-        .route("/api/agents/components/test", post(component_agents::test_model))
-        .route("/api/agents/components/asset", post(component_agents::asset))
         .route("/api/project", post(select_project))
         .route("/api/project/demo", post(select_demo_project))
         .route("/api/r", get(settings::read_r).post(settings::apply_r))
@@ -603,22 +562,6 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
                     .layer(RequestBodyLimitLayer::new(MAX_BRIDGE_BODY)),
             ),
         )
-        .merge(
-            Router::new().route(
-                "/api/agents/tasks/command",
-                post(agent_tasks::command)
-                    .layer::<_, std::convert::Infallible>(DefaultBodyLimit::max(12 * 1024 * 1024))
-                    .layer(RequestBodyLimitLayer::new(12 * 1024 * 1024)),
-            ),
-        )
-        .merge(Router::new().route("/api/agents/components/asset/upload",
-            post(component_agents::asset_upload)
-                .layer::<_, std::convert::Infallible>(DefaultBodyLimit::max(3 * 1024 * 1024))
-                .layer(RequestBodyLimitLayer::new(3 * 1024 * 1024))))
-        .merge(Router::new().route("/api/annotations/command",
-            post(annotations::command)
-                .layer::<_, std::convert::Infallible>(DefaultBodyLimit::max(12 * 1024 * 1024))
-                .layer(RequestBodyLimitLayer::new(12 * 1024 * 1024))))
         .layer(middleware::from_fn_with_state(state.clone(), boundary))
         .with_state(state)
 }
@@ -667,7 +610,6 @@ pub async fn serve_with_assets(
             host: Arc::new(host),
             root,
             connections: Arc::default(),
-            agents: Arc::default(),
         })
     } else {
         None
@@ -698,16 +640,6 @@ pub async fn serve_with_assets(
         authorization: format!("Bearer {token}"),
         mcp_sessions: Arc::default(),
         mcp_manager: Arc::default(),
-        native_mcp_authorization: format!(
-            "Bearer {}{}",
-            uuid::Uuid::new_v4().simple(),
-            uuid::Uuid::new_v4().simple()
-        ),
-        task_agents: rho_host::AgentTaskService::new(application.clone()),
-        component_agents: rho_host::ComponentAgentService::new(application.clone()),
-        handoffs: Arc::new(rho_host::AgentHandoffService::new(application.clone())),
-        annotations: Arc::new(rho_host::AnnotationService::new(application.clone())),
-        html_views: Arc::default(),
         calls: Arc::new(Semaphore::new(32)),
         observations: Arc::new(Semaphore::new(16)),
         application,
@@ -715,8 +647,6 @@ pub async fn serve_with_assets(
         nonce: uuid::Uuid::new_v4().simple().to_string(),
     };
     let shutdown = CancellationToken::new();
-    let task_agents = state.task_agents.clone();
-    let component_agents = state.component_agents.clone();
     let app = router(state, shutdown.clone());
     if let Some(path) = url_file {
         let mut options = std::fs::OpenOptions::new();
@@ -742,8 +672,6 @@ pub async fn serve_with_assets(
             shutdown.cancel();
         })
         .await;
-    task_agents.close().await;
-    component_agents.close().await;
     if let Some(selected) = &hosting.read().await.selected {
         selected.host.drain().await;
     }
@@ -792,14 +720,8 @@ mod tests {
             authority: "127.0.0.1:10001".into(),
             origin: "http://127.0.0.1:10001".into(),
             authorization: "Bearer fixture-only".into(),
-            native_mcp_authorization: "Bearer native-fixture-only".into(),
             mcp_sessions: Arc::default(),
             mcp_manager: Arc::default(),
-            task_agents: rho_host::AgentTaskService::new(application.clone()),
-            component_agents: rho_host::ComponentAgentService::new(application.clone()),
-            handoffs: Arc::new(rho_host::AgentHandoffService::new(application.clone())),
-            annotations: Arc::new(rho_host::AnnotationService::new(application.clone())),
-            html_views: Arc::default(),
             calls: Arc::new(Semaphore::new(32)),
             observations: Arc::new(Semaphore::new(16)),
             application,
@@ -933,76 +855,35 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn agent_component_setup_rejects_wrong_project_and_unsupported_provider() {
-        let (_temp, state, app) = fixture().await;
-        let wrong = request(
-            &app,
-            "/api/agents/setup",
-            Some(json!({"project_root":"/wrong-project","provider":"deepseek"})),
-        )
-        .await;
-        assert_eq!(wrong.status(), StatusCode::CONFLICT);
-        let root = state.hosting.read().await.info().project_root;
-        let unsupported = request(
-            &app,
-            "/api/agents/setup",
-            Some(json!({"project_root":root,"provider":"codex"})),
-        )
-        .await;
-        assert_eq!(unsupported.status(), StatusCode::BAD_REQUEST);
-        assert!(
-            state
-                .hosting
-                .read()
-                .await
-                .selected
-                .as_ref()
-                .unwrap()
-                .host
-                .is_idle()
-        );
-    }
-    #[tokio::test]
-    async fn component_routes_reject_mcp_credentials_wrong_projects_and_missing_window_headers() {
-        let (_temp,state,app)=fixture().await;
-        let root=state.hosting.read().await.info().project_root;
-        for path in ["/api/agents/components/query","/api/agents/components/command","/api/agents/components/credential","/api/agents/components/context","/api/agents/components/context/search","/api/agents/components/test"] {
-            let response=app.clone().oneshot(Request::builder().method("POST").uri(path)
-                .header(header::HOST,"127.0.0.1:10001").header(header::AUTHORIZATION,"Bearer native-fixture-only")
-                .header(header::CONTENT_TYPE,"application/json").body(Body::from("{}")).unwrap()).await.unwrap();
-            assert_eq!(response.status(),StatusCode::UNAUTHORIZED);
-        }
-        let response=request(&app,"/api/agents/components/query",Some(json!({"project_root":"/other","query":{"kind":"settings"}}))).await;
-        assert_eq!(response.status(),StatusCode::CONFLICT);
-        let body=json_body(response).await;
-        assert_eq!(body["diagnostic"]["code"],"unavailable");
-        assert_eq!(body["submission"],"rejected");
-        assert_eq!(body["diagnostic"]["next_reads"],json!([]));
-        let response=request(&app,"/api/agents/components/query",Some(json!({"project_root":root,"query":{"kind":"settings"}}))).await;
-        assert_eq!(response.status(),StatusCode::OK);assert_eq!(json_body(response).await["settings"]["enabled"],false);
-        let response=request(&app,"/api/agents/components/command",Some(json!({"project_root":root,"window":{"window_id":"unregistered","incarnation":"unregistered"},"command":{"kind":"create","conversation_id":"example","profile":"objects"}}))).await;
-        assert_eq!(response.status(),StatusCode::FORBIDDEN);assert!(!state.component_agents.has_live().await);
-    }
-
-    #[tokio::test]
-    async fn component_history_route_reads_without_a_model_or_r_runtime() {
-        let (_temp, state, app) = fixture().await;
+    async fn retired_scientific_http_routes_have_no_builtin_fallback() {
+        let (_temp, state, app) = fixture_with_runtime(RuntimeConfiguration::Plugins).await;
         let host = state.hosting.read().await.selected.as_ref().unwrap().host.clone();
-        let project = state.hosting.read().await.info().project_root.unwrap();
-        let mut context = NextHost::local_context();
-        context.connection_id = "studio:history-test".into();
-        let registered = host.dispatch(&context, HostRequest::ApplicationBridge(rho_contract::ApplicationBridgeRequest::Register {
-            window_id: "history-window".into(), incarnation: "history-life".into(), label: "History test".into(), previous_session: None,
-        })).await.unwrap();
-        let rho_contract::ApplicationBridgeReply::Registered(registration) = serde_json::from_value(registered).unwrap() else { panic!() };
-        state.component_agents.create(&host, &context, &project, &registration.session.window, "history", rho_contract::ComponentAgentProfile::Objects).unwrap();
-        let before = host.outbox(&context, 0, 100).await.unwrap();
-        let reply = request(&app, "/api/agents/components/query", Some(json!({"project_root":project,"query":{"kind":"runs","conversation_id":"history","before":null,"limit":32}}))).await;
-        assert_eq!(reply.status(), StatusCode::OK);
-        assert_eq!(json_body(reply).await, json!({"runs":[]}));
-        assert!(!state.component_agents.has_live().await);
+        let before = host.outbox(&NextHost::local_context(), 0, 100).await.unwrap();
+        for path in [
+            "/api/agents/discover", "/api/agents/setup", "/api/agents/test",
+            "/api/agents/tasks/query", "/api/agents/tasks/command", "/api/agents/tasks/asset",
+            "/api/agents/handoff/query", "/api/agents/handoff/command",
+            "/api/agents/components/query", "/api/agents/components/command",
+            "/api/agents/components/credential", "/api/agents/components/context",
+            "/api/agents/components/context/search", "/api/agents/components/test",
+            "/api/agents/components/asset", "/api/agents/components/asset/upload",
+            "/api/annotations/query", "/api/annotations/command", "/api/annotations/capture",
+            "/api/html/token",
+        ] {
+            assert_eq!(request(&app, path, Some(json!({}))).await.status(), StatusCode::NOT_FOUND, "{path}");
+        }
+        assert_eq!(request(&app, "/view/html/retired-token", None).await.status(), StatusCode::NOT_FOUND);
+        // Only the explicit Workbench credential reaches its public MCP edge.
+        // Ordinary Agent backends issue credentials on their own private endpoint.
+        for method in ["POST", "GET", "DELETE"] {
+            let response = app.clone().oneshot(Request::builder().method(method).uri("/mcp")
+                .header(header::HOST, "127.0.0.1:10001")
+                .header(header::AUTHORIZATION, "Bearer native-fixture-only")
+                .body(Body::empty()).unwrap()).await.unwrap();
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
         assert!(host.is_idle());
-        assert_eq!(host.outbox(&context, 0, 100).await.unwrap(), before);
+        assert_eq!(host.outbox(&NextHost::local_context(), 0, 100).await.unwrap(), before);
     }
 
     #[tokio::test]
@@ -1352,12 +1233,6 @@ mod tests {
     }
 }
 
-#[cfg(test)]
-mod mcp_identity_tests;
-#[cfg(test)]
-mod agent_handoff_tests;
-#[cfg(test)]
-mod annotation_tests;
 
 #[cfg(test)]
 mod plugin_test_project_tests;

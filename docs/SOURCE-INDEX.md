@@ -344,8 +344,6 @@ Checks:
   Applies to: `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `plugins/annotations/**`, `plugins/editor/backend/**`, `scripts/fixtures/annotation-capture-source.py`, `scripts/fixtures/annotation-captures.mjs`, `scripts/test-annotation-plugin.mjs`.
 - `plugins.annotation-files-host` (L2): `["node","scripts/test-annotation-plugin.mjs","--files"]`
   Applies to: `plugins/annotations/**`, `plugins/files/backend/**`, `scripts/fixtures/annotation-files.mjs`, `scripts/test-annotation-plugin.mjs`.
-- `plugins.annotation-http` (L2): `["cargo","test","-p","rho-workbench","--lib","annotation_tests","--locked"]`
-  Applies to: `crates/adapters/sqlite/src/annotations.rs`, `crates/adapters/sqlite/src/application.rs`, `crates/application/src/annotations.rs`, `crates/host/src/annotations.rs`, `crates/workbench/src/annotation_tests.rs`, `crates/workbench/src/annotations.rs`, `plugins/annotations/**`.
 - `plugins.annotation-image-agent` (L2): `["node","scripts/test-annotation-plugin.mjs","--agent","--captures","--browser"]`
   Applies to: `crates/host/tests/fixtures/agent-science.cjs`, `plugins/agent/**`, `plugins/annotations/**`, `scripts/fixtures/agent-annotation-tools.cjs`, `scripts/fixtures/annotation-agent-browser.mjs`, `scripts/fixtures/annotation-captures.mjs`, `scripts/fixtures/annotation-image-agent.mjs`, `scripts/fixtures/annotation-native-agent.mjs`, `scripts/test-annotation-plugin.mjs`.
 - `plugins.annotation-independent` (L2): `["node","scripts/test-annotation-plugin-store.mjs","--independent"]`
@@ -590,7 +588,7 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
 - `plugins.workspace-host` (L2): `["cargo","test","-p","rho-host","--test","plugin_workspace","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
-- `plugins.workspace-http` (L1): `["cargo","test","-p","rho-workbench","--lib","plugin_workspace","--locked"]`
+- `plugins.workspace-http` (L1): `["cargo","test","-p","rho-workbench","--lib","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
 - `system.architecture` (L0): `["node","scripts/check-architecture.mjs"]`
   Applies to: `Cargo.toml`, `crates/**`, `plugins/**`, `r/**`, `scripts/check-architecture.mjs`, `ui/src/**`.
@@ -687,8 +685,6 @@ Checks:
   Applies to: `governance/**`, `scripts/governance.mjs`, `scripts/test-governance.mjs`.
 - `system.agent-harness` (L1): `["node","scripts/test-agent-interface.mjs","--self-test"]`
   Applies to: `scripts/agent-interface/**`, `scripts/test-agent-interface.mjs`.
-- `system.agent-tasks` (L2): `["node","scripts/test-agent-task-recovery.mjs"]`
-  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-agent-task-recovery.mjs`.
 - `system.architecture` (L0): `["node","scripts/check-architecture.mjs"]`
   Applies to: `Cargo.toml`, `crates/**`, `plugins/**`, `r/**`, `scripts/check-architecture.mjs`, `ui/src/**`.
 - `system.architecture-tests` (L0): `["node","scripts/test-architecture.mjs"]`

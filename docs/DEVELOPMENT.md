@@ -293,8 +293,9 @@ styles and tests have been deleted. Their replacement checks live with the ordin
 plugins and the integrated scientific/Agent browser suites. The retained core UI
 checks cover transport, framing, layout, startup, closing and recovery.
 
-The Rust fixed-composition adapters and HTTP acceptance scripts still remain for
-the next removal stage; `--fixed-workspace` no longer selects a fixed browser UI.
+Private Agent/annotation/HTML HTTP routes and Workbench-owned service construction
+have also been removed. The fixed Rust composition, R settings and application
+bridge HTTP adapters remain for the next removal stage; `--fixed-workspace` no longer selects a fixed browser UI.
 It must not be treated as a fallback when feature packages are absent. Historical
 fixed-renderer test totals do not count as current plugin acceptance.
 
@@ -304,8 +305,9 @@ Annotation ownership checks reuse the workspace: `cargo test -p rho-annotation-s
 --test annotations --locked` covers immutable evidence, revisions, idempotency,
 separate-connection races, scope isolation and transactional budgets. The retiring
 bridge uses `cargo test -p rho-sqlite --test annotations --locked` for domain
-round-trips, live-window checks and absence of old-table reads; its HTTP checks are
-`cargo test -p rho-workbench --lib annotation_tests --locked`. Run these serially.
+round-trips, live-window checks and absence of old-table reads. Annotation HTTP
+checks were retired with the private routes; `node scripts/test-annotation-plugin.mjs`
+checks the ordinary native owner through a real generic Host. Run Cargo serially.
 `cargo test -p rho-annotation-backend --lib --locked` exercises the actual framed
 native entry with deterministic public context peers, receipts and reopen; it is
 not real Host/Editor/R acceptance. Changed source identities also require the
@@ -588,10 +590,10 @@ the checkout, verifies all local dependency containment and runs the same native
 protocol/recovery fixtures plus generated-contract freshness. Local fake providers
 exercise original input identity, bounded/redacted observations, uncertain replies,
 cancellation and native-session recovery without starting real Agents. Host task
-admission and HTTP identity integration remain covered by `cargo test -p rho-host
---lib agent_tasks --locked` and `cargo test -p rho-workbench --lib mcp_identity
---locked`; these do not establish an ordinary Agent runtime/view or real-provider
-acceptance. No setup entry point is invoked by the native fixture checks.
+admission remains covered by `cargo test -p rho-host --lib agent_tasks --locked`
+while that adapter awaits deletion. Workbench tests cover generic MCP project and
+test-project identity; ordinary Agent private MCP is checked by the native package
+and real Agent tool/restart acceptance. No setup entry point is invoked by the native fixture checks.
 
 The native task scheduler is `plugins/agent/backend/native`. Iterate with
 `cargo test -p rho-agent-native --lib --locked`, then run `cargo test -p rho-host
@@ -600,11 +602,10 @@ The native task scheduler is `plugins/agent/backend/native`. Iterate with
 owner and store outside the checkout and runs receipt-failure, no-replay and
 endpoint-cleanup fixtures, including failed registration and unconfirmed process
 cleanup, using only public dependencies. These use fake native
-sessions and a disposable Agent database. After building the current binary,
-`node scripts/test-agent-task-recovery.mjs` exercises the local ACP fixture across
-a disposable Host crash and explicit resume. Its default fixture run observes
-only temporary configuration; native user settings are inspected only by explicit
-`--real-*` runs. Ordinary native-plugin composition has separate framed and Host
+sessions and a disposable Agent database. The old fixed HTTP recovery script has
+been retired; ordinary `ui/e2e/agent-workspace.spec.ts` and
+`node scripts/test-agent-process.mjs` cover actual Host restart with explicit retained
+packages and local ACP peers. Ordinary native-plugin composition has framed and Host
 acceptance: `cargo test -p rho-agent-backend --test metadata native_tasks --locked`
 uses an injected native factory and real package storage/loopback endpoints.
 It covers original Send retention, explicit Stop, next drafts, attachment input,
@@ -1527,9 +1528,7 @@ Native/transport verification:
 | `test-remote-protocol.mjs` | Local SSH/Slurm transcript fixtures; does not validate a remote cluster |
 | `test-remote-live.mjs` | Opt-in real jobs on an explicitly selected host/scratch directory; see Operations |
 | `test-agent-interface.mjs` | Optional client-driven observations of Rho interfaces using an explicitly selected Codex installation; deterministic self-tests cover the harness without calling a model |
-| `test-agent-clients.mjs` | Optional investigation of Rho integration with installed/authenticated Codex/Kimi/DeepSeek; real-provider answers are observations, not a Rho acceptance gate |
 | `test-deepseek-inbox.mjs` | Checks the installed, lock-matched native Inbox replay/clear implementation with a disposable journal; no provider calls or session scan |
-| `test-agent-task-recovery.mjs` | Rho-owned recovery with a local ACP fixture by default: disposable Host crash, original identities, draft/receipt preservation, refreshed MCP and image-byte delivery; real-provider modes are optional investigations |
 
 Interactive Rho integration checks need a disposable analysis project outside the Rho
 checkout's ancestry, so the native Agent does not inherit repository-development
@@ -1563,17 +1562,17 @@ image tests at this boundary verify the bytes, metadata and references Rho deliv
 Missing native text or usage stays missing, and a native end-of-turn is not evidence
 that a requested answer or scientific result exists.
 
-For the routine isolated recovery check, run:
+For isolated ordinary Agent recovery, build the current Host and run:
 
 ```sh
-node scripts/test-agent-task-recovery.mjs
+RHO_PLUGIN_SET_PACKAGE=/absolute/path/to/retained/plugin-set node scripts/test-agent-process.mjs
 ```
 
-The real-provider switches of this script and `test-agent-clients.mjs` remain
-available only for an explicitly requested integration investigation, not routine
-Rho acceptance. Such runs use independent test Hosts and preserve native config
-hashes; never point them at a research Host. Keep prior raw logs and failed attempts
-as recorded. Changing the acceptance scope does not change an old failure to a pass.
+This reuses the selected archives and runs a local ACP peer, original tool/Send
+receipts, cancellation and same-instance Host restart. No real provider is called.
+The fixed HTTP scripts `test-agent-task-recovery.mjs` and `test-agent-clients.mjs`
+were deleted with their endpoints. Prior raw logs and failed attempts remain
+historical evidence; retiring a check does not turn an old failure into a pass.
 The reviewed Kimi adapter source was tag `@moonshot-ai/kimi-code@0.41.0`, commit
 `95478e8c7ba248fd2470d5bb151555ec7fedd19d`; that provenance does not certify the
 third-party product or require its current models to pass an independent evaluation.
@@ -1729,14 +1728,11 @@ and assets before verifying the current binary.
 
 ## Optional external-client observations
 
-For managed native task recovery, `node scripts/test-agent-task-recovery.mjs`
-runs an isolated protocol fixture. For a separately requested integration investigation,
-`--real-codex`, `--real-kimi` or `--real-deepseek` select a real provider. `--model EXACT_NATIVE_MODEL_ID` overrides
-the test session's model without changing the native platform's configuration.
-Use a model actually reported by that installation; retain failed attempts when
-changing it. These checks distinguish ordinary text/MCP recovery, image input and
-reported native usage. A successful native end-of-turn alone is not proof of an
-answer, correct image interpretation or token usage being reported.
+Ordinary Agent task recovery uses the retained-package checks above. For any
+separately requested real-provider investigation, use a disposable plugin instance
+and a model reported by that installation. Preserve configuration and failed
+attempts. A native end-of-turn alone does not prove an answer, image interpretation
+or token usage being reported.
 
 [`test-agent-interface.mjs`](../scripts/test-agent-interface.mjs) and
 [`scripts/agent-interface/`](../scripts/agent-interface/) are development tests,

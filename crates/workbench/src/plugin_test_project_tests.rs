@@ -12,7 +12,6 @@ mod fixture;
 
 struct Test {
     _directory: tempfile::TempDir,
-    state: AppState,
     app: Router,
     host: Arc<NextHost>,
     root: String,
@@ -68,7 +67,6 @@ impl Test {
         let app = router(state.clone(), shutdown.clone());
         Self {
             _directory: directory,
-            state,
             app,
             host,
             root,
@@ -146,8 +144,6 @@ impl Test {
     }
     async fn close(self) {
         self.shutdown.cancel();
-        self.state.task_agents.close().await;
-        self.state.component_agents.close().await;
         self.host.drain().await;
     }
 }

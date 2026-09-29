@@ -93,8 +93,11 @@ The browser always uses the ordinary plugin window. The temporary
 `rho --fixed-workspace ... workbench` profile retains fixed Rust/HTTP adapters for
 remaining backend reference checks; it no longer provides the retired fixed
 browser shell. Its R/remote/Skill startup flags apply only to that backend profile.
-Missing or failed plugins never trigger a fixed-interface fallback. Removal of
-these remaining backend adapters is tracked in Status.
+Missing or failed plugins never trigger a fixed-interface fallback. Agent, handoff,
+annotation and HTML Viewer use ordinary plugin capabilities/resources; their former
+private HTTP routes and Workbench-owned services have been removed. Agent MCP
+credentials belong to its backend endpoint, not the public Workbench `/mcp`.
+Removal of the remaining fixed backend adapters is tracked in Status.
 
 The native development ports `plugins.test_create`, `plugins.test_project`,
 `plugins.test_projects`, `plugins.test_operation` and `plugins.test_stop` create,

@@ -159,7 +159,6 @@ pub(super) async fn apply_r(
         }
         if !selected.host.is_idle()
             || Arc::strong_count(&selected.host) != 1
-            || state.task_agents.has_live().await
         {
             return failure(
                 StatusCode::CONFLICT,

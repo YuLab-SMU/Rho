@@ -1325,10 +1325,15 @@ not supply an invented cost estimate.
 `AgentTaskDraft`, `AgentCommandReceipt` and `AgentTaskEvent` live in the
 package-owned Agent store. No abandoned store or external CLI session is imported.
 Native session IDs enter through the adapter, never arbitrary browser input.
-`/api/agents/tasks/query` performs bounded observations; `/api/agents/tasks/command`
-admits a task/window/generation-bound action. `/api/agents/test` is a separate
-idempotent diagnostic path. Discovery and explicit setup keep their existing routes.
-The old ephemeral connect/action/sessions HTTP routes are retired.
+The ordinary Agent backend exposes bounded queries and task/window/generation-bound
+actions through its declared public capabilities. Workbench no longer constructs
+Agent, handoff or annotation services and has no private `/api/agents/*`,
+`/api/annotations/*`, `/api/html/token` or `/view/html/*` routes. Its public MCP edge
+accepts only the Workbench credential and preserves project/test-project session
+identity. Each ordinary Agent backend owns its separate private MCP endpoint;
+Workbench does not resolve Agent-issued credentials or close Agent tasks itself.
+HTML resources are presented by the ordinary Viewer through plugin resources.
+Temporary Host/Application task adapters still exist until their separate M6 removal.
 
 Persist a request and input digest before starting native creation or submission.
 The same request identity/content returns its receipt; altered reuse is rejected.
