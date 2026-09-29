@@ -311,6 +311,9 @@ try {
   const { RhoModel } = await import(pathToFileURL(path.join(temporary, 'compiled/src/rho-model.js')));
   const { testRhoTasks } = await import('./fixtures/agent-rho-tasks.mjs');
   await testRhoTasks(RhoModel, NativeAgentModel, operationRequestId);
+  const { HandoffModel } = await import(pathToFileURL(path.join(temporary, 'compiled/src/handoff-model.js')));
+  const { testHandoffs } = await import('./fixtures/agent-handoffs.mjs');
+  await testHandoffs(HandoffModel, NativeAgentModel, operationRequestId);
   const { ContextPicker, inclusionChoices } = await import(pathToFileURL(path.join(temporary, 'compiled/src/context-model.js')));
   const { testContextPicker } = await import('./fixtures/agent-context-picker.mjs');
   await testContextPicker(ContextPicker, inclusionChoices, root);

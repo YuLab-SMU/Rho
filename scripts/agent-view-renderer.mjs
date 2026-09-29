@@ -116,6 +116,8 @@ export async function testAgentRenderer(root, assets) {
     await testSettingsRenderer(page, frame, expect, output);
     const { testRhoRenderer } = await import('./fixtures/agent-rho-renderer.mjs');
     await testRhoRenderer(page, frame, expect, output);
+    const { testHandoffRenderer } = await import('./fixtures/agent-handoff-renderer.mjs');
+    await testHandoffRenderer(page, frame, expect, output);
     await page.evaluate(() => window.fixture.close());
     await expect.poll(async () => (await page.evaluate(() => window.fixture.snapshot())).calls.filter(call => call.type === 'prepare_close').length).toBe(1);
     snapshot = await page.evaluate(() => window.fixture.snapshot()); assert.equal(snapshot.calls.filter(call => call.arguments?.arguments?.command?.kind === 'stop').length, 0);

@@ -3,13 +3,14 @@ import type { AgentDraftContent, AgentTaskCommand, AgentTaskCommandResult, Agent
 import { NativeHistory } from './history.js';
 import type { ModelSettingsState } from './model-settings.js';
 import type { RhoState } from './rho-model.js';
+import type { HandoffState } from './handoff-model.js';
 import { captureFile, attachmentChunk, verifyProgress, verifyUploaded, ATTACHMENT_CHUNK_BYTES, type PendingUpload, type UploadProgress } from './uploads.js';
 import { type Client, type Intent, type RecordReply, json, same, terminal, verifyOriginal, inspectOriginal } from './operations.js';
 
 type Command = Exclude<AgentTaskCommand, { kind: 'add_asset' }>;
 interface LocalDraft { content: AgentDraftContent; base: number; revision: number; dirty: boolean; conflict: AgentDraftContent | null; }
 interface Pending { intent: Intent; task: string | null; kind: Command['kind'] | 'discover'; draftRevision: number | null; status: string | null; }
-interface Saved { schema: 1; selected: string | null; archived: boolean; drafts: Record<string, LocalDraft>; pending: Pending[]; tools: AgentNativeToolSelection[]; catalogs: Partial<Record<AgentProvider, LocalAgent>>; uploads?: PendingUpload[]; settings?: ModelSettingsState; rho?: RhoState; }
+interface Saved { schema: 1; selected: string | null; archived: boolean; drafts: Record<string, LocalDraft>; pending: Pending[]; tools: AgentNativeToolSelection[]; catalogs: Partial<Record<AgentProvider, LocalAgent>>; uploads?: PendingUpload[]; settings?: ModelSettingsState; rho?: RhoState; handoffs?: HandoffState; }
 const empty = (): AgentDraftContent => ({ text: '', assets: [], context: [] });
 export const agentBusy = (state: string) => ['running', 'waiting_for_permission', 'connecting', 'resuming', 'stopping', 'queued', 'waiting_for_r', 'needs_input'].includes(state);
 

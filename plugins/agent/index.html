@@ -7,10 +7,28 @@
       <button id="new-task" popovertarget="new-menu" aria-label="New task">New task</button>
       <div id="new-menu" popover><button id="new-rho-task">Rho</button><button data-provider="codex">Codex</button><button data-provider="kimi">Kimi Code</button><button data-provider="deepseek">DeepSeek Harness</button></div>
       <button id="task-actions" popovertarget="actions-menu" aria-label="Task actions">•••</button>
-      <div id="actions-menu" popover><button id="rename-task">Rename</button><button id="archive-task">Archive</button><button id="show-details">Session details</button><button id="open-settings">Settings</button></div>
+      <div id="actions-menu" popover><button id="prepare-handoff">Prepare handoff</button><button id="rename-task">Rename</button><button id="archive-task">Archive</button><button id="show-details">Session details</button><button id="open-settings">Settings</button></div>
     </header>
     <div id="task-pages" hidden><button id="newer-tasks">Newer tasks</button><button id="older-tasks">Older tasks</button></div>
     <div class="task-state"><span id="task-state">Choose or create a task</span><button id="take-over" hidden>Take over</button><button id="resume" hidden>Resume</button><button id="configure-rho" hidden>Configure Rho</button></div>
+    <section id="handoff" aria-label="Prepare handoff" hidden>
+      <header><strong>Prepare handoff</strong><small id="handoff-source-title"></small></header>
+      <div class="handoff-body">
+        <h2>Transfer the useful context</h2>
+        <label>Send context to<select id="handoff-target" aria-label="Send context to"><option value="">Choose a task in this project</option></select></label>
+        <div class="handoff-task-pages"><button id="handoff-newer" hidden>Newer tasks</button><button id="handoff-more" hidden>More project tasks</button></div><p id="handoff-task-note"></p>
+        <label>Handoff draft<textarea id="handoff-text" aria-label="Handoff draft" maxlength="16384" rows="8" placeholder="Goal:&#10;&#10;Confirmed:&#10;&#10;Next:"></textarea></label>
+        <div id="handoff-sources" aria-label="Handoff sources"></div>
+        <p id="handoff-invalid" role="alert" hidden>Some references are no longer in the source observation. Preview and remove them before adding the handoff.</p>
+        <section id="handoff-preview-area" aria-label="Handoff source preview" hidden><header><strong id="handoff-preview-title">Source preview</strong><button id="handoff-preview-close" aria-label="Close handoff source preview">Close</button></header><pre id="handoff-preview"></pre><small id="handoff-preview-note"></small></section>
+        <p id="handoff-notices"></p>
+        <section id="handoff-existing" aria-label="Existing target draft"><small>Already in the target draft</small><p id="handoff-existing-text"></p><small id="handoff-existing-note"></small></section>
+        <div id="handoff-error" role="alert" hidden></div><button id="handoff-refresh">Refresh source and target</button>
+        <div id="handoff-recovery" role="status" hidden><strong>Check the handoff receipt</strong><p>The original request is kept until its result is confirmed.</p></div>
+        <div id="handoff-confirmed" role="status" hidden><strong>Added to the target draft</strong><p>The target draft is ready for review. Send it when ready.</p><details><summary>Handoff receipt</summary><pre id="handoff-receipt"></pre></details></div>
+      </div>
+      <footer><small>Add to draft, then send when ready.</small><button id="handoff-close">Back to task</button><button id="handoff-check" hidden>Check receipt</button><button id="handoff-retry" hidden>Retry original request</button><button id="handoff-open-target" class="primary" hidden>Open target draft</button><button id="handoff-add" class="primary" disabled>Add to draft</button></footer>
+    </section>
     <section id="session-details" hidden aria-label="Agent session details"></section>
     <div id="history-controls" hidden><button id="earlier-messages">Earlier messages</button><button id="latest-messages" hidden>Latest messages</button><span id="history-note"></span></div>
     <div id="transcript" role="log" aria-label="Agent conversation"><p class="empty">Your conversation appears here.</p></div>

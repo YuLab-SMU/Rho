@@ -27,11 +27,27 @@ const staged = new Map();
 let modelSettings = {version:0,enabled:false,connection:null}, loseSettings = '';
 const modelKeys = new Map(), modelTests = new Map();
 const rhoTasks = new Map(), rhoRuns = new Map(), rhoEvents = new Map();
+const handoffReceipts = new Map();
+let loseHandoff = false;
 let loseRho = '', confirmedRho = false;
 let contextFault = '', contextManifest;
 const contextProvider = {...instance,instance:'editor-one',plugin:'org.rho.editor',revision:'sha256:'+'c'.repeat(64),artifact:'sha256:'+'d'.repeat(64)};
 const contextReference = {provider:contextProvider,contribution:'documents',window:'window',selector:{draft:'draft-one',version:7,digest:'sha256:'+'e'.repeat(64)}};
 const contextItem = {reference:contextReference,title:'分析 Ω.R',description:'Synchronized version 7 · selected lines 1–2',kind:'document'};
+
+function handoffTarget(ref) {
+  const native=ref.kind==='native', task=native?details.get(ref.task_id):rhoTasks.get(ref.conversation_id);
+  if(!task)throw Error('Unknown handoff task');
+  const draft=native?task.draft.content:task.draft_content;
+  return {target:copy(ref),title:native?task.summary.task.title:task.title,draft:copy(draft),draft_version:native?task.draft.version:task.draft_version,
+    controller:copy(native?task.summary.attachment.controller:task.controller),control_generation:native?task.summary.attachment.generation:null,
+    writable:!(native?task.summary.task.archived:task.archived),reason:null};
+}
+function handoffSource(ref) {
+  const target=handoffTarget(ref);
+  return {source:copy(ref),title:target.title,body:`Goal:\n${target.draft.text}\n\nConfirmed:\n\nNext:\n`,context:target.draft.context,
+    revision:`fixture-${target.draft_version}-${target.title}`,truncated:false,notices:target.draft.assets.length?['Source attachments remain in the original task and will not be copied.']:[]};
+}
 
 async function requestId(request) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('agent-view:' + request));
@@ -51,6 +67,9 @@ async function handle(body) {
     reads[id] = (reads[id] ?? 0) + 1;
     let data;
     if (id === 'operation.list_recent') data = { operations: records.filter(r => r.operation.client_request_id === body.arguments.client_request_id).map(r => ({ operation_id: r.operation.operation_id })) };
+    else if (id === 'agent.handoff.source') data = handoffSource(args.source);
+    else if (id === 'agent.handoff.target') data = handoffTarget(args.target);
+    else if (id === 'agent.handoff.receipt') { data=handoffReceipts.get(args.request_id)??null; if(!data)return {status:'ready',completeness:'partial',data:null}; }
     else if (id === 'agent.native.context') {
       const reference=copy(contextReference);reference.selector.version=6;
       data={request_id:args.request_id,task_id:'task-0',contexts:[{selection:{source:'plugin',label:'Captured selection',reference,inclusion:'{"kind":"selection"}'},title:'分析 Ω.R · selection',description:'Original synchronized version 6',text:'original_value <- 7 # 中文 Ω',data:{version:6}}]};
@@ -141,6 +160,25 @@ async function handle(body) {
   }
   if (body.type === 'invoke') {
     calls.push(copy(body));
+    if(body.capability.id==='agent.handoff.append') {
+      const args=body.arguments.arguments,key=args.source.kind==='native'?`native:${args.source.task_id}`:`rho:${args.source.conversation_id}`;
+      const retained=view.state.handoffs?.editors[key]?.pending;
+      if(!retained||JSON.stringify(retained.arguments)!==JSON.stringify(body.arguments)||retained.request!==body.request_id)throw Error('Original handoff was not saved');
+      const scoped=await requestId(body.request_id);let record=records.find(r=>r.operation.client_request_id===scoped);
+      if(!record){
+        const before=handoffTarget(args.target),source=handoffSource(args.source);let output=null,error=null;
+        if(source.revision!==args.source_revision||before.draft_version!==args.target_draft_version||before.control_generation!==args.target_control_generation||!before.writable)error='The source or target draft changed';
+        else{
+          const draft=copy(before.draft);draft.text+=(draft.text?'\n\n':'')+args.body;
+          for(const selection of args.context)if(!draft.context.some(original=>JSON.stringify(original)===JSON.stringify(selection)))draft.context.push(copy(selection));
+          if(args.target.kind==='native'){const task=details.get(args.target.task_id);task.draft.content=draft;task.draft.version++;task.summary.observation_version++;}
+          else{const task=rhoTasks.get(args.target.conversation_id);task.draft_content=draft;task.draft=draft.text;task.draft_version++;task.version++;}
+          output={request_id:args.request_id,source:copy(args.source),target:copy(args.target),target_draft_version:before.draft_version+1,created_at_ms:Date.now()};handoffReceipts.set(args.request_id,copy(output));
+        }
+        record={operation:{operation_id:'op-'+records.length,caller:{kind:'plugin',id:view.view},client_request_id:scoped,capability:copy(body.capability),normalized_arguments:copy(body.arguments),preconditions:[]},status:error?'failed':'succeeded',outcome:error?'failed':'succeeded',output,error};records.push(record);
+      }
+      if(loseHandoff){loseHandoff=false;throw Error('Lost handoff reply');}return copy(record);
+    }
     if (['create','draft','update','take_control','run','run.stop','run.reconcile'].some(kind=>body.capability.id===`agent.model.${kind}`)) {
       const retained=view.state.rho?.pending.find(p=>p.intent.request===body.request_id);
       if(!retained || JSON.stringify(retained.intent.arguments)!==JSON.stringify(body.arguments)) throw Error('Original Rho intent was not retained');
@@ -238,6 +276,9 @@ addEventListener('message', event => {
 window.fixture = {
   snapshot: () => copy({ view, calls, details: [...details], records, reads, rhoTasks:[...rhoTasks], rhoRuns:[...rhoRuns] }),
   contextFault: value => { contextFault=value; },
+  loseHandoffReply: () => { loseHandoff=true; },
+  handoffContext: () => { const task=details.get('task-0');task.draft.content.context=[{source:'plugin',label:'Editor documents · 分析 Ω.R',reference:copy(contextReference),inclusion:'{"kind":"selection"}'}];task.draft.version++;task.summary.observation_version++; },
+  changeHandoffTarget: () => { const task=details.get('task-1');task.draft.content.text='Changed target draft · 保留';task.draft.version++;task.summary.observation_version++; },
   loseRhoReply: id => { loseRho=id; },
   confirmRhoOutcomes: () => { confirmedRho=true; },
   finishRho: id => {

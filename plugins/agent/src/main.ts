@@ -8,11 +8,12 @@ import { NativeAgentModel, agentBusy } from './native-model.js';
 import { mountContext } from './context-view.js';
 import { mountSettings } from './settings-view.js';
 import { RhoModel, rhoBusy } from './rho-model.js';
+import { mountHandoff } from './handoff-view.js';
 
 const get = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const client = await connectPluginView();
 let disposed = false, closing = false, composing = false, compositionEnded = -Infinity, renderedTask: string | null = null;
-let polling = false, model: NativeAgentModel, rho: RhoModel, context: ReturnType<typeof mountContext> | undefined;
+let polling = false, model: NativeAgentModel, rho: RhoModel, context: ReturnType<typeof mountContext> | undefined, handoff: ReturnType<typeof mountHandoff> | undefined;
 const draftTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const flights = new Set<Promise<unknown>>(), message = get<HTMLTextAreaElement>('message');
 const positions = new Map<string, { event: string; offset: number }>();
@@ -69,15 +70,15 @@ function render() {
     if (activeKey && !tasks.some(task => taskKey(task.reference) === activeKey))
       selector.add(new Option(conversation?.title ?? detail?.summary.task.title ?? 'Unconfirmed task', activeKey));
   }
-  selector.value = activeKey; for (const button of list.querySelectorAll<HTMLElement>('[data-task]')) button.setAttribute('aria-current', String(button.dataset.task === activeKey));
-  selector.disabled = model.busy || rho.busy || closing;
+  selector.value = activeKey; for (const button of list.querySelectorAll<HTMLButtonElement>('[data-task]')) { button.setAttribute('aria-current', String(button.dataset.task === activeKey)); button.disabled = !!handoff?.isComposing || closing; }
+  selector.disabled = model.busy || rho.busy || closing || !!handoff?.isComposing;
   get('task-pages').hidden = !model.page?.next && !model.newerTasksAvailable;
   get<HTMLButtonElement>('newer-tasks').disabled = model.taskLoading || !model.newerTasksAvailable || closing;
   get<HTMLButtonElement>('older-tasks').disabled = model.taskLoading || !model.page?.next || closing;
-  get<HTMLButtonElement>('new-task').disabled = model.busy || rho.busy || closing || model.state.pending.some(p => p.kind === 'create' || p.kind === 'discover') || rho.state.pending.some(p => p.kind === 'create');
+  get<HTMLButtonElement>('new-task').disabled = model.busy || rho.busy || closing || !!handoff?.isComposing || model.state.pending.some(p => p.kind === 'create' || p.kind === 'discover') || rho.state.pending.some(p => p.kind === 'create');
   get<HTMLButtonElement>('task-actions').disabled = closing;
   get('archived').textContent = model.state.archived ? 'Active tasks' : 'Archived tasks';
-  if (rid) { renderRho(rid); return; }
+  if (rid) { renderRho(rid); handoff?.render({ kind: 'rho', conversation_id: rid }, closing); return; }
   get('configure-rho').hidden = true;
   get<HTMLButtonElement>('tools').disabled = closing || !((client.view.configuration as {tools?: unknown[]}).tools?.length);
   for (const id of ['rename-task', 'archive-task', 'show-details']) get<HTMLButtonElement>(id).disabled = !detail;
@@ -162,6 +163,7 @@ function render() {
   get('session-details').textContent = detail ? `Native session: ${detail.summary.task.native_session_id ?? 'Created on first Send'}\n${detail.summary.unconfirmed} unconfirmed request(s)\n${history?.source ?? detail.summary.attachment.capabilities.history ?? 'Observation cache'}` : '';
   get('archived').textContent = model.state.archived ? 'Active tasks' : 'Archived tasks';
   get('archive-task').textContent = detail?.summary.task.archived ? 'Unarchive' : 'Archive';
+  handoff?.render(id ? { kind: 'native', task_id: id } : null, closing);
 }
 function renderRho(id: string) {
 
@@ -305,6 +307,7 @@ model = new NativeAgentModel(client, render);
 rho = new RhoModel(client, model, render);
 const settings = mountSettings(client, model, track);
 context = mountContext(client, model, (task, kind) => saveDraftSoon(task, kind));
+handoff = mountHandoff(client, model, rho, track, render);
 message.addEventListener('compositionstart', () => { composing = true; compositionEnded = -Infinity; clearDraftTimers(); });
 message.addEventListener('compositionend', () => { composing = false; compositionEnded = performance.now(); changedText(); });
 message.addEventListener('input', changedText);
@@ -369,6 +372,7 @@ for (const tool of tools) {
 await client.installCloseHandler({
   async flush() {
     closing = true; clearDraftTimers(); if (composing) throw Error('Finish the current text composition before closing.');
+    handoff?.prepareClose();
     await Promise.all([...flights]); await model.save();
     settings.prepareClose();
     if ([...Object.values(model.state.drafts), ...Object.values(rho.state.drafts)].some(draft => draft.dirty)) throw Error('A task draft is not saved yet. Keep this view open and finish saving it before closing.');
@@ -377,4 +381,4 @@ await client.installCloseHandler({
 });
 await refresh().catch(report); render();
 const poll = setInterval(() => { void refresh().catch(report); }, 1000);
-addEventListener('pagehide', () => { disposed = true; clearDraftTimers(); clearInterval(poll); settings.dispose(); context?.dispose(); rho.dispose(); model.dispose(); client.dispose(); }, { once: true });
+addEventListener('pagehide', () => { disposed = true; clearDraftTimers(); clearInterval(poll); settings.dispose(); context?.dispose(); handoff?.dispose(); rho.dispose(); model.dispose(); client.dispose(); }, { once: true });

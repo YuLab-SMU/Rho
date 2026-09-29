@@ -8,6 +8,7 @@ import { join, resolve, delimiter } from 'node:path';
 import { verifyAgentBuild, agentBuildMode } from '../../scripts/agent-plugin-artifact.mjs';
 import { buildManagerPlugin } from '../../scripts/build-manager-plugin.mjs';
 import { startRhoModelPeer, exerciseRhoInput, inspectRhoAfterRestart } from './fixtures/agent-rho-workspace';
+import { prepareRetainedHandoff, inspectRetainedHandoff } from './fixtures/agent-handoff-workspace';
 
 let directory: string, project: string, url: URL, host: ReturnType<typeof spawn>, agent: any, r: any, view: any, session: string;
 let completed = false, database: string, hostEnvironment: NodeJS.ProcessEnv, managerView: any, editor: any, sourceDraft: any;
@@ -242,6 +243,9 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
   await saveContextSource(sourceText);
   const rhoInput = await exerciseRhoInput(page,frame,info,modelPeer,nativeQuery,sourceText,
     () => saveContextSource('changed_after_rho_send <- TRUE\n'));
+  const handoff = await prepareRetainedHandoff(page,frame,info,nativeQuery,task,rhoInput.task,rhoInput.draft);
+  rhoInput.draft = handoff.targetDraft;
+  expect(modelPeer.bodies).toHaveLength(rhoInput.requests);
   await frame.getByLabel('Select task',{exact:true}).selectOption(`native:${task}`);
   await expect(composer).toHaveValue(next);expect(await executions()).toHaveLength(1);
   // Normal Host exit suspends the same instances; acknowledged view/task data
@@ -299,6 +303,8 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
   expect(await nativeQuery('agent.native.context',{request_id:evidence.invocation.send_request})).toEqual(originalContext);
   expect((await query('plugins.instance',{instance:editor})).instance.state).toBe('suspended');
   await inspectRhoAfterRestart(frame,nativeQuery,modelPeer,rhoInput);
+  await inspectRetainedHandoff(page,frame,info,nativeQuery,task,handoff);
+  expect(modelPeer.bodies).toHaveLength(rhoInput.requests);
   expect((await query('plugins.instance',{instance:editor})).instance.state).toBe('suspended');
   await frame.getByLabel('Select task',{exact:true}).selectOption(`native:${task}`);
   await expect(composer).toHaveValue(next);
@@ -355,6 +361,7 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
     child: childId, native_session: nativeSession, r_session: session, cached_history_messages: 120,
     host_restart: { instance: agent, task, view: view.view, resume_request: resumeRequest, resume_calls: resumeCalls, reconnect_calls: reconnectCalls, native_resume_without_prompt: true },
     manager_restore: { instance: r, resume_calls: rResumes, native_r_remains_unstarted: true },
+    handoff: {request:handoff.request,source:handoff.receipt.source,target:handoff.receipt.target,append_calls:handoff.calls(),receipt_preserved_across_host_restart:true,send_calls:0},
     context: {provider:editor,reference:contextSelection.reference,sha256:hash(sourceText),preserved_after_source_change_and_host_restart:true},
     rho: {task:rhoInput.task,original:rhoInput.original.run_id,continued:rhoInput.continued.run_id,model_requests:modelPeer.bodies.length,
       source_preserved:true,next_draft_preserved:true,reload_and_host_restart_without_replay:true},
