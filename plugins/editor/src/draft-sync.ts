@@ -3,7 +3,8 @@
 import type { DocumentDraft, DraftSource, JsonValue, SaveDocumentDraft } from '../public/plugin-protocol/index.js';
 import { captureDraftContent, stageDraftContent, readDraft, isDocumentDraft, isDraftContent, MAX_DRAFT_BYTES } from '../public/plugin-ui/index.js';
 import { type Client, type Intent, type RecordReply, inspectOriginal, verifyOriginal, json, same, canonical, terminal } from './operations.js';
-export interface DraftState { schema: 1; draft: DocumentDraft | null; pending: Intent | null; }
+import type { AgentState } from './agent.js';
+export interface DraftState { schema: 1; draft: DocumentDraft | null; pending: Intent | null; agent?: AgentState; }
 const empty = (): DraftState => ({ schema: 1, draft: null, pending: null });
 const identity = (value: unknown): value is string => typeof value === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(value);
 export class DraftSync {
@@ -21,9 +22,13 @@ export class DraftSync {
     if (saved !== null && (typeof saved !== 'object' || Array.isArray(saved))) throw new Error('The saved Editor state is invalid.');
     this.state = saved && Object.keys(saved).length ? structuredClone(saved) as unknown as DraftState : empty();
     if (this.state.schema !== 1 || !Object.hasOwn(this.state, 'draft') || !Object.hasOwn(this.state, 'pending') ||
-      Object.keys(this.state).some(key => !['schema', 'draft', 'pending'].includes(key))) throw new Error('The saved Editor state has an unsupported format.');
+      Object.keys(this.state).some(key => !['schema', 'draft', 'pending', 'agent'].includes(key))) throw new Error('The saved Editor state has an unsupported format.');
     if (this.state.draft !== null) this.checkDraft(this.state.draft);
     if (this.state.pending !== null) this.checkIntent(this.state.pending);
+  }
+  saveAgent(state: AgentState): Promise<void> {
+    const captured = structuredClone(state);
+    return this.serial(async () => { this.state.agent = captured; await this.persist(); });
   }
   get snapshot(): DraftState { return structuredClone(this.state); }
   get unresolved() { return this.state.pending !== null; }
@@ -118,7 +123,7 @@ export class DraftSync {
     const args = this.state.pending!.arguments as unknown as SaveDocumentDraft;
     if (draft.draft !== args.draft || draft.version !== (args.expected_version ?? 0) + 1 ||
       !same(draft.content, args.content) || !same(draft.metadata, args.metadata)) throw new Error('The saved draft receipt differs from the original capture.');
-    this.state = { schema: 1, draft: structuredClone(draft), pending: null };
+    this.state = { ...this.state, draft: structuredClone(draft), pending: null };
     await this.persist(); return structuredClone(draft);
   }
   /** Explicit failure acknowledgement only. Uncertain/active requests retain their

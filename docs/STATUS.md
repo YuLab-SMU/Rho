@@ -28,7 +28,7 @@ written deletion condition. Internal pieces are not reported as milestones.
 | M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Default entry, real-R browser flow and Rust HTTP checks pass; delivery remains |
 | M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Combined real Host/browser flow passes: Native/Rho input, attachments, real R, reload, continuation and handoff |
 | M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Graceful Host restart, same instance/view/tasks, original receipts and native session Resume pass without replay |
-| M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Editor/Help/Viewer snapshots, history, Continue and handoff pass real Host/browser checks; Rho exact-session tool selection also passes; annotations and component input remain |
+| M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Editor/Help/Viewer snapshots, history, Continue and handoff pass real Host/browser checks; Rho exact-session tools and Editor Ask → Agent input pass; other component senders and annotations remain |
 | M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Combined real Host/browser flow passes: exact-branch Agent checkpoint, explicit build, preview and scenario application |
 | M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Not started |
 
@@ -157,8 +157,8 @@ Editor input and attachments, reach the model, and survive Continue,
 reload and Host restart while R stays suspended. Normal/390/220 layouts are checked.
 Concurrent foreground/background draft confirmation no longer reports a false
 missing-request error; its failing baseline and passing regression are retained.
-Component-request reception now previews/rechecks sources and appends once to an editable Native/Rho draft without changing text/tools or sending. Native/Rho renderer checks and real Editor-source Host/Send/restart checks pass; the latter uses configuration input, not an Editor Ask button.
-Remaining: component sender buttons/routing and annotations. Evidence: `agent-component-input-results.json`,
+Component-request reception previews/rechecks sources and appends once to editable Native/Rho drafts. Editor **Ask about…** now captures a synchronized document/selection and opens a chosen active Agent instance. Its real Host/browser flow passes lost-reply recovery, exact Rho draft insertion and reload without duplicate views, file writes or Send; normal/390/220 layouts are inspected.
+Remaining: other component sender buttons/routing and annotations. Evidence: `editor-agent-input-results.json`, `agent-component-input-results.json`,
 `agent-scientific-context-current-results.json` and `studio-agent-current-results.json` in `target/plugin-refactor/`.
 Synthetic peers for Process/Remote/Environment do not establish execution through those plugins.
 Agent evidence in `target/plugin-refactor/`: `agent-current-native-results.json`, `agent-handoff-ui-results.json`, `rho-continue-results.json`, `agent-assets-results-v3.json` and
@@ -207,10 +207,10 @@ Per-plugin checks: `node scripts/governance.mjs impact --changed-auto`.
   1,634,793 entries became 201,054 after retaining every referenced debug object;
   listing fell from 66.5s to 0.62s. All old files remain retained. A loader probe
   also stalled in dyld's file validation; `syspolicyd` errors alone do not prove its cause.
-  Agent/R/Files builders now default to workspace reuse; six R browser runners
+  Agent/R/Files/Editor builders now default to workspace reuse; six R browser runners
   require a retained package. Plugin tests drop Application/Agent owner/store
   from their local dependency closure (16 → 13); journal/default-store/build checks pass (21/27/7).
-  Evidence: `target/plugin-refactor/development-optimization-results.json`; combined Host integration remains.
+  Evidence: `target/plugin-refactor/development-optimization-results.json` and `editor-agent-input-results.json`; Editor assembly measured 18.23s then 1.70s with the unchanged Host reused.
 - Plugin backend native initialization occasionally exceeded ten seconds before
   reaching the program entry (Studio backend browser runs); cause not established.
   Treat a repeat as an infrastructure issue to investigate, not a product pass.

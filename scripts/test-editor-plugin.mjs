@@ -29,6 +29,8 @@ try {
   const {readFormattedCode}=await import(pathToFileURL(path.join(temporary,'compiled/src/r-format.js')).href);
   await checkEditorFormat({readFormattedCode,sdk});
   const {DraftSync}=await import(pathToFileURL(path.join(temporary,'compiled/src/draft-sync.js')).href);
+  const {EditorAgent}=await import(pathToFileURL(path.join(temporary,'compiled/src/agent.js')).href);
+  const {checkEditorAgent}=await import('./fixtures/editor-agent.mjs');await checkEditorAgent({EditorAgent,sdk});
   const {filePatch,rawOffset,normalizeText}=await import(pathToFileURL(path.join(temporary,'compiled/src/text.js')).href);
   const {applyPatch}=await import(pathToFileURL(path.join(root,'ui/node_modules/diff/libesm/index.js')).href);
   const before='\ufeff甲\r\n乙\n丙\r\n',after='\ufeff甲\r\n新\n丙\r\n';
@@ -133,6 +135,12 @@ try {
       }};
     return{client,state,owner:new DraftSync(client)};
   };
+  const agentDraft=make(),agentState={input:null,pending:null,opened:null};
+  await agentDraft.owner.saveAgent(agentState);
+  const agentSaving=agentDraft.owner.save(new TextEncoder().encode('captured document'),{encoding:'test'});
+  await agentDraft.owner.saveAgent({...agentState,input:{marker:'retained alongside draft settlement'}});await agentSaving;
+  assert.equal(agentDraft.owner.snapshot.agent.input.marker,'retained alongside draft settlement');
+  assert.equal(new DraftSync(agentDraft.client).snapshot.agent.input.marker,'retained alongside draft settlement');
   const normal=make(),captured=new Uint8Array(body),saved=normal.owner.save(captured,{encoding:'test'});captured.fill(0);
   const first=await saved;assert.ok(first.content.bytes>512*1024);assert.deepEqual(await normal.owner.read(),body);
   assert.ok(normal.state.readCalls>1);assert.equal(normal.state.saved.at(-1).pending,null);

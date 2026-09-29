@@ -96,6 +96,11 @@ For Files iteration, `node scripts/build-files-plugin.mjs /new/package`
 builds the current backend in the primary Cargo workspace and packages that artifact
 with its source and UI. It is integration evidence; add `--independent` only when
 independent-source build acceptance is actually due. Keep Cargo invocations serial.
+Editor uses the same default: `node scripts/build-editor-plugin.mjs /new/package`
+builds its backend in the primary workspace, then exports the context contract and
+builds its UI into a full source package. Use `--independent` for standalone-source
+acceptance. Its internal `--reuse-native` assembly flag is used only after the
+workspace builder succeeds; it is not independent-build evidence.
 
 R uses the same cadence: `node scripts/build-r-plugin.mjs /new/package`
 builds once through the primary cache and records an adjacent source/artifact receipt.
@@ -105,7 +110,7 @@ native Host stage. The Help, Viewer, Console, Objects, Plots and Packages browse
 The native runner's explicit `--build` remains available for independent acceptance.
 Reuse rejects stale sources or modified package bytes and retains packages after
 later-stage failures. `node scripts/test-r-workflow.mjs` checks this without Cargo.
-`node scripts/test-plugin-build-modes.mjs` observes the actual Agent/R/Files build
+`node scripts/test-plugin-build-modes.mjs` observes the actual Agent/R/Files/Editor build
 entry points with sentinel tools: default workspace dispatch, explicit independent
 dispatch and invalid-option refusal, without compiling anything.
 
@@ -207,8 +212,14 @@ Model and renderer checks cover stale/partial sources, typing during preview,
 changed task selection and lost draft replies. `agent-workspace.spec.ts` supplies
 an actual synchronized Editor reference through view configuration, then checks
 preview, insertion, Send and restart retention through the real owners. It does
-not establish the sender component's Ask button or automatic target-view routing;
-those need their own end-to-end flow.
+not establish every component sender. `editor-agent.spec.ts` separately drives
+Editor **Ask about…** → select an active Agent instance → open its ordinary view →
+choose an editable task → add the exact synchronized document/selection. It covers
+a lost view-open reply, reload and original-request inspection without another
+view or Send. Supply retained `RHO_EDITOR_PLUGIN_PACKAGE`, `RHO_AGENT_PLUGIN_PACKAGE`
+and `RHO_FILES_PLUGIN_PACKAGE` paths; the new case refuses missing package inputs.
+Existing Agent views are not silently taken over, and other component senders still
+need their own integration.
 
 For a Rho tool-selection change, use the smaller real-R browser case:
 `npm run test:browser --prefix ui -- agent-rho-tools.spec.ts`, with retained

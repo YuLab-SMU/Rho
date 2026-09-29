@@ -28,6 +28,7 @@ require('node:child_process').execFileSync = (file, args, options) => {
 require('node:module').syncBuiltinESMExports();
 `);
 const packages = {
+  editor: ['rho-editor-backend','rho-plugin-protocol','rho-plugin-sdk'],
   agent: ['rho-agent-api','rho-agent-backend','rho-agent-client','rho-agent-engine','rho-agent-native','rho-agent-owner','rho-agent-store','rho-plugin-protocol','rho-plugin-sdk','rho-r-api'],
   r: ['rho-environment-api','rho-plugin-protocol','rho-plugin-sdk','rho-process-api','rho-r-api','rho-r-backend','rho-r-engine'],
   files: ['rho-files-api','rho-files-backend','rho-files-engine','rho-files-owner','rho-plugin-protocol','rho-plugin-sdk','rho-process-engine'],
@@ -79,4 +80,4 @@ try {
     if (!independent) assert.equal(observed.cwd, root);
   }
 } finally { fs.rmSync(directory, {recursive: true, force: true}); }
-console.log('Agent/R/Files default to workspace builds; independent builds require an explicit flag; invalid modes stop before assembly. No native tools ran.');
+console.log('Agent/R/Files/Editor default to workspace builds; independent builds require an explicit flag; invalid modes stop before assembly. No native tools ran.');

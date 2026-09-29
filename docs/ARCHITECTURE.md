@@ -708,6 +708,14 @@ receipt; the existing task draft CAS and original-request recovery settle the ow
 write. A task change during preview, unavailable source, partial text or unsupported
 resources leave the draft unchanged. Sender components use ordinary view contracts;
 core does not interpret this Agent-specific configuration.
+Editor captures the acknowledged document/selection version before discovering an
+active Agent instance. Its exact source and original `windows.open_view` request
+live in outer view state, serialized alongside document synchronization, so they
+do not change the source bytes or disappear during a later draft save. A lost
+reply is recovered from that original Operation. Window opening carries the
+existing management contract's scopes for the target view; it grants no new
+scientific call to Editor. The new Agent view still requires explicit task choice,
+context insertion and Send.
 
 `views.caller` exposes only the original native view/window/connection identity
 captured at authenticated ingress. Backend delegation retains that private capture;

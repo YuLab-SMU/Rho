@@ -7,7 +7,8 @@ const dependencies=path.join(root,'node_modules');
 let borrowed=false;
 try {
   if(!fs.existsSync(path.join(root,'Cargo.toml'))) throw new Error('Assemble the standalone Editor source package before building.');
-  execFileSync(process.env.RHO_PLUGIN_CARGO??'cargo',['build','--locked','--offline','-p','rho-editor-backend','--bins'],{cwd:root,stdio:'inherit'});
+  if(process.argv.slice(2).some(arg=>arg!=='--reuse-native')||process.argv.length>3)throw Error('Usage: node build.mjs [--reuse-native]');
+  if(!process.argv.includes('--reuse-native')) execFileSync(process.env.RHO_PLUGIN_CARGO??'cargo',['build','--locked','--offline','-p','rho-editor-backend','--bins'],{cwd:root,stdio:'inherit'});
   const target=process.env.CARGO_TARGET_DIR?path.resolve(root,process.env.CARGO_TARGET_DIR):path.join(root,'target');
   execFileSync(path.join(target,'debug/export-editor-context'),[path.join(root,'plugin.json')],{cwd:root,stdio:'inherit'});
   if(!fs.existsSync(dependencies)) {

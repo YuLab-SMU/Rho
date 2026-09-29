@@ -340,7 +340,7 @@ Checks:
 - `plugins.editor-context-manifest` (L1): `["node","scripts/generate-editor-context.mjs","--check"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/editor/**`, `rust-toolchain.toml`, `scripts/build-editor-plugin.mjs`, `scripts/generate-editor-context.mjs`, `sdk/**`.
 - `plugins.editor-model` (L2): `["node","scripts/test-editor-plugin.mjs"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/editor/**`, `rust-toolchain.toml`, `scripts/build-editor-plugin.mjs`, `scripts/test-editor-plugin.mjs`, `sdk/**`.
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/editor/**`, `rust-toolchain.toml`, `scripts/build-editor-plugin.mjs`, `scripts/fixtures/editor-agent.mjs`, `scripts/test-editor-plugin.mjs`, `sdk/**`.
 - `plugins.environment-backend` (L1): `["cargo","test","-p","rho-environment-backend","--lib","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `sdk/**`.
 - `plugins.environment-checkpoint-references` (L2): `["node","scripts/test-environment-plugin.mjs","--checkpoint-references"]`

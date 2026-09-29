@@ -5,6 +5,7 @@ import { bracketMatching, indentOnInput, foldGutter, indentUnit } from '@codemir
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { connectPluginView } from '../public/plugin-ui/index.js';
+import { EditorAgent } from './agent.js';
 import { EditorController } from './controller.js';
 import { isR, rSupport } from './r-language.js';
 import { terminal } from './operations.js';
@@ -16,6 +17,7 @@ const client = await connectPluginView();
 let editor: EditorView | null = null, stopped = false, preparing = false, composing = false, compositionEndedAt = -Infinity;
 let timer: ReturnType<typeof setTimeout> | undefined, observing: ReturnType<typeof setTimeout> | undefined, pendingFlush: Promise<void> | null = null;
 let controller: EditorController;
+let agent: EditorAgent;
 let closeInstalled = false;
 const language = new Compartment();
 const preferences = new Compartment();
@@ -96,6 +98,7 @@ function render() {
     get('position').textContent = `Ln ${line.number}, Col ${head - line.from + 1} · ${doc.snapshot.byteSize.toLocaleString()} bytes · ${controller.preferences.indent_width} spaces`;
   }
   renderSessions();
+  renderAgent();
 }
 function preferenceExtensions() {
   const value = controller.preferences;
@@ -124,6 +127,30 @@ function renderSessions() {
     sessionChoices.length >= 200 ? 'Showing at most 200 sessions. Refresh to return to the first page.' : `${sessionChoices.length} session${sessionChoices.length === 1 ? '' : 's'} observed. Refresh to check current availability.`;
   get<HTMLButtonElement>('refresh-sessions').disabled = sessionsLoading || controller.busy || preparing;
   get('more-sessions').hidden = sessionNext === null; get<HTMLButtonElement>('more-sessions').disabled = sessionsLoading || controller.busy || preparing;
+}
+function renderAgent() {
+  if (!agent) return;
+  show('agent-error', controller.error);
+  const data = agent.data, input = data.input, busy = agent.busy || controller.busy || preparing || composing;
+  get<HTMLButtonElement>('ask-agent').disabled = !controller.document || busy || controller.drafts.unresolved;
+  get<HTMLButtonElement>('close-agent').disabled = agent.busy;
+  get('agent-capture').textContent = input ? input.title : 'Synchronize a document or selection to prepare its context.';
+  get('agent-preview').textContent = agent.preview || (input ? 'Original source reference retained. It is checked again before opening Agent.' : '');
+  const selector = get<HTMLSelectElement>('agent-instance');
+  const key = JSON.stringify([agent.candidates.map(item => item.instance.identity), input?.instance]);
+  if (selector.dataset.content !== key) {
+    selector.dataset.content = key; selector.replaceChildren(new Option('Choose an active Agent instance', ''));
+    for (const item of agent.candidates) selector.add(new Option(`${item.instance.alias} · ${item.instance.identity.revision.slice(7, 15)}`, item.instance.identity.instance));
+    if (input?.instance && !agent.candidates.some(item => same(item.instance.identity, input.instance))) selector.add(new Option('Captured Agent instance', input.instance.instance));
+  }
+  selector.value = input?.instance?.instance ?? ''; selector.disabled = busy || !input || !!data.pending || !!data.opened;
+  get('agent-status').textContent = data.pending ? 'Original view request retained. Check its result before another request.' : data.opened ? 'Agent view opened. Choose an editable task there, then add the captured context.' : !agent.candidates.length && input ? 'No active Agent instance on this page. Activate or restore one in Plugins, then refresh.' : 'Opening Agent does not create a task or send a message.';
+  get<HTMLButtonElement>('prepare-agent').disabled = busy || !!data.pending;
+  for (const id of ['refresh-agents', 'more-agents']) get<HTMLButtonElement>(id).disabled = busy;
+  get('more-agents').hidden = !agent.next;
+  get<HTMLButtonElement>('open-agent').disabled = busy || !input?.instance || !!data.pending || !!data.opened;
+  get('inspect-agent').hidden = !data.pending; get<HTMLButtonElement>('inspect-agent').disabled = busy;
+  get('retry-agent').hidden = !data.pending || data.pending.view !== client.view.view; get<HTMLButtonElement>('retry-agent').disabled = busy;
 }
 async function loadSessions(more = false) {
   if (!controller.sessionSelection || sessionsLoading || preparing || stopped) return;
@@ -203,6 +230,9 @@ function mount() {
 }
 try {
   controller = new EditorController(client, client.view.configuration as any, render);
+  agent = new EditorAgent(client, controller.drafts.snapshot.agent, state => controller.drafts.saveAgent(state), () => {
+    if (preparing || stopped) throw Error('The Editor is closing. The original Agent request is retained.');
+  }, render);
   wireActions();
   await controller.open();
   await ensureClose();
@@ -213,6 +243,7 @@ async function ensureClose() {
   const close = await client.installCloseHandler({ flush: async () => {
     preparing = true; clearTimeout(timer); clearTimeout(observing);
     if (editor && controller.document) controller.document.setScroll(editor.scrollDOM.scrollTop, editor.scrollDOM.scrollLeft);
+    if (agent.busy) throw Error('Wait for the current Agent view request before closing.');
     await controller.pause();
   }, resume: () => { preparing = false; controller.resume(); poll(); } });
   close.subscribe(() => { const state = close.getSnapshot(); if (state.error) show('error', state.error); });
@@ -220,6 +251,30 @@ async function ensureClose() {
   poll();
 }
 function wireActions() {
+  const prepareAgent = async () => {
+    controller.error = '';
+    await flush();
+    const draft = controller.drafts.snapshot.draft;
+    if (!draft || controller.drafts.unresolved) throw Error('Confirm the original draft save before preparing Agent input.');
+    await agent.prepare(draft);
+  };
+  get('ask-agent').onclick = () => {
+    if (preparing || composing || stopped || controller.busy || agent.busy) return;
+    get<HTMLDialogElement>('agent-dialog').showModal();
+    if (!agent.data.pending) action(prepareAgent);
+  };
+  get('close-agent').onclick = () => get<HTMLDialogElement>('agent-dialog').close();
+  const agentAction = (work: () => Promise<void>) => action(async () => { controller.error = ''; await work(); });
+  get('prepare-agent').onclick = () => agentAction(prepareAgent);
+  get('refresh-agents').onclick = () => agentAction(() => agent.list());
+  get('more-agents').onclick = () => agentAction(() => agent.list(true));
+  get('open-agent').onclick = () => agentAction(() => agent.open());
+  get('inspect-agent').onclick = () => agentAction(() => agent.inspect());
+  get('retry-agent').onclick = () => agentAction(() => agent.retry());
+  get<HTMLSelectElement>('agent-instance').onchange = event => {
+    const instance = agent.candidates.find(item => item.instance.identity.instance === (event.target as HTMLSelectElement).value)?.instance.identity ?? null;
+    agentAction(() => agent.select(instance));
+  };
   get('editor-settings').onclick = () => {
     if (preparing || stopped || composing) return;
     get<HTMLSelectElement>('font-size').value = String(controller.preferences.font_size); get<HTMLSelectElement>('indent-width').value = String(controller.preferences.indent_width);
