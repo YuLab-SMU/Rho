@@ -109,6 +109,13 @@ export async function testContextPicker(ContextPicker, inclusionChoices, root) {
     assert.deepEqual(f.queries.map(q=>q.cap.id),['agent.model.run.get']);
     f.rho.request.conversation_id='another-task';await assert.rejects(f.picker.originalRho('rho-task','rho-original'),/original Rho message/);
   });
+  await check('original Rho attachments retain complete text and refuse substituted evidence',async()=>{
+    const f=fixture(),asset={asset_id:'attachment',name:'notes.txt',mime_type:'text/plain',bytes:18000,sha256:'a'.repeat(64)};
+    f.rho.request.assets=[asset.asset_id];f.rho.context.sources=[{selection:{source:'attachments',label:asset.name,reference:{conversation_id:'rho-task',asset_id:asset.asset_id,sha256:asset.sha256},inclusion:'text'},title:asset.name,description:'Uploaded text',text:'x'.repeat(18000),truncated:false,observations:[],evidence:[{kind:'attachment',conversation_id:'rho-task',asset}]}];
+    assert.equal((await f.picker.originalRho('rho-task','rho-original')).sources[0].text.length,18000);
+    f.rho.context.sources[0].evidence[0].conversation_id='another-task';
+    await assert.rejects(f.picker.originalRho('rho-task','rho-original'),/original Rho message/);
+  });
   await check('malformed or oversized Rho history is never rendered as complete input',async()=>{
     for(const fault of ['kind','turns','unicode','missing-flag','budget']){
       const f=fixture(),history=f.rho.context.history;

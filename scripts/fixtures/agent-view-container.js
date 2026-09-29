@@ -26,7 +26,7 @@ let close = { phase: 'open' }, saveDelay = 0, loseFinish = false;
 const staged = new Map();
 let modelSettings = {version:0,enabled:false,connection:null}, loseSettings = '';
 const modelKeys = new Map(), modelTests = new Map();
-const rhoTasks = new Map(), rhoRuns = new Map(), rhoEvents = new Map();
+const rhoTasks = new Map(), rhoRuns = new Map(), rhoEvents = new Map(), rhoAssets = new Map();
 const handoffReceipts = new Map();
 let loseHandoff = false;
 let loseRho = '', confirmedRho = false;
@@ -92,6 +92,7 @@ async function handle(body) {
     }
     else if (id === 'agent.model.key.receipt') { const key=modelKeys.get(args.request_id); data={credential:key?{kind:'local_file',key_id:key.key_id}:null,available:!!key?.available}; }
     else if (id === 'agent.model.diagnostic') data = modelTests.get(args.request_id);
+    else if (id === 'agent.model.assets') data = {conversation_id:args.conversation_id,assets:rhoAssets.get(args.conversation_id)??[]};
     else if (id === 'agent.model.conversation') data = rhoTasks.get(args.conversation_id);
     else if (id === 'agent.model.run.get') data = rhoRuns.get(args.run_id);
     else if (id === 'agent.model.run.admission') data = {binding:{project:view.project,provider:instance,capability:{id:'agent.model.run',version:1},target:null},r:rhoRuns.get(args.run_id).request.r??null};
@@ -138,9 +139,10 @@ async function handle(body) {
       return result;
     }
     const { upload, offset, data } = body.arguments.arguments;
-    if (!view.state.uploads.some(p => JSON.stringify(p.upload) === JSON.stringify(upload))) throw Error('Attachment identity was not retained');
+    const rhoUpload = body.capability.id.startsWith('agent.model.assets.');
+    if (!(rhoUpload ? view.state.rho.uploads : view.state.uploads).some(p => JSON.stringify(p.upload) === JSON.stringify(upload))) throw Error('Attachment identity was not retained');
     calls.push({ ...copy(body), arguments: { upload: copy(upload), offset, encoded_bytes: data?.length ?? 0 } });
-    if (body.capability.id === 'agent.native.assets.stage') {
+    if (body.capability.id.endsWith('.assets.stage')) {
       const part = Uint8Array.from(atob(data), c => c.charCodeAt(0));
       let entry = staged.get(upload.request_id);
       if (!entry) { entry = { bytes: new Uint8Array(upload.bytes), received: 0 }; staged.set(upload.request_id, entry); }
@@ -148,10 +150,16 @@ async function handle(body) {
       entry.bytes.set(part, offset); entry.received = Math.max(entry.received, offset + part.length);
       return { upload: copy(upload), received: entry.received, complete: entry.received === upload.bytes };
     }
-    if (body.capability.id !== 'agent.native.assets.finish') throw Error('Unexpected attachment Control');
+    if (!body.capability.id.endsWith('.assets.finish')) throw Error('Unexpected attachment Control');
     const entry = staged.get(upload.request_id); if (entry?.received !== upload.bytes) throw Error('Incomplete file');
     const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', entry.bytes)), n => n.toString(16).padStart(2, '0')).join('');
     if (digest !== upload.sha256) throw Error('Changed file bytes');
+    if (rhoUpload) {
+      const asset={asset_id:upload.request_id,name:upload.name,mime_type:upload.mime_type,bytes:upload.bytes,sha256:upload.sha256};
+      const list=rhoAssets.get(upload.conversation_id)??[];list.push(asset);rhoAssets.set(upload.conversation_id,list);
+      if(loseFinish){loseFinish=false;throw Error('Lost attachment reply');}
+      return copy({conversation_id:upload.conversation_id,asset});
+    }
     const detail = details.get(upload.control.task_id), receipt = { request_id: upload.request_id, task_id: upload.control.task_id, command: 'add_asset', status: 'succeeded' };
     detail.assets.push({ asset_id: upload.request_id, name: upload.name, mime_type: upload.mime_type, bytes: upload.bytes, sha256: upload.sha256 });
     detail.receipts.push(receipt); detail.summary.observation_version++; staged.delete(upload.request_id);
@@ -197,7 +205,11 @@ async function handle(body) {
         }else if(kind==='run'){
           if(args.conversation_version!==task.version||args.text!==task.draft_content.text)throw Error('Original draft changed');
           const earlier=[...rhoRuns.values()].find(run=>run.request.conversation_id===task.conversation_id);
-          const capturedContext=args.sources.length||earlier?{history:earlier?{kind:'conversation',truncated:false,notice:'Fixture retained input',turns:[{run_id:earlier.run_id,state:'completed',user_text:earlier.request.text,assistant_text:'Retained Rho answer · 中文 Ω',history_gap:false,text_truncated:false,references:[],references_truncated:false}]}:null,sources:args.sources.map(selection=>({selection:copy(selection),title:contextItem.title,description:contextItem.description,text:JSON.parse(selection.inclusion).kind==='selection'?'selected_value <- 42 # 中文 Ω':'# Synchronized analysis document\nselected_value <- 42 # 中文 Ω\nprint(selected_value)',native_data:{version:7},truncated:false,observations:[],evidence:[]}))}:null;
+          const capturedContext=args.sources.length||args.assets?.length||earlier?{history:earlier?{kind:'conversation',truncated:false,notice:'Fixture retained input',turns:[{run_id:earlier.run_id,state:'completed',user_text:earlier.request.text,assistant_text:'Retained Rho answer · 中文 Ω',history_gap:false,text_truncated:false,references:[],references_truncated:false}]}:null,sources:args.sources.map(selection=>({selection:copy(selection),title:contextItem.title,description:contextItem.description,text:JSON.parse(selection.inclusion).kind==='selection'?'selected_value <- 42 # 中文 Ω':'# Synchronized analysis document\nselected_value <- 42 # 中文 Ω\nprint(selected_value)',native_data:{version:7},truncated:false,observations:[],evidence:[]}))}:null;
+          for(const id of args.assets??[]){
+            const asset=rhoAssets.get(task.conversation_id)?.find(a=>a.asset_id===id);if(!asset)throw Error('Missing original attachment');
+            capturedContext.sources.push({selection:{source:'attachments',label:asset.name,reference:{conversation_id:task.conversation_id,asset_id:id,sha256:asset.sha256},inclusion:'text'},title:asset.name,description:'User-uploaded attachment',text:new TextDecoder().decode(staged.get(id).bytes),native_data:{},truncated:false,observations:[],evidence:[{kind:'attachment',conversation_id:task.conversation_id,asset:copy(asset)}]});
+          }
           if(args.continuation){
             const original=rhoRuns.get(args.continuation.run_id);
             if(original.recovery.digest!==args.continuation.recovery_digest)throw Error('The recovery report changed. Your draft is retained.');

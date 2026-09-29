@@ -8,8 +8,9 @@ pub mod server;
 
 mod diagnostics;
 mod handoffs;
-mod runs;
+mod model_assets;
 mod run_recovery;
+mod runs;
 
 pub mod native_arguments;
 mod native_context;
@@ -21,7 +22,7 @@ mod native_host_selection;
 mod native_result;
 mod native_selection;
 mod native_tasks;
-mod native_uploads;
 mod native_tool_observation;
 mod native_tools;
+mod native_uploads;
 mod tools;

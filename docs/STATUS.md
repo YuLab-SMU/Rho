@@ -139,20 +139,20 @@ atomically consumes only its matching draft and preserves later typing on replay
 Stable view/controller identities survive private connection rotation. Rho settings
 provide key save/removal, versioned configuration and explicit synthetic tests;
 keys stay out of saved view state and Operations. Rho now submits text and contributed
-references and explicit continuation; attachments and tool selection remain to compose.
-The UI build and 90 model cases (29 native, 13 settings, 23 Rho, 14 context, 11 handoff) pass, as does
+references, attachments and explicit continuation in source; tool selection remains to compose.
+Rho uploads preserve original identity through lost replies/reselection; text ≤32 KiB and PNG/JPEG ≤2 MiB are captured before Send. Native validation of this addition is pending.
+The UI build and 97 model cases (29 native, 13 settings, 29 Rho, 15 context, 11 handoff) pass, as does
 the synthetic public MessagePort browser fixture: opaque iframe, IME Enter, task
-switching, one Send, next drafts, 8 MiB selection, lost creation/Send/import/key
+switching, native/Rho attachment recovery and retained context, next drafts, 8 MiB selection, lost creation/Send/import/key
 replies, actual reload, history and close without Stop. Settings/rename work without
 form permission. Continue preserves next drafts through lost replies/reload and original context
 at 960/440/220 px. Handoff also preserves edited text, references and lost receipts at those widths.
-The current framed backend check passes all 59 cases, including exact context capture,
+The preceding framed backend baseline passes all 59 cases, including exact context capture,
 draft-preserving refusal, Continue, atomic handoff, 8 MiB staging/import and reopen
 without replay. Compilation took 76m36s; executable startup waited before entering
-the tests, whose execution took 4.29s. The earlier six fixture failures remain in logs.
-The generated manifest now declares the combined view and all 42 capabilities.
-This does **not** establish combined Host acceptance or a current packaged artifact.
-The combined native/Rho–Editor–real-R/restart fixture, including handoff receipts, passes type checking and discovery.
+the tests, whose execution took 4.29s. New Rho attachments are outside that baseline.
+The checked-in 42-capability manifest awaits generation of the three new attachment ports after native validation.
+This does **not** establish combined Host acceptance or a current packaged artifact. The combined native/Rho–Editor–real-R/restart fixture now includes Rho attachments; type checking passes, and its prior cases passed discovery.
 Its model peer probe passes; the actual Host flow awaits one current Agent artifact.
 
 R now declares observed Help topics and saved HTML contexts; exact-copy/file checks, journal paging and native tests are written. Manager now captures the Viewer contribution's read grants in new scenarios and lost-reply recovery; model checks pass. Public Agent picker/grant/type checks pass; R native and Host acceptance remain unrun.

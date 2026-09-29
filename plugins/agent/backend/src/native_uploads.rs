@@ -1,5 +1,5 @@
-//! Bounded transient browser transfer. Only finish admits the existing AddAsset
-//! command; chunks are neither native task records nor scientific Operations.
+//! Bounded transient browser transfer. Finish goes through the task's owner;
+//! chunks are neither durable task records nor scientific Operations.
 use crate::metadata::Failure;
 use rho_agent_api::{AgentControllerRef, AgentTaskControl};
 use schemars::JsonSchema;
@@ -43,19 +43,31 @@ pub struct Finish {
     pub upload: Upload,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
-pub struct Progress {
-    pub upload: Upload,
+pub struct Progress<T = Upload> {
+    pub upload: T,
     pub received: u64,
     pub complete: bool,
 }
-struct Staged {
-    upload: Upload,
+struct Staged<T> {
+    upload: T,
     controller: AgentControllerRef,
     bytes: Vec<u8>,
     touched: Instant,
 }
-#[derive(Default)]
-pub struct Uploads(Mutex<BTreeMap<String, Staged>>);
+pub(crate) struct Uploads<T = Upload>(Mutex<BTreeMap<String, Staged<T>>>);
+impl<T> Default for Uploads<T> {
+    fn default() -> Self {
+        Self(Mutex::new(BTreeMap::new()))
+    }
+}
+/// Transfer identity only. Each task owner checks its own controller before
+/// staging or finishing; this buffer never supplies task authority.
+pub(crate) trait Transfer: Clone + PartialEq {
+    fn validate(&self) -> Result<(), Failure>;
+    fn id(&self) -> &str;
+    fn bytes(&self) -> u64;
+    fn sha256(&self) -> &str;
+}
 impl Upload {
     pub fn validate(&self) -> Result<(), Failure> {
         if uuid::Uuid::parse_str(&self.request_id)
@@ -87,19 +99,33 @@ impl Upload {
         Ok(())
     }
 }
-impl Uploads {
+impl Transfer for Upload {
+    fn validate(&self) -> Result<(), Failure> {
+        Upload::validate(self)
+    }
+    fn id(&self) -> &str {
+        &self.request_id
+    }
+    fn bytes(&self) -> u64 {
+        self.bytes
+    }
+    fn sha256(&self) -> &str {
+        &self.sha256
+    }
+}
+impl<T: Transfer> Uploads<T> {
     pub fn stage(
         &self,
-        upload: Upload,
+        upload: T,
         controller: AgentControllerRef,
         offset: u64,
         part: &[u8],
-    ) -> Result<Progress, Failure> {
+    ) -> Result<Progress<T>, Failure> {
         upload.validate()?;
-        if offset > upload.bytes
+        if offset > upload.bytes()
             || offset % CHUNK_BYTES as u64 != 0
-            || part.len() != (upload.bytes - offset).min(CHUNK_BYTES as u64) as usize
-            || (part.is_empty() && upload.bytes != 0)
+            || part.len() != (upload.bytes() - offset).min(CHUNK_BYTES as u64) as usize
+            || (part.is_empty() && upload.bytes() != 0)
         {
             return Err(Failure::invalid(
                 "Attachment chunk range differs from its original file",
@@ -110,14 +136,14 @@ impl Uploads {
             .lock()
             .map_err(|_| Failure::invalid("Attachment staging is unavailable"))?;
         entries.retain(|_, entry| entry.touched.elapsed() < Duration::from_secs(30 * 60));
-        if !entries.contains_key(&upload.request_id) {
+        if !entries.contains_key(upload.id()) {
             if offset != 0 {
                 return Err(Failure::invalid(
                     "The incomplete upload is no longer staged; reselect its original file",
                 ));
             }
             if entries.len() >= MAX_FILES
-                || entries.values().map(|e| e.upload.bytes).sum::<u64>() + upload.bytes
+                || entries.values().map(|e| e.upload.bytes()).sum::<u64>() + upload.bytes()
                     > TOTAL_BYTES
             {
                 return Err(Failure::invalid(
@@ -125,7 +151,7 @@ impl Uploads {
                 ));
             }
             entries.insert(
-                upload.request_id.clone(),
+                upload.id().to_owned(),
                 Staged {
                     upload: upload.clone(),
                     controller: controller.clone(),
@@ -134,7 +160,7 @@ impl Uploads {
                 },
             );
         }
-        let entry = entries.get_mut(&upload.request_id).unwrap();
+        let entry = entries.get_mut(upload.id()).unwrap();
         if entry.upload != upload || entry.controller != controller {
             return Err(Failure::invalid("The original attachment transfer changed"));
         }
@@ -149,31 +175,27 @@ impl Uploads {
         entry.touched = Instant::now();
         Ok(Progress {
             received: entry.bytes.len() as u64,
-            complete: entry.bytes.len() as u64 == upload.bytes,
+            complete: entry.bytes.len() as u64 == upload.bytes(),
             upload,
         })
     }
-    pub fn take(
-        &self,
-        upload: &Upload,
-        controller: &AgentControllerRef,
-    ) -> Result<Vec<u8>, Failure> {
+    pub fn take(&self, upload: &T, controller: &AgentControllerRef) -> Result<Vec<u8>, Failure> {
         upload.validate()?;
         let mut entries = self
             .0
             .lock()
             .map_err(|_| Failure::invalid("Attachment staging is unavailable"))?;
-        let entry = entries.get(&upload.request_id).ok_or_else(|| Failure::invalid("Inspect the original attachment receipt, or reselect its file to finish the transfer"))?;
+        let entry = entries.get(upload.id()).ok_or_else(|| Failure::invalid("Inspect the original attachment receipt, or reselect its file to finish the transfer"))?;
         if &entry.upload != upload
             || &entry.controller != controller
-            || entry.bytes.len() as u64 != upload.bytes
+            || entry.bytes.len() as u64 != upload.bytes()
         {
             return Err(Failure::invalid(
                 "The original attachment transfer is incomplete or changed",
             ));
         }
-        let entry = entries.remove(&upload.request_id).unwrap();
-        if format!("{:x}", Sha256::digest(&entry.bytes)) != upload.sha256 {
+        let entry = entries.remove(upload.id()).unwrap();
+        if format!("{:x}", Sha256::digest(&entry.bytes)) != upload.sha256() {
             return Err(Failure::invalid(
                 "Attachment checksum does not match the selected file; no asset was admitted",
             ));

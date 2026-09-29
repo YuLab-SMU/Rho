@@ -32,6 +32,10 @@ function rhoSelected() { return rho?.state.selected; }
 const taskKey = (reference: ProjectAgentTaskRef) => reference.kind === 'rho' ? `rho:${reference.conversation_id}` : `native:${reference.task_id}`;
 function selectTask(value: string) { return value.startsWith('rho:') ? rho.select(value.slice(4)) : model.select(value.slice(7)); }
 let resumingUpload: string | null = null;
+let uploadTarget: { kind: 'native' | 'rho'; task: string } | null = null;
+function chooseFiles(kind: 'native' | 'rho', task: string, request: string | null = null) {
+  uploadTarget = { kind, task }; resumingUpload = request; fileInput.multiple = !request; fileInput.click();
+}
 const fileInput = get<HTMLInputElement>('attachment-file');
 function clearDraftTimers() { for (const timer of draftTimers.values()) clearTimeout(timer); draftTimers.clear(); }
 function saveDraftSoon(task: string, kind: 'native' | 'rho' = 'native') {
@@ -192,9 +196,8 @@ function renderRho(id: string) {
   get('draft-status').textContent = !editable ? '' : local?.conflict ? 'Draft conflict' : local?.dirty ? 'Draft not saved yet' : 'Draft saved';
   const save = get<HTMLButtonElement>('save-draft'); save.hidden = !editable || !local?.dirty || !!local.conflict; save.disabled = rho.busy || closing || rho.state.pending.some(p => p.task === id && p.kind === 'draft');
   context?.render(id, editable, rho.busy || closing, rho);
-  get('attachments').replaceChildren(); get('attachments').dataset.content = ''; get('uploads').replaceChildren(); get('uploads').dataset.content = '';
-  get<HTMLButtonElement>('attach').disabled = true; get<HTMLButtonElement>('tools').disabled = true;
-  const send = get<HTMLButtonElement>('send'); send.hidden = running; send.disabled = !editable || !configured || rho.busy || closing || !!local?.conflict || !!conversation?.active_run_id || !message.value.trim() || rho.state.pending.some(p => p.task === id && p.kind === 'run');
+  renderAttachments(id, editable, 'rho'); get<HTMLButtonElement>('tools').disabled = true;
+  const send = get<HTMLButtonElement>('send'); send.hidden = running; send.disabled = !editable || !configured || rho.busy || closing || !!local?.conflict || !!conversation?.active_run_id || (!message.value.trim() && !rho.draft(id).assets.length) || rho.state.pending.some(p => p.task === id && p.kind === 'run');
   get('stop').hidden = !running; get<HTMLButtonElement>('stop').disabled = !controlled || rho.busy || closing;
   get('draft-conflict').hidden = !local?.conflict;
   const pending = rho.state.pending.find(p => p.task === id);
@@ -206,7 +209,7 @@ function renderRho(id: string) {
   get('history-controls').hidden = !earlier && !history?.before; get('earlier-messages').hidden = !earlier; get<HTMLButtonElement>('earlier-messages').disabled = rho.busy || closing;
   get('latest-messages').hidden = !history?.before; get<HTMLButtonElement>('latest-messages').disabled = rho.busy || closing; get('history-note').textContent = history?.before ? 'Earlier turns' : '';
   const transcript = get('transcript'), rows = [...(history?.page.runs ?? [])].reverse();
-  const signature = JSON.stringify([id, rows, controlled, editable, !!message.value.trim(), rho.busy, closing, conversation?.active_run_id, rows.map(row => [rho.runs.get(row.run_id), rho.transcripts.get(row.run_id)])]);
+  const signature = JSON.stringify([id, rows, controlled, editable, !!message.value.trim(), rho.draft(id).assets, rho.busy, closing, conversation?.active_run_id, rows.map(row => [rho.runs.get(row.run_id), rho.transcripts.get(row.run_id)])]);
   if (transcript.dataset.content !== signature) {
     const following = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 45, oldTask = transcript.dataset.task;
     const top = transcript.getBoundingClientRect().top, visible = [...transcript.querySelectorAll<HTMLElement>('[data-event]')].find(node => node.getBoundingClientRect().bottom > top);
@@ -216,6 +219,10 @@ function renderRho(id: string) {
     for (const row of rows) {
       const run = rho.runs.get(row.run_id), history = rho.transcripts.get(row.run_id);
       const input = block('You', run?.request.text ?? row.text_excerpt, `${row.run_id}:user`);
+      if (run?.request.assets?.length) {
+        const files = document.createElement('small'); files.className = 'sent-attachments';
+        files.textContent = run.request.assets.map(asset => run.context?.sources.flatMap(source => source.evidence).find(e => e.kind === 'attachment' && e.asset.asset_id === asset)).map(e => e?.kind === 'attachment' ? e.asset.name : 'Attachment').join(' · '); input.append(files);
+      }
       if (run?.context || run?.request.sources?.length) { const sources = document.createElement('button'); sources.className = 'sent-context'; sources.textContent = 'Sent context'; sources.onclick = () => context?.inspectOriginal(id, row.run_id, 'rho'); input.append(sources); }
       if (history?.text) block('Rho', history.text, `${row.run_id}:answer`);
       const activity = block('Activity', [row.state.replaceAll('_', ' '), run?.reason, history?.gap ? 'Earlier messages unavailable' : '', history?.partial || run && history && history.cursor < run.event_cursor ? 'Partial history' : ''].filter(Boolean).join(' · '), `${row.run_id}:state`);
@@ -235,7 +242,7 @@ function renderRho(id: string) {
           if (!run.recovery.unresolved_mutations) {
             const continued = document.createElement('button'); continued.className = 'sent-context'; continued.textContent = 'Continue task';
             continued.title = 'Send your current draft with this checked task’s original tools and context.';
-            continued.disabled = !editable || rho.busy || closing || !!conversation?.active_run_id || !message.value.trim() || rho.state.pending.some(p => p.task === id && p.kind === 'run');
+            continued.disabled = !editable || rho.busy || closing || !!conversation?.active_run_id || (!message.value.trim() && !rho.draft(id).assets.length) || rho.state.pending.some(p => p.task === id && p.kind === 'run');
             continued.onclick = () => action(() => rho.send(id, row.run_id)); activity.append(continued);
           }
         }
@@ -249,48 +256,49 @@ function renderRho(id: string) {
   get('session-details').textContent = conversation ? `Rho task: ${id}\n${rho.state.pending.filter(p => p.task === id).length} unconfirmed request(s)\n${active ? `Original run: ${active.run_id}` : 'No active run'}` : '';
   get('archive-task').textContent = conversation?.archived ? 'Unarchive' : 'Archive';
 }
-function renderAttachments(task: string | null, editable: boolean) {
-  get<HTMLButtonElement>('attach').disabled = !editable || model.busy || closing;
-  const area = get('attachments'), selectedAssets = task ? model.draft(task).assets : [];
-  const assets = task ? model.details.get(task)?.assets ?? [] : [];
-  const key = JSON.stringify([selectedAssets, assets, editable, model.busy, closing]);
+function renderAttachments(task: string | null, editable: boolean, kind: 'native' | 'rho' = 'native') {
+  const target = kind === 'rho' ? rho : model;
+  get<HTMLButtonElement>('attach').disabled = !editable || target.busy || closing;
+  const area = get('attachments'), selectedAssets = task ? target.draft(task).assets : [];
+  const assets = task ? (kind === 'rho' ? rho.assets.get(task) : model.details.get(task)?.assets) ?? [] : [];
+  const key = JSON.stringify([kind, task, selectedAssets, assets, editable, target.busy, closing]);
   if (area.dataset.content !== key) {
     area.dataset.content = key; area.replaceChildren();
     for (const id of selectedAssets) {
       const asset = assets.find(item => item.asset_id === id), row = document.createElement('div'); row.className = 'attachment';
       const label = document.createElement('span'); label.textContent = asset ? `${asset.name} · ${Math.ceil(asset.bytes / 1024)} KiB` : 'Attachment unavailable';
       const remove = document.createElement('button'); remove.textContent = '×'; remove.setAttribute('aria-label', `Remove ${asset?.name ?? 'attachment'} from draft`);
-      remove.disabled = !editable || model.busy || closing;
-      remove.onclick = () => { model.edit(task!, { ...model.draft(task!), assets: model.draft(task!).assets.filter(item => item !== id) }); saveDraftSoon(task!); };
+      remove.disabled = !editable || target.busy || closing;
+      remove.onclick = () => { target.edit(task!, { ...target.draft(task!), assets: target.draft(task!).assets.filter(item => item !== id) }); saveDraftSoon(task!, kind); };
       row.append(label, remove); area.append(row);
     }
   }
-  const transfers = get('uploads'), pending = model.uploads.filter(p => p.upload.control.task_id === task);
-  const transferKey = JSON.stringify([pending, model.busy, editable, closing]);
+  const transfers = get('uploads'), pending = kind === 'rho' ? rho.uploads.filter(p => p.upload.conversation_id === task) : model.uploads.filter(p => p.upload.control.task_id === task);
+  const transferKey = JSON.stringify([kind, task, pending, target.busy, editable, closing]);
   if (transfers.dataset.content === transferKey) return;
   transfers.dataset.content = transferKey; transfers.replaceChildren();
   for (const item of pending) {
     const row = document.createElement('div'); row.className = 'upload';
-    const label = document.createElement('span'); label.textContent = `${item.upload.name} · ${item.phase === 'imported' ? 'Ready to add' : model.busy ? 'Uploading…' : 'Transfer needs review'}`;
-    const status = document.createElement('button'); status.textContent = 'Check status'; status.disabled = model.busy || closing;
-    status.onclick = () => action(() => model.inspectUpload(item.upload.request_id));
-    const resume = document.createElement('button'); resume.textContent = item.phase === 'imported' ? 'Add to draft' : 'Reselect original file'; resume.disabled = model.busy || !editable || closing;
+    const label = document.createElement('span'); label.textContent = `${item.upload.name} · ${item.phase === 'imported' ? 'Ready to add' : target.busy ? 'Uploading…' : 'Transfer needs review'}`;
+    const status = document.createElement('button'); status.textContent = 'Check status'; status.disabled = target.busy || closing;
+    status.onclick = () => action(() => target.inspectUpload(item.upload.request_id));
+    const resume = document.createElement('button'); resume.textContent = item.phase === 'imported' ? 'Add to draft' : 'Reselect original file'; resume.disabled = target.busy || !editable || closing;
     resume.onclick = () => {
-      if (item.phase === 'imported') action(async () => { await model.addUploaded(item.upload.request_id); await model.flush(item.upload.control.task_id); });
-      else { resumingUpload = item.upload.request_id; fileInput.multiple = false; fileInput.click(); }
+      if (item.phase === 'imported') action(async () => { await target.addUploaded(item.upload.request_id); await target.flush(task!); });
+      else chooseFiles(kind, task!, item.upload.request_id);
     };
     row.append(label, status, resume); transfers.append(row);
   }
 }
-function attachFiles(files: File[]) {
-  if (rhoSelected() && files.length) { report(Error('File attachments are not available for this Rho task yet. Your draft is retained.')); return; }
-  const task = selected(); if (!task || !files.length) return;
+function attachFiles(files: File[], captured?: { kind: 'native' | 'rho'; task: string } | null) {
+  const rid = rhoSelected(), task = captured?.task ?? rid ?? selected(); if (!task || !files.length) return;
+  const target = (captured?.kind ?? (rid ? 'rho' : 'native')) === 'rho' ? rho : model;
   const original = resumingUpload; resumingUpload = null;
   action(async () => {
     if (files.length > 16) throw Error('Select at most 16 files at a time.');
     for (const file of files) {
-      if (original) await model.resumeUpload(original, file, file.name); else await model.attachFile(task, file, file.name);
-      await model.flush(task);
+      if (original) await target.resumeUpload(original, file, file.name); else await target.attachFile(task, file, file.name);
+      await target.flush(task);
     }
   });
 }
@@ -328,8 +336,9 @@ message.addEventListener('keydown', event => {
     const id = rhoSelected() ?? selected(); if (id && !get<HTMLButtonElement>('send').disabled && !get('send').hidden) action(() => rhoSelected() ? rho.send(id) : model.send(id));
   }
 });
-get('attach').onclick = () => { resumingUpload = null; fileInput.multiple = true; fileInput.click(); };
-fileInput.onchange = () => { attachFiles(Array.from(fileInput.files ?? [])); fileInput.value = ''; };
+get('attach').onclick = () => { const rid = rhoSelected(), task = rid ?? selected(); if (task) chooseFiles(rid ? 'rho' : 'native', task); };
+fileInput.onchange = () => { attachFiles(Array.from(fileInput.files ?? []), uploadTarget); uploadTarget = null; fileInput.value = ''; };
+fileInput.oncancel = () => { uploadTarget = null; resumingUpload = null; };
 get('agent').addEventListener('dragover', event => { if (event.dataTransfer?.types.includes('Files')) event.preventDefault(); });
 get('agent').addEventListener('drop', event => { event.preventDefault(); if (event.dataTransfer?.files.length) { resumingUpload = null; attachFiles(Array.from(event.dataTransfer.files)); } });
 message.addEventListener('paste', event => { if (event.clipboardData?.files.length) { event.preventDefault(); resumingUpload = null; attachFiles(Array.from(event.clipboardData.files)); } });

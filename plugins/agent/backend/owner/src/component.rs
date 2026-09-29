@@ -910,21 +910,56 @@ impl ComponentAgentOwner {
                 "Selected context exceeds its capture budget".into(),
             ));
         }
-        if context
-            .sources
-            .iter()
-            .map(|source| &source.selection)
-            .collect::<Vec<_>>()
-            != request.sources.iter().collect::<Vec<_>>()
+        let assets = request.assets.as_deref().unwrap_or(&[]);
+        if context.sources.len() != request.sources.len() + assets.len()
             || context.sources.iter().any(|source| {
                 source.truncated
                     || source.title.is_empty()
                     || source.title.len() > 1024
                     || source.description.len() > 4096
-                    || source.text.len() > 16384
             })
         {
             return Err(ApplicationError::RequestConflict);
+        }
+        let (references, attachments) = context.sources.split_at(request.sources.len());
+        if references
+            .iter()
+            .map(|source| &source.selection)
+            .collect::<Vec<_>>()
+            != request.sources.iter().collect::<Vec<_>>()
+            || references.iter().any(|source| source.text.len() > 16384)
+        {
+            return Err(ApplicationError::RequestConflict);
+        }
+        // Each asset capture is paired with the original selected ID, in order.
+        // The backend resolves immutable bytes before admission; the owner checks
+        // that the captured evidence cannot substitute another task or attachment.
+        for (source, selected) in attachments.iter().zip(assets) {
+            let [
+                ComponentAgentEvidence::Attachment {
+                    conversation_id,
+                    asset,
+                },
+            ] = source.evidence.as_slice()
+            else {
+                return Err(ApplicationError::RequestConflict);
+            };
+            let image = matches!(asset.mime_type.as_str(), "image/png" | "image/jpeg");
+            if conversation_id != &request.conversation_id
+                || &asset.asset_id != selected
+                || source.selection.source != "attachments"
+                || source.title != asset.name
+                || source.selection.label != asset.name
+                || source.selection.inclusion != if image { "image" } else { "text" }
+                || source.selection.reference
+                    != serde_json::json!({
+                        "conversation_id": request.conversation_id, "asset_id": asset.asset_id, "sha256": asset.sha256
+                    })
+                || source.text.len() > if image { 16384 } else { 32768 }
+                || !image && asset.mime_type != "text/plain"
+            {
+                return Err(ApplicationError::RequestConflict);
+            }
         }
         self.start_with_origin(actor, request, Some(origin), Some(context), now)
     }

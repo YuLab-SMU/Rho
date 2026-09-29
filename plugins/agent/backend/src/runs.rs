@@ -228,7 +228,7 @@ impl Runs {
             window: actor.window().clone(),
             text: args.text,
             sources: args.sources,
-            assets: None,
+            assets: args.assets,
             continuation: args.continuation,
             grant: ComponentAgentGrant {
                 mode,
@@ -288,7 +288,12 @@ impl Runs {
             }
             crate::run_recovery::revalidate_caller(call, &host, &caller).await?;
         }
-        let captured_context = if let Some(previous) = &previous {
+        let mut attachment_input = if previous.is_none() {
+            crate::model_assets::capture(metadata, &request)?
+        } else {
+            crate::model_assets::Captured::default()
+        };
+        let mut captured_context = if let Some(previous) = &previous {
             // An original retry observes the bytes already admitted. Current
             // provider state and optional source grants cannot replace them.
             previous.run.context.clone()
@@ -320,6 +325,15 @@ impl Runs {
                     .collect(),
             })
         };
+        if !attachment_input.sources.is_empty() {
+            captured_context
+                .get_or_insert(ComponentAgentContext {
+                    history: None,
+                    sources: vec![],
+                })
+                .sources
+                .append(&mut attachment_input.sources);
+        }
         let (admitted, guard, captured_key) = {
             let mut live = self.live.lock().map_err(|_| unavailable())?;
             let repeated = metadata
@@ -343,6 +357,11 @@ impl Runs {
                 if !settings.enabled {
                     return Err(Failure::invalid("Choose and enable a model before sending"));
                 }
+                crate::model_assets::validate_images(
+                    metadata,
+                    &settings,
+                    &attachment_input.images,
+                )?;
                 let connection = settings
                     .connection
                     .ok_or_else(|| Failure::invalid("Configure a model before sending"))?;
@@ -428,7 +447,7 @@ impl Runs {
                             task_intent: run.task_intent,
                         },
                         context,
-                        images: vec![],
+                        images: attachment_input.images,
                         tools,
                         key,
                         port: port.clone(),

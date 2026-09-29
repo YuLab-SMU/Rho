@@ -57,6 +57,10 @@ export async function exerciseRhoInput(page: Page, frame: FrameLocator, info: Te
   await picker.getByRole('button',{name:/上下文 Ω.R/}).click();
   await expect(picker.locator('#context-preview')).toHaveText(sourceText.trim());
   await picker.getByRole('button',{name:'Add to draft',exact:true}).click();
+  const attachmentText='Immutable Rho attachment · 完整文本 Ω';
+  await frame.locator('#attachment-file').setInputFiles({name:'Rho 输入.txt',mimeType:'text/plain',buffer:Buffer.from(attachmentText)});
+  await expect(frame.locator('#attachments')).toContainText('Rho 输入.txt');
+  await expect.poll(async()=>(await conversation()).draft_content.assets.length).toBe(1);
   const prompt='Explain this analysis from the selected Editor input · 中文 Ω';
   await composer.fill(prompt);await expect.poll(async()=>(await conversation()).draft).toBe(prompt);
   let sends=0, sourceReads=0;
@@ -77,6 +81,9 @@ export async function exerciseRhoInput(page: Page, frame: FrameLocator, info: Te
   const originalId=(await history()).runs[0].run_id;
   const captured=(await run(originalId)).context;
   expect(captured.sources[0].text.trim()).toBe(sourceText.trim());
+  expect(captured.sources[1].text).toBe(attachmentText);
+  expect(captured.sources[1].evidence[0].conversation_id).toBe(task);
+  expect(JSON.stringify(peer.bodies[0])).toContain(attachmentText);
   await changeSource();
   await expect(composer).toHaveValue('');
   const followup='Explain the earlier answer without changing the analysis · 后续输入';
@@ -85,6 +92,7 @@ export async function exerciseRhoInput(page: Page, frame: FrameLocator, info: Te
   await frame.locator('#inspect-original').click();await expect(frame.locator('#recovery')).toBeHidden();
   await frame.getByRole('button',{name:'Sent context',exact:true}).click();
   await expect(picker.locator('#context-captures')).toContainText(sourceText.trim());
+  await expect(picker.locator('#context-captures')).toContainText(attachmentText);
   await picker.getByRole('button',{name:'Close context'}).click();
   expect(sourceReads).toBe(0);expect(sends).toBe(1);expect(peer.bodies).toHaveLength(1);
   peer.release();

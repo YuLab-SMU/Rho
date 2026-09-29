@@ -7,7 +7,7 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
     const instance={instance:'agent',plugin:'org.rho.agent',revision:'sha256:'+'a'.repeat(64),artifact:'sha256:'+'b'.repeat(64)};
     const settings={version:1,enabled:true,connection:{model:'fixture',protocol:'openai_completions',base_url:'https://fixture.invalid',credential:{kind:'local_file',key_id:'fixture'}}};
     const conversations=new Map(),runs=new Map(),events=new Map(),records=[],calls=[],reads=[];
-    const overrides=new Map();
+    const overrides=new Map(),assets=new Map(),staged=new Map();
     const client={
       get view(){return {view:'view-one',window:'window-one',project:'project',instance,state:clone(state),state_version:version};},
       async setState(value){if(failSave)throw Error('State save failed');state=clone(value);version++;return this.view;},
@@ -17,6 +17,7 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
         else if(cap.id==='operation.list_recent')data={operations:records.filter(r=>r.operation.client_request_id===args.client_request_id).map(r=>({operation_id:r.operation.operation_id}))};
         else if(cap.id==='agent.model.settings')data=settings;
         else if(cap.id==='agent.model.key.status'){assert.equal(input.settings_version,settings.version);data={credential:settings.connection.credential,available:keyAvailable};}
+        else if(cap.id==='agent.model.assets')data={conversation_id:input.conversation_id,assets:assets.get(input.conversation_id)??[]};
         else if(cap.id==='agent.model.conversation')data=conversations.get(input.conversation_id);
         else if(cap.id==='agent.model.run.get')data=runs.get(input.run_id);
         else if(cap.id==='agent.model.run.admission')data={binding:{provider:instance,project:'project',capability:{id:'agent.model.run',version:1},target:null},r:runs.get(input.run_id).request.r??null};
@@ -28,6 +29,22 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
         }else if(cap.id==='agent.model.run.events')data={events:(events.get(input.run_id)??[]).filter(e=>e.sequence>input.after).slice(0,input.limit),cursor:runs.get(input.run_id).event_cursor,history_gap:false};
         else throw Error('Unexpected query '+cap.id);
         return {status:'ready',completeness:'complete',data:clone(data)};
+      },
+      async control(cap,args){
+        const {upload,offset,data}=args.arguments;
+        assert.ok(state.rho.uploads.some(p=>JSON.stringify(p.upload)===JSON.stringify(upload)), 'Save original identity before bytes');
+        calls.push(clone({cap,args,control:true})); let result;
+        if(cap.id==='agent.model.assets.stage'){
+          let entry=staged.get(upload.request_id);if(!entry){entry={upload:clone(upload),bytes:Buffer.alloc(0)};staged.set(upload.request_id,entry);}
+          assert.deepEqual(entry.upload,upload);const part=Buffer.from(data,'base64');assert.ok(part.length<=65536);
+          if(offset===entry.bytes.length)entry.bytes=Buffer.concat([entry.bytes,part]);else assert.deepEqual(entry.bytes.subarray(offset,offset+part.length),part);
+          result={upload:clone(upload),received:entry.bytes.length,complete:entry.bytes.length===upload.bytes};
+        }else if(cap.id==='agent.model.assets.finish'){
+          const list=assets.get(upload.conversation_id)??[];let asset=list.find(a=>a.asset_id===upload.request_id);
+          if(!asset){assert.equal(staged.get(upload.request_id).bytes.length,upload.bytes);asset={asset_id:upload.request_id,name:upload.name,mime_type:upload.mime_type,bytes:upload.bytes,sha256:upload.sha256};list.push(asset);assets.set(upload.conversation_id,list);}
+          result={conversation_id:upload.conversation_id,asset};
+        }else throw Error('Unexpected Control '+cap.id);
+        if(lost===cap.id){lost='';throw Error('Lost attachment reply');}return clone(result);
       },
       async invoke(cap,args,options){
         const pending=state.rho.pending.find(p=>p.intent.request===options.requestId);assert.ok(pending,'Original intent must be saved before invocation');assert.deepEqual(pending.intent.arguments,args);
@@ -61,7 +78,7 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
       },
       async operation(id){return clone(records.find(r=>r.operation.operation_id===id));},
     };
-    return {client,conversations,runs,records,calls,reads,overrides,
+    return {client,conversations,runs,records,calls,reads,overrides,assets,staged,
       open(){const native=new NativeAgentModel(client);return {native,model:new RhoModel(client,native)};},
       lose(id){lost=id;},hold(wait){gate=wait;},failSave(value){failSave=value;},missingKey(){keyAvailable=false;},
       finish(id,text='Answer 中文 Ω'){
@@ -187,9 +204,48 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
     const f=fixture(),{model,id}=await task(f);model.edit(id,{...empty(),text:'Explain',context:Array.from({length:17},(_,version)=>({source:'plugin',label:'Source',reference:{version},inclusion:'{}'}))});
     const before=f.calls.length;await assert.rejects(model.send(id),/16 context/);assert.equal(f.calls.length,before);assert.equal(model.draft(id).context.length,17);
   });
-  await check('missing model key and unsupported selected sources preserve the draft',async()=>{
+  await check('missing model key preserves text and selected attachments',async()=>{
     const f=fixture(),{model,id}=await task(f);await draft(model,id);f.missingKey();await assert.rejects(model.send(id),/key is unavailable/);assert.equal(model.draft(id).text,'Send exactly this draft');assert.equal(f.runs.size,0);
-    model.edit(id,{...empty(),text:'Retain selected input',assets:['not-yet-composed']});await assert.rejects(model.send(id),/sources/);assert.equal(model.draft(id).assets.length,1);
+    model.edit(id,{...empty(),text:'Retain selected input',assets:['retained-attachment']});await assert.rejects(model.send(id),/key is unavailable/);assert.equal(model.draft(id).assets.length,1);
+  });
+  await check('Rho text attachment transfer selects a draft but starts no model until attachment-only Send',async()=>{
+    const f=fixture(),{model,id}=await task(f);await model.attachFile(id,new Blob(['Retained 中文 Ω'],{type:'text/markdown'}),'说明.md');
+    const asset=f.assets.get(id)[0];assert.equal(asset.mime_type,'text/plain');assert.deepEqual(model.draft(id).assets,[asset.asset_id]);assert.equal(f.runs.size,0);
+    assert.equal(f.records.length,1);assert.equal(f.calls.filter(c=>c.control).length,2);await model.flush(id);await model.send(id);
+    assert.deepEqual(f.runs.get('run-0').request.assets,[asset.asset_id]);assert.equal(model.draft(id).assets.length,0);assert.equal(f.runs.size,1);
+  });
+  await check('lost Rho finish reopens for read-only inspection and explicit draft selection',async()=>{
+    const f=fixture(),{model,id}=await task(f);f.lose('agent.model.assets.finish');await assert.rejects(model.attachFile(id,new Blob(['original']),'notes.txt'),/Lost attachment/);
+    const original=model.uploads[0].upload,after=f.calls.length,reopened=f.open().model;await reopened.observe(id);await reopened.inspectUpload(original.request_id);
+    assert.equal(f.calls.length,after);assert.equal(reopened.draft(id).assets.length,0);assert.equal(reopened.uploads[0].phase,'imported');
+    await reopened.addUploaded(original.request_id);assert.deepEqual(reopened.draft(id).assets,[original.request_id]);assert.equal(f.runs.size,0);
+  });
+  await check('Rho chunk recovery requires the exact original file and handles lost transient staging',async()=>{
+    const f=fixture(),{model,id}=await task(f),blob=new Blob(['original bytes']);f.lose('agent.model.assets.stage');
+    await assert.rejects(model.attachFile(id,blob,'notes.txt'),/Lost attachment/);const original=model.uploads[0].upload;f.staged.clear();
+    const reopened=f.open().model;await reopened.observe(id);const before=f.calls.length;
+    await assert.rejects(reopened.resumeUpload(original.request_id,new Blob(['changed']),'notes.txt'),/same filename/);assert.equal(f.calls.length,before);
+    await reopened.resumeUpload(original.request_id,blob,'notes.txt');assert.deepEqual(reopened.draft(id).assets,[original.request_id]);assert.equal(f.assets.get(id).length,1);
+  });
+  await check('Rho attachment limits and unacknowledged state prevent any byte transfer',async()=>{
+    const f=fixture(),{model,id}=await task(f),before=f.calls.length;
+    for(const blob of [new Blob(['x'.repeat(32769)]),new Blob([new Uint8Array(2097153)],{type:'image/png'}),new Blob([new Uint8Array([0xff])]),new Blob(['binary\0'])])
+      await assert.rejects(model.attachFile(id,blob,'notes.txt'));
+    assert.equal(f.calls.length,before);f.failSave(true);await assert.rejects(model.attachFile(id,new Blob(['valid']),'notes.txt'),/State save/);assert.equal(f.calls.length,before);
+  });
+  await check('Rho attachment identity and controller cannot be replaced after reload',async()=>{
+    const f=fixture(),{model,id}=await task(f);f.lose('agent.model.assets.finish');await assert.rejects(model.attachFile(id,new Blob(['original']),'notes.txt'));
+    f.assets.get(id)[0].sha256='0'.repeat(64);await assert.rejects(model.inspectUpload(model.uploads[0].upload.request_id),/not confirmed/);assert.equal(model.draft(id).assets.length,0);
+    f.conversations.get(id).controller.incarnation='other';await model.observe(id);await assert.rejects(model.attachFile(id,new Blob(['next']),'next.txt'),/read-only/);
+    const state=f.client.view.state;state.rho.uploads[0].instance.instance='other';await f.client.setState(state);assert.throws(()=>f.open(),/another task, view or instance/);
+  });
+  await check('lost attachment Send preserves the next draft and rejects a different asset receipt',async()=>{
+    const f=fixture(),{model,id}=await task(f);await model.attachFile(id,new Blob(['original']),'notes.txt');await model.flush(id);f.lose('agent.model.run');
+    await assert.rejects(model.send(id),/Lost original/);model.edit(id,{...empty(),text:'Next draft'});await model.observe(id);
+    assert.equal(model.draft(id).text,'Next draft');assert.equal(f.runs.size,1);await model.inspect(model.state.pending[0].intent.request);
+    const next=fixture(),t=await task(next);await t.model.attachFile(t.id,new Blob(['original']),'notes.txt');await t.model.flush(t.id);
+    next.overrides.set('agent.model.run.request',()=>({...next.runs.get('run-0'),request:{...next.runs.get('run-0').request,assets:['other']}}));
+    await assert.rejects(t.model.send(t.id),/original Send/);assert.equal(t.model.draft(t.id).assets.length,1);
   });
   await check('conflicting draft stays local until explicit resolution',async()=>{
     const f=fixture(),{model,id}=await task(f);model.edit(id,{...empty(),text:'Local'});const remote=f.conversations.get(id);remote.draft_content={...empty(),text:'Other view'};remote.draft_version++;remote.version++;

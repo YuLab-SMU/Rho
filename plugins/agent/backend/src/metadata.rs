@@ -25,6 +25,7 @@ pub struct Metadata {
     settings_gate: Mutex<()>,
     diagnostics: crate::diagnostics::Diagnostics,
     runs: crate::runs::Runs,
+    model_assets: crate::model_assets::ModelAssets,
     pub(crate) instance: PluginInstance,
     pub(crate) scope: AgentTaskScope,
     pub(crate) grants: Vec<CapabilityRequirement>,
@@ -167,6 +168,7 @@ impl Metadata {
             store,
             diagnostics: Default::default(),
             runs: Default::default(),
+            model_assets: Default::default(),
             credentials: CredentialFile::at(
                 Path::new(&environment.data_root).join("model-credentials-v1.json"),
             ),
@@ -314,6 +316,7 @@ impl Metadata {
                 let args: Conversation = decode(&call.arguments)?;
                 encoded(self.conversation(&args.conversation_id)?)
             }
+            "agent.model.assets" => crate::model_assets::list(self, call),
             "agent.model.settings" => {
                 let _: Empty = decode(&call.arguments)?;
                 encoded(self.owner.store.component_settings(&self.scope)?)
@@ -329,6 +332,12 @@ impl Metadata {
         caller: PluginViewCaller,
         host: rho_plugin_sdk::HostCallClient,
     ) -> Result<Value, Failure> {
+        if call.binding.capability.id.as_str() == "agent.model.assets.stage" {
+            return self.model_assets.stage(self, call, caller);
+        }
+        if call.binding.capability.id.as_str() == "agent.model.assets.finish" {
+            return self.model_assets.finish(self, call, caller);
+        }
         if call.binding.capability.id.as_str() == "agent.native.assets.stage" {
             return self.native.stage_upload(self, call, caller);
         }

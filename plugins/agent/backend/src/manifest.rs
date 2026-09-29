@@ -4,11 +4,11 @@ use rho_agent_api::{
     AgentResourceAssetUpload, AgentTaskCommandResult, AgentTaskDetail, AgentTaskEventPage,
     ComponentCredentialRef, ComponentCredentialStatus, ComponentModelSettings,
     ProjectAgentTaskPage,
-    handoff::{AgentHandoffReceipt, AgentHandoffSourceSnapshot, AgentHandoffTargetSnapshot},
     component::{
         ComponentAgentConversation, ComponentAgentEventPage, ComponentAgentRun,
         ComponentModelDiagnostic, ComponentToolReceipt,
     },
+    handoff::{AgentHandoffReceipt, AgentHandoffSourceSnapshot, AgentHandoffTargetSnapshot},
 };
 use rho_plugin_sdk::protocol::*;
 use schemars::schema_for;
@@ -47,6 +47,8 @@ pub fn kind(id: &str) -> CapabilityKind {
             | "agent.native.assets.import"
             | "agent.native.assets.stage"
             | "agent.native.assets.finish"
+            | "agent.model.assets.stage"
+            | "agent.model.assets.finish"
     ) {
         CapabilityKind::Control
     } else if is_mutation(id) {
@@ -74,6 +76,10 @@ fn capability(
             "Admit a native Agent command with the original caller and task generation. Send may select exact ordinary-plugin query/Operation tools under existing grants; immutable manifests supply their contracts. Selected contributed text is revalidated through its declared preview query and retained with this Send before dispatch. Changed, truncated, unsupported-resource or over-budget context preserves the draft. Retains the original parent until the native turn and accepted scientific children settle. Identical requests only observe original receipts and context, never reread sources. Tool retries require the same Send and semantic request identity. Does not install an Agent. Attachment bytes are excluded."
         } else if id == "agent.native.context" {
             "Read the exact contributed text and source identities captured for an original Send. Does not reread current source content, reconnect a native Agent or repeat a turn."
+        } else if id == "agent.model.assets.stage" {
+            "Stage bounded Rho attachment chunks under the current task controller and exact original file identity. UTF-8 text is limited to 32 KiB; PNG/JPEG images to 2 MiB. Identical chunks are idempotent. Does not select draft input, create an Operation or start a model."
+        } else if id == "agent.model.assets.finish" {
+            "Verify the complete original file and store it immutably in its Rho conversation. Original identity retries return the retained attachment; changed metadata or bytes are refused. Inspect agent.model.assets after a lost reply. Does not select an attachment into a draft or start a model."
         } else if id == "agent.native.assets.stage" {
             "Stage bounded browser file chunks in transient instance memory under an exact task controller and original transfer identity. Identical chunks are idempotent; changed bytes, controllers and quotas are rejected. Does not create an asset, start an Agent or journal bytes. Incomplete data may expire; reselect the original file to continue."
         } else if id == "agent.native.assets.finish" {
@@ -91,7 +97,7 @@ fn capability(
         } else if id == "agent.handoff.receipt" {
             "Read the original atomic handoff receipt without appending or sending again. An absent receipt is an incomplete observation, never proof that a pending append cannot finish."
         } else if id == "agent.model.run" {
-            "Run the submitted text and explicit contributed sources using captured model settings, an available scoped key and the original native controller. Source previews are checked before admission; complete text, provenance and bounded ordinary conversation history are committed with the run. Historical input does not inherit tool authority. Admission atomically consumes only a matching saved draft; failed source capture or missing credentials preserve it. Retains the native Operation until the model and dispatched native tools settle and records text and usage in its original task. An optional exact R binding permits bounded observation in Explain and execution only in Run, subject to original scopes and granted native capabilities. Explicit Continue rechecks the selected recovery digest and retains the original Agent/R provider and session; confirmed repeated mutations return their original native outcomes. Attachments are not yet composed. Identical original requests only observe the existing run and captured sources without rereading providers, preserving later drafts."
+            "Run the submitted text and explicit contributed sources using captured model settings, an available scoped key and the original native controller. Source previews are checked before admission; complete text, provenance and bounded ordinary conversation history are committed with the run. Historical input does not inherit tool authority. Admission atomically consumes only a matching saved draft; failed source capture or missing credentials preserve it. Retains the native Operation until the model and dispatched native tools settle and records text and usage in its original task. An optional exact R binding permits bounded observation in Explain and execution only in Run, subject to original scopes and granted native capabilities. Explicit Continue rechecks the selected recovery digest and retains the original Agent/R provider and session; confirmed repeated mutations return their original native outcomes. Explicit immutable attachments capture bounded UTF-8 text or verified PNG/JPEG image input before admission; image bytes require a passing diagnostic for the current model connection. History retains attachment evidence without silently resending prior images. Identical original requests only observe the existing run and captured sources without rereading providers, preserving later drafts."
         } else if id == "agent.model.history" {
             "Read up to 20 original run summaries in one scoped task using an exact run cursor. Lost model loops are observed as interrupted without changing their stored state, recovering a process or replaying a request."
         } else if id == "agent.model.run.stop" {
@@ -118,7 +124,7 @@ fn capability(
         input_schema: input, output_schema: output, examples: vec![example],
         recovery_schema: json!({"type":"object","additionalProperties":false,"properties":{"code":{"type":"string"}},"required":["code"]}),
         required_scopes: if id == "agent.native.assets.import" { ["application.control".into(), "plugins.read".into(), "resources.read".into()].into() } else if operation || control { ["application.control".into(), "plugins.read".into()].into() } else if id == "agent.handoff.target" { ["application.read".into(), "plugins.read".into()].into() } else if matches!(id, "agent.model.tool.operation" | "agent.native.tool.operation") { ["application.read".into(), "operation.read".into()].into() } else { ["application.read".into()].into() },
-        effects: if id == "agent.native.discover" { ["agent.native.discovery".into()].into() } else if id == "agent.native.command" { ["agent.native.command".into()].into() } else if matches!(id, "agent.native.assets.upload" | "agent.native.assets.import" | "agent.native.assets.stage" | "agent.native.assets.finish") { ["agent.assets".into()].into() } else if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
+        effects: if id == "agent.native.discover" { ["agent.native.discovery".into()].into() } else if id == "agent.native.command" { ["agent.native.command".into()].into() } else if matches!(id, "agent.native.assets.upload" | "agent.native.assets.import" | "agent.native.assets.stage" | "agent.native.assets.finish" | "agent.model.assets.stage" | "agent.model.assets.finish") { ["agent.assets".into()].into() } else if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
         cancellation: CancellationSupport::Unsupported, preflight: None,
     }
 }
@@ -184,28 +190,54 @@ pub fn manifest() -> PluginManifest {
         },
         capabilities: vec![
             capability(
-                "agent.handoff.source", "Prepare a task handoff",
+                "agent.handoff.source",
+                "Prepare a task handoff",
                 schema_for!(HandoffSource).to_value(),
                 schema_for!(AgentHandoffSourceSnapshot).to_value(),
                 json!({"source":{"kind":"rho","conversation_id":"source-task"}}),
             ),
             capability(
-                "agent.handoff.target", "Inspect the existing target draft",
+                "agent.handoff.target",
+                "Inspect the existing target draft",
                 schema_for!(HandoffTarget).to_value(),
                 schema_for!(AgentHandoffTargetSnapshot).to_value(),
                 json!({"target":{"kind":"rho","conversation_id":"target-task"}}),
             ),
             capability(
-                "agent.handoff.receipt", "Inspect an original handoff receipt",
+                "agent.handoff.receipt",
+                "Inspect an original handoff receipt",
                 schema_for!(CredentialRequest).to_value(),
                 schema_for!(Option<AgentHandoffReceipt>).to_value(),
                 json!({"request_id":"handoff-original"}),
             ),
             capability(
-                "agent.handoff.append", "Add reviewed handoff to a task draft",
+                "agent.handoff.append",
+                "Add reviewed handoff to a task draft",
                 schema_for!(AppendHandoff).to_value(),
                 schema_for!(AgentHandoffReceipt).to_value(),
                 json!({"request_id":"handoff-original","source":{"kind":"rho","conversation_id":"source-task"},"source_revision":"source-digest","target":{"kind":"rho","conversation_id":"target-task"},"target_draft_version":1,"target_control_generation":null,"body":"Goal\nReview the captured source","context":[]}),
+            ),
+            capability(
+                "agent.model.assets",
+                "Read retained Rho attachments",
+                schema_for!(Conversation).to_value(),
+                schema_for!(crate::model_assets::Assets).to_value(),
+                json!({"conversation_id":"task-example"}),
+            ),
+            capability(
+                "agent.model.assets.stage",
+                "Stage a Rho attachment chunk",
+                schema_for!(crate::model_assets::Chunk).to_value(),
+                schema_for!(crate::native_uploads::Progress<crate::model_assets::Upload>)
+                    .to_value(),
+                json!({"upload":{"request_id":"11111111-1111-4111-8111-111111111111","conversation_id":"task-example","name":"empty.txt","mime_type":"text/plain","bytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"},"offset":0,"data":""}),
+            ),
+            capability(
+                "agent.model.assets.finish",
+                "Finish the original Rho attachment",
+                schema_for!(crate::model_assets::Finish).to_value(),
+                schema_for!(crate::model_assets::Imported).to_value(),
+                json!({"upload":{"request_id":"11111111-1111-4111-8111-111111111111","conversation_id":"task-example","name":"empty.txt","mime_type":"text/plain","bytes":0,"sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}}),
             ),
             capability(
                 "agent.native.assets.stage",
@@ -516,6 +548,9 @@ pub fn manifest() -> PluginManifest {
         "agent.native.history",
         "agent.native.assets.stage",
         "agent.native.assets.finish",
+        "agent.model.assets",
+        "agent.model.assets.stage",
+        "agent.model.assets.finish",
         "agent.model.settings",
         "agent.model.configure",
         "agent.model.key.store",

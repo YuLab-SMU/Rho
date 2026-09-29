@@ -270,7 +270,7 @@ fn native_recovery_report_checks_controller_and_version_and_survives_reopen() {
         owner.record_native_recovery(&other, &run.run.run_id, conversation.version, vec![], 5),
         Err(ComponentTaskError::Conflict)
     ));
-    let saved = owner
+    owner
         .save_draft_content(
             &actor,
             "task",
@@ -282,6 +282,10 @@ fn native_recovery_report_checks_controller_and_version_and_survives_reopen() {
             None,
             6,
         )
+        .unwrap();
+    let saved = store
+        .component_conversation(actor.scope(), "task")
+        .unwrap()
         .unwrap();
     assert!(matches!(
         owner.record_native_recovery(&actor, &run.run.run_id, conversation.version, vec![], 7),
@@ -414,7 +418,7 @@ fn native_history_is_bounded_scoped_and_never_inherits_previous_authority() {
         .component_conversation(actor.scope(), "task")
         .unwrap()
         .unwrap();
-    let saved = owner
+    owner
         .save_draft_content(
             &actor,
             "task",
@@ -427,6 +431,10 @@ fn native_history_is_bounded_scoped_and_never_inherits_previous_authority() {
             None,
             116,
         )
+        .unwrap();
+    let saved = store
+        .component_conversation(actor.scope(), "task")
+        .unwrap()
         .unwrap();
     let context = ComponentAgentContext {
         history: None,

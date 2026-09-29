@@ -168,13 +168,16 @@ pub struct RunModel {
     pub conversation_id: String,
     pub conversation_version: u64,
     pub model_settings_version: u64,
-    #[schemars(length(min = 1, max = 32768))]
+    #[schemars(length(max = 32768))]
     pub text: String,
     /// Exact user-selected contributed references. Resolved before admission;
     /// retained content is reused for every observation of the original request.
     #[serde(default)]
     #[schemars(length(max = 16))]
     pub sources: Vec<rho_agent_api::AgentContextSelection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(length(max = 16))]
+    pub assets: Option<Vec<String>>,
     #[serde(default)]
     pub continuation: Option<rho_agent_api::component::ComponentContinuation>,
     /// Optional exact R provider/session selection, supplied by the caller.

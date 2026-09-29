@@ -253,7 +253,7 @@ impl Fixture {
 fn manifest_contains_public_bounded_agent_capabilities() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 42);
+    assert_eq!(manifest.capabilities.len(), 45);
     assert_eq!(
         manifest.requires[0].capability,
         manifest::key("views.caller")
@@ -1369,3 +1369,6 @@ mod native_tasks;
 
 #[path = "support/handoffs.rs"]
 mod handoffs;
+
+#[path = "support/model_assets.rs"]
+mod model_assets;

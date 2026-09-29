@@ -286,6 +286,19 @@ action reads the original Agent-owned capture, including its source details,
 without querying the current provider. These renderer/model fixtures use synthetic
 peers; actual Editor-to-Agent/Host acceptance remains pending.
 
+Rho attachment input is implemented through `agent.model.assets.stage` and
+`.finish` Controls and the bounded `agent.model.assets` metadata query. It uses
+the existing component asset store: UTF-8 text up to 32 KiB, PNG/JPEG up to 2 MiB,
+and at most two images and 16 combined sources per Send. Image input requires a
+passing diagnostic for the exact selected model connection. The view saves file
+identity before uploading bounded chunks; lost replies offer inspection and exact
+file reselection. Inspection does not select draft input or send a message.
+Send captures immutable attachment evidence and text before admission; only images
+selected for that Send contribute image bytes. History and Continue preserve
+references without silently resending prior image pixels. Attachment-only Send and
+next-draft recovery use the same original-request checks as text. Model/renderer
+checks pass; this extension's native and actual Host acceptance remain pending.
+
 Rho uses the same source resolver before model admission. Its owner atomically
 stores `ComponentAgentContext` with the original request and matching draft
 consumption; partial/changed sources and missing keys preserve the saved draft.

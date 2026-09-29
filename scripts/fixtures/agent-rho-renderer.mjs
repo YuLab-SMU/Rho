@@ -26,6 +26,22 @@ export async function testRhoRenderer(page, frame, expect, output) {
   await contextDialog.getByRole('button',{name:'Add to draft',exact:true}).click();
   await expect(frame.getByRole('button',{name:'Editor documents · 分析 Ω.R',exact:true})).toBeVisible();
   await expect(frame.locator('#draft-status')).toHaveText('Draft saved');
+  await expect(frame.locator('#attach')).toBeEnabled();
+  await page.evaluate(()=>window.fixture.loseAttachmentReply());
+  await frame.locator('#attachment-file').setInputFiles({name:'Rho 完整附件.txt',mimeType:'text/plain',buffer:Buffer.from('Immutable attachment context 中文 Ω')});
+  await expect(frame.getByRole('alert')).toContainText('Lost attachment reply');
+  const uploaded=(await page.evaluate(()=>window.fixture.snapshot())).calls.filter(c=>c.capability?.id==='agent.model.assets.finish').length;
+  await page.evaluate(()=>window.fixture.reload());await expect(frame.locator('#uploads')).toContainText('Transfer needs review');
+  await frame.locator('#uploads').getByRole('button',{name:'Check status',exact:true}).click();
+  await expect(frame.locator('#uploads')).toContainText('Ready to add');await expect(frame.locator('#attachments')).not.toContainText('Rho 完整附件.txt');
+  await frame.locator('#uploads').getByRole('button',{name:'Add to draft',exact:true}).click();
+  await expect(frame.locator('#attachments')).toContainText('Rho 完整附件.txt');await expect(frame.locator('#draft-status')).toHaveText('Draft saved');
+  assert.equal((await page.evaluate(()=>window.fixture.snapshot())).calls.filter(c=>c.capability?.id==='agent.model.assets.finish').length,uploaded);
+  for(const width of [960,440,220]){
+    await page.setViewportSize({width,height:820});assert.equal(await frame.locator('body').evaluate(node=>node.scrollWidth>innerWidth),false);
+    await page.screenshot({path:path.join(output,`agent-rho-attachments-${width}.png`)});
+  }
+  await page.setViewportSize({width:440,height:820});
   await page.evaluate(()=>window.fixture.loseRhoReply('agent.model.run'));
   await frame.getByRole('button',{name:'Send message'}).click();await expect(frame.getByRole('alert')).toContainText('Lost original Rho reply');
   await expect(input).toHaveValue('');await input.fill('Keep my next Rho draft · 后续输入');await expect(frame.locator('#draft-status')).toHaveText('Draft saved');
@@ -39,6 +55,9 @@ export async function testRhoRenderer(page, frame, expect, output) {
   assert.equal(snapshot.calls.filter(c=>c.capability?.id==='agent.model.create').length,1);
   assert.equal(JSON.stringify(snapshot).includes('RHO-RENDERER-SYNTHETIC-KEY'),false);
   assert.equal(snapshot.rhoRuns[0][1].request.sources.length,1);
+  assert.equal(snapshot.rhoRuns[0][1].request.assets.length,1);
+  assert.equal(snapshot.rhoRuns[0][1].context.sources[1].text,'Immutable attachment context 中文 Ω');
+  await expect(frame.getByRole('log')).toContainText('Rho 完整附件.txt');
   assert.equal(snapshot.rhoRuns[0][1].context.sources[0].text,'selected_value <- 42 # 中文 Ω');
   await page.evaluate(()=>window.fixture.contextFault('changed'));
   const beforeSourceReads=snapshot.reads['editor.context.preview'];

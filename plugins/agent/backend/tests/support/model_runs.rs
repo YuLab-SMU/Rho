@@ -17,7 +17,7 @@ impl Fixture {
         self.settle(&native, result.outcome).await;
         json!({"request_id":"original-model-run","conversation_id":"task-one","conversation_version":conversation["version"],"model_settings_version":1,"text":"Explain this analysis"})
     }
-    async fn begin_run(&mut self, arguments: Value) -> PluginCall {
+    pub(super) async fn begin_run(&mut self, arguments: Value) -> PluginCall {
         let (native, reverse) = self.begin("run-model", "agent.model.run", arguments).await;
         self.writer.send(reverse.request, RpcBody::HostResult { result: json!({"status":"ready","completeness":"complete","data":origin("view-one")}) }).await.unwrap();
         native

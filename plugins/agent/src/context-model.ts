@@ -137,9 +137,20 @@ export class ContextPicker {
       arguments: { run_id: run }, preconditions: null,
     });
     const sources = data.context?.sources ?? [], history = data.context?.history;
+    const references = data.request.sources ?? [], assets = data.request.assets ?? [];
+    const attachments = sources.slice(references.length);
     if (data.run_id !== run || data.request.conversation_id !== task || !Array.isArray(sources) || sources.length > 16 || bytes(JSON.stringify(data.context ?? null)) > 65536 ||
-      !same(sources.map(value => value.selection), data.request.sources ?? []) ||
-      sources.some(value => value.truncated || typeof value.text !== 'string' || bytes(value.text) > 16384))
+      sources.length !== references.length + assets.length || !same(sources.slice(0, references.length).map(value => value.selection), references) ||
+      sources.some((value, index) => value.truncated || typeof value.text !== 'string' || bytes(value.text) > (index < references.length ? 16384 : 32768)) ||
+      attachments.some((source, index) => {
+        const evidence = source.evidence?.[0];
+        if (source.evidence?.length !== 1 || evidence?.kind !== 'attachment') return true;
+        const asset = evidence.asset, image = ['image/png', 'image/jpeg'].includes(asset.mime_type);
+        return evidence.conversation_id !== task || asset.asset_id !== assets[index] || source.title !== asset.name ||
+          source.selection.source !== 'attachments' || source.selection.label !== asset.name ||
+          source.selection.inclusion !== (image ? 'image' : 'text') || (!image && asset.mime_type !== 'text/plain') ||
+          !same(source.selection.reference, { conversation_id: task, asset_id: asset.asset_id, sha256: asset.sha256 });
+      }))
       throw Error('The saved context does not match this original Rho message.');
     if (history !== null && history !== undefined) {
       const value = object(history);
@@ -153,7 +164,7 @@ export class ContextPicker {
       if (value.kind === 'continuation' && (typeof value.previous_run_id !== 'string' || value.previous_run_id !== data.request.continuation?.run_id || !object(value.recovery) || object(value.recovery)?.digest !== data.request.continuation?.recovery_digest ||
         !Array.isArray(value.tools) || value.tools.length > 16 || typeof value.tools_truncated !== 'boolean' ||
         !Array.isArray(value.prior_sources) || value.prior_sources.length > 16 || typeof value.prior_sources_truncated !== 'boolean' ||
-        value.prior_sources.some(source => !object(source) || !source.selection || typeof source.title !== 'string' || typeof source.description !== 'string' || typeof source.text !== 'string' || bytes(source.text) > 16384 || source.truncated !== false)))
+        value.prior_sources.some(source => !object(source) || !source.selection || typeof source.title !== 'string' || typeof source.description !== 'string' || typeof source.text !== 'string' || bytes(source.text) > (object(source.selection)?.source === 'attachments' ? 32768 : 16384) || source.truncated !== false)))
         throw Error('The retained continuation does not match its original task.');
     }
     return { sources: sources.map(({ selection, title, description, text, native_data }) => ({ selection, title, description, text, data: native_data })), history: (history ?? null) as CapturedHistory | null };

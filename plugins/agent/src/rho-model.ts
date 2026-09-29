@@ -1,11 +1,14 @@
-import type { AgentDraftContent, ComponentAgentConversation, ComponentAgentRun, ComponentAgentRunSummary, ComponentAgentEventPage, ComponentModelSettings, ComponentCredentialStatus } from '../sdk/index.js';
+import type { AgentAsset, AgentDraftContent, ComponentAgentConversation, ComponentAgentRun, ComponentAgentRunSummary, ComponentAgentEventPage, ComponentModelSettings, ComponentCredentialStatus } from '../sdk/index.js';
 import type { NativeAgentModel } from './native-model.js';
 import type { ProviderBinding } from '../public/plugin-protocol/index.js';
 import { type Client, type Intent, json, same, terminal, inspectOriginal, verifyOriginal } from './operations.js';
 
+import { ATTACHMENT_CHUNK_BYTES, attachmentChunk } from './uploads.js';
+import { captureRhoFile, validateUpload, verifyRhoImported, type RhoPendingUpload, type RhoImported, type RhoUpload } from './rho-uploads.js';
+
 interface Draft { content: AgentDraftContent; base: number; revision: number; dirty: boolean; conflict: AgentDraftContent | null; }
 interface Pending { intent: Intent; task: string; kind: string; revision: number; draftVersion: number; status: string | null; run: string | null; consumed: boolean; }
-export interface RhoState { selected: string | null; drafts: Record<string, Draft>; pending: Pending[]; }
+export interface RhoState { selected: string | null; drafts: Record<string, Draft>; pending: Pending[]; uploads?: RhoPendingUpload[]; }
 export interface RhoHistoryPage { conversation_id: string; runs: ComponentAgentRunSummary[]; next: string | null; }
 interface History { before: string | null; page: RhoHistoryPage; }
 interface Transcript { cursor: number; text: string; gap: boolean; partial: boolean; }
@@ -18,6 +21,7 @@ const known = ['create', 'draft', 'update', 'take_control', 'run', 'run.stop', '
 export class RhoModel {
   readonly state: RhoState;
   readonly conversations = new Map<string, ComponentAgentConversation>();
+  readonly assets = new Map<string, AgentAsset[]>();
   readonly runs = new Map<string, ComponentAgentRun>();
   readonly history = new Map<string, History>();
   readonly transcripts = new Map<string, Transcript>();
@@ -28,6 +32,11 @@ export class RhoModel {
   private submissions = new Set<string>();
   constructor(private client: Client, private owner: NativeAgentModel, private changed = () => {}) {
     this.state = owner.state.rho ??= { selected: null, drafts: {}, pending: [] };
+    for (const pending of this.uploads) {
+      validateUpload(pending.upload);
+      if (pending.view !== client.view.view || !same(pending.instance, client.view.instance) || !['uploading', 'finishing', 'imported'].includes(pending.phase))
+        throw Error('A retained Rho attachment belongs to another task, view or instance.');
+    }
     for (const pending of this.state.pending) {
       const intent = pending.intent, args = intent.arguments as unknown as { binding: unknown; arguments: { conversation_id?: string; request_id?: string }; preconditions: unknown };
       if (!known.includes(pending.kind) || intent.view !== client.view.view || intent.capability.id !== `agent.model.${pending.kind}` || intent.capability.version !== 1 ||
@@ -102,7 +111,7 @@ export class RhoModel {
         if (run.run_id !== conversation.active_run_id || run.request.conversation_id !== task) throw Error('The active run belongs to another task.');
         changed = this.mergeRun(run) || changed;
       }
-      this.merge(conversation); if (changed) await this.save(); this.trim();
+      this.merge(conversation); await this.readAssets(task); if (changed) await this.save(); this.trim();
     } finally { this.observing.delete(task); this.notify(); }
   }
   private mergeRun(run: ComponentAgentRun) {
@@ -111,15 +120,15 @@ export class RhoModel {
     this.runs.set(run.run_id, run);
     const pending = this.state.pending.find(p => p.kind === 'run' && p.intent.request === run.request.request_id);
     if (!pending) return false;
-    const args = (pending.intent.arguments as unknown as { arguments: { text: string; sources?: AgentDraftContent['context']; continuation?: ComponentAgentRun['request']['continuation']; conversation_id: string; conversation_version: number; model_settings_version: number } }).arguments;
+    const args = (pending.intent.arguments as unknown as { arguments: { text: string; assets?: string[]; sources?: AgentDraftContent['context']; continuation?: ComponentAgentRun['request']['continuation']; conversation_id: string; conversation_version: number; model_settings_version: number } }).arguments;
     if (run.request.conversation_id !== pending.task || run.request.text !== args.text || run.request.conversation_version !== args.conversation_version ||
-      run.request.model_settings_version !== args.model_settings_version || !same(run.request.sources ?? [], args.sources ?? []) || !same(run.request.continuation ?? null, args.continuation ?? null) || run.request.window.window_id !== this.client.view.window || run.request.window.incarnation !== `view:${this.client.view.view}`)
+      run.request.model_settings_version !== args.model_settings_version || !same(run.request.assets ?? [], args.assets ?? []) || !same(run.request.sources ?? [], args.sources ?? []) || !same(run.request.continuation ?? null, args.continuation ?? null) || run.request.window.window_id !== this.client.view.window || run.request.window.incarnation !== `view:${this.client.view.view}`)
       throw Error('The Rho run does not match its original Send.');
     pending.run = run.run_id;
     if (pending.consumed) return false;
     const local = this.state.drafts[pending.task];
     if (local && local.base === pending.draftVersion) {
-      if (local.revision === pending.revision && same(local.content, { text: args.text, assets: [], context: args.sources ?? [] })) { local.content = empty(); local.dirty = false; }
+      if (local.revision === pending.revision && same(local.content, { text: args.text, assets: args.assets ?? [], context: args.sources ?? [] })) { local.content = empty(); local.dirty = false; }
       local.base = pending.draftVersion + 1; local.conflict = null;
     }
     pending.consumed = true; return true;
@@ -146,7 +155,7 @@ export class RhoModel {
       this.history.delete(id);
     }
     for (const id of this.conversations.keys()) if (this.conversations.size > 32 && id !== this.state.selected && !this.state.drafts[id]?.dirty && !this.state.pending.some(p => p.task === id)) {
-      this.conversations.delete(id); delete this.state.drafts[id];
+      this.conversations.delete(id); this.assets.delete(id); delete this.state.drafts[id];
     }
     const retained = new Set([...this.history.values()].flatMap(history => history.page.runs.map(run => run.run_id)));
     for (const task of this.conversations.values()) if (task.active_run_id) retained.add(task.active_run_id);
@@ -169,15 +178,14 @@ export class RhoModel {
     if (this.submissions.has(task) || this.state.pending.some(p => p.task === task && p.kind === 'run')) throw Error('Inspect the original Send before submitting again.');
     this.submissions.add(task);
     try {
-      if (this.draft(task).assets.length) throw Error('These attachment sources are not available to this Rho task yet. The draft is retained.');
-      if (this.draft(task).context.length > 16) throw Error('Rho tasks accept up to 16 context references. The draft is retained.');
+      if (this.draft(task).context.length + this.draft(task).assets.length > 16) throw Error('Rho tasks accept up to 16 context references and attachments. The draft is retained.');
       await this.flush(task);
       this.settings = await this.read<ComponentModelSettings>('agent.model.settings', {});
       if (!this.settings.enabled || !this.settings.connection) throw Error('Choose and enable a model in Settings before sending.');
       const credential = await this.read<ComponentCredentialStatus>('agent.model.key.status', { settings_version: this.settings.version });
       if (!credential.available || !same(credential.credential, this.settings.connection.credential)) throw Error('The configured model key is unavailable. Open Settings to replace it; your draft is retained.');
       const conversation = this.conversations.get(task), local = this.state.drafts[task];
-      if (!conversation || !local || local.dirty || local.conflict || !this.canControl(task) || conversation.archived || conversation.active_run_id || !local.content.text.trim())
+      if (!conversation || !local || local.dirty || local.conflict || !this.canControl(task) || conversation.archived || conversation.active_run_id || (!local.content.text.trim() && !local.content.assets.length))
         throw Error('Confirm the saved draft and original task state before sending.');
       const revision = local.revision, content = structuredClone(local.content);
       let continuation: ComponentAgentRun['request']['continuation'], r: ProviderBinding | null = null, mode: 'run' | 'explain' | null = null;
@@ -195,8 +203,79 @@ export class RhoModel {
       }
       const request = crypto.randomUUID();
       await this.issue('run', task, { request_id: request, conversation_id: task, conversation_version: conversation.version,
-        model_settings_version: this.settings.version, text: content.text, sources: content.context, continuation, r, mode }, revision, request);
+        model_settings_version: this.settings.version, text: content.text, assets: content.assets.length ? content.assets : undefined, sources: content.context, continuation, r, mode }, revision, request);
     } finally { this.submissions.delete(task); }
+  }
+  get uploads() { return this.state.uploads ?? []; }
+  private editable(task: string) {
+    this.live();
+    if (!this.canControl(task) || this.conversations.get(task)?.archived) throw Error('This Rho task is read-only in this view.');
+  }
+  private async readAssets(task: string) {
+    const reply = await this.read<{ conversation_id: string; assets: AgentAsset[] }>('agent.model.assets', { conversation_id: task });
+    if (reply.conversation_id !== task || !Array.isArray(reply.assets) || reply.assets.length > 64 || new Set(reply.assets.map(asset => asset.asset_id)).size !== reply.assets.length)
+      throw Error('The attachment observation belongs to another Rho task or exceeds its limit.');
+    this.assets.set(task, reply.assets); return reply;
+  }
+  async attachFile(task: string, file: Blob, name: string) {
+    this.editable(task); if (this.busy) throw Error('Wait for the current Rho request.');
+    if (this.uploads.length >= 16) throw Error('Resolve existing attachment transfers before selecting more files.');
+    this.busy = true; this.notify();
+    try {
+      const capture = await captureRhoFile(file, name, task); this.editable(task);
+      const pending: RhoPendingUpload = { upload: capture.upload, view: this.client.view.view, instance: this.client.view.instance, received: 0, phase: 'uploading' };
+      (this.state.uploads ??= []).push(pending); await this.save();
+      await this.transfer(pending, capture.blob); await this.addUploaded(pending.upload.request_id);
+    } finally { this.busy = false; this.notify(); }
+  }
+  private async transfer(pending: RhoPendingUpload, blob: Blob) {
+    const upload = pending.upload;
+    const control = async <T>(id: string, arguments_: unknown) => {
+      this.editable(upload.conversation_id);
+      const result = await this.client.control<T>({ id, version: 1 }, json({ binding: this.binding(id), arguments: arguments_, preconditions: null }));
+      this.live(); return result;
+    };
+    for (let offset = 0; offset < upload.bytes || offset === 0; offset += ATTACHMENT_CHUNK_BYTES) {
+      const data = await attachmentChunk(blob, offset);
+      const reply = await control<{ upload: RhoUpload; received: number; complete: boolean }>('agent.model.assets.stage', { upload, offset, data });
+      if (!same(reply.upload, upload) || !Number.isSafeInteger(reply.received) || reply.received < Math.min(offset + ATTACHMENT_CHUNK_BYTES, upload.bytes) ||
+        reply.received > upload.bytes || reply.complete !== (reply.received === upload.bytes)) throw Error('The attachment acknowledgement differs from the original file.');
+      pending.received = reply.received; this.notify();
+    }
+    pending.phase = 'finishing'; await this.save();
+    const reply = await control<RhoImported>('agent.model.assets.finish', { upload });
+    const asset = verifyRhoImported(upload, reply);
+    this.assets.set(upload.conversation_id, [...(this.assets.get(upload.conversation_id) ?? []).filter(a => a.asset_id !== asset.asset_id), asset]);
+    pending.phase = 'imported'; await this.save();
+  }
+  async inspectUpload(request: string) {
+    this.live(); const pending = this.uploads.find(p => p.upload.request_id === request);
+    if (!pending) throw Error('The original attachment is no longer pending.');
+    const reply = await this.readAssets(pending.upload.conversation_id);
+    const asset = reply.assets.find(a => a.asset_id === request);
+    if (!asset) throw Error('The original attachment is not imported. Reselect its original file to finish the transfer.');
+    verifyRhoImported(pending.upload, { conversation_id: reply.conversation_id, asset });
+    pending.phase = 'imported'; await this.save(); this.notify();
+  }
+  async resumeUpload(request: string, file: Blob, name: string) {
+    this.live(); if (this.busy) throw Error('Wait for the current Rho request.');
+    const pending = this.uploads.find(p => p.upload.request_id === request);
+    if (!pending || pending.phase === 'imported') throw Error('Inspect or add the already imported attachment.');
+    this.editable(pending.upload.conversation_id); this.busy = true; this.notify();
+    try {
+      const capture = await captureRhoFile(file, name, pending.upload.conversation_id, request);
+      if (!same(capture.upload, pending.upload)) throw Error('Reselect the same filename, type and bytes as the original attachment.');
+      await this.save(); await this.transfer(pending, capture.blob); await this.addUploaded(request);
+    } finally { this.busy = false; this.notify(); }
+  }
+  async addUploaded(request: string) {
+    this.live(); const pending = this.uploads.find(p => p.upload.request_id === request);
+    if (!pending || pending.phase !== 'imported') throw Error('Inspect the original attachment before adding it.');
+    const task = pending.upload.conversation_id, draft = this.draft(task);
+    const assets = [...new Set([...draft.assets, request])];
+    if (assets.length + draft.context.length > 16) throw Error('Select at most 16 attachments and context references for one Send.');
+    this.edit(task, { ...draft, assets }); await this.save();
+    this.state.uploads = this.uploads.filter(p => p !== pending); await this.save(); this.notify();
   }
   async stop(task: string) {
     const run = this.conversations.get(task)?.active_run_id;
