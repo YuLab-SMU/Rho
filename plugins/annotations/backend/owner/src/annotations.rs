@@ -18,6 +18,15 @@ pub struct AnnotationCaptureWrite<'a> {
     pub bytes: &'a [u8],
 }
 
+/// Decoded capture metadata supplied by the containing adapter, never a claim
+/// that an imported image is the original media produced by a scientific owner.
+pub struct ImportedCapture<'a> {
+    pub mime_type: &'a str,
+    pub width: u32,
+    pub height: u32,
+    pub bytes: &'a [u8],
+}
+
 pub struct AnnotationRevisionWrite<'a> {
     pub revision: &'a AnnotationRevision,
     /// The head revision this write replaces; `None` for a new annotation.
@@ -408,7 +417,86 @@ impl AnnotationOwner {
             Ok(digest) => digest,
             Err(receipt) => return Ok(receipt),
         };
-        if !matches!(mime_type.as_str(), "image/png" | "image/jpeg") {
+        self.commit_capture(
+            actor,
+            &request.request_id,
+            &digest,
+            ImportedCapture {
+                mime_type,
+                width: *width,
+                height: *height,
+                bytes,
+            },
+            *original_media,
+            now,
+        )
+    }
+
+    fn capture_import_digest(
+        &self,
+        actor: &AnnotationActor,
+        request_id: &str,
+        identity: &Value,
+    ) -> Result<String, AnnotationError> {
+        token(request_id, "request")?;
+        annotation_digest(&(
+            "resource_capture_v1",
+            &actor.scope().project,
+            actor.window(),
+            request_id,
+            identity,
+        ))
+    }
+
+    /// Resolve a native import before reading its external resource again.
+    pub fn replay_capture_import(
+        &self,
+        actor: &AnnotationActor,
+        request_id: &str,
+        identity: &Value,
+    ) -> Result<Option<AnnotationCommandReceipt>, AnnotationError> {
+        let digest = self.capture_import_digest(actor, request_id, identity)?;
+        self.receipt(actor.scope(), request_id)?
+            .map(|saved| {
+                if saved.input_digest != digest {
+                    return Err(AnnotationError::RequestConflict);
+                }
+                Ok(saved.receipt)
+            })
+            .transpose()
+    }
+
+    pub fn import_capture(
+        &self,
+        actor: &AnnotationActor,
+        request_id: &str,
+        identity: &Value,
+        image: ImportedCapture<'_>,
+        now: u64,
+    ) -> Result<AnnotationCommandReceipt, AnnotationError> {
+        if let Some(receipt) = self.replay_capture_import(actor, request_id, identity)? {
+            return Ok(receipt);
+        }
+        let digest = self.capture_import_digest(actor, request_id, identity)?;
+        self.commit_capture(actor, request_id, &digest, image, false, now)
+    }
+
+    fn commit_capture(
+        &self,
+        actor: &AnnotationActor,
+        request_id: &str,
+        digest: &str,
+        image: ImportedCapture<'_>,
+        original_media: bool,
+        now: u64,
+    ) -> Result<AnnotationCommandReceipt, AnnotationError> {
+        let ImportedCapture {
+            mime_type,
+            width,
+            height,
+            bytes,
+        } = image;
+        if !matches!(mime_type, "image/png" | "image/jpeg") {
             return Err(invalid("Captured views are PNG or JPEG"));
         }
         if bytes.is_empty() || bytes.len() > MAX_ANNOTATION_CAPTURE_BYTES {
@@ -416,20 +504,20 @@ impl AnnotationOwner {
                 "A captured view holds 1 byte to 8 MiB".into(),
             ));
         }
-        if *width == 0 || *height == 0 || *width > 16384 || *height > 16384 {
+        if width == 0 || height == 0 || width > 16384 || height > 16384 {
             return Err(invalid("Captured view dimensions are out of range"));
         }
         let capture = AnnotationCaptureRef {
             capture_id: fresh(),
             sha256: crate::sha256(bytes),
-            width: *width,
-            height: *height,
-            mime_type: mime_type.clone(),
+            width,
+            height,
+            mime_type: mime_type.into(),
             byte_size: bytes.len() as u64,
-            original_media: *original_media,
+            original_media,
         };
         let receipt = AnnotationCommandReceipt {
-            request_id: request.request_id.clone(),
+            request_id: request_id.into(),
             outcome: AnnotationCommandOutcome::Capture {
                 capture: capture.clone(),
             },
@@ -438,8 +526,8 @@ impl AnnotationOwner {
         let _guard = self.gate.lock().map_err(storage)?;
         self.store.commit_annotation(
             actor.scope(),
-            &request.request_id,
-            &digest,
+            request_id,
+            digest,
             AnnotationWrite::Capture(AnnotationCaptureWrite {
                 capture: &capture,
                 bytes,

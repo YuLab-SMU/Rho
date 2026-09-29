@@ -70,6 +70,9 @@ pub struct Empty {}
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TextAnchor {
     WholeItem,
+    CapturedView {
+        capture: AnnotationCaptureRef,
+    },
     TextQuote {
         quote: String,
         start: u64,
@@ -81,6 +84,7 @@ impl From<TextAnchor> for AnnotationAnchor {
     fn from(value: TextAnchor) -> Self {
         match value {
             TextAnchor::WholeItem => Self::WholeItem,
+            TextAnchor::CapturedView { capture } => Self::CapturedView { capture },
             TextAnchor::TextQuote {
                 quote,
                 start,
@@ -94,4 +98,25 @@ impl From<TextAnchor> for AnnotationAnchor {
             },
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CaptureImport {
+    pub request_id: String,
+    pub reference: ResourceReference,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CaptureRead {
+    pub capture: AnnotationCaptureRef,
+    pub offset: u64,
+    pub limit: u32,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct CaptureChunk {
+    pub capture: AnnotationCaptureRef,
+    pub offset: u64,
+    pub base64: String,
+    pub next: Option<u64>,
 }

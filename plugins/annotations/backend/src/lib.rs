@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 pub mod arguments;
+mod captures;
 mod contexts;
 pub mod manifest;
 pub mod metadata;

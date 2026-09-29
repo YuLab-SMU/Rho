@@ -96,13 +96,21 @@ pub fn preview(
     }
     let reference: AnnotationRevisionRef = decode(&request.reference.selector)?;
     let (revision, evidence) = metadata.owner.read(&metadata.scope, &reference)?;
+    let image_notice = match &evidence.anchor {
+        AnnotationAnchor::CapturedView { capture } => format!(
+            "\nCaptured view: {} × {} {}. Image bytes are retained separately and are not included in this text context.\n",
+            capture.width, capture.height, capture.mime_type
+        ),
+        _ => String::new(),
+    };
     let mut text = format!(
-        "Annotation: {}\nRevision: {}{}\n\n{}\n\nFrozen source version: {}\nCurrent source status: unknown (not re-observed).\n\n{}",
+        "Annotation: {}\nRevision: {}{}\n\n{}\n\nFrozen source version: {}\nCurrent source status: unknown (not re-observed).\n{}\n{}",
         evidence.source.title,
         reference.revision,
         if revision.deleted { " (deleted)" } else { "" },
         revision.note,
         evidence.source.source_version,
+        image_notice,
         evidence.fragment["text"]
             .as_str()
             .unwrap_or("No text excerpt was captured.")

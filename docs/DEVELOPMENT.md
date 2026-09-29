@@ -295,7 +295,12 @@ Operations and retained Send/tool records after restart with the source suspende
 The HTTP model and external ACP peers are local fixtures, not third-party model acceptance.
 Add `--browser` with `--agent` for the existing ordinary picker and retained draft;
 inspect its screenshots separately before claiming visual quality. This does not
-cover annotation editor UI, image capture or abrupt-crash recovery.
+cover annotation editor UI or abrupt-crash recovery.
+Add `--captures` for a Python-only public resource producer, actual PNG decode/import,
+Editor-bound captured evidence and marks, bounded byte readback, damaged-image refusal
+and replay after same-instance restart while that producer remains suspended. This
+can run without `--agent`; it does not validate browser screenshot/upload, real R
+image provenance or image bytes in Agent context.
 
 The generic plugin-only Host uses `cargo test -p rho-host --test plugin_workspace
 --locked` for canonical project identity, native lease exclusion, empty-catalog
@@ -1250,8 +1255,11 @@ reference loose objects: inspect existing native artifacts' `N_OSO` debug maps
 and retain every referenced object, not only the linked executables. Objects in
 an `.rlib` archive remain embedded in that archive. Verify native debug references
 and a focused build before removing any retained data.
-This is an exceptional recovery step, not a per-build scan or
-permission to clear caches. A fast directory listing alone does not establish that
+If enumeration stalls again despite a bounded entry count, a fresh directory of
+same-inode hardlinks can preserve all files while replacing the directory itself.
+Keep its backup and preserve relative symlink resolution; do not remove debug
+objects merely to reduce the count. Record before/after listing and build times.
+This is an exceptional recovery step, not a per-build scan or permission to clear caches. A fast directory listing alone does not establish that
 native loading or an acceptance flow passed.
 
 A test process that reaches its time budget is **incomplete**, not passed. Record the

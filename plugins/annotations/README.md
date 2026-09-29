@@ -13,8 +13,9 @@ its existing browser context picker also pass with this real provider; retained
 Send context survives Host restart while the provider remains suspended. Native Agent
 read/create/update, version-conflict refusal and original child Operations also pass;
 both Sends replay after restart without reactivating the note provider or external peer.
-Capture/image RPC and annotation UI remain incomplete;
-AN01–AN05 await user review. Help and
+Capture import/read RPC accepts bounded immutable PNG/JPEG resources, decodes and
+verifies their bytes, and retains images separately from note context. Annotation UI
+remains incomplete; AN01–AN05 await user review. Help and
 Viewer source identities have focused tests, not real annotation-flow acceptance.
 See the repository's current Status for executed checks and retained timeouts.
 
@@ -45,7 +46,16 @@ a failed read proves current availability. Reads require `application.read` and
 writes require `application.control`, both alongside `plugins.read`; the original
 caller and this instance must also hold the source query's declared grants. No
 annotation-specific Host registration or scope is introduced. Agent declares all
-four capabilities as optional grants; activation must select them explicitly.
+six capabilities as optional grants; activation must select them explicitly.
+`annotations.capture.import` additionally requires `resources.read` from both the
+instance and original caller. It reads an exact public resource in 64 KiB chunks,
+checks its digest, fully decodes PNG/JPEG within the image budget, and derives
+actual dimensions. Imports are at most 8 MiB; retained captures are always labeled
+`original_media: false`. Captured-view anchors reference that retained exact image;
+they do not certify the pixels as a scientific original or as the context source's
+rendering. Import replay reads its original receipt without contacting the resource
+provider. `annotations.capture.read` returns bounded chunks of that exact stored
+capture. Text context identifies the capture but does not include image bytes.
 The framed principal supplies author identity without guessing
 whether the initiating actor was human or Agent.
 
@@ -102,5 +112,12 @@ Malformed native arguments are refused before dispatch and cannot poison Send se
 The HTTP model and external ACP peers are deterministic local fixtures; this is not
 third-party model evaluation. Add `--browser` alongside `--agent` to exercise the existing ordinary
 Agent picker, draft retention after reload and constrained panel layouts. Inspect
-the retained screenshots separately. These checks do not establish image capture,
-annotation editor UI or abrupt-crash recovery.
+the retained screenshots separately.
+
+Add `--captures` for a language-independent Python resource peer publishing a real
+multi-chunk PNG through the generic native resource channel. It checks import,
+Editor-bound captured-view evidence and marks, exact chunk readback, damaged-image
+refusal and same-instance restart while the resource provider remains suspended.
+This is resource transport/owner acceptance, not a browser screenshot/upload flow,
+real R image provenance, image bytes in Agent context, annotation editor UI or
+abrupt-crash recovery.

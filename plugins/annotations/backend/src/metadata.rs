@@ -7,6 +7,7 @@ use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use std::{path::Path, sync::Arc};
 
+#[derive(Debug)]
 pub struct Failure {
     pub code: &'static str,
     pub message: String,
@@ -150,6 +151,15 @@ impl Metadata {
         host: &HostCallClient,
     ) -> Result<Value, Failure> {
         let caller = crate::sources::caller(self, call, host).await?;
+        match call.binding.capability.id.as_str() {
+            "annotations.capture.import" => {
+                return crate::captures::import(self, call, host, &caller).await;
+            }
+            "annotations.capture.read" => {
+                return crate::captures::read(self, decode(&call.arguments)?);
+            }
+            _ => (),
+        }
         if call.binding.capability.id.as_str() != "annotations.write" {
             return match call.binding.capability.id.as_str() {
                 "annotations.read" => self.read(decode(&call.arguments)?),

@@ -11,11 +11,16 @@ pub(crate) fn scientific_requirements() -> Vec<CapabilityRequirement> {
                 ("annotations.read", 1),
                 ("annotations.context.search", 1),
                 ("annotations.context.preview", 1),
+                ("annotations.capture.read", 1),
             ],
         ),
         (
             &["application.control", "plugins.read"],
             &[("annotations.write", 1)],
+        ),
+        (
+            &["application.control", "plugins.read", "resources.read"],
+            &[("annotations.capture.import", 1)],
         ),
         (
             &["documents.read"],

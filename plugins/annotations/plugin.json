@@ -45,6 +45,15 @@
   "optional_requires": [
     {
       "capability": {
+        "id": "resources.read",
+        "version": 1
+      },
+      "scopes": [
+        "resources.read"
+      ]
+    },
+    {
+      "capability": {
         "id": "editor.context.preview",
         "version": 1
       },
@@ -85,6 +94,49 @@
       "description": "Freeze a complete owner-contributed text source or append an annotation revision with an original request receipt and CAS. Quotes use offsets within the selected preview inclusion. Does not modify scientific content, start a runtime, or send to an Agent. Capture/image import is not part of this text capability.",
       "input_schema": {
         "$defs": {
+          "AnnotationCaptureRef": {
+            "additionalProperties": false,
+            "properties": {
+              "byte_size": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "capture_id": {
+                "type": "string"
+              },
+              "height": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "original_media": {
+                "description": "True only when these are the owner's original static media bytes.",
+                "type": "boolean"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "width": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "capture_id",
+              "sha256",
+              "width",
+              "height",
+              "mime_type",
+              "byte_size",
+              "original_media"
+            ],
+            "type": "object"
+          },
           "AnnotationCharacterUnit": {
             "enum": [
               "utf8",
@@ -294,6 +346,23 @@
                 },
                 "required": [
                   "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "capture": {
+                    "$ref": "#/$defs/AnnotationCaptureRef"
+                  },
+                  "kind": {
+                    "const": "captured_view",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "capture"
                 ],
                 "type": "object"
               },
@@ -1967,6 +2036,434 @@
           "resources"
         ],
         "title": "ContextPreview",
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "application.read",
+        "plugins.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "annotations.capture.import",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "annotations.capture.import",
+      "description": "Import a scoped immutable PNG/JPEG resource (at most 8 MiB) as a captured view, validating bytes, digest and decoded dimensions. Exact retries retain the receipt without rereading the source. Does not claim original scientific media or start a runtime.",
+      "input_schema": {
+        "$defs": {
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          },
+          "ResourceReference": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "reference": {
+            "$ref": "#/$defs/ResourceReference"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "reference"
+        ],
+        "title": "CaptureImport",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "reference": {
+            "bytes": 123,
+            "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "media_type": "image/png",
+            "owner": {
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "instance": "annotations-example",
+              "plugin": "org.rho.annotations",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "resource": "image-example"
+          },
+          "request_id": "capture-resource"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AnnotationCaptureRef": {
+            "additionalProperties": false,
+            "properties": {
+              "byte_size": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "capture_id": {
+                "type": "string"
+              },
+              "height": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "original_media": {
+                "description": "True only when these are the owner's original static media bytes.",
+                "type": "boolean"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "width": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "capture_id",
+              "sha256",
+              "width",
+              "height",
+              "mime_type",
+              "byte_size",
+              "original_media"
+            ],
+            "type": "object"
+          },
+          "AnnotationCommandOutcome": {
+            "oneOf": [
+              {
+                "properties": {
+                  "evidence_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "evidence",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "evidence_id"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "capture": {
+                    "$ref": "#/$defs/AnnotationCaptureRef"
+                  },
+                  "kind": {
+                    "const": "capture",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "capture"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "annotation": {
+                    "$ref": "#/$defs/AnnotationRevisionRef"
+                  },
+                  "kind": {
+                    "const": "annotation",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "annotation"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "AnnotationRevisionRef": {
+            "additionalProperties": false,
+            "properties": {
+              "annotation_id": {
+                "type": "string"
+              },
+              "revision": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "annotation_id",
+              "revision"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "created_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outcome": {
+            "$ref": "#/$defs/AnnotationCommandOutcome"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "outcome",
+          "created_at_ms"
+        ],
+        "title": "AnnotationCommandReceipt",
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "application.control",
+        "plugins.read",
+        "resources.read"
+      ],
+      "effects": [
+        "annotations.metadata"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "annotations.capture.read",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "annotations.capture.read",
+      "description": "Read up to 64 KiB of one exact retained capture without observing its original source or starting a runtime.",
+      "input_schema": {
+        "$defs": {
+          "AnnotationCaptureRef": {
+            "additionalProperties": false,
+            "properties": {
+              "byte_size": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "capture_id": {
+                "type": "string"
+              },
+              "height": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "original_media": {
+                "description": "True only when these are the owner's original static media bytes.",
+                "type": "boolean"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "width": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "capture_id",
+              "sha256",
+              "width",
+              "height",
+              "mime_type",
+              "byte_size",
+              "original_media"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "capture": {
+            "$ref": "#/$defs/AnnotationCaptureRef"
+          },
+          "limit": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "offset": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "capture",
+          "offset",
+          "limit"
+        ],
+        "title": "CaptureRead",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "capture": {
+            "byte_size": 123,
+            "capture_id": "capture-example",
+            "height": 2,
+            "mime_type": "image/png",
+            "original_media": false,
+            "sha256": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "width": 3
+          },
+          "limit": 65536,
+          "offset": 0
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AnnotationCaptureRef": {
+            "additionalProperties": false,
+            "properties": {
+              "byte_size": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "capture_id": {
+                "type": "string"
+              },
+              "height": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "original_media": {
+                "description": "True only when these are the owner's original static media bytes.",
+                "type": "boolean"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "width": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "capture_id",
+              "sha256",
+              "width",
+              "height",
+              "mime_type",
+              "byte_size",
+              "original_media"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "base64": {
+            "type": "string"
+          },
+          "capture": {
+            "$ref": "#/$defs/AnnotationCaptureRef"
+          },
+          "next": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "offset": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "capture",
+          "offset",
+          "base64"
+        ],
+        "title": "CaptureChunk",
         "type": "object"
       },
       "recovery_schema": true,

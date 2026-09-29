@@ -26,6 +26,7 @@ fn call(request: &str, cap: &str, arguments: Value) -> PluginCall {
             "application.control",
             "plugins.read",
             "documents.read",
+            "resources.read",
         ]
         .into_iter()
         .map(str::to_owned)
@@ -33,7 +34,8 @@ fn call(request: &str, cap: &str, arguments: Value) -> PluginCall {
         arguments,
         preconditions: Value::Null,
         owner_context: Value::Null,
-        operation_id: (cap == "annotations.write").then(|| format!("operation-{request}")),
+        operation_id: (manifest::is_operation(cap) == Some(true))
+            .then(|| format!("operation-{request}")),
     }
 }
 fn reference() -> Value {
@@ -109,6 +111,10 @@ impl Fixture {
             capability: manifest::key("editor.context.preview"),
             scopes: ["documents.read".into()].into(),
         });
+        grants.push(CapabilityRequirement {
+            capability: manifest::key("resources.read"),
+            scopes: ["resources.read".into()].into(),
+        });
         writer
             .send(
                 id("initialize"),
@@ -173,6 +179,11 @@ impl Fixture {
             if expected == "editor.context.preview" {
                 assert_eq!(arguments["binding"]["provider"], reference()["provider"]);
                 assert_eq!(arguments["arguments"]["reference"], reference());
+            }
+            if expected == "resources.read" {
+                assert_eq!(arguments["reference"], data["reference"]);
+                assert_eq!(arguments["offset"], data["offset"]);
+                assert_eq!(arguments["limit"], 65536);
             }
             self.writer
                 .send(
@@ -246,7 +257,7 @@ fn capture_replies() -> Vec<(&'static str, Value)> {
 fn public_manifest_declares_only_supported_contracts() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 4);
+    assert_eq!(manifest.capabilities.len(), 6);
     assert_eq!(manifest.contexts.len(), 1);
     assert!(manifest.views.is_empty());
     assert!(
@@ -499,4 +510,197 @@ async fn release_requires_original_settlement_and_changed_request_is_rejected() 
     assert_eq!(plan.recovery.unwrap()["code"], "request_conflict");
     assert!(frozen["outcome"]["evidence_id"].is_string());
     f.stop().await;
+}
+
+#[tokio::test]
+async fn captured_resource_replays_without_source_reads_and_preserves_image_anchor_after_reopen() {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let mut f = Fixture::new().await;
+    let mut seed = 713u32;
+    let image = image::RgbImage::from_fn(256, 256, |_, _| {
+        let mut rgb = [0u8; 3];
+        for channel in &mut rgb {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            *channel = seed as u8;
+        }
+        image::Rgb(rgb)
+    });
+    let mut bytes = std::io::Cursor::new(Vec::new());
+    image.write_to(&mut bytes, image::ImageFormat::Png).unwrap();
+    let bytes = bytes.into_inner();
+    assert!(bytes.len() > 65536);
+    let resource = json!({"owner":reference()["provider"],"resource":"captured-image","digest":rho_annotation_owner::sha256(&bytes),"media_type":"image/png","bytes":bytes.len()});
+    let input = json!({"request_id":"import-original","reference":resource});
+    let mut replies = vec![("views.caller", origin())];
+    for (index, part) in bytes.chunks(65536).enumerate() {
+        let offset = index * 65536;
+        let end = offset + part.len();
+        replies.push(("resources.read",json!({"reference":resource,"offset":offset,"base64":STANDARD.encode(part),"next":(end<bytes.len()).then_some(end)})));
+    }
+    replies.push(("views.caller", origin()));
+    let imported = succeeded(
+        f.perform(
+            call(
+                "capture-import",
+                "annotations.capture.import",
+                input.clone(),
+            ),
+            replies,
+            true,
+        )
+        .await,
+    );
+    let capture = imported["outcome"]["capture"].clone();
+    assert_eq!(capture["width"], 256);
+    assert_eq!(capture["height"], 256);
+    assert_eq!(capture["original_media"], false);
+    let mut freeze = freeze("capture-anchor");
+    freeze["command"]["anchor"] = json!({"kind":"captured_view","capture":capture});
+    let frozen = succeeded(
+        f.perform(
+            call("freeze-image", "annotations.write", freeze),
+            vec![
+                ("views.caller", origin()),
+                ("plugins.inspect", inspection()),
+                ("editor.context.preview", source()),
+                ("views.caller", origin()),
+            ],
+            true,
+        )
+        .await,
+    );
+    let (directory, environment) = f.stop().await;
+    let mut f = Fixture::open(directory, environment).await;
+    assert_eq!(
+        succeeded(
+            f.perform(
+                call("capture-retry", "annotations.capture.import", input.clone()),
+                vec![("views.caller", origin())],
+                true
+            )
+            .await
+        ),
+        imported
+    );
+    let mut changed = input;
+    changed["reference"]["resource"] = json!("another-image");
+    let RpcBody::CommitPlan(plan) = f
+        .perform(
+            call("capture-conflict", "annotations.capture.import", changed),
+            vec![("views.caller", origin())],
+            true,
+        )
+        .await
+    else {
+        panic!()
+    };
+    assert_eq!(plan.outcome, PluginOutcome::Failed);
+    let mut actual = Vec::new();
+    let mut offset = 0;
+    loop {
+        let RpcBody::QueryResult { data, .. } = f
+            .perform(
+                call(
+                    "capture-read",
+                    "annotations.capture.read",
+                    json!({"capture":capture,"offset":offset,"limit":65536}),
+                ),
+                vec![("views.caller", origin())],
+                false,
+            )
+            .await
+        else {
+            panic!()
+        };
+        actual.extend(STANDARD.decode(data["base64"].as_str().unwrap()).unwrap());
+        match data["next"].as_u64() {
+            Some(next) => offset = next,
+            None => break,
+        }
+    }
+    assert_eq!(actual, bytes);
+    let RpcBody::QueryResult { data, .. } = f
+        .perform(
+            call(
+                "capture-evidence",
+                "annotations.read",
+                json!({"kind":"evidence","evidence_id":frozen["outcome"]["evidence_id"]}),
+            ),
+            vec![("views.caller", origin())],
+            false,
+        )
+        .await
+    else {
+        panic!()
+    };
+    assert_eq!(data["evidence"]["anchor"]["capture"], capture);
+    let mut forged = capture.clone();
+    forged["width"] = json!(1);
+    assert!(matches!(
+        f.perform(
+            call(
+                "bad-capture-read",
+                "annotations.capture.read",
+                json!({"capture":forged,"offset":0,"limit":65536})
+            ),
+            vec![("views.caller", origin())],
+            false
+        )
+        .await,
+        RpcBody::Error { .. }
+    ));
+    f.stop().await;
+}
+
+#[tokio::test]
+async fn capture_import_refuses_wrong_bytes_changed_caller_and_missing_original_scope() {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let bytes = crate::captures::tests::png();
+    for variant in ["digest", "damaged", "caller", "scope"] {
+        let mut f = Fixture::new().await;
+        let actual = if variant == "damaged" {
+            bytes[..bytes.len() / 2].to_vec()
+        } else {
+            bytes.clone()
+        };
+        let resource = json!({"owner":reference()["provider"],"resource":"capture-refusal","digest":if variant=="digest"{format!("sha256:{}","0".repeat(64))}else{rho_annotation_owner::sha256(&actual)},"media_type":"image/png","bytes":actual.len()});
+        let mut request = call(
+            "refused-capture",
+            "annotations.capture.import",
+            json!({"request_id":"refused","reference":resource}),
+        );
+        let mut replies = vec![("views.caller", origin())];
+        if variant == "scope" {
+            request.scopes.remove("resources.read");
+        } else {
+            replies.push(("resources.read",json!({"reference":resource,"offset":0,"base64":STANDARD.encode(&actual),"next":null})));
+            if variant == "caller" {
+                let mut changed = origin();
+                changed["view"]["connection"] = json!("new-connection");
+                replies.push(("views.caller", changed));
+            }
+        }
+        let RpcBody::CommitPlan(plan) = f.perform(request, replies, true).await else {
+            panic!()
+        };
+        assert_eq!(plan.outcome, PluginOutcome::Failed, "{variant}");
+        let RpcBody::QueryResult { data, .. } = f
+            .perform(
+                call(
+                    "refused-receipt",
+                    "annotations.read",
+                    json!({"kind":"receipt","request_id":"refused"}),
+                ),
+                vec![("views.caller", origin())],
+                false,
+            )
+            .await
+        else {
+            panic!()
+        };
+        assert_eq!(data["receipt"], Value::Null);
+        f.stop().await;
+    }
 }

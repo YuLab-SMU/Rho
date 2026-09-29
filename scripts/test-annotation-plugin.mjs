@@ -10,12 +10,14 @@ import {fileURLToPath} from 'node:url';
 import {verifyAgentBuild} from './agent-plugin-artifact.mjs';
 import {annotationAgent} from './fixtures/annotation-agent.mjs';
 import {annotationNativeAgent} from './fixtures/annotation-native-agent.mjs';
+import {buildCaptureSource, annotationCaptures} from './fixtures/annotation-captures.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const flags = process.argv.slice(2);
-assert.ok(new Set(flags).size === flags.length && flags.every(arg => ['--agent', '--browser'].includes(arg)), 'Usage: node scripts/test-annotation-plugin.mjs [--agent [--browser]]');
+assert.ok(new Set(flags).size === flags.length && flags.every(arg => ['--agent', '--browser', '--captures'].includes(arg)), 'Usage: node scripts/test-annotation-plugin.mjs [--agent [--browser]] [--captures]');
 const withAgent = process.argv.includes('--agent');
 const withBrowser = process.argv.includes('--browser');
+const withCaptures = process.argv.includes('--captures');
 assert.ok(!withBrowser || withAgent, '--browser requires --agent');
 const binary = process.env.RHO_TEST_BINARY ?? path.join(root, 'target/debug/rho');
 const hash = bytes => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
@@ -51,6 +53,7 @@ for (const [source, packaged] of [
 }
 
 const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-annotation-host-')));
+if (withCaptures) packages.capture = buildCaptureSource(directory);
 const project = path.join(directory, 'project'), database = path.join(directory, 'host.sqlite');
 fs.mkdirSync(project);
 execFileSync('git', ['init', '-q', project]);
@@ -74,7 +77,7 @@ const result = {host_sha256: hostHash, packages, directory, stages: [], complete
     return [name, {sha256: hash(bytes), bytes: bytes.length}];
   })), started_at: new Date().toISOString()};
 const evidence = process.env.RHO_ANNOTATION_EVIDENCE ?? path.join(directory, 'result.json');
-let host, exited, url, editor, notes, agent, agentCase, nativeCase;
+let host, exited, url, editor, notes, agent, agentCase, nativeCase, captureSource, captureCase;
 const key = id => ({id, version: 1});
 const save = () => fs.writeFileSync(evidence, JSON.stringify(result, null, 2) + '\n');
 const safe = text => String(text).replace(/token=[a-z0-9]+/g, 'token=[redacted]');
@@ -159,14 +162,15 @@ try {
   }
   result.snapshots = snapshots;
   await start();
-  for (const name of ['files', 'editor', 'annotation', ...(withAgent ? ['agent'] : [])]) {
+  for (const name of ['files', 'editor', 'annotation', ...(withAgent ? ['agent'] : []), ...(withCaptures ? ['capture'] : [])]) {
     const snapshot = snapshots[name];
     const active = (await invoke('plugins.activate', {revision: snapshot.revision, artifact: snapshot.artifacts[0], target: 'aarch64-apple-darwin', alias: name, configuration: name === 'agent' ? {kimi_home:nativeHome} : {},
-      optional_capabilities: name === 'annotation' ? [key('editor.context.preview')] : name === 'agent'
+      optional_capabilities: name === 'annotation' ? [key('editor.context.preview'), ...(withCaptures ? [key('resources.read')] : [])] : name === 'agent'
         ? ['plugins.instances', 'plugins.inspect', 'annotations.read', 'annotations.write', 'annotations.context.search', 'annotations.context.preview', 'operation.get', 'plugins.delegated_operation'].map(key) : []})).output.instance.identity;
     if (name === 'editor') editor = active;
     if (name === 'annotation') notes = active;
     if (name === 'agent') agent = active;
+    if (name === 'capture') captureSource = active;
   }
   const initial = await draft('a🧬中z\n');
   const first = await selected();
@@ -199,6 +203,11 @@ try {
     result.native_agent = nativeCase.report;
     result.stages.push('Native Agent exact Send tools: read-only write refusal, authenticated create/update, CAS and original child Operations'); save();
   }
+  if (withCaptures) {
+    captureCase = await annotationCaptures({notes,captureSource,reference:first.reference,pluginQuery,invoke,binding,query});
+    result.captures = captureCase.report;
+    result.stages.push('public PNG resource → validated capture → frozen Editor evidence and marks → bounded image reads; damaged image refused'); save();
+  }
 
   await draft('a🧬中z changed\n', initial.version);
   const second = await selected();
@@ -226,6 +235,7 @@ try {
   const resumed = (await invoke('plugins.resume', {instance: notes, suspension: suspended.instance.suspension})).output.instance;
   assert.deepEqual(resumed.identity, notes);
   if (nativeCase) await nativeCase.afterSourceResume();
+  if (captureCase) await captureCase.afterRestart();
   assert.deepEqual((await write('capture-original', freeze)).output, frozen.output, 'Native replay must not reread the suspended Editor');
   assert.deepEqual((await write('note-original', create)).output, saved.output);
   const originalHostReceipt = await write('capture-original', freeze, 'host-freeze-original');

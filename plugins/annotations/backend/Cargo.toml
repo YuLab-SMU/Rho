@@ -7,6 +7,8 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/YuLab-SMU/Rho"
 
 [dependencies]
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 rho-annotation-api = { path = "../api" }
 rho-annotation-owner = { path = "owner" }
 rho-annotation-store = { path = "store" }

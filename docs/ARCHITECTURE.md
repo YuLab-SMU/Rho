@@ -38,8 +38,14 @@ and leaves current source status unknown. The ordinary Editor text flow and
 same-instance graceful Host recovery are verified. Agent uses optional public
 grants and the same contributed context; its retained Send input survives restart
 without resuming the source. Native Agent reads and writes use explicit Send tool
-selections and retain the same original child Operations across restart. Captured-image
-RPC, other real source flows and annotation UI remain incomplete. Metadata authorization
+selections and retain the same original child Operations across restart. Capture
+import reads an exact public resource in 64 KiB chunks under original `resources.read`
+grants, verifies its digest and fully decodes bounded PNG/JPEG bytes. The owner stores
+actual dimensions and image bytes separately, always with `original_media: false`;
+a captured-view anchor does not certify scientific provenance or a source rendering.
+Import replay uses the original receipt without rereading the provider. Exact capture
+readback is bounded; contributed note text identifies the image but omits its bytes.
+Other real source flows, browser capture and annotation UI remain incomplete. Metadata authorization
 reuses public application read/control scopes; it does not add a scientific
 annotation branch to the generic Host.
 

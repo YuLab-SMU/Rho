@@ -8,7 +8,7 @@ use rho_plugin_sdk::{HostCallClient, protocol::*};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 
-fn require(
+pub(crate) fn require(
     metadata: &Metadata,
     call: &PluginCall,
     capability: &CapabilityKey,
@@ -30,7 +30,7 @@ fn require(
     }
     Ok(())
 }
-async fn query(
+pub(crate) async fn query(
     host: &HostCallClient,
     call: &PluginCall,
     capability: CapabilityKey,
@@ -183,7 +183,7 @@ pub async fn freeze(
         ));
     }
     let fragment = match anchor {
-        AnnotationAnchor::WholeItem => preview.text.clone(),
+        AnnotationAnchor::WholeItem | AnnotationAnchor::CapturedView { .. } => preview.text.clone(),
         AnnotationAnchor::TextQuote {
             quote,
             start,

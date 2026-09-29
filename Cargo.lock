@@ -6081,6 +6081,8 @@ dependencies = [
 name = "rho-annotation-backend"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "image",
  "rho-annotation-api",
  "rho-annotation-owner",
  "rho-annotation-store",
