@@ -28,7 +28,7 @@ written deletion condition. Internal pieces are not reported as milestones.
 | M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Default entry, real-R browser flow and Rust HTTP checks pass; delivery remains |
 | M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Combined real Host/browser flow passes: Native/Rho input, attachments, real R, reload, continuation and handoff |
 | M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Graceful Host restart, same instance/view/tasks, original receipts and native session Resume pass without replay |
-| M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Editor/Help/Viewer snapshots, history, Continue and handoff pass real Host/browser checks; annotations, component input and Rho tool selection remain |
+| M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Editor/Help/Viewer snapshots, history, Continue and handoff pass real Host/browser checks; Rho exact-session tool selection also passes; annotations and component input remain |
 | M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Combined real Host/browser flow passes: exact-branch Agent checkpoint, explicit build, preview and scenario application |
 | M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Not started |
 
@@ -124,15 +124,15 @@ Host/browser checks pass, including lost receipts recovered after Host restart.
 The ordinary native/Rho task view is implemented in source: shared task selection,
 creation, draft CAS/conflicts, Send/Stop, explicit control and original-request
 inspection. Native tasks also support model/tool selection, permissions and
-attachments. Task lists and native/Rho history use bounded pages and preserve
-earlier reading positions. Rho Send captures an available key before admission,
+attachments. Task lists and native/Rho history use bounded pages and preserve earlier reading positions. Rho Send captures an available key before admission,
 atomically consumes only its matching draft and preserves later typing on replay.
 Stable view/controller identities survive private connection rotation. Rho settings
 provide key save/removal, versioned configuration and explicit synthetic tests;
 keys stay out of saved view state and Operations. Rho now submits text and contributed
-references, attachments and explicit continuation in source; tool selection remains to compose.
+references, attachments and explicit continuation. Rho Tools selects one supplied R session,
+freezes it at Send and retains the original binding for Continue after deselection. Real Host/Rig/R checks pass; see `target/plugin-refactor/agent-rho-tools-results.json`.
 Rho uploads preserve original identity through lost replies/reselection; text ≤32 KiB and PNG/JPEG ≤2 MiB are captured before Send. The five framed backend cases and the complete actual Host/browser flow pass.
-The UI build and 98 model cases (29 native, 13 settings, 30 Rho, 15 context, 11 handoff) pass, as does
+The UI build and 102 model cases (29 native, 13 settings, 34 Rho, 15 context, 11 handoff) pass, as does
 the synthetic public MessagePort browser fixture: opaque iframe, IME Enter, task
 switching, native/Rho attachment recovery and retained context, next drafts, 8 MiB selection, lost creation/Send/import/key
 replies, actual reload, history and close without Stop. Settings/rename work without
@@ -158,7 +158,7 @@ HTML join Editor input and attachments, reach the model, and survive Continue,
 reload and Host restart while R stays suspended. Normal/390/220 layouts are checked.
 Concurrent foreground/background draft confirmation no longer reports a false
 missing-request error; its failing baseline and passing regression are retained.
-Remaining: annotations/component input and Rho tool selection. Evidence:
+Remaining: annotations/component input. Evidence:
 `agent-scientific-context-current-results.json` and `studio-agent-current-results.json` in `target/plugin-refactor/`.
 Synthetic peers for Process/Remote/Environment do not establish execution through those plugins.
 Agent evidence in `target/plugin-refactor/`: `agent-current-native-results.json`, `agent-handoff-ui-results.json`, `rho-continue-results.json`, `agent-assets-results-v3.json` and

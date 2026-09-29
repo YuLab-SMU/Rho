@@ -285,6 +285,8 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `scripts/test-real-r.mjs`, `sdk/**`.
 - `plugins.agent-request` (L1): `["cargo","test","-p","rho-contract","--lib","public_agent_request","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/contract/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+- `plugins.agent-rho-tools-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","agent-rho-tools.spec.ts"]`
+  Applies to: `plugins/agent/backend/src/runs.rs`, `plugins/agent/backend/src/tools.rs`, `plugins/agent/src/**`, `scripts/agent-plugin-artifact.mjs`, `ui/e2e/agent-rho-tools.spec.ts`, `ui/e2e/fixtures/agent-scientific-context.ts`.
 - `plugins.agent-store` (L1): `["cargo","test","-p","rho-agent-store","--lib","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/owner/**`, `plugins/agent/backend/store/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
 - `plugins.agent-store-independent` (L2): `["node","scripts/test-agent-plugin-store.mjs"]`

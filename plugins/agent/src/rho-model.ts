@@ -1,4 +1,4 @@
-import type { AgentAsset, AgentDraftContent, ComponentAgentConversation, ComponentAgentRun, ComponentAgentRunSummary, ComponentAgentEventPage, ComponentModelSettings, ComponentCredentialStatus } from '../sdk/index.js';
+import type { AgentAsset, AgentDraftContent, AgentNativeToolSelection, ComponentAgentConversation, ComponentAgentRun, ComponentAgentRunSummary, ComponentAgentEventPage, ComponentModelSettings, ComponentCredentialStatus } from '../sdk/index.js';
 import type { NativeAgentModel } from './native-model.js';
 import type { ProviderBinding } from '../public/plugin-protocol/index.js';
 import { type Client, type Intent, json, same, terminal, inspectOriginal, verifyOriginal } from './operations.js';
@@ -8,7 +8,7 @@ import { captureRhoFile, validateUpload, verifyRhoImported, type RhoPendingUploa
 
 interface Draft { content: AgentDraftContent; base: number; revision: number; dirty: boolean; conflict: AgentDraftContent | null; }
 interface Pending { intent: Intent; task: string; kind: string; revision: number; draftVersion: number; status: string | null; run: string | null; consumed: boolean; }
-export interface RhoState { selected: string | null; drafts: Record<string, Draft>; pending: Pending[]; uploads?: RhoPendingUpload[]; }
+export interface RhoState { selected: string | null; drafts: Record<string, Draft>; pending: Pending[]; uploads?: RhoPendingUpload[]; tool?: AgentNativeToolSelection | null; }
 export interface RhoHistoryPage { conversation_id: string; runs: ComponentAgentRunSummary[]; next: string | null; }
 interface History { before: string | null; page: RhoHistoryPage; }
 interface Transcript { cursor: number; text: string; gap: boolean; partial: boolean; }
@@ -25,13 +25,20 @@ export class RhoModel {
   readonly runs = new Map<string, ComponentAgentRun>();
   readonly history = new Map<string, History>();
   readonly transcripts = new Map<string, Transcript>();
+  readonly tools: AgentNativeToolSelection[];
   settings: ComponentModelSettings | null = null;
   busy = false;
   private stopped = false;
   private observing = new Set<string>();
   private submissions = new Set<string>();
   constructor(private client: Client, private owner: NativeAgentModel, private changed = () => {}) {
+    const configured = (client.view.configuration as { tools?: AgentNativeToolSelection[] } | null)?.tools ?? [];
+    this.tools = structuredClone(configured.filter(tool => tool.target.type === 'provider' &&
+      tool.target.binding.project === client.view.project && !!tool.target.binding.target &&
+      (tool.target.binding.capability.id === 'r.execute' && tool.target.binding.capability.version === 2 ||
+       tool.target.binding.capability.id === 'r.session' && tool.target.binding.capability.version === 1)));
     this.state = owner.state.rho ??= { selected: null, drafts: {}, pending: [] };
+    this.selection(this.state.tool ?? null);
     for (const pending of this.uploads) {
       validateUpload(pending.upload);
       if (pending.view !== client.view.view || !same(pending.instance, client.view.instance) || !['uploading', 'finishing', 'imported'].includes(pending.phase))
@@ -44,6 +51,15 @@ export class RhoModel {
         !['run.stop', 'run.reconcile'].includes(pending.kind) && args.arguments.conversation_id !== pending.task || pending.kind === 'run' && args.arguments.request_id !== intent.request)
         throw Error('A retained Rho request belongs to another task, view or instance.');
     }
+  }
+  private selection(tool: AgentNativeToolSelection | null): { r: ProviderBinding | null; mode: 'run' | 'explain' } {
+    if (!tool) return { r: null, mode: 'explain' };
+    if (tool.target.type !== 'provider' || !this.tools.some(candidate => same(candidate, tool)))
+      throw Error('Select an R tool supplied by this Agent view.');
+    return { r: structuredClone(tool.target.binding), mode: tool.target.binding.capability.id === 'r.execute' ? 'run' : 'explain' };
+  }
+  async selectTool(tool: AgentNativeToolSelection | null) {
+    this.live(); this.selection(tool); this.state.tool = structuredClone(tool); await this.save(); this.notify();
   }
   private live() { if (this.stopped) throw Error('The Agent view is closed. Original Rho records are retained.'); }
   private notify() { if (!this.stopped) this.changed(); }
@@ -120,13 +136,15 @@ export class RhoModel {
   private mergeRun(run: ComponentAgentRun) {
     const old = this.runs.get(run.run_id);
     if (old && (old.updated_at_ms > run.updated_at_ms || old.event_cursor > run.event_cursor || !rhoBusy(old.state) && rhoBusy(run.state))) return false;
-    this.runs.set(run.run_id, run);
     const pending = this.state.pending.find(p => p.kind === 'run' && p.intent.request === run.request.request_id);
-    if (!pending) return false;
-    const args = (pending.intent.arguments as unknown as { arguments: { text: string; assets?: string[]; sources?: AgentDraftContent['context']; continuation?: ComponentAgentRun['request']['continuation']; conversation_id: string; conversation_version: number; model_settings_version: number } }).arguments;
-    if (run.request.conversation_id !== pending.task || run.request.text !== args.text || run.request.conversation_version !== args.conversation_version ||
+    if (!pending) { this.runs.set(run.run_id, run); return false; }
+    const args = (pending.intent.arguments as unknown as { arguments: { r?: ProviderBinding | null; mode?: 'run' | 'explain' | null; text: string; assets?: string[]; sources?: AgentDraftContent['context']; continuation?: ComponentAgentRun['request']['continuation']; conversation_id: string; conversation_version: number; model_settings_version: number } }).arguments;
+    const session = args.r ? { workspace_instance_id: args.r.provider.instance, session_id: args.r.target } : null;
+    if (run.request.grant.mode !== (args.mode ?? 'explain') || !same(run.request.grant.session, session) ||
+      run.request.conversation_id !== pending.task || run.request.text !== args.text || run.request.conversation_version !== args.conversation_version ||
       run.request.model_settings_version !== args.model_settings_version || !same(run.request.assets ?? [], args.assets ?? []) || !same(run.request.sources ?? [], args.sources ?? []) || !same(run.request.continuation ?? null, args.continuation ?? null) || run.request.window.window_id !== this.client.view.window || run.request.window.incarnation !== `view:${this.client.view.view}`)
       throw Error('The Rho run does not match its original Send.');
+    this.runs.set(run.run_id, run);
     pending.run = run.run_id;
     if (pending.consumed) return false;
     const local = this.state.drafts[pending.task];
@@ -179,6 +197,9 @@ export class RhoModel {
   async send(task: string, continueRun?: string) {
     this.live();
     if (this.submissions.has(task) || this.state.pending.some(p => p.task === task && p.kind === 'run')) throw Error('Inspect the original Send before submitting again.');
+    // Capture the user's choice before any draft/settings awaits. Later changes
+    // configure the next Send and cannot alter this original request.
+    const selected = this.selection(this.state.tool ?? null);
     this.submissions.add(task);
     try {
       if (this.draft(task).context.length + this.draft(task).assets.length > 16) throw Error('Rho tasks accept up to 16 context references and attachments. The draft is retained.');
@@ -191,7 +212,8 @@ export class RhoModel {
       if (!conversation || !local || local.dirty || local.conflict || !this.canControl(task) || conversation.archived || conversation.active_run_id || (!local.content.text.trim() && !local.content.assets.length))
         throw Error('Confirm the saved draft and original task state before sending.');
       const revision = local.revision, content = structuredClone(local.content);
-      let continuation: ComponentAgentRun['request']['continuation'], r: ProviderBinding | null = null, mode: 'run' | 'explain' | null = null;
+      let continuation: ComponentAgentRun['request']['continuation'];
+      let { r, mode } = selected;
       if (continueRun) {
         const previous = await this.read<ComponentAgentRun>('agent.model.run.get', { run_id: continueRun });
         if (previous.run_id !== continueRun || previous.request.conversation_id !== task || rhoBusy(previous.state) || !previous.recovery || previous.recovery.unresolved_mutations)

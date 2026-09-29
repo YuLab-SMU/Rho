@@ -196,14 +196,27 @@ or R execution. Manager then restores the original viewless R backend through a
 lost reply and confirms that its R session stays unstarted. This does not cover abrupt process failure or external-model
 quality. A listed/written browser case is not a passing native result.
 
+For a Rho tool-selection change, use the smaller real-R browser case:
+`npm run test:browser --prefix ui -- agent-rho-tools.spec.ts`, with retained
+`RHO_AGENT_PLUGIN_PACKAGE`, `RHO_R_PLUGIN_PACKAGE`, `RHO_ARK` and `RHO_R_HOME`.
+It reuses the current generic Host and invokes no Cargo or package build. The
+ordinary view selects an exact R binding; the real Rig driver calls that R plugin
+under the original Send. A local streaming model peer checks the real tool result.
+The case covers lost Send acknowledgement, reload without replay, original tool
+inspection and Continue after deselecting the next-turn tool. It also checks menu
+bounds while resizing through 1440/390/220 px. External-model quality and Host
+restart are separate acceptance scopes. Workspace-built package receipts remain
+mandatory; do not silently rebuild dependencies inside a browser test.
+
 Browser acceptance uses the locked Node 22 type declarations in `ui`. Check the
 Agent fixture and its imported helpers without invoking Cargo from the repository
 root:
 
 ```sh
-node ui/node_modules/typescript/bin/tsc --noEmit --target es2022 \
+node ui/node_modules/typescript/bin/tsc --noEmit --target es2023 \
   --module esnext --moduleResolution bundler --skipLibCheck --allowJs \
-  --types node --typeRoots ui/node_modules/@types ui/e2e/agent-workspace.spec.ts
+  --types node --typeRoots ui/node_modules/@types \
+  ui/e2e/agent-workspace.spec.ts ui/e2e/agent-rho-tools.spec.ts
 ```
 
 This checks fixture types only; run the browser case with its retained packages

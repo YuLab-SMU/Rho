@@ -57,6 +57,7 @@ function saveDraftSoon(task: string, kind: 'native' | 'rho' = 'native') {
 }
 function render() {
   if (!model || disposed) return;
+  renderTools();
   const id = selected(), detail = id ? model.details.get(id) : null, controlled = !!id && model.canControl(id), editable = controlled && !detail?.summary.task.archived;
   const running = !!detail && agentBusy(detail.summary.attachment.state), local = id ? model.state.drafts[id] : null;
   const rid = rhoSelected(), conversation = rid ? rho.conversations.get(rid) : null;
@@ -196,7 +197,7 @@ function renderRho(id: string) {
   get('draft-status').textContent = !editable ? '' : local?.conflict ? 'Draft conflict' : local?.dirty ? 'Draft not saved yet' : 'Draft saved';
   const save = get<HTMLButtonElement>('save-draft'); save.hidden = !editable || !local?.dirty || !!local.conflict; save.disabled = rho.busy || closing || rho.state.pending.some(p => p.task === id && p.kind === 'draft');
   context?.render(id, editable, rho.busy || closing, rho);
-  renderAttachments(id, editable, 'rho'); get<HTMLButtonElement>('tools').disabled = true;
+  renderAttachments(id, editable, 'rho'); get<HTMLButtonElement>('tools').disabled = !editable || rho.busy || closing || !rho.tools.length;
   const send = get<HTMLButtonElement>('send'); send.hidden = running; send.disabled = !editable || !configured || rho.busy || closing || !!local?.conflict || !!conversation?.active_run_id || (!message.value.trim() && !rho.draft(id).assets.length) || rho.state.pending.some(p => p.task === id && p.kind === 'run');
   get('stop').hidden = !running; get<HTMLButtonElement>('stop').disabled = !controlled || rho.busy || closing;
   get('draft-conflict').hidden = !local?.conflict;
@@ -370,12 +371,17 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-provide
 };
 for (const button of document.querySelectorAll<HTMLButtonElement>('[popovertarget]')) {
   const menu = get(button.getAttribute('popovertarget')!);
-  menu.addEventListener('toggle', () => {
+  const position = () => {
     if (!menu.matches(':popover-open')) return;
+    // Measure at the viewport edge before clamping. The old left offset can
+    // otherwise squeeze the menu or leave it outside a newly narrowed panel.
+    menu.style.left = '8px'; menu.style.top = '8px';
     const anchor = button.getBoundingClientRect(), bounds = menu.getBoundingClientRect();
     menu.style.left = `${Math.max(8, Math.min(anchor.left, innerWidth - bounds.width - 8))}px`;
     menu.style.top = `${Math.max(8, anchor.bottom + bounds.height + 8 <= innerHeight ? anchor.bottom + 4 : anchor.top - bounds.height - 4)}px`;
-  });
+  };
+  menu.addEventListener('toggle', position);
+  window.addEventListener('resize', position);
 }
 get('rename-task').onclick = () => { get('actions-menu').hidePopover(); get<HTMLInputElement>('title').value = rhoSelected() ? rho.conversations.get(rhoSelected()!)?.title ?? '' : model.details.get(selected()!)?.summary.task.title ?? ''; get<HTMLDialogElement>('rename-dialog').showModal(); };
 get('cancel-rename').onclick = () => get<HTMLDialogElement>('rename-dialog').close();
@@ -384,11 +390,29 @@ get('rename-form').onkeydown = event => { if (event.key === 'Enter' && !event.is
 const tools = (client.view.configuration as { tools?: AgentNativeToolSelection[] }).tools ?? [];
 get('add-studio-request').onclick = () => { const id = selected(); if (id && studioInput && !rhoSelected()) action(() => addStudioRequest(model, id, studioInput, tools)); };
 get<HTMLButtonElement>('tools').disabled = !tools.length;
-for (const tool of tools) {
-  const label = document.createElement('label'), checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = model.state.tools.some(item => JSON.stringify(item) === JSON.stringify(tool));
-  label.append(checkbox, document.createTextNode(tool.name)); get('tools-menu').append(label);
-  checkbox.onchange = () => action(async () => { model.state.tools = model.state.tools.filter(item => JSON.stringify(item) !== JSON.stringify(tool)); if (checkbox.checked) model.state.tools.push(structuredClone(tool)); await model.save(); });
-  get('tools-menu').addEventListener('toggle', () => { checkbox.checked = model.state.tools.some(item => JSON.stringify(item) === JSON.stringify(tool)); });
+function renderTools() {
+  if (!rho) return;
+  const isRho = !!rhoSelected(), available = isRho ? rho.tools : (client.view.configuration as { tools?: AgentNativeToolSelection[] }).tools ?? [];
+  const selectedTools = isRho ? (rho.state.tool ? [rho.state.tool] : []) : model.state.tools;
+  const menu = get('tools-menu'), content = JSON.stringify([isRho, available, selectedTools]);
+  if (menu.dataset.content === content) return;
+  menu.dataset.content = content; menu.replaceChildren();
+  for (const tool of available) {
+    const label = document.createElement('label'), checkbox = document.createElement('input'); checkbox.type = 'checkbox';
+    checkbox.checked = selectedTools.some(item => JSON.stringify(item) === JSON.stringify(tool));
+    const suffix = isRho && tool.target.type === 'provider' ? (tool.target.binding.capability.id === 'r.execute' ? ' · Run R' : ' · Observe R') : '';
+    label.append(checkbox, document.createTextNode(tool.name + suffix)); menu.append(label);
+    checkbox.onchange = () => {
+      const checked = checkbox.checked;
+      action(async () => {
+        if (isRho) await rho.selectTool(checked ? tool : null);
+        else {
+          model.state.tools = model.state.tools.filter(item => JSON.stringify(item) !== JSON.stringify(tool));
+          if (checked) model.state.tools.push(structuredClone(tool)); await model.save();
+        }
+      });
+    };
+  }
 }
 await client.installCloseHandler({
   async flush() {

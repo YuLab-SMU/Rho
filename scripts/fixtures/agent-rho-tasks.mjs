@@ -2,14 +2,14 @@ import assert from 'node:assert/strict';
 
 export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestId) {
   const clone=structuredClone, empty=()=>({text:'',assets:[],context:[]});
-  function fixture() {
+  function fixture(tools = []) {
     let state={},version=0,lost='',gate=null,failSave=false,keyAvailable=true;
     const instance={instance:'agent',plugin:'org.rho.agent',revision:'sha256:'+'a'.repeat(64),artifact:'sha256:'+'b'.repeat(64)};
     const settings={version:1,enabled:true,connection:{model:'fixture',protocol:'openai_completions',base_url:'https://fixture.invalid',credential:{kind:'local_file',key_id:'fixture'}}};
     const conversations=new Map(),runs=new Map(),events=new Map(),records=[],calls=[],reads=[];
     const overrides=new Map(),assets=new Map(),staged=new Map();
     const client={
-      get view(){return {view:'view-one',window:'window-one',project:'project',instance,state:clone(state),state_version:version};},
+      get view(){return {view:'view-one',window:'window-one',project:'project',instance,configuration:{tools:clone(tools)},state:clone(state),state_version:version};},
       async setState(value){if(failSave)throw Error('State save failed');state=clone(value);version++;return this.view;},
       async query(cap,args){
         reads.push({id:cap.id,args:clone(args)});const input=args.arguments;let data;
@@ -62,7 +62,7 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
             else{conversation.version++;if(kind==='take_control'){conversation.controller={window_id:'window-one',incarnation:'view:view-one'};conversation.active_run_id=null;}else{if(input.title!==undefined)conversation.title=input.title.trim();if(input.archived!==undefined)conversation.archived=input.archived;}output=clone(conversation);}
           }else if(kind==='run'){
             assert.equal(input.conversation_version,conversation.version);assert.equal(input.text,conversation.draft_content.text);assert.deepEqual(input.sources,conversation.draft_content.context);
-            const run={run_id:'run-'+runs.size,request:{...clone(input),grant:{mode:input.mode??'explain',session:null,files:[],documents:[]},window:clone(conversation.controller)},state:'running',updated_at_ms:runs.size+1,event_cursor:0,reason:null};runs.set(run.run_id,run);
+            const run={run_id:'run-'+runs.size,request:{...clone(input),grant:{mode:input.mode??'explain',session:input.r?{workspace_instance_id:input.r.provider.instance,session_id:input.r.target}:null,files:[],documents:[]},window:clone(conversation.controller)},state:'running',updated_at_ms:runs.size+1,event_cursor:0,reason:null};runs.set(run.run_id,run);
             conversation.draft_content=empty();conversation.draft='';conversation.draft_version++;conversation.version++;conversation.active_run_id=run.run_id;status='running';output=null;
           }else if(kind==='run.stop'){
             const run=runs.get(input.run_id);run.state='stopping';run.updated_at_ms++;output=clone(run);
@@ -187,11 +187,46 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
     await assert.rejects(model.send(id,'run-0'),/draft changed while preparing Continue/);
     assert.equal(f.calls.length,before);assert.equal(model.draft(id).text,'Newer input');
   });
-  await check('Continue keeps the exact original native R target',async()=>{
-    const f=fixture(),{model,id}=await task(f);await draft(model,id);await model.send(id);f.finish('run-0');await model.refresh();await model.reconcile(id,'run-0');await draft(model,id,'Continue R');
-    const binding={provider:{instance:'r',plugin:'org.rho.r',revision:'sha256:'+'c'.repeat(64),artifact:'sha256:'+'d'.repeat(64)},project:'project',capability:{id:'r.execute',version:2},target:'original-session'};
-    f.runs.get('run-0').request.grant.mode='run';f.runs.get('run-0').request.r=clone(binding);
-    await model.send(id,'run-0');assert.deepEqual(f.calls.at(-1).args.arguments.r,binding);assert.equal(f.calls.at(-1).args.arguments.mode,'run');
+  const rTool = (session = 'original-session', capability = {id:'r.execute',version:2}) => ({name:session,target:{type:'provider',binding:{provider:{instance:'r',plugin:'org.rho.r',revision:'sha256:'+'c'.repeat(64),artifact:'sha256:'+'d'.repeat(64)},project:'project',capability,target:session}}});
+  await check('Rho tool choice is explicit, exclusive, retained and independent of Native tools',async()=>{
+    const first=rTool(),second=rTool('other-session'),read=rTool('read-session',{id:'r.session',version:1});
+    const f=fixture([first,second,read,{name:'other',target:{type:'host',project:'project',capability:{id:'files.read',version:1},fixed_arguments:{}}}]),{model,native,id}=await task(f);
+    assert.equal(model.tools.length,3);assert.equal(model.state.tool,undefined);
+    native.state.tools=[first];await model.selectTool(second);assert.deepEqual(native.state.tools,[first]);
+    assert.deepEqual(f.open().model.state.tool,second);await model.selectTool(read);await draft(model,id);await model.send(id);
+    assert.deepEqual(f.calls.at(-1).args.arguments.r,read.target.binding);assert.equal(f.calls.at(-1).args.arguments.mode,'explain');
+    assert.deepEqual(model.state.tool,read);
+  });
+  await check('original Send freezes the selected R session before asynchronous preparation and lost receipt',async()=>{
+    const first=rTool(),second=rTool('next-session'),f=fixture([first,second]),{model,id}=await task(f);
+    await model.selectTool(first);await draft(model,id);
+    f.overrides.set('agent.model.settings',async()=>{await model.selectTool(second);return {version:1,enabled:true,connection:{credential:{kind:'local_file',key_id:'fixture'}}};});
+    f.lose('agent.model.run');await assert.rejects(model.send(id),/Lost original reply/);
+    assert.deepEqual(f.calls.at(-1).args.arguments.r,first.target.binding);assert.equal(f.calls.at(-1).args.arguments.mode,'run');
+    const opened=f.open().model;await opened.inspect(opened.state.pending[0].intent.request);
+    assert.deepEqual(opened.state.tool,second);assert.equal(f.runs.size,1);
+  });
+  await check('foreign, missing and forged persisted R tools cannot be selected',async()=>{
+    const tool=rTool(),f=fixture([tool]),{model}=await task(f);
+    const forged=clone(tool);forged.target.binding.provider.artifact='other';
+    await assert.rejects(model.selectTool(forged),/supplied by this Agent view/);
+    await assert.rejects(model.selectTool(rTool('foreign-session')),/supplied by this Agent view/);
+    const saved=f.client.view.state;saved.rho.tool=forged;await f.client.setState(saved);
+    assert.throws(()=>f.open(),/supplied by this Agent view/);
+  });
+  await check('a run with a changed session or mode cannot consume the original draft',async()=>{
+    for (const field of ['session','mode']) {
+      const tool=rTool(),f=fixture([tool]),{model,id}=await task(f);await model.selectTool(tool);await draft(model,id);
+      f.lose('agent.model.run');await assert.rejects(model.send(id));
+      f.runs.get('run-0').request.grant[field]=field==='mode'?'explain':{workspace_instance_id:'r',session_id:'other'};
+      await assert.rejects(model.inspect(model.state.pending[0].intent.request),/does not match its original Send/);
+      assert.equal(model.draft(id).text,'Send exactly this draft');assert.equal(model.runs.size,0);
+    }
+  });
+  await check('Continue keeps the exact original native R target after deselection',async()=>{
+    const tool=rTool(),f=fixture([tool]),{model,id}=await task(f);await model.selectTool(tool);await draft(model,id);await model.send(id);
+    f.finish('run-0');await model.refresh();await model.reconcile(id,'run-0');await draft(model,id,'Continue R');await model.selectTool(null);
+    await model.send(id,'run-0');assert.deepEqual(f.calls.at(-1).args.arguments.r,tool.target.binding);assert.equal(f.calls.at(-1).args.arguments.mode,'run');
   });
   await check('identical retry recovers one run and a forged result never clears the draft',async()=>{
     const f=fixture(),{model,id}=await task(f);await draft(model,id);f.lose('agent.model.run');await assert.rejects(model.send(id));
