@@ -23,8 +23,11 @@ struct Cli {
     #[arg(long, requires = "connect_url_file")]
     test_project: Option<String>,
     /// Open only generic plugin/Operation ports. Does not discover R or install packages.
-    #[arg(long, requires = "project", conflicts_with_all = ["demo", "demo_project", "ark", "r_home", "checkpoint_helper", "rscript", "environment", "remote_host", "host_skills", "connect_url_file"])]
+    #[arg(long, conflicts_with_all = ["demo", "ark", "r_home", "checkpoint_helper", "rscript", "environment", "remote_host", "host_skills", "connect_url_file", "fixed_workspace"])]
     plugins_only: bool,
+    /// Temporary development reference for the fixed workspace, pending plugin migration.
+    #[arg(long, conflicts_with_all = ["plugins_only", "connect_url_file"])]
+    fixed_workspace: bool,
     /// Explicit test-only runtime; does not run R.
     #[arg(long, conflicts_with = "ark")]
     demo: bool,
@@ -61,12 +64,21 @@ struct Cli {
 
 impl Cli {
     fn profile(&self) -> Result<HostProfile, String> {
+        let workbench = matches!(self.command, Command::Workbench { .. });
+        if self.fixed_workspace && !workbench {
+            return Err("--fixed-workspace applies only to the workbench development reference".into());
+        }
+        let plugins = self.plugins_only || workbench && !self.fixed_workspace;
+        if plugins && (self.demo || self.ark.is_some() || self.r_home.is_some() || self.checkpoint_helper.is_some()
+            || self.rscript.is_some() || self.environment.is_some() || self.remote_host.is_some() || self.host_skills.is_some()) {
+            return Err("The workspace uses installed plugins. Configure the selected provider there; --fixed-workspace is only the temporary development reference".into());
+        }
         let remote = self.remote_host.as_ref().map(|host| SshConfig {
             host_alias: host.clone(),
             project_root: self.remote_root.clone().unwrap_or_default(),
             slurm_cluster: self.slurm_cluster.clone(),
         });
-        let runtime = if self.plugins_only {
+        let runtime = if plugins {
             RuntimeConfiguration::Plugins
         } else if let Some(executable) = &self.ark {
             RuntimeConfiguration::Ark {
@@ -235,6 +247,9 @@ impl From<rho_host::OperationError> for CliFailure {
 
 async fn run() -> Result<(), CliFailure> {
     let cli = Cli::parse();
+    if cli.fixed_workspace && !matches!(cli.command, Command::Workbench { .. }) {
+        return Err("--fixed-workspace applies only to the workbench development reference".into());
+    }
     if let Command::Plugins { store, command } = &cli.command {
         if cli.plugins_only {
             return Err("Plugin repository commands need no Host; omit --plugins-only".into());
@@ -513,7 +528,9 @@ mod plugin_workspace_arguments {
                 RuntimeConfiguration::Plugins
             ));
         }
-        assert!(Cli::try_parse_from(["rho", "--plugins-only", "session"]).is_err());
+        // Workbench can now choose its project in the browser. Other Host edges
+        // still enforce --project in open_host, before opening any owner.
+        assert!(Cli::try_parse_from(["rho", "--plugins-only", "workbench"]).is_ok());
         for extra in [
             vec!["--demo"],
             vec!["--ark", "/ark"],
@@ -527,5 +544,25 @@ mod plugin_workspace_arguments {
             args.push("session");
             assert!(Cli::try_parse_from(args).is_err());
         }
+    }
+    #[test]
+    fn ordinary_workbench_is_the_default_and_fixed_bindings_need_the_development_flag() {
+        let cli = Cli::try_parse_from(["rho", "workbench"]).unwrap();
+        assert!(matches!(cli.profile().unwrap().runtime, RuntimeConfiguration::Plugins));
+        let cli = Cli::try_parse_from(["rho", "--r-home", "/R", "workbench"]).unwrap();
+        assert!(cli.profile().unwrap_err().contains("installed plugins"));
+        let cli = Cli::try_parse_from(["rho", "--demo", "workbench"]).unwrap();
+        assert!(cli.profile().unwrap_err().contains("installed plugins"));
+        let cli = Cli::try_parse_from(["rho", "--fixed-workspace", "workbench"]).unwrap();
+        assert!(matches!(cli.profile().unwrap().runtime, RuntimeConfiguration::Project));
+        let cli = Cli::try_parse_from(["rho", "--fixed-workspace", "session"]).unwrap();
+        assert!(cli.profile().is_err());
+        let cli = Cli::try_parse_from(["rho", "--demo-project", "workbench"]).unwrap();
+        assert!(matches!(cli.profile().unwrap().runtime, RuntimeConfiguration::Plugins));
+    }
+    #[tokio::test]
+    async fn plugin_session_without_project_cannot_open_an_owner() {
+        let cli = Cli::try_parse_from(["rho", "--plugins-only", "session"]).unwrap();
+        assert!(matches!(cli.open_host().await, Err(message) if message == "--project is required"));
     }
 }

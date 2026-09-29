@@ -8,7 +8,7 @@ let directory: string, project: string, url: string, host: ReturnType<typeof spa
 test.beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), "rho-shell-"));
   project = join(directory, "study"); await mkdir(project);
-  host = spawn(resolve("../target/debug/rho"), ["--database", join(directory, "state.sqlite"), "--project", project, "workbench"], { stdio: ["ignore", "pipe", "pipe"] });
+  host = spawn(resolve("../target/debug/rho"), ["--database", join(directory, "state.sqlite"), "--project", project, "--fixed-workspace", "workbench"], { stdio: ["ignore", "pipe", "pipe"] });
   url = await new Promise<string>((resolve, reject) => {
     let output = "", errors = "";
     const timer = setTimeout(() => reject(new Error(`Shell Host startup timed out: ${errors}`)), 40000);

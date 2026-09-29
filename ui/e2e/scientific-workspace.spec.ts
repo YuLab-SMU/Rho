@@ -19,10 +19,6 @@ async function port(method: string, params: unknown) {
   if (!reply.ok) throw Error(reply.error); return reply.result;
 }
 async function query(id: string, args: unknown) { return (await port('query_snapshot', { capability: { id, version: 1 }, arguments: args })).data; }
-async function invoke(id: string, args: unknown) {
-  const record = await port('invoke', { capability: { id, version: 1 }, client_request_id: crypto.randomUUID(), arguments: args, preconditions: [] });
-  expect(record.status, JSON.stringify(record.error)).toBe('succeeded'); return record.output;
-}
 test.beforeAll(async () => {
   test.setTimeout(180000);
   expect(process.env.RHO_SCIENTIFIC_PACKAGES).toBeTruthy(); expect(process.env.RHO_ARK).toBeTruthy(); expect(process.env.RHO_R_HOME).toBeTruthy();
@@ -33,8 +29,8 @@ test.beforeAll(async () => {
   const snapshot = (path: string, target: string) => JSON.parse(execFileSync(binary, ['--database', database, 'plugins', 'snapshot', path, '--target', target], { encoding: 'utf8' })).result;
   for (const key of ['r', 'files', 'editor']) snapshot(native[key], 'aarch64-apple-darwin');
   for (const [key, build] of Object.entries({ console: buildConsolePlugin, objects: buildObjectsPlugin, plots: buildPlotsPlugin, viewer: buildViewerPlugin, packages: buildPackagesPlugin, help: buildHelpPlugin })) snapshot(native[key] ?? build(join(directory, key)), 'ui-web');
-  const manager = snapshot(buildManagerPlugin(join(directory, 'manager')), 'ui-web');
-  host = spawn(binary, ['--database', database, '--project', project, '--plugins-only', 'workbench'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  snapshot(buildManagerPlugin(join(directory, 'manager')), 'ui-web');
+  host = spawn(binary, ['--database', database, 'workbench'], { stdio: ['ignore', 'pipe', 'pipe'] });
   url = new URL(await new Promise<string>((done, reject) => {
     let output = '', errors = ''; const timer = setTimeout(() => reject(Error(`Generic Host startup deadline: ${errors}`)), 60000);
     host.stderr!.on('data', bytes => errors += bytes); host.stdout!.on('data', bytes => {
@@ -42,9 +38,6 @@ test.beforeAll(async () => {
       if (found) { clearTimeout(timer); done(found[0]); }
     }); host.once('exit', code => { clearTimeout(timer); reject(Error(`Generic Host exited ${code}: ${errors}`)); });
   }));
-  const instance = (await invoke('plugins.activate', { revision: manager.revision, artifact: manager.artifacts[0], target: 'ui-web', alias: 'manager', configuration: {} })).instance.identity;
-  managerView = (await invoke('windows.open_view', { expected_layout_version: 0, group: null,
-    view: { instance, window: windowId, contribution: 'manager', configuration: {}, state: {} } })).view;
 });
 test.afterAll(async () => {
   if (host?.exitCode === null && host.signalCode === null) {
@@ -60,6 +53,33 @@ test.afterAll(async () => {
 test('Manager prepares the ordinary scientific scene; Files opens a runnable Editor and original R results reach Objects and Plots', async ({ page }, info) => {
   test.setTimeout(240000);
   const address = new URL(url); address.searchParams.set('window', windowId); await page.goto(address.href);
+  await page.getByLabel('Absolute Project Path', { exact: true }).fill(project);
+  await page.getByRole('button', { name: 'Open Project', exact: true }).click();
+  const selector = page.getByLabel('Installed workspace view', { exact: true });
+  const choice = selector.locator('option').filter({ hasText: /^Plugins ·/ });
+  await expect(choice).toHaveCount(1); await selector.selectOption((await choice.getAttribute('value'))!);
+  await page.screenshot({ path: info.outputPath('scientific-launcher.png') });
+  let lost = false;
+  await page.route('**/api/host', async route => {
+    const request = route.request().postDataJSON()?.frame?.request;
+    if (!lost && request?.method === 'invoke' && request.params.capability.id === 'plugins.activate') {
+      lost = true; await route.fetch(); await route.abort(); return;
+    }
+    await route.continue();
+  });
+  await page.getByRole('button', { name: 'Open view', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Inspect original request', exact: true })).toBeEnabled();
+  await page.reload();
+  await page.getByRole('button', { name: 'Inspect original request', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Continue opening view', exact: true })).toBeEnabled();
+  expect((await query('plugins.instances', { after: null, limit: 100 })).total).toBe(1);
+  expect((await query('windows.layout', { window: windowId })).layout.kind).toBe('empty');
+  await page.getByRole('button', { name: 'Continue opening view', exact: true }).click();
+  await expect.poll(async () => {
+    const layout = (await query('windows.layout', { window: windowId })).layout;
+    if (layout.kind !== 'tabs' || layout.views.length !== 1) return null;
+    managerView = await query('views.inspect', { view: layout.views[0] }); return managerView.contribution;
+  }).toBe('manager');
   const frame = (id: string) => page.locator(`[data-plugin-frame="${id}"]`).frameLocator('iframe');
   const manager = frame(managerView.view);
   await manager.getByRole('button', { name: 'Scenarios', exact: true }).click();

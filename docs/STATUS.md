@@ -29,9 +29,9 @@ written deletion condition. Internal pieces are not reported as milestones.
 
 | # | Milestone (user flow) | Replaces / deletes | State |
 | --- | --- | --- | --- |
-| M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Ordinary Manager preparation and real-R flow verified; default entry pending |
+| M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Ordinary scientific flow verified; default entry implemented, native/browser checks pending; delivery remains |
 | M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Backend done; view not started |
-| M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Not verified |
+| M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Same-instance lifecycle recovery missing; not verified |
 | M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Not started |
 | M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Branch checkpoint via Agent verified; Studio UI not started |
 | M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Not started |
@@ -60,10 +60,21 @@ artifact reuse and limits; browser evidence is retained beside it. Current R and
 Editor native artifacts were reused, and Files was built once through the primary
 workspace cache. This is integration evidence, not a new independent-source build.
 
-Next: connect ordinary project startup/default scenario delivery, then retire the
-fixed scientific default path. `rho workbench` still launches the fixed composition;
-the new starter requires installed packages in the plugin-only workspace. No user
-Host was replaced and no installation or publication ran.
+Default entry is now implemented in source: `rho workbench` selects the ordinary
+plugin profile, accepts project selection in the browser, and offers installed
+standalone UI views in an empty window. Opening a view retains its original
+activation and view requests before dispatch. The startup model/window checks
+pass (25 frontend cases), including no fixed Studio construction in ordinary
+startup; the updated native Host and browser path remain pending.
+Existing fixed-composition acceptance explicitly uses `--fixed-workspace`. Remove
+that temporary reference and shell after M2–M4 replace the remaining fixed flows;
+missing plugins cannot select it as a fallback. Default package delivery remains.
+
+Restart recovery needs implementation, not just another acceptance run: current
+Host drain closes views and releases instances; released identities cannot be
+resurrected. Separate confirmed Host suspension from explicit instance release
+before claiming same-instance/task recovery. Browser reload evidence does not
+cover that boundary. No user Host was replaced, installation or publication ran.
 
 ### Agent migration: current state
 

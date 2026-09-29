@@ -46,7 +46,7 @@ async function startHost(extra: string[] = []) {
       join(directory, "next.sqlite"),
       "--project",
       join(directory, "中文项目"),
-      "workbench",
+      "--fixed-workspace", "workbench",
       ...extra,
     ],
     { stdio: ["ignore", "pipe", "pipe"] },

@@ -44,7 +44,7 @@ try{
   host=spawn(binary,['--database',database,'--project',project,'workbench'],{stdio:['ignore','pipe','pipe']});
   url=new URL(await new Promise((done,reject)=>{
     let output='',errors='';const timer=setTimeout(()=>reject(new Error(`Disposable formatting Host startup timed out: ${errors}`)),90000);
-    host.stderr.on('data',chunk=>errors+=chunk);host.stdout.on('data',chunk=>{output+=chunk;const found=output.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[a-z0-9]+/);if(found){clearTimeout(timer);done(found[0]);}});
+    host.stderr.on('data',chunk=>errors+=chunk);host.stdout.on('data',chunk=>{output+=chunk;const found=output.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/);if(found){clearTimeout(timer);done(found[0]);}});
     host.once('exit',code=>{clearTimeout(timer);reject(new Error(`Disposable formatting Host exited ${code}: ${errors}`));});
   }));
   const instance=(await invoke('plugins.activate',{revision:snapshot.revision,artifact:snapshot.artifacts[0],target:'aarch64-apple-darwin',alias:'formatter',

@@ -45,7 +45,7 @@ test.beforeAll(async () => {
     let output = "", errors = "";
     const timer = setTimeout(() => reject(new Error(`Preview Host startup timed out: ${errors}`)), 40000);
     process_.stderr!.on("data", b => errors += b);
-    process_.stdout!.on("data", b => { output += b; const found = output.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[a-z0-9]+/); if (found) { clearTimeout(timer); done(found[0]); } });
+    process_.stdout!.on("data", b => { output += b; const found = output.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/); if (found) { clearTimeout(timer); done(found[0]); } });
     process_.once("exit", code => { clearTimeout(timer); reject(new Error(`Preview Host exited ${code}: ${errors}`)); });
   }));
   const build = await invoke("plugins.build",{revision:installed.revision,timeout_ms:20000});

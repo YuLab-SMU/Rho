@@ -47,7 +47,7 @@ test.beforeAll(async () => {
   });
   await new Promise<void>(resolve => model.listen(0, "127.0.0.1", resolve));
   endpoint = `http://127.0.0.1:${(model.address() as { port: number }).port}`;
-  host = spawn(resolve("../target/debug/rho"), ["--database", join(directory, "state.sqlite"), "--project", project, "workbench", ...((process.env.RHO_BROWSER_DEV_ASSETS || process.env.RHO_COMPONENT_BROWSER_DEV_ASSETS) ? ["--dev-assets", resolve((process.env.RHO_BROWSER_DEV_ASSETS || process.env.RHO_COMPONENT_BROWSER_DEV_ASSETS)!)] : [])], { env: { ...process.env, RHO_COMPONENT_BROWSER_KEY: process.env.RHO_COMPONENT_BROWSER_REAL_MODEL ? process.env.RHO_COMPONENT_BROWSER_SECRET : "fixture-only" }, stdio: ["ignore", "pipe", "pipe"] });
+  host = spawn(resolve("../target/debug/rho"), ["--database", join(directory, "state.sqlite"), "--project", project, "--fixed-workspace", "workbench", ...((process.env.RHO_BROWSER_DEV_ASSETS || process.env.RHO_COMPONENT_BROWSER_DEV_ASSETS) ? ["--dev-assets", resolve((process.env.RHO_BROWSER_DEV_ASSETS || process.env.RHO_COMPONENT_BROWSER_DEV_ASSETS)!)] : [])], { env: { ...process.env, RHO_COMPONENT_BROWSER_KEY: process.env.RHO_COMPONENT_BROWSER_REAL_MODEL ? process.env.RHO_COMPONENT_BROWSER_SECRET : "fixture-only" }, stdio: ["ignore", "pipe", "pipe"] });
   url = await new Promise<string>((resolve, reject) => {
     let output = "", errors = "";
     const timer = setTimeout(() => reject(new Error(`Host startup: ${errors}`)), 40000);

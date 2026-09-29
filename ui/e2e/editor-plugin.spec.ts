@@ -35,7 +35,7 @@ test.beforeAll(async()=>{
   const filesPackage=snapshot(filesPath,'aarch64-apple-darwin'),editorPackage=snapshot(editorPath,'aarch64-apple-darwin');
   process_=spawn(binary,['--database',database,'--project',project,'workbench'],{stdio:['ignore','pipe','pipe']});
   url=new URL(await new Promise<string>((done,reject)=>{let output='',errors='';const timer=setTimeout(()=>reject(new Error(`Editor Host startup timed out: ${errors}`)),90000);
-    process_.stderr!.on('data',bytes=>errors+=bytes);process_.stdout!.on('data',bytes=>{output+=bytes;const found=output.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[a-z0-9]+/);if(found){clearTimeout(timer);done(found[0]);}});
+    process_.stderr!.on('data',bytes=>errors+=bytes);process_.stdout!.on('data',bytes=>{output+=bytes;const found=output.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/);if(found){clearTimeout(timer);done(found[0]);}});
     process_.once('exit',code=>{clearTimeout(timer);reject(new Error(`Editor Host exited ${code}: ${errors}`));});}));
   files=(await invoke('plugins.activate',{revision:filesPackage.revision,artifact:filesPackage.artifacts[0],target:'aarch64-apple-darwin',alias:'files',configuration:{}})).instance;
   editor=(await invoke('plugins.activate',{revision:editorPackage.revision,artifact:editorPackage.artifacts[0],target:'aarch64-apple-darwin',alias:'editor',configuration:{}})).instance;

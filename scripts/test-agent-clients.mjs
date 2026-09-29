@@ -100,7 +100,7 @@ async function run(options) {
     .slice(0, 2000);
   const report = data => console.log(safe(JSON.stringify(data)));
   const host = spawn(options.binary, ["--database", path.join(dir, "state.sqlite"),
-    "--project", project, "workbench", "--url-file", launchFile], {
+    "--project", project, "--fixed-workspace", "workbench", "--url-file", launchFile], {
     cwd: project, stdio: ["ignore", "pipe", "pipe"],
   });
   host.stdout.on("data", () => {});

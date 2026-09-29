@@ -18,7 +18,7 @@ test.beforeAll(async () => {
     "--database", join(directory, "records.sqlite"),
     "--project", project,
     "--r-home", rHome,
-    "workbench",
+    "--fixed-workspace", "workbench",
   ], { stdio: ["ignore", "pipe", "pipe"] });
   url = await new Promise<string>((accept, reject) => {
     let output = "", errors = "";

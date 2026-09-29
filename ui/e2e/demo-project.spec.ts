@@ -20,7 +20,7 @@ async function startHost() {
   );
   host = spawn(
     resolve("../target/debug/rho"),
-    ["--database", join(directory, "records.sqlite"), "--ark", ark, "--r-home", rHome, "workbench"],
+    ["--database", join(directory, "records.sqlite"), "--ark", ark, "--r-home", rHome, "--fixed-workspace", "workbench"],
     {
       stdio: ["ignore", "pipe", "pipe"],
       env: { ...process.env, RHO_DEMO_PROJECT: project, XDG_DATA_HOME: join(directory, "app-data") },

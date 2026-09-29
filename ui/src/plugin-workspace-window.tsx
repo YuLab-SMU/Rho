@@ -6,6 +6,7 @@ import { pluginLayoutDocument, pluginLayoutModel, pluginLayoutViews, namePluginL
 import { PluginLayoutHost } from './plugin-layout-host';
 import { Modal } from "./primitives";
 import { mountPluginFrame } from './plugin-frame';
+import { PluginLauncherPanel } from './plugin-launcher-panel';
 
 function ConnectedFrame({ client, project, connection, failed, refresh }: {
   client: HostClient; project: string; connection: PluginViewConnection; failed(error: string): void; refresh(): Promise<void>;
@@ -131,25 +132,56 @@ export function PluginWorkspace({ client, project, testName }: { client: HostCli
         try { owners.layout.change(pluginLayoutDocument(dock)); applied.current = owners.layout.getSnapshot().layout; void owners.layout.save().catch(error => setError(message(error))); }
         catch (error) { setError(message(error)); }
       }} />
-      {saved.saved && pluginLayoutViews(saved.layout).length === 0 && <div className="empty" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>No views are open in this window.</div>}
+      {saved.saved && pluginLayoutViews(saved.layout).length === 0 && (client.testProject
+        ? <div className="empty" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>No views are open in this window.</div>
+        : <div style={{ position: 'absolute', inset: 0, overflow: 'auto' }}><PluginLauncherPanel client={client} project={project} refresh={() => refresh.current()} /></div>)}
     </div>
   </main>;
 }
 
-export function PluginWorkspaceWindow() {
+export function PluginWorkspaceWindow({ client: provided }: { client?: HostClient }) {
   const [connection, setConnection] = useState<{ client: HostClient; project: string; testName?: string } | null>(null);
+  const [available, setAvailable] = useState<HostClient | null>(null);
+  const [path, setPath] = useState(''), [opening, setOpening] = useState(false);
   const [error, setError] = useState('');
   useEffect(() => {
     let client: HostClient | undefined, stopped = false;
     try {
-      client = HostClient.fromLocation(); const current = client;
+      client = provided ?? HostClient.fromLocation(); const current = client;
       void client.info().then(async info => {
-        if (!info.project_root) throw new Error('Select a project before opening this window.');
+        if (!info.project_root) {
+          if (current.testProject) throw new Error('Select a project before opening this test workspace.');
+          if (!stopped) setAvailable(current);
+          return;
+        }
         const test = await current.testProjectObservation(info.project_root);
         if (!stopped) setConnection({ client: current, project: info.project_root, testName: test?.project.selection.name });
       }).catch(error => { if (!stopped) setError(message(error)); });
     } catch (error) { setError(message(error)); }
     return () => { stopped = true; client?.stopReads(); };
-  }, []);
-  return connection ? <PluginWorkspace {...connection} /> : <div className="empty" role={error ? 'alert' : 'status'}>{error || 'Opening window…'}</div>;
+  }, [provided]);
+  if (connection) return <PluginWorkspace {...connection} />;
+  if (available) return <main className="plugin-start">
+    <div className="welcome-mark">rho</div><h1>Your scientific workspace</h1>
+    <p>Open a local project, then choose an installed workspace view.</p>
+    <form onSubmit={event => {
+      event.preventDefault(); setOpening(true); setError('');
+      void available.selectProject(path.trim()).then(info => {
+        if (!info.project_root) throw Error('The selected project was not opened.');
+        setConnection({ client: available, project: info.project_root });
+      }).catch(error => setError(message(error))).finally(() => setOpening(false));
+    }}>
+      <label>Absolute Project Path<input autoFocus value={path} onChange={event => setPath(event.target.value)} placeholder="/Users/…/project" disabled={opening} /></label>
+      <button className="primary" disabled={opening || !path.trim()}>Open Project</button>
+    </form>
+    <button disabled={opening} onClick={() => {
+      setOpening(true); setError('');
+      void available.selectDemoProject().then(info => {
+        if (!info.project_root) throw Error('The demo project was not opened.');
+        setConnection({ client: available, project: info.project_root });
+      }).catch(error => setError(message(error))).finally(() => setOpening(false));
+    }}>Open Rho Demo</button>
+    {opening && <p role="status">Opening project…</p>}{error && <p role="alert" className="error">{error}</p>}
+  </main>;
+  return <div className="empty" role={error ? 'alert' : 'status'}>{error || 'Opening window…'}</div>;
 }

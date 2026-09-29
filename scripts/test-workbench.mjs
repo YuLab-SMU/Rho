@@ -85,7 +85,7 @@ async function deadline(promise, ms, message) {
   }
 }
 const watcher = fs.watch(dir);
-const child = spawn(binary, [...args, "workbench", "--url-file", urlFile], {
+const child = spawn(binary, [...args, "--fixed-workspace", "workbench", "--url-file", urlFile], {
   stdio: ["ignore", "pipe", "pipe"],
 });
 let stderr = "";

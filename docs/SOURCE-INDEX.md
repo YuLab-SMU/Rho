@@ -527,6 +527,10 @@ Checks:
   Applies to: `crates/contract/**`, `scripts/test-frontend-boundaries.mjs`, `sdk/**`, `ui/**`.
 - `studio.browser` (L2): `["npm","run","test:browser","--prefix","ui"]`
   Applies to: `crates/contract/**`, `sdk/**`, `ui/**`.
+- `studio.plugin-launcher` (L1): `["npm","run","test","--prefix","ui","--","tests/plugin-launcher.test.ts","tests/plugin-workspace-window.test.tsx","tests/plugin-window-client.test.ts","tests/plugin-window-views.test.ts","tests/fixed-studio-lifecycle.test.ts"]`
+  Applies to: `ui/src/context.ts`, `ui/src/host-client.ts`, `ui/src/plugin*`, `ui/tests/fixed-studio-lifecycle.test.ts`, `ui/tests/plugin*`.
+- `studio.plugin-startup` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-startup.spec.ts"]`
+  Applies to: `crates/cli/**`, `crates/workbench/**`, `ui/e2e/plugin-startup.spec.ts`, `ui/src/plugin*`, `ui/src/style.css`.
 - `studio.types` (L1): `["npm","run","typecheck","--prefix","ui"]`
   Applies to: `crates/contract/**`, `sdk/**`, `ui/**`.
 - `studio.unit` (L1): `["npm","run","test","--prefix","ui"]`

@@ -18,9 +18,11 @@ target/debug/rho workbench
 ```
 
 Open the private URL printed by the command and select a project directory.
-Studio discovers installed R and Ark and provides configuration in Settings.
-Files remain available without usable R. Runtimes and R packages are not installed
-automatically.
+Choose an installed workspace view, then use **Plugins → Scenarios → New R
+workspace** to compose the scientific tools with existing R and Ark paths.
+Startup uses the ordinary plugin composition. Packages must currently be imported
+explicitly; an empty repository shows recovery instructions. Runtimes and packages
+are not installed automatically. See [Operations](docs/OPERATIONS.md) for setup.
 
 For a guided real project, use **Open Rho Demo** on the welcome page, or launch
 it directly after building:
@@ -29,7 +31,8 @@ it directly after building:
 target/debug/rho --demo-project workbench
 ```
 
-The demo is a materialized Gapminder project. Run `run_demo.R` in Editor to
+The demo is a materialized Gapminder project. After preparing a scientific scenario,
+run `run_demo.R` in Editor to
 populate real R objects, Plots output, generated files and an HTML report for
 Viewer. It uses base R and does not install packages or send Agent requests.
 

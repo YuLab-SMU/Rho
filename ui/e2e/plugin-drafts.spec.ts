@@ -24,7 +24,7 @@ test.beforeAll(async()=>{
   process_=spawn(binary,['--database',database,'--project',project,'workbench'],{stdio:['ignore','pipe','pipe']});
   url=new URL(await new Promise<string>((done,reject)=>{
     let output='',errors='';const timer=setTimeout(()=>reject(new Error(`Draft fixture startup timed out: ${errors}`)),90000);
-    process_.stderr!.on('data',bytes=>errors+=bytes);process_.stdout!.on('data',bytes=>{output+=bytes;const found=output.match(/http:\/\/127\.0\.0\.1:\d+\/#token=[a-z0-9]+/);if(found){clearTimeout(timer);done(found[0]);}});
+    process_.stderr!.on('data',bytes=>errors+=bytes);process_.stdout!.on('data',bytes=>{output+=bytes;const found=output.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/);if(found){clearTimeout(timer);done(found[0]);}});
     process_.once('exit',code=>{clearTimeout(timer);reject(new Error(`Draft fixture exited ${code}: ${errors}`));});
   }));
   instance=(await invoke('plugins.activate',{revision:installed.revision,artifact:installed.artifacts[0],target:'ui-web',alias:'draft',configuration:{}})).instance;

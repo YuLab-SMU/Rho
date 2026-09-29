@@ -10,15 +10,18 @@ target/debug/rho workbench
 ```
 
 Open the full private URL printed by the command. Select an absolute project
-directory, then use Studio to edit scripts, run R, inspect objects and view plots.
-Node is needed for frontend development, not for running the embedded application.
+directory, then choose an installed standalone workspace view. Open **Plugins**
+to prepare the scientific scenario described below. Startup does not discover R,
+install packages or fall back to the fixed scientific workspace. An empty package
+repository shows recovery instructions; import a workspace plugin explicitly
+through the recovery CLI. Node is needed for frontend development, not for running
+the embedded application.
 
-For explicit storage, runtime and project paths:
+For explicit storage and project paths:
 
 ```sh
 target/debug/rho --database /absolute/path/to/state.sqlite \
   --project /absolute/path/to/project \
-  --ark /absolute/path/to/ark --r-home /absolute/path/to/R/home \
   workbench --url-file /absolute/path/to/private-launch-url
 ```
 
@@ -30,7 +33,7 @@ ends the R processes this Host started; an exiting Host cannot leave them reacha
 and they are not reattached by a later one. Closing a browser page cancels nothing and
 leaves R running.
 
-### Open a plugin-only development workspace
+### Ordinary plugin startup and scientific scenario
 
 Use a separate project and database directory when testing plugin composition:
 
@@ -39,10 +42,13 @@ target/debug/rho --database /absolute/path/to/test-state/state.sqlite \
   --project /absolute/path/to/test-project --plugins-only workbench
 ```
 
-This explicit development mode opens the generic plugin window and does not
+`workbench` uses this composition by default; `--plugins-only` is still an explicit
+selection for other Host edges. It opens the generic plugin window and does not
 discover or start R, import defaults or construct fixed scientific owners. The
-project must already exist. Install packages through the ordinary recovery CLI,
-then activate exact revisions and open views through the shared Host ports.
+project must already exist; omit `--project` in Workbench to choose it in the
+browser. Install packages through the ordinary recovery CLI. The empty-window
+selector opens any installed standalone UI contribution using exact artifacts and
+the shared activation/view ports; it gives no special treatment to Manager.
 `--plugins-only` also applies to `session`, `mcp` and native `invoke`; standalone
 read-only queries use their normal observer, while live plugin reads connect to
 the running Host. It cannot be combined with fixed R/remote/Skill startup flags.
@@ -57,8 +63,17 @@ in Console. Files opens Editors bound to that same R provider, so **Save and Run
 can feed Console, Objects and Plots. Missing packages remain missing until an
 explicit import. If preparation loses a reply, inspect its original request before
 continuing; the retained partial instances are not recreated automatically.
-This starter currently requires the plugin-only workspace and installed packages;
-the ordinary default launch path is still under development.
+The starter requires installed packages. Default package delivery is still under
+development. A browser reload retains the window and original requests. After a
+Host restart, historical instances remain unavailable: same-instance restart
+recovery is not implemented yet. Startup does not create replacements or replay
+scientific operations.
+
+The old fixed scientific composition is available only as the temporary development
+reference: `rho --fixed-workspace ... workbench`. Its R/remote/Skill startup flags
+apply only there. This flag and the fixed browser shell will be removed after their
+remaining Agent/context/recovery flows have ordinary-plugin replacements; it is not
+a fallback for missing or failed plugins.
 
 The native development ports `plugins.test_create`, `plugins.test_project`,
 `plugins.test_projects`, `plugins.test_operation` and `plugins.test_stop` create,
@@ -983,7 +998,8 @@ contracts are in the [public protocol](../sdk/plugin-protocol/README.md#archive-
 The ordinary management UI is assembled with
 `node scripts/build-manager-plugin.mjs DEST`, using a new directory outside the
 checkout and existing build tools. Snapshot/import it through the same package
-CLI, activate its exact `ui-web` artifact, and open contribution `manager` with
+CLI, then select **Plugins** in the empty workspace and click **Open view**.
+For a scripted launch, activate its exact `ui-web` artifact and open contribution `manager` with
 configuration/state `{}` through `windows.open_view`. For an existing window,
 provide an observed tab-group ID and layout version. The manager has no private
 Host token, database access or delivery privilege; its explicit delegation scopes

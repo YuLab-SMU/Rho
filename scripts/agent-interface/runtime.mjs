@@ -52,7 +52,7 @@ export class FixtureHost {
   async start(project, skillsManifest=null) {
     this.project=fs.realpathSync(project);this.database=path.join(this.directory,'state','next.sqlite');
     const urlFile=path.join(this.directory,'launch.url');
-    const args=['--database',this.database,'--project',this.project,'--ark',this.options.ark,'--r-home',this.options.rHome,...(skillsManifest?['--host-skills',skillsManifest]:[]),'workbench','--url-file',urlFile];
+    const args=['--database',this.database,'--project',this.project,'--ark',this.options.ark,'--r-home',this.options.rHome,...(skillsManifest?['--host-skills',skillsManifest]:[]),'--fixed-workspace', 'workbench','--url-file',urlFile];
     this.child=spawn(this.options.binary,args,{stdio:['ignore','pipe','pipe']});
     const log=fs.createWriteStream(path.join(this.options.evidence,'host.stderr.log'),{mode:0o600});this.child.stderr.pipe(log);this.child.stdout.resume();
     this.startError=null;this.exit=new Promise(resolve=>{this.child.once('exit',(code,signal)=>resolve({code,signal}));this.child.once('error',error=>{this.startError=error;resolve({error:error.message});});});

@@ -642,9 +642,6 @@ pub async fn serve_with_assets(
     dev_assets: Option<&Path>,
 ) -> Result<(), String> {
     let plugins_only = matches!(profile.runtime, rho_host::RuntimeConfiguration::Plugins);
-    if plugins_only && project.is_none() {
-        return Err("Plugin workspace launch requires an explicit project".into());
-    }
     let application = Arc::new(rho_host::ApplicationStore::open(
         &profile.database.with_extension("studio.sqlite"),
     )?);
@@ -898,6 +895,21 @@ mod tests {
         );
         assert!(!temp.path().join("runtime").exists());
         assert!(!temp.path().join("environment").exists());
+    }
+
+    #[tokio::test]
+    async fn plugin_workspace_can_wait_for_an_explicit_project_selection() {
+        let (temp, state, app) = fixture_with_runtime(RuntimeConfiguration::Plugins).await;
+        let selected = state.hosting.write().await.selected.take().unwrap();
+        selected.host.drain().await;
+        drop(selected);
+        let info = json_body(request(&app, "/api/info", None).await).await;
+        assert!(info["project_root"].is_null());
+        assert_eq!(info["runtime"], "plugins");
+        let opened = json_body(request(&app, "/api/project", Some(json!({"project_root":temp.path().join("project")}))).await).await;
+        assert_eq!(opened["runtime"], "plugins");
+        assert!(opened["project_root"].is_string());
+        assert!(!temp.path().join("runtime").exists());
     }
 
     #[tokio::test]

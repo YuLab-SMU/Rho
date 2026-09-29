@@ -18,6 +18,7 @@ function fixture() {
   const record = (id: string) => ({ view: id, instance: identity, project: 'project', principal: 'principal', window: 'window', contribution: id, closed: false, state: {}, configuration: {}, state_version: 0 });
   let layout: PluginWindowLayout = { window: 'window', project: 'project', principal: 'principal', version: 1, layout: { kind: 'tabs', id: 'main', views: ['one'], selected: 'one' } };
   const query = vi.fn(async (_project: string, capability: string, args: any) => {
+    if (capability === 'plugins.list') return { status: 'ready', data: { items: [], next: null, total: 0 }, notices: [] };
     const data = capability === 'windows.layout' ? structuredClone(layout) : capability === 'views.connection' ? { view: record(args.view), connection: args.view, call_token: 'private', asset_token: 'asset', entrypoint: 'index.html', grants: [], next_sequence: 1 } : capability === 'views.inspect' ? record(args.view) : { summary: { revision: 'revision' }, manifest: { id: 'example', views: [{ id: 'one', title: 'One' }, { id: 'two', title: 'Two' }] } };
     return { status: 'ready', data, notices: [] };
   });
@@ -26,7 +27,7 @@ function fixture() {
     layout = { ...layout, version: layout.version + 1, layout: { kind: 'empty' } };
     return { operation: { client_request_id: input.client_request_id, capability: input.capability, operation_id: 'close' }, status: 'succeeded', outcome: 'succeeded', output: { ...record(input.arguments.view), closed: true } };
   });
-  const client = { windowId: 'window', query, invoke } as unknown as HostClient;
+  const client = { windowId: 'window', query, invoke, readState: async (_project: string, key: string) => ({ key, version: null, value: null }) } as unknown as HostClient;
   return { client, query, invoke, change: (value: PluginWindowLayout['layout']) => { layout = { ...layout, layout: value, version: layout.version + 1 }; } };
 }
 it('mounts new contributed views without replacing the existing document and retains hidden views', async () => {
@@ -51,6 +52,8 @@ it('disposes a frame only after the original close is confirmed and preserves it
   await waitFor(() => expect(screen.queryByLabelText('Draft one')).toBeNull());
   expect(mounted.stops).toEqual(['one']); expect(f.invoke.mock.calls[0][1].client_request_id).toBe(f.invoke.mock.calls[1][1].client_request_id);
   expect(screen.getByText('No views are open in this window.').isConnected).toBe(true);
+  await screen.findByText(/No standalone workspace views are installed/);
+  expect(screen.queryByRole('alert')).toBeNull();
 });
 
 it('refreshes a committed scenario immediately while keeping the original live document', async () => {
