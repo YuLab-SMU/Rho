@@ -1,4 +1,4 @@
-import type { AgentContextSelection } from '../sdk/index.js';
+import type { AgentContextSelection, ComponentAgentRun } from '../sdk/index.js';
 import type { CapabilityKey, ContextContribution, ContextPage, ContextPreview, ContextReference,
   InstanceRef, JsonValue, PluginInspection, PluginInstancePage } from '../public/plugin-protocol/index.js';
 import { type Client, json, same } from './operations.js';
@@ -122,6 +122,19 @@ export class ContextPicker {
       data.contexts.some(value => typeof value.title !== 'string' || typeof value.description !== 'string' || typeof value.text !== 'string' || bytes(value.text) > 16384 || !value.selection))
       throw Error('The saved context does not match this original message.');
     return data.contexts;
+  }
+  async originalRho(task: string, run: string): Promise<CapturedContext[]> {
+    const capability = { id: 'agent.model.run.get', version: 1 };
+    const { data } = await this.read<ComponentAgentRun>(capability, {
+      binding: { project: this.client.view.project, provider: this.client.view.instance, capability, target: null },
+      arguments: { run_id: run }, preconditions: null,
+    });
+    const sources = data.context?.sources ?? [];
+    if (data.run_id !== run || data.request.conversation_id !== task || !Array.isArray(sources) || sources.length > 16 || bytes(JSON.stringify(sources)) > 65536 ||
+      !same(sources.map(value => value.selection), data.request.sources ?? []) ||
+      sources.some(value => value.truncated || typeof value.text !== 'string' || bytes(value.text) > 16384))
+      throw Error('The saved context does not match this original Rho message.');
+    return sources.map(({ selection, title, description, text, native_data }) => ({ selection, title, description, text, data: native_data }));
   }
   selection(source: ContextSource, preview: ContextPreview, inclusion: JsonValue): AgentContextSelection {
     if (preview.truncated || preview.resources.length) throw Error('This Agent input needs complete text. Choose another inclusion or keep the draft for later.');

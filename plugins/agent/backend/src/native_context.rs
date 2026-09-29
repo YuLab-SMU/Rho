@@ -51,6 +51,26 @@ pub(crate) async fn capture(
     if draft.content.context.is_empty() {
         return Ok(vec![]);
     }
+    resolve(metadata, call, caller, &draft.content.context, host).await
+}
+
+/// Shared source resolution for native and Rho tasks. The caller owns its task
+/// and must atomically retain these bytes before consuming a submitted draft.
+pub(crate) async fn resolve(
+    metadata: &Metadata,
+    call: &PluginCall,
+    caller: &PluginViewCaller,
+    selections: &[AgentContextSelection],
+    host: &HostCallClient,
+) -> Result<Vec<AgentNativeContextSnapshot>, Failure> {
+    if selections.is_empty() {
+        return Ok(vec![]);
+    }
+    if selections.len() > 20 {
+        return Err(Failure::invalid(
+            "Too many selected sources; the draft is retained",
+        ));
+    }
     require(
         metadata,
         call,
@@ -58,7 +78,7 @@ pub(crate) async fn capture(
         &["plugins.read".into()].into(),
     )?;
     let mut captures = vec![];
-    for selection in &draft.content.context {
+    for selection in selections {
         if selection.source != "plugin" {
             return Err(Failure::invalid(
                 "Select a contributed source before sending; the original draft is retained",

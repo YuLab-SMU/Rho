@@ -214,7 +214,7 @@ impl Runs {
     ) -> Result<Value, Failure> {
         let args: RunModel = decode(&call.arguments)?;
         let at = now();
-        let actor = metadata.actor(caller, at);
+        let actor = metadata.actor(caller.clone(), at);
         let mode = args
             .mode
             .map(Into::into)
@@ -227,7 +227,7 @@ impl Runs {
             model_settings_version: args.model_settings_version,
             window: actor.window().clone(),
             text: args.text,
-            sources: vec![],
+            sources: args.sources,
             assets: None,
             continuation: None,
             grant: ComponentAgentGrant {
@@ -251,6 +251,42 @@ impl Runs {
                 binding: call.binding.clone(),
                 r: selected_r.clone(),
             };
+        let previous = metadata
+            .owner
+            .store
+            .component_run_by_request(&metadata.scope, &request.request_id)?;
+        let captured_context = if let Some(previous) = &previous {
+            // An original retry observes the bytes already admitted. Current
+            // provider state and optional source grants cannot replace them.
+            previous.run.context.clone()
+        } else if request.sources.is_empty() {
+            None
+        } else {
+            if request.sources.len() > 16 {
+                return Err(Failure::invalid(
+                    "Rho tasks accept up to 16 context references",
+                ));
+            }
+            let captures =
+                crate::native_context::resolve(metadata, call, &caller, &request.sources, &host)
+                    .await?;
+            Some(ComponentAgentContext {
+                history: None,
+                sources: captures
+                    .into_iter()
+                    .map(|capture| ComponentSourceSnapshot {
+                        selection: capture.selection,
+                        title: capture.title,
+                        description: capture.description,
+                        text: capture.text,
+                        native_data: capture.data,
+                        truncated: false,
+                        observations: vec![],
+                        evidence: vec![],
+                    })
+                    .collect(),
+            })
+        };
         let (admitted, guard, captured_key) = {
             let mut live = self.live.lock().map_err(|_| unavailable())?;
             let repeated = metadata
@@ -285,7 +321,15 @@ impl Runs {
             } else {
                 None
             };
-            let admitted = metadata.owner.start_native(&actor, request, origin, at)?;
+            let admitted = if let Some(context) = captured_context {
+                metadata
+                    .owner
+                    .start_native_captured(&actor, request, origin, context, now())?
+            } else {
+                metadata
+                    .owner
+                    .start_native(&actor, request, origin, now())?
+            };
             if admitted.repeated {
                 drop(live);
                 return encoded(self.observe(metadata, admitted.run)?);

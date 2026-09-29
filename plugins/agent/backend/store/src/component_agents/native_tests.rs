@@ -376,3 +376,151 @@ fn native_capture_cannot_change_with_a_retained_request_digest() {
         encode(&before).unwrap()
     );
 }
+
+#[test]
+fn native_context_admission_consumes_matching_draft_and_retains_original_payload() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("agent.sqlite");
+    let store = Arc::new(AgentStore::open(&path).unwrap());
+    let (owner, actor, original) = setup(store.clone());
+    let conversation = owner
+        .create(&actor, "context-task", ComponentAgentProfile::Project, 4)
+        .unwrap();
+    let selection = rho_agent_api::AgentContextSelection {
+        source: "plugin".into(),
+        label: "Captured source".into(),
+        reference: serde_json::json!({"version":7}),
+        inclusion: "{\"kind\":\"selection\"}".into(),
+    };
+    let draft = AgentDraftContent {
+        text: "Explain captured text".into(),
+        context: vec![selection.clone()],
+        assets: vec![],
+    };
+    owner
+        .save_draft_content(
+            &actor,
+            "context-task",
+            conversation.draft_version,
+            draft.clone(),
+            None,
+            5,
+        )
+        .unwrap();
+    let saved = store
+        .component_conversation(actor.scope(), "context-task")
+        .unwrap()
+        .unwrap();
+    let request = ComponentAgentStart {
+        request_id: "context-request".into(),
+        conversation_id: "context-task".into(),
+        conversation_version: saved.version,
+        text: draft.text.clone(),
+        sources: vec![selection.clone()],
+        ..original.run.request
+    };
+    let context = ComponentAgentContext {
+        history: None,
+        sources: vec![ComponentSourceSnapshot {
+            selection,
+            title: "Source".into(),
+            description: "Version 7".into(),
+            text: "Original 中文 Ω".into(),
+            native_data: serde_json::json!({"version":7}),
+            truncated: false,
+            observations: vec![],
+            evidence: vec![],
+        }],
+    };
+    let captured_origin = ComponentNativeRunOrigin {
+        operation: OperationId::new("context-operation").unwrap(),
+        request: RequestId::new("context-parent").unwrap(),
+        ..origin()
+    };
+    let mut changed = context.clone();
+    changed.sources[0].text = "X".repeat(65537);
+    assert!(
+        owner
+            .start_native_captured(&actor, request.clone(), captured_origin.clone(), changed, 6)
+            .is_err()
+    );
+    assert_eq!(
+        encode(
+            &store
+                .component_conversation(actor.scope(), "context-task")
+                .unwrap()
+                .unwrap()
+                .draft_content
+        )
+        .unwrap(),
+        encode(&draft).unwrap()
+    );
+    let admitted = owner
+        .start_native_captured(
+            &actor,
+            request.clone(),
+            captured_origin.clone(),
+            context.clone(),
+            7,
+        )
+        .unwrap();
+    let after = store
+        .component_conversation(actor.scope(), "context-task")
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        encode(&after.draft_content).unwrap(),
+        encode(&AgentDraftContent::default()).unwrap()
+    );
+    assert_eq!(after.draft_version, saved.draft_version + 1);
+    let next = AgentDraftContent {
+        text: "Keep next".into(),
+        ..Default::default()
+    };
+    owner
+        .save_draft_content(
+            &actor,
+            "context-task",
+            after.draft_version,
+            next.clone(),
+            None,
+            8,
+        )
+        .unwrap();
+    drop(owner);
+    drop(store);
+    let store = Arc::new(AgentStore::open(&path).unwrap());
+    let owner = ComponentAgentOwner::new(store.clone(), "reopened".into());
+    let mut changed = context.clone();
+    changed.sources[0].text = "Replacement".into();
+    assert!(matches!(
+        owner.start_native_captured(&actor, request.clone(), captured_origin.clone(), changed, 9),
+        Err(ComponentTaskError::RequestConflict)
+    ));
+    let repeated = owner
+        .start_native_captured(
+            &actor,
+            request,
+            captured_origin.clone(),
+            context.clone(),
+            10,
+        )
+        .unwrap();
+    assert!(repeated.repeated);
+    assert_eq!(repeated.run.run.run_id, admitted.run.run.run_id);
+    assert_eq!(
+        encode(&repeated.run.run.context).unwrap(),
+        encode(&Some(context)).unwrap()
+    );
+    assert_eq!(
+        encode(
+            &store
+                .component_conversation(actor.scope(), "context-task")
+                .unwrap()
+                .unwrap()
+                .draft_content
+        )
+        .unwrap(),
+        encode(&next).unwrap()
+    );
+}

@@ -178,8 +178,8 @@ reopening reads them and never dispatches a replacement. Admission captures an
 available key before changing the draft and atomically consumes only matching
 input. Later typing survives delayed acknowledgements and original-request replay.
 `agent.model.history` pages up to 20 scoped summaries without starting a model or
-changing stored interrupted work. The current Rho composer submits text only;
-attachments, contributed context, tool selection and continuation still require
+changing stored interrupted work. The Rho composer submits text and explicit
+contributed references; attachments, tool selection and continuation still require
 composition. Renderer fixtures establish UI behavior, not native Host acceptance.
 
 Generate declarations with `node plugins/agent/generate-sdk.mjs`; add `--check` to
@@ -284,4 +284,13 @@ Saved references remain removable and inspectable when a source changes. Send
 revalidates them through the backend capture path. The message's **Sent context**
 action reads the original Agent-owned capture, including its source details,
 without querying the current provider. These renderer/model fixtures use synthetic
-peers; actual Editor-to-Agent/Host and Rho task input remain pending.
+peers; actual Editor-to-Agent/Host acceptance remains pending.
+
+Rho uses the same source resolver before model admission. Its owner atomically
+stores `ComponentAgentContext` with the original request and matching draft
+consumption; partial/changed sources and missing keys preserve the saved draft.
+The production Rig driver receives the retained source bytes, and original retries
+read that capture without contacting the provider. The common picker edits each
+native/Rho task through its own draft owner; a delayed Send cannot remove newer
+reference selections. Sent context inspects the original run. Native framed and
+store acceptance for this new composition remains pending.

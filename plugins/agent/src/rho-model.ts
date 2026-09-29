@@ -109,15 +109,15 @@ export class RhoModel {
     this.runs.set(run.run_id, run);
     const pending = this.state.pending.find(p => p.kind === 'run' && p.intent.request === run.request.request_id);
     if (!pending) return false;
-    const args = (pending.intent.arguments as unknown as { arguments: { text: string; conversation_id: string; conversation_version: number; model_settings_version: number } }).arguments;
+    const args = (pending.intent.arguments as unknown as { arguments: { text: string; sources?: AgentDraftContent['context']; conversation_id: string; conversation_version: number; model_settings_version: number } }).arguments;
     if (run.request.conversation_id !== pending.task || run.request.text !== args.text || run.request.conversation_version !== args.conversation_version ||
-      run.request.model_settings_version !== args.model_settings_version || run.request.window.window_id !== this.client.view.window || run.request.window.incarnation !== `view:${this.client.view.view}`)
+      run.request.model_settings_version !== args.model_settings_version || !same(run.request.sources ?? [], args.sources ?? []) || run.request.window.window_id !== this.client.view.window || run.request.window.incarnation !== `view:${this.client.view.view}`)
       throw Error('The Rho run does not match its original Send.');
     pending.run = run.run_id;
     if (pending.consumed) return false;
     const local = this.state.drafts[pending.task];
     if (local && local.base === pending.draftVersion) {
-      if (local.revision === pending.revision && local.content.text === args.text) { local.content = empty(); local.dirty = false; }
+      if (local.revision === pending.revision && same(local.content, { text: args.text, assets: [], context: args.sources ?? [] })) { local.content = empty(); local.dirty = false; }
       local.base = pending.draftVersion + 1; local.conflict = null;
     }
     pending.consumed = true; return true;
@@ -166,7 +166,8 @@ export class RhoModel {
     if (this.submissions.has(task) || this.state.pending.some(p => p.task === task && p.kind === 'run')) throw Error('Inspect the original Send before submitting again.');
     this.submissions.add(task);
     try {
-      if (this.draft(task).assets.length || this.draft(task).context.length) throw Error('These sources are not available to this Rho task yet. The draft is retained.');
+      if (this.draft(task).assets.length) throw Error('These attachment sources are not available to this Rho task yet. The draft is retained.');
+      if (this.draft(task).context.length > 16) throw Error('Rho tasks accept up to 16 context references. The draft is retained.');
       await this.flush(task);
       this.settings = await this.read<ComponentModelSettings>('agent.model.settings', {});
       if (!this.settings.enabled || !this.settings.connection) throw Error('Choose and enable a model in Settings before sending.');
@@ -177,7 +178,7 @@ export class RhoModel {
         throw Error('Confirm the saved draft and original task state before sending.');
       const request = crypto.randomUUID();
       await this.issue('run', task, { request_id: request, conversation_id: task, conversation_version: conversation.version,
-        model_settings_version: this.settings.version, text: local.content.text, r: null, mode: null }, local.revision, request);
+        model_settings_version: this.settings.version, text: local.content.text, sources: structuredClone(local.content.context), r: null, mode: null }, local.revision, request);
     } finally { this.submissions.delete(task); }
   }
   async stop(task: string) {

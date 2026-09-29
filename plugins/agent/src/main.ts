@@ -159,7 +159,7 @@ function render() {
   get('archive-task').textContent = detail?.summary.task.archived ? 'Unarchive' : 'Archive';
 }
 function renderRho(id: string) {
-  context?.render(null, false, true);
+
   const conversation = rho.conversations.get(id), local = rho.state.drafts[id], controlled = rho.canControl(id), editable = controlled && !conversation?.archived;
   const active = conversation?.active_run_id ? rho.runs.get(conversation.active_run_id) : null;
   const running = !!active && rhoBusy(active.state), orphan = !!conversation?.active_run_id && active?.state === 'interrupted';
@@ -174,6 +174,7 @@ function renderRho(id: string) {
   if (!composing && (renderedTask !== `rho:${id}` || document.activeElement !== message || !local?.dirty)) { message.value = rho.draft(id).text; renderedTask = `rho:${id}`; }
   get('draft-status').textContent = !editable ? '' : local?.conflict ? 'Draft conflict' : local?.dirty ? 'Draft not saved yet' : 'Draft saved';
   const save = get<HTMLButtonElement>('save-draft'); save.hidden = !editable || !local?.dirty || !!local.conflict; save.disabled = rho.busy || closing || rho.state.pending.some(p => p.task === id && p.kind === 'draft');
+  context?.render(id, editable, rho.busy || closing, rho);
   get('attachments').replaceChildren(); get('attachments').dataset.content = ''; get('uploads').replaceChildren(); get('uploads').dataset.content = '';
   get<HTMLButtonElement>('attach').disabled = true; get<HTMLButtonElement>('tools').disabled = true;
   const send = get<HTMLButtonElement>('send'); send.hidden = running; send.disabled = !editable || !configured || rho.busy || closing || !!local?.conflict || !!conversation?.active_run_id || !message.value.trim() || rho.state.pending.some(p => p.task === id && p.kind === 'run');
@@ -194,10 +195,11 @@ function renderRho(id: string) {
     const top = transcript.getBoundingClientRect().top, visible = [...transcript.querySelectorAll<HTMLElement>('[data-event]')].find(node => node.getBoundingClientRect().bottom > top);
     const position = visible ? {id:visible.dataset.event,offset:visible.getBoundingClientRect().top-top} : null;
     transcript.dataset.task = `rho:${id}`; transcript.dataset.content = signature; transcript.replaceChildren();
-    function block(role: string, text: string, event: string) { const node = document.createElement('div'), label = document.createElement('span'); node.className = `event ${role === 'You' ? 'user' : 'assistant'}`; node.dataset.event = event; label.className = 'role'; label.textContent = role; node.append(label, document.createTextNode(text)); transcript.append(node); }
+    function block(role: string, text: string, event: string) { const node = document.createElement('div'), label = document.createElement('span'); node.className = `event ${role === 'You' ? 'user' : 'assistant'}`; node.dataset.event = event; label.className = 'role'; label.textContent = role; node.append(label, document.createTextNode(text)); transcript.append(node); return node; }
     for (const row of rows) {
       const run = rho.runs.get(row.run_id), history = rho.transcripts.get(row.run_id);
-      block('You', run?.request.text ?? row.text_excerpt, `${row.run_id}:user`);
+      const input = block('You', run?.request.text ?? row.text_excerpt, `${row.run_id}:user`);
+      if (run?.request.sources?.length) { const sources = document.createElement('button'); sources.className = 'sent-context'; sources.textContent = 'Sent context'; sources.onclick = () => context?.inspectOriginal(id, row.run_id, 'rho'); input.append(sources); }
       if (history?.text) block('Rho', history.text, `${row.run_id}:answer`);
       block('Activity', [row.state.replaceAll('_', ' '), run?.reason, history?.gap ? 'Earlier messages unavailable' : '', history?.partial || run && history && history.cursor < run.event_cursor ? 'Partial history' : ''].filter(Boolean).join(' · '), `${row.run_id}:state`);
     }
@@ -276,7 +278,7 @@ function changedText() {
 model = new NativeAgentModel(client, render);
 rho = new RhoModel(client, model, render);
 const settings = mountSettings(client, model, track);
-context = mountContext(client, model, task => saveDraftSoon(task));
+context = mountContext(client, model, (task, kind) => saveDraftSoon(task, kind));
 message.addEventListener('compositionstart', () => { composing = true; compositionEnded = -Infinity; clearDraftTimers(); });
 message.addEventListener('compositionend', () => { composing = false; compositionEnded = performance.now(); changedText(); });
 message.addEventListener('input', changedText);

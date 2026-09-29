@@ -141,6 +141,11 @@ pub struct RunModel {
     pub model_settings_version: u64,
     #[schemars(length(min = 1, max = 32768))]
     pub text: String,
+    /// Exact user-selected contributed references. Resolved before admission;
+    /// retained content is reused for every observation of the original request.
+    #[serde(default)]
+    #[schemars(length(max = 16))]
+    pub sources: Vec<rho_agent_api::AgentContextSelection>,
     /// Optional exact R provider/session selection, supplied by the caller.
     /// Explain is read-only; Run authorizes execution in this selected session.
     #[serde(default)]

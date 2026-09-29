@@ -876,7 +876,7 @@ impl ComponentAgentOwner {
         request: ComponentAgentStart,
         now: u64,
     ) -> Result<ComponentRunAdmission, ApplicationError> {
-        self.start_with_origin(actor, request, None, now)
+        self.start_with_origin(actor, request, None, None, now)
     }
     pub fn start_native(
         &self,
@@ -887,13 +887,52 @@ impl ComponentAgentOwner {
     ) -> Result<ComponentRunAdmission, ApplicationError> {
         origin.validate()?;
         native_tools::validate_targets(&request, &origin)?;
-        self.start_with_origin(actor, request, Some(origin), now)
+        self.start_with_origin(actor, request, Some(origin), None, now)
+    }
+    /// Commit already resolved source bytes with native admission and matching
+    /// draft consumption. No source I/O or model work occurs inside this owner.
+    pub fn start_native_captured(
+        &self,
+        actor: &ComponentActor,
+        request: ComponentAgentStart,
+        origin: ComponentNativeRunOrigin,
+        context: ComponentAgentContext,
+        now: u64,
+    ) -> Result<ComponentRunAdmission, ApplicationError> {
+        origin.validate()?;
+        native_tools::validate_targets(&request, &origin)?;
+        if context.history.is_some()
+            || context.sources.len() > 16
+            || serde_json::to_vec(&context).map_err(storage)?.len() > 64 * 1024
+        {
+            return Err(ApplicationError::Budget(
+                "Selected context exceeds its capture budget".into(),
+            ));
+        }
+        if context
+            .sources
+            .iter()
+            .map(|source| &source.selection)
+            .collect::<Vec<_>>()
+            != request.sources.iter().collect::<Vec<_>>()
+            || context.sources.iter().any(|source| {
+                source.truncated
+                    || source.title.is_empty()
+                    || source.title.len() > 1024
+                    || source.description.len() > 4096
+                    || source.text.len() > 16384
+            })
+        {
+            return Err(ApplicationError::RequestConflict);
+        }
+        self.start_with_origin(actor, request, Some(origin), Some(context), now)
     }
     fn start_with_origin(
         &self,
         actor: &ComponentActor,
         request: ComponentAgentStart,
         origin: Option<ComponentNativeRunOrigin>,
+        captured_context: Option<ComponentAgentContext>,
         now: u64,
     ) -> Result<ComponentRunAdmission, ApplicationError> {
         let _guard = self.gate.lock().map_err(storage)?;
@@ -914,6 +953,9 @@ impl ComponentAgentOwner {
                     != origin.as_ref().map(|o| &o.binding)
                 || existing.native_origin.as_ref().and_then(|o| o.r.as_ref())
                     != origin.as_ref().and_then(|o| o.r.as_ref())
+                || captured_context.is_some()
+                    && component_digest(&existing.run.context)?
+                        != component_digest(&captured_context)?
             {
                 return Err(ApplicationError::RequestConflict);
             }
@@ -991,7 +1033,7 @@ impl ComponentAgentOwner {
                 created_at_ms: now,
                 updated_at_ms: now,
                 reason: None,
-                context: None,
+                context: captured_context,
                 document_versions: None,
                 recovery: None,
             },

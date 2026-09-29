@@ -4,7 +4,8 @@ import { ContextPicker, type ContextSource } from './context-model.js';
 import { same, type Client } from './operations.js';
 import type { NativeAgentModel } from './native-model.js';
 
-export function mountContext(client: Client, model: NativeAgentModel, save: (task: string) => void) {
+type DraftOwner = Pick<NativeAgentModel, 'draft' | 'edit'>;
+export function mountContext(client: Client, model: NativeAgentModel, save: (task: string, kind: 'native' | 'rho') => void) {
   const get = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
   const dialog = get<HTMLDialogElement>('context-dialog'), picker = new ContextPicker(client);
   const sourceSelect = get<HTMLSelectElement>('context-source'), inclusionSelect = get<HTMLSelectElement>('context-inclusion');
@@ -12,13 +13,15 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
   let target: string | null = null, inspecting = false, source: ContextSource | null = null, item: ContextItem | null = null;
   let preview: ContextPreview | null = null, inclusion: JsonValue = null, next: JsonValue | null = null;
   let items: ContextItem[] = [], text = '', cursors = new Set<string>();
+  let draftOwner: DraftOwner = model, targetOwner: DraftOwner = model, limit = 20;
+  const saveDraft = (id: string) => save(id, draftOwner === model ? 'native' : 'rho');
   function controls() {
     sourceSelect.disabled = busy || inspecting;
     inclusionSelect.disabled = busy || inspecting || !source;
     get<HTMLButtonElement>('context-search-button').disabled = busy || inspecting || !source;
     get<HTMLButtonElement>('context-more-sources').disabled = busy;
     get<HTMLButtonElement>('context-more-items').disabled = busy;
-    get<HTMLButtonElement>('context-add').disabled = busy || inspecting || !preview || preview.truncated || !!preview.resources.length || !editable || blocked || target !== task;
+    get<HTMLButtonElement>('context-add').disabled = busy || inspecting || !preview || preview.truncated || !!preview.resources.length || !editable || blocked || target !== task || targetOwner !== draftOwner;
     for (const button of get('context-items').querySelectorAll<HTMLButtonElement>('button')) button.disabled = busy;
   }
   function run(work: (current: () => boolean) => Promise<void>) {
@@ -69,7 +72,7 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
     get('context-more-items').hidden = next === null;
   }
   function open(saved?: AgentContextSelection) {
-    target = task; inspecting = !!saved; source = null; item = null; clearPreview();
+    target = task; targetOwner = draftOwner; inspecting = !!saved; source = null; item = null; clearPreview();
     get('context-browse').hidden = inspecting; get('context-add').hidden = inspecting;
     get('context-dialog-title').textContent = 'Context'; get('context-captures').hidden = true;
     get('context-inclusion-controls').hidden = false; get('context-preview-area').hidden = false;
@@ -101,11 +104,11 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
   });
   get('context-add').onclick = () => {
     try {
-      if (!task || target !== task || !editable || blocked || busy || !source || !preview) return;
-      const selection = picker.selection(source, preview, inclusion), draft = model.draft(task);
+      if (!task || target !== task || targetOwner !== draftOwner || !editable || blocked || busy || !source || !preview) return;
+      const selection = picker.selection(source, preview, inclusion), draft = draftOwner.draft(task);
       if (!draft.context.some(old => same(old.reference, selection.reference) && old.inclusion === selection.inclusion)) {
-        if (draft.context.length >= 20) throw Error('A draft can include up to 20 context references.');
-        model.edit(task, { ...draft, context: [...draft.context, selection] }); save(task);
+        if (draft.context.length >= limit) throw Error(`This draft can include up to ${limit} context references.`);
+        draftOwner.edit(task, { ...draft, context: [...draft.context, selection] }); saveDraft(task);
       }
       dialog.close();
     } catch (error) { get('context-error').textContent = error instanceof Error ? error.message : String(error); get('context-error').hidden = false; }
@@ -113,7 +116,7 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
   get('context-close').onclick = () => dialog.close();
   dialog.addEventListener('close', () => { epoch++; busy = false; clearPreview(); });
   return {
-    inspectOriginal(originalTask: string, request: string) {
+    inspectOriginal(originalTask: string, request: string, kind: 'native' | 'rho' = 'native') {
       inspecting = true; target = originalTask; clearPreview();
       get('context-dialog-title').textContent = 'Sent context';
       for (const id of ['context-browse', 'context-add', 'context-inclusion-controls', 'context-preview-area']) get(id).hidden = true;
@@ -121,7 +124,7 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
       get('context-footer-note').textContent = 'The input saved with this original message.';
       dialog.showModal();
       run(async current => {
-        const captures = await picker.original(originalTask, request); if (!current()) return;
+        const captures = await (kind === 'rho' ? picker.originalRho(originalTask, request) : picker.original(originalTask, request)); if (!current()) return;
         if (!captures.length) { const empty = document.createElement('p'); empty.textContent = 'No contributed context was included in this message.'; area.append(empty); }
         for (const value of captures) {
           const section = document.createElement('section'), heading = document.createElement('h3'), description = document.createElement('p'), text = document.createElement('pre');
@@ -132,19 +135,19 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
         }
       });
     },
-    render(currentTask: string | null, canEdit: boolean, unavailable: boolean) {
-      task = currentTask; editable = canEdit; blocked = unavailable;
+    render(currentTask: string | null, canEdit: boolean, unavailable: boolean, owner: DraftOwner = model) {
+      task = currentTask; editable = canEdit; blocked = unavailable; draftOwner = owner; limit = owner === model ? 20 : 16;
       get<HTMLButtonElement>('choose-context').disabled = !task || !editable || blocked;
-      const area = get('selected-context'), selections = task ? model.draft(task).context : [];
-      const key = JSON.stringify([task, selections, editable, blocked]);
+      const area = get('selected-context'), selections = task ? draftOwner.draft(task).context : [];
+      const key = JSON.stringify([task, owner === model, selections, editable, blocked]);
       if (area.dataset.content !== key) {
         area.dataset.content = key; area.replaceChildren();
         for (const selection of selections) {
           const row = document.createElement('div'); row.className = 'attachment';
           const show = document.createElement('button'); show.className = 'context-chip'; show.textContent = selection.label; show.onclick = () => open(selection); show.disabled = unavailable;
           const remove = document.createElement('button'); remove.textContent = '×'; remove.setAttribute('aria-label', `Remove ${selection.label} from draft`); remove.disabled = !editable || blocked;
-          const originalTask = task!;
-          remove.onclick = () => { if (task !== originalTask || !editable || blocked) return; const draft = model.draft(originalTask); model.edit(originalTask, { ...draft, context: draft.context.filter(value => !same(value, selection)) }); save(originalTask); };
+          const originalTask = task!, originalOwner = draftOwner;
+          remove.onclick = () => { if (task !== originalTask || draftOwner !== originalOwner || !editable || blocked) return; const draft = draftOwner.draft(originalTask); draftOwner.edit(originalTask, { ...draft, context: draft.context.filter(value => !same(value, selection)) }); saveDraft(originalTask); };
           row.append(show, remove); area.append(row);
         }
       }

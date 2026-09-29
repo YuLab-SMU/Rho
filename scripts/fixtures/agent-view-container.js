@@ -157,7 +157,8 @@ async function handle(body) {
           output=copy(task);
         }else if(kind==='run'){
           if(args.conversation_version!==task.version||args.text!==task.draft_content.text)throw Error('Original draft changed');
-          const run={run_id:'rho-run-'+rhoRuns.size,request:{...copy(args),window:copy(task.controller)},state:'running',updated_at_ms:Date.now(),event_cursor:0,reason:null};rhoRuns.set(run.run_id,run);
+          const capturedContext=args.sources.length?{history:null,sources:args.sources.map(selection=>({selection:copy(selection),title:contextItem.title,description:contextItem.description,text:JSON.parse(selection.inclusion).kind==='selection'?'selected_value <- 42 # 中文 Ω':'# Synchronized analysis document\nselected_value <- 42 # 中文 Ω\nprint(selected_value)',native_data:{version:7},truncated:false,observations:[],evidence:[]}))}:null;
+          const run={run_id:'rho-run-'+rhoRuns.size,request:{...copy(args),window:copy(task.controller)},context:capturedContext,state:'running',updated_at_ms:Date.now(),event_cursor:0,reason:null};rhoRuns.set(run.run_id,run);
           task.draft_content=blank();task.draft='';task.draft_version++;task.version++;task.active_run_id=run.run_id;status='running';output=null;
         }else{const run=rhoRuns.get(args.run_id);run.state='stopping';run.updated_at_ms=Date.now();output=copy(run);}
         record={operation:{operation_id:'op-'+records.length,caller:{kind:'plugin',id:view.view},client_request_id:scoped,capability:copy(body.capability),normalized_arguments:copy(body.arguments),preconditions:[]},status,outcome:status==='running'?null:status,output,error:null};records.push(record);

@@ -516,7 +516,12 @@ preview before Native Send, original captured text after reopen, no source rerea
 and refusal of foreign, partial, truncated, oversized, resource-bearing or
 unauthorized input before native launch. `cargo test -p rho-agent-store --lib
 native_context_bytes --locked` checks immutable captured context and replay after
-reopening the store. These framed fixtures do not establish a real Editor/Host flow.
+reopening the store. `rho_contributed_context` on the metadata target verifies
+actual context bytes delivered through Rig to a local HTTP/SSE model, atomic
+admission, reopen without source grants and unchanged drafts on source refusal.
+The store `native_context_admission` case covers atomic context/draft persistence,
+changed-byte retry rejection and later drafts after reopening. These framed/store
+fixtures do not establish a real Editor/Host flow.
 `node scripts/test-agent-view.mjs --browser` also exercises the ordinary @ picker,
 using the actual Editor inclusion schema and a synthetic source over the public
 view channel. It checks exact references, no implicit activation, bounded/partial

@@ -43,7 +43,7 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
             if(input.expected_version!==conversation.version)error='Version conflict';
             else{conversation.version++;if(kind==='take_control'){conversation.controller={window_id:'window-one',incarnation:'view:view-one'};conversation.active_run_id=null;}else{if(input.title!==undefined)conversation.title=input.title.trim();if(input.archived!==undefined)conversation.archived=input.archived;}output=clone(conversation);}
           }else if(kind==='run'){
-            assert.equal(input.conversation_version,conversation.version);assert.equal(input.text,conversation.draft_content.text);
+            assert.equal(input.conversation_version,conversation.version);assert.equal(input.text,conversation.draft_content.text);assert.deepEqual(input.sources,conversation.draft_content.context);
             const run={run_id:'run-'+runs.size,request:{...clone(input),window:clone(conversation.controller)},state:'running',updated_at_ms:runs.size+1,event_cursor:0,reason:null};runs.set(run.run_id,run);
             conversation.draft_content=empty();conversation.draft='';conversation.draft_version++;conversation.version++;conversation.active_run_id=run.run_id;status='running';output=null;
           }else if(kind==='run.stop'){
@@ -112,6 +112,25 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
   });
   await check('unconfirmed view persistence prevents all new model dispatch',async()=>{
     const f=fixture(),{model,id}=await task(f);await draft(model,id);const before=f.calls.length;f.failSave(true);await assert.rejects(model.send(id),/State save failed/);assert.equal(f.calls.length,before);assert.equal(f.runs.size,0);
+  });
+  await check('context belongs to the original Send and later reference edits survive its receipt',async()=>{
+    const f=fixture(),{model,id}=await task(f),source={source:'plugin',label:'Selected document',reference:{version:7},inclusion:'{"kind":"selection"}'};
+    model.edit(id,{...empty(),text:'Explain context',context:[source]});await model.flush(id);
+    let release;f.hold(new Promise(resolve=>release=resolve));const sent=model.send(id);
+    while(!f.runs.size)await new Promise(resolve=>setTimeout(resolve,0));
+    const later={...source,reference:{version:8}};model.edit(id,{...empty(),text:'Explain context',context:[later]});release();await sent;
+    assert.deepEqual(f.runs.get('run-0').request.sources,[source]);assert.deepEqual(model.draft(id).context,[later]);await model.flush(id);
+    const reopened=f.open().model;await reopened.observe(id);assert.deepEqual(reopened.draft(id).context,[later]);assert.equal(f.runs.size,1);
+  });
+  await check('a different captured selection cannot acknowledge the original Rho Send',async()=>{
+    const f=fixture(),{model,id}=await task(f),source={source:'plugin',label:'Source',reference:{version:7},inclusion:'{"kind":"document"}'};
+    model.edit(id,{...empty(),text:'Explain context',context:[source]});await model.flush(id);
+    f.overrides.set('agent.model.run.request',()=>({...f.runs.get('run-0'),request:{...f.runs.get('run-0').request,sources:[{...source,reference:{version:8}}]}}));
+    await assert.rejects(model.send(id),/original Send/);assert.deepEqual(model.draft(id).context,[source]);assert.equal(model.state.pending[0].consumed,false);
+  });
+  await check('over-limit Rho context preserves the complete local draft without dispatch',async()=>{
+    const f=fixture(),{model,id}=await task(f);model.edit(id,{...empty(),text:'Explain',context:Array.from({length:17},(_,version)=>({source:'plugin',label:'Source',reference:{version},inclusion:'{}'}))});
+    const before=f.calls.length;await assert.rejects(model.send(id),/16 context/);assert.equal(f.calls.length,before);assert.equal(model.draft(id).context.length,17);
   });
   await check('missing model key and unsupported selected sources preserve the draft',async()=>{
     const f=fixture(),{model,id}=await task(f);await draft(model,id);f.missingKey();await assert.rejects(model.send(id),/key is unavailable/);assert.equal(model.draft(id).text,'Send exactly this draft');assert.equal(f.runs.size,0);

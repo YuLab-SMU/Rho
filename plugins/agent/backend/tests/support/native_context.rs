@@ -228,3 +228,125 @@ async fn contributed_context_refuses_changed_partial_oversized_or_foreign_source
         f.release().await;
     }
 }
+
+async fn rho_input(f: &mut Fixture, model: &SyntheticModel) -> Value {
+    f.model_settings(model).await;
+    let mut input = f.run_input().await;
+    input["sources"] = json!([selection()]);
+    let (save, reverse) = f.begin("rho-context-draft", "agent.model.draft", json!({"conversation_id":"task-one","draft_version":1,"content":{"text":input["text"],"assets":[],"context":[selection()]},"grant":null})).await;
+    let saved = f.answer(reverse, origin("view-one")).await;
+    assert_eq!(saved.outcome, PluginOutcome::Succeeded);
+    input["conversation_version"] = saved.output.as_ref().unwrap()["version"].clone();
+    f.settle(&save, saved.outcome).await;
+    input
+}
+async fn rho_begin(f: &mut Fixture, input: Value, source_scope: bool) -> PluginCall {
+    let mut native = call("captured-context-send", "agent.model.run", input, true);
+    if source_scope {
+        native.scopes.insert("documents.read".into());
+    }
+    f.writer
+        .send(native.request.clone(), RpcBody::Invoke(native.clone()))
+        .await
+        .unwrap();
+    answer(f, "views.caller", origin("view-one"), true).await;
+    native
+}
+
+#[tokio::test]
+async fn rho_contributed_context_reaches_model_and_survives_reopen_without_source_reads() {
+    let mut f = start(Arc::new(Factory::default())).await;
+    let model = SyntheticModel::start().await;
+    let input = rho_input(&mut f, &model).await;
+    let native = rho_begin(&mut f, input.clone(), true).await;
+    answer(&mut f, "plugins.inspect", inspection(), true).await;
+    let selected = answer(&mut f, "editor.context.preview", preview(), true).await;
+    assert_eq!(selected["arguments"]["reference"], reference());
+    answer(&mut f, "views.caller", origin("view-one"), true).await;
+    model.entered().await;
+    let running = f.original_run().await;
+    let context = running["context"].clone();
+    assert_eq!(context["sources"][0]["text"], preview()["text"]);
+    assert_eq!(context["sources"][0]["selection"], selection());
+    assert_eq!(context["sources"][0]["native_data"], preview()["data"]);
+    let delivered = model.state.bodies.lock().unwrap()[0].to_string();
+    assert!(delivered.contains("selected_value <- 42 # 中文 Ω"));
+    assert!(delivered.contains("source-window") && delivered.contains("version-seven"));
+    let conversation = f
+        .query(
+            "agent.model.conversation",
+            json!({"conversation_id":"task-one"}),
+        )
+        .await;
+    assert_eq!(
+        conversation["draft_content"],
+        json!({"text":"","context":[],"assets":[]})
+    );
+    model.state.resume.notify_one();
+    let frame = f.read().await;
+    assert_eq!(frame.request, native.request);
+    let RpcBody::CommitPlan(plan) = frame.body else {
+        panic!("{frame:?}")
+    };
+    assert_eq!(plan.outcome, PluginOutcome::Succeeded, "{plan:?}");
+    assert_eq!(plan.output.as_ref().unwrap()["state"], "completed");
+    f.settle(&native, plan.outcome).await;
+    let (directory, environment) = f.release().await;
+    let mut reopened = Fixture::open_with_optional(directory, environment, &[]).await;
+    let (retry, reverse) = reopened
+        .begin("rho-context-reopened", "agent.model.run", input)
+        .await;
+    let result = reopened.answer(reverse, origin("view-one")).await;
+    assert_eq!(result.outcome, PluginOutcome::Succeeded, "{result:?}");
+    assert_eq!(result.output.as_ref().unwrap()["context"], context);
+    assert_eq!(model.count(), 1);
+    reopened.settle(&retry, result.outcome).await;
+    reopened.release().await;
+}
+
+#[tokio::test]
+async fn rho_contributed_context_refusal_preserves_draft_before_model_admission() {
+    for fault in ["truncated", "changed-caller", "version", "scope"] {
+        let mut f = start(Arc::new(Factory::default())).await;
+        let model = SyntheticModel::start().await;
+        let input = rho_input(&mut f, &model).await;
+        let before = f
+            .query(
+                "agent.model.conversation",
+                json!({"conversation_id":"task-one"}),
+            )
+            .await;
+        let native = rho_begin(&mut f, input, fault != "scope").await;
+        answer(&mut f, "plugins.inspect", inspection(), true).await;
+        if fault != "scope" {
+            let mut value = preview();
+            if fault == "truncated" {
+                value["truncated"] = json!(true);
+            }
+            if fault == "version" {
+                value["item"]["reference"]["selector"]["version"] = json!(8);
+            }
+            answer(&mut f, "editor.context.preview", value, true).await;
+            if fault == "changed-caller" {
+                answer(&mut f, "views.caller", origin("other-view"), true).await;
+            }
+        }
+        let frame = f.read().await;
+        assert_eq!(frame.request, native.request);
+        let RpcBody::CommitPlan(plan) = frame.body else {
+            panic!("{frame:?}")
+        };
+        assert_eq!(plan.outcome, PluginOutcome::Failed, "{fault}: {plan:?}");
+        assert_eq!(
+            f.query(
+                "agent.model.conversation",
+                json!({"conversation_id":"task-one"})
+            )
+            .await,
+            before
+        );
+        assert_eq!(model.count(), 0);
+        f.settle(&native, plan.outcome).await;
+        f.release().await;
+    }
+}
