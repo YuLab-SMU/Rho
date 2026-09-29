@@ -870,20 +870,24 @@ async fn scientific_explain_uses_only_the_original_readonly_r_query() {
 }
 
 #[tokio::test]
-async fn scientific_stale_r_observation_fails_without_reading_key_or_starting_runtime() {
+async fn scientific_stale_r_observation_fails_without_contacting_model_or_starting_runtime() {
     let mut f = Fixture::start_with_grants(true).await;
     let model = SyntheticModel::start().await;
     f.model_settings(&model).await;
     let input = f.science_input("run").await;
+    let native = f.scientific_begin(input, true).await;
+    let frame = f.read().await;
+    assert!(
+        matches!(&frame.body,RpcBody::HostCall{capability,..} if capability == &manifest::key("r.session")),
+        "{frame:?}"
+    );
+    // New runs capture their credential before consuming the draft. Once this
+    // native observation is pending, removing the credential must neither hide
+    // the stale-session failure nor cause a later key read/model dispatch.
     std::fs::remove_file(
         std::path::Path::new(&f.environment.data_root).join("model-credentials-v1.json"),
     )
     .unwrap();
-    let native = f.scientific_begin(input, true).await;
-    let frame = f.read().await;
-    assert!(
-        matches!(&frame.body,RpcBody::HostCall{capability,..} if capability == &manifest::key("r.session"))
-    );
     f.answer_host(frame,json!({"status":"ready","completeness":"complete","data":{"state":"unstarted","session_id":null}})).await;
     let plan = f.receive_run(&native, "failed").await;
     assert_eq!(plan.output.as_ref().unwrap()["model_calls"], 0);

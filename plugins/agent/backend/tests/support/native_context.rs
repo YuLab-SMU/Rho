@@ -135,9 +135,10 @@ fn inspection() -> Value {
     let mut manifest = json!(manifest::manifest());
     manifest["id"] = r["provider"]["plugin"].clone();
     manifest["contexts"] = json!([{"id":"documents","title":"Editor documents","search":{"id":"editor.context.search","version":1},"preview":{"id":"editor.context.preview","version":1}}]);
-    manifest["capabilities"] = json!([{"capability":{"id":"editor.context.preview","version":1},"kind":"query","title":"Preview","description":"Exact synchronized source","input_schema":{},"examples":[],"output_schema":{},"recovery_schema":{},"required_scopes":["documents.read"],"effects":[],"cancellation":"unsupported","preflight":null}]);
+    manifest["capabilities"] = json!([{"capability":{"id":"editor.context.preview","version":1},"kind":"query","title":"Preview","description":"Exact synchronized source","input_schema":{},"examples":[{"reference":r,"inclusion":{"kind":"selection"},"max_bytes":16384}],"output_schema":{},"recovery_schema":{},"required_scopes":["documents.read"],"effects":[],"cancellation":"unsupported","preflight":null}]);
     let mut search = manifest["capabilities"][0].clone();
     search["capability"]["id"] = json!("editor.context.search");
+    search["examples"] = json!([{"window":"source-window","text":"","after":null,"limit":20}]);
     manifest["capabilities"]
         .as_array_mut()
         .unwrap()

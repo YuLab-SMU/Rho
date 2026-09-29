@@ -145,7 +145,7 @@ form permission. Continue preserves next drafts through lost replies/reload and 
 at 960/440/220 px. Handoff also preserves edited text, references and lost receipts at those widths.
 This does **not** establish combined native/Host acceptance: native manifest
 regeneration, backend checks and activation of the new combined package remain
-pending while the current native check waits at test startup after compilation. `plugin.json` still
+pending: the native metadata run reached 53 passes/6 failures; fixture fixes are under rerun. `plugin.json` still
 describes the prior backend-only package until regeneration. No new Agent native
 package was built for the frontend iterations.
 Browser file capture retains identity, sends bounded Controls and selects a confirmed
