@@ -233,6 +233,7 @@ async fn file_context_pins_native_identity_and_preserves_bounded_original_text()
     assert_eq!(complete,ObservationCompleteness::Complete);
     assert!(preview["text"].as_str().unwrap().ends_with("中文\r\nprint(42)\n"));
     assert_eq!(preview["truncated"],false);
+    assert_eq!(preview["data"]["annotation_source"],json!({"source_id":"file:分析.R","source_version":page["file"]["sha256"]}));
     let mut short_args=args.clone();short_args["max_bytes"]=json!(131);
     let short=owner.query(&call("files.context.preview",short_args,&root,None)).await;
     // Boundaries must remain valid UTF-8 and report omitted content.
@@ -241,7 +242,21 @@ async fn file_context_pins_native_identity_and_preserves_bounded_original_text()
     let mut forged=args.clone();forged["reference"]["selector"]["native_identity"]=json!("different-file");
     assert!(owner.query(&call("files.context.preview",forged,&root,None)).await.is_err());
     fs::write(format!("{root}/分析.R"),"changed").unwrap();
-    assert!(owner.query(&call("files.context.preview",args,&root,None)).await.is_err());
+    assert!(owner.query(&call("files.context.preview",args.clone(),&root,None)).await.is_err());
+    let changed=owner.query(&call("files.read_text",json!({"path":"分析.R"}),&root,None)).await.unwrap().0;
+    let mut updated=args.clone();updated["reference"]["selector"]=changed["file"].clone();
+    let next=owner.query(&call("files.context.preview",updated,&root,None)).await.unwrap().0;
+    assert_eq!(next["data"]["annotation_source"]["source_id"],preview["data"]["annotation_source"]["source_id"]);
+    assert_ne!(next["data"]["annotation_source"]["source_version"],preview["data"]["annotation_source"]["source_version"]);
+    // A new native identity for the original bytes is not a new content version.
+    fs::write(format!("{root}/replacement"),"中文\r\nprint(42)\n").unwrap();
+    fs::rename(format!("{root}/replacement"),format!("{root}/分析.R")).unwrap();
+    let fresh=owner.query(&call("files.read_text",json!({"path":"分析.R"}),&root,None)).await.unwrap().0;
+    assert_ne!(fresh["file"]["native_identity"],page["file"]["native_identity"]);
+    assert!(owner.query(&call("files.context.preview",args.clone(),&root,None)).await.is_err());
+    let mut updated=args;updated["reference"]["selector"]=fresh["file"].clone();
+    let same=owner.query(&call("files.context.preview",updated,&root,None)).await.unwrap().0;
+    assert_eq!(same["data"]["annotation_source"],preview["data"]["annotation_source"]);
 }
 
 #[tokio::test]

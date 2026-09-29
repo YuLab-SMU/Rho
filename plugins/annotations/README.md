@@ -37,7 +37,9 @@ owner supplies `ContextPreview.data.annotation_source` with stable `source_id`
 and content `source_version`; missing identity is refused, never inferred from a
 selector. Editor uses draft lineage and document bytes, Help uses installed-topic
 lineage and retained help-file digests, and Viewer uses the original output and
-resource digest. A fresh observation alone is not a content change.
+resource digest. Files uses the contained project path and content digest while
+still checking the exact native file identity. A fresh observation or atomic save
+of identical bytes alone is not a content change.
 
 Freezing requires a complete text inclusion; quote offsets refer to that inclusion
 and preserve UTF-8/UTF-16/scalar boundaries. Exact request replays read the original
@@ -107,6 +109,11 @@ the existing `RHO_TEST_BINARY` (default `target/debug/rho`), and never compiles.
 freeze, current-source refusal, continuation, revision CAS, tombstones, historical
 context and same-instance graceful Host recovery with the source still suspended.
 The fixture retains its disposable project and original records.
+
+Add `--files` to exercise real Files → quoted evidence → note context, unchanged
+content across observations/atomic saves, changed-source refusal, and original
+receipts after Host restart while Files remains suspended. It checks the retained
+Files backend source against the checkout before running; no new UI is exercised.
 
 Add `--agent` with `RHO_AGENT_PLUGIN_PACKAGE` to verify exact note context through
 real Agent/Rig Send and same-instance restart without source or model replay. It also

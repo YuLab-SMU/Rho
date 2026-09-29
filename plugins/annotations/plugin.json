@@ -63,6 +63,15 @@
     },
     {
       "capability": {
+        "id": "files.context.preview",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
         "id": "r.context.help.preview",
         "version": 1
       },

@@ -86,6 +86,7 @@ pub fn manifest() -> PluginManifest {
         optional_requires: vec![
             requirement("resources.read", &["resources.read"]),
             requirement("editor.context.preview", &["documents.read"]),
+            requirement("files.context.preview", &["project.read"]),
             requirement("r.context.help.preview", &["workspace.read"]),
             requirement(
                 "r.context.viewer.preview",

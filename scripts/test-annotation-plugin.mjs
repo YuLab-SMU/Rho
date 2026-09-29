@@ -8,6 +8,7 @@ import {createHash, randomUUID} from 'node:crypto';
 import {execFileSync, spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {verifyRBuild} from './r-plugin-artifact.mjs';
+import {annotationFiles} from './fixtures/annotation-files.mjs';
 import {annotationScientific} from './fixtures/annotation-scientific.mjs';
 import {verifyAgentBuild} from './agent-plugin-artifact.mjs';
 import {annotationAgent} from './fixtures/annotation-agent.mjs';
@@ -17,10 +18,11 @@ import {buildCaptureSource, annotationCaptures} from './fixtures/annotation-capt
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const flags = process.argv.slice(2);
-assert.ok(new Set(flags).size === flags.length && flags.every(arg => ['--agent', '--browser', '--captures', '--scientific'].includes(arg)), 'Usage: node scripts/test-annotation-plugin.mjs [--agent [--browser]] [--captures] [--scientific]');
+assert.ok(new Set(flags).size === flags.length && flags.every(arg => ['--agent', '--browser', '--captures', '--scientific', '--files'].includes(arg)), 'Usage: node scripts/test-annotation-plugin.mjs [--agent [--browser]] [--captures] [--scientific] [--files]');
 const withAgent = process.argv.includes('--agent');
 const withBrowser = process.argv.includes('--browser');
 const withCaptures = process.argv.includes('--captures');
+const withFiles = process.argv.includes('--files');
 const withScientific = process.argv.includes('--scientific');
 assert.ok(!withScientific || (process.env.RHO_ARK && process.env.RHO_R_HOME), '--scientific requires existing RHO_ARK and RHO_R_HOME');
 assert.ok(!withBrowser || withAgent, '--browser requires --agent');
@@ -49,6 +51,7 @@ for (const [source, packaged] of [
   ['plugins/annotations/api', path.join(packages.annotation, 'api')],
   ['plugins/annotations/backend', path.join(packages.annotation, 'backend')],
   ['plugins/editor/backend', path.join(packages.editor, 'backend')],
+  ...(withFiles ? [['plugins/files/backend', path.join(packages.files, 'backend')]] : []),
   ['crates/plugin-protocol', path.join(packages.annotation, 'public/native/plugin-protocol')],
   ['crates/plugin-sdk', path.join(packages.annotation, 'public/native/plugin-sdk')],
 ]) {
@@ -83,7 +86,7 @@ const result = {host_sha256: hostHash, packages, directory, stages: [], complete
     return [name, {sha256: hash(bytes), bytes: bytes.length}];
   })), started_at: new Date().toISOString()};
 const evidence = process.env.RHO_ANNOTATION_EVIDENCE ?? path.join(directory, 'result.json');
-let host, exited, url, editor, notes, agent, agentCase, nativeCase, captureSource, captureCase, imageCase, r, scientificCase, scientificAgentCase;
+let host, exited, url, editor, notes, agent, agentCase, nativeCase, captureSource, captureCase, imageCase, r, scientificCase, scientificAgentCase, files, filesCase;
 const key = id => ({id, version: 1});
 const save = () => fs.writeFileSync(evidence, JSON.stringify(result, null, 2) + '\n');
 const safe = text => String(text).replace(/token=[a-z0-9]+/g, 'token=[redacted]');
@@ -171,9 +174,10 @@ try {
   for (const name of ['files', 'editor', ...(withScientific ? ['r'] : []), 'annotation', ...(withAgent ? ['agent'] : []), ...(withCaptures ? ['capture'] : [])]) {
     const snapshot = snapshots[name];
     const active = (await invoke('plugins.activate', {revision: snapshot.revision, artifact: snapshot.artifacts[0], target: 'aarch64-apple-darwin', alias: name, configuration: name === 'agent' ? {kimi_home:nativeHome} : name === 'r' ? {ark:fs.realpathSync(process.env.RHO_ARK),r_home:fs.realpathSync(process.env.RHO_R_HOME),execution_timeout_seconds:120} : {},
-      optional_capabilities: name === 'annotation' ? [key('editor.context.preview'), ...(withScientific ? ['r.context.help.preview','r.context.viewer.preview'].map(key) : []), ...(withCaptures ? [key('resources.read')] : [])] : name === 'agent'
+      optional_capabilities: name === 'annotation' ? [key('editor.context.preview'), ...(withFiles ? [key('files.context.preview')] : []), ...(withScientific ? ['r.context.help.preview','r.context.viewer.preview'].map(key) : []), ...(withCaptures ? [key('resources.read')] : [])] : name === 'agent'
         ? ['plugins.instances', 'plugins.inspect', 'annotations.read', 'annotations.write', 'annotations.context.search', 'annotations.context.preview', 'operation.get', 'plugins.delegated_operation', ...(withCaptures ? ['resources.read'] : [])].map(key) : name === 'r' ? ['operation.get','operation.list_recent','resources.read'].map(key) : []})).output.instance.identity;
     if (name === 'editor') editor = active;
+    if (name === 'files') files = active;
     if (name === 'annotation') notes = active;
     if (name === 'agent') agent = active;
     if (name === 'capture') captureSource = active;
@@ -197,6 +201,11 @@ try {
   assert.ok(context.text.includes(create.note));
   assert.equal(context.data.source_status, 'unknown');
   result.stages.push('real Editor freeze → note → contributed context'); save();
+  if (withFiles) {
+    filesCase = await annotationFiles({files,notes,window,project,binding,invoke,pluginQuery,query,port});
+    result.files = filesCase.report;
+    result.stages.push('real Files source → frozen quoted evidence; content identity, stale source refusal and retained history'); save();
+  }
   if (withCaptures) {
     captureCase = await annotationCaptures({notes,captureSource,reference:first.reference,pluginQuery,invoke,binding,query});
     result.captures = captureCase.report;
@@ -262,6 +271,7 @@ try {
   if (nativeCase) await nativeCase.afterSourceResume();
   if (captureCase) await captureCase.afterRestart();
   if (scientificCase) await scientificCase.afterRestart();
+  if (filesCase) await filesCase.afterRestart();
   assert.deepEqual((await write('capture-original', freeze)).output, frozen.output, 'Native replay must not reread the suspended Editor');
   assert.deepEqual((await write('note-original', create)).output, saved.output);
   const originalHostReceipt = await write('capture-original', freeze, 'host-freeze-original');

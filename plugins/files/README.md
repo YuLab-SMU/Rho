@@ -89,3 +89,9 @@ to 16 KiB including its source header; use file information for larger files.
 The context picker lists up to 100 previously read text files for the caller.
 Lost view-opening requests remain recoverable without reopening a fresh request.
 Viewing does not execute a script, start R or modify files.
+
+The same preview supplies annotation lineage from the contained project path and
+version from the file content digest. Atomic saves of identical bytes preserve
+that content version; preview still refuses an obsolete native file identity.
+Annotations require an explicit `files.context.preview` grant and a complete
+bounded inclusion. This source contract does not add an annotation editor.

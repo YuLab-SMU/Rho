@@ -282,6 +282,9 @@ without compilation. Reserve `--independent` for an owner/store source audit.
 `node scripts/build-annotation-plugin.mjs /new/path` defaults to the workspace cache;
 only an explicit `--independent` rebuilds standalone source. Native tests, package
 assembly, real-provider/Host acceptance and UI review are separate outcomes.
+`node scripts/test-annotation-plugin.mjs --files` uses retained Annotation,
+Editor and Files packages and the frozen Host for Files quote freezing, native
+identity/content-version separation and same-instance restart without source replay.
 For **Files → Agent** acceptance, `node scripts/test-files-agent.mjs` reuses
 `RHO_FILES_PLUGIN_PACKAGE` and `RHO_AGENT_PLUGIN_PACKAGE` with the frozen Host.
 It builds nothing. A disposable Unicode text file supplies the exact native

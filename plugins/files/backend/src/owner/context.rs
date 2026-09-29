@@ -170,7 +170,12 @@ impl Owner {
             item: item(&call.binding.provider, &request.reference.window, &file)?,
             text,
             truncated,
-            data: json!({"file":file,"inclusion":request.inclusion}),
+            // The contained project path is the lineage, not the transient native
+            // observation. Exact native identity is still checked above; identical
+            // bytes saved again remain the same annotation content version.
+            data: json!({"file":file,"inclusion":request.inclusion,
+                "annotation_source":{"source_id":format!("file:{}",file.path),
+                    "source_version":file.sha256}}),
             resources: vec![],
         };
         preview.validate().map_err(Failure::input)?;
