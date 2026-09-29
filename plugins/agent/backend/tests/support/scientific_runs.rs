@@ -21,6 +21,61 @@ fn record(f: &Fixture, native: &PluginCall, request: &Value) -> Value {
     json!({"operation":{"operation_id":"original-scientific-operation","caller":{"kind":"plugin","id":"agent-one"},"causation_id":native.operation_id,"idempotency_scope":f.environment.project_root,"capability":request["binding"]["capability"],"normalized_arguments":request,"admission":{"owner_context":{"binding":request["binding"]}}},"status":"succeeded","output":{"value":"scientific result 中文"},"error":null,"recovery":null,"cancellation_requested":false})
 }
 impl Fixture {
+    async fn observe_earlier(
+        &mut self,
+        parent: &PluginCall,
+        original: &PluginCall,
+        receipt: &Value,
+        record: &Value,
+    ) {
+        let frame = self.read().await;
+        let RpcBody::HostCall {
+            parent_request,
+            capability,
+            arguments,
+        } = &frame.body
+        else {
+            panic!("{frame:?}")
+        };
+        assert_eq!(parent_request, &parent.request);
+        assert_eq!(capability, &manifest::key("plugins.delegated_operation"));
+        assert_eq!(
+            arguments,
+            &json!({"parent_operation":original.operation_id,"request":receipt["client_request_id"]})
+        );
+        self.answer_host(frame,json!({"status":"ready","completeness":"complete","data":{"operation_id":"original-scientific-operation"}})).await;
+        let frame = self.read().await;
+        let RpcBody::HostCall {
+            parent_request,
+            capability,
+            arguments,
+        } = &frame.body
+        else {
+            panic!("{frame:?}")
+        };
+        assert_eq!(parent_request, &parent.request);
+        assert_eq!(capability, &manifest::key("operation.get"));
+        assert_eq!(
+            arguments,
+            &json!({"operation_id":"original-scientific-operation"})
+        );
+        self.answer_host(
+            frame,
+            json!({"status":"ready","completeness":"complete","data":{"record":record}}),
+        )
+        .await;
+    }
+    async fn revalidated_caller(&mut self) {
+        let frame = self.read().await;
+        assert!(
+            matches!(&frame.body,RpcBody::HostCall{capability,..} if capability==&manifest::key("views.caller"))
+        );
+        self.answer_host(
+            frame,
+            json!({"status":"ready","completeness":"complete","data":origin("view-one")}),
+        )
+        .await;
+    }
     async fn answer_host(&mut self, frame: RpcFrame, result: Value) {
         self.writer
             .send(frame.request, RpcBody::HostResult { result })
@@ -125,6 +180,179 @@ impl Fixture {
         self.answer_host(frame, json!({"status":"ready","completeness":"complete","data":{"operation_id":"original-scientific-operation"}})).await;
         query
     }
+}
+
+#[tokio::test]
+async fn rho_continuation_rechecks_original_and_reuses_confirmed_r_operation_instead_of_running_again()
+ {
+    let mut f = Fixture::start_with_grants(true).await;
+    let model = SyntheticModel::with_options(
+        Some(("r_execute".into(), json!({"code":"counter <- counter + 1"}))),
+        true,
+    )
+    .await;
+    f.model_settings(&model).await;
+    let input = f.science_input("run").await;
+    let native = f.scientific_begin(input.clone(), true).await;
+    f.session_observation(&native).await;
+    model.entered().await;
+    let first = f.original_run().await;
+    model.state.resume.notify_one();
+    let execution = f.read().await;
+    let RpcBody::HostCall {
+        capability,
+        arguments,
+        ..
+    } = &execution.body
+    else {
+        panic!("{execution:?}")
+    };
+    assert_eq!(capability.id.as_str(), "r.execute");
+    let original_record = record(&f, &native, arguments);
+    f.answer_host(execution, original_record.clone()).await;
+    let done = f.receive_run(&native, "completed").await;
+    f.settle(&native, done.outcome).await;
+    let receipts = f.scientific_receipts(&first).await;
+    let conversation = f
+        .query(
+            "agent.model.conversation",
+            json!({"conversation_id":"task-one"}),
+        )
+        .await;
+    let inspect = scientific_call(
+        "continuation-inspect",
+        "agent.model.run.reconcile",
+        json!({"run_id":first["run_id"],"conversation_version":conversation["version"]}),
+        true,
+    );
+    f.scientific_admit(inspect.clone()).await;
+    f.observe_earlier(&inspect, &native, &receipts[0], &original_record)
+        .await;
+    f.revalidated_caller().await;
+    let report = f.receive_run(&inspect, "completed").await;
+    let recovery = report.output.as_ref().unwrap()["recovery"].clone();
+    f.settle(&inspect, report.outcome).await;
+    let conversation = f
+        .query(
+            "agent.model.conversation",
+            json!({"conversation_id":"task-one"}),
+        )
+        .await;
+    let mut continued = input.clone();
+    continued["request_id"] = json!("continued-request");
+    continued["conversation_version"] = conversation["version"].clone();
+    continued["text"] = json!("Continue the checked task 中文 Ω");
+    continued["continuation"] =
+        json!({"run_id":first["run_id"],"recovery_digest":recovery["digest"]});
+
+    // A changed current observation refuses admission before another model or R call.
+    let rejected = scientific_call(
+        "continue-changed",
+        "agent.model.run",
+        continued.clone(),
+        true,
+    );
+    f.scientific_admit(rejected.clone()).await;
+    let mut changed = original_record.clone();
+    changed["status"] = json!("uncertain");
+    f.observe_earlier(&rejected, &native, &receipts[0], &changed)
+        .await;
+    let RpcBody::CommitPlan(refusal) = f.read().await.body else {
+        panic!()
+    };
+    assert_eq!(refusal.outcome, PluginOutcome::Failed);
+    f.settle(&rejected, refusal.outcome).await;
+    assert_eq!(model.count(), 2);
+    assert_eq!(
+        f.query(
+            "agent.model.conversation",
+            json!({"conversation_id":"task-one"})
+        )
+        .await,
+        conversation
+    );
+
+    let next = scientific_call(
+        "continue-science",
+        "agent.model.run",
+        continued.clone(),
+        true,
+    );
+    f.scientific_admit(next.clone()).await;
+    f.observe_earlier(&next, &native, &receipts[0], &original_record)
+        .await;
+    f.revalidated_caller().await;
+    let session = f.read().await;
+    assert!(
+        matches!(&session.body,RpcBody::HostCall{parent_request,capability,..} if parent_request == &next.request && capability == &manifest::key("r.session"))
+    );
+    // A second inspection cannot replace the ancestor's confirmed report while
+    // this continuation is using it. Hold the session reply to keep that run live.
+    let active = f
+        .query(
+            "agent.model.conversation",
+            json!({"conversation_id":"task-one"}),
+        )
+        .await;
+    let reinspect = scientific_call(
+        "continue-ancestor-inspect",
+        "agent.model.run.reconcile",
+        json!({"run_id":first["run_id"],"conversation_version":active["version"]}),
+        true,
+    );
+    f.scientific_admit(reinspect.clone()).await;
+    let refusal = f.read().await;
+    assert_eq!(refusal.request, reinspect.request);
+    let RpcBody::CommitPlan(refusal) = refusal.body else {
+        panic!()
+    };
+    assert_eq!(refusal.outcome, PluginOutcome::Failed);
+    f.settle(&reinspect, refusal.outcome).await;
+    f.answer_host(session,json!({"status":"ready","completeness":"complete","data":{"state":"idle","session_id":"r-session-one","queue_target":null,"checkpoint_available":false}})).await;
+    // The model asks for the identical mutation, but only original-owner reads
+    // are allowed here. Receiving r.execute again would fail this exact sequence.
+    f.observe_earlier(&next, &native, &receipts[0], &original_record)
+        .await;
+    let result = f.receive_run(&next, "completed").await;
+    let run = result.output.as_ref().unwrap().clone();
+    assert_eq!(run["context"]["history"]["kind"], "continuation");
+    assert_eq!(
+        run["context"]["history"]["previous_run_id"],
+        first["run_id"]
+    );
+    assert!(
+        model.state.bodies.lock().unwrap()[2]
+            .to_string()
+            .contains("Confirmed earlier actions must not be executed again")
+    );
+    let tools = f.scientific_receipts(&run).await;
+    assert_eq!(tools[0]["mutation"], false);
+    assert_eq!(
+        tools[0]["result"]["operation_id"],
+        "original-scientific-operation"
+    );
+    assert_eq!(
+        tools[0]["result"]["reused_previous"]["run_id"],
+        first["run_id"]
+    );
+    assert_eq!(f.scientific_receipts(&first).await, receipts);
+    assert_eq!(model.count(), 4);
+    f.settle(&next, result.outcome).await;
+    let (directory, environment) = f.release().await;
+    std::fs::remove_file(
+        std::path::Path::new(&environment.data_root).join("model-credentials-v1.json"),
+    )
+    .unwrap();
+    let mut reopened = Fixture::open_with_grants(directory, environment, true).await;
+    let (retry, caller) = reopened
+        .begin("continued-original-retry", "agent.model.run", continued)
+        .await;
+    let repeated = reopened.answer(caller, origin("view-one")).await;
+    assert_eq!(repeated.outcome, PluginOutcome::Succeeded, "{repeated:?}");
+    assert_eq!(repeated.output.as_ref().unwrap()["context"], run["context"]);
+    assert_eq!(model.count(), 4);
+    reopened.settle(&retry, repeated.outcome).await;
+    reopened.release().await;
 }
 
 #[tokio::test]

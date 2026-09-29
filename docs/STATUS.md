@@ -32,7 +32,7 @@ written deletion condition. Internal pieces are not reported as milestones.
 | M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Default entry, real-R browser flow and Rust HTTP checks pass; delivery remains |
 | M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Native/Rho views and attachment source/renderer checked; combined native/Host path pending |
 | M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Lifecycle, explicit view recovery and four runtime suspension cases pass; Host acceptance pending |
-| M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Selected text and bounded Rho history in source; renderer checked, native/restart/continuation acceptance pending |
+| M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Text/history and explicit Continue in source; renderer checked, native/restart acceptance pending |
 | M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Branch checkpoint via Agent verified; Studio UI not started |
 | M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Not started |
 
@@ -125,8 +125,8 @@ Implemented in `plugins/agent` (public APIs/SDK only, no private core imports):
 
 Native/Rho text capture validates exact previews; Rho also freezes up to eight prior turns
 (24 KiB) under its admission gate without inheriting authority. Source bytes and history stay
-with the original Send. Check tool outcomes now records explicit native recovery in source.
-Picker/input/recovery UI checks pass; native frames/store and real Editor/Host integration remain pending.
+with the original Send. Check tool outcomes records recovery; explicit Continue rechecks it,
+retains exact Agent/R targets and reuses confirmed results. Native/Host checks remain pending.
 The ordinary native/Rho task view is implemented in source: shared task selection,
 creation, draft CAS/conflicts, Send/Stop, explicit control and original-request
 inspection. Native tasks also support model/tool selection, permissions and
@@ -136,16 +136,16 @@ atomically consumes only its matching draft and preserves later typing on replay
 Stable view/controller identities survive private connection rotation. Rho settings
 provide key save/removal, versioned configuration and explicit synthetic tests;
 keys stay out of saved view state and Operations. Rho now submits text and contributed
-references; attachments, tool selection and continuation remain to compose.
-The UI build and 67 model cases (24 native, 13 settings, 18 Rho, 12 context) pass, as does
+references and explicit continuation; attachments and tool selection remain to compose.
+The UI build and 73 model cases (24 native, 13 settings, 23 Rho, 13 context) pass, as does
 the synthetic public MessagePort browser fixture: opaque iframe, IME Enter, task
 switching, one Send, next drafts, 8 MiB selection, lost creation/Send/import/key
 replies, actual reload, history and close without Stop. Settings/rename work without
-form permission. 960/440/320/220 px and short-context screenshots were inspected.
-Evidence: `target/plugin-refactor/rho-recovery-results.json`, `rho-history-results.json`, `native-context-results.json`.
+form permission. Continue preserves next drafts through lost replies/reload and original context
+at 960/440/220 px; its draft-save race was fixed. Evidence: `target/plugin-refactor/rho-continue-results.json`.
 This does **not** establish combined native/Host acceptance: native manifest
 regeneration, backend checks and activation of the new combined package remain
-pending behind the current serial build. The checked-in `plugin.json` still
+pending behind the serial native rerun after the prior compile failed. `plugin.json` still
 describes the prior backend-only package until regeneration. No new Agent native
 package was built for the frontend iterations.
 Browser file capture retains identity, sends bounded Controls and selects a confirmed
@@ -155,8 +155,8 @@ checksum/controller and reopen fixtures are written but unrun; no native accepta
 The combined Editor/real-R browser fixture is written/discoverable but unrun; it reuses one
 Agent artifact built through the primary cache and records this as integration evidence.
 
-Not done: native acceptance of attachments/settings/Rho drafts/history, full context
-and component input/continuation, actual Host restart recovery and Studio Agent flow.
+Not done: native acceptance of attachments/settings/Rho drafts/history/Continue, remaining
+context/component input, actual Host restart recovery and Studio Agent flow.
 Synthetic peers for Process/Remote/Environment do not establish execution through those plugins.
 
 Agent evidence in `target/plugin-refactor/`: `agent-assets-results-v3.json` and

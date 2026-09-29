@@ -19,6 +19,7 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
         else if(cap.id==='agent.model.key.status'){assert.equal(input.settings_version,settings.version);data={credential:settings.connection.credential,available:keyAvailable};}
         else if(cap.id==='agent.model.conversation')data=conversations.get(input.conversation_id);
         else if(cap.id==='agent.model.run.get')data=runs.get(input.run_id);
+        else if(cap.id==='agent.model.run.admission')data={binding:{provider:instance,project:'project',capability:{id:'agent.model.run',version:1},target:null},r:runs.get(input.run_id).request.r??null};
         else if(cap.id==='agent.model.run.request')data=[...runs.values()].find(r=>r.request.request_id===input.request_id);
         else if(cap.id==='agent.model.history'){
           const rows=[...runs.values()].filter(r=>r.request.conversation_id===input.conversation_id).reverse();
@@ -44,7 +45,7 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
             else{conversation.version++;if(kind==='take_control'){conversation.controller={window_id:'window-one',incarnation:'view:view-one'};conversation.active_run_id=null;}else{if(input.title!==undefined)conversation.title=input.title.trim();if(input.archived!==undefined)conversation.archived=input.archived;}output=clone(conversation);}
           }else if(kind==='run'){
             assert.equal(input.conversation_version,conversation.version);assert.equal(input.text,conversation.draft_content.text);assert.deepEqual(input.sources,conversation.draft_content.context);
-            const run={run_id:'run-'+runs.size,request:{...clone(input),window:clone(conversation.controller)},state:'running',updated_at_ms:runs.size+1,event_cursor:0,reason:null};runs.set(run.run_id,run);
+            const run={run_id:'run-'+runs.size,request:{...clone(input),grant:{mode:input.mode??'explain',session:null,files:[],documents:[]},window:clone(conversation.controller)},state:'running',updated_at_ms:runs.size+1,event_cursor:0,reason:null};runs.set(run.run_id,run);
             conversation.draft_content=empty();conversation.draft='';conversation.draft_version++;conversation.version++;conversation.active_run_id=run.run_id;status='running';output=null;
           }else if(kind==='run.stop'){
             const run=runs.get(input.run_id);run.state='stopping';run.updated_at_ms++;output=clone(run);
@@ -119,6 +120,43 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
     const f=fixture(),{model,id}=await task(f);await draft(model,id);await model.send(id);const before=f.calls.length;
     await assert.rejects(model.reconcile(id,'run-0'),/finished run/);f.finish('run-0');await model.refresh();
     await assert.rejects(model.reconcile('another-task','run-0'),/finished run/);assert.equal(f.calls.length,before);
+  });
+  await check('Continue captures the checked run and lost replies never turn into fresh sends',async()=>{
+    const f=fixture();let {model,id}=await task(f);await draft(model,id);await model.send(id);f.finish('run-0');await model.refresh();await model.reconcile(id,'run-0');
+    await draft(model,id,'Continue from that result Ω');f.lose('agent.model.run');await assert.rejects(model.send(id,'run-0'),/Lost original reply/);
+    const args=f.calls.at(-1).args.arguments;assert.deepEqual(args.continuation,{run_id:'run-0',recovery_digest:'retained-report'});assert.equal(args.mode,'explain');assert.equal(args.r,null);
+    const before=f.calls.length;model=f.open().model;await model.refresh();await model.inspect(model.state.pending[0].intent.request);
+    assert.equal(f.calls.length,before);assert.equal(f.runs.size,2);assert.equal(model.runs.get('run-1').request.continuation.run_id,'run-0');
+  });
+  await check('Continue refuses unresolved recovery or a substituted original provider and preserves the draft',async()=>{
+    const f=fixture(),{model,id}=await task(f);await draft(model,id);await model.send(id);f.finish('run-0');await model.refresh();await model.reconcile(id,'run-0');await draft(model,id,'Keep my input');
+    const before=f.calls.length;f.runs.get('run-0').recovery.unresolved_mutations=1;await assert.rejects(model.send(id,'run-0'),/original tool outcomes/);
+    f.runs.get('run-0').recovery.unresolved_mutations=0;f.overrides.set('agent.model.run.admission',()=>({binding:{provider:{instance:'other'}},r:null}));
+    await assert.rejects(model.send(id,'run-0'),/different native admission/);assert.equal(f.calls.length,before);assert.equal(model.draft(id).text,'Keep my input');
+  });
+  await check('next draft waits for original consumption after a lost Continue reply',async()=>{
+    const f=fixture();let {model,native,id}=await task(f);await draft(model,id);await model.send(id);f.finish('run-0');await model.refresh();await model.reconcile(id,'run-0');
+    await draft(model,id,'Continue');f.lose('agent.model.run');await assert.rejects(model.send(id,'run-0'),/Lost original reply/);
+    model.edit(id,{...empty(),text:'Immediate next input'});await native.save();const before=f.calls.length;
+    assert.equal(model.draftAwaitingRun(id),true);await assert.rejects(model.flush(id),/Inspect the original Send/);assert.equal(f.calls.length,before);
+    model=f.open().model;await model.refresh();assert.equal(model.draftAwaitingRun(id),false);await model.flush(id);
+    assert.equal(model.draft(id).text,'Immediate next input');assert.equal(f.conversations.get(id).draft,'Immediate next input');assert.equal(f.runs.size,2);
+  });
+  await check('typing during Continue admission reads retains the newer draft without dispatch',async()=>{
+    const f=fixture(),{model,id}=await task(f);await draft(model,id);await model.send(id);f.finish('run-0');await model.refresh();await model.reconcile(id,'run-0');await draft(model,id,'Continue');
+    const before=f.calls.length;
+    f.overrides.set('agent.model.run.admission',async()=>{
+      await model.observe(id);model.edit(id,{...empty(),text:'Newer input'});
+      return {binding:{provider:f.client.view.instance,project:'project',capability:{id:'agent.model.run',version:1},target:null},r:null};
+    });
+    await assert.rejects(model.send(id,'run-0'),/draft changed while preparing Continue/);
+    assert.equal(f.calls.length,before);assert.equal(model.draft(id).text,'Newer input');
+  });
+  await check('Continue keeps the exact original native R target',async()=>{
+    const f=fixture(),{model,id}=await task(f);await draft(model,id);await model.send(id);f.finish('run-0');await model.refresh();await model.reconcile(id,'run-0');await draft(model,id,'Continue R');
+    const binding={provider:{instance:'r',plugin:'org.rho.r',revision:'sha256:'+'c'.repeat(64),artifact:'sha256:'+'d'.repeat(64)},project:'project',capability:{id:'r.execute',version:2},target:'original-session'};
+    f.runs.get('run-0').request.grant.mode='run';f.runs.get('run-0').request.r=clone(binding);
+    await model.send(id,'run-0');assert.deepEqual(f.calls.at(-1).args.arguments.r,binding);assert.equal(f.calls.at(-1).args.arguments.mode,'run');
   });
   await check('identical retry recovers one run and a forged result never clears the draft',async()=>{
     const f=fixture(),{model,id}=await task(f);await draft(model,id);f.lose('agent.model.run');await assert.rejects(model.send(id));

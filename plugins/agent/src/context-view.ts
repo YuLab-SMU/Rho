@@ -125,12 +125,20 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
       dialog.showModal();
       run(async current => {
         const captured = kind === 'rho' ? await picker.originalRho(originalTask, request) : { sources: await picker.original(originalTask, request), history: null }; if (!current()) return;
-        const captures = captured.sources;
+        const captures = [...(captured.history?.prior_sources ?? []).map(source => ({selection:source.selection,title:source.title,description:`Earlier input · ${source.description}`,text:source.text,data:source.native_data})), ...captured.sources];
         if (captured.history) {
           const heading = document.createElement('h3'), note = document.createElement('p');
-          heading.textContent = 'Earlier conversation';
+          heading.textContent = captured.history.kind === 'continuation' ? 'Continued task input' : 'Earlier conversation';
           note.textContent = `${captured.history.truncated ? 'Some earlier input was omitted. ' : ''}Saved with this message; it does not grant tool access.`;
           area.append(heading, note);
+          if (captured.history.kind === 'continuation') {
+            const details = document.createElement('details'), summary = document.createElement('summary'), original = document.createElement('pre');
+            summary.textContent = 'Checked original tools'; original.textContent = JSON.stringify({run_id:captured.history.previous_run_id,recovery:captured.history.recovery,tools:captured.history.tools},null,2);
+            details.append(summary,original); area.append(details);
+            if (captured.history.tools_truncated || captured.history.prior_sources_truncated) {
+              const omitted = document.createElement('p'); omitted.textContent = 'Some earlier tool results or source inputs were omitted to keep this message within its limits.'; area.append(omitted);
+            }
+          }
           for (const turn of captured.history.turns) {
             const section = document.createElement('section'), question = document.createElement('h4'), user = document.createElement('pre'), answer = document.createElement('h4'), text = document.createElement('pre'), status = document.createElement('p');
             question.textContent = 'You'; user.textContent = turn.user_text; answer.textContent = 'Agent'; text.textContent = turn.assistant_text || 'No retained answer text.';

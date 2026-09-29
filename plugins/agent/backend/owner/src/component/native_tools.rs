@@ -7,8 +7,7 @@ pub(super) fn validate_targets(
     request: &ComponentAgentStart,
     origin: &ComponentNativeRunOrigin,
 ) -> Result<(), ApplicationError> {
-    if request.continuation.is_some()
-        || request.grant.permission_policy.is_some()
+    if request.grant.permission_policy.is_some()
         || !request.grant.documents.is_empty()
         || !request.grant.files.is_empty()
         || !matches!(

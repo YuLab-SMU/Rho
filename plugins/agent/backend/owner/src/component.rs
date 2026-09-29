@@ -987,6 +987,9 @@ impl ComponentAgentOwner {
         }
         validate_component_grant(conversation.profile, &request.grant)?;
         self.validate_continuation(&actor.scope, &request)?;
+        if let Some(origin) = &origin {
+            self.validate_native_continuation(&actor.scope, &request, origin)?;
+        }
         let settings = self.store.component_settings(&actor.scope)?;
         if !settings.enabled {
             return Err(invalid("Component assistant is disabled"));
@@ -1011,10 +1014,14 @@ impl ComponentAgentOwner {
         }
         let (task_intent, document_grants) = self.continued_authority(&actor.scope, &request)?;
         let mut captured_context = captured_context;
-        if origin.is_some() && request.continuation.is_none() {
+        if origin.is_some() {
             // New ordinary turns capture their own history. Original retries
             // returned above, so later events cannot replace their input.
-            let history = self.conversation_history(&actor.scope, &request.conversation_id)?;
+            let history = if let Some(reference) = &request.continuation {
+                Some(self.native_continuation_history(&actor.scope, reference)?)
+            } else {
+                self.conversation_history(&actor.scope, &request.conversation_id)?
+            };
             if history.is_some() || captured_context.is_some() {
                 captured_context
                     .get_or_insert(ComponentAgentContext {
@@ -1301,8 +1308,16 @@ impl ComponentAgentOwner {
                     })
             }) {
                 action = ComponentToolAction::PreviousResult {
-                    capability: CapabilityRef::new(action.capability(), 1)
-                        .map_err(|e| invalid(e.to_string()))?,
+                    capability: CapabilityRef::new(
+                        action.capability(),
+                        match &action {
+                            ComponentToolAction::PluginInvoke(request) => {
+                                request.binding.capability.version
+                            }
+                            _ => 1,
+                        },
+                    )
+                    .map_err(|e| invalid(e.to_string()))?,
                     run_id: ancestor.run.run_id.clone(),
                     receipt_id: previous.receipt.receipt_id.clone(),
                 };

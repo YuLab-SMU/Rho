@@ -1013,6 +1013,7 @@ struct SyntheticModelState {
     entered: std::sync::Arc<tokio::sync::Notify>,
     resume: std::sync::Arc<tokio::sync::Notify>,
     tool: Option<(String, Value)>,
+    repeat_tool: bool,
     bodies: std::sync::Arc<std::sync::Mutex<Vec<Value>>>,
 }
 struct SyntheticModel {
@@ -1030,8 +1031,12 @@ impl SyntheticModel {
         Self::with_tool(None).await
     }
     async fn with_tool(tool: Option<(String, Value)>) -> Self {
+        Self::with_options(tool, false).await
+    }
+    async fn with_options(tool: Option<(String, Value)>, repeat_tool: bool) -> Self {
         let state = SyntheticModelState {
             tool,
+            repeat_tool,
             ..Default::default()
         };
         let app = axum::Router::new()
@@ -1097,7 +1102,14 @@ async fn synthetic_completion(
         ));
         sse.push_str(&chunk(json!({}), json!("stop")));
     } else if let Some((name, arguments)) = &state.tool {
-        if index == 0 {
+        if index == 0
+            || state.repeat_tool
+                && body["messages"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .all(|message| message["role"] != "tool")
+        {
             sse.push_str(&chunk(json!({"tool_calls":[{"index":0,"id":"science-original","type":"function","function":{"name":name,"arguments":arguments.to_string()}}]}), Value::Null));
             sse.push_str(&chunk(json!({}), json!("tool_calls")));
         } else {

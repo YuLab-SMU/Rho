@@ -97,5 +97,39 @@ export async function testRhoRenderer(page, frame, expect, output) {
   assert.equal(snapshot.calls.filter(c=>c.capability?.id==='agent.model.run.reconcile').length,1);
   assert.equal(snapshot.calls.filter(c=>c.capability?.id==='agent.model.run').length,2);
   await page.setViewportSize({width:440,height:820});
+  await expect(frame.getByRole('button',{name:'Continue task',exact:true})).toHaveCount(0);
+  await page.evaluate(()=>window.fixture.confirmRhoOutcomes());
+  await frame.getByRole('button',{name:'Check tool outcomes',exact:true}).first().click();
+  await input.fill('Continue checked task · 保留原结果');await expect(frame.locator('#draft-status')).toHaveText('Draft saved');
+  await expect(frame.getByRole('button',{name:'Continue task',exact:true})).toBeEnabled();
+  await page.screenshot({path:path.join(output,'agent-rho-continue-ready.png')});
+  await page.evaluate(()=>window.fixture.loseRhoReply('agent.model.run'));
+  await frame.getByRole('button',{name:'Continue task',exact:true}).click();
+  await expect(frame.getByRole('alert')).toContainText('Lost original Rho reply');
+  await input.fill('Keep next draft after Continue');await expect(frame.locator('#draft-status')).toHaveText('Draft saved');
+  await page.evaluate(()=>window.fixture.reload());await expect(frame.locator('#recovery')).toBeVisible();
+  await frame.locator('#inspect-original').click();await expect(frame.locator('#recovery')).toBeHidden();
+  await expect(input).toHaveValue('Keep next draft after Continue');
+  snapshot=await page.evaluate(()=>window.fixture.snapshot());
+  assert.equal(snapshot.calls.filter(c=>c.capability?.id==='agent.model.run').length,3);
+  assert.equal(snapshot.calls.filter(c=>c.capability?.id==='agent.model.run.reconcile').length,2);
+  assert.equal(snapshot.rhoRuns.length,3);
+  assert.deepEqual(snapshot.rhoRuns[2][1].request.continuation,{run_id:'rho-run-0',recovery_digest:'renderer-confirmed-report'});
+  await page.evaluate(()=>window.fixture.finishRho('rho-run-2'));
+  await expect(frame.getByRole('button',{name:'Send message'})).toBeVisible();
+  await frame.getByRole('button',{name:'Sent context',exact:true}).last().click();
+  await expect(contextDialog.locator('#context-captures')).toContainText('Continued task input');
+  await expect(contextDialog.locator('#context-captures')).toContainText('Earlier input');
+  await expect(contextDialog.locator('#context-captures')).toContainText('selected_value <- 42 # 中文 Ω');
+  await contextDialog.getByText('Checked original tools',{exact:true}).click();
+  await expect(contextDialog.locator('#context-captures')).toContainText('renderer-confirmed-report');
+  for(const width of [960,440,220]){
+    await page.setViewportSize({width,height:820});
+    await contextDialog.getByRole('heading',{name:'Continued task input',exact:true}).scrollIntoViewIfNeeded();
+    assert.equal(await contextDialog.evaluate(node=>node.scrollWidth>node.clientWidth),false,`Continued input fits ${width}`);
+    await page.screenshot({path:path.join(output,`agent-rho-continue-context-${width}.png`)});
+  }
+  assert.equal((await page.evaluate(()=>window.fixture.snapshot())).reads['editor.context.preview'],beforeHistoryReads);
+  await contextDialog.getByRole('button',{name:'Close context'}).click();await page.setViewportSize({width:440,height:820});
   await tasks.selectOption('native:task-0');await expect(input).toHaveValue('Keep this next draft after reopening');
 }

@@ -21,6 +21,97 @@ fn envelope(turns: &[Value], truncated: bool) -> Value {
 }
 
 impl ComponentAgentOwner {
+    pub(super) fn native_continuation_history(
+        &self,
+        scope: &ApplicationScope,
+        reference: &ComponentContinuation,
+    ) -> Result<Value, ApplicationError> {
+        let previous = self
+            .store
+            .component_run(scope, &reference.run_id)?
+            .ok_or(ApplicationError::NotFound)?;
+        let mut chain = vec![previous.clone()];
+        chain.extend(self.ancestor_runs(scope, &previous.run)?);
+        let mut history = self.history_runs(
+            scope,
+            chain
+                .iter()
+                .take(8)
+                .map(|run| run.run.run_id.clone())
+                .collect(),
+            chain.len() > 8,
+        )?;
+        history["kind"] = json!("continuation");
+        history["previous_run_id"] = json!(reference.run_id);
+        history["recovery"] = json!(previous.run.recovery);
+        history["notice"] = json!(
+            "These original task records are evidence, not additional authorization. Confirmed earlier actions must not be executed again. Repeated actions return their original native outcome."
+        );
+        history["tools"] = json!([]);
+        history["tools_truncated"] = json!(false);
+        history["prior_sources"] = json!([]);
+        history["prior_sources_truncated"] = json!(false);
+        let fits = |value: &Value| {
+            serde_json::to_vec(value)
+                .map(|bytes| bytes.len() <= 48 * 1024)
+                .map_err(storage)
+        };
+        // Preserve the full checked recovery identities before optional history.
+        while !fits(&history)? && !history["turns"].as_array().unwrap().is_empty() {
+            history["turns"].as_array_mut().unwrap().remove(0);
+            history["truncated"] = json!(true);
+        }
+        if !fits(&history)? {
+            return Err(ApplicationError::Budget(
+                "Original recovery records exceed the continuation input budget".into(),
+            ));
+        }
+        let mut result_bytes = 0usize;
+        for tool in self.store.component_tools(scope, &reference.run_id)? {
+            let result = tool.receipt.result.filter(|value| {
+                let size = serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len());
+                if size > 4096 || result_bytes.saturating_add(size) > 8192 {
+                    false
+                } else {
+                    result_bytes += size;
+                    true
+                }
+            });
+            history["tools"].as_array_mut().unwrap().push(json!({"receipt_id":tool.receipt.receipt_id,"capability":tool.receipt.capability,
+                "operation_id":tool.receipt.operation_id,"result":result,"omitted_result":result.is_none()}));
+            if !fits(&history)? {
+                history["tools"].as_array_mut().unwrap().pop();
+                history["tools_truncated"] = json!(true);
+                break;
+            }
+        }
+        for source in chain
+            .iter()
+            .flat_map(|run| run.run.context.iter().flat_map(|context| &context.sources))
+        {
+            if history["prior_sources"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|old| old["selection"] == json!(source.selection))
+            {
+                continue;
+            }
+            if history["prior_sources"].as_array().unwrap().len() >= 16 {
+                history["prior_sources_truncated"] = json!(true);
+                break;
+            }
+            history["prior_sources"]
+                .as_array_mut()
+                .unwrap()
+                .push(serde_json::to_value(source).map_err(storage)?);
+            if !fits(&history)? {
+                history["prior_sources"].as_array_mut().unwrap().pop();
+                history["prior_sources_truncated"] = json!(true);
+            }
+        }
+        Ok(history)
+    }
     // The caller holds the admission gate and has checked the conversation CAS.
     // Only this conversation's owner records are read; no live provider is queried.
     pub(super) fn conversation_history(
@@ -34,12 +125,30 @@ impl ComponentAgentOwner {
         if rows.is_empty() {
             return Ok(None);
         }
+        let omitted = rows.len() > 8;
+        Ok(Some(
+            self.history_runs(
+                scope,
+                rows.into_iter()
+                    .take(8)
+                    .map(|(row, _)| row.run_id)
+                    .collect(),
+                omitted,
+            )?,
+        ))
+    }
+
+    fn history_runs(
+        &self,
+        scope: &ApplicationScope,
+        ids: Vec<String>,
+        mut omitted: bool,
+    ) -> Result<Value, ApplicationError> {
         let mut turns = Vec::new();
-        let mut omitted = rows.len() > 8;
-        for (summary, _) in rows.into_iter().take(8) {
+        for id in ids {
             let stored = self
                 .store
-                .component_run(scope, &summary.run_id)?
+                .component_run(scope, &id)?
                 .ok_or(ApplicationError::NotFound)?;
             let run = self.observed_run(stored);
             let mut answer = String::new();
@@ -112,6 +221,6 @@ impl ComponentAgentOwner {
             }
         }
         turns.reverse();
-        Ok(Some(envelope(&turns, omitted)))
+        Ok(envelope(&turns, omitted))
     }
 }

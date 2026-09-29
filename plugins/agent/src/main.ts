@@ -38,6 +38,11 @@ function saveDraftSoon(task: string, kind: 'native' | 'rho' = 'native') {
     draftTimers.delete(key);
     if (disposed || closing || composing) return;
     if (model.busy || rho.busy) { saveDraftSoon(task, kind); return; }
+    if (kind === 'rho' && rho.draftAwaitingRun(task)) {
+      // Persist later typing locally while the original Send's atomic draft
+      // consumption is still unknown. Polling only observes that original run.
+      action(async () => { await model.save(); saveDraftSoon(task, kind); }); return;
+    }
     const target = kind === 'rho' ? rho : model, pendingKind = kind === 'rho' ? 'draft' : 'save_draft';
     if (!target.state.pending.some(p => p.task === task && p.kind === pendingKind))
       action(async () => { await model.save(); await target.flush(task); });
@@ -189,7 +194,7 @@ function renderRho(id: string) {
   get('history-controls').hidden = !earlier && !history?.before; get('earlier-messages').hidden = !earlier; get<HTMLButtonElement>('earlier-messages').disabled = rho.busy || closing;
   get('latest-messages').hidden = !history?.before; get<HTMLButtonElement>('latest-messages').disabled = rho.busy || closing; get('history-note').textContent = history?.before ? 'Earlier turns' : '';
   const transcript = get('transcript'), rows = [...(history?.page.runs ?? [])].reverse();
-  const signature = JSON.stringify([id, rows, controlled, rho.busy, closing, conversation?.active_run_id, rows.map(row => [rho.runs.get(row.run_id), rho.transcripts.get(row.run_id)])]);
+  const signature = JSON.stringify([id, rows, controlled, editable, !!message.value.trim(), rho.busy, closing, conversation?.active_run_id, rows.map(row => [rho.runs.get(row.run_id), rho.transcripts.get(row.run_id)])]);
   if (transcript.dataset.content !== signature) {
     const following = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 45, oldTask = transcript.dataset.task;
     const top = transcript.getBoundingClientRect().top, visible = [...transcript.querySelectorAll<HTMLElement>('[data-event]')].find(node => node.getBoundingClientRect().bottom > top);
@@ -215,6 +220,12 @@ function renderRho(id: string) {
             const line = document.createElement('p'); line.textContent = [tool.state.replaceAll('_', ' '), ...tool.operations.map(operation => operation.status), tool.note].filter(Boolean).join(' · '); report.append(line);
           }
           activity.append(report);
+          if (!run.recovery.unresolved_mutations) {
+            const continued = document.createElement('button'); continued.className = 'sent-context'; continued.textContent = 'Continue task';
+            continued.title = 'Send your current draft with this checked task’s original tools and context.';
+            continued.disabled = !editable || rho.busy || closing || !!conversation?.active_run_id || !message.value.trim() || rho.state.pending.some(p => p.task === id && p.kind === 'run');
+            continued.onclick = () => action(() => rho.send(id, row.run_id)); activity.append(continued);
+          }
         }
       }
     }

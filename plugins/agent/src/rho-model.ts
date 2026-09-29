@@ -1,5 +1,6 @@
 import type { AgentDraftContent, ComponentAgentConversation, ComponentAgentRun, ComponentAgentRunSummary, ComponentAgentEventPage, ComponentModelSettings, ComponentCredentialStatus } from '../sdk/index.js';
 import type { NativeAgentModel } from './native-model.js';
+import type { ProviderBinding } from '../public/plugin-protocol/index.js';
 import { type Client, type Intent, json, same, terminal, inspectOriginal, verifyOriginal } from './operations.js';
 
 interface Draft { content: AgentDraftContent; base: number; revision: number; dirty: boolean; conflict: AgentDraftContent | null; }
@@ -45,6 +46,7 @@ export class RhoModel {
     return controller?.window_id === this.client.view.window && controller.incarnation === `view:${this.client.view.view}`;
   }
   draft(task: string) { return this.state.drafts[task]?.content ?? this.conversations.get(task)?.draft_content ?? empty(); }
+  draftAwaitingRun(task: string) { return this.state.pending.some(p => p.task === task && p.kind === 'run' && !p.consumed); }
   edit(task: string, content: AgentDraftContent) {
     this.live(); const local = this.state.drafts[task];
     if (!local || !this.canControl(task) || this.conversations.get(task)?.archived) throw Error('This Rho task is read-only in this view.');
@@ -109,9 +111,9 @@ export class RhoModel {
     this.runs.set(run.run_id, run);
     const pending = this.state.pending.find(p => p.kind === 'run' && p.intent.request === run.request.request_id);
     if (!pending) return false;
-    const args = (pending.intent.arguments as unknown as { arguments: { text: string; sources?: AgentDraftContent['context']; conversation_id: string; conversation_version: number; model_settings_version: number } }).arguments;
+    const args = (pending.intent.arguments as unknown as { arguments: { text: string; sources?: AgentDraftContent['context']; continuation?: ComponentAgentRun['request']['continuation']; conversation_id: string; conversation_version: number; model_settings_version: number } }).arguments;
     if (run.request.conversation_id !== pending.task || run.request.text !== args.text || run.request.conversation_version !== args.conversation_version ||
-      run.request.model_settings_version !== args.model_settings_version || !same(run.request.sources ?? [], args.sources ?? []) || run.request.window.window_id !== this.client.view.window || run.request.window.incarnation !== `view:${this.client.view.view}`)
+      run.request.model_settings_version !== args.model_settings_version || !same(run.request.sources ?? [], args.sources ?? []) || !same(run.request.continuation ?? null, args.continuation ?? null) || run.request.window.window_id !== this.client.view.window || run.request.window.incarnation !== `view:${this.client.view.view}`)
       throw Error('The Rho run does not match its original Send.');
     pending.run = run.run_id;
     if (pending.consumed) return false;
@@ -157,11 +159,12 @@ export class RhoModel {
   async latest(task: string) { this.history.delete(task); await this.observe(task); }
   async flush(task: string) {
     const local = this.state.drafts[task]; if (!local?.dirty) return;
+    if (this.draftAwaitingRun(task)) throw Error('Inspect the original Send before saving the next draft. Your local input is retained.');
     if (!this.canControl(task) || this.conversations.get(task)?.archived || local.conflict) throw Error('Resolve task control or the draft conflict before saving.');
     if (new TextEncoder().encode(local.content.text).length > 32768) throw Error('Messages are limited to 32 KiB. Your local draft is retained.');
     await this.issue('draft', task, { conversation_id: task, draft_version: local.base, content: structuredClone(local.content), grant: null }, local.revision);
   }
-  async send(task: string) {
+  async send(task: string, continueRun?: string) {
     this.live();
     if (this.submissions.has(task) || this.state.pending.some(p => p.task === task && p.kind === 'run')) throw Error('Inspect the original Send before submitting again.');
     this.submissions.add(task);
@@ -176,9 +179,23 @@ export class RhoModel {
       const conversation = this.conversations.get(task), local = this.state.drafts[task];
       if (!conversation || !local || local.dirty || local.conflict || !this.canControl(task) || conversation.archived || conversation.active_run_id || !local.content.text.trim())
         throw Error('Confirm the saved draft and original task state before sending.');
+      const revision = local.revision, content = structuredClone(local.content);
+      let continuation: ComponentAgentRun['request']['continuation'], r: ProviderBinding | null = null, mode: 'run' | 'explain' | null = null;
+      if (continueRun) {
+        const previous = await this.read<ComponentAgentRun>('agent.model.run.get', { run_id: continueRun });
+        if (previous.run_id !== continueRun || previous.request.conversation_id !== task || rhoBusy(previous.state) || !previous.recovery || previous.recovery.unresolved_mutations)
+          throw Error('Check the original tool outcomes before Continue. Your draft is retained.');
+        if (!['run', 'explain'].includes(previous.request.grant.mode)) throw Error('This task has no supported original tool selection.');
+        const admission = await this.read<{ binding: ProviderBinding; r: ProviderBinding | null }>('agent.model.run.admission', { run_id: continueRun });
+        if (!same(admission.binding, this.binding('agent.model.run')) || previous.request.grant.mode === 'run' && !admission.r)
+          throw Error('The original task has a different native admission.');
+        continuation = { run_id: continueRun, recovery_digest: previous.recovery.digest }; r = admission.r; mode = previous.request.grant.mode as 'run' | 'explain';
+        const current = this.state.drafts[task];
+        if (!current || current.revision !== revision || current.dirty || current.conflict || !same(current.content, content) || this.conversations.get(task)?.version !== conversation.version) throw Error('The draft changed while preparing Continue. Your input is retained.');
+      }
       const request = crypto.randomUUID();
       await this.issue('run', task, { request_id: request, conversation_id: task, conversation_version: conversation.version,
-        model_settings_version: this.settings.version, text: local.content.text, sources: structuredClone(local.content.context), r: null, mode: null }, local.revision, request);
+        model_settings_version: this.settings.version, text: content.text, sources: content.context, continuation, r, mode }, revision, request);
     } finally { this.submissions.delete(task); }
   }
   async stop(task: string) {

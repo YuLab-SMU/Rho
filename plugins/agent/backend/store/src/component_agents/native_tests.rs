@@ -83,6 +83,163 @@ fn setup(store: Arc<AgentStore>) -> (ComponentAgentOwner, ComponentActor, Stored
 }
 
 #[test]
+fn native_continuation_retains_exact_provider_and_converts_confirmed_mutations_to_original_results()
+{
+    let directory = tempfile::tempdir().unwrap();
+    let store = Arc::new(AgentStore::open(&directory.path().join("agent.sqlite")).unwrap());
+    let (owner, actor, first) = setup(store.clone());
+    owner.claim(actor.scope(), &first.run.run_id, 4).unwrap();
+    owner
+        .begin_model_call(actor.scope(), &first.run.run_id, 5)
+        .unwrap();
+    let action = ComponentToolAction::PluginInvoke(PluginRequest {
+        binding: origin().r.unwrap(),
+        arguments: serde_json::json!({"expected_session":"r-session","run":{"code":"counter <- counter + 1"}}),
+        preconditions: serde_json::Value::Null,
+    });
+    let tool = owner
+        .admit_tool(
+            actor.scope(),
+            &first.run.run_id,
+            1,
+            "first-call",
+            action.clone(),
+            6,
+        )
+        .unwrap()
+        .tool;
+    let operation = OperationId::new("prior-operation").unwrap();
+    owner
+        .record_tool(
+            actor.scope(),
+            &first.run.run_id,
+            &tool.receipt.receipt_id,
+            ComponentToolUpdate::Accepted {
+                operation_id: Some(operation.clone()),
+                application_request_id: None,
+            },
+            7,
+        )
+        .unwrap();
+    owner
+        .record_tool(
+            actor.scope(),
+            &first.run.run_id,
+            &tool.receipt.receipt_id,
+            ComponentToolUpdate::Resolved {
+                result: serde_json::json!({"status":"succeeded","output":"Original Ω"}),
+                evidence: vec![],
+            },
+            8,
+        )
+        .unwrap();
+    owner
+        .finish(
+            actor.scope(),
+            &first.run.run_id,
+            ComponentAgentRunState::Completed,
+            None,
+            9,
+        )
+        .unwrap();
+    let conversation = store
+        .component_conversation(actor.scope(), "task")
+        .unwrap()
+        .unwrap();
+    let recovered = owner
+        .record_native_recovery(
+            &actor,
+            &first.run.run_id,
+            conversation.version,
+            vec![ComponentRecoveredTool {
+                receipt_id: tool.receipt.receipt_id.clone(),
+                state: ComponentRecoveryState::Confirmed,
+                application_request_id: None,
+                application_state: None,
+                operations: vec![ComponentRecoveredOperation {
+                    operation_id: operation,
+                    status: OperationStatus::Succeeded,
+                }],
+                documents: vec![],
+                note: None,
+            }],
+            10,
+        )
+        .unwrap();
+    let conversation = store
+        .component_conversation(actor.scope(), "task")
+        .unwrap()
+        .unwrap();
+    let request = ComponentAgentStart {
+        request_id: "continued".into(),
+        conversation_version: conversation.version,
+        continuation: Some(ComponentContinuation {
+            run_id: first.run.run_id.clone(),
+            recovery_digest: recovered.recovery.unwrap().digest,
+        }),
+        ..first.run.request.clone()
+    };
+    let next_origin = ComponentNativeRunOrigin {
+        operation: OperationId::new("continued-operation").unwrap(),
+        request: RequestId::new("continued-parent").unwrap(),
+        ..origin()
+    };
+    for field in ["revision", "artifact"] {
+        let mut changed = serde_json::to_value(&next_origin).unwrap();
+        changed["r"]["provider"][field] = serde_json::json!(format!("sha256:{}", "e".repeat(64)));
+        let changed = serde_json::from_value(changed).unwrap();
+        assert!(
+            owner
+                .start_native(&actor, request.clone(), changed, 11)
+                .is_err()
+        );
+    }
+    let mut stale = request.clone();
+    stale.continuation.as_mut().unwrap().recovery_digest = "stale-report".into();
+    assert!(
+        owner
+            .start_native(&actor, stale, next_origin.clone(), 11)
+            .is_err()
+    );
+    let next = owner
+        .start_native(&actor, request, next_origin, 12)
+        .unwrap()
+        .run;
+    let history = next.run.context.as_ref().unwrap().history.as_ref().unwrap();
+    assert_eq!(history["kind"], "continuation");
+    assert_eq!(history["previous_run_id"], first.run.run_id);
+    assert!(serde_json::to_vec(history).unwrap().len() <= 48 * 1024);
+    owner.claim(actor.scope(), &next.run.run_id, 13).unwrap();
+    owner
+        .begin_model_call(actor.scope(), &next.run.run_id, 14)
+        .unwrap();
+    let repeated = owner
+        .admit_tool(
+            actor.scope(),
+            &next.run.run_id,
+            1,
+            "continued-call",
+            action,
+            15,
+        )
+        .unwrap()
+        .tool;
+    assert!(!repeated.receipt.mutation);
+    let ComponentToolAction::PreviousResult {
+        capability,
+        run_id,
+        receipt_id,
+    } = repeated.action
+    else {
+        panic!()
+    };
+    assert_eq!(capability.id, "r.execute");
+    assert_eq!(capability.version, 2);
+    assert_eq!(run_id, first.run.run_id);
+    assert_eq!(receipt_id, tool.receipt.receipt_id);
+}
+
+#[test]
 fn native_recovery_report_checks_controller_and_version_and_survives_reopen() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("agent.sqlite");

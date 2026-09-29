@@ -426,6 +426,61 @@ async fn dispatch(
         .owner
         .check_tool_dispatch(&metadata.scope, run, &tool.receipt.receipt_id, now())
         .map_err(safe)?;
+    if let ComponentToolAction::PreviousResult {
+        run_id, receipt_id, ..
+    } = &tool.action
+    {
+        let current = metadata
+            .owner
+            .store
+            .component_run(&metadata.scope, run)
+            .map_err(safe)?
+            .ok_or("Current continuation record is unavailable")?;
+        let (previous, original) = metadata
+            .owner
+            .previous_tool(&metadata.scope, &current.run, run_id, receipt_id)
+            .map_err(safe)?;
+        let previous_origin = previous
+            .native_origin
+            .as_ref()
+            .ok_or("Original native admission is unavailable")?;
+        let observed = observe_original(
+            metadata,
+            host,
+            &origin.request,
+            previous_origin,
+            run_id,
+            &original,
+        )
+        .await
+        .map_err(|error| error.message)?;
+        if observed["completeness"] != "complete"
+            || !["succeeded", "failed", "cancelled"]
+                .iter()
+                .any(|status| observed["operation"]["status"] == *status)
+        {
+            return Err(
+                "The previous native outcome is no longer confirmed; no operation was replayed"
+                    .into(),
+            );
+        }
+        let mut result = observed["operation"].clone();
+        result["reused_previous"] = json!({"run_id":run_id,"receipt_id":receipt_id});
+        metadata
+            .owner
+            .record_tool(
+                &metadata.scope,
+                run,
+                &tool.receipt.receipt_id,
+                ComponentToolUpdate::Resolved {
+                    result: result.clone(),
+                    evidence: vec![],
+                },
+                now(),
+            )
+            .map_err(safe)?;
+        return Ok(result);
+    }
     let (request, mutation) = match &tool.action {
         ComponentToolAction::PluginQuery(request) => (request, false),
         ComponentToolAction::PluginInvoke(request) => (request, true),
@@ -539,7 +594,18 @@ pub(crate) async fn inspect_original(
         .into_iter()
         .find(|tool| tool.receipt.receipt_id == args.receipt_id)
         .ok_or(ComponentTaskError::NotFound)?;
-    let ComponentToolAction::PluginInvoke(request) = tool.action else {
+    observe_original(metadata, &host, &call.request, &origin, &args.run_id, &tool).await
+}
+
+async fn observe_original(
+    metadata: &Metadata,
+    host: &HostCallClient,
+    parent: &RequestId,
+    origin: &ComponentNativeRunOrigin,
+    run: &str,
+    tool: &StoredComponentTool,
+) -> Result<Value, Failure> {
+    let ComponentToolAction::PluginInvoke(request) = &tool.action else {
         return Err(Failure::invalid(
             "This tool has no delegated scientific Operation",
         ));
@@ -547,7 +613,7 @@ pub(crate) async fn inspect_original(
     let pending = host
         .begin(
             read_id(),
-            call.request.clone(),
+            parent.clone(),
             manifest::key("plugins.delegated_operation"),
             json!({"parent_operation":origin.operation,"request":tool.receipt.client_request_id}),
         )
@@ -558,7 +624,7 @@ pub(crate) async fn inspect_original(
     let id = observed["data"]["operation_id"].as_str();
     if observed["status"] != "ready" || observed["completeness"] != "complete" || id.is_none() {
         return Ok(
-            json!({"run_id":args.run_id,"receipt_id":args.receipt_id,"completeness":"partial","operation":null,"request":tool.receipt.client_request_id}),
+            json!({"run_id":run,"receipt_id":tool.receipt.receipt_id,"completeness":"partial","operation":null,"request":tool.receipt.client_request_id}),
         );
     }
     let id = OperationId::new(id.unwrap())
@@ -575,7 +641,7 @@ pub(crate) async fn inspect_original(
     }
     let data = query(
         &host,
-        &call.request,
+        parent,
         key("operation.get", 1),
         json!({"operation_id":id}),
     )
@@ -589,6 +655,6 @@ pub(crate) async fn inspect_original(
         ));
     }
     Ok(
-        json!({"run_id":args.run_id,"receipt_id":args.receipt_id,"completeness":"complete","operation":result,"request":tool.receipt.client_request_id}),
+        json!({"run_id":run,"receipt_id":tool.receipt.receipt_id,"completeness":"complete","operation":result,"request":tool.receipt.client_request_id}),
     )
 }

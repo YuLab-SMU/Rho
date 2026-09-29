@@ -93,5 +93,11 @@ export async function testContextPicker(ContextPicker, inclusionChoices, root) {
       await assert.rejects(f.picker.originalRho('rho-task','rho-original'),/incomplete or exceeds/);
     }
   });
+  await check('continuation input remains tied to its original checked run and digest',async()=>{
+    const f=fixture();f.rho.request.continuation={run_id:'earlier',recovery_digest:'checked-digest'};
+    Object.assign(f.rho.context.history,{kind:'continuation',previous_run_id:'earlier',recovery:{digest:'checked-digest'},tools:[],tools_truncated:false,prior_sources:[],prior_sources_truncated:false});
+    assert.equal((await f.picker.originalRho('rho-task','rho-original')).history.kind,'continuation');
+    f.rho.context.history.recovery.digest='replacement';await assert.rejects(f.picker.originalRho('rho-task','rho-original'),/original task/);
+  });
   console.log(`Ordinary context picker: ${count} checks passed; exact source, inclusion, partial/changed input and bounded reads. Native/Host acceptance remains separate.`);
 }

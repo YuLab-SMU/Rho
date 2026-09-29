@@ -1,6 +1,45 @@
-//! Continuation authority and action identity remain application-owned.
+//! Continuation authority and action identity remain Agent-owner records.
 use super::*;
 impl ComponentAgentOwner {
+    pub(super) fn validate_native_continuation(
+        &self,
+        scope: &ApplicationScope,
+        request: &ComponentAgentStart,
+        origin: &ComponentNativeRunOrigin,
+    ) -> Result<(), ApplicationError> {
+        let Some(reference) = &request.continuation else {
+            return Ok(());
+        };
+        let previous = self
+            .store
+            .component_run(scope, &reference.run_id)?
+            .ok_or(ApplicationError::NotFound)?;
+        let old = previous
+            .native_origin
+            .ok_or_else(|| invalid("Continue requires an original native model task"))?;
+        if old.binding != origin.binding {
+            return Err(invalid(
+                "Continue cannot replace the original Agent provider",
+            ));
+        }
+        match (&old.r, &origin.r) {
+            (_, None) if request.grant.mode == ComponentAgentMode::Explain => Ok(()),
+            (Some(old), Some(next)) if old == next => Ok(()),
+            (Some(old), Some(next))
+                if request.grant.mode == ComponentAgentMode::Explain
+                    && old.provider == next.provider
+                    && old.project == next.project
+                    && old.target == next.target
+                    && next.capability.id.as_str() == "r.session"
+                    && next.capability.version == 1 =>
+            {
+                Ok(())
+            }
+            _ => Err(invalid(
+                "Continue cannot replace the original R provider, version or native session",
+            )),
+        }
+    }
     pub fn ancestor_runs(
         &self,
         scope: &ApplicationScope,

@@ -229,7 +229,7 @@ impl Runs {
             text: args.text,
             sources: args.sources,
             assets: None,
-            continuation: None,
+            continuation: args.continuation,
             grant: ComponentAgentGrant {
                 mode,
                 permission_policy: None,
@@ -255,6 +255,39 @@ impl Runs {
             .owner
             .store
             .component_run_by_request(&metadata.scope, &request.request_id)?;
+        if previous.is_none()
+            && let Some(reference) = &request.continuation
+        {
+            if self.live_ids()?.contains(&reference.run_id) {
+                return Err(Failure::invalid(
+                    "The original model or native tool wait is still live",
+                ));
+            }
+            let original = self.stored(metadata, &reference.run_id)?;
+            if !original.run.state.is_terminal()
+                || original.native_origin.is_none()
+                || original.run.request.conversation_id != request.conversation_id
+                || original
+                    .run
+                    .recovery
+                    .as_ref()
+                    .is_none_or(|report| report.digest != reference.recovery_digest)
+            {
+                return Err(Failure::invalid(
+                    "Check the original task's tool outcomes before Continue",
+                ));
+            }
+            let observations =
+                crate::run_recovery::inspect(metadata, call, &host, &reference.run_id).await?;
+            if rho_agent_owner::component::component_digest(&observations)?
+                != reference.recovery_digest
+            {
+                return Err(Failure::invalid(
+                    "Original tool outcomes changed; check them again before Continue. The draft is retained",
+                ));
+            }
+            crate::run_recovery::revalidate_caller(call, &host, &caller).await?;
+        }
         let captured_context = if let Some(previous) = &previous {
             // An original retry observes the bytes already admitted. Current
             // provider state and optional source grants cannot replace them.

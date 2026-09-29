@@ -27,7 +27,7 @@ const staged = new Map();
 let modelSettings = {version:0,enabled:false,connection:null}, loseSettings = '';
 const modelKeys = new Map(), modelTests = new Map();
 const rhoTasks = new Map(), rhoRuns = new Map(), rhoEvents = new Map();
-let loseRho = '';
+let loseRho = '', confirmedRho = false;
 let contextFault = '', contextManifest;
 const contextProvider = {...instance,instance:'editor-one',plugin:'org.rho.editor',revision:'sha256:'+'c'.repeat(64),artifact:'sha256:'+'d'.repeat(64)};
 const contextReference = {provider:contextProvider,contribution:'documents',window:'window',selector:{draft:'draft-one',version:7,digest:'sha256:'+'e'.repeat(64)}};
@@ -75,6 +75,7 @@ async function handle(body) {
     else if (id === 'agent.model.diagnostic') data = modelTests.get(args.request_id);
     else if (id === 'agent.model.conversation') data = rhoTasks.get(args.conversation_id);
     else if (id === 'agent.model.run.get') data = rhoRuns.get(args.run_id);
+    else if (id === 'agent.model.run.admission') data = {binding:{project:view.project,provider:instance,capability:{id:'agent.model.run',version:1},target:null},r:rhoRuns.get(args.run_id).request.r??null};
     else if (id === 'agent.model.run.request') data = [...rhoRuns.values()].find(r => r.request.request_id === args.request_id);
     else if (id === 'agent.model.run.events') data = {events:(rhoEvents.get(args.run_id)??[]).filter(e=>e.sequence>args.after).slice(0,args.limit),cursor:rhoRuns.get(args.run_id).event_cursor,history_gap:false};
     else if (id === 'agent.model.history') {
@@ -159,11 +160,16 @@ async function handle(body) {
           if(args.conversation_version!==task.version||args.text!==task.draft_content.text)throw Error('Original draft changed');
           const earlier=[...rhoRuns.values()].find(run=>run.request.conversation_id===task.conversation_id);
           const capturedContext=args.sources.length||earlier?{history:earlier?{kind:'conversation',truncated:false,notice:'Fixture retained input',turns:[{run_id:earlier.run_id,state:'completed',user_text:earlier.request.text,assistant_text:'Retained Rho answer · 中文 Ω',history_gap:false,text_truncated:false,references:[],references_truncated:false}]}:null,sources:args.sources.map(selection=>({selection:copy(selection),title:contextItem.title,description:contextItem.description,text:JSON.parse(selection.inclusion).kind==='selection'?'selected_value <- 42 # 中文 Ω':'# Synchronized analysis document\nselected_value <- 42 # 中文 Ω\nprint(selected_value)',native_data:{version:7},truncated:false,observations:[],evidence:[]}))}:null;
-          const run={run_id:'rho-run-'+rhoRuns.size,request:{...copy(args),window:copy(task.controller)},context:capturedContext,state:'running',updated_at_ms:Date.now(),event_cursor:0,reason:null};rhoRuns.set(run.run_id,run);
+          if(args.continuation){
+            const original=rhoRuns.get(args.continuation.run_id);
+            if(original.recovery.digest!==args.continuation.recovery_digest)throw Error('The recovery report changed. Your draft is retained.');
+            capturedContext.history={...capturedContext.history,kind:'continuation',previous_run_id:original.run_id,recovery:copy(original.recovery),tools:[],tools_truncated:false,prior_sources:copy(original.context?.sources??[]),prior_sources_truncated:false};
+          }
+          const run={run_id:'rho-run-'+rhoRuns.size,request:{...copy(args),grant:{mode:args.mode??'explain',session:null,files:[],documents:[]},window:copy(task.controller)},context:capturedContext,state:'running',updated_at_ms:Date.now(),event_cursor:0,reason:null};rhoRuns.set(run.run_id,run);
           task.draft_content=blank();task.draft='';task.draft_version++;task.version++;task.active_run_id=run.run_id;status='running';output=null;
         }else if(kind==='run.reconcile'){
           const run=rhoRuns.get(args.run_id),task=rhoTasks.get(run.request.conversation_id);if(args.conversation_version!==task.version)throw Error('Task version changed');
-          run.recovery={version:1,digest:'renderer-report',checked_at_ms:Date.now(),unresolved_mutations:1,tools:[{receipt_id:'original-tool',state:'uncertain',application_request_id:null,application_state:null,operations:[],documents:[],note:'The original operation has no confirmed outcome. No work was repeated.'}]};run.updated_at_ms=Date.now();task.version++;output=copy(run);
+          run.recovery={version:1,digest:confirmedRho?'renderer-confirmed-report':'renderer-report',checked_at_ms:Date.now(),unresolved_mutations:confirmedRho?0:1,tools:[{receipt_id:'original-tool',state:confirmedRho?'confirmed':'uncertain',application_request_id:null,application_state:null,operations:[],documents:[],note:confirmedRho?'The original operation is confirmed. No work was repeated.':'The original operation has no confirmed outcome. No work was repeated.'}]};run.updated_at_ms=Date.now();task.version++;output=copy(run);
         }else{const run=rhoRuns.get(args.run_id);run.state='stopping';run.updated_at_ms=Date.now();output=copy(run);}
         record={operation:{operation_id:'op-'+records.length,caller:{kind:'plugin',id:view.view},client_request_id:scoped,capability:copy(body.capability),normalized_arguments:copy(body.arguments),preconditions:[]},status,outcome:status==='running'?null:status,output,error:null};records.push(record);
       }
@@ -233,6 +239,7 @@ window.fixture = {
   snapshot: () => copy({ view, calls, details: [...details], records, reads, rhoTasks:[...rhoTasks], rhoRuns:[...rhoRuns] }),
   contextFault: value => { contextFault=value; },
   loseRhoReply: id => { loseRho=id; },
+  confirmRhoOutcomes: () => { confirmedRho=true; },
   finishRho: id => {
     const run=rhoRuns.get(id);run.state='completed';run.updated_at_ms=Date.now();run.event_cursor=2;
     rhoEvents.set(id,[{run_id:id,sequence:1,content:{kind:'text',text:'Retained Rho answer · 中文 Ω.\nThis is a renderer fixture; no model was contacted.'}},{run_id:id,sequence:2,content:{kind:'reasoning',text:'RHO_PRIVATE_REASONING'}}]);

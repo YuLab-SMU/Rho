@@ -1,4 +1,4 @@
-import type { AgentContextSelection, ComponentAgentRun } from '../sdk/index.js';
+import type { AgentContextSelection, ComponentAgentRun, ComponentSourceSnapshot } from '../sdk/index.js';
 import type { CapabilityKey, ContextContribution, ContextPage, ContextPreview, ContextReference,
   InstanceRef, JsonValue, PluginInspection, PluginInstancePage } from '../public/plugin-protocol/index.js';
 import { type Client, json, same } from './operations.js';
@@ -7,7 +7,9 @@ export interface Inclusion { title: string; value: JsonValue; }
 export interface ContextSource { provider: InstanceRef; title: string; contribution: ContextContribution; inclusions: Inclusion[]; }
 export interface CapturedContext { selection: AgentContextSelection; title: string; description: string; text: string; data: JsonValue; }
 export interface CapturedHistory {
-  kind: 'conversation'; truncated: boolean; notice: string;
+  kind: 'conversation' | 'continuation'; truncated: boolean; notice: string;
+  previous_run_id?: string; recovery?: JsonValue; tools?: JsonValue[]; tools_truncated?: boolean;
+  prior_sources?: ComponentSourceSnapshot[]; prior_sources_truncated?: boolean;
   turns: { run_id: string; state: string; user_text: string; assistant_text: string;
     history_gap: boolean; text_truncated: boolean; references: JsonValue[]; references_truncated: boolean }[];
 }
@@ -141,13 +143,18 @@ export class ContextPicker {
       throw Error('The saved context does not match this original Rho message.');
     if (history !== null && history !== undefined) {
       const value = object(history);
-      if (!value || value.kind !== 'conversation' || typeof value.truncated !== 'boolean' || typeof value.notice !== 'string' ||
-        bytes(JSON.stringify(history)) > 24576 || !Array.isArray(value.turns) || value.turns.length > 8 ||
+      if (!value || !['conversation', 'continuation'].includes(String(value.kind)) || typeof value.truncated !== 'boolean' || typeof value.notice !== 'string' ||
+        bytes(JSON.stringify(history)) > (value.kind === 'continuation' ? 49152 : 24576) || !Array.isArray(value.turns) || value.turns.length > 8 ||
         value.turns.some(turn => !object(turn) || typeof turn.run_id !== 'string' || typeof turn.state !== 'string' ||
           typeof turn.user_text !== 'string' || bytes(turn.user_text) > 2048 || typeof turn.assistant_text !== 'string' || bytes(turn.assistant_text) > 4096 ||
           typeof turn.history_gap !== 'boolean' || typeof turn.text_truncated !== 'boolean' || typeof turn.references_truncated !== 'boolean' ||
           !Array.isArray(turn.references) || turn.references.length > 8))
         throw Error('The retained conversation input is incomplete or exceeds its bounds.');
+      if (value.kind === 'continuation' && (typeof value.previous_run_id !== 'string' || value.previous_run_id !== data.request.continuation?.run_id || !object(value.recovery) || object(value.recovery)?.digest !== data.request.continuation?.recovery_digest ||
+        !Array.isArray(value.tools) || value.tools.length > 16 || typeof value.tools_truncated !== 'boolean' ||
+        !Array.isArray(value.prior_sources) || value.prior_sources.length > 16 || typeof value.prior_sources_truncated !== 'boolean' ||
+        value.prior_sources.some(source => !object(source) || !source.selection || typeof source.title !== 'string' || typeof source.description !== 'string' || typeof source.text !== 'string' || bytes(source.text) > 16384 || source.truncated !== false)))
+        throw Error('The retained continuation does not match its original task.');
     }
     return { sources: sources.map(({ selection, title, description, text, native_data }) => ({ selection, title, description, text, data: native_data })), history: (history ?? null) as CapturedHistory | null };
   }

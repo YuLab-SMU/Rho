@@ -1,8 +1,9 @@
 use crate::{arguments::*, native_arguments::*};
 use rho_agent_api::{
-    AgentCommandReceipt, AgentNativeHistoryPage, AgentNativeToolReceipt, AgentResourceAssetUpload,
-    AgentTaskCommandResult, AgentTaskDetail, AgentTaskEventPage, ComponentCredentialRef,
-    ComponentCredentialStatus, ComponentModelSettings, ProjectAgentTaskPage,
+    AgentCommandReceipt, AgentContextSelection, AgentNativeHistoryPage, AgentNativeToolReceipt,
+    AgentResourceAssetUpload, AgentTaskCommandResult, AgentTaskDetail, AgentTaskEventPage,
+    ComponentCredentialRef, ComponentCredentialStatus, ComponentModelSettings,
+    ProjectAgentTaskPage,
     component::{
         ComponentAgentConversation, ComponentAgentEventPage, ComponentAgentRun,
         ComponentModelDiagnostic, ComponentToolReceipt,
@@ -80,7 +81,7 @@ fn capability(
         } else if id == "agent.native.assets.upload" {
             "Store a bounded native task attachment through ephemeral input, the same task owner and runtime, without journaling its bytes or starting a native Agent. Inspect its original task receipt after a lost reply. This capability currently accepts only bounded single-message attachments."
         } else if id == "agent.model.run" {
-            "Run the submitted text and explicit contributed sources using captured model settings, an available scoped key and the original native controller. Source previews are checked before admission; complete text, provenance and bounded ordinary conversation history are committed with the run. Historical input does not inherit tool authority. Admission atomically consumes only a matching saved draft; failed source capture or missing credentials preserve it. Retains the native Operation until the model and dispatched native tools settle and records text and usage in its original task. An optional exact R binding permits bounded observation in Explain and execution only in Run, subject to original scopes and granted native capabilities. Attachments and continuation are not yet composed. Identical original requests only observe the existing run and captured sources without rereading providers, preserving later drafts."
+            "Run the submitted text and explicit contributed sources using captured model settings, an available scoped key and the original native controller. Source previews are checked before admission; complete text, provenance and bounded ordinary conversation history are committed with the run. Historical input does not inherit tool authority. Admission atomically consumes only a matching saved draft; failed source capture or missing credentials preserve it. Retains the native Operation until the model and dispatched native tools settle and records text and usage in its original task. An optional exact R binding permits bounded observation in Explain and execution only in Run, subject to original scopes and granted native capabilities. Explicit Continue rechecks the selected recovery digest and retains the original Agent/R provider and session; confirmed repeated mutations return their original native outcomes. Attachments are not yet composed. Identical original requests only observe the existing run and captured sources without rereading providers, preserving later drafts."
         } else if id == "agent.model.history" {
             "Read up to 20 original run summaries in one scoped task using an exact run cursor. Lost model loops are observed as interrupted without changing their stored state, recovering a process or replaying a request."
         } else if id == "agent.model.run.stop" {
@@ -494,6 +495,7 @@ pub fn manifest() -> PluginManifest {
         "agent.model.history",
         "agent.model.run",
         "agent.model.run.get",
+        "agent.model.run.admission",
         "agent.model.run.request",
         "agent.model.run.stop",
         "agent.model.run.reconcile",

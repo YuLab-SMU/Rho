@@ -685,7 +685,16 @@ native children until their correlated replies return; late receipts remain on t
 original task. Disconnect retains uncertainty. `agent.model.tool.operation` reads
 the original delegated request and Operation through public queries, without
 restarting work or rewriting task storage. An absent match is partial evidence.
-General context contributions, attachments and continuation remain uncomposed.
+Explicit contributed text is checked and captured before admission. Ordinary
+Continue rechecks the selected recovery digest through original-owner queries,
+then retains the same Agent and R provider/artifact/session under the owner's
+admission gate. Explain may narrow to observation without changing the target.
+Its history keeps up to eight turns from a bounded 32-run ancestry, the full checked
+recovery report, compact original tool results and prior source snapshots within
+48 KiB; combined context remains limited to 64 KiB. Labeled omission does not alter
+the stored original input. A repeated confirmed mutation reads its original
+correlated Operation through the current parent's query grants. It cannot dispatch
+another scientific mutation. Rho attachments remain uncomposed.
 
 `views.caller` exposes only the original native view/window/connection identity
 captured at authenticated ingress. Backend delegation retains that private capture;

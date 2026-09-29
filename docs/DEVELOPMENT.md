@@ -142,6 +142,20 @@ store `native_recovery_report` checks controller/version fencing and reopen. The
 must pass on the current backend separately. A recovery report does not itself start
 Continue or establish actual Host restart acceptance.
 
+`Continue task` sends the current saved draft with a selected checked run. The
+renderer covers unchanged original targets, refusal of unresolved reports, typing
+during admission reads, and lost continuation replies followed by immediate next
+input and reload. A next draft waits for observation of the original Send's atomic
+draft consumption; saving its old version is not retried as new work. Sent context
+shows the retained continuation report, input and source snapshots without queries
+to the original source. Screenshots cover 960/440/220 px.
+The metadata `rho_continuation_rechecks_original` case exercises fresh recovery
+observations and Rig asking for the same confirmed R mutation: only reads of the
+original native Operation are accepted, never a second `r.execute`. Store
+`native_continuation_retains_exact_provider` checks exact artifact/session retention,
+stale reports and previous-result receipts. These checks must run separately before
+native or real-R acceptance can be claimed; the browser's peer is synthetic.
+
 Once the combined package is current, run the existing real-R runner with
 `--browser --package /absolute/retained/package` and explicit `RHO_R_PLUGIN_PACKAGE`,
 `RHO_EDITOR_PLUGIN_PACKAGE`, `RHO_FILES_PLUGIN_PACKAGE`, `RHO_ARK` and `RHO_R_HOME`. This mode never invokes Cargo: `agent-workspace.spec.ts`

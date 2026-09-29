@@ -146,6 +146,8 @@ pub struct RunModel {
     #[serde(default)]
     #[schemars(length(max = 16))]
     pub sources: Vec<rho_agent_api::AgentContextSelection>,
+    #[serde(default)]
+    pub continuation: Option<rho_agent_api::component::ComponentContinuation>,
     /// Optional exact R provider/session selection, supplied by the caller.
     /// Explain is read-only; Run authorizes execution in this selected session.
     #[serde(default)]
