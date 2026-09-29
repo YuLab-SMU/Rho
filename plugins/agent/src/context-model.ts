@@ -1,0 +1,132 @@
+import type { AgentContextSelection } from '../sdk/index.js';
+import type { CapabilityKey, ContextContribution, ContextPage, ContextPreview, ContextReference,
+  InstanceRef, JsonValue, PluginInspection, PluginInstancePage } from '../public/plugin-protocol/index.js';
+import { type Client, json, same } from './operations.js';
+
+export interface Inclusion { title: string; value: JsonValue; }
+export interface ContextSource { provider: InstanceRef; title: string; contribution: ContextContribution; inclusions: Inclusion[]; }
+export interface CapturedContext { selection: AgentContextSelection; title: string; description: string; text: string; data: JsonValue; }
+const object = (value: unknown): Record<string, unknown> | null => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+const bytes = (value: string) => new TextEncoder().encode(value).length;
+
+/** Owners declare finite inclusion values in their public query schema. Never
+ * infer document/selection semantics from a plugin name or source kind. */
+export function inclusionChoices(input: unknown): Inclusion[] {
+  const root = object(object(input)?.properties), inclusion = object(root?.inclusion);
+  const variants = inclusion?.oneOf ?? inclusion?.anyOf ?? (inclusion ? [inclusion] : []);
+  if (!Array.isArray(variants) || variants.length > 20) return [];
+  return variants.flatMap(value => {
+    const variant = object(value);
+    if (!variant || typeof variant.title !== 'string' || !variant.title.trim()) return [];
+    let capture: unknown;
+    if (Object.hasOwn(variant, 'const')) capture = variant.const;
+    else {
+      const properties = object(variant.properties);
+      if (variant.type !== 'object' || !properties || !Array.isArray(variant.required) || !variant.required.length ||
+        !variant.required.every(key => typeof key === 'string' && object(properties[key]) && Object.hasOwn(properties[key] as object, 'const')) ||
+        Object.values(properties).some(property => !object(property) || !Object.hasOwn(property as object, 'const'))) return [];
+      capture = Object.fromEntries(Object.entries(properties).map(([key, property]) => [key, object(property)!.const]));
+    }
+    if (capture === undefined || bytes(JSON.stringify(capture)) > 4096) return [];
+    return [{ title: variant.title, value: json(capture) }];
+  });
+}
+
+export class ContextPicker {
+  sources: ContextSource[] = [];
+  nextInstances: string | null = null;
+  notices: string[] = [];
+  private cursors = new Set<string>();
+  private discovery = 0;
+  constructor(private client: Client) {}
+  private async read<T>(capability: CapabilityKey, arguments_: unknown, complete = true) {
+    const result = await this.client.query<{ status: string; completeness: string; data: T }>(capability, json(arguments_));
+    if (result.status !== 'ready' || complete && result.completeness !== 'complete' || !result.data)
+      throw Error('This source is not fully available. The draft is retained.');
+    return result;
+  }
+  private async inspect(provider: InstanceRef) {
+    const { data } = await this.read<PluginInspection>({ id: 'plugins.inspect', version: 1 }, { revision: provider.revision });
+    if (data.summary.revision !== provider.revision || data.manifest.id !== provider.plugin || !data.artifacts.some(a => a.id === provider.artifact))
+      throw Error('The source differs from its selected plugin version.');
+    return data;
+  }
+  private source(provider: InstanceRef, inspection: PluginInspection, contribution: ContextContribution): ContextSource {
+    const search = inspection.manifest.capabilities.find(c => same(c.capability, contribution.search) && c.kind === 'query');
+    const preview = inspection.manifest.capabilities.find(c => same(c.capability, contribution.preview) && c.kind === 'query');
+    if (!search || !preview) throw Error('This source does not declare readable search and preview queries.');
+    return { provider: structuredClone(provider), title: contribution.title, contribution: structuredClone(contribution), inclusions: inclusionChoices(preview.input_schema) };
+  }
+  async discover(more = false) {
+    if (more && !this.nextInstances) return;
+    if (!more) { this.discovery++; this.sources = []; this.notices = []; this.nextInstances = null; this.cursors.clear(); }
+    const discovery = this.discovery;
+    const after = more ? this.nextInstances : null;
+    const { data } = await this.read<PluginInstancePage>({ id: 'plugins.instances', version: 1 }, { after, limit: 20, include_previews: false });
+    if (discovery !== this.discovery) return;
+    if (!Array.isArray(data.instances) || data.instances.length > 20 || data.next && (data.next === after || this.cursors.has(data.next)))
+      throw Error('The source listing did not return a bounded next page.');
+    if (data.next) this.cursors.add(data.next);
+    this.nextInstances = data.next;
+    for (const instance of data.instances) {
+      if (instance.project !== this.client.view.project || instance.state !== 'active' || instance.purpose === 'fixture_preview') continue;
+      try {
+        const inspection = await this.inspect(instance.identity);
+        if (discovery !== this.discovery) return;
+        for (const contribution of inspection.manifest.contexts) {
+          const source = this.source(instance.identity, inspection, contribution);
+          if (!this.sources.some(old => same(old.provider, source.provider) && old.contribution.id === contribution.id)) this.sources.push(source);
+        }
+      } catch (error) { if (discovery === this.discovery) this.notices.push(`${instance.alias}: ${error instanceof Error ? error.message : String(error)}`); }
+    }
+  }
+  private arguments(source: ContextSource, capability: CapabilityKey, args: unknown) {
+    return { binding: { project: this.client.view.project, provider: source.provider, capability, target: null }, arguments: args, preconditions: null };
+  }
+  async search(source: ContextSource, text: string, after: JsonValue | null = null): Promise<ContextPage> {
+    if (bytes(text) > 1024) throw Error('Shorten this search to 1 KiB.');
+    const args = { window: this.client.view.window, text, after, limit: 20 };
+    const { data, completeness } = await this.read<ContextPage>(source.contribution.search, this.arguments(source, source.contribution.search, args), false);
+    if (!Array.isArray(data.items) || data.items.length > 20 || !Array.isArray(data.notices) ||
+      data.items.some(item => !same(item.reference.provider, source.provider) || item.reference.contribution !== source.contribution.id || item.reference.window !== args.window) ||
+      data.next !== null && same(data.next, after)) throw Error('The source returned a different or unbounded selection.');
+    return { ...data, notices: [...data.notices, ...(completeness === 'complete' ? [] : ['Partial source listing'])] };
+  }
+  async preview(source: ContextSource, reference: ContextReference, inclusion: JsonValue): Promise<ContextPreview> {
+    if (!same(reference.provider, source.provider) || reference.contribution !== source.contribution.id)
+      throw Error('The context reference belongs to another source.');
+    if (!source.inclusions.some(choice => same(choice.value, inclusion))) throw Error('This inclusion is not declared by the source.');
+    const args = { reference: structuredClone(reference), inclusion: structuredClone(inclusion), max_bytes: 16384 };
+    const { data } = await this.read<ContextPreview>(source.contribution.preview, this.arguments(source, source.contribution.preview, args));
+    if (!same(data.item.reference, reference) || typeof data.text !== 'string' || bytes(data.text) > 16384 ||
+      typeof data.truncated !== 'boolean' || !Array.isArray(data.resources)) throw Error('The preview differs from the selected source.');
+    return data;
+  }
+  async retained(selection: AgentContextSelection) {
+    if (selection.source !== 'plugin') throw Error('This saved source is not available in the plugin picker.');
+    const reference = selection.reference as ContextReference;
+    if (!reference?.provider || typeof reference.contribution !== 'string') throw Error('The saved source reference is incomplete.');
+    const inspected = await this.inspect(reference.provider);
+    const contribution = inspected.manifest.contexts.find(c => c.id === reference.contribution);
+    if (!contribution) throw Error('The selected version no longer declares this source.');
+    const source = this.source(reference.provider, inspected, contribution), inclusion = JSON.parse(selection.inclusion) as JsonValue;
+    return { source, inclusion, preview: await this.preview(source, reference, inclusion) };
+  }
+  async original(task: string, request: string): Promise<CapturedContext[]> {
+    const capability = { id: 'agent.native.context', version: 1 };
+    const { data } = await this.read<{ request_id: string; task_id: string; contexts: CapturedContext[] }>(capability, {
+      binding: { project: this.client.view.project, provider: this.client.view.instance, capability, target: null },
+      arguments: { request_id: request }, preconditions: null,
+    });
+    if (data.request_id !== request || data.task_id !== task || !Array.isArray(data.contexts) || data.contexts.length > 20 || bytes(JSON.stringify(data.contexts)) > 65536 ||
+      data.contexts.some(value => typeof value.title !== 'string' || typeof value.description !== 'string' || typeof value.text !== 'string' || bytes(value.text) > 16384 || !value.selection))
+      throw Error('The saved context does not match this original message.');
+    return data.contexts;
+  }
+  selection(source: ContextSource, preview: ContextPreview, inclusion: JsonValue): AgentContextSelection {
+    if (preview.truncated || preview.resources.length) throw Error('This Agent input needs complete text. Choose another inclusion or keep the draft for later.');
+    if (!same(preview.item.reference.provider, source.provider) || preview.item.reference.contribution !== source.contribution.id || !source.inclusions.some(i => same(i.value, inclusion)))
+      throw Error('Preview this exact source and inclusion before adding it.');
+    return { source: 'plugin', label: `${source.title} · ${preview.item.title}`, reference: json(structuredClone(preview.item.reference)), inclusion: JSON.stringify(inclusion) };
+  }
+}

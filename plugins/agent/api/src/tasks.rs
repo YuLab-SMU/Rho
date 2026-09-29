@@ -31,7 +31,7 @@ pub struct AgentAttachment {
     pub control_frozen: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
 pub struct AgentContextSelection {
     pub source: String,

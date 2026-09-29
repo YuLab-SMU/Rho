@@ -64,8 +64,20 @@ launching native work, including after backend reopen. Unconfirmed original rece
 remain uncertain; changed resources or controllers are refused. Asset bytes retain
 the existing 8 MiB/file and 32 MiB/task limits. Resource import does not provide a
 browser file picker or stage local files; ordinary view file capture uses the
-separate bounded stage/finish Controls. Contributed context input is still refused
-before native submission.
+separate bounded stage/finish Controls.
+
+Native Send now resolves selected text context through the exact provider's
+declared public preview Query. A `plugin` selection retains its `ContextReference`
+and a JSON-encoded owner-defined inclusion. The backend verifies the immutable
+manifest/artifact, inherited read grants, reference and complete preview, then
+revalidates the original live caller before admission. Each inclusion is at most
+16 KiB and the combined capture at most 64 KiB; truncated or resource-bearing input
+is refused with the draft retained. The task owner saves resolved source text,
+provenance and original selections atomically with Send. Replay reads that capture
+without querying current sources. `agent.native.context` exposes the original
+capture after reopen. Context adds no scientific/tool authority. The ordinary
+picker, Rho context composition and actual Editor/Host acceptance remain pending;
+the framed source fixtures use a synthetic public context provider.
 
 Send can explicitly select up to 16 Query/Operation tools. Provider targets retain
 an exact ordinary-plugin binding and immutable public manifest; Host targets retain
@@ -261,3 +273,15 @@ submitted-text runs alone do not establish scientific execution or real-provider
 delivery remains unfinished.
 The backend transport and independent Host verification commands are described
 in the build instructions.
+
+The ordinary native composer now has a generic @ picker. It reads active runtime
+instances, discovers their declared context contributions and derives finite
+inclusion choices from each preview query's schema. Search and preview are bounded
+reads; opening the picker never starts or resumes a provider. Partial listings are
+labeled. Only a complete supported text preview can be added, retaining its exact
+provider, original window, selector/version and inclusion in the ordinary draft.
+Saved references remain removable and inspectable when a source changes. Send
+revalidates them through the backend capture path. The message's **Sent context**
+action reads the original Agent-owned capture, including its source details,
+without querying the current provider. These renderer/model fixtures use synthetic
+peers; actual Editor-to-Agent/Host and Rho task input remain pending.

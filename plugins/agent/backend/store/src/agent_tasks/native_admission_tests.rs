@@ -325,6 +325,46 @@ fn capture(store: &AgentStore, admitted: &AgentTaskAdmission) -> StoredAgentNati
 }
 
 #[test]
+fn native_context_bytes_survive_reopen_and_cannot_be_replaced_by_original_retry() {
+    let (directory, store, owner, created) = setup();
+    let saved = draft(&owner, &created.task, 0, "Explain this captured source");
+    let mut parent = origin();
+    parent
+        .contexts
+        .push(rho_agent_owner::AgentNativeContextSnapshot {
+            selection: saved.draft.content.context[0].clone(),
+            title: "Source at version 7".into(),
+            description: "Original selection".into(),
+            text: "Captured source 中文 Ω".into(),
+            data: serde_json::json!({"source_version":7}),
+        });
+    let sending = request(AgentTaskCommand::Send {
+        control: control(&saved.task),
+        draft_version: saved.draft.version,
+    });
+    let admitted = owner
+        .admit_native(&scope(), &sending, parent.clone(), 3)
+        .unwrap();
+    assert_eq!(capture(&store, &admitted).origin.contexts, parent.contexts);
+    let mut changed = parent.clone();
+    changed.contexts[0].text = "Replacement source".into();
+    assert!(matches!(
+        owner.admit_native(&scope(), &sending, changed, 4),
+        Err(AgentTaskError::RequestConflict)
+    ));
+    drop(owner);
+    drop(store);
+    let store = Arc::new(AgentStore::open(&directory.path().join("agent.sqlite")).unwrap());
+    let owner = AgentTaskOwner::new(store.clone());
+    let observed = owner
+        .admit_native(&scope(), &sending, parent.clone(), 5)
+        .unwrap();
+    assert!(observed.repeated);
+    assert_eq!(capture(&store, &observed).origin.contexts, parent.contexts);
+    assert_eq!(observed.receipt.request_id, admitted.receipt.request_id);
+}
+
+#[test]
 fn native_admission_preserves_original_parent_and_pre_command_input_across_retries() {
     let (_directory, store, owner, created) = setup();
     let saved = draft(&owner, &created.task, 0, "Original Unicode 科学内容");

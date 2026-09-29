@@ -9,6 +9,7 @@ export async function testAgentRenderer(root, assets) {
   const output = path.join(root, 'target/plugin-refactor/agent-view-renderer'); fs.mkdirSync(output, { recursive: true });
   const server = http.createServer((req, res) => {
     if (req.url === '/') { res.setHeader('Content-Type', 'text/html; charset=utf-8'); res.end('<!doctype html><meta charset="utf-8"><style>html,body,iframe{margin:0;border:0;width:100%;height:100%;overflow:hidden}iframe{display:block}</style><iframe title="Agent" sandbox="allow-scripts"></iframe><script src="/fixture.js"></script>'); return; }
+    if (req.url === '/editor-context-manifest.json') { res.setHeader('Content-Type', 'application/json'); res.end(fs.readFileSync(path.join(root, 'plugins/editor/plugin.json'))); return; }
     const location = req.url === '/fixture.js' ? path.join(root, 'scripts/fixtures/agent-view-container.js') : path.resolve(assets, '.' + decodeURIComponent(new URL(req.url, 'http://localhost').pathname));
     if (req.url !== '/fixture.js' && !location.startsWith(assets + path.sep) || !fs.existsSync(location) || !fs.statSync(location).isFile()) { res.writeHead(404).end(); return; }
     const type = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html', '.woff2': 'font/woff2' }[path.extname(location)] ?? 'application/octet-stream';
@@ -38,6 +39,9 @@ export async function testAgentRenderer(root, assets) {
       await input.click();
     }
     await page.setViewportSize({ width: 440, height: 820 });
+    const { testContextRenderer } = await import('./fixtures/agent-context-renderer.mjs');
+    await testContextRenderer(page, frame, expect, output);
+    await page.reload(); await expect(input).toBeEnabled();
     await page.evaluate(() => { window.fixture.pagedTasks(true); window.fixture.pagedHistory(true); });
     await expect(frame.getByRole('button', {name:'Older tasks',exact:true})).toBeEnabled();
     await frame.getByRole('button', {name:'Older tasks',exact:true}).click();
@@ -103,7 +107,7 @@ export async function testAgentRenderer(root, assets) {
     await expect(input).toHaveValue(''); await expect(frame.getByRole('log')).toContainText('完整附件.txt · lost-reply.txt'); await input.fill('Keep this next draft after reopening'); await expect(frame.locator('#draft-status')).toHaveText('Draft saved');
     snapshot = await page.evaluate(() => window.fixture.snapshot()); const send = snapshot.calls.filter(call => call.arguments?.arguments?.command?.kind === 'send');
     assert.equal(send.length, 1); assert.equal(send[0].arguments.arguments.tools.length, 1);
-    assert.equal(snapshot.details[0][1].receipts.find(r => r.command === 'send').input_assets.length, 2);
+    assert.equal(snapshot.details[0][1].receipts.find(r => r.request_id === send[0].arguments.arguments.request_id).input_assets.length, 2);
     await page.evaluate(() => window.fixture.reload()); await expect(input).toHaveValue('Keep this next draft after reopening');
     await expect(frame.getByRole('button', { name: 'Stop Agent' })).toBeVisible();
     await page.screenshot({ path: path.join(output, 'agent-running-reopened.png') });

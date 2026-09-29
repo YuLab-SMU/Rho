@@ -311,6 +311,9 @@ try {
   const { RhoModel } = await import(pathToFileURL(path.join(temporary, 'compiled/src/rho-model.js')));
   const { testRhoTasks } = await import('./fixtures/agent-rho-tasks.mjs');
   await testRhoTasks(RhoModel, NativeAgentModel, operationRequestId);
+  const { ContextPicker, inclusionChoices } = await import(pathToFileURL(path.join(temporary, 'compiled/src/context-model.js')));
+  const { testContextPicker } = await import('./fixtures/agent-context-picker.mjs');
+  await testContextPicker(ContextPicker, inclusionChoices, root);
   if (process.argv.includes('--build-ui') || process.argv.includes('--browser')) execFileSync(process.execPath, [path.join(temporary, 'build-ui.mjs')], {
     cwd: temporary, stdio: 'inherit', env: { ...process.env, RHO_PLUGIN_NODE_MODULES: path.join(root, 'ui/node_modules') },
   });

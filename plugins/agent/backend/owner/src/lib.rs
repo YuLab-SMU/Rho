@@ -408,6 +408,7 @@ impl AgentTaskOwner {
                 // It cannot move the command to a different Agent instance.
                 if original.origin.binding != origin.binding
                     || original.origin.tools != origin.tools
+                    || original.origin.contexts != origin.contexts
                 {
                     return Err(AgentTaskError::RequestConflict);
                 }

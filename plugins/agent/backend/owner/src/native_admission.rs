@@ -3,8 +3,8 @@
 use crate::{AgentTaskError, AgentTaskScope};
 use rho_agent_api::component::{OperationId, ProviderBinding, RequestId};
 use rho_agent_api::{
-    AgentCommandReceipt, AgentNativeToolGrant, AgentTask, AgentTaskCommand, AgentTaskDraft,
-    AgentTaskRequest,
+    AgentCommandReceipt, AgentContextSelection, AgentNativeToolGrant, AgentTask, AgentTaskCommand,
+    AgentTaskDraft, AgentTaskRequest,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -12,6 +12,19 @@ use std::collections::BTreeSet;
 
 pub const MAX_NATIVE_ADMISSION_BYTES: usize = 128 * 1024;
 pub const MAX_PROJECT_NATIVE_ADMISSION_BYTES: usize = 64 * 1024 * 1024;
+pub const MAX_NATIVE_CONTEXT_BYTES: usize = 64 * 1024;
+
+/// Source bytes resolved before native admission, retained with the original
+/// Send. These are observations, never new tool grants or dispatch credentials.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentNativeContextSnapshot {
+    pub selection: AgentContextSelection,
+    pub title: String,
+    pub description: String,
+    pub text: String,
+    pub data: serde_json::Value,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -24,6 +37,8 @@ pub struct AgentNativeCommandOrigin {
     pub scopes: BTreeSet<String>,
     #[serde(default)]
     pub tools: Vec<AgentNativeToolGrant>,
+    #[serde(default)]
+    pub contexts: Vec<AgentNativeContextSnapshot>,
 }
 impl AgentNativeCommandOrigin {
     pub fn validate(&self, scope: &AgentTaskScope) -> Result<(), AgentTaskError> {
@@ -66,6 +81,34 @@ impl StoredAgentNativeAdmission {
     ) -> Result<(), AgentTaskError> {
         self.origin.validate(scope)?;
         crate::native_tools::validate_grants(&self.origin)?;
+        if self.origin.contexts.len() > 20
+            || serde_json::to_vec(&self.origin.contexts)
+                .map_err(|e| AgentTaskError::Storage(e.to_string()))?
+                .len()
+                > MAX_NATIVE_CONTEXT_BYTES
+        {
+            return Err(AgentTaskError::Budget(
+                "Native context capture exceeds 64 KiB".into(),
+            ));
+        }
+        if !self.origin.contexts.is_empty()
+            && (!matches!(self.request.command, AgentTaskCommand::Send { .. })
+                || self
+                    .origin
+                    .contexts
+                    .iter()
+                    .map(|item| &item.selection)
+                    .collect::<Vec<_>>()
+                    != self.input_draft.content.context.iter().collect::<Vec<_>>()
+                || self.origin.contexts.iter().any(|item| {
+                    item.title.is_empty()
+                        || item.title.len() > 1024
+                        || item.description.len() > 4096
+                        || item.text.len() > 16384
+                }))
+        {
+            return Err(AgentTaskError::RequestConflict);
+        }
         if !self.origin.tools.is_empty()
             && !matches!(self.request.command, AgentTaskCommand::Send { .. })
         {

@@ -32,7 +32,7 @@ written deletion condition. Internal pieces are not reported as milestones.
 | M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Default entry, real-R browser flow and Rust HTTP checks pass; delivery remains |
 | M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Native/Rho views and attachment source/renderer checked; combined native/Host path pending |
 | M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Lifecycle, explicit view recovery and four runtime suspension cases pass; Host acceptance pending |
-| M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Not started |
+| M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Native text capture and picker in source; renderer checked, native/Rho/continuation acceptance pending |
 | M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Branch checkpoint via Agent verified; Studio UI not started |
 | M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Not started |
 
@@ -76,8 +76,8 @@ current client assets with the retained Host and native plugin artifacts. It
 verified one execution, Objects/Plots output and reload without replay. Evidence:
 `target/plugin-refactor/default-entry-results.json`; earlier startup timeouts and
 the label failure remain retained. Both Rust HTTP cases now pass (58 minutes of
-compilation, 0.52 seconds of test execution). The client generated-asset check and
-embedded-binary refresh remain pending; that earlier run does not cover M3 edits.
+compilation, 0.52 seconds of test execution). Current client generation and build pass; embedded-binary refresh remains
+pending, and that earlier browser run does not cover M3 edits.
 Existing fixed-composition acceptance explicitly uses `--fixed-workspace`. Remove
 that temporary reference and shell after M2–M4 replace the remaining fixed flows;
 missing plugins cannot select it as a fallback. Default package delivery remains.
@@ -96,8 +96,8 @@ reload. All 566 core frontend tests pass, including 42 recovery/view cases. The 
 native current-source run passes all four suspension cases, including publication
 conflict (34m11s compilation, 1s tests); the earlier pre-fix failure remains in evidence.
 Host-reopen and combined Agent/real-R browser restart fixtures remain unrun.
-Public plugin types are generated and Manager restore/model checks pass; core client
-generation is still compiling. Client checks and actual Host acceptance remain.
+Public/core client generation, client build and Manager restore/model checks pass.
+Client check and actual Host acceptance remain.
 Evidence: `target/plugin-refactor/restart-lifecycle-results.json`. No user Host was replaced or package installed/published.
 
 ### Agent migration: current state
@@ -123,6 +123,10 @@ Implemented in `plugins/agent` (public APIs/SDK only, no private core imports):
   original receipt; repeats observe the original. Inline attachments stay ≤ 524288
   encoded bytes per Control.
 
+Native text-context capture is implemented: Send validates exact previews and retains
+text/provenance. The ordinary @ picker, inclusion preview, saved references and Sent
+context inspection pass synthetic model/browser checks; changed/partial input stays
+visible. Native framed/store checks and actual Editor/Host integration remain pending.
 The ordinary native/Rho task view is implemented in source: shared task selection,
 creation, draft CAS/conflicts, Send/Stop, explicit control and original-request
 inspection. Native tasks also support model/tool selection, permissions and
@@ -133,12 +137,12 @@ Stable view/controller identities survive private connection rotation. Rho setti
 provide key save/removal, versioned configuration and explicit synthetic tests;
 keys stay out of saved view state and Operations. The Rho composer is text-only:
 contributed input, attachments, tool selection and continuation remain to compose.
-The UI build and 50 model cases (24 native, 13 settings, 13 Rho tasks) pass, as does
+The UI build and 60 model cases (24 native, 13 settings, 13 Rho, 10 context) pass, as does
 the synthetic public MessagePort browser fixture: opaque iframe, IME Enter, task
 switching, one Send, next drafts, 8 MiB selection, lost creation/Send/import/key
 replies, actual reload, history and close without Stop. Settings/rename work without
-form permission. 960/440/320/220 px screenshots were inspected. Evidence:
-`target/plugin-refactor/rho-tasks-results.json` and `model-settings-results.json`.
+form permission. 960/440/320/220 px and short-context screenshots were inspected.
+Evidence: `target/plugin-refactor/native-context-results.json`, `rho-tasks-results.json`.
 This does **not** establish combined native/Host acceptance: native manifest
 regeneration, backend checks and activation of the new combined package remain
 pending behind the current serial build. The checked-in `plugin.json` still
@@ -148,22 +152,18 @@ Browser file capture retains identity, sends bounded Controls and selects a conf
 asset into a separately saved draft. Reload does not repeat import or Send;
 inspection and exact-file reselection remain explicit. Native staging quota,
 checksum/controller and reopen fixtures are written but unrun; no native acceptance claim.
-The combined real-R browser fixture is written and discoverable, but unrun. It uses
-one retained Agent artifact built through the primary workspace cache; build receipts
-distinguish integration evidence from independent compilation. Mapped checks reuse it.
+The combined real-R browser fixture is written/discoverable but unrun; it reuses one
+Agent artifact built through the primary cache and records this as integration evidence.
 
-Not done: native acceptance of browser attachments/settings/Rho drafts/history,
-contributed context and component input/continuation,
-actual Host restart recovery, Studio Agent flow.
+Not done: native acceptance of attachments/settings/Rho drafts/history, full context
+and component input/continuation, actual Host restart recovery and Studio Agent flow.
 Synthetic peers for Process/Remote/Environment do not establish execution through those plugins.
 
-Current Agent evidence (`target/plugin-refactor/`): `agent-assets-results-v3.json`
-and `agent-assets-combined-v1.json` (20 owner, 35 store, 42 framed backend cases,
-five frozen-Host cases including a real 8 MiB resource-channel import),
-`agent-core-combined-v2.json` (management tools, checkpoint case), and
-`agent-native-tools-combined-v1.json` plus `agent-native-tools-native-rerun-v2.json`
-(component and native real-R normal/Stop fixtures). No real-model quality, browser,
-full-workspace, installation or publication check ran for these changes.
+Agent evidence in `target/plugin-refactor/`: `agent-assets-results-v3.json` and
+`agent-assets-combined-v1.json` (20 owner/35 store/42 framed cases; five frozen-Host
+cases including real 8 MiB import), `agent-core-combined-v2.json` (management/checkpoint),
+and `agent-native-tools-combined-v1.json` / `agent-native-tools-native-rerun-v2.json`
+(component/native real-R normal/Stop). No real-model quality or distribution claim.
 
 ### Plugin platform: implemented behavior
 

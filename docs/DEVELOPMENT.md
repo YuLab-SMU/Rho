@@ -507,6 +507,17 @@ fabricated Control settlement. `support/model_settings.rs` additionally checks
 version-fenced key availability/removal, unchanged settings, retained receipts,
 environment-key refusal and storage-error visibility. These fixtures use only
 temporary synthetic keys.
+The `contributed_context` filter on the same metadata target checks public source
+preview before Native Send, original captured text after reopen, no source reread,
+and refusal of foreign, partial, truncated, oversized, resource-bearing or
+unauthorized input before native launch. `cargo test -p rho-agent-store --lib
+native_context_bytes --locked` checks immutable captured context and replay after
+reopening the store. These framed fixtures do not establish a real Editor/Host flow.
+`node scripts/test-agent-view.mjs --browser` also exercises the ordinary @ picker,
+using the actual Editor inclusion schema and a synthetic source over the public
+view channel. It checks exact references, no implicit activation, bounded/partial
+reads, changed sources, draft reload, original sent context and responsive layouts.
+These checks do not replace native source capture or real Editor/Host acceptance.
 `node plugins/agent/generate-manifest.mjs` updates its contributed schemas; use
 `--check` for freshness. `node scripts/test-agent-plugin.mjs --build` first builds the
 generic Host harness, then builds one external package, checks public dependency

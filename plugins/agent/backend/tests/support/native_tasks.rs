@@ -19,6 +19,8 @@ mod science;
 mod assets;
 #[path = "native_uploads.rs"]
 mod uploads;
+#[path = "native_context.rs"]
+mod context;
 
 #[derive(Default)]
 struct Factory {

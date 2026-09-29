@@ -10,6 +10,7 @@ mod diagnostics;
 mod runs;
 
 pub mod native_arguments;
+mod native_context;
 mod native_controller;
 mod native_core_grants;
 mod native_grants;

@@ -109,6 +109,12 @@ impl NativeTools {
             serde_json::to_string(&turn.origin.tools).unwrap()
         )))
     }
+    pub(crate) fn captured_context(
+        &self,
+        task: &str,
+    ) -> Result<Vec<AgentNativeContextSnapshot>, String> {
+        Ok(self.turn(task)?.origin.contexts.clone())
+    }
     pub(crate) async fn finish(&self, task: &str, send: &str) -> Result<(), Failure> {
         let turn = match self.turn(task) {
             Ok(t) if t.send == send => t,

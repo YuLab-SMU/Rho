@@ -67,7 +67,9 @@ fn capability(
         description: if id == "agent.native.discover" {
             "Explicitly inspect one installed native Agent and its model catalog in this instance's project. May start and close a bounded discovery CLI; does not install software, start a model turn or change an existing task. Opening a view and reading tasks do not perform discovery. Repeated original Operations only observe their original result."
         } else if id == "agent.native.command" {
-            "Admit a native Agent command with the original caller and task generation. Send may select exact ordinary-plugin query/Operation tools under existing grants; immutable manifests supply their contracts. Retains the original parent until the native turn and accepted scientific children settle. Identical requests only observe original receipts. Tool retries require the same Send and semantic request identity. Does not install an Agent. Attachment bytes are excluded and contributed context is not yet composed."
+            "Admit a native Agent command with the original caller and task generation. Send may select exact ordinary-plugin query/Operation tools under existing grants; immutable manifests supply their contracts. Selected contributed text is revalidated through its declared preview query and retained with this Send before dispatch. Changed, truncated, unsupported-resource or over-budget context preserves the draft. Retains the original parent until the native turn and accepted scientific children settle. Identical requests only observe original receipts and context, never reread sources. Tool retries require the same Send and semantic request identity. Does not install an Agent. Attachment bytes are excluded."
+        } else if id == "agent.native.context" {
+            "Read the exact contributed text and source identities captured for an original Send. Does not reread current source content, reconnect a native Agent or repeat a turn."
         } else if id == "agent.native.assets.stage" {
             "Stage bounded browser file chunks in transient instance memory under an exact task controller and original transfer identity. Identical chunks are idempotent; changed bytes, controllers and quotas are rejected. Does not create an asset, start an Agent or journal bytes. Incomplete data may expire; reselect the original file to continue."
         } else if id == "agent.native.assets.finish" {
@@ -229,6 +231,19 @@ pub fn manifest() -> PluginManifest {
                 schema_for!(NativeEvents).to_value(),
                 schema_for!(AgentTaskEventPage).to_value(),
                 json!({"task_id":"task-example","after":0,"before":null,"limit":50}),
+            ),
+            capability(
+                "agent.native.context",
+                "Read an original Send's captured context",
+                schema_for!(NativeReceipt).to_value(),
+                json!({"type":"object","additionalProperties":false,"properties":{
+                    "request_id":{"type":"string"},"task_id":{"type":"string"},
+                    "contexts":{"type":"array","maxItems":20,"items":{"type":"object","additionalProperties":false,"properties":{
+                        "selection":schema_for!(AgentContextSelection).to_value(),"title":{"type":"string","maxLength":1024},
+                        "description":{"type":"string","maxLength":4096},"text":{"type":"string","maxLength":16384},"data":{}
+                    },"required":["selection","title","description","text","data"]}}
+                },"required":["request_id","task_id","contexts"]}),
+                json!({"request_id":"11111111-1111-4111-8111-111111111111"}),
             ),
             capability(
                 "agent.native.history",
@@ -447,6 +462,7 @@ pub fn manifest() -> PluginManifest {
         "agent.native.discover",
         "agent.native.task",
         "agent.native.receipt",
+        "agent.native.context",
         "agent.native.events",
         "agent.native.history",
         "agent.native.assets.stage",

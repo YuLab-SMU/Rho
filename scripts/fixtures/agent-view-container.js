@@ -19,6 +19,8 @@ events.set('task-0', [
   { cursor: 2, kind: 'text', role: 'assistant', text: 'The selected calculation returned 42. Its original record remains available.\n\nYou can continue this conversation or start a separate task.' },
   { cursor: 3, kind: 'reasoning', role: 'assistant', text: 'RENDERER_PRIVATE_REASONING' },
 ]);
+events.get('task-0')[0].request_id='previous-context-send';
+details.get('task-0').receipts.push({request_id:'previous-context-send',task_id:'task-0',command:'send',status:'succeeded',input_assets:[]});
 const originalEvents = copy(events.get('task-0'));
 let close = { phase: 'open' }, saveDelay = 0, loseFinish = false;
 const staged = new Map();
@@ -26,6 +28,11 @@ let modelSettings = {version:0,enabled:false,connection:null}, loseSettings = ''
 const modelKeys = new Map(), modelTests = new Map();
 const rhoTasks = new Map(), rhoRuns = new Map(), rhoEvents = new Map();
 let loseRho = '';
+let contextFault = '', contextManifest;
+const contextProvider = {...instance,instance:'editor-one',plugin:'org.rho.editor',revision:'sha256:'+'c'.repeat(64),artifact:'sha256:'+'d'.repeat(64)};
+const contextReference = {provider:contextProvider,contribution:'documents',window:'window',selector:{draft:'draft-one',version:7,digest:'sha256:'+'e'.repeat(64)}};
+const contextItem = {reference:contextReference,title:'分析 Ω.R',description:'Synchronized version 7 · selected lines 1–2',kind:'document'};
+
 async function requestId(request) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('agent-view:' + request));
   return 'sha256:' + Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2, '0')).join('');
@@ -44,6 +51,21 @@ async function handle(body) {
     reads[id] = (reads[id] ?? 0) + 1;
     let data;
     if (id === 'operation.list_recent') data = { operations: records.filter(r => r.operation.client_request_id === body.arguments.client_request_id).map(r => ({ operation_id: r.operation.operation_id })) };
+    else if (id === 'agent.native.context') {
+      const reference=copy(contextReference);reference.selector.version=6;
+      data={request_id:args.request_id,task_id:'task-0',contexts:[{selection:{source:'plugin',label:'Captured selection',reference,inclusion:'{"kind":"selection"}'},title:'分析 Ω.R · selection',description:'Original synchronized version 6',text:'original_value <- 7 # 中文 Ω',data:{version:6}}]};
+    }
+    else if (id === 'plugins.instances') data = {instances:[{identity:contextProvider,project:'project',state:'active',alias:'Editor'}],next:null,total:1};
+    else if (id === 'plugins.inspect') {
+      contextManifest ??= await fetch('/editor-context-manifest.json').then(r=>r.json());
+      data={summary:{revision:contextProvider.revision},manifest:contextManifest,artifacts:[{id:contextProvider.artifact}]};
+    }
+    else if (id === 'editor.context.search') data={items:[contextItem],next:null,notices:[]};
+    else if (id === 'editor.context.preview') {
+      if(JSON.stringify(body.arguments.binding.provider)!==JSON.stringify(contextProvider)||args.reference.selector.version!==7)throw Error('Source changed. The draft is retained.');
+      if(contextFault==='changed') throw Error('Source changed. The draft is retained.');
+      data={item:contextItem,text:args.inclusion.kind==='selection'?'selected_value <- 42 # 中文 Ω':'# Synchronized analysis document\nselected_value <- 42 # 中文 Ω\nprint(selected_value)',truncated:contextFault==='truncated',data:{inclusion:args.inclusion.kind},resources:[]};
+    }
     else if (id === 'agent.model.settings') data = modelSettings;
     else if (id === 'agent.model.key.status') {
       if (args.settings_version !== modelSettings.version) throw Error('Settings changed');
@@ -204,6 +226,7 @@ addEventListener('message', event => {
 });
 window.fixture = {
   snapshot: () => copy({ view, calls, details: [...details], records, reads, rhoTasks:[...rhoTasks], rhoRuns:[...rhoRuns] }),
+  contextFault: value => { contextFault=value; },
   loseRhoReply: id => { loseRho=id; },
   finishRho: id => {
     const run=rhoRuns.get(id);run.state='completed';run.updated_at_ms=Date.now();run.event_cursor=2;

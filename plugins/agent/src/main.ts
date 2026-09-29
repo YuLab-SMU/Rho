@@ -5,13 +5,14 @@ import './style.css';
 import { connectPluginView } from '../public/plugin-ui/index.js';
 import type { AgentProvider, AgentNativeToolSelection, ProjectAgentTaskRef } from '../sdk/index.js';
 import { NativeAgentModel, agentBusy } from './native-model.js';
+import { mountContext } from './context-view.js';
 import { mountSettings } from './settings-view.js';
 import { RhoModel, rhoBusy } from './rho-model.js';
 
 const get = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const client = await connectPluginView();
 let disposed = false, closing = false, composing = false, compositionEnded = -Infinity, renderedTask: string | null = null;
-let polling = false, model: NativeAgentModel, rho: RhoModel;
+let polling = false, model: NativeAgentModel, rho: RhoModel, context: ReturnType<typeof mountContext> | undefined;
 const draftTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const flights = new Set<Promise<unknown>>(), message = get<HTMLTextAreaElement>('message');
 const positions = new Map<string, { event: string; offset: number }>();
@@ -89,7 +90,8 @@ function render() {
   const saveDraft = get<HTMLButtonElement>('save-draft'); saveDraft.hidden = !editable || !local?.dirty || !!local.conflict;
   saveDraft.disabled = model.busy || closing || model.state.pending.some(p => p.task === id && p.kind === 'save_draft');
   renderAttachments(id, editable);
-  const send = get<HTMLButtonElement>('send'); send.hidden = running; send.disabled = !editable || model.busy || !!local?.conflict || !(message.value.trim() || (id && model.draft(id).assets.length)) || closing;
+  context?.render(id, editable, model.busy || closing);
+  const send = get<HTMLButtonElement>('send'); send.hidden = running; send.disabled = !editable || model.busy || !!local?.conflict || !(message.value.trim() || (id && (model.draft(id).assets.length || model.draft(id).context.length))) || closing;
   get('stop').hidden = !running; get<HTMLButtonElement>('stop').disabled = !editable || model.busy || closing;
   get('draft-conflict').hidden = !local?.conflict;
   const pending = model.state.pending.find(p => p.task === id || p.task === null);
@@ -131,6 +133,7 @@ function render() {
       if (event.source === 'native_history') role.textContent += ' · Native history';
       block.append(role, document.createTextNode(event.text));
       const receipt = event.role === 'user' ? detail?.receipts.find(item => item.request_id === event.request_id) : null;
+      if (receipt?.command === 'send') { const sources = document.createElement('button'); sources.className = 'sent-context'; sources.textContent = 'Sent context'; sources.onclick = () => context?.inspectOriginal(id!, receipt.request_id); block.append(sources); }
       if (receipt?.input_assets.length) {
         const files = document.createElement('small'); files.className = 'sent-attachments';
         files.textContent = receipt.input_assets.map(asset => detail?.assets.find(item => item.asset_id === asset)?.name ?? 'Attachment unavailable').join(' · '); block.append(files);
@@ -156,6 +159,7 @@ function render() {
   get('archive-task').textContent = detail?.summary.task.archived ? 'Unarchive' : 'Archive';
 }
 function renderRho(id: string) {
+  context?.render(null, false, true);
   const conversation = rho.conversations.get(id), local = rho.state.drafts[id], controlled = rho.canControl(id), editable = controlled && !conversation?.archived;
   const active = conversation?.active_run_id ? rho.runs.get(conversation.active_run_id) : null;
   const running = !!active && rhoBusy(active.state), orphan = !!conversation?.active_run_id && active?.state === 'interrupted';
@@ -272,6 +276,7 @@ function changedText() {
 model = new NativeAgentModel(client, render);
 rho = new RhoModel(client, model, render);
 const settings = mountSettings(client, model, track);
+context = mountContext(client, model, task => saveDraftSoon(task));
 message.addEventListener('compositionstart', () => { composing = true; compositionEnded = -Infinity; clearDraftTimers(); });
 message.addEventListener('compositionend', () => { composing = false; compositionEnded = performance.now(); changedText(); });
 message.addEventListener('input', changedText);
@@ -344,4 +349,4 @@ await client.installCloseHandler({
 });
 await refresh().catch(report); render();
 const poll = setInterval(() => { void refresh().catch(report); }, 1000);
-addEventListener('pagehide', () => { disposed = true; clearDraftTimers(); clearInterval(poll); settings.dispose(); rho.dispose(); model.dispose(); client.dispose(); }, { once: true });
+addEventListener('pagehide', () => { disposed = true; clearDraftTimers(); clearInterval(poll); settings.dispose(); context?.dispose(); rho.dispose(); model.dispose(); client.dispose(); }, { once: true });
