@@ -499,7 +499,19 @@ async fn dispatch(
         |_| "Original native tool ended without a correlated result; no work was replayed",
     )?;
     let result = if mutation {
-        let (operation, result) = operation_result(metadata, origin, request, &value)?;
+        let (operation, result) = match operation_result(metadata, origin, request, &value) {
+            Ok(result) => result,
+            Err(error) if error == crate::native_result::NORMALIZED => {
+                let observed = query(host, &origin.request, key("plugins.delegated_operation", 1),
+                    json!({"parent_operation":origin.operation,"request":tool.receipt.client_request_id})).await?;
+                let found: rho_plugin_sdk::protocol::PluginDelegatedOperation = serde_json::from_value(observed)
+                    .map_err(|_| "Invalid original operation correlation")?;
+                let id = found.operation_id.ok_or("Original operation is unconfirmed; no work was replayed")?;
+                crate::native_result::correlated_operation_result(&metadata.scope.project,
+                    &origin.binding.provider.instance, &origin.operation, request, &id, &value)?
+            }
+            Err(error) => return Err(error),
+        };
         metadata
             .owner
             .record_tool(
@@ -647,7 +659,8 @@ async fn observe_original(
     )
     .await
     .map_err(|_| Failure::invalid("Original Operation record is unavailable"))?;
-    let (found, result) = operation_result(metadata, &origin, &request, &data["record"])
+    let (found, result) = crate::native_result::correlated_operation_result(&metadata.scope.project,
+        &origin.binding.provider.instance, &origin.operation, request, &id, &data["record"])
         .map_err(|_| Failure::invalid("Original Operation differs from the recorded tool"))?;
     if found != id {
         return Err(Failure::invalid(

@@ -137,6 +137,7 @@ Sources:
 - `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
 - `scripts/fixtures/agent-annotation-tools.cjs`
+- `scripts/fixtures/agent-process-tools.cjs`
 - `scripts/fixtures/agent-view-container.js`
 - `scripts/fixtures/annotation-agent-browser.mjs`
 - `scripts/fixtures/annotation-agent.mjs`
@@ -180,6 +181,7 @@ Sources:
 - `scripts/test-agent-plugin-store.mjs`
 - `scripts/test-agent-plugin-types.mjs`
 - `scripts/test-agent-plugin.mjs`
+- `scripts/test-agent-process.mjs`
 - `scripts/test-agent-tool-grants.mjs`
 - `scripts/test-agent-view.mjs`
 - `scripts/test-annotation-plugin-store.mjs`
@@ -299,6 +301,8 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
 - `plugins.agent-owner-independent` (L2): `["node","scripts/test-agent-plugin-owner.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-owner.mjs`, `sdk/**`.
+- `plugins.agent-process` (L2): `["node","scripts/test-agent-process.mjs"]`
+  Applies to: `crates/host/tests/fixtures/agent-science.cjs`, `plugins/agent/**`, `plugins/process/**`, `scripts/fixtures/agent-process-tools.cjs`, `scripts/test-agent-process.mjs`.
 - `plugins.agent-protocol` (L1): `["node","plugins/agent/generate-sdk.mjs","--check"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/generate-sdk.mjs`, `plugins/agent/sdk/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
 - `plugins.agent-real-r` (L2): `["node","scripts/test-real-r.mjs","--agent"]`

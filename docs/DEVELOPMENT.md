@@ -719,6 +719,22 @@ after model stop, original causation, no duplicate execution and retained native
 reports after package removal. All sessions, projects and model keys are disposable.
 Neither this nor the framed suite establishes real-provider quality or Agent views.
 
+`RHO_PLUGIN_SET_PACKAGE=/absolute/set node scripts/test-agent-process.mjs` uses
+retained ordinary archives and the frozen Host, without Cargo or a model service.
+A local ACP peer reaches real Process preflight/run through Agent's private MCP:
+read-only selection refuses execution, malformed provider arguments are refused
+before admission, and the selected process produces original Unicode stdin/stdout
+and stderr with a bounded resource report. Tool/Send retries retain one effect. Owner-normalized targets/arguments must match
+an independently queried original Host operation identity; provider, project,
+capability, preconditions and original parent remain fixed.
+Native Agent Stop fences further Agent work while the original Send waits for its
+already accepted Process child to settle; it is not a process cancellation request.
+The runner restarts only its disposable Host, resumes the same Agent instance and
+replays original receipts while Process remains suspended. `RHO_TEST_BINARY`
+selects the frozen core and `RHO_AGENT_PROCESS_EVIDENCE` selects the report. This
+is real plugin/native-process composition with a deterministic ACP peer, not
+real-model quality, Rho-model execution, remote-cluster or browser acceptance.
+
 Native Host tool capture uses the `native_host` filters in owner/store/backend
 checks and the ordinary framed `metadata` suite. These cover fixed branches,
 model-field override refusal, explicit optional grants, foreign project/version

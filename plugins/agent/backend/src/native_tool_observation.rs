@@ -87,11 +87,12 @@ pub(crate) async fn query(
     )
     .await?;
     let (found, result) = match &tool.native_request {
-        AgentNativeToolRequest::Provider { request } => crate::native_result::operation_result(
+        AgentNativeToolRequest::Provider { request } => crate::native_result::correlated_operation_result(
             &metadata.scope.project,
             &capture.origin.binding.provider.instance,
             &capture.origin.operation,
             request,
+            &id,
             &data["record"],
         ),
         AgentNativeToolRequest::Host { capability, .. } => {

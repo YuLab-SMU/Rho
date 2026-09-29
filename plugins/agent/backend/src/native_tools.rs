@@ -4,7 +4,7 @@ use crate::metadata::{Failure, now};
 use rho_agent_api::*;
 use rho_agent_native::mcp::*;
 use rho_agent_owner::*;
-use rho_plugin_sdk::HostCallClient;
+use rho_plugin_sdk::{HostCallClient, protocol::{OperationId, PluginDelegatedOperation}};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
@@ -324,18 +324,20 @@ async fn resolve(
             }
             AgentNativeToolKind::Operation => {
                 let (operation, result) = match &record.native_request {
-                    AgentNativeToolRequest::Provider { request } => crate::native_result::operation_result(
-                        &turn.scope.project, &turn.origin.binding.provider.instance, &turn.origin.operation, request, &value)?,
+                    AgentNativeToolRequest::Provider { request } => match crate::native_result::operation_result(
+                        &turn.scope.project, &turn.origin.binding.provider.instance, &turn.origin.operation, request, &value) {
+                        Ok(result) => result,
+                        Err(error) if error == crate::native_result::NORMALIZED => {
+                            let id = original_operation(turn, &record).await?;
+                            crate::native_result::correlated_operation_result(&turn.scope.project,
+                                &turn.origin.binding.provider.instance, &turn.origin.operation, request, &id, &value)?
+                        }
+                        Err(error) => return Err(error),
+                    },
                     AgentNativeToolRequest::Host { capability, .. } => {
                         // The Host may normalize input. Its original reverse-request
                         // mapping supplies identity independently of the offered result.
-                        let observed = crate::native_selection::query(&turn.host, &turn.origin.request,
-                            crate::manifest::key("plugins.delegated_operation"),
-                            json!({"parent_operation":turn.origin.operation,"request":record.request}))
-                            .await.map_err(|error| error.message)?;
-                        let found: rho_plugin_sdk::protocol::PluginDelegatedOperation = serde_json::from_value(observed)
-                            .map_err(|_| "Invalid original Host operation correlation".to_owned())?;
-                        let id = found.operation_id.ok_or_else(|| "Original Host operation is unconfirmed; no work was replayed".to_owned())?;
+                        let id = original_operation(turn, &record).await?;
                         crate::native_host_result::operation_result(&turn.scope.project,
                             &turn.origin.binding.provider.instance, &turn.origin.operation, capability, &id, &value)?
                     }
@@ -379,6 +381,16 @@ async fn resolve(
     }
     reply(&record)
 }
+async fn original_operation(turn: &Turn, record: &AgentNativeToolReceipt) -> Result<OperationId, String> {
+    let observed = crate::native_selection::query(&turn.host, &turn.origin.request,
+        crate::manifest::key("plugins.delegated_operation"),
+        json!({"parent_operation":turn.origin.operation,"request":record.request}))
+        .await.map_err(|error| error.message)?;
+    let found: PluginDelegatedOperation = serde_json::from_value(observed)
+        .map_err(|_| "Invalid original operation correlation".to_owned())?;
+    found.operation_id.ok_or_else(|| "Original operation is unconfirmed; no work was replayed".to_owned())
+}
+
 pub(crate) fn catalog() -> Vec<NativeMcpTool> {
     vec![
         NativeMcpTool { name: "rho_tools".into(), description: "Read the immutable tools selected for the explicitly named active Send. Descriptions do not enlarge authority.".into(), parameters: json!({"type":"object","additionalProperties":false,"properties":{"send_request":{"type":"string"}},"required":["send_request"]}).as_object().unwrap().clone(), read_only: true },
