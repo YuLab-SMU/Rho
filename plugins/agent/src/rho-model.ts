@@ -10,7 +10,7 @@ interface History { before: string | null; page: RhoHistoryPage; }
 interface Transcript { cursor: number; text: string; gap: boolean; partial: boolean; }
 const empty = (): AgentDraftContent => ({ text: '', assets: [], context: [] });
 export const rhoBusy = (state: string) => ['queued', 'running', 'waiting_for_r', 'waiting_for_permission', 'needs_input', 'stopping'].includes(state);
-const known = ['create', 'draft', 'update', 'take_control', 'run', 'run.stop'];
+const known = ['create', 'draft', 'update', 'take_control', 'run', 'run.stop', 'run.reconcile'];
 
 /** Ordinary Rho tasks share the public Agent owner and the view's CAS writer.
  * Persisted requests are recovery material; observations never invoke a model. */
@@ -31,7 +31,7 @@ export class RhoModel {
       const intent = pending.intent, args = intent.arguments as unknown as { binding: unknown; arguments: { conversation_id?: string; request_id?: string }; preconditions: unknown };
       if (!known.includes(pending.kind) || intent.view !== client.view.view || intent.capability.id !== `agent.model.${pending.kind}` || intent.capability.version !== 1 ||
         !same(args.binding, this.binding(intent.capability.id)) || args.preconditions !== null ||
-        pending.kind !== 'run.stop' && args.arguments.conversation_id !== pending.task || pending.kind === 'run' && args.arguments.request_id !== intent.request)
+        !['run.stop', 'run.reconcile'].includes(pending.kind) && args.arguments.conversation_id !== pending.task || pending.kind === 'run' && args.arguments.request_id !== intent.request)
         throw Error('A retained Rho request belongs to another task, view or instance.');
     }
   }
@@ -186,6 +186,13 @@ export class RhoModel {
     if (!this.canControl(task) || !run) throw Error('Read the original active run before stopping.');
     await this.issue('run.stop', task, { run_id: run });
   }
+  async reconcile(task: string, id: string) {
+    const conversation = this.conversations.get(task), run = this.runs.get(id);
+    if (!conversation || !this.canControl(task) || conversation.active_run_id || !run || run.request.conversation_id !== task || rhoBusy(run.state))
+      throw Error('Read the original finished run and take control before checking tool outcomes.');
+    await this.issue('run.reconcile', task, { run_id: id, conversation_version: conversation.version });
+    await this.observe(task);
+  }
   async takeOver(task: string) { const c = this.conversations.get(task); if (!c) throw Error('Read the task before taking control.'); await this.issue('take_control', task, { conversation_id: task, expected_version: c.version }); }
   async rename(task: string, title: string) { return this.update(task, { title }); }
   async archive(task: string, archived: boolean) { return this.update(task, { archived }); }
@@ -236,9 +243,11 @@ export class RhoModel {
       const run = record.status === 'succeeded' ? record.output as ComponentAgentRun : await this.read<ComponentAgentRun>('agent.model.run.request', { request_id: pending.intent.request });
       if (run?.request?.request_id !== pending.intent.request || !run.run_id) throw Error('The run belongs to another original Send.');
       this.mergeRun(run);
-    } else if (record.status === 'succeeded' && pending.kind === 'run.stop') {
+    } else if (record.status === 'succeeded' && ['run.stop', 'run.reconcile'].includes(pending.kind)) {
       const run = record.output as ComponentAgentRun, expected = (pending.intent.arguments as unknown as { arguments: { run_id: string } }).arguments;
-      if (run?.run_id !== expected.run_id || run.request.conversation_id !== pending.task) throw Error('The Stop result belongs to another run.');
+      if (run?.run_id !== expected.run_id || run.request.conversation_id !== pending.task) throw Error('The original tool result belongs to another run.');
+      if (pending.kind === 'run.reconcile' && (!run.recovery || rhoBusy(run.state) || !Array.isArray(run.recovery.tools) || run.recovery.tools.length > 16 || !run.recovery.digest))
+        throw Error('The original recovery report is incomplete.');
       this.mergeRun(run);
     } else if (record.status === 'succeeded') {
       const conversation = record.output as ComponentAgentConversation;

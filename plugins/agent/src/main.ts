@@ -189,7 +189,7 @@ function renderRho(id: string) {
   get('history-controls').hidden = !earlier && !history?.before; get('earlier-messages').hidden = !earlier; get<HTMLButtonElement>('earlier-messages').disabled = rho.busy || closing;
   get('latest-messages').hidden = !history?.before; get<HTMLButtonElement>('latest-messages').disabled = rho.busy || closing; get('history-note').textContent = history?.before ? 'Earlier turns' : '';
   const transcript = get('transcript'), rows = [...(history?.page.runs ?? [])].reverse();
-  const signature = JSON.stringify([id, rows, rows.map(row => [rho.runs.get(row.run_id), rho.transcripts.get(row.run_id)])]);
+  const signature = JSON.stringify([id, rows, controlled, rho.busy, closing, conversation?.active_run_id, rows.map(row => [rho.runs.get(row.run_id), rho.transcripts.get(row.run_id)])]);
   if (transcript.dataset.content !== signature) {
     const following = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 45, oldTask = transcript.dataset.task;
     const top = transcript.getBoundingClientRect().top, visible = [...transcript.querySelectorAll<HTMLElement>('[data-event]')].find(node => node.getBoundingClientRect().bottom > top);
@@ -201,7 +201,22 @@ function renderRho(id: string) {
       const input = block('You', run?.request.text ?? row.text_excerpt, `${row.run_id}:user`);
       if (run?.context || run?.request.sources?.length) { const sources = document.createElement('button'); sources.className = 'sent-context'; sources.textContent = 'Sent context'; sources.onclick = () => context?.inspectOriginal(id, row.run_id, 'rho'); input.append(sources); }
       if (history?.text) block('Rho', history.text, `${row.run_id}:answer`);
-      block('Activity', [row.state.replaceAll('_', ' '), run?.reason, history?.gap ? 'Earlier messages unavailable' : '', history?.partial || run && history && history.cursor < run.event_cursor ? 'Partial history' : ''].filter(Boolean).join(' · '), `${row.run_id}:state`);
+      const activity = block('Activity', [row.state.replaceAll('_', ' '), run?.reason, history?.gap ? 'Earlier messages unavailable' : '', history?.partial || run && history && history.cursor < run.event_cursor ? 'Partial history' : ''].filter(Boolean).join(' · '), `${row.run_id}:state`);
+      if (run && !rhoBusy(run.state)) {
+        const inspect = document.createElement('button'); inspect.className = 'sent-context'; inspect.textContent = 'Check tool outcomes';
+        inspect.disabled = !controlled || rho.busy || closing || !!conversation?.active_run_id;
+        inspect.onclick = () => action(() => rho.reconcile(id, row.run_id)); activity.append(inspect);
+        if (run.recovery) {
+          const report = document.createElement('details'), summary = document.createElement('summary');
+          summary.textContent = !run.recovery.tools.length ? 'No tool calls recorded' : run.recovery.unresolved_mutations ? `${run.recovery.unresolved_mutations} operation(s) still unconfirmed` : 'Original tool outcomes inspected';
+          const checked = document.createElement('p'); checked.textContent = `Last inspected: ${new Date(run.recovery.checked_at_ms).toLocaleString()}`;
+          report.append(summary, checked);
+          for (const tool of run.recovery.tools) {
+            const line = document.createElement('p'); line.textContent = [tool.state.replaceAll('_', ' '), ...tool.operations.map(operation => operation.status), tool.note].filter(Boolean).join(' · '); report.append(line);
+          }
+          activity.append(report);
+        }
+      }
     }
     if (!rows.length) { const empty = document.createElement('p'); empty.className = 'empty'; empty.textContent = configured ? 'Write a message to start this conversation.' : 'Choose and enable a model in Settings to start using Rho.'; transcript.append(empty); }
     if (!history?.before && (following || oldTask !== `rho:${id}`)) transcript.scrollTop = transcript.scrollHeight;

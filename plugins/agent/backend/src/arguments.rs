@@ -161,6 +161,13 @@ pub struct ModelRun {
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct ModelReconcile {
+    #[schemars(length(min = 1, max = 160))]
+    pub run_id: String,
+    pub conversation_version: u64,
+}
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ModelEvents {
     #[schemars(length(min = 1, max = 160))]
     pub run_id: String,

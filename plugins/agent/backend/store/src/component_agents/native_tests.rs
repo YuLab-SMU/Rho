@@ -83,6 +83,93 @@ fn setup(store: Arc<AgentStore>) -> (ComponentAgentOwner, ComponentActor, Stored
 }
 
 #[test]
+fn native_recovery_report_checks_controller_and_version_and_survives_reopen() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("agent.sqlite");
+    let store = Arc::new(AgentStore::open(&path).unwrap());
+    let (owner, actor, run) = setup(store.clone());
+    owner
+        .finish(
+            actor.scope(),
+            &run.run.run_id,
+            ComponentAgentRunState::Completed,
+            None,
+            4,
+        )
+        .unwrap();
+    let conversation = store
+        .component_conversation(actor.scope(), "task")
+        .unwrap()
+        .unwrap();
+    let other = ComponentActor::new(
+        actor.scope().clone(),
+        ApplicationWindowRef {
+            window_id: "another-window".into(),
+            incarnation: "other-view".into(),
+        },
+        Arc::new(Caller),
+    );
+    assert!(matches!(
+        owner.record_native_recovery(&other, &run.run.run_id, conversation.version, vec![], 5),
+        Err(ComponentTaskError::Conflict)
+    ));
+    let saved = owner
+        .save_draft_content(
+            &actor,
+            "task",
+            conversation.draft_version,
+            AgentDraftContent {
+                text: "Retain next draft".into(),
+                ..Default::default()
+            },
+            None,
+            6,
+        )
+        .unwrap();
+    assert!(matches!(
+        owner.record_native_recovery(&actor, &run.run.run_id, conversation.version, vec![], 7),
+        Err(ComponentTaskError::Conflict)
+    ));
+    assert!(
+        store
+            .component_run(actor.scope(), &run.run.run_id)
+            .unwrap()
+            .unwrap()
+            .run
+            .recovery
+            .is_none()
+    );
+    let report = owner
+        .record_native_recovery(&actor, &run.run.run_id, saved.version, vec![], 8)
+        .unwrap();
+    assert_eq!(report.recovery.as_ref().unwrap().unresolved_mutations, 0);
+    let current = store
+        .component_conversation(actor.scope(), "task")
+        .unwrap()
+        .unwrap();
+    assert_eq!(current.draft_content.text, "Retain next draft");
+    let repeated = owner
+        .record_native_recovery(&actor, &run.run.run_id, current.version, vec![], 9)
+        .unwrap();
+    assert_eq!(repeated.event_cursor, report.event_cursor);
+    drop(owner);
+    drop(store);
+    let reopened = AgentStore::open(&path).unwrap();
+    assert_eq!(
+        encode(
+            &reopened
+                .component_run(actor.scope(), &run.run.run_id)
+                .unwrap()
+                .unwrap()
+                .run
+                .recovery
+        )
+        .unwrap(),
+        encode(&report.recovery).unwrap()
+    );
+}
+
+#[test]
 fn native_history_is_bounded_scoped_and_never_inherits_previous_authority() {
     let directory = tempfile::tempdir().unwrap();
     let store = Arc::new(AgentStore::open(&directory.path().join("agent.sqlite")).unwrap());

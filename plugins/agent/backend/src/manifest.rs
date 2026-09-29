@@ -32,6 +32,7 @@ pub fn is_mutation(id: &str) -> bool {
             | "agent.model.test.stop"
             | "agent.model.run"
             | "agent.model.run.stop"
+            | "agent.model.run.reconcile"
     )
 }
 pub fn kind(id: &str) -> CapabilityKind {
@@ -79,11 +80,13 @@ fn capability(
         } else if id == "agent.native.assets.upload" {
             "Store a bounded native task attachment through ephemeral input, the same task owner and runtime, without journaling its bytes or starting a native Agent. Inspect its original task receipt after a lost reply. This capability currently accepts only bounded single-message attachments."
         } else if id == "agent.model.run" {
-            "Run the submitted text and explicit contributed sources using captured model settings, an available scoped key and the original native controller. Source previews are checked before admission; complete text and provenance are committed with the run. Admission atomically consumes only a matching saved draft; failed source capture or missing credentials preserve it. Retains the native Operation until the model and dispatched native tools settle and records text and usage in its original task. An optional exact R binding permits bounded observation in Explain and execution only in Run, subject to original scopes and granted native capabilities. Attachments and continuation are not yet composed. Identical original requests only observe the existing run and captured sources without rereading providers, preserving later drafts."
+            "Run the submitted text and explicit contributed sources using captured model settings, an available scoped key and the original native controller. Source previews are checked before admission; complete text, provenance and bounded ordinary conversation history are committed with the run. Historical input does not inherit tool authority. Admission atomically consumes only a matching saved draft; failed source capture or missing credentials preserve it. Retains the native Operation until the model and dispatched native tools settle and records text and usage in its original task. An optional exact R binding permits bounded observation in Explain and execution only in Run, subject to original scopes and granted native capabilities. Attachments and continuation are not yet composed. Identical original requests only observe the existing run and captured sources without rereading providers, preserving later drafts."
         } else if id == "agent.model.history" {
             "Read up to 20 original run summaries in one scoped task using an exact run cursor. Lost model loops are observed as interrupted without changing their stored state, recovering a process or replaying a request."
         } else if id == "agent.model.run.stop" {
             "Request stopping the original model task under its current controller. Dispatched native work remains retained after the model loop ends; a stop request does not cancel or roll back scientific execution."
+        } else if id == "agent.model.run.reconcile" {
+            "Explicitly inspect the original tools of a terminal model run and retain a recovery report under the current controller and exact conversation version. Delegated Operations are checked through their original parent and native records; missing or incomplete observations remain uncertain. Refuses a still-live model/native wait. Does not start a model, repeat a tool, resume a provider, cancel work or treat a missing reply as proof of no effect."
         } else if id == "agent.model.test" {
             "Explicitly run a bounded synthetic model test with the captured settings and scoped key. Retains the original Operation until completion; it has no project context or scientific tools. Repeated original requests only observe their retained diagnostic."
         } else if id == "agent.model.test.stop" {
@@ -333,6 +336,13 @@ pub fn manifest() -> PluginManifest {
                 json!({"conversation_id":"task-example","before":null,"limit":20}),
             ),
             capability(
+                "agent.model.run.reconcile",
+                "Inspect original model tool outcomes",
+                schema_for!(ModelReconcile).to_value(),
+                schema_for!(ComponentAgentRun).to_value(),
+                json!({"run_id":"run-example","conversation_version":3}),
+            ),
+            capability(
                 "agent.model.test",
                 "Test the configured model",
                 schema_for!(TestModel).to_value(),
@@ -486,6 +496,7 @@ pub fn manifest() -> PluginManifest {
         "agent.model.run.get",
         "agent.model.run.request",
         "agent.model.run.stop",
+        "agent.model.run.reconcile",
         "agent.model.run.events",
         "agent.model.run.tools",
         "agent.model.tool.operation",

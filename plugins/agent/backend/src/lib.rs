@@ -8,6 +8,7 @@ pub mod server;
 
 mod diagnostics;
 mod runs;
+mod run_recovery;
 
 pub mod native_arguments;
 mod native_context;

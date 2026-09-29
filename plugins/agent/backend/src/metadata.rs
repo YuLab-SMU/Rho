@@ -427,6 +427,9 @@ impl Metadata {
             "agent.native.command" => self.native.command(self, call, caller, host).await,
             "agent.model.run" => self.runs.start(self, call, caller, host).await,
             "agent.model.run.stop" => self.runs.stop(self, call, caller),
+            "agent.model.run.reconcile" => {
+                crate::run_recovery::reconcile(self, &self.runs, call, caller, host).await
+            }
             "agent.model.test" => self.diagnostics.start(self, call, caller).await,
             "agent.model.test.stop" => self.diagnostics.stop(self, call, caller),
             _ => self.mutate(call, caller),

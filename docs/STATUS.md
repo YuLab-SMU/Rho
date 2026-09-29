@@ -125,8 +125,8 @@ Implemented in `plugins/agent` (public APIs/SDK only, no private core imports):
 
 Native/Rho text capture validates exact previews; Rho also freezes up to eight prior turns
 (24 KiB) under its admission gate without inheriting authority. Source bytes and history stay
-with the original Send. The @ picker and Sent context inspection pass synthetic model/browser
-checks; native history/source frames, store bounds and actual Editor/Host integration remain pending.
+with the original Send. Check tool outcomes now records explicit native recovery in source.
+Picker/input/recovery UI checks pass; native frames/store and real Editor/Host integration remain pending.
 The ordinary native/Rho task view is implemented in source: shared task selection,
 creation, draft CAS/conflicts, Send/Stop, explicit control and original-request
 inspection. Native tasks also support model/tool selection, permissions and
@@ -137,12 +137,12 @@ Stable view/controller identities survive private connection rotation. Rho setti
 provide key save/removal, versioned configuration and explicit synthetic tests;
 keys stay out of saved view state and Operations. Rho now submits text and contributed
 references; attachments, tool selection and continuation remain to compose.
-The UI build and 65 model cases (24 native, 13 settings, 16 Rho, 12 context) pass, as does
+The UI build and 67 model cases (24 native, 13 settings, 18 Rho, 12 context) pass, as does
 the synthetic public MessagePort browser fixture: opaque iframe, IME Enter, task
 switching, one Send, next drafts, 8 MiB selection, lost creation/Send/import/key
 replies, actual reload, history and close without Stop. Settings/rename work without
 form permission. 960/440/320/220 px and short-context screenshots were inspected.
-Evidence: `target/plugin-refactor/rho-history-results.json`, `rho-context-results.json`, `native-context-results.json`.
+Evidence: `target/plugin-refactor/rho-recovery-results.json`, `rho-history-results.json`, `native-context-results.json`.
 This does **not** establish combined native/Host acceptance: native manifest
 regeneration, backend checks and activation of the new combined package remain
 pending behind the current serial build. The checked-in `plugin.json` still

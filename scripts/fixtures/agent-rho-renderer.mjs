@@ -79,5 +79,23 @@ export async function testRhoRenderer(page, frame, expect, output) {
   }
   assert.equal((await page.evaluate(()=>window.fixture.snapshot())).reads['editor.context.preview'],beforeHistoryReads);
   await contextDialog.getByRole('button',{name:'Close context'}).click();await page.setViewportSize({width:440,height:820});
+  await input.fill('Keep draft while inspecting outcomes');await expect(frame.locator('#draft-status')).toHaveText('Draft saved');
+  await page.evaluate(()=>window.fixture.loseRhoReply('agent.model.run.reconcile'));
+  await frame.getByRole('button',{name:'Check tool outcomes',exact:true}).last().click();
+  await expect(frame.getByRole('alert')).toContainText('Lost original Rho reply');
+  await page.evaluate(()=>window.fixture.reload());await expect(frame.locator('#recovery')).toBeVisible();
+  await frame.locator('#inspect-original').click();await expect(frame.locator('#recovery')).toBeHidden();
+  await expect(input).toHaveValue('Keep draft while inspecting outcomes');
+  await frame.getByText('1 operation(s) still unconfirmed',{exact:true}).click();
+  await expect(frame.getByRole('log')).toContainText('No work was repeated.');
+  for(const width of [440,220]){
+    await page.setViewportSize({width,height:820});assert.equal(await frame.locator('body').evaluate(node=>node.scrollWidth>innerWidth),false);
+    await frame.getByText('uncertain · The original operation has no confirmed outcome. No work was repeated.',{exact:true}).scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(output,`agent-rho-recovery-${width}.png`)});
+  }
+  snapshot=await page.evaluate(()=>window.fixture.snapshot());
+  assert.equal(snapshot.calls.filter(c=>c.capability?.id==='agent.model.run.reconcile').length,1);
+  assert.equal(snapshot.calls.filter(c=>c.capability?.id==='agent.model.run').length,2);
+  await page.setViewportSize({width:440,height:820});
   await tasks.selectOption('native:task-0');await expect(input).toHaveValue('Keep this next draft after reopening');
 }

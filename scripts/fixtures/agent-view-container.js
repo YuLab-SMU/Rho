@@ -140,7 +140,7 @@ async function handle(body) {
   }
   if (body.type === 'invoke') {
     calls.push(copy(body));
-    if (['create','draft','update','take_control','run','run.stop'].some(kind=>body.capability.id===`agent.model.${kind}`)) {
+    if (['create','draft','update','take_control','run','run.stop','run.reconcile'].some(kind=>body.capability.id===`agent.model.${kind}`)) {
       const retained=view.state.rho?.pending.find(p=>p.intent.request===body.request_id);
       if(!retained || JSON.stringify(retained.intent.arguments)!==JSON.stringify(body.arguments)) throw Error('Original Rho intent was not retained');
       const scoped=await requestId(body.request_id);let record=records.find(r=>r.operation.client_request_id===scoped);
@@ -161,6 +161,9 @@ async function handle(body) {
           const capturedContext=args.sources.length||earlier?{history:earlier?{kind:'conversation',truncated:false,notice:'Fixture retained input',turns:[{run_id:earlier.run_id,state:'completed',user_text:earlier.request.text,assistant_text:'Retained Rho answer · 中文 Ω',history_gap:false,text_truncated:false,references:[],references_truncated:false}]}:null,sources:args.sources.map(selection=>({selection:copy(selection),title:contextItem.title,description:contextItem.description,text:JSON.parse(selection.inclusion).kind==='selection'?'selected_value <- 42 # 中文 Ω':'# Synchronized analysis document\nselected_value <- 42 # 中文 Ω\nprint(selected_value)',native_data:{version:7},truncated:false,observations:[],evidence:[]}))}:null;
           const run={run_id:'rho-run-'+rhoRuns.size,request:{...copy(args),window:copy(task.controller)},context:capturedContext,state:'running',updated_at_ms:Date.now(),event_cursor:0,reason:null};rhoRuns.set(run.run_id,run);
           task.draft_content=blank();task.draft='';task.draft_version++;task.version++;task.active_run_id=run.run_id;status='running';output=null;
+        }else if(kind==='run.reconcile'){
+          const run=rhoRuns.get(args.run_id),task=rhoTasks.get(run.request.conversation_id);if(args.conversation_version!==task.version)throw Error('Task version changed');
+          run.recovery={version:1,digest:'renderer-report',checked_at_ms:Date.now(),unresolved_mutations:1,tools:[{receipt_id:'original-tool',state:'uncertain',application_request_id:null,application_state:null,operations:[],documents:[],note:'The original operation has no confirmed outcome. No work was repeated.'}]};run.updated_at_ms=Date.now();task.version++;output=copy(run);
         }else{const run=rhoRuns.get(args.run_id);run.state='stopping';run.updated_at_ms=Date.now();output=copy(run);}
         record={operation:{operation_id:'op-'+records.length,caller:{kind:'plugin',id:view.view},client_request_id:scoped,capability:copy(body.capability),normalized_arguments:copy(body.arguments),preconditions:[]},status,outcome:status==='running'?null:status,output,error:null};records.push(record);
       }

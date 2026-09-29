@@ -98,11 +98,48 @@ impl ComponentAgentOwner {
         tools: Vec<ComponentRecoveredTool>,
         now: u64,
     ) -> Result<ComponentAgentRun, ApplicationError> {
+        self.record_recovery_checked(scope, id, tools, None, now)
+    }
+
+    /// An ordinary plugin records recovery only for the current controller and
+    /// exact conversation observation used for its original inspection.
+    pub fn record_native_recovery(
+        &self,
+        actor: &ComponentActor,
+        id: &str,
+        expected_version: u64,
+        tools: Vec<ComponentRecoveredTool>,
+        now: u64,
+    ) -> Result<ComponentAgentRun, ApplicationError> {
+        self.record_recovery_checked(
+            &actor.scope,
+            id,
+            tools,
+            Some((actor, expected_version)),
+            now,
+        )
+    }
+
+    fn record_recovery_checked(
+        &self,
+        scope: &ApplicationScope,
+        id: &str,
+        tools: Vec<ComponentRecoveredTool>,
+        controller: Option<(&ComponentActor, u64)>,
+        now: u64,
+    ) -> Result<ComponentAgentRun, ApplicationError> {
         let _guard = self.gate.lock().map_err(storage)?;
         let mut run = self
             .store
             .component_run(scope, id)?
             .ok_or(ApplicationError::NotFound)?;
+        if let Some((actor, expected_version)) = controller {
+            actor.validate(now)?;
+            let conversation = self.conversation(actor, &run.run.request.conversation_id)?;
+            if run.native_origin.is_none() || conversation.version != expected_version {
+                return Err(ApplicationError::Conflict);
+            }
+        }
         if !run.run.state.is_terminal() {
             return Err(ApplicationError::Conflict);
         }

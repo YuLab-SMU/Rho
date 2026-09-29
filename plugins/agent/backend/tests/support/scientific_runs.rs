@@ -128,6 +128,149 @@ impl Fixture {
 }
 
 #[tokio::test]
+async fn rho_recovery_reports_original_native_outcomes_without_replay_and_rejects_changed_identity()
+{
+    let mut f = Fixture::start_with_grants(true).await;
+    let model = SyntheticModel::with_tool(Some((
+        "r_execute".into(),
+        json!({"code":"counter <- counter + 1"}),
+    )))
+    .await;
+    f.model_settings(&model).await;
+    let input = f.science_input("run").await;
+    let native = f.scientific_begin(input, true).await;
+    f.session_observation(&native).await;
+    model.entered().await;
+    let run = f.original_run().await;
+    let conversation = f
+        .query(
+            "agent.model.conversation",
+            json!({"conversation_id":"task-one"}),
+        )
+        .await;
+    let (inspect, caller) = f
+        .begin(
+            "recover-live",
+            "agent.model.run.reconcile",
+            json!({"run_id":run["run_id"],"conversation_version":conversation["version"]}),
+        )
+        .await;
+    let refused = f.answer(caller, origin("view-one")).await;
+    assert_eq!(refused.outcome, PluginOutcome::Failed);
+    assert!(f.original_run().await["recovery"].is_null());
+    f.settle(&inspect, refused.outcome).await;
+    model.state.resume.notify_one();
+    let frame = f.read().await;
+    let RpcBody::HostCall { arguments, .. } = &frame.body else {
+        panic!("{frame:?}")
+    };
+    let original_record = record(&f, &native, arguments);
+    f.answer_host(frame, original_record.clone()).await;
+    let done = f.receive_run(&native, "completed").await;
+    f.settle(&native, done.outcome).await;
+    let receipts = f.scientific_receipts(&run).await;
+    let mut last_report = Value::Null;
+    for status in [
+        "succeeded",
+        "running",
+        "uncertain",
+        "missing",
+        "foreign",
+        "changed-caller",
+    ] {
+        let conversation = f
+            .query(
+                "agent.model.conversation",
+                json!({"conversation_id":"task-one"}),
+            )
+            .await;
+        let inspect = scientific_call(
+            &format!("recover-{status}"),
+            "agent.model.run.reconcile",
+            json!({"run_id":run["run_id"],"conversation_version":conversation["version"]}),
+            true,
+        );
+        f.scientific_admit(inspect.clone()).await;
+        let frame = f.read().await;
+        let RpcBody::HostCall {
+            capability,
+            parent_request,
+            arguments,
+        } = &frame.body
+        else {
+            panic!("{frame:?}")
+        };
+        assert_eq!(capability, &manifest::key("plugins.delegated_operation"));
+        assert_eq!(parent_request, &inspect.request);
+        assert_eq!(
+            arguments,
+            &json!({"parent_operation":native.operation_id,"request":receipts[0]["client_request_id"]})
+        );
+        f.answer_host(frame, json!({"status":"ready","completeness":"complete","data":{"operation_id":if status=="missing" {Value::Null} else {json!("original-scientific-operation")}}})).await;
+        if status != "missing" {
+            let frame = f.read().await;
+            assert!(
+                matches!(&frame.body, RpcBody::HostCall {capability,..} if capability == &manifest::key("operation.get"))
+            );
+            let mut observed = original_record.clone();
+            if matches!(status, "running" | "uncertain") {
+                observed["status"] = json!(status);
+            }
+            if status == "foreign" {
+                observed["operation"]["causation_id"] = json!("another-parent");
+            }
+            f.answer_host(
+                frame,
+                json!({"status":"ready","completeness":"complete","data":{"record":observed}}),
+            )
+            .await;
+        }
+        if status != "foreign" {
+            let frame = f.read().await;
+            assert!(
+                matches!(&frame.body, RpcBody::HostCall {capability,..} if capability == &manifest::key("views.caller"))
+            );
+            f.answer_host(frame, json!({"status":"ready","completeness":"complete","data":origin(if status=="changed-caller" {"other-view"} else {"view-one"})})).await;
+        }
+        let frame = f.read().await;
+        assert_eq!(frame.request, inspect.request);
+        let RpcBody::CommitPlan(plan) = frame.body else {
+            panic!("{frame:?}")
+        };
+        if matches!(status, "foreign" | "changed-caller") {
+            assert_eq!(plan.outcome, PluginOutcome::Failed);
+            assert_eq!(f.original_run().await["recovery"], last_report);
+        } else {
+            assert_eq!(plan.outcome, PluginOutcome::Succeeded, "{status}: {plan:?}");
+            let report = &plan.output.as_ref().unwrap()["recovery"];
+            assert_eq!(
+                report["tools"][0]["state"],
+                if status == "succeeded" {
+                    "confirmed"
+                } else if status == "running" {
+                    "pending"
+                } else {
+                    "uncertain"
+                }
+            );
+            assert_eq!(
+                report["unresolved_mutations"],
+                if status == "succeeded" { 0 } else { 1 }
+            );
+            last_report = report.clone();
+        }
+        f.settle(&inspect, plan.outcome).await;
+        assert_eq!(f.scientific_receipts(&run).await, receipts);
+        assert_eq!(model.count(), 2);
+    }
+    let (directory, environment) = f.release().await;
+    let mut reopened = Fixture::open_with_grants(directory, environment, true).await;
+    assert_eq!(reopened.original_run().await["recovery"], last_report);
+    assert_eq!(model.count(), 2);
+    reopened.release().await;
+}
+
+#[tokio::test]
 async fn scientific_tools_keep_native_identity_and_late_results_after_model_stop() {
     for stop in [false, true] {
         let mut f = Fixture::start_with_grants(true).await;

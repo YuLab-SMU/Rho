@@ -321,14 +321,22 @@ impl Runs {
             } else {
                 None
             };
+            // Source previews may have awaited multiple native reads. Consume
+            // a fresh actor synchronously after their caller revalidation.
+            let admitted_at = now();
+            let actor = metadata.actor(caller, admitted_at);
             let admitted = if let Some(context) = captured_context {
-                metadata
-                    .owner
-                    .start_native_captured(&actor, request, origin, context, now())?
+                metadata.owner.start_native_captured(
+                    &actor,
+                    request,
+                    origin,
+                    context,
+                    admitted_at,
+                )?
             } else {
                 metadata
                     .owner
-                    .start_native(&actor, request, origin, now())?
+                    .start_native(&actor, request, origin, admitted_at)?
             };
             if admitted.repeated {
                 drop(live);

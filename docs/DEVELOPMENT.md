@@ -133,6 +133,15 @@ That fixture does not replace real combined
 Agent/Host acceptance; native manifest changes still require the serial exporter
 and backend checks before snapshotting the package.
 
+`Check tool outcomes` invokes `agent.model.run.reconcile` explicitly, retaining its
+original request before dispatch. The renderer covers a lost reply, reload without
+repeating the inspection, preserved next draft and an uncertain report at 440/220 px.
+The native `rho_recovery_reports_original_native_outcomes` fixture checks original
+parent correlation, live-wait refusal, pending/uncertain outcomes and changed callers;
+store `native_recovery_report` checks controller/version fencing and reopen. These
+must pass on the current backend separately. A recovery report does not itself start
+Continue or establish actual Host restart acceptance.
+
 Once the combined package is current, run the existing real-R runner with
 `--browser --package /absolute/retained/package` and explicit `RHO_R_PLUGIN_PACKAGE`,
 `RHO_EDITOR_PLUGIN_PACKAGE`, `RHO_FILES_PLUGIN_PACKAGE`, `RHO_ARK` and `RHO_R_HOME`. This mode never invokes Cargo: `agent-workspace.spec.ts`

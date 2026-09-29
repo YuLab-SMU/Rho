@@ -48,6 +48,10 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
             conversation.draft_content=empty();conversation.draft='';conversation.draft_version++;conversation.version++;conversation.active_run_id=run.run_id;status='running';output=null;
           }else if(kind==='run.stop'){
             const run=runs.get(input.run_id);run.state='stopping';run.updated_at_ms++;output=clone(run);
+          }else if(kind==='run.reconcile'){
+            const run=runs.get(input.run_id),task=conversations.get(run.request.conversation_id);
+            assert.equal(input.conversation_version,task.version);assert.equal(task.active_run_id,null);
+            run.recovery={version:1,digest:'retained-report',checked_at_ms:1,unresolved_mutations:0,tools:[]};run.updated_at_ms++;task.version++;output=clone(run);
           }else throw Error('Unexpected Operation '+kind);
           if(error)status='failed';record={operation:{operation_id:'op-'+records.length,caller:{kind:'plugin',id:'view-one'},client_request_id:scoped,capability:clone(cap),normalized_arguments:clone(args),preconditions:[]},status,outcome:status==='running'?null:status,output,error};records.push(record);
         }
@@ -102,6 +106,19 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
     const request=model.state.pending[0].intent.request,before=f.calls.length;model=f.open().model;await model.refresh();assert.equal(f.calls.length,before);
     await model.inspect(request);assert.equal(f.runs.size,1);assert.equal(f.calls.length,before);assert.equal(model.state.drafts[id].content.text,'');
     assert.equal(model.state.pending[0].intent.request,request);assert.equal(model.state.pending[0].status,'running');
+  });
+  await check('lost tool inspection is recovered as its original request without sending a model turn',async()=>{
+    const f=fixture();let {model,id}=await task(f);await draft(model,id);await model.send(id);f.finish('run-0');await model.refresh();
+    await draft(model,id,'Keep the next input');f.lose('agent.model.run.reconcile');await assert.rejects(model.reconcile(id,'run-0'),/Lost original reply/);
+    const pending=model.state.pending.find(p=>p.kind==='run.reconcile'),before=f.calls.length;assert.ok(pending);
+    model=f.open().model;await model.refresh();await model.inspect(pending.intent.request);
+    assert.equal(f.calls.length,before);assert.equal(f.calls.filter(c=>c.cap.id==='agent.model.run').length,1);
+    assert.equal(model.runs.get('run-0').recovery.digest,'retained-report');assert.equal(model.draft(id).text,'Keep the next input');assert.equal(model.state.pending.length,0);
+  });
+  await check('tool inspection refuses an active run or a run from another task',async()=>{
+    const f=fixture(),{model,id}=await task(f);await draft(model,id);await model.send(id);const before=f.calls.length;
+    await assert.rejects(model.reconcile(id,'run-0'),/finished run/);f.finish('run-0');await model.refresh();
+    await assert.rejects(model.reconcile('another-task','run-0'),/finished run/);assert.equal(f.calls.length,before);
   });
   await check('identical retry recovers one run and a forged result never clears the draft',async()=>{
     const f=fixture(),{model,id}=await task(f);await draft(model,id);f.lose('agent.model.run');await assert.rejects(model.send(id));

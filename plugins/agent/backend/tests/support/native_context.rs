@@ -262,6 +262,9 @@ async fn rho_contributed_context_reaches_model_and_survives_reopen_without_sourc
     answer(&mut f, "plugins.inspect", inspection(), true).await;
     let selected = answer(&mut f, "editor.context.preview", preview(), true).await;
     assert_eq!(selected["arguments"]["reference"], reference());
+    // A real source read outlives the original caller's millisecond. Admission
+    // must consume the revalidated caller at its new synchronous commit time.
+    tokio::time::sleep(std::time::Duration::from_millis(2)).await;
     answer(&mut f, "views.caller", origin("view-one"), true).await;
     model.entered().await;
     let running = f.original_run().await;
