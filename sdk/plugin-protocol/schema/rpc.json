@@ -122,6 +122,8 @@
         "preparing",
         "active",
         "draining",
+        "suspending",
+        "suspended",
         "released",
         "failed",
         "cleanup_failed",
@@ -283,6 +285,13 @@
         },
         "state": {
           "$ref": "#/$defs/InstanceState"
+        },
+        "suspension": {
+          "description": "A confirmed Host shutdown incarnation. Explicit resume consumes this\nexact token; an older request cannot resume a later suspension.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "additionalProperties": false,

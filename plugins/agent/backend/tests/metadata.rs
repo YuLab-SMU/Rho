@@ -253,7 +253,7 @@ impl Fixture {
 fn manifest_contains_public_bounded_agent_capabilities() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 35);
+    assert_eq!(manifest.capabilities.len(), 36);
     assert_eq!(
         manifest.requires[0].capability,
         manifest::key("views.caller")
@@ -295,6 +295,8 @@ fn manifest_contains_public_bounded_agent_capabilities() {
         "agent.model.key.remove",
         "agent.model.configure",
         "agent.model.test",
+        "agent.model.history",
+        "agent.model.run",
     ] {
         let own = manifest
             .capabilities
@@ -335,7 +337,7 @@ async fn metadata_uses_native_origin_cas_and_settlement_without_replaying_on_reo
     assert!(created.facts.is_empty() && created.evidence.is_empty());
     assert_eq!(
         created.output.as_ref().unwrap()["controller"]["incarnation"],
-        "view-one:connection-view-one"
+        "view:view-one"
     );
     f.writer
         .send(id("early-release"), RpcBody::Release)
@@ -535,7 +537,7 @@ async fn bounded_concurrent_calls_keep_each_origin_and_refuse_original_operation
         assert_eq!(plan.outcome, PluginOutcome::Succeeded);
         assert_eq!(
             plan.output.unwrap()["controller"]["incarnation"],
-            format!("{name}:connection-{name}")
+            format!("view:{name}")
         );
         f.settle(&call, PluginOutcome::Succeeded).await;
     }

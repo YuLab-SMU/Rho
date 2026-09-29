@@ -44,7 +44,7 @@ export async function testAgentRenderer(root, assets) {
     await expect(frame.getByRole('combobox', {name:'Select task'}).locator('option').filter({hasText:'Earlier task 24'})).toHaveCount(1);
     await expect(frame.getByRole('button', {name:'Newer tasks',exact:true})).toBeEnabled();
     await frame.getByRole('button', {name:'Newer tasks',exact:true}).click();
-    await expect(frame.getByRole('combobox', {name:'Select task'})).toHaveValue('task-0');
+    await expect(frame.getByRole('combobox', {name:'Select task'})).toHaveValue('native:task-0');
     await expect(frame.getByRole('log')).toContainText('Retained message 220');
     await expect(frame.getByRole('log')).not.toContainText('Retained message 21 ·');
     await frame.getByRole('button', {name:'Earlier messages',exact:true}).click();
@@ -75,10 +75,10 @@ export async function testAgentRenderer(root, assets) {
     assert.equal(snapshot.details[0][1].draft.content.text, '中文 Ω');
     // Switch within the debounce interval: the saved text must belong to task-0.
     await input.fill('Draft belongs to the first task');
-    await frame.getByRole('combobox', { name: 'Select task' }).selectOption('task-1');
+    await frame.getByRole('combobox', { name: 'Select task' }).selectOption('native:task-1');
     await expect(input).toHaveValue('');
     await expect.poll(async () => (await page.evaluate(() => window.fixture.snapshot())).details[0][1].draft.content.text).toBe('Draft belongs to the first task');
-    await frame.getByRole('combobox', { name: 'Select task' }).selectOption('task-0'); await expect(input).toHaveValue('Draft belongs to the first task');
+    await frame.getByRole('combobox', { name: 'Select task' }).selectOption('native:task-0'); await expect(input).toHaveValue('Draft belongs to the first task');
     await frame.locator('#attachment-file').setInputFiles({ name: '完整附件.txt', mimeType: 'text/plain', buffer: Buffer.alloc(8 * 1024 * 1024, 82) });
     await expect(frame.locator('#attachments')).toContainText('完整附件.txt'); await expect(frame.locator('#draft-status')).toHaveText('Draft saved');
     snapshot = await page.evaluate(() => window.fixture.snapshot());
@@ -110,12 +110,14 @@ export async function testAgentRenderer(root, assets) {
     snapshot = await page.evaluate(() => window.fixture.snapshot()); assert.equal(snapshot.calls.filter(call => call.arguments?.arguments?.command?.kind === 'send').length, 1);
     const { testSettingsRenderer } = await import('./fixtures/agent-settings-renderer.mjs');
     await testSettingsRenderer(page, frame, expect, output);
+    const { testRhoRenderer } = await import('./fixtures/agent-rho-renderer.mjs');
+    await testRhoRenderer(page, frame, expect, output);
     await page.evaluate(() => window.fixture.close());
     await expect.poll(async () => (await page.evaluate(() => window.fixture.snapshot())).calls.filter(call => call.type === 'prepare_close').length).toBe(1);
     snapshot = await page.evaluate(() => window.fixture.snapshot()); assert.equal(snapshot.calls.filter(call => call.arguments?.arguments?.command?.kind === 'stop').length, 0);
     assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify({ status: 'passed', fixture: 'synthetic public MessagePort; no Host or native Agent', checks: ['opaque iframe bootstrap', '960/440/320/220 layout and anchored menu', 'reasoning excluded', 'IME Enter', 'debounced save across task switch', 'explicit tools captured by one Send', 'next draft and original Operation after reload', 'close does not Stop', '8 MiB file selection in bounded chunks', 'lost attachment receipt reload and explicit selection without reimport', 'task pagination', 'earlier history with stable scroll through polling; explicit return to latest'] }, null, 2) + '\n');
-    console.log(`Agent renderer and Rho settings checks passed (960/440/320/220, original key/configuration/removal receipt recovery, explicit synthetic model test). Evidence: ${output}. Synthetic peer, not native/Host acceptance.`);
+    console.log(`Agent renderer, Rho tasks and settings checks passed (960/440/320/220, original create/Send/key/configuration/removal receipt recovery, next drafts and synthetic model history). Evidence: ${output}. Synthetic peer, not native/Host acceptance.`);
   } catch (error) {
     await page?.screenshot({ path: path.join(output, 'failure.png') }).catch(() => {});
     if (page) {

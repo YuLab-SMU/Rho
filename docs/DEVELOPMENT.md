@@ -115,12 +115,13 @@ run's browser evidence before another run replaces `target/studio-browser`, or
 pass Playwright a dedicated `--output` directory.
 
 For ordinary Agent UI iteration, `node scripts/test-agent-view.mjs --build-ui`
-checks the task/draft and Rho settings models and builds just the UI from public SDK copies. It uses
+checks native/Rho task, draft and settings models and builds just the UI from public SDK copies. It uses
 the already installed client dependencies and never invokes Cargo. Add `--browser`
 when the interaction settles to check the production UI in an opaque iframe with
 a synthetic public MessagePort peer. Reload creates a new document/connection,
 including original key/configuration/removal receipt recovery without automatic
-model tests. Settings and rename buttons work without `allow-forms`; screenshots
+model tests. Rho creation/Send recovery, missing keys, next-draft isolation and
+retained history run through the same opaque iframe. Settings and rename buttons work without `allow-forms`; screenshots
 cover 960/440/320/220 px, with the narrow settings panel scrolled to its diagnostics.
 That fixture does not replace real combined
 Agent/Host acceptance; native manifest changes still require the serial exporter
@@ -519,8 +520,13 @@ foreign stop requests, and verify disable/disconnect behavior without replay.
 The model-task fixtures additionally retain the original native admission,
 stream Unicode text into existing task events, project live task status and fence
 the original loop on stop/disable/takeover. Duplicate/reopened task requests are
-observations even after removing the fixture key file. The independent generic
-Host case exercises the ordinary task's actual retained process and journal.
+observations even after removing the fixture key file.
+The `model_history` fixture checks bounded pages and foreign/invalid cursors;
+the disconnect case projects interrupted history without changing stored state.
+Missing-key preflight must leave the saved draft and run history unchanged.
+`cargo test -p rho-agent-store --lib native_send_consumes --locked` checks atomic
+matching-draft consumption, unmatched input and original replay after reopening.
+The independent generic Host case exercises the ordinary task's actual retained process and journal.
 They use temporary keys and no real provider or user session. Scientific tools,
 context/attachment capture, continuation, native Agent connections and Agent view
 acceptance remain separate checks. `cargo test -p rho-agent-owner -p

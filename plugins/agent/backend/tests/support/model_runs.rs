@@ -42,6 +42,16 @@ async fn model_run_retains_native_parent_text_events_and_original_request_withou
     let running = f.original_run().await;
     assert_eq!(running["state"], "running");
     assert_eq!(running["model_calls"], 1);
+    let history = f
+        .query(
+            "agent.model.history",
+            json!({"conversation_id":"task-one","before":null,"limit":1}),
+        )
+        .await;
+    assert_eq!(history["conversation_id"], "task-one");
+    assert_eq!(history["runs"][0]["run_id"], running["run_id"]);
+    assert_eq!(history["runs"][0]["state"], "running");
+    assert!(history["next"].is_null());
     let tasks = f
         .query(
             "agent.tasks",
@@ -123,13 +133,28 @@ async fn model_run_retains_native_parent_text_events_and_original_request_withou
     let (retry, reverse) = reopened
         .begin("repeat-after-reopen", "agent.model.run", input)
         .await;
-    let repeated = reopened.answer(reverse, origin("view-one")).await;
+    let mut reconnected = origin("view-one");
+    reconnected["view"]["connection"] = json!("fresh-private-connection");
+    let repeated = reopened.answer(reverse, reconnected).await;
+    assert_eq!(
+        repeated.outcome,
+        PluginOutcome::Succeeded,
+        "{:?}",
+        repeated.error
+    );
     assert_eq!(
         repeated.output.as_ref().unwrap()["run_id"],
         running["run_id"]
     );
     assert_eq!(repeated.output.as_ref().unwrap()["state"], "completed");
     reopened.settle(&retry, repeated.outcome).await;
+    let history = reopened
+        .query(
+            "agent.model.history",
+            json!({"conversation_id":"task-one","before":null,"limit":1}),
+        )
+        .await;
+    assert_eq!(history["runs"][0]["state"], "completed");
     assert_eq!(
         reopened
             .query(
@@ -244,6 +269,14 @@ async fn model_run_disconnect_reopens_original_observation_without_key_read_or_m
     .unwrap();
     let mut reopened = Fixture::open(directory, environment).await;
     assert_eq!(reopened.original_run().await["state"], "interrupted");
+    let history = reopened
+        .query(
+            "agent.model.history",
+            json!({"conversation_id":"task-one","before":null,"limit":20}),
+        )
+        .await;
+    assert_eq!(history["runs"][0]["state"], "interrupted");
+    assert_eq!(history["runs"][0]["run_id"], run["run_id"]);
     let (retry, reverse) = reopened
         .begin("repeated-abandoned", "agent.model.run", input)
         .await;
@@ -274,11 +307,103 @@ async fn model_run_disconnect_reopens_original_observation_without_key_read_or_m
 }
 
 #[tokio::test]
-async fn model_run_refuses_uncaptured_authority_and_retains_preflight_failure_without_model_call() {
+async fn model_history_pages_original_runs_and_refuses_foreign_or_unbounded_cursors() {
     let mut f = Fixture::start().await;
     let model = SyntheticModel::start().await;
     f.model_settings(&model).await;
-    let input = f.run_input().await;
+    let mut input = f.run_input().await;
+    model.state.resume.notify_one();
+    let mut ids = std::collections::BTreeSet::new();
+    for index in 0..4 {
+        let conversation = f
+            .query(
+                "agent.model.conversation",
+                json!({"conversation_id":"task-one"}),
+            )
+            .await;
+        input["conversation_version"] = conversation["version"].clone();
+        input["request_id"] = json!(format!("history-request-{index}"));
+        let (native, reverse) = f
+            .begin(
+                &format!("history-run-{index}"),
+                "agent.model.run",
+                input.clone(),
+            )
+            .await;
+        let result = f.answer(reverse, origin("view-one")).await;
+        assert_eq!(result.outcome, PluginOutcome::Succeeded, "{result:?}");
+        ids.insert(
+            result.output.as_ref().unwrap()["run_id"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+        );
+        f.settle(&native, result.outcome).await;
+    }
+    let first = f
+        .query(
+            "agent.model.history",
+            json!({"conversation_id":"task-one","before":null,"limit":2}),
+        )
+        .await;
+    assert_eq!(first["runs"].as_array().unwrap().len(), 2);
+    assert_eq!(first["next"], first["runs"][1]["run_id"]);
+    let second = f
+        .query(
+            "agent.model.history",
+            json!({"conversation_id":"task-one","before":first["next"],"limit":2}),
+        )
+        .await;
+    assert_eq!(second["runs"].as_array().unwrap().len(), 2);
+    assert!(second["next"].is_null());
+    let observed: std::collections::BTreeSet<_> = [
+        first["runs"].as_array().unwrap(),
+        second["runs"].as_array().unwrap(),
+    ]
+    .into_iter()
+    .flatten()
+    .map(|run| {
+        assert_eq!(run["state"], "completed");
+        run["run_id"].as_str().unwrap().to_owned()
+    })
+    .collect();
+    assert_eq!(ids, observed);
+    let (create, reverse) = f
+        .begin(
+            "other-task",
+            "agent.model.create",
+            json!({"conversation_id":"other-task","profile":"project"}),
+        )
+        .await;
+    let result = f.answer(reverse, origin("view-one")).await;
+    assert_eq!(result.outcome, PluginOutcome::Succeeded);
+    f.settle(&create, result.outcome).await;
+    for arguments in [
+        json!({"conversation_id":"task-one","before":null,"limit":0}),
+        json!({"conversation_id":"task-one","before":null,"limit":21}),
+        json!({"conversation_id":"task-one","before":"","limit":2}),
+        json!({"conversation_id":"unknown","before":null,"limit":2}),
+        json!({"conversation_id":"other-task","before":first["next"],"limit":2}),
+    ] {
+        f.writer
+            .send(
+                id("bad-history"),
+                RpcBody::Query(call("bad-history", "agent.model.history", arguments, false)),
+            )
+            .await
+            .unwrap();
+        assert!(matches!(f.read().await.body, RpcBody::Error { .. }));
+    }
+    assert_eq!(model.count(), 4);
+    f.release().await;
+}
+
+#[tokio::test]
+async fn model_run_refuses_uncaptured_authority_and_missing_key_before_draft_admission() {
+    let mut f = Fixture::start().await;
+    let model = SyntheticModel::start().await;
+    f.model_settings(&model).await;
+    let mut input = f.run_input().await;
     let mut forged = input.clone();
     forged["grant"] =
         json!({"mode":"run","session":{"session_id":"forged","workspace_instance_id":"forged"}});
@@ -299,20 +424,41 @@ async fn model_run_refuses_uncaptured_authority_and_retains_preflight_failure_wi
         std::path::Path::new(&f.environment.data_root).join("model-credentials-v1.json"),
     )
     .unwrap();
+    let (save, reverse) = f.begin("saved-before-send", "agent.model.draft", json!({"conversation_id":"task-one","draft_version":1,"content":{"text":input["text"],"context":[],"assets":[]},"grant":null})).await;
+    let saved = f.answer(reverse, origin("view-one")).await;
+    assert_eq!(saved.outcome, PluginOutcome::Succeeded);
+    let saved = saved.output.unwrap();
+    f.settle(&save, PluginOutcome::Succeeded).await;
+    input["conversation_version"] = saved["version"].clone();
     let (failed, reverse) = f
         .begin("missing-key", "agent.model.run", input.clone())
         .await;
     let outcome = f.answer(reverse, origin("view-one")).await;
-    assert_eq!(outcome.outcome, PluginOutcome::Succeeded);
-    assert_eq!(outcome.output.as_ref().unwrap()["state"], "failed");
-    assert_eq!(outcome.output.as_ref().unwrap()["model_calls"], 0);
+    assert_eq!(outcome.outcome, PluginOutcome::Failed);
+    assert!(outcome.output.is_none());
     f.settle(&failed, outcome.outcome).await;
-    let original = f.original_run().await;
+    assert_eq!(
+        f.query(
+            "agent.model.conversation",
+            json!({"conversation_id":"task-one"})
+        )
+        .await,
+        saved
+    );
+    assert_eq!(
+        f.query(
+            "agent.model.history",
+            json!({"conversation_id":"task-one","before":null,"limit":5})
+        )
+        .await["runs"],
+        json!([])
+    );
     let (retry, reverse) = f
         .begin("repeat-preflight-failure", "agent.model.run", input)
         .await;
     let repeated = f.answer(reverse, origin("view-one")).await;
-    assert_eq!(repeated.output.unwrap()["run_id"], original["run_id"]);
+    assert_eq!(repeated.outcome, PluginOutcome::Failed);
+    assert!(repeated.output.is_none());
     f.settle(&retry, repeated.outcome).await;
     assert_eq!(model.count(), 0);
     f.release().await;

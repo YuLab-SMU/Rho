@@ -2,13 +2,14 @@ import type { AgentDraftContent, AgentTaskCommand, AgentTaskCommandResult, Agent
   AgentNativeToolSelection, AgentProvider, LocalAgent, ProjectAgentTaskPage, AgentCommandReceipt } from '../sdk/index.js';
 import { NativeHistory } from './history.js';
 import type { ModelSettingsState } from './model-settings.js';
+import type { RhoState } from './rho-model.js';
 import { captureFile, attachmentChunk, verifyProgress, verifyUploaded, ATTACHMENT_CHUNK_BYTES, type PendingUpload, type UploadProgress } from './uploads.js';
 import { type Client, type Intent, type RecordReply, json, same, terminal, verifyOriginal, inspectOriginal } from './operations.js';
 
 type Command = Exclude<AgentTaskCommand, { kind: 'add_asset' }>;
 interface LocalDraft { content: AgentDraftContent; base: number; revision: number; dirty: boolean; conflict: AgentDraftContent | null; }
 interface Pending { intent: Intent; task: string | null; kind: Command['kind'] | 'discover'; draftRevision: number | null; status: string | null; }
-interface Saved { schema: 1; selected: string | null; archived: boolean; drafts: Record<string, LocalDraft>; pending: Pending[]; tools: AgentNativeToolSelection[]; catalogs: Partial<Record<AgentProvider, LocalAgent>>; uploads?: PendingUpload[]; settings?: ModelSettingsState; }
+interface Saved { schema: 1; selected: string | null; archived: boolean; drafts: Record<string, LocalDraft>; pending: Pending[]; tools: AgentNativeToolSelection[]; catalogs: Partial<Record<AgentProvider, LocalAgent>>; uploads?: PendingUpload[]; settings?: ModelSettingsState; rho?: RhoState; }
 const empty = (): AgentDraftContent => ({ text: '', assets: [], context: [] });
 export const agentBusy = (state: string) => ['running', 'waiting_for_permission', 'connecting', 'resuming', 'stopping', 'queued', 'waiting_for_r', 'needs_input'].includes(state);
 
@@ -67,6 +68,7 @@ export class NativeAgentModel {
     const write = this.writes.then(async () => {
       this.live(); const value = structuredClone(this.state);
       value.drafts = Object.fromEntries(Object.entries(value.drafts).filter(([id, draft]) => draft.dirty || id === value.selected || value.pending.some(p => p.task === id)));
+      if (value.rho) value.rho.drafts = Object.fromEntries(Object.entries(value.rho.drafts).filter(([id, draft]) => draft.dirty || id === value.rho!.selected || value.rho!.pending.some(p => p.task === id)));
       const original = this.client.view;
       const confirmed = await this.client.setState(json(value));
       if (confirmed.view !== original.view || !same(confirmed.instance, original.instance) || !same(confirmed.state, value))
@@ -107,6 +109,7 @@ export class NativeAgentModel {
     this.taskCursors = [null]; this.page = null; await this.save(); await this.readTasks();
   }
   async select(task: string) {
+    if (this.state.rho) this.state.rho.selected = null;
     this.live(); this.state.selected = task; await this.save(); await this.observe(task); this.notify();
   }
   canControl(task: string) {
@@ -331,7 +334,7 @@ export class NativeAgentModel {
       const latest = this.details.get(task);
       this.state.pending = this.state.pending.filter(p => p !== pending);
       this.merge(latest && latest.summary.observation_version > result.detail.summary.observation_version ? latest : result.detail);
-      if (pending.kind === 'create') this.state.selected = task;
+      if (pending.kind === 'create') { this.state.selected = task; if (this.state.rho) this.state.rho.selected = null; }
     } else if (terminal(record.status) && record.status !== 'uncertain') {
       this.state.pending = this.state.pending.filter(p => p !== pending);
       this.error = record.error || `The original ${pending.kind} request ${record.status}.`;

@@ -24,6 +24,8 @@ let close = { phase: 'open' }, saveDelay = 0, loseFinish = false;
 const staged = new Map();
 let modelSettings = {version:0,enabled:false,connection:null}, loseSettings = '';
 const modelKeys = new Map(), modelTests = new Map();
+const rhoTasks = new Map(), rhoRuns = new Map(), rhoEvents = new Map();
+let loseRho = '';
 async function requestId(request) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('agent-view:' + request));
   return 'sha256:' + Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2, '0')).join('');
@@ -49,8 +51,18 @@ async function handle(body) {
     }
     else if (id === 'agent.model.key.receipt') { const key=modelKeys.get(args.request_id); data={credential:key?{kind:'local_file',key_id:key.key_id}:null,available:!!key?.available}; }
     else if (id === 'agent.model.diagnostic') data = modelTests.get(args.request_id);
+    else if (id === 'agent.model.conversation') data = rhoTasks.get(args.conversation_id);
+    else if (id === 'agent.model.run.get') data = rhoRuns.get(args.run_id);
+    else if (id === 'agent.model.run.request') data = [...rhoRuns.values()].find(r => r.request.request_id === args.request_id);
+    else if (id === 'agent.model.run.events') data = {events:(rhoEvents.get(args.run_id)??[]).filter(e=>e.sequence>args.after).slice(0,args.limit),cursor:rhoRuns.get(args.run_id).event_cursor,history_gap:false};
+    else if (id === 'agent.model.history') {
+      const all=[...rhoRuns.values()].filter(r=>r.request.conversation_id===args.conversation_id).reverse();
+      const start=args.before?all.findIndex(r=>r.run_id===args.before)+1:0, page=all.slice(start,start+args.limit);
+      data={conversation_id:args.conversation_id,runs:page.map(r=>({run_id:r.run_id,conversation_id:r.request.conversation_id,state:r.state})),next:start+args.limit<all.length?page.at(-1).run_id:null};
+    }
     else if (id === 'agent.tasks') {
       const tasks = [...details.values()].filter(d => d.summary.task.archived === args.archived).map(d => ({ reference: { kind: 'native', task_id: d.summary.task.task_id }, title: d.summary.task.title, provider: d.summary.task.provider, state: d.summary.attachment.state, archived: d.summary.task.archived }));
+      tasks.push(...[...rhoTasks.values()].filter(t=>t.archived===args.archived).map(t=>({reference:{kind:'rho',conversation_id:t.conversation_id},title:t.title,provider:null,state:t.active_run_id?rhoRuns.get(t.active_run_id).state:'idle',archived:t.archived})));
       const before = Number(args.before ?? 0), end = before + args.limit;
       data = { tasks: tasks.slice(before,end), next: end < tasks.length ? String(end) : null };
     }
@@ -106,6 +118,30 @@ async function handle(body) {
   }
   if (body.type === 'invoke') {
     calls.push(copy(body));
+    if (['create','draft','update','take_control','run','run.stop'].some(kind=>body.capability.id===`agent.model.${kind}`)) {
+      const retained=view.state.rho?.pending.find(p=>p.intent.request===body.request_id);
+      if(!retained || JSON.stringify(retained.intent.arguments)!==JSON.stringify(body.arguments)) throw Error('Original Rho intent was not retained');
+      const scoped=await requestId(body.request_id);let record=records.find(r=>r.operation.client_request_id===scoped);
+      if(!record){
+        const args=body.arguments.arguments,kind=body.capability.id.slice('agent.model.'.length);let task=rhoTasks.get(args.conversation_id),output,status='succeeded';
+        if(kind==='create'){
+          task={conversation_id:args.conversation_id,title:'New Rho task',profile:args.profile,archived:false,version:1,draft_version:1,draft:'',draft_content:blank(),controller:{window_id:view.window,incarnation:'view:'+view.view},active_run_id:null};rhoTasks.set(task.conversation_id,task);output=copy(task);
+        }else if(kind==='draft'){
+          if(args.draft_version!==task.draft_version)throw Error('Draft conflict');task.draft_content=copy(args.content);task.draft=args.content.text;task.draft_version++;task.version++;output=copy(task);
+        }else if(kind==='update'||kind==='take_control'){
+          if(args.expected_version!==task.version)throw Error('Task changed');task.version++;
+          if(kind==='take_control'){task.controller={window_id:view.window,incarnation:'view:'+view.view};task.active_run_id=null;}
+          else{if(args.title!==undefined)task.title=args.title.trim();if(args.archived!==undefined)task.archived=args.archived;}
+          output=copy(task);
+        }else if(kind==='run'){
+          if(args.conversation_version!==task.version||args.text!==task.draft_content.text)throw Error('Original draft changed');
+          const run={run_id:'rho-run-'+rhoRuns.size,request:{...copy(args),window:copy(task.controller)},state:'running',updated_at_ms:Date.now(),event_cursor:0,reason:null};rhoRuns.set(run.run_id,run);
+          task.draft_content=blank();task.draft='';task.draft_version++;task.version++;task.active_run_id=run.run_id;status='running';output=null;
+        }else{const run=rhoRuns.get(args.run_id);run.state='stopping';run.updated_at_ms=Date.now();output=copy(run);}
+        record={operation:{operation_id:'op-'+records.length,caller:{kind:'plugin',id:view.view},client_request_id:scoped,capability:copy(body.capability),normalized_arguments:copy(body.arguments),preconditions:[]},status,outcome:status==='running'?null:status,output,error:null};records.push(record);
+      }
+      if(loseRho===body.capability.id){loseRho='';throw Error('Lost original Rho reply');}return copy(record);
+    }
     if (body.capability.id.startsWith('agent.model.')) {
       if (!view.state.settings.pending.some(p=>p.intent.request===body.request_id)) throw Error('Original settings intent was not retained');
       const scoped=await requestId(body.request_id); let record=records.find(r=>r.operation.client_request_id===scoped);
@@ -167,7 +203,14 @@ addEventListener('message', event => {
   if (reloaded) { const resolve = reloaded; reloaded = null; resolve(); }
 });
 window.fixture = {
-  snapshot: () => copy({ view, calls, details: [...details], records, reads }),
+  snapshot: () => copy({ view, calls, details: [...details], records, reads, rhoTasks:[...rhoTasks], rhoRuns:[...rhoRuns] }),
+  loseRhoReply: id => { loseRho=id; },
+  finishRho: id => {
+    const run=rhoRuns.get(id);run.state='completed';run.updated_at_ms=Date.now();run.event_cursor=2;
+    rhoEvents.set(id,[{run_id:id,sequence:1,content:{kind:'text',text:'Retained Rho answer · 中文 Ω.\nThis is a renderer fixture; no model was contacted.'}},{run_id:id,sequence:2,content:{kind:'reasoning',text:'RHO_PRIVATE_REASONING'}}]);
+    const task=rhoTasks.get(run.request.conversation_id);task.active_run_id=null;task.version++;
+    const record=records.find(r=>r.operation.capability.id==='agent.model.run'&&r.operation.normalized_arguments.arguments.request_id===run.request.request_id);record.status='succeeded';record.outcome='succeeded';record.output=copy(run);
+  },
   pagedTasks: enabled => {
     for (let index = 2; index < 25; index++) {
       const id = `task-${index}`; if (enabled) details.set(id, detail(id, `Earlier task ${index}`)); else details.delete(id);

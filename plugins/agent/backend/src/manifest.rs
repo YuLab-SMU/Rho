@@ -77,7 +77,9 @@ fn capability(
         } else if id == "agent.native.assets.upload" {
             "Store a bounded native task attachment through ephemeral input, the same task owner and runtime, without journaling its bytes or starting a native Agent. Inspect its original task receipt after a lost reply. This capability currently accepts only bounded single-message attachments."
         } else if id == "agent.model.run" {
-            "Run the submitted text using captured model settings and the original native controller. Retains the native Operation until the model and dispatched native tools settle and records text and usage in its original task. An optional exact R binding permits bounded observation in Explain and execution only in Run, subject to original scopes and granted native capabilities. Attachments and continuation are not yet composed. Identical original requests only observe the existing run."
+            "Run the submitted text using captured model settings, an available scoped key and the original native controller. Admission atomically consumes only a matching saved draft; missing credentials preserve it. Retains the native Operation until the model and dispatched native tools settle and records text and usage in its original task. An optional exact R binding permits bounded observation in Explain and execution only in Run, subject to original scopes and granted native capabilities. Attachments and continuation are not yet composed. Identical original requests only observe the existing run, preserving later drafts."
+        } else if id == "agent.model.history" {
+            "Read up to 20 original run summaries in one scoped task using an exact run cursor. Lost model loops are observed as interrupted without changing their stored state, recovering a process or replaying a request."
         } else if id == "agent.model.run.stop" {
             "Request stopping the original model task under its current controller. Dispatched native work remains retained after the model loop ends; a stop request does not cancel or roll back scientific execution."
         } else if id == "agent.model.test" {
@@ -309,6 +311,13 @@ pub fn manifest() -> PluginManifest {
                 json!({"run_id":"run-example","after":0,"limit":50}),
             ),
             capability(
+                "agent.model.history",
+                "Read a model task's original run history",
+                schema_for!(ModelHistory).to_value(),
+                schema_for!(ModelHistoryPage).to_value(),
+                json!({"conversation_id":"task-example","before":null,"limit":20}),
+            ),
+            capability(
                 "agent.model.test",
                 "Test the configured model",
                 schema_for!(TestModel).to_value(),
@@ -451,6 +460,19 @@ pub fn manifest() -> PluginManifest {
         "agent.model.test",
         "agent.model.test.stop",
         "agent.model.diagnostic",
+        "agent.model.create",
+        "agent.model.conversation",
+        "agent.model.draft",
+        "agent.model.update",
+        "agent.model.take_control",
+        "agent.model.history",
+        "agent.model.run",
+        "agent.model.run.get",
+        "agent.model.run.request",
+        "agent.model.run.stop",
+        "agent.model.run.events",
+        "agent.model.run.tools",
+        "agent.model.tool.operation",
     ] {
         let own = manifest
             .capabilities

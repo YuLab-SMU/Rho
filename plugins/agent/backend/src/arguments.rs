@@ -166,6 +166,25 @@ pub struct ModelEvents {
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct ModelHistory {
+    #[schemars(length(min = 1, max = 160))]
+    pub conversation_id: String,
+    #[schemars(length(min = 1, max = 160))]
+    pub before: Option<String>,
+    #[schemars(range(min = 1, max = 20))]
+    pub limit: u32,
+}
+
+#[derive(Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ModelHistoryPage {
+    pub conversation_id: String,
+    pub runs: Vec<rho_agent_api::component::ComponentAgentRunSummary>,
+    pub next: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct ModelTool {
     #[schemars(length(min = 1, max = 160))]
     pub run_id: String,

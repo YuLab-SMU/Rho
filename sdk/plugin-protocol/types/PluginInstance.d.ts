@@ -5,10 +5,16 @@ import type { InstanceState } from "./InstanceState.js";
 import type { PluginInstancePurpose } from "./PluginInstancePurpose.js";
 import type { PrincipalId } from "./PrincipalId.js";
 import type { ProjectId } from "./ProjectId.js";
+import type { RequestId } from "./RequestId.js";
 import type { JsonValue } from "./serde_json/JsonValue.js";
 
 export type PluginInstance = { identity: InstanceRef,
 /**
  * Omitted for normal runtime instances, preserving native initialization.
  */
-purpose?: PluginInstancePurpose, project: ProjectId, principal: PrincipalId, alias: InstanceAlias, configuration: JsonValue, state: InstanceState, diagnostic: string | null, };
+purpose?: PluginInstancePurpose, project: ProjectId, principal: PrincipalId, alias: InstanceAlias, configuration: JsonValue, state: InstanceState,
+/**
+ * A confirmed Host shutdown incarnation. Explicit resume consumes this
+ * exact token; an older request cannot resume a later suspension.
+ */
+suspension?: RequestId, diagnostic: string | null, };

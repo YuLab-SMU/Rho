@@ -211,6 +211,118 @@ fn native_parent_cannot_be_replaced_or_removed_by_later_transaction() {
 }
 
 #[test]
+fn native_send_consumes_only_its_matching_draft_and_replay_preserves_next_input() {
+    for matched in [true, false] {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("agent.sqlite");
+        let store = Arc::new(AgentStore::open(&path).unwrap());
+        let (owner, actor, original) = setup(store.clone());
+        let conversation = owner
+            .create(&actor, "draft-task", ComponentAgentProfile::Project, 4)
+            .unwrap();
+        let content = AgentDraftContent {
+            text: "Submitted draft 中文 Ω".into(),
+            ..Default::default()
+        };
+        owner
+            .save_draft_content(
+                &actor,
+                "draft-task",
+                conversation.draft_version,
+                content.clone(),
+                None,
+                5,
+            )
+            .unwrap();
+        let saved = store
+            .component_conversation(actor.scope(), "draft-task")
+            .unwrap()
+            .unwrap();
+        let request = ComponentAgentStart {
+            request_id: "draft-request".into(),
+            conversation_id: "draft-task".into(),
+            conversation_version: saved.version,
+            text: if matched {
+                content.text.clone()
+            } else {
+                "Different explicitly submitted text".into()
+            },
+            ..original.run.request
+        };
+        let origin = ComponentNativeRunOrigin {
+            operation: OperationId::new("draft-operation").unwrap(),
+            request: RequestId::new("draft-request").unwrap(),
+            ..origin()
+        };
+        let admitted = owner
+            .start_native(&actor, request.clone(), origin.clone(), 6)
+            .unwrap();
+        let after = store
+            .component_conversation(actor.scope(), "draft-task")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            encode(&after.draft_content).unwrap(),
+            encode(&if matched {
+                AgentDraftContent::default()
+            } else {
+                content
+            })
+            .unwrap()
+        );
+        assert_eq!(
+            after.draft_version,
+            saved.draft_version + u64::from(matched)
+        );
+        assert_eq!(
+            after.active_run_id.as_deref(),
+            Some(admitted.run.run.run_id.as_str())
+        );
+        let next = AgentDraftContent {
+            text: "Keep my next input".into(),
+            ..Default::default()
+        };
+        owner
+            .save_draft_content(
+                &actor,
+                "draft-task",
+                after.draft_version,
+                next.clone(),
+                None,
+                7,
+            )
+            .unwrap();
+        let retained = store
+            .component_conversation(actor.scope(), "draft-task")
+            .unwrap()
+            .unwrap();
+        assert!(
+            owner
+                .start_native(&actor, request.clone(), origin.clone(), 8)
+                .unwrap()
+                .repeated
+        );
+        drop(owner);
+        drop(store);
+        let reopened = Arc::new(AgentStore::open(&path).unwrap());
+        let owner = ComponentAgentOwner::new(reopened.clone(), "new-process".into());
+        let repeated = owner.start_native(&actor, request, origin, 9).unwrap();
+        assert!(repeated.repeated);
+        assert_eq!(repeated.run.run.run_id, admitted.run.run.run_id);
+        let current = reopened
+            .component_conversation(actor.scope(), "draft-task")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            encode(&current.draft_content).unwrap(),
+            encode(&next).unwrap()
+        );
+        assert_eq!(current.version, retained.version);
+        assert_eq!(current.draft_version, retained.draft_version);
+    }
+}
+
+#[test]
 fn native_capture_cannot_change_with_a_retained_request_digest() {
     let directory = tempfile::tempdir().unwrap();
     let store = Arc::new(AgentStore::open(&directory.path().join("agent.sqlite")).unwrap());

@@ -997,6 +997,24 @@ impl ComponentAgentOwner {
             },
         };
         conversation.active_run_id = Some(run_id);
+        // The native conversation version freezes the submitted draft. Consume
+        // it in the same transaction as admission, and only when its complete
+        // content matches. A later draft and a repeated original request cannot
+        // be cleared by the acknowledgement of this Send.
+        if run.native_origin.is_some()
+            && conversation.draft_content.text == run.run.request.text
+            && conversation.draft_content.assets
+                == run.run.request.assets.clone().unwrap_or_default()
+            && component_digest(&conversation.draft_content.context)?
+                == component_digest(&run.run.request.sources)?
+        {
+            conversation.draft.clear();
+            conversation.draft_content = AgentDraftContent::default();
+            conversation.draft_version = conversation
+                .draft_version
+                .checked_add(1)
+                .ok_or_else(|| invalid("Draft version exhausted"))?;
+        }
         self.save(&actor.scope, conversation, Some(&run), &[], &[], now)?;
         Ok(ComponentRunAdmission {
             run,

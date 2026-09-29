@@ -113,7 +113,9 @@ test('ordinary Agent attachments and one original Send reach real R; reload and 
   const composer = frame.getByRole('textbox', { name: 'Agent message', exact: true });
   await expect(composer).toBeEnabled({ timeout: 45000 });
   expect(existsSync(join(project, 'native-science-evidence.json'))).toBe(false);
-  const task = await frame.getByLabel('Select task', { exact: true }).inputValue();
+  const selection = await frame.getByLabel('Select task', { exact: true }).inputValue();
+  expect(selection).toMatch(/^native:/);
+  const task = selection.slice(7);
   const detail = () => nativeQuery('agent.native.task', { task_id: task });
   const prompt = 'Run the authorized R counter once, using the selected attachments 中文';
   writeFileSync(join(project, 'native-science-history.json'), JSON.stringify({ messages: 120 }));
@@ -240,7 +242,7 @@ test('ordinary Agent attachments and one original Send reach real R; reload and 
   }
   await page.getByRole('button', { name: 'Restore saved view', exact: true }).click();
   await expect(composer).toHaveValue(next);
-  await expect(frame.getByLabel('Select task', { exact: true })).toHaveValue(task);
+  await expect(frame.getByLabel('Select task', { exact: true })).toHaveValue(`native:${task}`);
   await expect(transcript).toContainText('Original scientific result observed 中文');
   expect(resumeCalls).toBe(1); expect(reconnectCalls).toBe(1);
   const currentConnection = await query('views.connection', { view: view.view });

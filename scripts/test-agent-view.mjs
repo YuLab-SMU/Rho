@@ -308,6 +308,9 @@ try {
   const { ModelSettings } = await import(pathToFileURL(path.join(temporary, 'compiled/src/model-settings.js')));
   const { testModelSettings } = await import('./fixtures/agent-model-settings.mjs');
   await testModelSettings(ModelSettings, NativeAgentModel, operationRequestId);
+  const { RhoModel } = await import(pathToFileURL(path.join(temporary, 'compiled/src/rho-model.js')));
+  const { testRhoTasks } = await import('./fixtures/agent-rho-tasks.mjs');
+  await testRhoTasks(RhoModel, NativeAgentModel, operationRequestId);
   if (process.argv.includes('--build-ui') || process.argv.includes('--browser')) execFileSync(process.execPath, [path.join(temporary, 'build-ui.mjs')], {
     cwd: temporary, stdio: 'inherit', env: { ...process.env, RHO_PLUGIN_NODE_MODULES: path.join(root, 'ui/node_modules') },
   });

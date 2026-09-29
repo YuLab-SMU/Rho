@@ -236,6 +236,7 @@ impl Metadata {
     pub fn read(&self, call: &PluginCall) -> Result<Value, Failure> {
         match call.binding.capability.id.as_str() {
             "agent.model.run.get"
+            | "agent.model.history"
             | "agent.model.run.request"
             | "agent.model.run.events"
             | "agent.model.run.admission"
@@ -382,13 +383,16 @@ impl Metadata {
         let controller = match caller.view {
             Some(origin) => AgentControllerRef {
                 window_id: origin.window.to_string(),
-                incarnation: format!("{}:{}", origin.view, origin.connection),
+                // The fresh caller observation validates the connection. A
+                // private connection rotation must not change persisted task
+                // identity or the digest of an original Send.
+                incarnation: format!("view:{}", origin.view),
             },
             // A direct native caller has its own controller namespace. It cannot
             // masquerade as a view or implicitly take over another controller.
             None => AgentControllerRef {
                 window_id: format!("agent:{}", self.instance.identity.instance),
-                incarnation: self.owner.host_incarnation.clone(),
+                incarnation: format!("instance:{}", self.instance.identity.instance),
             },
         };
         ComponentActor::new(

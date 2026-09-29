@@ -96,6 +96,41 @@ impl Runs {
     }
     pub fn read(&self, metadata: &Metadata, call: &PluginCall) -> Result<Value, Failure> {
         match call.binding.capability.id.as_str() {
+            "agent.model.history" => {
+                let args: ModelHistory = decode(&call.arguments)?;
+                if args.conversation_id.is_empty()
+                    || args.conversation_id.len() > 160
+                    || !(1..=20).contains(&args.limit)
+                    || args
+                        .before
+                        .as_ref()
+                        .is_some_and(|id| id.is_empty() || id.len() > 160)
+                {
+                    return Err(Failure::invalid("Invalid model history page bounds"));
+                }
+                let live = self.live_ids()?;
+                let mut rows = metadata.owner.store.component_run_history(
+                    &metadata.scope,
+                    &args.conversation_id,
+                    args.before.as_deref(),
+                    args.limit as usize + 1,
+                )?;
+                let more = rows.len() > args.limit as usize;
+                rows.truncate(args.limit as usize);
+                let next = more.then(|| rows.last().unwrap().0.run_id.clone());
+                let runs = rows.into_iter().map(|(mut run, incarnation)| {
+                    if !run.state.is_terminal() && (incarnation != metadata.owner.host_incarnation || !live.contains(&run.run_id)) {
+                        run.state = ComponentAgentRunState::Interrupted;
+                        run.reason = Some("The original model loop is no longer owned by this process; inspect its original records before continuing".into());
+                    }
+                    run
+                }).collect();
+                encoded(ModelHistoryPage {
+                    conversation_id: args.conversation_id,
+                    runs,
+                    next,
+                })
+            }
             "agent.model.run.get" => {
                 let args: ModelRun = decode(&call.arguments)?;
                 encoded(self.observe(metadata, self.stored(metadata, &args.run_id)?)?)
@@ -216,7 +251,7 @@ impl Runs {
                 binding: call.binding.clone(),
                 r: selected_r.clone(),
             };
-        let (admitted, guard) = {
+        let (admitted, guard, captured_key) = {
             let mut live = self.live.lock().map_err(|_| unavailable())?;
             let repeated = metadata
                 .owner
@@ -230,9 +265,26 @@ impl Runs {
                         .into(),
                 });
             }
-            if !repeated {
+            let captured_key = if !repeated {
                 validate_selection(metadata, call, selected_r.as_ref(), mode)?;
-            }
+                let settings = metadata.owner.store.component_settings(&metadata.scope)?;
+                if settings.version != request.model_settings_version {
+                    return Err(ComponentTaskError::Conflict.into());
+                }
+                if !settings.enabled {
+                    return Err(Failure::invalid("Choose and enable a model before sending"));
+                }
+                let connection = settings
+                    .connection
+                    .ok_or_else(|| Failure::invalid("Configure a model before sending"))?;
+                // Capture before draft admission. A missing key must preserve
+                // the draft; later removal cannot revoke bytes already captured
+                // for this authorized Send. Immutable references and settings
+                // CAS fence concurrent model replacement.
+                Some(metadata.model_key(&connection.credential)?)
+            } else {
+                None
+            };
             let admitted = metadata.owner.start_native(&actor, request, origin, at)?;
             if admitted.repeated {
                 drop(live);
@@ -248,6 +300,7 @@ impl Runs {
                     id,
                     cancellation,
                 },
+                captured_key,
             )
         };
         let id = &admitted.run.run_id;
@@ -260,7 +313,8 @@ impl Runs {
                     "Model task stopped before model admission",
                 ));
             }
-            let key = metadata.model_key(&admitted.run.model.credential)?;
+            let key = captured_key
+                .ok_or_else(|| Failure::invalid("The captured model credential is unavailable"))?;
             Ok::<_, Failure>((run, key, context))
         }
         .await;

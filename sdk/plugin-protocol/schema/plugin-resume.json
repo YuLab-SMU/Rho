@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ResumePlugin",
+  "description": "Resume one confirmed Host suspension. Configuration and grants are retained\nby the Host; the caller cannot replace them through recovery.",
+  "type": "object",
+  "properties": {
+    "instance": {
+      "$ref": "#/$defs/InstanceRef"
+    },
+    "suspension": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "instance",
+    "suspension"
+  ],
+  "$defs": {
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    }
+  }
+}

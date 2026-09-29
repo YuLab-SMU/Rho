@@ -5,12 +5,12 @@
   <section class="conversation">
     <header class="task-header"><select id="task-selector" aria-label="Select task"><option value="">Choose a task</option></select>
       <button id="new-task" popovertarget="new-menu" aria-label="New task">New task</button>
-      <div id="new-menu" popover><button data-provider="codex">Codex</button><button data-provider="kimi">Kimi Code</button><button data-provider="deepseek">DeepSeek Harness</button></div>
+      <div id="new-menu" popover><button id="new-rho-task">Rho</button><button data-provider="codex">Codex</button><button data-provider="kimi">Kimi Code</button><button data-provider="deepseek">DeepSeek Harness</button></div>
       <button id="task-actions" popovertarget="actions-menu" aria-label="Task actions">•••</button>
       <div id="actions-menu" popover><button id="rename-task">Rename</button><button id="archive-task">Archive</button><button id="show-details">Session details</button><button id="open-settings">Settings</button></div>
     </header>
     <div id="task-pages" hidden><button id="newer-tasks">Newer tasks</button><button id="older-tasks">Older tasks</button></div>
-    <div class="task-state"><span id="task-state">Choose or create a task</span><button id="take-over" hidden>Take over</button><button id="resume" hidden>Resume</button></div>
+    <div class="task-state"><span id="task-state">Choose or create a task</span><button id="take-over" hidden>Take over</button><button id="resume" hidden>Resume</button><button id="configure-rho" hidden>Configure Rho</button></div>
     <section id="session-details" hidden aria-label="Agent session details"></section>
     <div id="history-controls" hidden><button id="earlier-messages">Earlier messages</button><button id="latest-messages" hidden>Latest messages</button><span id="history-note"></span></div>
     <div id="transcript" role="log" aria-label="Agent conversation"><p class="empty">Your conversation appears here.</p></div>

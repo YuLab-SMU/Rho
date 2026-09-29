@@ -63,8 +63,9 @@ Identical retries inspect the original receipt without re-reading the source or
 launching native work, including after backend reopen. Unconfirmed original receipts
 remain uncertain; changed resources or controllers are refused. Asset bytes retain
 the existing 8 MiB/file and 32 MiB/task limits. Resource import does not provide a
-browser file picker or stage local files; ordinary Agent view capture remains to be
-composed. Contributed context input is still refused before native submission.
+browser file picker or stage local files; ordinary view file capture uses the
+separate bounded stage/finish Controls. Contributed context input is still refused
+before native submission.
 
 Send can explicitly select up to 16 Query/Operation tools. Provider targets retain
 an exact ordinary-plugin binding and immutable public manifest; Host targets retain
@@ -155,8 +156,19 @@ Connection and image tests require explicit actions and use synthetic content.
 `agent.model.key.remove` removes only that version's configured local key after a
 fresh caller observation. Configuration and removal share a gate, and storage
 errors do not masquerade as missing keys. Removal preserves original key receipts
-and leaves accepted model work's captured key untouched. Rho task/composer and
-contributed-context integration remain separate work.
+and leaves accepted model work's captured key untouched.
+
+The ordinary view also supports Rho task creation, shared task selection, versioned
+drafts, rename/archive, explicit takeover, Send/Stop and bounded run history. Native
+and Rho drafts share the same view-state writer while retaining separate task
+identities. Unknown creation/Send replies preserve their exact original requests;
+reopening reads them and never dispatches a replacement. Admission captures an
+available key before changing the draft and atomically consumes only matching
+input. Later typing survives delayed acknowledgements and original-request replay.
+`agent.model.history` pages up to 20 scoped summaries without starting a model or
+changing stored interrupted work. The current Rho composer submits text only;
+attachments, contributed context, tool selection and continuation still require
+composition. Renderer fixtures establish UI behavior, not native Host acceptance.
 
 Generate declarations with `node plugins/agent/generate-sdk.mjs`; add `--check` to
 verify freshness. `node scripts/test-agent-plugin-types.mjs` checks an independent
@@ -227,7 +239,8 @@ reopen observe the original diagnostic and never restart it.
 
 `agent.model.run` also composes the real model-task owner and Rig loop for explicit
 submitted text. It captures the original native Operation, request and provider
-binding atomically with admission. Text, usage and terminal state use the existing
+binding atomically with admission and matching saved-draft consumption. Missing
+credentials refuse admission and preserve the draft. Text, usage and terminal state use the existing
 task event log. `agent.model.run.request`, `.get` and `.events` only observe that
 original record; `.stop`, disabling settings and explicit controller takeover fence
 the original loop. A duplicate semantic request returns the original run without
@@ -242,8 +255,8 @@ queries never replay it. The build instructions distinguish framed fixtures from
 the separate independent-package real-R acceptance.
 
 Native Agent connections and explicitly selected native tools are composed as
-described above. General context providers, ordinary-view attachment capture,
-component-model continuation and Agent views still require integration. Synthetic diagnostics and
+described above. General context providers, component-model input/continuation and
+combined ordinary-view native/Host acceptance still require integration. Synthetic diagnostics and
 submitted-text runs alone do not establish scientific execution or real-provider quality. Default
 delivery remains unfinished.
 The backend transport and independent Host verification commands are described
