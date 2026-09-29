@@ -67,7 +67,6 @@ pub struct McpRequestIdentity {
     pub project: String,
     pub identity: String,
     pub test_project: Option<rho_contract::TestProjectId>,
-    pub managed: Option<rho_host::AgentMcpIdentity>,
 }
 struct HttpBinding {
     identity: String,
@@ -283,11 +282,7 @@ impl McpEdge {
         if &identity.project != project {
             return Err(ErrorData::invalid_request("MCP connection identity changed", None));
         }
-        let context = match &identity.managed {
-            Some(managed) if managed.is_valid() && &managed.project == project => Ok(managed.context.clone()),
-            Some(_) => Err(ErrorData::invalid_request("MCP attachment is no longer active", None)),
-            None => Ok(self.context.clone()),
-        }?;
+        let context = self.context.clone();
         // Selection is fixed by authenticated transport metadata, never by tool
         // arguments. Keep the child leased until this MCP connection ends.
         let selected = match &identity.test_project {

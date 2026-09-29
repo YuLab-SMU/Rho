@@ -9,8 +9,8 @@
 避免自研循环，把组件作为统一 Agent 的上下文入口，并共享 Rho 的真实科研系统。
 实施进度只记录在 [STATUS](STATUS.md)，本文件不追加完成历史。
 统一插件重构后的源码归属以 [Architecture](ARCHITECTURE.md) 为准：Rig 驱动属于
-`plugins/agent/backend/engine`，`rho-agents` 暂时保留原执行端口的转换层。
-下文目录图描述原方案，不约束插件迁移后的包位置。
+`plugins/agent/backend/engine`；旧 Host 服务与 `rho-agents` 转换层已删除。
+下文目录图与依赖图描述原方案，不约束插件迁移后的包位置；当前检查入口见 Development。
 
 ## 1. 实施结论与第一版完成定义
 
@@ -415,44 +415,15 @@ fixtures 验证。Kimi 图片回答等第三方表现不阻塞 Rho 完成；已�
 | A12 | 资源与历史有界 | 超并发、超调用、超 byte/token、巨大工具批次、事件上限；控制读取仍可响应；回执与活动引用不被淘汰 |
 | A13 | 旧能力不回归 | 原生 CLI 接入的确定性协议 fixtures、MCP、R 运行、包/对象观察、Rho 恢复与草稿的既有测试；没有导入或改写原生用户配置 |
 
-对应测试位置：`crates/agents/tests/`、`crates/host/tests/component_agents.rs`、
-普通插件的 `plugins/agent/tests/`、`ui/e2e/agent-workspace.spec.ts` 与
-`ui/e2e/agent-rho-tools.spec.ts`；原固定客户端测试随其实现删除。
-新增 `scripts/test-component-agents.mjs`：默认 fake provider；`--real-model` 为显式真实模型验收，
-使用临时项目/Host，输出原始模型请求摘要、工具轨迹、Operation 回读、图像摘要与判定。
-后端与脚本现已实现；`--real-sources` 还会运行真实 R 来源、文档修复、Continue 和生成图像验收。
-统一 UI 已有单元/Chrome 测试入口；A20 设计已审阅授权，交接测试随实现补齐。各项实际执行记录以 Status 为准。
+当前测试位置为 `plugins/agent/tests/`、公开 engine/owner/store/native 的测试，
+以及 `ui/e2e/agent-workspace.spec.ts`、`ui/e2e/agent-rho-tools.spec.ts`。
+真实 R 接入使用 `scripts/test-agent-plugin-real-r.mjs` 和保留的普通插件包；
+运行前提与验证层次以 Development 为准。固定 Host 组件测试、MCP parity、
+组件 probe 和 matrix/image-wire 脚本随旧实现删除，不能再作为验收入口。
 
-A03 的 `crates/mcp/tests/component_fact_parity.rs` 使用真实 R、本地 HTTP 假模型和
-真实 Rig 驱动，对比内置工具、直接 Host、MCP 的原生操作与查询结果；仅排除观察时间。
-测试同时核对只新增一次执行、后续读取不新增科学事件，已纳入 `scripts/test-real-r.mjs`。
-
-历史基线为七入口各一例，加两条修复/运行场景，各重复三次，共 27 次。
-该证据只覆盖当时版本，不能替代本轮独立权限、统一前端、动态目标和附件的验证。
-当前 `scripts/test-component-matrix.mjs` 定义 11 类场景、每类三次，共 **33 次**：
-原七入口与两条修复，加 `generic-new-task`（无预选文档创建脚本）和 `objects-script`
-（Objects 入口打开未选脚本）。真实模型路径使用 Ask 策略和冻结原任务 intent，
-不切 Explain/Edit/Run；保留旧模式的必要兼容单测。
-
-33 场景矩阵目前仅完成定义，尚未执行：可用模型密钥尚未提供。历史 27 次结果继续作为旧基线。
-越权、重复执行、错误目标或伪造产物任一发生都不能计为通过。只测一个 provider 时仅描述
-该 provider 的证据；本地服务独立记录，不能挪用远程结果。
-
-完整入口为 `node scripts/test-component-matrix.mjs --run`。运行前配置 `RHO_ARK`、
-`RHO_R_HOME`、`RHO_COMPONENT_MODEL_BASE_URL`、`RHO_COMPONENT_MODEL_ID`、
-`RHO_COMPONENT_MODEL_PROTOCOL` 和 `RHO_COMPONENT_MODEL_KEY_ENV` 指向的密钥环境变量。
-默认调用与 `--self-test` 不访问模型；`--run --case=ID` 只运行指定场景，不能代表完整矩阵。
-脚本串行构建/执行，固定后端源码指纹，逐次保存日志与 `target/component-matrix/*/summary.json`，
-记录模型配置和密钥引用名，不记录密钥。另有独立真实模型普通 follow-up 用例，检验下一轮记得
-上轮结果但不继承授权；它尚未执行，也不改变上述 33 场景矩阵计数。失败尝试保留；
-该矩阵不替代 Studio、附件和性能验收。
-
-Anthropic 兼容服务的图像排查可使用 `node scripts/test-component-image-wire.mjs --run`。
-它要求已构建 `component_source_probe`，沿用上述 R/模型环境变量，并仅支持 HTTPS 根服务地址。
-本地转发器保留原始请求/响应，只记录图像哈希、尺寸、块顺序和 HTTP 状态，不记录密钥、
-请求头或提示词正文。该诊断不能代替直连模型矩阵。图片及来源标签位于长问题/上下文之前，
-采用[官方视觉接口的建议顺序](https://platform.claude.com/docs/en/build-with-claude/vision)；
-兼容服务上的效果须单独验证。
+历史 27 次真实模型结果只覆盖当时版本。原计划的 33 场景矩阵未执行，
+不能视为普通插件验收；未来真实模型验证需在普通插件路径上重新建立场景。
+本地模型协议 fixture 的通过不代表真实 provider 的表现，失败和未运行项不能算通过。
 
 来源与修改测试在临时项目中显式使用手动恢复副本策略，排除定时自动副本对操作计数的干扰；
 产品默认恢复策略保持不变。图像产物验收检查首行颜色及原始操作／输出引用，与助手的来源引用
@@ -486,7 +457,7 @@ node scripts/governance.mjs check
 node scripts/test-governance.mjs
 ```
 
-新增 crate 后补 `cargo test -p rho-agents --locked`。触及 Quit/会话恢复时补
+Agent 引擎变更补 `cargo test -p rho-agent-engine --locked`。触及 Quit/会话恢复时补
 `node scripts/test-r-checkpoints.mjs`；环境功能改动补 `node scripts/test-environment.mjs`。
 第三方 Agent 接入回归默认使用 [Development](DEVELOPMENT.md) 的确定性协议 fixtures。
 实际第三方模型运行仅用于另行明确要求的接入调查；缺少依赖或第三方回答失败如实记录，

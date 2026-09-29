@@ -268,8 +268,6 @@ Checks:
 
 - `docs.index` (L0): `["node","scripts/governance.mjs","check"]`
   Applies to: `AGENTS.md`, `README.md`, `docs/**`, `governance/**`, `scripts/governance.mjs`.
-- `plugins.agent-adapter` (L1): `["cargo","test","-p","rho-agents","--lib","--locked"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/agents/**`, `crates/application/**`, `crates/contract/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/engine/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
 - `plugins.agent-backend` (L1): `["cargo","test","-p","rho-agent-backend","--test","metadata","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/api/**`, `plugins/agent/backend/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
 - `plugins.agent-component-boundary` (L1): `["cargo","test","-p","rho-application","--lib","component_boundary","--locked"]`
@@ -292,16 +290,12 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-client.mjs`, `sdk/**`.
 - `plugins.agent-manifest` (L1): `["node","plugins/agent/generate-manifest.mjs","--check"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/src/arguments.rs`, `plugins/agent/backend/src/bin/export-agent-manifest.rs`, `plugins/agent/backend/src/manifest.rs`, `plugins/agent/backend/src/native_arguments.rs`, `plugins/agent/backend/src/native_core_grants.rs`, `plugins/agent/backend/src/native_grants.rs`, `plugins/agent/backend/src/native_uploads.rs`, `plugins/agent/generate-manifest.mjs`, `plugins/agent/plugin.json`, `plugins/r/api/**`, `rust-toolchain.toml`.
-- `plugins.agent-model-host` (L2): `["cargo","test","-p","rho-host","--test","component_agents","--test","component_recovery","--locked"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `sdk/**`.
 - `plugins.agent-native` (L1): `["cargo","test","-p","rho-agent-client","--lib","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/client/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
 - `plugins.agent-native-real-r` (L2): `["node","scripts/test-agent-plugin-real-r.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/host/**`, `crates/operation/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-real-r.mjs`, `sdk/**`.
 - `plugins.agent-native-runtime` (L1): `["cargo","test","-p","rho-agent-native","--lib","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/client/**`, `plugins/agent/backend/native/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
-- `plugins.agent-native-runtime-host` (L1): `["cargo","test","-p","rho-host","--lib","agent_tasks","--locked"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/application/**`, `crates/contract/**`, `crates/host/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/client/**`, `plugins/agent/backend/native/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
 - `plugins.agent-native-runtime-independent` (L2): `["node","scripts/test-agent-plugin-native.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-native.mjs`, `sdk/**`.
 - `plugins.agent-owner` (L1): `["cargo","test","-p","rho-agent-owner","--lib","--locked"]`
@@ -691,8 +685,6 @@ Checks:
   Applies to: `scripts/check-architecture.mjs`, `scripts/test-architecture.mjs`.
 - `system.client` (L1): `["node","scripts/client.mjs","check"]`
   Applies to: `crates/contract/**`, `scripts/client.mjs`, `ui/**`.
-- `system.component-agents` (L2): `["node","scripts/test-component-agents.mjs"]`
-  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-component-agents.mjs`.
 - `system.environment` (L2): `["node","scripts/test-environment.mjs"]`
   Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-environment.mjs`.
 - `system.evidence-pack` (L1): `["python3","scripts/test-pack-agent-evidence.py"]`

@@ -1,9 +1,4 @@
 #![forbid(unsafe_code)]
-pub use rho_agent_client::{
-    ExternalAgentClient, discover_agent, install_deepseek_component,
-    NativeAgentFactory, NativeAgentSession, NativeEvent, NativeEventPage, NativeOpenFailure,
-    NativeOpenRequest, NativeProcessProof, NativePrompt,
-};
 mod application;
 mod discovery;
 mod observer;
@@ -20,19 +15,9 @@ mod config;
 mod r_configuration;
 pub use r_configuration::{default_database, discover_r, probe_r};
 pub use rho_sqlite::ApplicationStore;
-mod agent_tasks;
-mod agent_handoffs;
-pub use agent_handoffs::AgentHandoffService;
 mod plugin_views;
 mod plugin_tests;
-mod agent_connections;
-pub use agent_connections::{AgentMcpConnections, AgentMcpIdentity};
-mod component_agents;
-pub use component_agents::ComponentAgentService;
 pub use rho_application::ApplicationError;
-pub use agent_tasks::AgentTaskService;
-mod agent_context;
-pub use agent_context::{AgentContextProvider, AgentContextReader};
 mod environment;
 mod ownership;
 pub use config::{HostProfile, ReservedHost, RuntimeConfiguration};
@@ -165,7 +150,6 @@ struct HostRuntime {
     workspace: Option<Arc<WorkspaceRunHandler>>,
     instances: Option<Arc<instances::InstanceOwner>>,
     application: Option<Arc<rho_application::ApplicationOwner>>,
-    annotations: Option<Arc<rho_application::AnnotationOwner>>,
     output_owner: Option<Arc<rho_workspace::WorkspaceOutputHandler>>,
     skills: Option<Arc<rho_skills::SkillOwner>>,
     plugins: Option<Arc<rho_plugins::PluginService>>,
@@ -804,7 +788,6 @@ impl NextHost {
                 workspace: None,
                 instances: None,
                 application: None,
-                annotations: None,
                 output_owner: None,
                 skills: None,
                 plugins: None,
@@ -896,9 +879,6 @@ impl NextHost {
                 )
             })
             .transpose()?;
-        let annotation_owner = application_store
-            .clone()
-            .map(|store| Arc::new(rho_application::AnnotationOwner::new(store)));
         let application_owner =
             application_store
                 .zip(output_project.clone())
@@ -1192,7 +1172,6 @@ impl NextHost {
             workspace: workspace_owner,
             instances: instance_owner,
             application: application_owner,
-            annotations: annotation_owner,
             output_owner,
             skills: skill_owner,
             plugins,
@@ -1259,10 +1238,6 @@ impl NextHost {
     /// again by its owner when a control is admitted.
     pub fn capabilities_for(&self, context: &CallContext) -> Vec<CapabilityDescriptor> {
         port_contracts::visible(self.capabilities(), context)
-    }
-
-    pub(crate) fn annotations(&self) -> Option<&Arc<rho_application::AnnotationOwner>> {
-        self.runtime.annotations.as_ref()
     }
 
     fn application_owner(&self) -> Result<&Arc<rho_application::ApplicationOwner>, OperationError> {

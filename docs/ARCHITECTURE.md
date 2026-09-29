@@ -1013,18 +1013,18 @@ the authorized design.
 Agent integration is a thin boundary. Scientific owners validate mechanical
 constraints and respond to requested operations; they do not infer goals, plan
 Agent work, call models or introduce a second approval decision. The optional
-component assistant uses Rig's driver in `plugins/agent/backend/engine`, through
-the transitional `rho-agents` owner adapter, with explicit
+component assistant uses Rig's driver in `plugins/agent/backend/engine`, composed
+by the ordinary Agent backend with explicit
 model configuration and a user-initiated bounded request.
 Conversation content is not a scientific authority source.
 External scientific requests use MCP; built-in tools use the same Host gateways
 directly. The optional local CLI client uses Codex app-server
 or Kimi/DeepSeek Harness ACP to discover native models, open a native session, submit a user turn
-and relay native output and permission choices. It supplies the current Host's
+and relay native output and permission choices. The Agent backend supplies its private
 MCP connection for that session without editing the CLI's user configuration.
 The CLI retains authentication, model execution, conversation history and Agent
-behavior. ApplicationStore retains stable task identities, per-task CAS drafts,
-submission receipts and a bounded observation cache. The Host task service is its
+behavior. The Agent-owned store retains stable task identities, per-task CAS drafts,
+submission receipts and a bounded observation cache. The ordinary backend is its
 single writer. These records are separate from the scientific Operation journal;
 opening the panel only reads task metadata. Settings Test creates an independent
 diagnostic session, and only an explicit Test sends its minimal prompt. Scientific capabilities remain discoverable through
@@ -1054,8 +1054,8 @@ The public Agent task owner owns component conversations, CAS drafts/controllers
 fixed run inputs, model configuration references, tool intents and bounded events.
 Its AgentStore keeps separate native/component records in one Agent-owned database,
 outside the science journal. Application currently provides typed forwarding.
-The engine never opens SQLite or calls an R adapter. Host composes the engine and
-its narrow tool access port; all scientific reads/writes still use their real owner.
+The engine never opens SQLite or calls an R adapter. The Agent backend composes
+the engine and its narrow public tool access port; all scientific reads/writes still use their real owner.
 Current implementation and unimplemented integration stages are in Status.
 
 Rho is another Agent in the shared task interface. Component entries supply initial
@@ -1100,14 +1100,13 @@ custom Application database can retain an existing reference. Only explicit remo
 deletes the exact selected key ID, so a delayed settings writer cannot erase a
 newer writer's current credential.
 
-`ComponentAgentEngine` and `ComponentRunPort` remain transitional Application
-interfaces; Host implements the owner port. `rho-agents` converts their admitted
-records to the public `AgentModelRun` and `AgentModelPort` used by the package-owned
-Rig driver. The model receives only captured input, verified image bytes/citations
-and owner-offered tools. An opaque, nonserializable ticket carries the original
-admission back to its originating port. The adapter rejects foreign tickets and
-records owner diagnostics before returning admission/dispatch errors. No second
-receipt database or scientific commit path is introduced.
+The fixed Host task, handoff, context, component and managed-MCP services and the
+`rho-agents` adapter are removed. Transitional Application interfaces/storage still
+remain for later removal; they are not a second running Agent implementation.
+The ordinary backend connects the public `AgentModelRun` and `AgentModelPort` to
+the package-owned Rig driver. Inputs, citations, grants and original receipts belong
+to the captured plugin instance; core no longer imports the native Agent clients
+or model engine. No second scientific commit path is introduced.
 Model-facing schemas are derived from current descriptors without modifying the
 registry. Host-bound identity fields are removed from that schema, injected from
 the accepted run, then validated against the original native schema. Dispatch
@@ -1980,7 +1979,6 @@ package inspection.
 | `plugins/agent/backend/native` | Native task scheduling, connection limits, event/receipt observation and process recovery through the injected task owner; ephemeral context/endpoint ports only |
 | `plugins/agent/backend/store` | Sole task/asset/handoff SQL and scoped credential-file persistence; explicit storage paths, immutable key references and no scientific journal connection |
 | `plugins/agent/backend/engine` | Public Rig execution/diagnostics, captured model input and owner callback ports; the sole direct Rig dependency, with no private core imports |
-| `crates/agents` | Transitional admitted-record, image citation and tool-ticket adapters to the public model engine; no model/provider implementation |
 | `crates/cli`, `mcp`, `workbench` | Transport and application entry points |
 | `plugins/r/backend/engine/r/bridge`, `plugins/environment/backend/owner/r` | Native R execution, bounded observation and environment helpers |
 | `ui/src`, `scripts/` | Studio models/views and reproducible development/verification tools |

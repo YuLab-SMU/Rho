@@ -31,9 +31,9 @@ migration, import, archive-reader or compatibility work without a new request.
 - Scientific owners manage files, the live R Workspace, Environment, executions,
   jobs, outputs and recovery. Add capabilities to their real owner.
 - Agent behavior belongs to external platforms or the optional built-in component
-  assistant. The built-in assistant reuses Rig through `rho-agents` and the same
-  validated Host ports. Scientific owners, Operation and native adapters do not
-  plan Agent work or call models. Application records the user's authorized scope;
+  assistant. The built-in assistant reuses Rig through `plugins/agent/backend/engine` and
+  the ordinary Agent plugin’s validated Host ports. Scientific owners, Operation
+  and native adapters do not plan Agent work or call models. Application records the user's authorized scope;
   model output and context cannot expand it or introduce another approval decision.
 - Agent requests are trusted subject to mechanical identity, schema, scope,
   containment, quota and native-precondition checks. Do not add Rho approvals or

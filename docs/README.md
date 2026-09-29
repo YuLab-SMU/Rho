@@ -27,8 +27,9 @@ are implemented in the current source. Scientific work still uses the existing
 owners. A20 manual handoff has been reviewed and authorized; it appends reviewed
 context to existing task drafts. Rho verifies its own integration and data behavior,
 not the independent performance of third-party Agents.
-The new 33-scenario real-model matrix is defined but has not run; the earlier
-27-scenario evidence remains the prior baseline. See Status for executed checks
+The fixed Host Agent services and their test harnesses have been removed. The
+planned 33-scenario real-model matrix did not run; the earlier 27-scenario evidence
+remains historical only. Current integration checks exercise ordinary plugins. See Status for executed checks
 and the remaining acceptance limits.
 
 ## Maintenance

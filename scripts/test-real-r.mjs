@@ -19,11 +19,7 @@ const rHome = process.env.RHO_R_HOME || run("Rscript", ["--vanilla", "-e", "cat(
 const env = { ...process.env, RHO_ARK: ark, RHO_R_HOME: rHome };
 if (process.argv.includes("--agent")) {
   assert.deepEqual(process.argv.slice(2), ["--agent"], "Use --agent alone for the focused Agent boundary check");
-  const targets = ["--test", "component_sources_real_r", "--test", "component_mutations_real_r"];
-  run("cargo", ["test", "-p", "rho-host", ...targets, "--locked", "--offline", "--no-run"], { env, stdio: "inherit" });
-  run("cargo", ["test", "-p", "rho-host", ...targets, "--locked", "--offline", "--",
-    "--ignored", "--skip", "real_model_", "--test-threads=1"], { env, stdio: "inherit", timeout: 600_000 });
-  console.log("Verified real R Agent sources and authorized execution/recovery with fixture engines; real-model cases are excluded.");
+  run("node", ["scripts/test-agent-plugin-real-r.mjs"], { env, stdio: "inherit", timeout: 900_000 });
   process.exit(0);
 }
 if (process.argv.includes("--plugin-recovery")) {
@@ -41,14 +37,9 @@ run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", "scripts/test-
 run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", "scripts/test-r-packages.R"], { env, stdio: "inherit" });
 for (const script of ["scripts/test-r-objects.R", "scripts/test-r-package-index.R"]) run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", script], { env, stdio: "inherit" });
 run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "real_r",
-  "--test", "component_sources_real_r", "--test", "component_mutations_real_r",
   "--locked", "--no-run"], { env, stdio: "inherit" });
 run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "real_r",
   "--locked", "--", "--ignored", "--nocapture"], { env, stdio: "inherit", timeout: 120_000 });
-run("cargo", ["test", "-p", "rho-host", "--test", "component_sources_real_r", "--locked", "--", "--ignored"], { env, stdio: "inherit", timeout: 120_000 });
-run("cargo", ["test", "-p", "rho-host", "--test", "component_mutations_real_r", "--locked", "--", "--ignored", "--skip", "real_model_"], { env, stdio: "inherit", timeout: 120_000 });
-run("cargo", ["test", "-p", "rho-mcp", "--test", "component_fact_parity", "--locked", "--no-run"], { env, stdio: "inherit" });
-run("cargo", ["test", "-p", "rho-mcp", "--test", "component_fact_parity", "--locked", "--", "--ignored"], { env, stdio: "inherit", timeout: 120_000 });
 // The two-installation case in this file needs RHO_ALT_* and stays opt-in.
 const checkpointHelper = run("node", ["scripts/test-r-checkpoints.mjs", "--print-library"], { env }).trim();
 const instanceEnv = { ...env, RHO_CHECKPOINT_HELPER: checkpointHelper };

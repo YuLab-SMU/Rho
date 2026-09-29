@@ -25,7 +25,6 @@ members = [
   "crates/contract",
   "crates/operation",
   "crates/application",
-  "crates/agents",
   "crates/skills",
   "crates/adapters/skills",
   "crates/workspace",

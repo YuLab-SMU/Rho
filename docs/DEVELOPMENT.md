@@ -664,12 +664,11 @@ The public model driver is `plugins/agent/backend/engine`. Run `cargo test -p
 rho-agent-engine --locked` for the real Rig HTTP/SSE codecs and production-driver
 ports using local provider fixtures. `node scripts/test-agent-plugin-engine.mjs`
 repeats these checks with the owner/API in an independent source assembly and
-checks SDK freshness. The transitional admitted-record adapter is covered by
-`cargo test -p rho-agents --lib --locked`, including foreign/fabricated ticket
-refusal and owner diagnostics. Host integration remains `cargo test -p rho-host
---test component_agents --test component_recovery --locked`; it checks the actual
-adapter with the existing task owner. These are local synthetic-model tests;
-provider quality and ordinary Agent backend delivery remain separate outcomes.
+checks SDK freshness. The fixed Host task/component services and their adapter
+crate have been removed. Ordinary integration uses the retained-package Agent
+workflow, real-R and browser checks documented above; retired Host service tests
+do not count as plugin acceptance. These use local synthetic models; provider
+quality remains a separate outcome.
 The explicit live provider probe now belongs to `rho-agent-engine`'s
 `provider_probe` example; no test invokes it implicitly.
 
@@ -874,10 +873,12 @@ without modifying them. The temporary core storage adapter and manual handoff us
 --test agent_handoffs --test component_agents --locked`. These preserve one native
 task writer, original receipt/draft captures and component/native asset separation;
 they do not prove an ordinary Agent backend or default delivery.
-`node scripts/test-real-r.mjs --agent` runs the real-R Agent source and authorized
-execution/recovery targets with fixture engines, explicitly excluding `real_model_`
-cases. It requires installed Ark/R, runs serially and does not install prerequisites.
-It is an affected-boundary check; the no-argument script retains the broader real-R gate.
+`node scripts/test-real-r.mjs --agent` delegates to the ordinary Agent/R plugin
+harness (`test-agent-plugin-real-r.mjs`) using retained `RHO_AGENT_PLUGIN_PACKAGE`
+and `RHO_R_PLUGIN_PACKAGE`, plus installed `RHO_ARK`/`RHO_R_HOME`. It builds only
+the affected Host test executables and does not rebuild plugins or call a live model.
+The no-argument script retains the broader real-R owner/CLI gate; the retired
+fixed component-source, mutation and MCP parity tests are no longer part of it.
 
 Environment contracts, native execution and R helpers live in
 `plugins/environment/api` and `plugins/environment/backend/owner`. The retiring
@@ -1473,7 +1474,7 @@ storage. Check ordinary/wide/constrained layouts and copying, not only snapshots
 | Studio interaction and real local R | `npm run test:browser --prefix ui` |
 | Rust architecture/dependency ownership | `node scripts/check-architecture.mjs` |
 | Component assistant Studio | `npm run test:browser --prefix ui -- agent-workspace.spec.ts agent-rho-tools.spec.ts` with retained packages; local model fixture, native context, attachments and recovery |
-| Component Agent integration | `node scripts/test-component-agents.mjs`; Rig HTTP/SSE, SQLite admission and direct Host project-query checks; real R remains separate |
+| Component Agent integration | `cargo test -p rho-agent-engine --locked` for Rig HTTP/SSE; retained-package `test-agent-process.mjs` and ordinary Agent browser checks for Host integration |
 | Frontend ownership and dependency boundaries | `npm run check:boundaries --prefix ui` and `npm run test:boundaries --prefix ui` |
 | Vendored Jet snapshot / verifier | `node scripts/vendor-jet.mjs check` and `node scripts/test-vendor-jet.mjs` |
 | Documentation/map only | `node scripts/governance.mjs check` and `node scripts/test-governance.mjs` |
@@ -1492,31 +1493,11 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked -- --test-threads=1
 ```
 
-The component Agent diagnostic's explicit `--real-model` option checks a synthetic
-tool/image and reads a random marker from a disposable project through the Host.
-Set `RHO_COMPONENT_MODEL_BASE_URL`,
-`RHO_COMPONENT_MODEL_ID`, `RHO_COMPONENT_MODEL_PROTOCOL` (`anthropic` or
-`openai_completions`) and `RHO_COMPONENT_MODEL_KEY_ENV` naming an environment
-variable already containing the credential. Never put the credential in a tracked
-file. HTTPS is required except for explicit loopback HTTP. It does not read native
-CLI authentication or existing user projects. Logs and a scope-labeled summary are retained
-under `target/component-agent-probe/`; absence of `--real-model` means real model
-testing was not run. These probes do not replace real R, component UI or authorized
-write/recovery acceptance.
-
-`node scripts/test-component-agents.mjs --real-sources` additionally uses explicit
-`RHO_ARK` and `RHO_R_HOME` to create a disposable R project and verify Objects,
-Packages and native plot context with the configured model. The deterministic
-source/byte checks are in `cargo test -p rho-host --test component_sources_real_r
---locked -- --ignored` with the same R environment. These tests do not install
-packages or reuse an existing user's R process.
-The real-source probe first runs the explicit synthetic connection/tool and image
-diagnostics. Image context requires a passed image diagnostic matching the current
-model configuration; a changed model does not inherit that result.
-For the explicit direct-R mutation probe, run the `component_source_probe` Host
-example with `--with-run` in that same configured environment. It verifies one
-authorized R operation and the model's use of its native result. Captured document
-save/run and final seven-component acceptance remain separate.
+Live model diagnostics belong to the public `rho-agent-engine` `provider_probe`
+example. They are opt-in and require explicit model configuration; never record
+credentials. The removed fixed Host probes and 33-case harness are not current
+acceptance entry points. Ordinary Agent/R checks use disposable projects and local
+model fixtures; they do not establish live-provider quality.
 
 Native/transport verification:
 

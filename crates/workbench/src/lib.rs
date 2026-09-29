@@ -146,7 +146,7 @@ async fn boundary(State(state): State<AppState>, mut request: Request, next: Nex
             }
         }
         let identity = rho_mcp::McpRequestIdentity {
-            project, identity: "manual-mcp".into(), test_project, managed: None,
+            project, identity: "manual-mcp".into(), test_project,
         };
         if request.headers().get_all("mcp-session-id").iter().count() > 1 {
             return failure(StatusCode::BAD_REQUEST, "Duplicate MCP session identity");

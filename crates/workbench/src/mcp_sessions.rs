@@ -38,7 +38,7 @@ impl HttpMcpSessions {
         }
         let mut expired = Vec::new();
         entries.retain(|id, entry| {
-            let keep = entry.project == identity.project && entry.managed.as_ref().is_none_or(|managed| managed.is_valid());
+            let keep = entry.project == identity.project;
             if !keep && !id.starts_with("pending:") { expired.push(id.clone()); }
             keep
         });

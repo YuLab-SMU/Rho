@@ -8,11 +8,7 @@ repository.workspace = true
 
 [dependencies]
 rho-plugin-protocol = { path = "../plugin-protocol" }
-rho-agents = { path = "../agents" }
 jsonschema.workspace = true
-rho-agent-store = { path = "../../plugins/agent/backend/store" }
-rho-agent-client = { path = "../../plugins/agent/backend/client" }
-rho-agent-native = { path = "../../plugins/agent/backend/native" }
 async-trait.workspace = true
 rho-contract = { path = "../contract" }
 rho-plugins = { path = "../plugins" }
