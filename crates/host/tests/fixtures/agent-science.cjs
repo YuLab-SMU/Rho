@@ -73,6 +73,11 @@ async function prompt(message) {
     await rpc('notifications/initialized', {}, null);
   }
   const catalog = await rpc('tools/call', {name:'rho_tools', arguments:{send_request:sendRequest}});
+  if (fs.existsSync(path.join(cwd, 'native-remote-input.json'))) {
+    await require('./agent-remote-tools.cjs')({cwd, sendRequest, catalog, rpc, save, session, prompts});
+    if (pending === id) { result(id, {stopReason:'end_turn'}); pending = null; }
+    return;
+  }
   if (fs.existsSync(path.join(cwd, 'native-environment-input.json'))) {
     await require('./agent-environment-tools.cjs')({cwd, sendRequest, catalog, rpc, save, session, prompts});
     if (pending === id) { result(id, {stopReason:'end_turn'}); pending = null; }

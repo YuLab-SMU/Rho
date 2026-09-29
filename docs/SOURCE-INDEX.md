@@ -139,6 +139,7 @@ Sources:
 - `scripts/fixtures/agent-annotation-tools.cjs`
 - `scripts/fixtures/agent-environment-tools.cjs`
 - `scripts/fixtures/agent-process-tools.cjs`
+- `scripts/fixtures/agent-remote-tools.cjs`
 - `scripts/fixtures/agent-view-container.js`
 - `scripts/fixtures/annotation-agent-browser.mjs`
 - `scripts/fixtures/annotation-agent.mjs`
@@ -153,6 +154,7 @@ Sources:
 - `scripts/fixtures/editor-format.mjs`
 - `scripts/fixtures/editor-save-run.mjs`
 - `scripts/fixtures/editor-sessions.mjs`
+- `scripts/fixtures/loopback-ssh.mjs`
 - `scripts/fixtures/manager-archive.mjs`
 - `scripts/fixtures/manager-export.mjs`
 - `scripts/fixtures/plugin-archive-download.mjs`
@@ -184,6 +186,7 @@ Sources:
 - `scripts/test-agent-plugin-types.mjs`
 - `scripts/test-agent-plugin.mjs`
 - `scripts/test-agent-process.mjs`
+- `scripts/test-agent-remote.mjs`
 - `scripts/test-agent-tool-grants.mjs`
 - `scripts/test-agent-view.mjs`
 - `scripts/test-annotation-plugin-store.mjs`
@@ -311,6 +314,8 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/generate-sdk.mjs`, `plugins/agent/sdk/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
 - `plugins.agent-real-r` (L2): `["node","scripts/test-real-r.mjs","--agent"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `scripts/test-real-r.mjs`, `sdk/**`.
+- `plugins.agent-remote` (L2): `["node","scripts/test-agent-remote.mjs"]`
+  Applies to: `crates/host/tests/fixtures/agent-science.cjs`, `plugins/agent/**`, `plugins/remote/**`, `scripts/fixtures/agent-remote-tools.cjs`, `scripts/fixtures/loopback-ssh.mjs`, `scripts/test-agent-remote.mjs`.
 - `plugins.agent-request` (L1): `["cargo","test","-p","rho-contract","--lib","public_agent_request","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/contract/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
 - `plugins.agent-rho-tools-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","agent-rho-tools.spec.ts"]`

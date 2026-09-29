@@ -751,6 +751,20 @@ Environment suspended. `RHO_AGENT_ENVIRONMENT_EVIDENCE` selects the report.
 This does not establish real-model quality, Rho-model Environment execution,
 remote package resolution, renv restoration, material cleanup or browser behavior.
 
+`RHO_PLUGIN_SET_PACKAGE=/absolute/set node scripts/test-agent-remote.mjs` uses
+retained Agent/Remote artifacts and actual macOS OpenSSH. The owned sshd listens
+only on loopback with ephemeral client/host keys, a pinned host key and private
+configuration; it changes no system service or user SSH files. A local ACP peer
+checks read-only preflight without a connection, exact target refusal, Unicode
+streams, native exit 9, exit 255 uncertainty, Stop waiting for accepted work, and
+original tool/Send records after actual Host restart with Remote suspended.
+SSH connection counts and one-time file effects must not change on retries or
+restart. A fresh envelope may successfully read a native ACP receipt; the original
+Send and SSH operation must independently retain their uncertain status. `RHO_AGENT_REMOTE_EVIDENCE` selects the retained report. This verifies
+real SSH transport on one machine, not Slurm, a remote cluster, cross-machine
+network failure, real-model quality or Rho-model Remote execution. The runner
+never builds Rho/plugin binaries or replaces an existing Host/SSH service.
+
 Native Host tool capture uses the `native_host` filters in owner/store/backend
 checks and the ordinary framed `metadata` suite. These cover fixed branches,
 model-field override refusal, explicit optional grants, foreign project/version
