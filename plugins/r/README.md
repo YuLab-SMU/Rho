@@ -34,8 +34,8 @@ access or acquire scientific tools. Agent exposes these as optional grants too;
 activation and each input still select their scope explicitly.
 Run `cargo test -p rho-r-backend --bin rho-r-backend owner::context --locked` for
 the owner checks. Current native and combined Host acceptance remain in Status.
-`node scripts/build-r-plugin.mjs DEST --workspace` reuses the primary Cargo cache
-and assembles the complete package outside the checkout. Omit `--workspace` for
+`node scripts/build-r-plugin.mjs DEST` reuses the primary Cargo cache
+and assembles the complete package outside the checkout. Add `--independent` for
 explicit independent-build acceptance; see [build instructions](BUILD.md). Current acceptance and
 the remaining migration are recorded in `docs/STATUS.md` at the repository root.
 

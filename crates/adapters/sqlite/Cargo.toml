@@ -6,10 +6,16 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# Host application persistence still includes the retiring fixed Agent bridge.
+# Journal-only users opt out without pulling those owners into their build graph.
+default = ["application-store"]
+application-store = ["dep:rho-agent-store", "dep:rho-agent-owner", "dep:rho-application"]
+
 [dependencies]
-rho-agent-store = { path = "../../../plugins/agent/backend/store" }
-rho-agent-owner = { path = "../../../plugins/agent/backend/owner" }
-rho-application = { path = "../../application" }
+rho-agent-store = { path = "../../../plugins/agent/backend/store", optional = true }
+rho-agent-owner = { path = "../../../plugins/agent/backend/owner", optional = true }
+rho-application = { path = "../../application", optional = true }
 uuid.workspace = true
 async-trait.workspace = true
 rho-contract = { path = "../../contract" }
@@ -21,3 +27,19 @@ serde_json.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 tokio.workspace = true
+
+[[test]]
+name = "agent_handoffs"
+required-features = ["application-store"]
+
+[[test]]
+name = "agent_store"
+required-features = ["application-store"]
+
+[[test]]
+name = "annotations"
+required-features = ["application-store"]
+
+[[test]]
+name = "component_agents"
+required-features = ["application-store"]

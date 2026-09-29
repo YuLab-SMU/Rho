@@ -1,9 +1,9 @@
 # Build the R backend package
 
-During development use `node scripts/build-r-plugin.mjs DEST --workspace` once
+During development use `node scripts/build-r-plugin.mjs DEST` once
 after focused checks settle. This compiles the current backend in the primary
 workspace cache and copies that exact executable into the external package. It
-establishes integration, not independent-source compilation. Omit `--workspace`
+establishes integration, not independent-source compilation. Add `--independent`
 only when the independent build boundary is due.
 Use a new destination outside the repository. The assembly includes the complete
 R API, engine, backend, public Environment/Process contracts, Rust SDK/protocol, pinned Jet source and licenses,

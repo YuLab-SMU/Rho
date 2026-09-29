@@ -18,7 +18,7 @@ try {
   const executable = output.trim().split('\n').map(line => JSON.parse(line)).find(item => item.reason === 'compiler-artifact' && item.target.name === 'files_plugin' && item.executable)?.executable;
   assert.ok(executable, 'Cargo did not identify the Files Host harness');
   const original = digest(executable);
-  if (!process.env.RHO_FILES_PLUGIN_PACKAGE) execFileSync(process.execPath, [path.join(root, 'scripts/build-files-plugin.mjs'), source], { cwd: root, env, stdio: 'inherit' });
+  if (!process.env.RHO_FILES_PLUGIN_PACKAGE) execFileSync(process.execPath, [path.join(root, 'scripts/build-files-plugin.mjs'), source,'--independent'], { cwd: root, env, stdio: 'inherit' });
   assert.equal(digest(executable), original, 'Building an external Files plugin changed the compiled Host');
   execFileSync('python3', [path.join(source, 'tests/protocol.py'), path.join(source, 'dist/rho-files-backend')], { cwd: source, env, stdio: 'inherit' });
   execFileSync(executable, ['--ignored', '--nocapture'], { cwd: root, env: { ...env, RHO_FILES_PLUGIN_PACKAGE: source }, stdio: 'inherit' });

@@ -13,7 +13,7 @@ if(options.build) {
   const directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),"rho-r-plugin-acceptance-")));
   source=path.join(directory,"package");
   console.log(`Retained R package: ${source}`);
-  execFileSync(process.execPath,[path.join(root,"scripts/build-r-plugin.mjs"),source],{cwd:root,stdio:"inherit"});
+  execFileSync(process.execPath,[path.join(root,"scripts/build-r-plugin.mjs"),source,'--independent'],{cwd:root,stdio:"inherit"});
   source=verifyRBuild(source);
 }
 // Reuse preserves the exact native artifact; only the affected Host fixture

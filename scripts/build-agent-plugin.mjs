@@ -15,7 +15,7 @@ export function agentPluginBuildEnvironment() {
     RHO_PLUGIN_NODE_MODULES: path.join(root, 'ui/node_modules'),
     CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '2', CARGO_TARGET_DIR: path.join(root, 'target')};
 }
-export function buildAgentPlugin(destination, {workspace = false} = {}) {
+export function buildAgentPlugin(destination, {workspace = true} = {}) {
   assert.ok(destination, 'Specify a new package directory outside the checkout');
   const output = path.join(fs.realpathSync(path.dirname(path.resolve(destination))), path.basename(destination));
   assert.ok(output !== root && !output.startsWith(root + path.sep), 'Use an independent source directory');
@@ -65,11 +65,11 @@ export function prepareAgentAcceptance(options) {
   const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-build-')));
   const output = path.join(directory, 'package');
   console.log(`Retained Agent package: ${output}`);
-  return buildAgentPlugin(output);
+  return buildAgentPlugin(output, {workspace: false});
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  assert.ok(process.argv.slice(3).every(arg => arg === '--workspace') && process.argv.length <= 4,
-    'Usage: node scripts/build-agent-plugin.mjs /new/package [--workspace]');
-  const workspace = process.argv.includes('--workspace');
+  assert.ok(process.argv.slice(3).every(arg => ['--workspace', '--independent'].includes(arg)) && process.argv.length <= 4,
+    'Usage: node scripts/build-agent-plugin.mjs /new/package [--workspace | --independent]');
+  const workspace = !process.argv.includes('--independent');
   console.log(`${workspace ? 'Workspace-built' : 'Independent'} Agent package: ${buildAgentPlugin(process.argv[2], {workspace})}`);
 }

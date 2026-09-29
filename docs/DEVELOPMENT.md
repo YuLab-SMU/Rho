@@ -72,13 +72,14 @@ Keep retained packages through milestone acceptance and remove them when their
 evidence is no longer needed. Older packages without receipts are not adopted.
 
 For Agent integration during development, run
-`node scripts/build-agent-plugin.mjs /new/package --workspace` once, then pass
+`node scripts/build-agent-plugin.mjs /new/package` once, then pass
 that package to the same `--package` runners. This builds the native backend in
 the primary workspace cache and assembles the same source/UI package. The receipt
 and acceptance output identify `workspace` versus `independent` builds; workspace
 framed checks also stay in the primary checkout. This verifies integration, not
-independent-source compilation. Omit `--workspace` only when that separate
-acceptance is due. Neither mode weakens package validation or source containment.
+independent-source compilation. Add `--independent` only when that separate
+acceptance is due. `--workspace` remains an explicit spelling of the default.
+Neither mode weakens package validation or source containment.
 Mapped Agent integration checks expect `RHO_AGENT_PLUGIN_PACKAGE` to identify the
 retained package; they no longer suggest an independent rebuild at every stage.
 
@@ -91,19 +92,22 @@ The runner builds only missing UI packages and the current Manager, opens a fres
 drives default Workbench startup → project selection → installed Manager view →
 scenario preparation/switch → Files → Editor Save and Run →
 Console/Objects/Plots → browser reload. It does not run Cargo or install software.
-For Files iteration, `node scripts/build-files-plugin.mjs /new/package --workspace`
+For Files iteration, `node scripts/build-files-plugin.mjs /new/package`
 builds the current backend in the primary Cargo workspace and packages that artifact
-with its source and UI. It is integration evidence; omit `--workspace` only when
+with its source and UI. It is integration evidence; add `--independent` only when
 independent-source build acceptance is actually due. Keep Cargo invocations serial.
 
-R uses the same cadence: `node scripts/build-r-plugin.mjs /new/package --workspace`
+R uses the same cadence: `node scripts/build-r-plugin.mjs /new/package`
 builds once through the primary cache and records an adjacent source/artifact receipt.
 Run `node scripts/test-r-plugin.mjs --package /absolute/retained/package` for the
-native Host stage. The Help, Viewer and Console browser runners require
+native Host stage. The Help, Viewer, Console, Objects, Plots and Packages browser runners require
 `RHO_R_PLUGIN_PACKAGE` and verify that receipt; they never compile another R package.
 The native runner's explicit `--build` remains available for independent acceptance.
 Reuse rejects stale sources or modified package bytes and retains packages after
 later-stage failures. `node scripts/test-r-workflow.mjs` checks this without Cargo.
+`node scripts/test-plugin-build-modes.mjs` observes the actual Agent/R/Files build
+entry points with sentinel tools: default workspace dispatch, explicit independent
+dispatch and invalid-option refusal, without compiling anything.
 
 `npm run test:browser --prefix ui -- plugin-startup.spec.ts` covers default
 project selection, constrained startup layouts and an empty repository remaining
@@ -1007,6 +1011,16 @@ this is not a reason to expand a focused check into a workspace audit.
 
 ### Common L2 commands
 
+For Operation-journal-only changes, use
+`cargo test -p rho-sqlite --no-default-features --lib --locked`.
+The SQLite `application-store` feature retains the existing Application and fixed
+Agent persistence bridge for Host builds and ordinary SQLite test commands.
+Plugin-runtime fixtures explicitly disable it, avoiding Agent owner/store and
+Application dependencies when they only need the journal. Check the selected
+closure with `cargo tree -p rho-plugins --edges normal,build,dev --locked --offline`;
+public Agent API types in the common contract are still present. This is a first
+dependency cut, not removal of the remaining fixed Host composition.
+
 Scenario metadata changes use `cargo test -p rho-plugins --test package_repository
 --locked`, `cargo test -p rho-plugin-protocol --test contract --locked` and
 `cargo test -p rho-host --test plugin_scenarios --locked` serially. They cover
@@ -1072,7 +1086,7 @@ checks the same native layer from an independent public/plugin source tree.
 Archive checks include separate-process lock contention and process exit without
 a destructor. For ordinary RPC publication and original-operation authorization,
 run `cargo test -p rho-r-backend --locked --offline`, generate the R SDK, and build
-an independent package with `scripts/build-r-plugin.mjs`. With that package selected
+an independent package with `scripts/build-r-plugin.mjs DEST --independent`. With that package selected
 as `RHO_R_PLUGIN_PACKAGE`, run `node scripts/test-r-recovery.mjs` using the same
 three native prerequisites and an already built Host. The test verifies unchanged
 Host bytes, optional read grants, pure observations, partial Unicode graph capture,
@@ -1147,6 +1161,21 @@ executable startup, and test-body time before changing code. Do not start anothe
 build, clear Cargo caches, or restart a scientific Host to hide the delay. Preserve
 incomplete evidence, continue independent work, and resume only the affected stage
 with its retained artifact when appropriate.
+
+If the compiler spends time scanning `target/debug/deps`, measure its entry count
+and listing time before invalidating cached libraries. Repeated/interrupted builds
+can leave large numbers of loose `*.rcgu.o` files alongside final artifacts.
+Cache maintenance requires all Cargo/rustc processes to be stopped. Preserve the
+original directory; retain final libraries, metadata, dependency files and
+executables with their identities and permissions, as well as `incremental/`,
+`build/` and fingerprints. On macOS, the default unpacked debug information can
+reference loose objects: inspect existing native artifacts' `N_OSO` debug maps
+and retain every referenced object, not only the linked executables. Objects in
+an `.rlib` archive remain embedded in that archive. Verify native debug references
+and a focused build before removing any retained data.
+This is an exceptional recovery step, not a per-build scan or
+permission to clear caches. A fast directory listing alone does not establish that
+native loading or an acceptance flow passed.
 
 A test process that reaches its time budget is **incomplete**, not passed. Record the
 last completed target and retain its log. Do not turn an ignored, skipped,

@@ -47,7 +47,7 @@ try {
   const r = process.env.RHO_R_PLUGIN_PACKAGE ? fs.realpathSync(process.env.RHO_R_PLUGIN_PACKAGE)
     : path.join(fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-r-build-'))), 'r');
   console.log(`Retained R package: ${r}`);
-  if (!process.env.RHO_R_PLUGIN_PACKAGE) execFileSync(process.execPath,[path.join(root,'scripts/build-r-plugin.mjs'),r],{cwd:root,env,stdio:'inherit'});
+  if (!process.env.RHO_R_PLUGIN_PACKAGE) execFileSync(process.execPath,[path.join(root,'scripts/build-r-plugin.mjs'),r,'--independent'],{cwd:root,env,stdio:'inherit'});
   for (const {name, executable, original} of harnesses) {
     assert.equal(digest(executable),original);
     execFileSync(executable,['--ignored','--nocapture'],{cwd:root,env:{...env,RHO_AGENT_PLUGIN_PACKAGE:agent,RHO_R_PLUGIN_PACKAGE:r},stdio:'inherit'});

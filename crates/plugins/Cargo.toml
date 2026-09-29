@@ -27,4 +27,4 @@ uuid.workspace = true
 jsonschema.workspace = true
 
 [dev-dependencies]
-rho-sqlite = { path = "../adapters/sqlite" }
+rho-sqlite = { path = "../adapters/sqlite", default-features = false }

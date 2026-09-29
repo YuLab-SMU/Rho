@@ -56,7 +56,7 @@ Checks:
 - `plugins.agent-workflow` (L1): `["node","scripts/test-agent-workflow.mjs"]`
   Applies to: `scripts/agent-plugin-artifact.mjs`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-core-tools.mjs`, `scripts/test-agent-plugin-real-r.mjs`, `scripts/test-agent-plugin.mjs`, `scripts/test-agent-workflow.mjs`.
 - `plugins.r-workflow` (L1): `["node","scripts/test-r-workflow.mjs"]`
-  Applies to: `scripts/build-r-plugin.mjs`, `scripts/r-plugin-artifact.mjs`, `scripts/test-r-console.mjs`, `scripts/test-r-help.mjs`, `scripts/test-r-plugin.mjs`, `scripts/test-r-viewer.mjs`, `scripts/test-r-workflow.mjs`.
+  Applies to: `scripts/build-r-plugin.mjs`, `scripts/r-plugin-artifact.mjs`, `scripts/test-r-console.mjs`, `scripts/test-r-help.mjs`, `scripts/test-r-objects-plugin.mjs`, `scripts/test-r-packages.mjs`, `scripts/test-r-plots.mjs`, `scripts/test-r-plugin.mjs`, `scripts/test-r-viewer.mjs`, `scripts/test-r-workflow.mjs`.
 
 ## `documentation`
 
@@ -456,7 +456,7 @@ Checks:
 - `plugins.r-viewer` (L2): `["node","scripts/test-r-viewer.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/r/**`, `plugins/viewer/**`, `rust-toolchain.toml`, `scripts/build-r-plugin.mjs`, `scripts/build-viewer-plugin.mjs`, `scripts/test-r-viewer.mjs`, `sdk/**`.
 - `plugins.r-workflow` (L1): `["node","scripts/test-r-workflow.mjs"]`
-  Applies to: `scripts/build-r-plugin.mjs`, `scripts/r-plugin-artifact.mjs`, `scripts/test-r-console.mjs`, `scripts/test-r-help.mjs`, `scripts/test-r-plugin.mjs`, `scripts/test-r-viewer.mjs`, `scripts/test-r-workflow.mjs`.
+  Applies to: `scripts/build-r-plugin.mjs`, `scripts/r-plugin-artifact.mjs`, `scripts/test-r-console.mjs`, `scripts/test-r-help.mjs`, `scripts/test-r-objects-plugin.mjs`, `scripts/test-r-packages.mjs`, `scripts/test-r-plots.mjs`, `scripts/test-r-plugin.mjs`, `scripts/test-r-viewer.mjs`, `scripts/test-r-workflow.mjs`.
 - `plugins.remote-backend` (L1): `["cargo","test","-p","rho-remote-backend","--lib","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/remote/**`, `rust-toolchain.toml`, `scripts/build-remote-plugin.mjs`, `sdk/**`.
 - `plugins.remote-independent` (L2): `["node","scripts/test-remote-plugin-owner.mjs"]`

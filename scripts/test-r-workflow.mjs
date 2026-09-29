@@ -49,7 +49,7 @@ try {
   write(path.join(bin,'cargo'),'#!/bin/sh\nprintf "%s\\n" "$@" > "$RHO_WORKFLOW_MARKER"\nexit 99\n');fs.chmodSync(path.join(bin,'cargo'),0o755);
   const env={...process.env,PATH:bin+path.delimiter+process.env.PATH,RHO_WORKFLOW_MARKER:marker,RHO_ARK:'/fixture/ark',RHO_R_HOME:'/fixture/R'};
   delete env.RHO_R_PLUGIN_PACKAGE;
-  for(const runner of ['test-r-plugin.mjs','test-r-help.mjs','test-r-viewer.mjs','test-r-console.mjs']) {
+  for(const runner of ['test-r-plugin.mjs','test-r-help.mjs','test-r-viewer.mjs','test-r-console.mjs','test-r-packages.mjs','test-r-plots.mjs','test-r-objects-plugin.mjs']) {
     for(const candidate of [null,pkg]) {
       const environment={...env,...(candidate?{RHO_R_PLUGIN_PACKAGE:candidate}:{})};
       const result=spawnSync(process.execPath,[path.join(root,'scripts',runner)],{env:environment,encoding:'utf8',timeout:5000});

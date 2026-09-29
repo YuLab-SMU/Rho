@@ -140,18 +140,18 @@ Stable view/controller identities survive private connection rotation. Rho setti
 provide key save/removal, versioned configuration and explicit synthetic tests;
 keys stay out of saved view state and Operations. Rho now submits text and contributed
 references, attachments and explicit continuation in source; tool selection remains to compose.
-Rho uploads preserve original identity through lost replies/reselection; text ≤32 KiB and PNG/JPEG ≤2 MiB are captured before Send. Native validation of this addition is pending.
+Rho uploads preserve original identity through lost replies/reselection; text ≤32 KiB and PNG/JPEG ≤2 MiB are captured before Send. The five new framed backend cases pass; actual Host acceptance remains pending.
 The UI build and 97 model cases (29 native, 13 settings, 29 Rho, 15 context, 11 handoff) pass, as does
 the synthetic public MessagePort browser fixture: opaque iframe, IME Enter, task
 switching, native/Rho attachment recovery and retained context, next drafts, 8 MiB selection, lost creation/Send/import/key
 replies, actual reload, history and close without Stop. Settings/rename work without
 form permission. Continue preserves next drafts through lost replies/reload and original context
 at 960/440/220 px. Handoff also preserves edited text, references and lost receipts at those widths.
-The preceding framed backend baseline passes all 59 cases, including exact context capture,
-draft-preserving refusal, Continue, atomic handoff, 8 MiB staging/import and reopen
-without replay. Compilation took 76m36s; executable startup waited before entering
-the tests, whose execution took 4.29s. New Rho attachments are outside that baseline.
-The checked-in 42-capability manifest awaits generation of the three new attachment ports after native validation.
+The current framed backend passes all 64 cases: exact context/history/Continue,
+atomic handoff, native 8 MiB uploads, Rho attachments and original-request reopen
+without replay. After cache maintenance, compilation took 12.94s and tests 5.19s;
+the two interrupted attempts remain incomplete evidence, not passes.
+The checked-in 42-capability manifest still awaits the three validated attachment ports.
 This does **not** establish combined Host acceptance or a current packaged artifact. The combined native/Rho–Editor–real-R/restart fixture now includes Rho attachments; type checking passes, and its prior cases passed discovery.
 Its model peer probe passes; the actual Host flow awaits one current Agent artifact.
 
@@ -202,14 +202,14 @@ Per-plugin checks are mapped in `governance/source-map.json`; run
 
 ### Known open problems
 
-- Native compilation and executable startup have shown prolonged idle waits.
-  The CLI build took 104 minutes, while its selected tests ran in under a second;
-  fresh Host startup subsequently exceeded its 60-second deadline. System logs
-  repeat `syspolicyd: Unable to initialize qtn_proc: 3`; this is diagnostic evidence,
-  not a proven cause. Read-only signature verification of the compiler's open
-  `libtracing_attributes` library also timed out after 20 seconds in both Codex
-  and a separate system Terminal. This is not isolated to a Rho test body; the
-  cause remains unconfirmed. Logs and incomplete checks remain in `target/plugin-refactor`.
+- Build iteration recovered after reducing an oversized dependency directory:
+  1,634,793 entries became 201,054 after retaining every referenced debug object;
+  listing fell from 66.5s to 0.62s. All old files remain retained. A loader probe
+  also stalled in dyld's file validation; `syspolicyd` errors alone do not prove its cause.
+  Agent/R/Files builders now default to workspace reuse; six R browser runners
+  require a retained package. Plugin tests drop Application/Agent owner/store
+  from their local dependency closure (16 → 13); journal/default-store/build checks pass (21/27/7).
+  Evidence: `target/plugin-refactor/development-optimization-results.json`; combined Host integration remains.
 - Plugin backend native initialization occasionally exceeded ten seconds before
   reaching the program entry (Studio backend browser runs); cause not established.
   Treat a repeat as an infrastructure issue to investigate, not a product pass.

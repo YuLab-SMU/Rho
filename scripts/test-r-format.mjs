@@ -37,7 +37,7 @@ async function retained(reference){
 }
 try{
   const source=process.env.RHO_R_PLUGIN_PACKAGE??path.join(directory,'package');
-  if(!process.env.RHO_R_PLUGIN_PACKAGE)execFileSync(process.execPath,[path.join(root,'scripts/build-r-plugin.mjs'),source],{cwd:root,stdio:'inherit'});
+  if(!process.env.RHO_R_PLUGIN_PACKAGE)execFileSync(process.execPath,[path.join(root,'scripts/build-r-plugin.mjs'),source,'--independent'],{cwd:root,stdio:'inherit'});
   assert.equal(digest(fs.readFileSync(binary)),originalHost,'Independent package build must leave the Host unchanged.');
   const database=path.join(directory,'state.sqlite');
   const snapshot=JSON.parse(execFileSync(binary,['--database',database,'plugins','snapshot',source,'--target','aarch64-apple-darwin'],{encoding:'utf8'})).result;

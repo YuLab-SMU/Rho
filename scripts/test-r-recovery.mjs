@@ -45,7 +45,7 @@ function payload(record){
 }
 try {
   const source=process.env.RHO_R_PLUGIN_PACKAGE?fs.realpathSync(process.env.RHO_R_PLUGIN_PACKAGE):path.join(directory,'r');
-  if(!process.env.RHO_R_PLUGIN_PACKAGE)execFileSync(process.execPath,['scripts/build-r-plugin.mjs',source],{cwd:root,stdio:'inherit'});
+  if(!process.env.RHO_R_PLUGIN_PACKAGE)execFileSync(process.execPath,['scripts/build-r-plugin.mjs',source,'--independent'],{cwd:root,stdio:'inherit'});
   assert.ok(!source.startsWith(root+path.sep),'Use a source package outside the Host checkout');
   assert.equal(digest(fs.readFileSync(binary)),originalHost);
   const snapshot=source=>JSON.parse(execFileSync(binary,['--database',database,'--project',project,'plugins','snapshot',source,'--target','aarch64-apple-darwin'],{encoding:'utf8',timeout:180000,maxBuffer:16*1024*1024})).result;

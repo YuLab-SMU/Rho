@@ -20,6 +20,17 @@ const cli = metadata.packages.find(pkg => pkg.name === "rho-cli");
 assert.ok(cli, "production CLI is missing");
 assert.deepEqual(metadata.workspace_default_members, [cli.id]);
 assert.deepEqual(cli.targets.filter(target => target.kind.includes("bin")).map(target => target.name), ["rho"]);
+const sqlite = metadata.packages.find(pkg => pkg.name === "rho-sqlite");
+for (const name of ["rho-agent-store", "rho-agent-owner", "rho-application"]) {
+  assert.equal(sqlite.dependencies.find(dep => dep.name === name)?.optional, true,
+    `Journal-only SQLite must not require ${name}`);
+  assert.ok(sqlite.features["application-store"].includes(`dep:${name}`));
+}
+const journalFixture = metadata.packages.find(pkg => pkg.name === "rho-plugins")
+  .dependencies.find(dep => dep.name === "rho-sqlite");
+assert.equal(journalFixture.uses_default_features, false,
+  "Plugin journal fixtures must not compile the fixed Application/Agent bridge");
+assert.deepEqual(journalFixture.features, []);
 const allowed = {
   "rho-plugin-protocol": [],
   "rho-plugin-sdk": ["rho-plugin-protocol"],

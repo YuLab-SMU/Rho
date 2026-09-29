@@ -35,7 +35,7 @@ async function run(instance,session,code){return success(await invoke(`run-${++c
 try{
   const environmentSource=process.env.RHO_ENVIRONMENT_PLUGIN_PACKAGE?fs.realpathSync(process.env.RHO_ENVIRONMENT_PLUGIN_PACKAGE):buildEnvironmentPlugin(path.join(directory,'environment'));
   const rSource=process.env.RHO_R_PLUGIN_PACKAGE?fs.realpathSync(process.env.RHO_R_PLUGIN_PACKAGE):path.join(directory,'r');
-  if(!process.env.RHO_R_PLUGIN_PACKAGE)execFileSync(process.execPath,['scripts/build-r-plugin.mjs',rSource],{cwd:root,stdio:'inherit'});
+  if(!process.env.RHO_R_PLUGIN_PACKAGE)execFileSync(process.execPath,['scripts/build-r-plugin.mjs',rSource,'--independent'],{cwd:root,stdio:'inherit'});
   for(const source of [environmentSource,rSource])assert.ok(!source.startsWith(root+path.sep),'Use independent source packages.');
   execFileSync('python3',[path.join(rSource,'tests/environment_protocol.py'),path.join(rSource,'dist/rho-r-backend')],{cwd:rSource,stdio:'inherit',timeout:180000});
   assert.equal(digest(fs.readFileSync(binary)),originalHost);

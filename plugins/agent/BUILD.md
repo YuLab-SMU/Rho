@@ -16,8 +16,9 @@ and these instructions are included in the package inventory.
 The generated manifest uses compact JSON so the complete encoded file, including
 its source inventory, remains within the public protocol's 256 KiB read limit.
 
-During repository development, add `--workspace` to the assembler to reuse the
-primary Cargo workspace cache. It still creates a complete external source/UI
+The assembler defaults to the primary Cargo workspace cache during repository
+development. Add `--independent` only for independent-source build acceptance.
+It still creates a complete external source/UI
 package and an immutable native artifact. The adjacent receipt records the build
 mode; acceptance runners report workspace integration separately from independent
 source compilation. Reuse that package with `--package` while its inputs match.

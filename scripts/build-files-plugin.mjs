@@ -5,8 +5,9 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 assert.ok(process.argv[2], 'Specify a new directory outside the checkout');
-assert.ok(process.argv.slice(3).every(arg => arg === '--workspace'), 'Only --workspace is supported after the destination');
-const workspaceBuild = process.argv.includes('--workspace');
+assert.ok(process.argv.slice(3).every(arg => ['--workspace', '--independent'].includes(arg)) && process.argv.length <= 4,
+  'Usage: node scripts/build-files-plugin.mjs DEST [--workspace | --independent]');
+const workspaceBuild = !process.argv.includes('--independent');
 const output = path.join(fs.realpathSync(path.dirname(path.resolve(process.argv[2]))), path.basename(process.argv[2]));
 assert.ok(output !== root && !output.startsWith(root + path.sep), 'Use a standalone directory');
 fs.mkdirSync(output);

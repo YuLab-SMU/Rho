@@ -11,6 +11,9 @@ From the Rho checkout, assemble into a new directory outside the checkout:
 node scripts/build-files-plugin.mjs /absolute/new/files-package
 ```
 
+The default builds in the primary workspace cache. Add `--independent` to build
+from the external source package for milestone acceptance.
+
 That package contains all first-party Files, shared process supervision, public
 protocol/SDK sources, the standalone workspace and its locked dependencies. From
 that directory, repeat the build with `node build.mjs`. Cargo is locked/offline.

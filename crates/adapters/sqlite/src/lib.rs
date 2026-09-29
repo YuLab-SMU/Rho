@@ -1,13 +1,22 @@
 #![forbid(unsafe_code)]
+#[cfg(feature = "application-store")]
 mod agent_tasks;
+#[cfg(feature = "application-store")]
 mod agent_storage;
+#[cfg(feature = "application-store")]
 mod agent_handoffs;
+#[cfg(feature = "application-store")]
 mod annotations;
 mod caller_records;
+#[cfg(feature = "application-store")]
 mod component_agents;
+#[cfg(feature = "application-store")]
 mod application;
+#[cfg(feature = "application-store")]
 pub use application::ApplicationStore;
+#[cfg(feature = "application-store")]
 mod runtime_instances;
+#[cfg(feature = "application-store")]
 pub use runtime_instances::RuntimeInstancePage;
 mod filtered_records;
 mod commit_candidates;

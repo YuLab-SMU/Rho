@@ -7,8 +7,8 @@ import {rSourceCopies, excludedRSource, rBuildInputDigest, recordRBuild} from '.
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),"..");
 const destination=process.argv[2];
 assert.ok(destination,"Specify a new package directory outside the repository");
-assert.ok(process.argv.slice(3).every(arg=>arg==='--workspace') && process.argv.length<=4, 'Usage: node scripts/build-r-plugin.mjs DEST [--workspace]');
-const workspace=process.argv.includes('--workspace');
+assert.ok(process.argv.slice(3).every(arg=>['--workspace','--independent'].includes(arg)) && process.argv.length<=4, 'Usage: node scripts/build-r-plugin.mjs DEST [--workspace | --independent]');
+const workspace=!process.argv.includes('--independent');
 const parent=fs.realpathSync(path.dirname(path.resolve(destination)));
 const output=path.join(parent,path.basename(destination));
 assert.ok(output !== root && !output.startsWith(root+path.sep),"Use an independent directory outside the core checkout");
