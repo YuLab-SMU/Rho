@@ -317,12 +317,18 @@ impl Owner {
         if !record["record"]["error"].is_null() {
             text.push_str(&format!("Recorded error: {}\n", record["record"]["error"]));
         }
+        // Both inclusions refer to the same immutable run. Include code and
+        // terminal outcome as well as the retained transcript's digest.
+        let source_version = format!("sha256:{:x}", Sha256::digest(serde_json::to_vec(
+            &json!([code, status, record["record"]["error"], source.events.digest])
+        ).map_err(|e| e.to_string())?));
         let (text, truncated) = bounded_text(&text, request.max_bytes as usize);
         let preview = ContextPreview {
             item: source.item(&self.instance, &request.reference.window, &code, &status)?,
             text,
             truncated,
-            data: json!({"operation":source.operation,"session":source.session,"events":source.events,"status":status,"inclusion":kind}),
+            data: json!({"operation":source.operation,"session":source.session,"events":source.events,"status":status,"inclusion":kind,
+                "annotation_source":{"source_id":format!("run:{}",source.operation),"source_version":source_version}}),
             resources: vec![],
         };
         preview.validate().map_err(|e| e.to_string())?;

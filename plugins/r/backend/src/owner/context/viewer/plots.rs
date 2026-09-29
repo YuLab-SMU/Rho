@@ -13,6 +13,16 @@ enum Inclusion {
     Images {},
     Metadata {},
 }
+fn annotation_source(plots: &[Source]) -> Result<Value, String> {
+    // Order is significant for the explicitly selected comparison. Native
+    // session/observation clocks and presentation state are not content versions.
+    let lineage = plots.iter().map(|p| json!([p.operation,p.sequence])).collect::<Vec<_>>();
+    let versions = plots.iter().map(|p| &p.reference.digest).collect::<Vec<_>>();
+    let digest = |value: &Value| -> Result<String, String> {
+        Ok(format!("sha256:{:x}", Sha256::digest(serde_json::to_vec(value).map_err(|e|e.to_string())?)))
+    };
+    Ok(json!({"source_id":format!("plots:{}",digest(&json!(lineage))?),"source_version":digest(&json!(versions))?}))
+}
 pub(super) fn item(
     owner: &InstanceRef,
     window: &WindowId,
@@ -109,7 +119,8 @@ impl Owner {
             item,
             text,
             truncated,
-            data: json!({"inclusion":if resources.is_empty(){"metadata"}else{"images"},"plots":selection.plots,"artifacts":artifacts,"operation_statuses":statuses,"interactive_state":false}),
+            data: json!({"inclusion":if resources.is_empty(){"metadata"}else{"images"},"plots":selection.plots,"artifacts":artifacts,"operation_statuses":statuses,"interactive_state":false,
+                "annotation_source":annotation_source(&selection.plots)?}),
             resources,
         };
         check(

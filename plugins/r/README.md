@@ -28,6 +28,12 @@ The R owner also declares ordinary `help` and `viewer` context contributions:
   availability and interactive browser state. It can inspect original records
   after reopening the instance without starting R.
 
+Console and Plots previews also supply owner-defined annotation identities.
+Console binds code/transcript inclusions to the original run and recorded outcome;
+Plots binds the ordered original outputs and image digests. A later execution
+cannot replace either source. Plot text freezing includes artifact metadata only;
+image import and browser capture are separate actions. Reads never rerun analysis.
+
 Viewer context requires the R instance's optional `operation.get`,
 `operation.list_recent` and `resources.read` grants. Context references never grant
 access or acquire scientific tools. Agent exposes these as optional grants too;

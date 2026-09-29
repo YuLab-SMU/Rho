@@ -312,6 +312,7 @@ fn plot_record(owner: &InstanceRef, mime: &str, count: u64) -> Value {
 }
 #[tokio::test]
 async fn plots_preview_pair_checks_originals_and_never_starts_r() {
+    let mut image_identity = None;
     for kind in ["images", "metadata"] {
         let (_directory, owner, mut call, mut host) = fixture();
         let original = plot_record(&owner.instance, "image/png", 2);
@@ -343,6 +344,11 @@ async fn plots_preview_pair_checks_originals_and_never_starts_r() {
             if kind == "images" { 2 } else { 0 }
         );
         assert_eq!(preview.data["artifacts"][0]["operation"], "original");
+        let identity = preview.data["annotation_source"].clone();
+        assert!(identity["source_id"].as_str().unwrap().starts_with("plots:sha256:"));
+        if let Some(original) = &image_identity {
+            assert_eq!(&identity, original, "Metadata and images refer to the same ordered original plots");
+        } else { image_identity = Some(identity); }
         assert_eq!(preview.data["artifacts"][0]["resource"], json!(sources[0].reference));
         assert_eq!(preview.item.reference, reference);
         assert!(preview.text.contains("Producing run: original"));

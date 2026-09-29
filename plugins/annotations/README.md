@@ -40,6 +40,11 @@ lineage and retained help-file digests, and Viewer uses the original output and
 resource digest. Files uses the contained project path and content digest while
 still checking the exact native file identity. A fresh observation or atomic save
 of identical bytes alone is not a content change.
+Console uses the original terminal run and a digest of its recorded code, outcome
+and transcript identity. Plots uses the ordered original outputs and their image
+digests. Metadata and explicit image selections share that plot identity, but
+text freezing accepts only the complete metadata inclusion; it does not capture
+pixels or panel overlays.
 
 Freezing requires a complete text inclusion; quote offsets refer to that inclusion
 and preserve UTF-8/UTF-16/scalar boundaries. Exact request replays read the original
@@ -137,10 +142,11 @@ This does not establish browser screenshot/upload capture, real R image provenan
 annotation editor UI or abrupt-crash recovery.
 
 Add `--scientific` with a current `RHO_R_PLUGIN_PACKAGE`, existing `RHO_ARK` and
-`RHO_R_HOME` for real Help/Viewer sources. R is activated before consumers select
+`RHO_R_HOME` for real Help/Viewer/Console/Plots sources. R is activated before consumers select
 its grants; the fixture explicitly starts one disposable session. Native package
 and help pages keep their partial/complete labels, while each frozen annotation
 requires a complete selected inclusion. The flow verifies installed-topic identity,
-original HTML evidence after a newer output, forged-resource refusal and retained
-notes/retries while R stays suspended after Host restart. With `--agent`, both notes
+original HTML, transcript and plot metadata after a newer run, forged-resource
+refusal and retained notes/retries while R stays suspended after Host restart.
+With `--agent`, all four notes
 reach the actual Agent/Rig model input (local deterministic model peer).

@@ -62,8 +62,14 @@ export async function annotationNativeAgent({agent, notes, original, evidenceId,
       if (before_cursor === null) break;
     }
     assert.equal(before_cursor, null, 'Bounded original Operation history');
-    const details = await Promise.all(records.filter(record => record.capability.id === 'annotations.write')
-      .map(async record => (await query('operation.get', {operation_id:record.operation_id})).record));
+    const writesToInspect = records.filter(record => record.capability.id === 'annotations.write');
+    const details = [];
+    // Adding source cases must not saturate the Host's bounded query admission.
+    // Inspect all records (including unexpected writes), in bounded batches.
+    for (let start = 0; start < writesToInspect.length; start += 4) {
+      details.push(...await Promise.all(writesToInspect.slice(start, start + 4)
+        .map(async record => (await query('operation.get', {operation_id:record.operation_id})).record)));
+    }
     const children = details.filter(record => record.operation.caller.id === agent.instance);
     assert.deepEqual(children.map(record => record.operation.operation_id).sort(), writes.map(({tool}) => tool.operation).sort(), 'Exactly the three original writes; no duplicate or forged-author Operation');
   };

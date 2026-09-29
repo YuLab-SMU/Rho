@@ -108,6 +108,8 @@ async fn console_code_preview_rechecks_original_without_runtime_or_resource_read
     let preview: ContextPreview = decode(reply.unwrap()).unwrap();
     assert!(preview.text.contains("cat('中文')"));
     assert!(!preview.truncated);
+    assert_eq!(preview.data["annotation_source"]["source_id"], "run:original");
+    assert_eq!(preview.data["annotation_source"]["source_version"], format!("sha256:{:x}", Sha256::digest(serde_json::to_vec(&json!([code,status,null,source.events.digest])).unwrap())));
     assert_eq!(preview.item.reference, reference);
     assert!(owner.runtime.lock().unwrap().is_none());
     assert!(host.try_recv().is_err());

@@ -1,4 +1,4 @@
-// Real R-owned Help and saved HTML observations through public plugin ports.
+// Real R-owned Help, Viewer, Console and Plots through public plugin ports.
 // This tests annotation evidence and recovery, not the pending annotation editor.
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
@@ -13,7 +13,7 @@ export async function annotationScientific({r, notes, window, binding, invoke, p
     return result.data;
   };
   const execute = async (text) => invoke('r.execute',{binding:await binding(r,'r.execute'),arguments:{expected_session:session,
-    code:`writeLines(${JSON.stringify(text)}, "annotation-viewer.html"); getOption("viewer")("annotation-viewer.html"); 1L`}});
+    code:`writeLines(${JSON.stringify(text)}, "annotation-viewer.html"); getOption("viewer")("annotation-viewer.html"); plot(1:3, main = "Annotation source"); cat("Original Console annotation output\\n"); 1L`}});
   const source = async (kind,text,matches=()=>true) => {
     let after=null;
     for(let page=0;page<20;page++) {
@@ -68,12 +68,32 @@ export async function annotationScientific({r, notes, window, binding, invoke, p
   const viewer=await freeze('viewer',await source('viewer',first.operation.operation_id),{kind:'text'},'Review this exact saved HTML output · 中文 🧬');
   assert.equal(viewer.preview.text,html+'\n');
   assert.equal(viewer.reference.selector.operation,first.operation.operation_id);
+  const consoleNote=await freeze('console',await source('console',first.operation.operation_id),{kind:'transcript'},'Review this original Console run');
+  assert.ok(consoleNote.preview.text.includes('Original Console annotation output'));
+  const codePreview=await pluginQuery(r,'r.context.console.preview',{reference:consoleNote.reference,inclusion:{kind:'code'},max_bytes:16384});
+  assert.deepEqual(codePreview.data.annotation_source,consoleNote.preview.data.annotation_source,'Code and transcript bind the same original run');
+  const plots=await freeze('plots',await source('plots',first.operation.operation_id),{kind:'metadata'},'Review this original plot artifact');
+  assert.equal(plots.reference.selector.plots.length,1);
+  assert.equal(plots.reference.selector.plots[0].operation,first.operation.operation_id);
+  assert.ok(plots.preview.text.includes('no image content is included'));
   const next=await execute('<html><body>Later Viewer output must not replace the original note.</body></html>');
   const nextRef=await source('viewer',next.operation.operation_id);
   const nextPreview=await pluginQuery(r,'r.context.viewer.preview',{reference:nextRef,inclusion:{kind:'text'},max_bytes:16384});
   assert.notEqual(nextPreview.data.annotation_source.source_id,viewer.preview.data.annotation_source.source_id);
   assert.notEqual(nextPreview.data.annotation_source.source_version,viewer.preview.data.annotation_source.source_version);
   assert.deepEqual(await pluginQuery(r,'r.context.viewer.preview',{reference:viewer.reference,inclusion:{kind:'text'},max_bytes:16384}),viewer.preview);
+  for (const item of [consoleNote,plots]) {
+    const fresh=await pluginQuery(r,`r.context.${item.kind}.preview`,{reference:item.reference,inclusion:item.command.inclusion,max_bytes:16384});
+    assert.deepEqual(fresh,item.preview,'Later execution cannot replace an original source');
+    const nextReference=await source(item.kind,next.operation.operation_id);
+    const later=await pluginQuery(r,`r.context.${item.kind}.preview`,{reference:nextReference,inclusion:item.command.inclusion,max_bytes:16384});
+    assert.notEqual(later.data.annotation_source.source_id,item.preview.data.annotation_source.source_id);
+    const forged=structuredClone(item.command);
+    const resource=item.kind==='console'?forged.reference.selector.events:forged.reference.selector.plots[0].reference;
+    resource.digest='sha256:'+'0'.repeat(64);
+    await write(`forged-${item.kind}-resource`,forged,randomUUID(),'failed');
+    assert.equal((await pluginQuery(notes,'annotations.read',{kind:'receipt',request_id:`forged-${item.kind}-resource`})).receipt,null);
+  }
   // A caller cannot substitute another resource digest under the old Operation.
   const forged=structuredClone(viewer.command);forged.reference.selector.reference.digest='sha256:'+'0'.repeat(64);
   await write('forged-viewer-resource',forged,randomUUID(),'failed');
