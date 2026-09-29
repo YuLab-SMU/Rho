@@ -36,9 +36,14 @@ export function scientificWorkspace(choices: Record<ScientificPlugin, WorkspaceC
       throw Error('Select a Files revision that passes its R provider to the Editor.');
     if (key === 'help' && !(manifest.views.find(view => view.id === 'help')!.configuration_schema as any)?.properties?.copy?.type?.includes('null'))
       throw Error('Select a Help revision that can open before choosing an installed package.');
-    const optional = key === 'editor' ? [{ id: 'r.session', version: 1 }, { id: 'r.execute', version: 2 }, { id: 'r.format', version: 1 }, { id: 'resources.read', version: 1 }] : [];
+    // Saved Viewer context reads original operations and resources through R's
+    // public ports. Capture those grants in the same activation/scenario as the
+    // selected contribution; Help-only revisions do not need these reads.
+    const optional = key === 'editor' ? [{ id: 'r.session', version: 1 }, { id: 'r.execute', version: 2 }, { id: 'r.format', version: 1 }, { id: 'resources.read', version: 1 }]
+      : key === 'r' && manifest.contexts.some(context => context.id === 'viewer')
+        ? [{ id: 'operation.get', version: 1 }, { id: 'operation.list_recent', version: 1 }, { id: 'resources.read', version: 1 }] : [];
     if (optional.some(cap => !manifest.optional_requires?.some(grant => grant.capability.id === cap.id && grant.capability.version === cap.version)))
-      throw Error('Select an Editor revision with the public R execution and resource contracts.');
+      throw Error(key === 'r' ? 'Select an R revision with the public saved Viewer context read contracts.' : 'Select an Editor revision with the public R execution and resource contracts.');
     setup.packages[key] = { plugin: manifest.id, revision: choice.inspection.summary.revision, artifact: artifact.id, target,
       configuration: key === 'r' ? json({ ...runtime, execution_timeout_seconds: 600 }) : structuredClone(manifest.default_configuration),
       dependencies: {}, ...(optional.length ? { optional_capabilities: optional } : {}) };

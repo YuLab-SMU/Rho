@@ -11,6 +11,16 @@ export async function checkScientificWorkspace({ Manager, scientificWorkspace, s
   }));
   const runtime = { ark: '/tools/ark', r_home: '/tools/R' };
   const setup = () => scientificWorkspace(choices, 'aarch64-apple-darwin', runtime, 7, 'scientific', 'Scientific workspace');
+  const viewerReads = [{ id: 'operation.get', version: 1 }, { id: 'operation.list_recent', version: 1 }, { id: 'resources.read', version: 1 }];
+  assert.deepEqual(setup().packages.r.optional_capabilities, viewerReads, 'the selected Viewer context receives its original-record/resource reads');
+  for (const capability of viewerReads) {
+    const missingRead = structuredClone(choices);
+    missingRead.r.inspection.manifest.optional_requires = missingRead.r.inspection.manifest.optional_requires.filter(grant => grant.capability.id !== capability.id);
+    assert.throws(() => scientificWorkspace(missingRead, 'aarch64-apple-darwin', runtime, 7, 'science'), /R revision.*Viewer context read contracts/);
+  }
+  const noViewerContext = structuredClone(choices);
+  noViewerContext.r.inspection.manifest.contexts = noViewerContext.r.inspection.manifest.contexts.filter(context => context.id !== 'viewer');
+  assert.equal(scientificWorkspace(noViewerContext, 'aarch64-apple-darwin', runtime, 7, 'science').packages.r.optional_capabilities, undefined, 'context grants are selected only for a declared contribution');
   const managerIdentity = { instance: 'manager-instance', plugin: 'org.rho.manager', revision: hash(99), artifact: hash(199) };
   const managerView = { view: 'manager-view', contribution: 'manager', instance: managerIdentity, configuration: {}, state: {}, window: 'window', project: 'project', principal: 'principal', closed: false };
   assert.throws(() => scientificWorkspace({ ...choices, help: undefined }, 'aarch64-apple-darwin', runtime, 7, 'science'), /installed help/);
@@ -72,6 +82,8 @@ export async function checkScientificWorkspace({ Manager, scientificWorkspace, s
   f.lose('plugins.activate'); await assert.rejects(manager.prepareWorkspace(), /Lost original reply/);
   await assert.rejects(manager.resetWorkspace(), /Inspect the original request/);
   const first = f.records[0]; manager = new Manager(f.client, f.saved);
+  assert.deepEqual(first.operation.normalized_arguments.optional_capabilities, viewerReads);
+  assert.deepEqual(manager.state.workspace.packages.r.optional_capabilities, viewerReads, 'lost activation recovery retains the captured grants');
   assert.equal(f.calls.length, 1, 'opening retained setup performs no work');
   await manager.recover(); assert.equal(f.calls.length, 1, 'recovery only inspects the original activation');
   assert.equal(manager.state.workspace.instances.r.instance, first.output.instance.identity.instance);
@@ -86,6 +98,7 @@ export async function checkScientificWorkspace({ Manager, scientificWorkspace, s
   assert.deepEqual(views.editor.configuration.runtime, r);
   for (const key of ['objects', 'plots', 'console', 'viewer', 'packages', 'help']) assert.deepEqual(views[key].configuration.source, r);
   assert.deepEqual(definition.instances.editor.optional_capabilities, [{ id: 'r.session', version: 1 }, { id: 'r.execute', version: 2 }, { id: 'r.format', version: 1 }, { id: 'resources.read', version: 1 }]);
+  assert.deepEqual(definition.instances.r.optional_capabilities, viewerReads, 'the saved scenario carries the same Viewer read grants');
   f.lose('views.open'); await assert.rejects(manager.prepareWorkspace(), /Lost original reply/);
   manager = new Manager(f.client, f.saved); const count = f.calls.length; await manager.recover(); assert.equal(f.calls.length, count);
   await manager.prepareWorkspace();

@@ -155,7 +155,7 @@ This does **not** establish combined Host acceptance or a current packaged artif
 The combined native/Rho–Editor–real-R/restart fixture, including handoff receipts, passes type checking and discovery.
 Its model peer probe passes; the actual Host flow awaits one current Agent artifact.
 
-R now declares observed Help topics and saved HTML contexts; exact-copy/file checks, journal paging and native tests are written. Public Agent picker/grant/type checks pass; R native and Host acceptance remain unrun.
+R now declares observed Help topics and saved HTML contexts; exact-copy/file checks, journal paging and native tests are written. Manager now captures the Viewer contribution's read grants in new scenarios and lost-reply recovery; model checks pass. Public Agent picker/grant/type checks pass; R native and Host acceptance remain unrun.
 Not done: actual Host acceptance of Agent input/Continue/handoff and native/Host checks for the new R sources; annotations/component input, Host restart recovery and combined Studio Agent acceptance.
 Synthetic peers for Process/Remote/Environment do not establish execution through those plugins.
 

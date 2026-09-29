@@ -47,6 +47,9 @@ checkpoint against the observed current head. Saving never applies a scene.
 Viewer, Packages and Help revisions, plus existing Ark/R paths. The Manager recipe
 uses normal activation and view ports, captures exact identities for cross-view
 bindings, and saves a scientific scenario. It retains the current Manager view.
+When the selected R revision contributes saved Viewer context, preparation selects
+its original-operation and resource read grants and retains them in the scenario.
+Missing declared read contracts are reported before activating any instance.
 Preparation does not switch the window or start R; use the existing Switch action,
 then Start R in Console. Missing packages are never installed automatically.
 Choices and partial preparation survive view reload. Each original request is
