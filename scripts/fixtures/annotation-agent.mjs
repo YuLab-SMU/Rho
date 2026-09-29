@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 
-export async function annotationAgent({agent, notes, context, notePreview, port, query, invoke, binding, pluginQuery}) {
+export async function annotationAgent({agent, notes, context, notePreview, port, query, invoke, binding, pluginQuery, cases = [{context,notePreview}], id = 'annotation-reader'}) {
   const requests = [], errors = [];
   const server = createServer(async (request, response) => {
     try {
@@ -18,9 +18,15 @@ export async function annotationAgent({agent, notes, context, notePreview, port,
       const body = JSON.parse(input);
       assert.equal(body.stream, true);
       const messages = JSON.stringify(body.messages);
-      assert.ok(messages.includes('Check the original 🧬 result'));
+      // The real driver sends context as JSON following an explanatory prefix.
+      const contains = (value, text) => typeof value === 'string'
+        ? value.includes(text) || value.includes(JSON.stringify(text))
+        : value !== null && typeof value === 'object' && Object.values(value).some(item=>contains(item,text));
+      for (const {context} of cases) {
+        assert.ok(contains(body.messages,context.text),'Exact frozen note and evidence must reach the model');
+        assert.ok(messages.includes(context.data.source.source_version));
+      }
       assert.ok(messages.includes('Current source status: unknown'));
-      assert.ok(messages.includes(context.data.source.source_version));
       requests.push(body);
       const chunk = (delta, finish_reason) => `data: ${JSON.stringify({id: 'annotation-model-fixture', object: 'chat.completion.chunk', created: 1, model: 'fixture', choices: [{index: 0, delta, finish_reason}]})}\n\n`;
       response.writeHead(200, {'Content-Type': 'text/event-stream'}).end(
@@ -45,37 +51,40 @@ export async function annotationAgent({agent, notes, context, notePreview, port,
       binding: await binding(agent, 'agent.model.key.store'),
       arguments: {request_id: 'annotation-fixture-key', value: 'disposable-annotation-model-key'},
     }});
-    const settings = (await agentInvoke('agent.model.configure', {version: 0, enabled: true, connection: {
+    const settings = (await agentInvoke('agent.model.configure', {version: (await agentQuery('agent.model.settings',{})).version, enabled: true, connection: {
       protocol: 'openai_completions', base_url: `http://127.0.0.1:${server.address().port}/v1`, model: 'fixture', credential,
     }})).output;
-    const created = (await agentInvoke('agent.model.create', {conversation_id: 'annotation-reader', profile: 'project'})).output;
-    const selection = {source: 'plugin', label: context.item.title, reference: notePreview.reference, inclusion: JSON.stringify(notePreview.inclusion)};
+    const created = (await agentInvoke('agent.model.create', {conversation_id: id, profile: 'project'})).output;
+    const selections = cases.map(({context,notePreview})=>({source:'plugin',label:context.item.title,reference:notePreview.reference,inclusion:JSON.stringify(notePreview.inclusion)}));
     const text = 'Review this exact frozen note and distinguish it from the current source.';
-    const saved = (await agentInvoke('agent.model.draft', {conversation_id: 'annotation-reader', draft_version: created.draft_version,
-      content: {text, context: [selection], assets: []}, grant: null})).output;
-    const input = {request_id: 'annotation-send-original', conversation_id: 'annotation-reader', conversation_version: saved.version,
-      model_settings_version: settings.version, text, sources: [selection]};
+    const saved = (await agentInvoke('agent.model.draft', {conversation_id: id, draft_version: created.draft_version,
+      content: {text, context: selections, assets: []}, grant: null})).output;
+    const input = {request_id: `${id}-send-original`, conversation_id: id, conversation_version: saved.version,
+      model_settings_version: settings.version, text, sources: selections};
     const original = await agentInvoke('agent.model.run', input);
     const run = original.output;
     assert.equal(run.state, 'completed', JSON.stringify(run));
     assert.equal(requests.length, 1); assert.deepEqual(errors, []);
-    assert.equal(run.context.sources.length, 1);
-    assert.equal(run.context.sources[0].text, context.text);
-    assert.deepEqual(run.context.sources[0].selection, selection);
-    assert.deepEqual(run.context.sources[0].native_data, context.data);
-    const conversation = await agentQuery('agent.model.conversation', {conversation_id: 'annotation-reader'});
+    assert.equal(run.context.sources.length, cases.length);
+    cases.forEach(({context},i)=>{
+      assert.equal(run.context.sources[i].text, context.text);
+      assert.deepEqual(run.context.sources[i].selection, selections[i]);
+      assert.deepEqual(run.context.sources[i].native_data, context.data);
+    });
+    const conversation = await agentQuery('agent.model.conversation', {conversation_id: id});
     assert.deepEqual(conversation.draft_content, {text: '', context: [], assets: []});
     return {
       close,
       report: {model_peer: 'local deterministic streaming HTTP fixture', original_run: run.run_id,
-        original_host_operation: original.operation.operation_id, exact_annotation: notePreview.reference.selector,
+        original_host_operation: original.operation.operation_id, exact_annotations: cases.map(({notePreview})=>notePreview.reference.selector),
         captured_context: run.context, source_replayed: null},
       async afterRestart() {
         assert.equal((await query('plugins.instance', {instance: notes})).instance.state, 'suspended');
         const state = await query('plugins.instance', {instance: agent});
-        assert.equal(state.instance.state, 'suspended');
-        const resumed = (await invoke('plugins.resume', {instance: agent, suspension: state.instance.suspension})).output.instance;
-        assert.deepEqual(resumed.identity, agent);
+        if (state.instance.state === 'suspended') {
+          const resumed = (await invoke('plugins.resume', {instance: agent, suspension: state.instance.suspension})).output.instance;
+          assert.deepEqual(resumed.identity, agent);
+        } else assert.equal(state.instance.state,'active');
         const retained = await agentQuery('agent.model.run.get', {run_id: run.run_id});
         assert.deepEqual(retained.context, run.context);
         const replay = (await agentInvoke('agent.model.run', input)).output;

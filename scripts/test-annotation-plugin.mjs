@@ -7,6 +7,8 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {execFileSync, spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {verifyRBuild} from './r-plugin-artifact.mjs';
+import {annotationScientific} from './fixtures/annotation-scientific.mjs';
 import {verifyAgentBuild} from './agent-plugin-artifact.mjs';
 import {annotationAgent} from './fixtures/annotation-agent.mjs';
 import {annotationImageAgent} from './fixtures/annotation-image-agent.mjs';
@@ -15,15 +17,17 @@ import {buildCaptureSource, annotationCaptures} from './fixtures/annotation-capt
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const flags = process.argv.slice(2);
-assert.ok(new Set(flags).size === flags.length && flags.every(arg => ['--agent', '--browser', '--captures'].includes(arg)), 'Usage: node scripts/test-annotation-plugin.mjs [--agent [--browser]] [--captures]');
+assert.ok(new Set(flags).size === flags.length && flags.every(arg => ['--agent', '--browser', '--captures', '--scientific'].includes(arg)), 'Usage: node scripts/test-annotation-plugin.mjs [--agent [--browser]] [--captures] [--scientific]');
 const withAgent = process.argv.includes('--agent');
 const withBrowser = process.argv.includes('--browser');
 const withCaptures = process.argv.includes('--captures');
+const withScientific = process.argv.includes('--scientific');
+assert.ok(!withScientific || (process.env.RHO_ARK && process.env.RHO_R_HOME), '--scientific requires existing RHO_ARK and RHO_R_HOME');
 assert.ok(!withBrowser || withAgent, '--browser requires --agent');
 const binary = process.env.RHO_TEST_BINARY ?? path.join(root, 'target/debug/rho');
 const hash = bytes => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 const hostHash = hash(fs.readFileSync(binary));
-const packages = Object.fromEntries(['annotation', 'editor', 'files', ...(withAgent ? ['agent'] : [])].map(name => {
+const packages = Object.fromEntries(['annotation', 'editor', 'files', ...(withAgent ? ['agent'] : []), ...(withScientific ? ['r'] : [])].map(name => {
   const value = process.env[`RHO_${name.toUpperCase()}_PLUGIN_PACKAGE`];
   assert.ok(value, `Supply RHO_${name.toUpperCase()}_PLUGIN_PACKAGE; this check never builds`);
   const directory = fs.realpathSync(value);
@@ -31,6 +35,7 @@ const packages = Object.fromEntries(['annotation', 'editor', 'files', ...(withAg
   return [name, directory];
 }));
 if (withAgent) verifyAgentBuild(packages.agent);
+if (withScientific) verifyRBuild(packages.r);
 // Refuse stale Rust source in either owner and in the annotation package's public SDK.
 function rustFiles(directory, prefix = '') {
   return fs.readdirSync(directory, {withFileTypes: true}).flatMap(entry => {
@@ -78,7 +83,7 @@ const result = {host_sha256: hostHash, packages, directory, stages: [], complete
     return [name, {sha256: hash(bytes), bytes: bytes.length}];
   })), started_at: new Date().toISOString()};
 const evidence = process.env.RHO_ANNOTATION_EVIDENCE ?? path.join(directory, 'result.json');
-let host, exited, url, editor, notes, agent, agentCase, nativeCase, captureSource, captureCase, imageCase;
+let host, exited, url, editor, notes, agent, agentCase, nativeCase, captureSource, captureCase, imageCase, r, scientificCase, scientificAgentCase;
 const key = id => ({id, version: 1});
 const save = () => fs.writeFileSync(evidence, JSON.stringify(result, null, 2) + '\n');
 const safe = text => String(text).replace(/token=[a-z0-9]+/g, 'token=[redacted]');
@@ -163,15 +168,16 @@ try {
   }
   result.snapshots = snapshots;
   await start();
-  for (const name of ['files', 'editor', 'annotation', ...(withAgent ? ['agent'] : []), ...(withCaptures ? ['capture'] : [])]) {
+  for (const name of ['files', 'editor', ...(withScientific ? ['r'] : []), 'annotation', ...(withAgent ? ['agent'] : []), ...(withCaptures ? ['capture'] : [])]) {
     const snapshot = snapshots[name];
-    const active = (await invoke('plugins.activate', {revision: snapshot.revision, artifact: snapshot.artifacts[0], target: 'aarch64-apple-darwin', alias: name, configuration: name === 'agent' ? {kimi_home:nativeHome} : {},
-      optional_capabilities: name === 'annotation' ? [key('editor.context.preview'), ...(withCaptures ? [key('resources.read')] : [])] : name === 'agent'
-        ? ['plugins.instances', 'plugins.inspect', 'annotations.read', 'annotations.write', 'annotations.context.search', 'annotations.context.preview', 'operation.get', 'plugins.delegated_operation', ...(withCaptures ? ['resources.read'] : [])].map(key) : []})).output.instance.identity;
+    const active = (await invoke('plugins.activate', {revision: snapshot.revision, artifact: snapshot.artifacts[0], target: 'aarch64-apple-darwin', alias: name, configuration: name === 'agent' ? {kimi_home:nativeHome} : name === 'r' ? {ark:fs.realpathSync(process.env.RHO_ARK),r_home:fs.realpathSync(process.env.RHO_R_HOME),execution_timeout_seconds:120} : {},
+      optional_capabilities: name === 'annotation' ? [key('editor.context.preview'), ...(withScientific ? ['r.context.help.preview','r.context.viewer.preview'].map(key) : []), ...(withCaptures ? [key('resources.read')] : [])] : name === 'agent'
+        ? ['plugins.instances', 'plugins.inspect', 'annotations.read', 'annotations.write', 'annotations.context.search', 'annotations.context.preview', 'operation.get', 'plugins.delegated_operation', ...(withCaptures ? ['resources.read'] : [])].map(key) : name === 'r' ? ['operation.get','operation.list_recent','resources.read'].map(key) : []})).output.instance.identity;
     if (name === 'editor') editor = active;
     if (name === 'annotation') notes = active;
     if (name === 'agent') agent = active;
     if (name === 'capture') captureSource = active;
+    if (name === 'r') r = active;
   }
   const initial = await draft('a🧬中z\n');
   const first = await selected();
@@ -196,6 +202,11 @@ try {
     result.captures = captureCase.report;
     result.stages.push('public PNG resource → validated capture → frozen Editor evidence and marks → bounded image reads; damaged image refused'); save();
   }
+  if (withScientific) {
+    scientificCase = await annotationScientific({r,notes,window,binding,invoke,pluginQuery,query,port});
+    result.scientific = scientificCase.report;
+    result.stages.push('real R Help and saved HTML → frozen annotation evidence; stable topic identity and immutable output provenance'); save();
+  }
   if (withAgent) {
     agentCase = await annotationAgent({agent, notes, context, notePreview, port, query, invoke, binding, pluginQuery});
     result.agent = agentCase.report;
@@ -210,6 +221,11 @@ try {
       imageCase=await annotationImageAgent({agent,notes,image:captureCase.image,port,query,invoke,binding,pluginQuery});
       result.image_agent=imageCase.report;
       result.stages.push('explicit captured image reaches Rho model; subsequent text-only Send does not resend it');save();
+    }
+    if (scientificCase) {
+      scientificAgentCase = await annotationAgent({agent,notes,port,query,invoke,binding,pluginQuery,cases:scientificCase.cases,id:'scientific-annotation-reader'});
+      result.scientific_agent = scientificAgentCase.report;
+      result.stages.push('Help and Viewer annotation evidence reaches real Agent/Rig through exact note contexts'); save();
     }
     result.native_agent = nativeCase.report;
     result.stages.push('Native Agent exact Send tools: read-only write refusal, authenticated create/update, CAS and original child Operations'); save();
@@ -238,12 +254,14 @@ try {
     await agentCase.afterRestart();
     await nativeCase.afterRestart();
     if (imageCase) await imageCase.afterRestart();
+    if (scientificAgentCase) await scientificAgentCase.afterRestart();
     result.stages.push('same Agent instance retains Send context and receipt while its annotation source stays suspended'); save();
   }
   const resumed = (await invoke('plugins.resume', {instance: notes, suspension: suspended.instance.suspension})).output.instance;
   assert.deepEqual(resumed.identity, notes);
   if (nativeCase) await nativeCase.afterSourceResume();
   if (captureCase) await captureCase.afterRestart();
+  if (scientificCase) await scientificCase.afterRestart();
   assert.deepEqual((await write('capture-original', freeze)).output, frozen.output, 'Native replay must not reread the suspended Editor');
   assert.deepEqual((await write('note-original', create)).output, saved.output);
   const originalHostReceipt = await write('capture-original', freeze, 'host-freeze-original');
@@ -268,6 +286,7 @@ try {
   }
   if (agentCase) await agentCase.close();
   if (imageCase) await imageCase.close();
+  if (scientificAgentCase) await scientificAgentCase.close();
   assert.equal(hash(fs.readFileSync(binary)), hostHash, 'Acceptance must not replace the Host');
   result.finished_at = new Date().toISOString();
   save(); console.log(JSON.stringify({completed: result.completed, evidence, directory, stages: result.stages}));

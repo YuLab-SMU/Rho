@@ -307,6 +307,14 @@ its thumbnail at 1440/960/390/220 px and preserve both selections across reload.
 The ACP and HTTP model peers are fixtures; these checks do not validate browser
 screenshot/upload, real R image provenance or an annotation editor.
 
+Add `--scientific` with a current retained `RHO_R_PLUGIN_PACKAGE`, `RHO_ARK` and
+`RHO_R_HOME` to test actual installed Help and saved HTML as annotation sources.
+The disposable R instance explicitly starts once. The check freezes exact evidence,
+refuses a forged Viewer resource, preserves the original output after a newer run,
+and reads/replays notes after graceful Host restart while R remains suspended.
+With `--agent`, both notes reach the real Agent/Rig path through a local model peer.
+This is owner/RPC integration; it does not claim annotation-editor interaction.
+
 The generic plugin-only Host uses `cargo test -p rho-host --test plugin_workspace
 --locked` for canonical project identity, native lease exclusion, empty-catalog
 startup, retained history after package removal, and two independently running

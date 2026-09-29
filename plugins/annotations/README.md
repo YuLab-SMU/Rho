@@ -15,8 +15,9 @@ read/create/update, version-conflict refusal and original child Operations also 
 both Sends replay after restart without reactivating the note provider or external peer.
 Capture import/read RPC accepts bounded immutable PNG/JPEG resources, decodes and
 verifies their bytes, and retains images separately from note context. Annotation UI
-remains incomplete; AN01–AN05 await user review. Help and
-Viewer source identities have focused tests, not real annotation-flow acceptance.
+remains incomplete; AN01–AN05 await user review. Real R-owned Help and saved HTML
+now have owner/RPC annotation acceptance through Agent Send and same-instance
+restart; this does not establish annotation-editor interaction.
 See the repository's current Status for executed checks and retained timeouts.
 
 ## Ownership and admission
@@ -127,3 +128,12 @@ Native and Rho Send, the Rho image diagnostic, text-only followup and restart wi
 no image/source/model replay. `--browser` checks the actual thumbnail and draft.
 This does not establish browser screenshot/upload capture, real R image provenance,
 annotation editor UI or abrupt-crash recovery.
+
+Add `--scientific` with a current `RHO_R_PLUGIN_PACKAGE`, existing `RHO_ARK` and
+`RHO_R_HOME` for real Help/Viewer sources. R is activated before consumers select
+its grants; the fixture explicitly starts one disposable session. Native package
+and help pages keep their partial/complete labels, while each frozen annotation
+requires a complete selected inclusion. The flow verifies installed-topic identity,
+original HTML evidence after a newer output, forged-resource refusal and retained
+notes/retries while R stays suspended after Host restart. With `--agent`, both notes
+reach the actual Agent/Rig model input (local deterministic model peer).

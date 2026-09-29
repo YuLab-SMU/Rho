@@ -143,6 +143,7 @@ Sources:
 - `scripts/fixtures/annotation-captures.mjs`
 - `scripts/fixtures/annotation-image-agent.mjs`
 - `scripts/fixtures/annotation-native-agent.mjs`
+- `scripts/fixtures/annotation-scientific.mjs`
 - `scripts/fixtures/editor-code.mjs`
 - `scripts/fixtures/editor-controller.mjs`
 - `scripts/fixtures/editor-format.mjs`
@@ -327,6 +328,8 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/annotations/**`, `scripts/build-annotation-plugin.mjs`, `scripts/test-annotation-plugin-store.mjs`.
 - `plugins.annotation-native-host` (L2): `["node","scripts/test-annotation-plugin.mjs"]`
   Applies to: `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `plugins/annotations/**`, `plugins/editor/backend/**`, `scripts/test-annotation-plugin.mjs`.
+- `plugins.annotation-scientific-host` (L2): `["node","scripts/test-annotation-plugin.mjs","--agent","--scientific"]`
+  Applies to: `plugins/agent/**`, `plugins/annotations/**`, `plugins/r/**`, `scripts/fixtures/annotation-agent.mjs`, `scripts/fixtures/annotation-scientific.mjs`, `scripts/r-plugin-artifact.mjs`, `scripts/test-annotation-plugin.mjs`.
 - `plugins.annotation-source` (L0): `["node","scripts/test-annotation-plugin-store.mjs","--source-check"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/annotations/**`, `scripts/build-annotation-plugin.mjs`, `scripts/test-annotation-plugin-store.mjs`.
 - `plugins.annotation-store` (L1): `["cargo","test","-p","rho-annotation-store","--test","annotations","--locked"]`

@@ -48,7 +48,7 @@ readback is bounded. The default note/text inclusion omits image bytes; explicit
 `note_evidence_and_image` publishes the retained image through the ordinary resource
 channel. Publishing the owner's evidence uses annotation read authority; consumers
 separately need `resources.read` to read those immutable bytes.
-Other real source flows, browser capture and annotation UI remain incomplete. Metadata authorization
+Browser capture and annotation-editor interaction status is tracked in Status. Metadata authorization
 reuses public application read/control scopes; it does not add a scientific
 annotation branch to the generic Host.
 
