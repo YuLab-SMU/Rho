@@ -3,7 +3,11 @@
 export function contextContributions(schema) {
   const owner = {plugin:'org.rho.r',instance:'copy-original-r-instance',revision:'sha256:'+'a'.repeat(64),artifact:'sha256:'+'b'.repeat(64)};
   const files = name => [1,2,3,4].map(index => ({path:`original-${name}-${index}`,digest:'copy-original-file-digest'}));
-  const sources = [{id:'help',title:'Observed Help topics',scopes:['workspace.read'],
+  const sources = [{id:'objects',title:'Observed objects',scopes:['workspace.read'],
+    description:'Search up to 100 previously opened object observations. Preview rechecks the exact native handle, session and structural path; never starts R, evaluates a binding or observes a replacement. Includes bounded metadata and recognition sample, not the whole object.',
+    choices:[['Metadata and recognition sample','summary']],
+    selector:{session:'copy-original-native-session',name:'copy-original-object-name',object_ref:'copy-original-object-reference',observed_path:[],path:[]}},
+    {id:'help',title:'Observed Help topics',scopes:['workspace.read'],
     description:'Search up to 100 previously observed topics from this R instance. Preview rechecks the exact native session, package observation and static index/help file identities. Never starts R, loads a namespace or selects another installed copy.',
     choices:[['Topic text','text'],['First 12 lines','excerpt']],
     selector:{session:'copy-original-native-session',observation:'copy-original-package-observation',package:'base',library:'/original/library',topic:'sum',index_files:files('index'),help_files:files('help')}},

@@ -12,6 +12,7 @@
       "index.html",
       "package.json",
       "src/actions.ts",
+      "src/agent-source.ts",
       "src/connection.ts",
       "src/main.tsx",
       "src/object-fields.ts",
@@ -32,6 +33,7 @@
       "src/views/object-summary.tsx",
       "src/views/object-vector-view.tsx",
       "tests/actions.test.ts",
+      "tests/agent-source.test.ts",
       "tests/connection.test.ts",
       "tests/object-copy.test.tsx",
       "tests/object-demand.test.tsx",
@@ -114,10 +116,27 @@
         "version": 1
       },
       "scopes": [
+        "application.control",
+        "application.read",
+        "documents.read",
+        "documents.write",
+        "environment.read",
+        "environment.write",
+        "operation.read",
+        "plugins.read",
         "plugins.run",
+        "plugins.write",
+        "process.run_local",
+        "project.read",
+        "project.references.read",
+        "project.write",
+        "remote.execute",
+        "resources.read",
+        "skill.read",
+        "slurm.read",
+        "slurm.write",
         "workspace.read",
-        "workspace.run_r",
-        "operation.read"
+        "workspace.run_r"
       ]
     },
     {
@@ -136,6 +155,42 @@
       },
       "scopes": [
         "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instances",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instance",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.context.objects.preview",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
       ]
     }
   ],
@@ -161,6 +216,35 @@
               "object",
               "null"
             ]
+          },
+          "agent": {
+            "type": "object",
+            "required": [
+              "input",
+              "pending",
+              "opened"
+            ],
+            "properties": {
+              "input": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "pending": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "opened": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false
@@ -239,6 +323,35 @@
               "object",
               "null"
             ]
+          },
+          "agent": {
+            "type": "object",
+            "required": [
+              "input",
+              "pending",
+              "opened"
+            ],
+            "properties": {
+              "input": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "pending": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "opened": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false

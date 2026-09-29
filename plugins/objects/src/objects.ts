@@ -189,8 +189,11 @@ export class Objects extends Model<ObjectsSnapshot> {
   get selected() { return this.selectedName; }
   private get supported() { return capabilities.every((id) => this.ports.context().capabilities.includes(id)); }
   get canLoadMore() { return this.nextOffset !== null && !this.listDirty && !this.directoryExpired && Date.now() < this.directoryExpiresAt && !this.loading && this.requestedOffset === null; }
-  get selection(): ObjectSelection | null {
-    const session = this.ports.context().session, name = this.selectedName, observed = name ? this.references.get(name) : null;
+  get selection(): ObjectSelection | null { return this.observationFor(this.selectedName, false); }
+  observationFor(name: string | null, requireIdle = true): ObjectSelection | null {
+    const scope = this.ports.context();
+    if (requireIdle && (!scope.connected || scope.runtimeState !== "idle")) return null;
+    const session = scope.session, observed = name ? this.references.get(name) : null;
     return name && session && observed?.validated && Date.now() < observed.expiresAt ? Object.freeze({ name, object_ref: observed.reference, native_session_id: session }) : null;
   }
   /** The optional page is an already verified root read from the shared owner. */

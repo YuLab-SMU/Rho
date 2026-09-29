@@ -1,3 +1,5 @@
+import { componentInputDialog } from "../public/agent-input/dialog.js";
+import { objectContext } from "./agent-source.js";
 import "@fontsource/inter/latin-400.css";
 import "@fontsource/inter/latin-500.css";
 import "@fontsource/inter/latin-600.css";
@@ -22,9 +24,15 @@ try {
     throw new Error("The Objects contribution or object configuration is missing.");
   const connection = new ObjectsConnection(client, configuration.source);
   const actions = new ObjectsActions(client, connection, configuration.object_group);
+  let closingSource = false;
+  let selectedSource: {name:string;path:ObjectPathElement[]} | null = null;
+  const sender = componentInputDialog({client,saved:connection.savedAgent,persist:state=>connection.saveAgent(state),
+    guard:()=>{if(closingSource)throw Error('Objects is closing. The original request is retained.');},
+    modes:[{value:'summary',label:'Metadata and recognition sample'}],
+    capture:kind=>objectContext(connection.source,client.view.window,connection.objects.observationFor(selectedSource?.name??null),selectedSource?.path??[],kind)});
   const closing = await client.installCloseHandler({
-    async flush() { await connection.pause(); await actions.settled(); await connection.flush(); },
-    resume() { connection.resume(); },
+    async flush() { closingSource=true; if(sender.busy)throw Error("Wait for the current Agent request before closing."); await connection.pause(); await actions.settled(); await connection.flush(); },
+    resume() { closingSource=false; connection.resume(); },
   });
   const ignore = (promise: Promise<unknown>) => { void promise.catch(() => undefined); };
   function App() {
@@ -33,6 +41,7 @@ try {
     const close = useSyncExternalStore(closing.subscribe, closing.getSnapshot);
     const receipt = action.receipt;
     return <ObjectsViewContext.Provider value={{ objects: connection.objects, session: state.session,
+      agent: { blocked: close.preparing, recovering: !!connection.savedAgent?.pending, ask: (name,path=[])=>{selectedSource={name,path:structuredClone(path)};sender.open();} },
       navigation: { blocked: close.preparing || action.working || !!action.pending, openObject: (name, path) => ignore(actions.openObject(name, path)) },
       execution: { blocked: close.preparing || action.working || !!action.pending, run: (code, mode) => actions.run(code, mode).catch(() => undefined) }, clipboard: client }}>
       <main className="objects-root">
@@ -57,7 +66,7 @@ try {
   root.render(<App />);
   ignore(connection.refresh());
   const polling = setInterval(() => ignore(connection.refresh()), 1500);
-  window.addEventListener("pagehide", () => { clearInterval(polling); actions.stop(); connection.stop(); client.dispose(); root.unmount(); }, { once: true });
+  window.addEventListener("pagehide", () => { clearInterval(polling); closingSource=true; sender.dispose(); actions.stop(); connection.stop(); client.dispose(); root.unmount(); }, { once: true });
 } catch (error) {
   root.render(<div className="empty" role="alert">{error instanceof Error ? error.message : String(error)}</div>);
 }

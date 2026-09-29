@@ -191,6 +191,7 @@ Sources:
 - `scripts/test-files-ui.mjs`
 - `scripts/test-help-plugin.mjs`
 - `scripts/test-manager-plugin.mjs`
+- `scripts/test-object-agent.mjs`
 - `scripts/test-objects-plugin.mjs`
 - `scripts/test-packages-plugin.mjs`
 - `scripts/test-plots-plugin.mjs`
@@ -422,7 +423,9 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/manager/**`, `rust-toolchain.toml`, `scripts/build-manager-plugin.mjs`, `sdk/**`, `ui/e2e/manager-archive.spec.ts`, `ui/e2e/manager-plugin.spec.ts`.
 - `plugins.manager-model` (L1): `["node","scripts/test-manager-plugin.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/*/plugin.json`, `plugins/manager/**`, `rust-toolchain.toml`, `scripts/build-manager-plugin.mjs`, `scripts/fixtures/scientific-workspace.mjs`, `scripts/test-manager-plugin.mjs`, `sdk/**`.
-- `plugins.objects` (L2): `["node","scripts/test-objects-plugin.mjs"]`
+- `plugins.object-agent-host` (L2): `["node","scripts/test-object-agent.mjs"]`
+  Applies to: `plugins/agent/**`, `plugins/objects/**`, `plugins/r/backend/**`, `plugins/r/context-manifest.mjs`, `plugins/r/plugin.json`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-objects-plugin.mjs`, `scripts/r-plugin-artifact.mjs`, `scripts/test-object-agent.mjs`.
+- `plugins.objects` (L1): `["node","scripts/test-objects-plugin.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/objects/**`, `rust-toolchain.toml`, `scripts/build-objects-plugin.mjs`, `scripts/test-objects-plugin.mjs`, `sdk/**`.
 - `plugins.objects-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","objects-plugin.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/objects/**`, `rust-toolchain.toml`, `scripts/build-objects-plugin.mjs`, `sdk/**`, `ui/e2e/objects-plugin.spec.ts`.

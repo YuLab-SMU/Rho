@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useState, useRef } from "react";
-import { useClipboard, useObjects, useSession, useNavigation, useExecution } from "../view-services";
+import { useClipboard, useObjects, useSession, useNavigation, useExecution, useAgent } from "../view-services";
 import type { ObjectMetadata } from "../../public/r-protocol/index.js";
 import type { ObjectReadPage } from "../../public/r-protocol/index.js";
 import type { ObjectPathElement } from "../../public/r-protocol/index.js";
@@ -338,6 +338,7 @@ export function ObjectInspector({
   metadata?: ObjectMetadata;
 }) {
   const clipboard = useClipboard();
+  const agent = useAgent();
   const o = useObjects(),
     nav = useNavigation(),
     runtime = useSession(),
@@ -414,11 +415,14 @@ export function ObjectInspector({
           ].includes(m.object_type ?? "")),
     ) ?? [];
   const readPage = p?.kind === chosen ? p : undefined;
+  const ask = agent && <div className="object-agent-action"><button disabled={agent.blocked || !agent.recovering && (isStale || !o.observationFor(name))}
+    onClick={() => agent.ask(name,path)}>Ask about…</button></div>;
   if (vector && m)
     return (
       <div
         className={`object-preview object-inspector object-vector-inspector ${inline ? "is-inline" : "is-dedicated"}`}
       >
+        {ask}
         <VectorInspector
           name={name}
           viewId={viewId}
@@ -432,6 +436,7 @@ export function ObjectInspector({
     <div
       className={`object-preview object-inspector ${inline ? "is-inline" : "is-dedicated"}`}
     >
+      {ask}
       {(!inline || modes.length > 1) && (
         <div className="object-read-tabs">
           {[...modes, "attributes"].map((mode) => (

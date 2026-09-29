@@ -4,6 +4,8 @@ use super::*;
 use serde::Serialize;
 use std::collections::BTreeMap;
 mod viewer;
+mod objects;
+pub(super) use objects::Catalog as ObjectCatalog;
 
 const HELP: &str = "help";
 const HELP_SEARCH: &str = "r.context.help.search";
@@ -11,7 +13,7 @@ const HELP_PREVIEW: &str = "r.context.help.preview";
 const MAX_OBSERVED_TOPICS: usize = 100;
 
 pub fn is_query(id: &str) -> bool {
-    matches!(id, HELP_SEARCH | HELP_PREVIEW) || viewer::is_query(id)
+    matches!(id, HELP_SEARCH | HELP_PREVIEW) || viewer::is_query(id) || objects::is_query(id)
 }
 pub(super) struct Grants {
     get: bool,
@@ -245,6 +247,7 @@ impl Owner {
             "Context requires an exact owner, workspace.read and no runtime target or mutation preconditions",
         )?;
         match call.binding.capability.id.as_str() {
+            id if objects::is_query(id) => self.query_objects_context(call).await,
             id if viewer::is_query(id) => self.query_viewer_context(call).await,
             HELP_SEARCH => Ok(json!(
                 self.help_context

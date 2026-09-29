@@ -1226,3 +1226,7 @@
   display: inline;
   flex-shrink: 0;
 }
+
+.object-agent-action { display:flex; justify-content:flex-end; padding:4px 8px; }
+.object-agent-action button { font:inherit; color:inherit; background:var(--surface, #fff); border:1px solid var(--border, #d8dfe7); border-radius:4px; padding:3px 8px; cursor:pointer; }
+.object-agent-action button:disabled { opacity:.5; cursor:default; }

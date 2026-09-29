@@ -9,6 +9,7 @@ export interface ObjectsViewServices {
   session: { project: string | null; runtime: { state: string } | null };
   navigation: { blocked?: boolean; openObject(name: string, path?: ObjectPathElement[]): void };
   execution: { blocked?: boolean; run(code: string, mode: "console"): Promise<unknown> };
+  agent?: { blocked?: boolean; recovering?: boolean; ask(name:string,path?:ObjectPathElement[]):void };
   clipboard: Pick<PluginViewClient, "copyText">;
 }
 export const ObjectsViewContext = createContext<ObjectsViewServices | null>(null);
@@ -26,3 +27,5 @@ export const useSession = () => useServices().session;
 export const useNavigation = () => useServices().navigation;
 export const useExecution = () => useServices().execution;
 export const useClipboard = () => useServices().clipboard;
+
+export const useAgent = () => useServices().agent;

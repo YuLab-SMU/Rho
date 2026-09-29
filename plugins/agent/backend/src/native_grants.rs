@@ -233,6 +233,8 @@ pub(crate) fn scientific_requirements() -> Vec<CapabilityRequirement> {
         (
             &["workspace.read"],
             &[
+                ("r.context.objects.preview", 1),
+                ("r.context.objects.search", 1),
                 ("r.context.help.preview", 1),
                 ("r.context.help.search", 1),
                 ("r.check_code", 1),

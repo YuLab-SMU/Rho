@@ -4,10 +4,10 @@ import { afterEach, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Objects } from "../src/objects";
-import { ObjectsPanel } from "../src/views/object-panel";
+import { ObjectsPanel, ObjectInspector } from "../src/views/object-panel";
 import type { ResourceIdentity } from "../src/resource-ports";
 
-const { state } = vi.hoisted(() => ({ state: { owner: null as Objects | null } }));
+const { state } = vi.hoisted(() => ({ state: { owner: null as Objects | null, agent: undefined as {recovering:boolean;ask:()=>void}|undefined } }));
 vi.mock("../src/view-services", () => ({
   useObjects: () => {
     const owner = state.owner!;
@@ -16,10 +16,11 @@ vi.mock("../src/view-services", () => ({
   },
   useSession: () => ({ runtime: { state: "idle" } }),
   useNavigation: () => ({ openObject: vi.fn() }),
+  useAgent: () => state.agent,
   useClipboard: () => ({ copyText: vi.fn() }),
   useExecution: () => ({ run: vi.fn() }),
 }));
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); state.owner?.stop(); });
+afterEach(() => { cleanup(); state.agent=undefined; vi.unstubAllGlobals(); vi.restoreAllMocks(); state.owner?.stop(); });
 const metadata = { classes: ["data.frame"], object_type: "list", kind: "value", length: 1, dimensions: [1, 1], supported_reads: ["structure", "table", "children"], attributes: [], notice: null };
 
 it("loads every explicitly expanded row even when its preview never intersects the scroll viewport", async () => {
@@ -52,4 +53,15 @@ it("loads every explicitly expanded row even when its preview never intersects t
   expect(container.querySelectorAll('[role="grid"]')).toHaveLength(3);
   expect(query.mock.calls.filter(([, capability]) => capability === "r.observe_object").map(([, , args]) => args.name)).toEqual(names);
   expect(query.mock.calls.filter(([, capability]) => capability === "r.read_object").map(([, , args]) => args.object_ref)).toEqual(names.map((name) => `ref-${name}`));
+});
+
+it("allows original Agent request recovery when the R observation is unavailable", async () => {
+  const query=vi.fn(),ask=vi.fn();
+  const owner=new Objects({context:()=>({epoch:1,project:"/project",session:null,runtimeState:null,connected:false,capabilities:[]}),query,schedule:vi.fn(),changed:vi.fn()});
+  state.owner=owner;state.agent={recovering:false,ask};
+  const view=render(<ObjectInspector name="original" viewId="objects" />);
+  expect((screen.getByRole("button",{name:"Ask about…"}) as HTMLButtonElement).disabled).toBe(true);
+  state.agent.recovering=true;view.rerender(<ObjectInspector name="original" viewId="objects" />);
+  await userEvent.click(screen.getByRole("button",{name:"Ask about…"}));
+  expect(ask).toHaveBeenCalledWith("original",[]);expect(query).not.toHaveBeenCalled();
 });

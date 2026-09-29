@@ -28,7 +28,7 @@ written deletion condition. Internal pieces are not reported as milestones.
 | M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Default entry, real-R browser flow and Rust HTTP checks pass; delivery remains |
 | M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Combined real Host/browser flow passes: Native/Rho input, attachments, real R, reload, continuation and handoff |
 | M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Graceful Host restart, same instance/view/tasks, original receipts and native session Resume pass without replay |
-| M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Editor/Help/Viewer snapshots, history, Continue and handoff pass real Host/browser checks; Rho exact-session tools and Editor/Help/Viewer Ask → Agent input pass; annotation text/context and Native/Rho Send pass real Editor and real-R Help/Viewer source flows with same-instance restart; the picker and Native read/write tools also pass; resource-image import/read, explicit Native/Rho image context, picker thumbnails and restart pass; browser capture, annotation editor and other component senders remain |
+| M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Editor/Help/Viewer snapshots, history, Continue and handoff pass real Host/browser checks; Rho exact-session tools and Editor/Help/Viewer/Objects Ask → Agent input pass; annotation text/context and Native/Rho Send pass real Editor and real-R Help/Viewer source flows with same-instance restart; the picker and Native read/write tools also pass; resource-image import/read, explicit Native/Rho image context, picker thumbnails and restart pass; browser capture, annotation editor and other component senders remain |
 | M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Combined real Host/browser flow passes: exact-branch Agent checkpoint, explicit build, preview and scenario application |
 | M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Not started |
 
@@ -100,7 +100,7 @@ Implemented in `plugins/agent` (public APIs/SDK only, no private core imports):
   takeover, model settings/diagnostics, scoped credential Control, component model
   runs, native task commands, attachment Control and original-request observations.
 - Native Send captures explicit Query/Operation targets and scopes. Optional grants
-  cover 93 public R, Files, Process, Remote, Environment, Editor and Annotation contracts plus
+  cover 95 public R, Files, Process, Remote, Environment, Editor and Annotation contracts plus
   31 native management contracts (not Control/Runtime). Tool requests are durably
   admitted before dispatch; later turns, Stop and dropped observers cannot redirect
   or replay them. Unverified or oversized replies stay uncertain. All scientific
@@ -150,15 +150,15 @@ Eleven Host delegation/test-project checks pass, including Query refusal. Immedi
 task selection prevents handoff from using the prior task while saving. Native
 Resume evidence covers Kimi through a local ACP peer; no other provider or abrupt
 crash recovery claim. Post-restart records retain the original real R result.
-R declares observed Help topics and saved HTML contexts with exact-copy/file
-checks and bounded journal paging. Twelve context tests and the real-R Host case
-pass. The Agent picker has actual Host/browser evidence: Help excerpt and saved HTML join
-Editor input and attachments, reach the model, and survive Continue,
-reload and Host restart while R stays suspended. Normal/390/220 layouts are checked.
+R declares observed Help topics, bounded object summaries and saved HTML contexts; previews check original native handles/sessions, installed files or output records.
+Fifteen context tests and real-R Host flows pass. The Agent picker has actual
+Host/browser evidence: Help excerpts and saved HTML join Editor input/attachments,
+reach the model, and survive Continue, reload and Host restart while R stays suspended. Normal/390/220 layouts are checked.
 Concurrent foreground/background draft confirmation no longer reports a false
 missing-request error; its failing baseline and passing regression are retained.
 Component-request reception appends checked sources once to editable Native/Rho drafts. Editor, Help and Viewer **Ask about…** now open a chosen active Agent instance with exact document, installed-topic or saved-HTML references. Real Host/browser flows pass original-opening settlement, lost replies, draft insertion and reload without duplicate views or Send; a newer Viewer output leaves the prepared source unchanged. Normal/390/220 layouts are inspected.
-Remaining: other component sender buttons/routing, annotation browser capture and editor UI. Evidence: `component-senders-results.json`, `editor-agent-input-results.json`, `agent-component-input-results.json`,
+Objects now adds exact-handle metadata and recognition samples (including nested paths) through Ask or the picker to a Rho draft and explicit Send. Real R/Agent/Rig browser checks pass; changed sources refuse Send and retain the draft, while original input survives actual Host restart and an old handle cannot start resumed R. Normal/960/390/220 previews are inspected; 72 UI cases include original-opening recovery without a live R observation. Evidence: `target/plugin-refactor/object-context-results.json`; earlier fixture failures are retained.
+Remaining: Console/Plots/Packages/Files component sender buttons/routing, annotation browser capture and editor UI. Evidence: `component-senders-results.json`, `editor-agent-input-results.json`, `agent-component-input-results.json`,
 `agent-scientific-context-current-results.json` and `studio-agent-current-results.json` in `target/plugin-refactor/`.
 Synthetic peers for Process/Remote/Environment do not establish execution through those plugins.
 Agent evidence in `target/plugin-refactor/`: `agent-current-native-results.json`, `agent-handoff-ui-results.json`, `rho-continue-results.json`, `agent-assets-results-v3.json` and

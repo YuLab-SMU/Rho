@@ -282,6 +282,16 @@ without compilation. Reserve `--independent` for an owner/store source audit.
 `node scripts/build-annotation-plugin.mjs /new/path` defaults to the workspace cache;
 only an explicit `--independent` rebuilds standalone source. Native tests, package
 assembly, real-provider/Host acceptance and UI review are separate outcomes.
+For **Objects → Agent** acceptance, `node scripts/test-object-agent.mjs` reuses
+`RHO_R_PLUGIN_PACKAGE`, `RHO_AGENT_PLUGIN_PACKAGE` and `RHO_OBJECTS_PLUGIN_PACKAGE`,
+plus existing `RHO_ARK` / `RHO_R_HOME`. It checks build receipts before starting a
+disposable Host; it never builds or restarts a user session. The browser previews
+one exact object handle, opens a selected Agent, adds to its draft and explicitly
+sends to a local deterministic model peer through the real driver. Source changes,
+nested paths, original Send retention and actual Host restart share this fixture.
+Set `RHO_OBJECT_AGENT_EVIDENCE` to retain its JSON report and screenshot paths.
+The inclusion is bounded native metadata/recognition samples, not the whole object.
+
 For settled text-flow acceptance, `node scripts/test-annotation-plugin.mjs` reuses
 `RHO_ANNOTATION_PLUGIN_PACKAGE`, `RHO_EDITOR_PLUGIN_PACKAGE` and
 `RHO_FILES_PLUGIN_PACKAGE` against a frozen `RHO_TEST_BINARY` (default `target/debug/rho`).

@@ -102,3 +102,14 @@ it("close preparation drains the active read, pauses new observations and captur
   await vi.advanceTimersByTimeAsync(3000); expect(f.query).toHaveBeenCalledTimes(reads); expect(f.setState).toHaveBeenCalledTimes(saves);
   f.owner.resume(); await f.owner.refresh(); expect(f.query.mock.calls.length).toBeGreaterThan(reads);
 });
+
+it("retains an exact Agent open request alongside Objects state across refresh and save", async () => {
+  const pending = {input:null,pending:{request:"original"},opened:null};
+  const f=fixture({agent:pending,actions:{request:"plot-original"}});
+  expect(f.owner.savedAgent).toEqual(pending);
+  const copy=f.owner.savedAgent!;copy.pending=null;expect(f.owner.savedAgent).toEqual(pending);
+  await f.owner.refresh();await f.owner.flush();
+  const saved=f.setState.mock.calls.at(-1)![0];expect(saved.agent).toEqual(pending);expect(saved.actions).toEqual({request:"plot-original"});
+  await f.owner.saveAgent({input:null,pending:null,opened:null});
+  expect(f.setState.mock.calls.at(-1)![0].agent).toEqual({input:null,pending:null,opened:null});
+});
