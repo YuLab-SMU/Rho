@@ -78,7 +78,7 @@ fn capability(
         } else if id == "agent.native.command" {
             "Admit a native Agent command with the original caller and task generation. Send may select exact ordinary-plugin query/Operation tools under existing grants; immutable manifests supply their contracts. Selected contributed text is revalidated through its declared preview query and retained with this Send before dispatch. Changed, truncated, unsupported-resource or over-budget context preserves the draft. Retains the original parent until the native turn and accepted scientific children settle. Identical requests only observe original receipts and context, never reread sources. Tool retries require the same Send and semantic request identity. Does not install an Agent. Attachment bytes are excluded."
         } else if id == "agent.native.context" {
-            "Read the exact contributed text and source identities captured for an original Send. Does not reread current source content, reconnect a native Agent or repeat a turn."
+            "Read the exact contributed text, source identities and verified image metadata captured for an original Send. Does not reread current source content, reconnect a native Agent or repeat a turn."
         } else if id == "agent.model.assets.stage" {
             "Stage bounded Rho attachment chunks under the current task controller and exact original file identity. UTF-8 text is limited to 32 KiB; PNG/JPEG images to 2 MiB. Identical chunks are idempotent. Does not select draft input, create an Operation or start a model."
         } else if id == "agent.model.assets.finish" {
@@ -133,6 +133,10 @@ fn capability(
 }
 pub fn manifest() -> PluginManifest {
     let conversation = schema_for!(ComponentAgentConversation).to_value();
+    // Resource references retain root-relative definition links when nested.
+    let mut native_context_resource = schema_for!(ResourceReference).to_value();
+    let native_context_definitions = native_context_resource
+        .as_object_mut().unwrap().remove("$defs").unwrap_or(json!({}));
     let mut manifest = PluginManifest {
         protocol_version: PLUGIN_PROTOCOL_VERSION,
         id: PluginId::new("org.rho.agent").unwrap(),
@@ -309,11 +313,17 @@ pub fn manifest() -> PluginManifest {
                 "agent.native.context",
                 "Read an original Send's captured context",
                 schema_for!(NativeReceipt).to_value(),
-                json!({"type":"object","additionalProperties":false,"properties":{
+                json!({"$defs":native_context_definitions,"type":"object","additionalProperties":false,"properties":{
                     "request_id":{"type":"string"},"task_id":{"type":"string"},
                     "contexts":{"type":"array","maxItems":20,"items":{"type":"object","additionalProperties":false,"properties":{
                         "selection":schema_for!(AgentContextSelection).to_value(),"title":{"type":"string","maxLength":1024},
-                        "description":{"type":"string","maxLength":4096},"text":{"type":"string","maxLength":16384},"data":{}
+                        "description":{"type":"string","maxLength":4096},"text":{"type":"string","maxLength":16384},"data":{},
+                        "images":{"type":"array","maxItems":2,"items":{"type":"object","additionalProperties":false,"properties":{
+                            "reference":native_context_resource,
+                            "sha256":{"type":"string","pattern":"^sha256:[a-f0-9]{64}$"},
+                            "mime_type":{"type":"string","enum":["image/png","image/jpeg"]},
+                            "bytes":{"type":"integer","minimum":1,"maximum":rho_agent_owner::MAX_CONTEXT_IMAGE_BYTES}
+                        },"required":["reference","sha256","mime_type","bytes"]}}
                     },"required":["selection","title","description","text","data"]}}
                 },"required":["request_id","task_id","contexts"]}),
                 json!({"request_id":"11111111-1111-4111-8111-111111111111"}),

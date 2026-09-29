@@ -104,11 +104,12 @@ impl Owner {
             if resources.is_empty(){"Artifact metadata only; no image content is included."}else{"Original image included; panel zoom, pan and overlays are not captured."}
         )).collect::<Vec<_>>().join("\n\n");
         let (text, truncated) = bounded_text(&text, request.max_bytes as usize);
+        let artifacts = selection.plots.iter().enumerate().map(|(index, source)| json!({"label":format!("Plot {}",index+1),"resource":source.reference,"operation":source.operation})).collect::<Vec<_>>();
         let preview = ContextPreview {
             item,
             text,
             truncated,
-            data: json!({"inclusion":if resources.is_empty(){"metadata"}else{"images"},"plots":selection.plots,"operation_statuses":statuses,"interactive_state":false}),
+            data: json!({"inclusion":if resources.is_empty(){"metadata"}else{"images"},"plots":selection.plots,"artifacts":artifacts,"operation_statuses":statuses,"interactive_state":false}),
             resources,
         };
         check(

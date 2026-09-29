@@ -309,7 +309,7 @@ Checks:
 - `plugins.agent-types` (L1): `["node","scripts/test-agent-plugin-types.mjs"]`
   Applies to: `plugins/agent/sdk/**`, `scripts/test-agent-plugin-types.mjs`, `sdk/plugin-protocol/**`.
 - `plugins.agent-view` (L1): `["node","scripts/test-agent-view.mjs","--build-ui"]`
-  Applies to: `plugins/agent/build-ui.mjs`, `plugins/agent/dependencies.lock`, `plugins/agent/index.html`, `plugins/agent/package.json`, `plugins/agent/sdk/**`, `plugins/agent/src/**`, `plugins/agent/tsconfig.json`, `scripts/test-agent-view.mjs`, `sdk/plugin-protocol/**`, `sdk/plugin-ui/**`.
+  Applies to: `plugins/agent/build-ui.mjs`, `plugins/agent/dependencies.lock`, `plugins/agent/index.html`, `plugins/agent/package.json`, `plugins/agent/sdk/**`, `plugins/agent/src/**`, `plugins/agent/tsconfig.json`, `scripts/fixtures/agent-context-artifacts.mjs`, `scripts/fixtures/agent-context-picker.mjs`, `scripts/test-agent-view.mjs`, `sdk/plugin-protocol/**`, `sdk/plugin-ui/**`.
 - `plugins.agent-view-browser` (L2): `["node","scripts/test-agent-view.mjs","--browser"]`
   Applies to: `plugins/agent/build-ui.mjs`, `plugins/agent/dependencies.lock`, `plugins/agent/index.html`, `plugins/agent/package.json`, `plugins/agent/sdk/**`, `plugins/agent/src/**`, `plugins/agent/tsconfig.json`, `scripts/agent-view-renderer.mjs`, `scripts/fixtures/agent-view-container.js`, `scripts/test-agent-view.mjs`, `sdk/plugin-protocol/**`, `sdk/plugin-ui/**`.
 - `plugins.agent-workspace-browser` (L2): `["node","scripts/test-agent-plugin-real-r.mjs","--browser"]`
@@ -437,7 +437,7 @@ Checks:
 - `plugins.plots` (L1): `["node","scripts/test-plots-plugin.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/sdk/component-input/**`, `plugins/plots/**`, `rust-toolchain.toml`, `scripts/build-plots-plugin.mjs`, `scripts/test-plots-plugin.mjs`, `sdk/**`.
 - `plugins.plots-agent-host` (L2): `["node","scripts/test-plots-agent.mjs"]`
-  Applies to: `plugins/agent/**`, `plugins/plots/**`, `plugins/r/backend/**`, `plugins/r/context-manifest.mjs`, `plugins/r/plugin.json`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-plots-plugin.mjs`, `scripts/r-plugin-artifact.mjs`, `scripts/test-plots-agent.mjs`.
+  Applies to: `crates/host/tests/fixtures/agent-science.cjs`, `plugins/agent/**`, `plugins/plots/**`, `plugins/r/backend/**`, `plugins/r/context-manifest.mjs`, `plugins/r/plugin.json`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-plots-plugin.mjs`, `scripts/fixtures/agent-plots-input.cjs`, `scripts/fixtures/plots-native-agent.mjs`, `scripts/r-plugin-artifact.mjs`, `scripts/test-plots-agent.mjs`.
 - `plugins.plots-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plots-plugin.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/plots/**`, `rust-toolchain.toml`, `scripts/build-plots-plugin.mjs`, `sdk/**`, `ui/e2e/plots-plugin.spec.ts`.
 - `plugins.preview-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-preview.spec.ts"]`

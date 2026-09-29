@@ -285,10 +285,15 @@ assembly, real-provider/Host acceptance and UI review are separate outcomes.
 For **Plots → Agent** acceptance, `node scripts/test-plots-agent.mjs` reuses
 `RHO_R_PLUGIN_PACKAGE`, `RHO_AGENT_PLUGIN_PACKAGE` and `RHO_PLOTS_PLUGIN_PACKAGE`,
 plus existing `RHO_ARK` / `RHO_R_HOME`. It builds nothing and uses a disposable
-Host, two real R outputs and a local deterministic image-model peer. The browser
+Host, two real R outputs and local deterministic Rig/ACP peers. The browser
 selects originals, previews images or metadata, adds the pair to a draft and sends
 explicitly. Image diagnostics, digest-preserving delivery, text-only follow-up and
-same-instance Host restart are covered together. Set `RHO_PLOTS_AGENT_EVIDENCE`
+same-instance Host restart are covered together. Sent-context buttons read the
+original image and producing run through public queries; screenshots cover
+1440/960/390/220 widths. Native API Send separately checks exact image bytes,
+retained context, scoped preview tools and original-request retries before/after
+restart while R is suspended. This does not establish Native browser Send coverage.
+Set `RHO_PLOTS_AGENT_EVIDENCE`
 for the report and screenshot paths. This does not measure model reasoning quality.
 For **Objects → Agent** acceptance, `node scripts/test-object-agent.mjs` reuses
 `RHO_R_PLUGIN_PACKAGE`, `RHO_AGENT_PLUGIN_PACKAGE` and `RHO_OBJECTS_PLUGIN_PACKAGE`,

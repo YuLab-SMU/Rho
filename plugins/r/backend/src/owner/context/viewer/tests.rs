@@ -342,6 +342,8 @@ async fn plots_preview_pair_checks_originals_and_never_starts_r() {
             preview.resources.len(),
             if kind == "images" { 2 } else { 0 }
         );
+        assert_eq!(preview.data["artifacts"][0]["operation"], "original");
+        assert_eq!(preview.data["artifacts"][0]["resource"], json!(sources[0].reference));
         assert_eq!(preview.item.reference, reference);
         assert!(preview.text.contains("Producing run: original"));
         assert!(preview.text.contains("failed"));

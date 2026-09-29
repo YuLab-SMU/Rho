@@ -49,8 +49,8 @@ export async function testContextPicker(ContextPicker, inclusionChoices, root) {
       return{status:'ready',completeness:'complete',data:cap.id.endsWith('.search')?{items:[item],next:null,notices:[]}:
         {item,text:contribution.id==='help'?'Exact topic 中文':'<h1>Original HTML Ω</h1>',truncated:false,data:{original:true},resources:[]}};
     }};
-    const picker=new ContextPicker(client);await picker.discover();assert.equal(picker.sources.length,2);
-    for(const source of picker.sources){
+    const picker=new ContextPicker(client);await picker.discover();assert.deepEqual(picker.sources.map(source=>source.contribution.id).sort(),r.contexts.map(source=>source.id).sort());
+    for(const source of picker.sources.filter(source=>['help','viewer'].includes(source.contribution.id))){
       assert.deepEqual(source.inclusions.map(choice=>choice.value.kind),source.contribution.id==='help'?['text','excerpt']:['text','metadata']);
       const page=await picker.search(source,'');
       const preview=await picker.preview(source,page.items[0].reference,{kind:'text'});

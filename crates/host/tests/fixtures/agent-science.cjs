@@ -73,6 +73,10 @@ async function prompt(message) {
     await rpc('notifications/initialized', {}, null);
   }
   const catalog = await rpc('tools/call', {name:'rho_tools', arguments:{send_request:sendRequest}});
+  if (fs.existsSync(path.join(cwd, 'native-plots-input.json'))) {
+    await require('./agent-plots-input.cjs')({cwd, sendRequest, catalog, rpc, save, session, prompts, prompt:message.params.prompt});
+    result(id, {stopReason:'end_turn'});pending=null;return;
+  }
   if (fs.existsSync(path.join(cwd, 'native-annotation-input.json'))) {
     await require('./agent-annotation-tools.cjs')({cwd, sendRequest, catalog, rpc, save, session, prompts, prompt:message.params.prompt});
     result(id, {stopReason:'end_turn'});

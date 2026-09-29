@@ -6,6 +6,7 @@ import path from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import {inflateSync} from 'node:zlib';
+import {plotsNativeAgent} from './fixtures/plots-native-agent.mjs';
 import {spawn,execFileSync} from 'node:child_process';
 import {verifyRBuild} from './r-plugin-artifact.mjs';
 import {verifyAgentBuild} from './agent-plugin-artifact.mjs';
@@ -28,8 +29,14 @@ verifyTree(path.join(root,'plugins/plots/src'),path.join(packages.plots,'src'));
 verifyTree(path.join(root,'plugins/agent/sdk/component-input'),path.join(packages.plots,'public/agent-input'));
 assert.ok(process.env.RHO_ARK&&process.env.RHO_R_HOME,'Select existing Ark and R paths');
 const directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-plots-agent-')));
-const project=path.join(directory,'project'),database=path.join(directory,'host.sqlite');fs.mkdirSync(project);
+const project=path.join(directory,'project'),database=path.join(directory,'host.sqlite');fs.mkdirSync(project);execFileSync('git',['init','-q',project]);
 const window='plots-agent-acceptance',hostEnvironment={...process.env};
+const nativeBin=path.join(directory,'native-bin'),nativeHome=path.join(directory,'native-home');
+fs.mkdirSync(nativeBin);fs.mkdirSync(nativeHome);fs.writeFileSync(path.join(nativeBin,'rho-science-fixture'),'disposable');
+fs.copyFileSync(path.join(root,'crates/host/tests/fixtures/agent-science.cjs'),path.join(nativeBin,'kimi'));
+fs.copyFileSync(path.join(root,'scripts/fixtures/agent-plots-input.cjs'),path.join(nativeBin,'agent-plots-input.cjs'));
+fs.chmodSync(path.join(nativeBin,'kimi'),0o700);hostEnvironment.PATH=nativeBin+path.delimiter+process.env.PATH;
+
 const evidence=process.env.RHO_PLOTS_AGENT_EVIDENCE??path.join(directory,'result.json');
 const result={host_sha256:hostHash,packages,directory,stages:[],screenshots:[],completed:false};
 let host, exited, url, agent, r, plots;
@@ -103,8 +110,8 @@ try {
   for(const name of ['r','agent','plots']) {
     const snapshot=snapshots[name];
     const active=(await invoke('plugins.activate',{revision:snapshot.revision,artifact:snapshot.artifacts[0],target:name==='plots'?'ui-web':'aarch64-apple-darwin',alias:name,
-      configuration:name==='r'?{ark:fs.realpathSync(process.env.RHO_ARK),r_home:fs.realpathSync(process.env.RHO_R_HOME)}:{},
-      optional_capabilities:name==='agent'?['plugins.instances','plugins.inspect','resources.read','r.context.plots.search','r.context.plots.preview'].map(key):name==='r'?['operation.get','operation.list_recent','resources.read'].map(key):[]})).output.instance.identity;
+      configuration:name==='r'?{ark:fs.realpathSync(process.env.RHO_ARK),r_home:fs.realpathSync(process.env.RHO_R_HOME)}:name==='agent'?{kimi_home:nativeHome}:{},
+      optional_capabilities:name==='agent'?['plugins.instances','plugins.inspect','resources.read','operation.get','r.context.plots.search','r.context.plots.preview'].map(key):name==='r'?['operation.get','operation.list_recent','resources.read'].map(key):[]})).output.instance.identity;
     if(name==='r')r=active;if(name==='agent')agent=active;if(name==='plots')plots=active;
   }
   assert.deepEqual((await pluginQuery(r,'r.context.plots.search',{window,text:'',after:null,limit:20})).items,[]);
@@ -202,12 +209,35 @@ try {
   const original=await pluginQuery(agent,'agent.model.run.get',{run_id:history.runs.at(-1).run_id});
   assert.equal(original.state,'completed');assert.deepEqual(original.context.sources[0].selection,capture);
   assert.deepEqual(original.context.sources[0].native_data.agent_context_images.map(p=>p.sha256),context.resources.map(p=>p.digest));
+  result.original_run=original;save();
+  await receiver.getByRole('button',{name:'Sent context',exact:true}).last().click();
+  const sent=receiver.getByRole('dialog',{name:'Choose context'});
+  await sent.getByRole('button',{name:'View original image 1',exact:true}).click();
+  await expect(sent.getByRole('img',{name:'Original Plot 1',exact:true})).toBeVisible();
+  await expect.poll(()=>sent.getByRole('img',{name:'Original Plot 1',exact:true}).evaluate(img=>img.complete&&img.naturalWidth>0)).toBe(true);
+  const imageShot=path.join(directory,'plots-original-image.png');await sent.screenshot({path:imageShot});result.screenshots.push(imageShot);
+  await sent.getByRole('button',{name:'View producing run 1',exact:true}).click();
+  await expect(sent.locator('.context-artifact-evidence').first()).toContainText(originalIds.includes(reference.selector.plots[0].operation)?reference.selector.plots[0].operation:'unexpected original');
+  await expect(sent.locator('.context-artifact-evidence').first()).toContainText('Original run · succeeded');
+  for(const width of [1440,960,390,220]){
+    await page.setViewportSize({width,height:900});await expect.poll(()=>receiver.locator('body').evaluate(()=>innerWidth)).toBeGreaterThan(width-20);
+    await expect.poll(()=>sent.evaluate(node=>node.scrollWidth>node.clientWidth)).toBe(false);
+    await sent.getByRole('button',{name:'View producing run 1',exact:true}).scrollIntoViewIfNeeded();
+    const linksShot=path.join(directory,`plots-producing-run-${width}.png`);await sent.screenshot({path:linksShot});result.screenshots.push(linksShot);
+  }
+  await page.setViewportSize({width:1440,height:900});
+  await sent.locator('#context-close').click();
   await composer.fill('Continue using the previous answer.');await receiver.getByRole('button',{name:'Send message',exact:true}).click();
   await expect(receiver.locator('#transcript')).toContainText('Retained text history');
   assert.deepEqual(requests.map(p=>p.kind),['diagnostic','pair','text']);assert.deepEqual(modelErrors,[]);assert.deepEqual(errors,[]);
   result.original_run=original;result.stages.push('unverified image Send preserves draft; diagnosed model receives exact original pair; follow-up does not resend pixels');save();
+  const native=await plotsNativeAgent({agent,r,project,selection:capture,context,binding,invoke,pluginQuery});result.native=native.report;
+  result.stages.push('Native original Send carries exact pair; public preview query, text-only follow-up and idempotent retries pass');save();
   await browser.close();browser=null;await stop();await start();
-  for(const instance of [agent,r]){const state=await query('plugins.instance',{instance});assert.equal(state.instance.state,'suspended');await invoke('plugins.resume',{instance,suspension:state.instance.suspension});}
+  for(const instance of [agent,r]){
+    const state=await query('plugins.instance',{instance});assert.equal(state.instance.state,'suspended');await invoke('plugins.resume',{instance,suspension:state.instance.suspension});
+    if(instance===agent){await native.afterRestart();assert.equal((await query('plugins.instance',{instance:r})).instance.state,'suspended');}
+  }
   assert.deepEqual((await pluginQuery(agent,'agent.model.run.get',{run_id:original.run_id})).context,original.context);
   const restored=await pluginQuery(r,'r.context.plots.preview',{reference,inclusion:{kind:'images'},max_bytes:16384});assert.deepEqual(restored,context);
   for(const reference of restored.resources){
@@ -218,7 +248,11 @@ try {
   assert.equal((await pluginQuery(r,'r.inspection_state',{expected_session:null})).session_id,null);
   assert.deepEqual(requests.map(p=>p.kind),['diagnostic','pair','text']);
   result.stages.push('actual Host restart: same Agent context and original image references retained; no R session or model replay');result.completed=true;
-} catch(error) {result.error=safe(error.stack??error);throw error;}
+} catch(error) {
+  result.error=safe(error.stack??error);
+  if(browser){const page=browser.contexts()[0]?.pages()[0];if(page){result.failure_frames=await Promise.all(page.frames().map(async frame=>{try{return (await frame.locator('body').innerText()).slice(0,12000);}catch{return 'unavailable';}}));}}
+  throw error;
+}
 finally {
   if(browser)await browser.close();
   try{await stop();}catch(error){result.completed=false;result.cleanup_error=safe(error.message);if(host?.exitCode===null)host.kill('SIGKILL');}

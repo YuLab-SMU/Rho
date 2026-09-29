@@ -736,6 +736,15 @@ correlated Operation through the current parent's query grants. It cannot dispat
 another scientific mutation. Attachments are captured by the Agent-owned upload
 ports before admission; original history reads retained bytes and source snapshots.
 
+Captured context data may declare up to eight `artifacts` entries, each with a
+`label`, a full `resource` reference owned by the context provider, and its original
+producing `operation` ID. These are optional owner-authored inspection links, not
+commands or URLs. The ordinary Agent exposes explicit original-image and producing-
+run reads through its declared `resources.read` / `operation.get` grants. It checks
+resource bytes/digests and exact operation/provider identity, labels shortened
+record display, and never starts a runtime or replays work. Missing grants or
+unavailable originals remain explicit errors; the captured Send text stays intact.
+
 An ordinary Agent view may receive `component_request` in its immutable configuration:
 a request ID, a title and up to 16 contributed context selections. References retain
 their exact source provider, revision, artifact, window and owner selector. They

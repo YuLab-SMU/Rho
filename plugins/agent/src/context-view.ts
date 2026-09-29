@@ -1,3 +1,4 @@
+import {contextArtifacts, originalImage, producingRun} from './context-artifacts.js';
 import type { AgentContextSelection } from '../sdk/index.js';
 import type { ContextItem, ContextPreview, JsonValue } from '../public/plugin-protocol/index.js';
 import { ContextPicker, contextInputIssue, type ContextSource } from './context-model.js';
@@ -25,7 +26,7 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
     get<HTMLButtonElement>('context-more-sources').disabled = busy;
     get<HTMLButtonElement>('context-more-items').disabled = busy;
     get<HTMLButtonElement>('context-add').disabled = busy || inspecting || !preview || !!contextInputIssue(preview) || !editable || blocked || target !== task || targetOwner !== draftOwner;
-    for (const button of get('context-items').querySelectorAll<HTMLButtonElement>('button')) button.disabled = busy;
+    for (const button of dialog.querySelectorAll<HTMLButtonElement>('#context-items button, [data-context-artifact]')) button.disabled = busy;
   }
   function run(work: (current: () => boolean) => Promise<void>) {
     const ticket = ++epoch; busy = true; get('context-error').hidden = true; controls();
@@ -169,6 +170,20 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
           const details = document.createElement('details'), summary = document.createElement('summary'), reference = document.createElement('pre');
           summary.textContent = 'Source details'; reference.textContent = JSON.stringify({ reference: value.selection.reference, inclusion: value.selection.inclusion, data: value.data, images: 'images' in value ? value.images : undefined }, null, 2);
           details.append(summary, reference); section.append(heading, description, text, details); area.append(section);
+          for(const [index,artifact] of contextArtifacts(value.selection,value.data).entries()) {
+            const links=document.createElement('div'),view=document.createElement('button'),runButton=document.createElement('button'),evidence=document.createElement('div');
+            links.className='context-artifact-links';evidence.className='context-artifact-evidence';
+            let activeUrl:string|null=null;const release=()=>{if(activeUrl){URL.revokeObjectURL(activeUrl);imageUrls=imageUrls.filter(url=>url!==activeUrl);activeUrl=null;}};
+            view.textContent=`View original image ${index+1}`;runButton.textContent=`View producing run ${index+1}`;
+            view.dataset.contextArtifact='image';runButton.dataset.contextArtifact='run';
+            view.onclick=()=>run(async current=>{const blob=await originalImage(client,artifact);if(!current())return;
+              release();const img=document.createElement('img'),url=URL.createObjectURL(blob);activeUrl=url;imageUrls.push(url);img.src=url;img.alt=`Original ${artifact.label}`;evidence.replaceChildren(img);
+            });
+            runButton.onclick=()=>run(async current=>{const record=await producingRun(client,artifact);if(!current())return;
+              release();const status=document.createElement('p'),body=document.createElement('pre');status.textContent=`Original run · ${record.status}${record.truncated?' · Display shortened':''}`;body.textContent=record.details;evidence.replaceChildren(status,body);
+            });
+            links.append(view,runButton);section.append(links,evidence);
+          }
         }
       });
     },
