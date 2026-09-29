@@ -8,8 +8,11 @@ on an Agent implementation, a scientific owner or a private Host crate.
 The native RPC entry, typed capability manifest, text-source freeze and contributed
 note context are implemented. The workspace-built package passes a frozen generic
 Host flow with a real Editor provider, source changes, historical notes and an
-actual graceful Host restart of the same annotation instance. Capture/image RPC,
-Agent integration and UI remain incomplete; AN01–AN05 await user review. Help and
+actual graceful Host restart of the same annotation instance. Agent Rho Send and
+its existing browser context picker also pass with this real provider; retained
+Send context survives Host restart while the provider remains suspended. Capture/image
+RPC, Native Agent annotation tool calls and annotation UI remain incomplete;
+AN01–AN05 await user review. Help and
 Viewer source identities have focused tests, not real annotation-flow acceptance.
 See the repository's current Status for executed checks and retained timeouts.
 
@@ -39,8 +42,9 @@ labels the current underlying source status unknown: neither a retained note nor
 a failed read proves current availability. Reads require `application.read` and
 writes require `application.control`, both alongside `plugins.read`; the original
 caller and this instance must also hold the source query's declared grants. No
-annotation-specific Host registration or scope is introduced. Agent grants remain
-to be connected. The framed principal supplies author identity without guessing
+annotation-specific Host registration or scope is introduced. Agent declares all
+four capabilities as optional grants; activation must select them explicitly.
+The framed principal supplies author identity without guessing
 whether the initiating actor was human or Agent.
 
 `AnnotationStore::open` receives a private data path from its trusted container.
@@ -85,5 +89,12 @@ the existing `RHO_TEST_BINARY` (default `target/debug/rho`), and never compiles.
 `RHO_ANNOTATION_EVIDENCE` selects its JSON report. The real Editor check covers
 freeze, current-source refusal, continuation, revision CAS, tombstones, historical
 context and same-instance graceful Host recovery with the source still suspended.
-It does not establish browser UI quality, image capture, Agent Send or abrupt-crash
-recovery. The fixture retains its disposable project and original records.
+The fixture retains its disposable project and original records.
+
+Add `--agent` with `RHO_AGENT_PLUGIN_PACKAGE` to verify exact note context through
+real Agent/Rig Send and same-instance restart without source or model replay. Only
+the model HTTP peer is a deterministic local fixture; this is not third-party model
+evaluation. Add `--browser` alongside `--agent` to exercise the existing ordinary
+Agent picker, draft retention after reload and constrained panel layouts. Inspect
+the retained screenshots separately. These checks do not establish Native Agent
+annotation tool writes, image capture, annotation editor UI or abrupt-crash recovery.

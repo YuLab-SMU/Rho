@@ -6,6 +6,18 @@ use rho_plugin_sdk::protocol::*;
 pub(crate) fn scientific_requirements() -> Vec<CapabilityRequirement> {
     let groups: &[(&[&str], &[(&str, u32)])] = &[
         (
+            &["application.read", "plugins.read"],
+            &[
+                ("annotations.read", 1),
+                ("annotations.context.search", 1),
+                ("annotations.context.preview", 1),
+            ],
+        ),
+        (
+            &["application.control", "plugins.read"],
+            &[("annotations.write", 1)],
+        ),
+        (
             &["documents.read"],
             &[("editor.context.preview", 1), ("editor.context.search", 1)],
         ),

@@ -35,8 +35,10 @@ public context providers, requires owner-supplied lineage/content versions, and
 rechecks the original live caller before freezing bounded text. Its private
 receipts do not settle the Host Operation. Note context retains frozen evidence
 and leaves current source status unknown. The ordinary Editor text flow and
-same-instance graceful Host recovery are verified. Captured-image RPC, other real
-source flows, Agent integration and UI remain incomplete. Metadata authorization
+same-instance graceful Host recovery are verified. Agent uses optional public
+grants and the same contributed context; its retained Send input survives restart
+without resuming the source. Captured-image RPC, other real source flows, Native
+Agent annotation tool calls and annotation UI remain incomplete. Metadata authorization
 reuses public application read/control scopes; it does not add a scientific
 annotation branch to the generic Host.
 

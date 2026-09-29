@@ -36,7 +36,7 @@ for (const id of core) {
   assert.ok(!agent.requires.some(grant => key(grant.capability) === name), `Core tools must remain optional: ${name}`);
 }
 let count = 0;
-for (const owner of ['r', 'files', 'process', 'remote', 'environment', 'editor']) {
+for (const owner of ['r', 'files', 'process', 'remote', 'environment', 'editor', 'annotations']) {
   const manifest = read(owner);
   for (const capability of manifest.capabilities) {
     const name = key(capability.capability);

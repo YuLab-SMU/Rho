@@ -288,6 +288,12 @@ For settled text-flow acceptance, `node scripts/test-annotation-plugin.mjs` reus
 It refuses stale annotation/Editor source, snapshots into a disposable database,
 checks historical context and restarts only its own Host. `RHO_ANNOTATION_EVIDENCE`
 selects the retained report. It never triggers compilation or independent builds.
+Add `--agent` and a current `RHO_AGENT_PLUGIN_PACKAGE` for exact contributed note
+context through real Agent/Rig Send and recovery while its provider stays suspended.
+The model HTTP peer is a local streaming fixture, not third-party model acceptance.
+Add `--browser` with `--agent` for the existing ordinary picker and retained draft;
+inspect its screenshots separately before claiming visual quality. This does not
+cover annotation editor UI, image capture or Native Agent annotation tool writes.
 
 The generic plugin-only Host uses `cargo test -p rho-host --test plugin_workspace
 --locked` for canonical project identity, native lease exclusion, empty-catalog

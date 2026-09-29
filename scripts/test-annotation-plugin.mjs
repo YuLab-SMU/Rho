@@ -7,18 +7,26 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {execFileSync, spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
+import {verifyAgentBuild} from './agent-plugin-artifact.mjs';
+import {annotationAgent} from './fixtures/annotation-agent.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const flags = process.argv.slice(2);
+assert.ok(new Set(flags).size === flags.length && flags.every(arg => ['--agent', '--browser'].includes(arg)), 'Usage: node scripts/test-annotation-plugin.mjs [--agent [--browser]]');
+const withAgent = process.argv.includes('--agent');
+const withBrowser = process.argv.includes('--browser');
+assert.ok(!withBrowser || withAgent, '--browser requires --agent');
 const binary = process.env.RHO_TEST_BINARY ?? path.join(root, 'target/debug/rho');
 const hash = bytes => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 const hostHash = hash(fs.readFileSync(binary));
-const packages = Object.fromEntries(['annotation', 'editor', 'files'].map(name => {
+const packages = Object.fromEntries(['annotation', 'editor', 'files', ...(withAgent ? ['agent'] : [])].map(name => {
   const value = process.env[`RHO_${name.toUpperCase()}_PLUGIN_PACKAGE`];
   assert.ok(value, `Supply RHO_${name.toUpperCase()}_PLUGIN_PACKAGE; this check never builds`);
   const directory = fs.realpathSync(value);
   assert.ok(!directory.startsWith(root + path.sep), 'Use an assembled external package');
   return [name, directory];
 }));
+if (withAgent) verifyAgentBuild(packages.agent);
 // Refuse stale Rust source in either owner and in the annotation package's public SDK.
 function rustFiles(directory, prefix = '') {
   return fs.readdirSync(directory, {withFileTypes: true}).flatMap(entry => {
@@ -54,7 +62,7 @@ const result = {host_sha256: hostHash, packages, directory, stages: [], complete
     return [name, {sha256: hash(bytes), bytes: bytes.length}];
   })), started_at: new Date().toISOString()};
 const evidence = process.env.RHO_ANNOTATION_EVIDENCE ?? path.join(directory, 'result.json');
-let host, exited, url, editor, notes;
+let host, exited, url, editor, notes, agent, agentCase;
 const key = id => ({id, version: 1});
 const save = () => fs.writeFileSync(evidence, JSON.stringify(result, null, 2) + '\n');
 const safe = text => String(text).replace(/token=[a-z0-9]+/g, 'token=[redacted]');
@@ -139,12 +147,14 @@ try {
   }
   result.snapshots = snapshots;
   await start();
-  for (const name of ['files', 'editor', 'annotation']) {
+  for (const name of ['files', 'editor', 'annotation', ...(withAgent ? ['agent'] : [])]) {
     const snapshot = snapshots[name];
     const active = (await invoke('plugins.activate', {revision: snapshot.revision, artifact: snapshot.artifacts[0], target: 'aarch64-apple-darwin', alias: name, configuration: {},
-      optional_capabilities: name === 'annotation' ? [key('editor.context.preview')] : []})).output.instance.identity;
+      optional_capabilities: name === 'annotation' ? [key('editor.context.preview')] : name === 'agent'
+        ? ['plugins.instances', 'plugins.inspect', 'annotations.read', 'annotations.context.search', 'annotations.context.preview'].map(key) : []})).output.instance.identity;
     if (name === 'editor') editor = active;
     if (name === 'annotation') notes = active;
+    if (name === 'agent') agent = active;
   }
   const initial = await draft('a🧬中z\n');
   const first = await selected();
@@ -164,6 +174,16 @@ try {
   assert.ok(context.text.includes(create.note));
   assert.equal(context.data.source_status, 'unknown');
   result.stages.push('real Editor freeze → note → contributed context'); save();
+  if (withAgent) {
+    agentCase = await annotationAgent({agent, notes, context, notePreview, port, query, invoke, binding, pluginQuery});
+    result.agent = agentCase.report;
+    result.stages.push('real Agent Rho Send captures the exact annotation and delivers it through Rig to a local model peer'); save();
+    if (withBrowser) {
+      const {annotationAgentBrowser} = await import('./fixtures/annotation-agent-browser.mjs');
+      result.browser = await annotationAgentBrowser({url, window, agent, query, invoke, pluginQuery, notePreview, directory});
+      result.stages.push('ordinary Agent picker previews and adds the exact note to an editable draft, retained after reload without Send'); save();
+    }
+  }
 
   await draft('a🧬中z changed\n', initial.version);
   const second = await selected();
@@ -183,6 +203,10 @@ try {
   const suspended = await query('plugins.instance', {instance: notes});
   assert.equal(suspended.instance.state, 'suspended');
   assert.equal((await query('plugins.instance', {instance: editor})).instance.state, 'suspended');
+  if (agentCase) {
+    await agentCase.afterRestart();
+    result.stages.push('same Agent instance retains Send context and receipt while its annotation source stays suspended'); save();
+  }
   const resumed = (await invoke('plugins.resume', {instance: notes, suspension: suspended.instance.suspension})).output.instance;
   assert.deepEqual(resumed.identity, notes);
   assert.deepEqual((await write('capture-original', freeze)).output, frozen.output, 'Native replay must not reread the suspended Editor');
@@ -207,6 +231,7 @@ try {
       catch (forced) { result.cleanup_error += `; ${safe(forced.message)}`; }
     }
   }
+  if (agentCase) await agentCase.close();
   assert.equal(hash(fs.readFileSync(binary)), hostHash, 'Acceptance must not replace the Host');
   result.finished_at = new Date().toISOString();
   save(); console.log(JSON.stringify({completed: result.completed, evidence, directory, stages: result.stages}));

@@ -136,6 +136,8 @@ Sources:
 - `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
 - `scripts/fixtures/agent-view-container.js`
+- `scripts/fixtures/annotation-agent-browser.mjs`
+- `scripts/fixtures/annotation-agent.mjs`
 - `scripts/fixtures/editor-code.mjs`
 - `scripts/fixtures/editor-controller.mjs`
 - `scripts/fixtures/editor-format.mjs`
@@ -306,6 +308,8 @@ Checks:
   Applies to: `crates/host/**`, `crates/workbench/**`, `plugins/agent/**`, `plugins/r/**`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-real-r.mjs`, `sdk/**`, `ui/e2e/agent-workspace.spec.ts`, `ui/src/host-client.ts`, `ui/src/plugin-*.*`.
 - `plugins.annotation-adapter` (L1): `["cargo","test","-p","rho-sqlite","--test","annotations","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/adapters/sqlite/Cargo.toml`, `crates/adapters/sqlite/src/annotations.rs`, `crates/adapters/sqlite/src/application.rs`, `crates/adapters/sqlite/tests/annotations.rs`, `crates/application/Cargo.toml`, `crates/application/src/annotations.rs`, `plugins/annotations/**`.
+- `plugins.annotation-agent-browser` (L2): `["node","scripts/test-annotation-plugin.mjs","--agent","--browser"]`
+  Applies to: `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `plugins/agent/**`, `plugins/annotations/**`, `plugins/editor/backend/**`, `scripts/agent-plugin-artifact.mjs`, `scripts/fixtures/annotation-agent-browser.mjs`, `scripts/fixtures/annotation-agent.mjs`, `scripts/test-annotation-plugin.mjs`, `ui/src/plugin-*.*`.
 - `plugins.annotation-backend` (L1): `["cargo","test","-p","rho-annotation-backend","--lib","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/annotations/**`.
 - `plugins.annotation-http` (L2): `["cargo","test","-p","rho-workbench","--lib","annotation_tests","--locked"]`
