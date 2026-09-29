@@ -2,6 +2,7 @@
 import { expect, type Page, type FrameLocator, type TestInfo } from '@playwright/test';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { addScientificContexts, selectContextSource, setAgentViewport } from './agent-scientific-context';
 
 export async function startRhoModelPeer() {
   const bodies: unknown[] = [], errors: string[] = [];
@@ -33,7 +34,7 @@ type Query = (id: string, args: unknown) => Promise<any>;
 export interface RhoRetainedInput { task: string; original: any; continued: any; draft: string; requests: number; }
 
 export async function exerciseRhoInput(page: Page, frame: FrameLocator, info: TestInfo, peer: Peer,
-  query: Query, sourceText: string, changeSource: () => Promise<void>): Promise<RhoRetainedInput> {
+  query: Query, sourceText: string, changeSource: () => Promise<void>, viewerOperation: string): Promise<RhoRetainedInput> {
   const composer=frame.getByRole('textbox',{name:'Agent message',exact:true});
   await frame.getByRole('button',{name:'New task',exact:true}).click();
   await frame.getByRole('button',{name:'Rho',exact:true}).click();
@@ -55,9 +56,12 @@ export async function exerciseRhoInput(page: Page, frame: FrameLocator, info: Te
   await settings.getByRole('button',{name:'Close settings'}).click();expect(peer.bodies).toHaveLength(0);
   await frame.getByRole('button',{name:'Choose context',exact:true}).click();
   const picker=frame.getByRole('dialog',{name:'Choose context'});
+  await selectContextSource(frame,'Editor documents');
   await picker.getByRole('button',{name:/上下文 Ω.R/}).click();
   await expect(picker.locator('#context-preview')).toHaveText(sourceText.trim());
   await picker.getByRole('button',{name:'Add to draft',exact:true}).click();
+  const scientificTexts=await addScientificContexts(page,frame,info,viewerOperation);
+  await expect.poll(async()=>(await conversation()).draft_content.context.length).toBe(3);
   const attachmentText='Immutable Rho attachment · 完整文本 Ω';
   await frame.locator('#attachment-file').setInputFiles({name:'Rho 输入.txt',mimeType:'text/plain',buffer:Buffer.from(attachmentText)});
   await expect(frame.locator('#attachments')).toContainText('Rho 输入.txt');
@@ -68,7 +72,7 @@ export async function exerciseRhoInput(page: Page, frame: FrameLocator, info: Te
   const routePattern='**/api/plugin-view';
   const routeHandler: Parameters<Page['route']>[1] = async route => {
     const body=route.request().postDataJSON()?.message?.body;
-    if(body?.type==='query'&&body.capability.id==='editor.context.preview')sourceReads++;
+    if(body?.type==='query'&&['editor.context.preview','r.context.help.preview','r.context.viewer.preview'].includes(body.capability.id))sourceReads++;
     if(body?.type==='invoke'&&body.capability.id==='agent.model.run'){
       sends++;if(sends===1||sends===3){
         const response=await route.fetch(),reply=await response.json();expect(reply.ok).toBe(true);
@@ -84,9 +88,15 @@ export async function exerciseRhoInput(page: Page, frame: FrameLocator, info: Te
   await expect.poll(async()=>(await history()).runs.length).toBe(1);
   const originalId=(await history()).runs[0].run_id;
   const captured=(await run(originalId)).context;
+  const submitted=(peer.bodies[0] as {messages:{role:string;content:string}[]}).messages.findLast(message=>message.role==='user')!.content;
   expect(captured.sources[0].text.trim()).toBe(sourceText.trim());
-  expect(captured.sources[1].text).toBe(attachmentText);
-  expect(captured.sources[1].evidence[0].conversation_id).toBe(task);
+  expect(captured.sources).toHaveLength(4);
+  for (const [index,text] of scientificTexts.entries()) {
+    expect(captured.sources[index+1].text).toBe(text);
+    expect(submitted).toContain(JSON.stringify(text));
+  }
+  expect(captured.sources[3].text).toBe(attachmentText);
+  expect(captured.sources[3].evidence[0].conversation_id).toBe(task);
   expect(JSON.stringify(peer.bodies[0])).toContain(attachmentText);
   await changeSource();
   await expect(composer).toHaveValue('');
@@ -122,13 +132,14 @@ export async function exerciseRhoInput(page: Page, frame: FrameLocator, info: Te
   await expect.poll(async()=>(await run((await history()).runs[0].run_id)).state).toBe('completed');
   const continued=await run((await history()).runs[0].run_id), original=await run(originalId);
   expect(continued.request.continuation).toEqual({run_id:originalId,recovery_digest:original.recovery.digest});
-  expect(continued.context.history.prior_sources[0]).toEqual(captured.sources[0]);
+  expect(continued.context.history.prior_sources).toEqual(captured.sources);
   expect(JSON.stringify(peer.bodies[2])).toContain(sourceText.trim());expect(JSON.stringify(peer.bodies[2])).toContain('Confirmed earlier actions must not be executed again');
   await frame.getByRole('button',{name:'Sent context',exact:true}).last().click();
   await expect(picker.locator('#context-captures')).toContainText('Continued task input');
   await expect(picker.locator('#context-captures')).toContainText(sourceText.trim());
+  for (const text of scientificTexts) await expect(picker.locator('#context-captures')).toContainText(text.trim());
   for(const width of [1440,390,220]){
-    await page.setViewportSize({width,height:900});
+    await setAgentViewport(page,frame,width);
     await expect.poll(()=>picker.evaluate(node=>node.scrollWidth>node.clientWidth)).toBe(false);
     await page.screenshot({path:info.outputPath(`agent-rho-continued-${width}.png`)});
   }
@@ -148,6 +159,7 @@ export async function inspectRhoAfterRestart(frame: FrameLocator, query: Query, 
   const picker=frame.getByRole('dialog',{name:'Choose context'});
   await expect(picker.locator('#context-captures')).toContainText('Continued task input');
   await expect(picker.locator('#context-captures')).toContainText(retained.original.context.sources[0].text.trim());
+  for (const source of retained.original.context.sources.slice(1,3)) await expect(picker.locator('#context-captures')).toContainText(source.text.trim());
   await picker.getByRole('button',{name:'Close context'}).click();
   expect(peer.bodies).toHaveLength(retained.requests);expect(peer.errors).toEqual([]);
 }

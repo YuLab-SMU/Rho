@@ -83,7 +83,7 @@ export class RhoModel {
   }
   async refresh() {
     if (this.state.selected) await this.observe(this.state.selected);
-    for (const pending of [...this.state.pending]) if (pending.intent.operation && pending.status !== 'uncertain') await this.inspect(pending.intent.request);
+    for (const pending of [...this.state.pending]) if (this.state.pending.includes(pending) && pending.intent.operation && pending.status !== 'uncertain') await this.inspect(pending.intent.request);
   }
   async observe(task: string) {
     if (this.observing.has(task)) return;
@@ -317,7 +317,10 @@ export class RhoModel {
       await this.save(); await this.accept(pending, await this.client.invoke(capability, pending.intent.arguments, { requestId: request }));
       const deadline = Date.now() + 8000;
       while (kind !== 'run' && this.state.pending.includes(pending) && pending.status && !terminal(pending.status) && Date.now() < deadline) {
-        await new Promise(done => setTimeout(done, 150)); await this.inspect(request);
+        await new Promise(done => setTimeout(done, 150));
+        // A background observation may confirm this same request while the
+        // foreground waiter is parked. That success needs no second inspection.
+        if (this.state.pending.includes(pending)) await this.inspect(request);
       }
     }
     finally { this.busy = false; this.notify(); }

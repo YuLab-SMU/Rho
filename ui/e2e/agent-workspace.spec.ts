@@ -9,6 +9,7 @@ import { verifyAgentBuild, agentBuildMode } from '../../scripts/agent-plugin-art
 import { buildManagerPlugin } from '../../scripts/build-manager-plugin.mjs';
 import { startRhoModelPeer, exerciseRhoInput, inspectRhoAfterRestart } from './fixtures/agent-rho-workspace';
 import { prepareRetainedHandoff, inspectRetainedHandoff } from './fixtures/agent-handoff-workspace';
+import { observeHelp, selectContextSource, setAgentViewport, viewerText } from './fixtures/agent-scientific-context';
 
 let directory: string, project: string, url: URL, host: ReturnType<typeof spawn>, agent: any, r: any, view: any, session: string;
 let completed = false, database: string, hostEnvironment: NodeJS.ProcessEnv, managerView: any, editor: any, sourceDraft: any;
@@ -102,18 +103,20 @@ test.beforeAll(async () => {
   for (const id of ['plugins.resume', 'views.reconnect']) expect(info.capabilities.some((item: any) => item.capability.id === id), `Build the current Host before ${id} acceptance`).toBe(true);
   const activate = async (name: 'agent' | 'r' | 'editor' | 'files', configuration: unknown, optional_capabilities: any[] = []) =>
     (await invoke('plugins.activate', { revision: sources[name].revision, artifact: sources[name].artifacts[0], target: 'aarch64-apple-darwin', alias: name, configuration, optional_capabilities })).instance.identity;
-  r = await activate('r', { ark: realpathSync(process.env.RHO_ARK!), r_home: realpathSync(process.env.RHO_R_HOME!), execution_timeout_seconds: 120 });
+  r = await activate('r', { ark: realpathSync(process.env.RHO_ARK!), r_home: realpathSync(process.env.RHO_R_HOME!), execution_timeout_seconds: 120 },
+    ['operation.get','operation.list_recent','resources.read'].map(id => ({id,version:1})));
   session = (await invoke('r.create_session', { binding: await binding(r, 'r.create_session'), arguments: {} })).session_id;
   await activate('files', {});
   editor = await activate('editor', {}); await saveContextSource(sourceText);
   agent = await activate('agent', { kimi_home: nativeHome }, [
     { id: 'plugins.instances', version: 1 }, { id: 'editor.context.search', version: 1 }, { id: 'editor.context.preview', version: 1 },
     { id: 'plugins.inspect', version: 1 }, { id: 'r.execute', version: 2 },
+    ...['r.context.help.search','r.context.help.preview','r.context.viewer.search','r.context.viewer.preview'].map(id => ({id,version:1})),
     { id: 'operation.get', version: 1 }, { id: 'plugins.delegated_operation', version: 1 },
   ]);
   const rBinding = { ...await binding(r, 'r.execute', 2), target: session };
   writeFileSync(join(project, 'native-science-input.json'), JSON.stringify({ expected_session: session, run: {
-    code: 'counter <- if (exists("counter", inherits=FALSE)) counter + 1L else 1L; writeLines(as.character(counter), "counter-value.txt"); while (!file.exists("release-r")) Sys.sleep(0.01); cat("browser-original-r-result\\n"); counter',
+    code: `counter <- if (exists("counter", inherits=FALSE)) counter + 1L else 1L; writeLines(as.character(counter), "counter-value.txt"); while (!file.exists("release-r")) Sys.sleep(0.01); writeLines(${JSON.stringify(viewerText)}, "agent-viewer.html"); getOption("viewer")("agent-viewer.html"); cat("browser-original-r-result\\n"); counter`,
   } }));
   const manager = (await invoke('plugins.activate', { revision: managerPackage.revision, artifact: managerPackage.artifacts[0],
     target: 'ui-web', alias: 'manager', configuration: {} })).instance.identity;
@@ -149,6 +152,7 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
   const detail = () => nativeQuery('agent.native.task', { task_id: task });
   await frame.getByRole('button', {name:'Choose context',exact:true}).click();
   const picker = frame.getByRole('dialog', {name:'Choose context'});
+  await selectContextSource(frame,'Editor documents');
   await picker.getByRole('button', {name:/上下文 Ω.R/}).click();
   await expect(picker.locator('#context-preview')).toHaveText(sourceText.trim());
   await picker.getByRole('button', {name:'Add to draft',exact:true}).click();
@@ -185,7 +189,7 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
   await expect.poll(async () => (await detail()).draft.content.assets.length).toBe(2);
   expect(finishes).toBe(1); expect((await detail()).draft.content.text).toBe(prompt);
   for (const width of [1440, 390, 220]) {
-    await page.setViewportSize({ width, height: 900 });
+    await setAgentViewport(page,frame,width);
     await expect.poll(() => composer.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
     await page.screenshot({ path: info.outputPath(`agent-native-attachments-${width}.png`) });
   }
@@ -251,9 +255,15 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
   await expect(transcript).not.toContainText('History sample 001 中文');
   await expect(composer).toHaveValue(next);
   expect(await executions()).toHaveLength(1);
+  const help = await observeHelp(async (id,args) => query(id,{binding:await binding(r,id),arguments:args}),session);
+  expect(await executions()).toHaveLength(1);
   await saveContextSource(sourceText);
   const rhoInput = await exerciseRhoInput(page,frame,info,modelPeer,nativeQuery,sourceText,
-    () => saveContextSource('changed_after_rho_send <- TRUE\n'));
+    () => saveContextSource('changed_after_rho_send <- TRUE\n'),childId);
+  expect(rhoInput.original.context.sources[1].selection.reference.provider).toEqual(r);
+  expect(rhoInput.original.context.sources[1].selection.reference.selector.help_files).toEqual(help.help_files);
+  expect(rhoInput.original.context.sources[2].selection.reference.provider).toEqual(r);
+  expect(rhoInput.original.context.sources[2].selection.reference.selector.operation).toBe(childId);
   const handoff = await prepareRetainedHandoff(page,frame,info,nativeQuery,task,rhoInput.task,rhoInput.draft);
   rhoInput.draft = handoff.targetDraft;
   expect(modelPeer.bodies).toHaveLength(rhoInput.requests);
@@ -338,7 +348,12 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
   expect(JSON.parse(readFileSync(join(project, 'native-science-resumes.json'), 'utf8'))).toEqual({ session: nativeSession, resumes: 1, prompts: 0 });
   expect(JSON.parse(readFileSync(join(project, 'native-science-evidence.json'), 'utf8')).prompts).toBe(1);
   await expect(composer).toHaveValue(next); expect(await executions()).toHaveLength(1);
+  await expect(frame.locator('#task-state')).toHaveText('Kimi Code · ready');
+  await expect(frame.locator('#recovery')).toBeHidden();
   await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(composer).toBeVisible();
+  await setAgentViewport(page,frame,1440);
+  await expect(transcript).toContainText('Original scientific result observed 中文');
   await page.screenshot({ path: info.outputPath('agent-host-restored.png') });
   expect((await query('operation.list_recent', { client_request_id: resumeRequest, limit: 10 })).operations).toHaveLength(1);
   // A backend without its own view is restored explicitly in the ordinary
@@ -382,7 +397,8 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
     handoff: {request:handoff.request,source:handoff.receipt.source,target:handoff.receipt.target,append_calls:handoff.calls(),receipt_preserved_across_host_restart:true,send_calls:0},
     context: {provider:editor,reference:contextSelection.reference,sha256:hash(sourceText),preserved_after_source_change_and_host_restart:true},
     rho: {task:rhoInput.task,original:rhoInput.original.run_id,continued:rhoInput.continued.run_id,model_requests:modelPeer.bodies.length,
-      source_preserved:true,next_draft_preserved:true,reload_and_host_restart_without_replay:true},
+      source_preserved:true,next_draft_preserved:true,reload_and_host_restart_without_replay:true,
+      sources:rhoInput.original.context.sources.map((source:any)=>({title:source.title,selection:source.selection,sha256:hash(source.text)}))},
     assets: saved.assets.map((a: any) => ({ name: a.name, bytes: a.bytes, sha256: a.sha256 })),
     limits: ['Local ACP and streaming model peers, no external model', 'Rho continuation is read-only; real R execution is through the native Agent task', 'Graceful Host restart after the original turn settled; no abrupt crash recovery', 'No installation or publication'],
   }, null, 2));

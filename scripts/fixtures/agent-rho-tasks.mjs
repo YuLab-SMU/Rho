@@ -111,6 +111,24 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
     f.records.at(-1).status='running';await model.inspect(model.state.pending[0].intent.request);
     assert.equal(model.draft(id).text,'');assert.equal(f.runs.size,1);
   });
+  await check('background confirmation can finish a draft while its foreground waiter is parked',async()=>{
+    const f=fixture(),{model,id}=await task(f),invoke=f.client.invoke;
+    f.client.invoke=async(...args)=>{const record=await invoke(...args);return args[0].id==='agent.model.draft'?{...record,status:'accepted',outcome:null,output:null}:record;};
+    model.edit(id,{...empty(),text:'Confirmed once by background inspection'});
+    const timer=globalThis.setTimeout;let parked,waiting;const atWait=new Promise(resolve=>waiting=resolve);
+    globalThis.setTimeout=(callback,delay,...args)=>{
+      if(delay!==150)return timer(callback,delay,...args);
+      parked=()=>callback(...args);waiting();return 0;
+    };
+    let saving;
+    try {
+      saving=model.flush(id);await atWait;await model.refresh();
+      assert.equal(model.state.pending.length,0);assert.equal(model.state.drafts[id].dirty,false);
+      parked();await saving;
+      assert.equal(f.calls.filter(c=>c.cap.id==='agent.model.draft').length,1);
+      assert.equal(model.draft(id).text,'Confirmed once by background inspection');
+    } finally {globalThis.setTimeout=timer;parked?.();await saving?.catch(()=>{});}
+  });
   await check('an original Send consumes only its draft and retains next input through reload',async()=>{
     const f=fixture(),{model,id}=await task(f);await draft(model,id);let release;f.hold(new Promise(resolve=>release=resolve));
     const sent=model.send(id);while(!f.runs.size)await new Promise(resolve=>setTimeout(resolve,0));
