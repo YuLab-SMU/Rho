@@ -129,8 +129,12 @@ uses the current Host, ordinary Agent/R packages and a local ACP peer. It checks
 browser attachment capture, lost import receipts, one original Send, real R work
 and reload during that work. It also pages a long native observation history,
 keeps its earlier reading position through background refreshes and returns to
-the latest messages without another Send. It does not establish external-model quality or Host
-restart recovery. A listed/written browser case is not a passing native result.
+the latest messages without another Send. After the turn settles it restarts the
+disposable Host against the same storage, restores the original instance/view
+through a lost resume reply, and explicitly resumes the same native Agent session.
+It checks the original result, attachments and unsent draft without another prompt
+or R execution. This does not cover abrupt process failure or external-model
+quality. A listed/written browser case is not a passing native result.
 
 ### Status discipline
 
@@ -157,13 +161,17 @@ disposable-project creation or real-R acceptance.
 
 Host restart work uses `cargo test -p rho-plugins --test backend_runtime suspension
 --locked` for confirmed cleanup, original activation/data retention, stale resume
-tokens, authority changes and substituted data directories. After that settles,
+tokens, authority changes, substituted data directories and conflicting live
+contracts during recovery. After that settles,
 `cargo test -p rho-host --test plugin_restart --locked` exercises the public resume
 and view-reconnect Operations across actual Host reopen with a separate native
 backend, including retained state/layout and original Operation replay refusal.
 Run the existing `plugin_workspace` and `plugin_test_projects` Host targets once
 to check the shared shutdown paths. This does not establish the combined Agent
 browser/real-R restart flow; that acceptance still needs its current artifact.
+`ui/tests/plugin-window-recovery.test.ts` covers saved original requests, missing
+replies, explicit inspection/retry and refusal to advance a recovered request on
+reload. The workspace component test checks restoring its original isolated view.
 
 Disposable-project metadata uses `cargo test -p rho-plugins --test test_projects
 --locked` for exact dependency/configuration selection, scoped byte-bounded paging, immutable

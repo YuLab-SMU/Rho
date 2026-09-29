@@ -95,5 +95,20 @@ try {
   assert.deepEqual(replies.map(reply => reply.id), [1,2,3]);
   assert.equal(replies[1].result.configOptions[0].currentValue, 'fixture');
   assert.ok(!fs.existsSync(path.join(temporary, 'native-science-evidence.json')), 'Discovery must not start a scientific turn');
+  // The restart fixture restores only its persisted native session. Loading
+  // history cannot issue a prompt or require a live scientific MCP provider.
+  const mcpServers = [{name:'disposable', url:'http://127.0.0.1:9', headers:[]}];
+  const nativeMessages = structuredClone(messages);
+  nativeMessages[1].params.mcpServers = mcpServers;
+  const start = spawnSync(process.execPath, [peer], {input:nativeMessages.map(m => JSON.stringify(m)).join('\n')+'\n', encoding:'utf8', timeout:5000});
+  assert.equal(start.status, 0, start.stderr);
+  const {session} = JSON.parse(fs.readFileSync(path.join(temporary, 'native-science-session.json'), 'utf8'));
+  const load = [...messages];
+  load[1] = {jsonrpc:'2.0', id:2, method:'session/load', params:{cwd:temporary, sessionId:session, mcpServers}};
+  const resumed = spawnSync(process.execPath, [peer], {input:load.map(m => JSON.stringify(m)).join('\n')+'\n', encoding:'utf8', timeout:5000});
+  assert.equal(resumed.status, 0, resumed.stderr);
+  assert.equal(JSON.parse(resumed.stdout.trim().split('\n')[1]).result.sessionId, session);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(temporary, 'native-science-resumes.json'), 'utf8')), {session, resumes:1, prompts:0});
+  assert.ok(!fs.existsSync(path.join(temporary, 'native-science-evidence.json')), 'Resume must not start a scientific turn');
 } finally { fs.rmSync(temporary, {recursive: true, force: true}); }
-console.log('Agent acceptance requires an explicit mode; source/artifact reuse rejects stale, modified or missing evidence. Local ACP discovery passed without a scientific turn. No Cargo build ran.');
+console.log('Agent acceptance requires an explicit mode; source/artifact reuse rejects stale, modified or missing evidence. Local ACP discovery and original-session resume passed without a scientific turn. No Cargo build ran.');

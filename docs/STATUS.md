@@ -31,7 +31,7 @@ written deletion condition. Internal pieces are not reported as milestones.
 | --- | --- | --- | --- |
 | M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Default entry, real-R browser flow and Rust HTTP checks pass; delivery remains |
 | M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Native view and attachment source/renderer checked; combined native/Host path pending |
-| M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Suspension/resume and view-reconnect source implemented; native checks and browser integration pending |
+| M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Lifecycle and explicit view recovery implemented; frontend checks pass; native/Host acceptance pending |
 | M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Not started |
 | M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Branch checkpoint via Agent verified; Studio UI not started |
 | M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Not started |
@@ -88,11 +88,16 @@ contained data and acknowledged view/layout identity. Explicit `plugins.resume`
 consumes that suspension token; `views.reconnect` separately creates a fresh
 connection for the retained open view. Queries do neither. Permanent release and
 disposable-test teardown remain distinct. Stale tokens, changed authority/data and
-unconfirmed cleanup have refusal fixtures. The focused native test is compiling;
-the Host-reopen fixture is written but unrun. Rust syntax, architecture/plugin
-boundaries and governance checks pass, which do not establish runtime recovery.
-Public type regeneration, browser recovery actions and combined Agent/real-R
-restart acceptance remain. No user Host was replaced, installation or publication ran.
+unconfirmed cleanup have refusal fixtures. A publication conflict during resume
+preserves the original instance with a new confirmed suspension token.
+The generic window saves each recovery request before dispatch; lost replies offer
+explicit inspection/retry of the original request, with no next-step dispatch on
+reload. All 566 frontend tests pass, including 42 recovery/view cases. The focused
+native test is compiling; the Host-reopen fixture and combined Agent/real-R browser
+restart flow are written but unrun. Rust syntax, boundary and governance checks
+pass; public type generation, client checks and native acceptance remain.
+Evidence: `target/plugin-refactor/restart-lifecycle-results.json`. No user Host was
+replaced, installation or publication ran.
 
 ### Agent migration: current state
 

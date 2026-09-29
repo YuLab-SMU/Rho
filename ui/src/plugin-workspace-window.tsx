@@ -7,6 +7,7 @@ import { PluginLayoutHost } from './plugin-layout-host';
 import { Modal } from "./primitives";
 import { mountPluginFrame } from './plugin-frame';
 import { PluginLauncherPanel } from './plugin-launcher-panel';
+import { PluginWindowRecovery } from './plugin-window-recovery';
 
 function ConnectedFrame({ client, project, connection, failed, refresh }: {
   client: HostClient; project: string; connection: PluginViewConnection; failed(error: string): void; refresh(): Promise<void>;
@@ -22,10 +23,11 @@ function ConnectedFrame({ client, project, connection, failed, refresh }: {
 /** Scientific content is entirely contributed. The containing window only
  * observes layouts, retains isolated documents and requests cooperative close. */
 export function PluginWorkspace({ client, project, testName }: { client: HostClient; project: string; testName?: string }) {
-  const [owners] = useState(() => ({ layout: createPluginWindowState(client, project), views: createPluginWindowViews(client, project), closes: createPluginWindowClosures(client, project) }));
+  const [owners] = useState(() => ({ layout: createPluginWindowState(client, project), views: createPluginWindowViews(client, project), closes: createPluginWindowClosures(client, project), recoveries: new PluginWindowRecovery(client, project) }));
   const saved = useSyncExternalStore(owners.layout.subscribe, owners.layout.getSnapshot);
   const views = useSyncExternalStore(owners.views.subscribe, owners.views.getSnapshot);
   const closes = useSyncExternalStore(owners.closes.subscribe, owners.closes.getSnapshot);
+  const recoveries = useSyncExternalStore(owners.recoveries.subscribe, owners.recoveries.getSnapshot);
   const [dock, setDock] = useState(() => pluginLayoutModel(saved.layout));
   const applied = useRef(saved.layout);
   const [error, setError] = useState('');
@@ -64,7 +66,7 @@ export function PluginWorkspace({ client, project, testName }: { client: HostCli
       if (!stopped && document.visibilityState === 'visible') await new Promise<void>(done => requestAnimationFrame(() => done()));
     };
     void observe();
-    return () => { stopped = true; clearTimeout(timer); owners.layout.stop(); owners.views.stop(); owners.closes.stop(); };
+    return () => { stopped = true; clearTimeout(timer); owners.layout.stop(); owners.views.stop(); owners.closes.stop(); owners.recoveries.stop(); };
   }, [owners]);
   useEffect(() => {
     if (saved.layout === applied.current) return;
@@ -95,13 +97,25 @@ export function PluginWorkspace({ client, project, testName }: { client: HostCli
     } catch (error) { setError(message(error)); }
   };
   const retryLayout = async () => { try { await owners.layout.save(); setError(''); } catch (error) { setError(message(error)); } };
+  const restoreView = async (id: string, retry = false) => {
+    try {
+      const record = await owners.views.inspectForRecovery(id);
+      if (record.closed) { owners.views.confirmedClosed(record); await owners.layout.load(); return; }
+      const connected = await (retry ? owners.recoveries.retryOriginal(record) : owners.recoveries.restore(record));
+      if (connected) await owners.views.retry(id);
+    } catch (error) { owners.views.failed(id, message(error)); }
+  };
   const frames = [...views].map(([id, entry]) => {
     const connection = owners.views.connection(id);
+    const recovering = recoveries.get(id);
     return { id, title: entry.title, content: <div style={{ position: 'relative', height: '100%', width: '100%' }}>
       {connection && <ConnectedFrame client={client} project={project} connection={connection} failed={error => owners.views.failed(id, error)} refresh={() => refresh.current()} />}
       {(!connection || entry.error) && <div className="empty" role={entry.error ? 'alert' : 'status'} style={{ position: 'absolute', inset: 0, background: 'var(--color-surface)' }}>
-        {entry.error || 'Connecting view…'}
-        {entry.error && <button onClick={() => void owners.views.retry(id).catch(error => setError(message(error)))}>Reconnect this view</button>}
+        {recovering?.busy ? <span role="status">Restoring saved view…</span> : recovering?.error || recovering?.message || entry.error || 'Connecting view…'}
+        {entry.error && <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <button disabled={recovering?.busy} onClick={() => void restoreView(id)}>{recovering?.pending ? 'Check recovery status' : connection ? 'Reconnect this view' : 'Restore saved view'}</button>
+          {recovering?.pending && <button disabled={recovering.busy} onClick={() => void restoreView(id, true)}>Retry original request</button>}
+        </div>}
       </div>}
     </div> };
   });

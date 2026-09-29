@@ -183,6 +183,7 @@ impl PluginRuntime {
         prepared.lifecycle = Some(self.lifecycle.clone());
         let identity = prepared.record.identity.clone();
         let purpose = prepared.record.purpose;
+        let resuming = prepared.resuming;
         // Failure before readiness has no published registrations. The prepared
         // lease keeps the revision while native code is being initialized.
         let manifest = prepared.manifest.clone();
@@ -309,7 +310,16 @@ impl PluginRuntime {
             }
         };
         if publish.is_err() {
-            let _ = entry.process.get().unwrap().release().await;
+            // A conflicting live contract can reject an otherwise ready
+            // recovery. Confirm cleanup without permanently releasing the
+            // original identity, retained views or revision. A later explicit
+            // recovery must observe the new suspension token.
+            let disposition = if resuming {
+                ShutdownDisposition::Suspend(RequestId::new(format!("suspension-{}", Uuid::new_v4().simple()))?)
+            } else {
+                ShutdownDisposition::Release
+            };
+            let _ = entry.process.get().unwrap().shutdown(disposition).await;
         }
         publish
     }
@@ -817,6 +827,7 @@ pub(crate) struct PreparedInstance {
     pub executable: Option<PathBuf>,
     pub repository: Arc<Mutex<PluginRepository>>,
     pub retain_after_drop: bool,
+    resuming: bool,
     lifecycle: Option<tokio::sync::watch::Sender<u64>>,
 }
 impl PreparedInstance {
@@ -938,6 +949,7 @@ impl PreparedInstance {
             repository: repository.clone(),
             // Recovery failure must not discard the original identity/data pin.
             retain_after_drop: suspension.is_some(),
+            resuming: suspension.is_some(),
             lifecycle: None,
         })
     }

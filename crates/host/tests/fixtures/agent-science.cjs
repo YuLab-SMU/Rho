@@ -102,15 +102,22 @@ async function prompt(message) {
 const lines = readline.createInterface({input:process.stdin});
 lines.on('line', line => {
   const message = JSON.parse(line), p = message.params || {};
-  if (message.method === 'initialize') result(message.id, {protocolVersion:1, agentInfo:{name:'Local scientific fixture', version:'1'}, agentCapabilities:{promptCapabilities:{embeddedContext:true}, sessionCapabilities:{close:{}}}});
-  else if (message.method === 'session/new') {
-    cwd = p.cwd; session = randomUUID();
+  if (message.method === 'initialize') result(message.id, {protocolVersion:1, agentInfo:{name:'Local scientific fixture', version:'1'}, agentCapabilities:{loadSession:true, promptCapabilities:{embeddedContext:true}, sessionCapabilities:{close:{}}}});
+  else if (message.method === 'session/new' || message.method === 'session/load') {
+    cwd = p.cwd; session = message.method === 'session/load' ? p.sessionId : randomUUID();
     assert.ok(p.mcpServers.length <= 1);
     endpoint = p.mcpServers[0]?.url;
     if (endpoint) {
       assert.equal(new URL(endpoint).hostname, '127.0.0.1');
       headers = Object.fromEntries(p.mcpServers[0].headers.map(h => [h.name,h.value]));
     }
+    const retainedSession = path.join(cwd, 'native-science-session.json');
+    if (message.method === 'session/load') {
+      assert.equal(JSON.parse(fs.readFileSync(retainedSession, 'utf8')).session, session);
+      const resumed = path.join(cwd, 'native-science-resumes.json');
+      const count = fs.existsSync(resumed) ? JSON.parse(fs.readFileSync(resumed, 'utf8')).resumes : 0;
+      fs.writeFileSync(resumed, JSON.stringify({session, resumes:count + 1, prompts}));
+    } else if (endpoint) fs.writeFileSync(retainedSession, JSON.stringify({session}));
     result(message.id, {sessionId:session, configOptions:config()});
   } else if (message.method === 'session/set_config_option') result(message.id, {configOptions:config()});
   else if (message.method === 'session/prompt') void prompt(message).catch(error => {

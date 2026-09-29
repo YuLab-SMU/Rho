@@ -8,7 +8,7 @@ import { join, resolve, delimiter } from 'node:path';
 import { verifyAgentBuild, agentBuildMode } from '../../scripts/agent-plugin-artifact.mjs';
 
 let directory: string, project: string, url: URL, host: ReturnType<typeof spawn>, agent: any, r: any, view: any, session: string;
-let completed = false;
+let completed = false, database: string, hostEnvironment: NodeJS.ProcessEnv;
 const windowId = 'agent-scientific-workspace', binary = resolve('../target/debug/rho');
 const hash = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex');
 async function port(method: string, params: unknown) {
@@ -28,6 +28,33 @@ async function nativeQuery(id: string, args: unknown) { return query(id, { bindi
 async function sessionState() { return query('r.session', { binding: await binding(r, 'r.session'), arguments: {} }); }
 async function executions() { return (await query('operation.list_recent', { limit: 100 })).operations.filter((record: any) => record.capability.id === 'r.execute'); }
 
+async function startHost() {
+  const started = spawn(binary, ['--database', database, '--project', project, 'workbench'], {
+    stdio: ['ignore', 'pipe', 'pipe'], env: hostEnvironment,
+  });
+  host = started; // Retain ownership even if startup fails before returning a URL.
+  const address = new URL(await new Promise<string>((done, reject) => {
+    let output = '', errors = ''; const timer = setTimeout(() => reject(Error(`Agent Host startup deadline: ${errors}`)), 60000);
+    started.stderr!.on('data', bytes => errors += bytes); started.stdout!.on('data', bytes => {
+      output += bytes; const found = output.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/);
+      if (found) { clearTimeout(timer); done(found[0]); }
+    }); started.once('exit', code => { clearTimeout(timer); reject(Error(`Agent Host exited ${code}: ${errors}`)); });
+  }));
+  return { process: started, address };
+}
+async function stopHost(process_: ReturnType<typeof spawn>) {
+  if (process_.exitCode !== null || process_.signalCode !== null) return;
+  await new Promise<void>((done, reject) => {
+    const timer = setTimeout(() => { process_.kill('SIGKILL'); reject(Error('Disposable Agent Host did not confirm shutdown')); }, 60000);
+    process_.once('exit', (code, signal) => {
+      clearTimeout(timer);
+      if (code !== 0 || signal) reject(Error(`Disposable Agent Host shutdown was not clean: ${code}/${signal}`));
+      else done();
+    });
+    process_.kill('SIGINT');
+  });
+}
+
 test.beforeAll(async () => {
   test.setTimeout(180000);
   expect(process.env.RHO_AGENT_PLUGIN_PACKAGE).toBeTruthy(); expect(process.env.RHO_R_PLUGIN_PACKAGE).toBeTruthy();
@@ -38,19 +65,13 @@ test.beforeAll(async () => {
   const nativeHome = join(directory, 'native-home'); mkdirSync(nativeHome);
   writeFileSync(join(nativeBin, 'rho-science-fixture'), 'disposable');
   copyFileSync(resolve('../crates/host/tests/fixtures/agent-science.cjs'), join(nativeBin, 'kimi')); chmodSync(join(nativeBin, 'kimi'), 0o700);
-  const database = join(directory, 'state.sqlite');
+  database = join(directory, 'state.sqlite');
   const snapshot = (path: string) => JSON.parse(execFileSync(binary, ['--database', database, 'plugins', 'snapshot', path, '--target', 'aarch64-apple-darwin'], { encoding: 'utf8', timeout: 90000, killSignal: 'SIGKILL' })).result;
   const sources = { agent: snapshot(agentPackage), r: snapshot(realpathSync(process.env.RHO_R_PLUGIN_PACKAGE!)) };
-  host = spawn(binary, ['--database', database, '--project', project, 'workbench'], {
-    stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, PATH: nativeBin + delimiter + process.env.PATH, KIMI_CODE_HOME: nativeHome },
-  });
-  url = new URL(await new Promise<string>((done, reject) => {
-    let output = '', errors = ''; const timer = setTimeout(() => reject(Error(`Agent Host startup deadline: ${errors}`)), 60000);
-    host.stderr!.on('data', bytes => errors += bytes); host.stdout!.on('data', bytes => {
-      output += bytes; const found = output.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/);
-      if (found) { clearTimeout(timer); done(found[0]); }
-    }); host.once('exit', code => { clearTimeout(timer); reject(Error(`Agent Host exited ${code}: ${errors}`)); });
-  }));
+  hostEnvironment = { ...process.env, PATH: nativeBin + delimiter + process.env.PATH, KIMI_CODE_HOME: nativeHome };
+  const started = await startHost(); host = started.process; url = started.address;
+  const info = await fetch(new URL('/api/info', url), { headers: { Authorization: `Bearer ${url.hash.slice(7)}` } }).then(response => response.json());
+  for (const id of ['plugins.resume', 'views.reconnect']) expect(info.capabilities.some((item: any) => item.capability.id === id), `Build the current Host before ${id} acceptance`).toBe(true);
   const activate = async (name: 'agent' | 'r', configuration: unknown, optional_capabilities: any[] = []) =>
     (await invoke('plugins.activate', { revision: sources[name].revision, artifact: sources[name].artifacts[0], target: 'aarch64-apple-darwin', alias: name, configuration, optional_capabilities })).instance.identity;
   r = await activate('r', { ark: realpathSync(process.env.RHO_ARK!), r_home: realpathSync(process.env.RHO_R_HOME!), execution_timeout_seconds: 120 });
@@ -70,19 +91,13 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => {
   if (project) writeFileSync(join(project, 'release-r'), 'finish disposable test');
-  if (host?.exitCode === null && host.signalCode === null) {
-    host.kill('SIGINT');
-    await new Promise<void>((done, reject) => {
-      const timer = setTimeout(() => { host.kill('SIGKILL'); reject(Error('Disposable Agent Host did not confirm shutdown')); }, 60000);
-      host.once('exit', () => { clearTimeout(timer); done(); });
-    });
-  }
+  if (host) await stopHost(host);
   if (directory && completed) rmSync(directory, { recursive: true, force: true });
   else if (directory) console.error(`Agent browser acceptance retained at ${directory}`);
 });
 
-test('ordinary Agent attachments and one original Send reach real R; reload preserves the task, next draft and original result', async ({ page }, info) => {
-  test.setTimeout(240000);
+test('ordinary Agent attachments and one original Send reach real R; reload and explicit Host restart preserve the task and original result', async ({ page }, info) => {
+  test.setTimeout(360000);
   const address = new URL(url); address.searchParams.set('window', windowId); await page.goto(address.href);
   const frame = page.locator(`[data-plugin-frame="${view.view}"]`).frameLocator('iframe');
   await frame.getByRole('button', { name: 'New task', exact: true }).click();
@@ -174,10 +189,77 @@ test('ordinary Agent attachments and one original Send reach real R; reload pres
   await expect(transcript).not.toContainText('History sample 001 中文');
   await expect(composer).toHaveValue(next);
   expect(await executions()).toHaveLength(1);
+  // Normal Host exit suspends the same instances; acknowledged view/task data
+  // remains available without restarting R or dispatching the old Send again.
+  const retainedView = await query('views.inspect', { view: view.view });
+  const priorConnection = await query('views.connection', { view: view.view });
+  const priorLayout = await query('windows.layout', { window: windowId });
+  const stoppedPid = host.pid; await stopHost(host);
+  const restarted = await startHost(); host = restarted.process; url = restarted.address;
+  expect(host.pid).not.toBe(stoppedPid);
+  const suspended = await query('plugins.instance', { instance: agent });
+  expect(suspended.observed_in_this_host).toBe(false); expect(suspended.instance.state).toBe('suspended');
+  expect((await query('plugins.instance', { instance: r })).instance.state).toBe('suspended');
+  expect(await query('views.inspect', { view: view.view })).toEqual(retainedView);
+  expect(await query('windows.layout', { window: windowId })).toEqual(priorLayout);
+  let resumeRequest = '', resumeCalls = 0, reconnectCalls = 0, loseResume = true;
+  await page.route('**/api/host', async route => {
+    const request = route.request().postDataJSON()?.frame?.request;
+    if (request?.method === 'invoke') {
+      if (request.params.capability.id === 'plugins.resume') {
+        resumeCalls++; resumeRequest ||= request.params.client_request_id;
+        if (loseResume) { loseResume = false; await route.fetch(); await route.abort(); return; }
+      }
+      if (request.params.capability.id === 'views.reconnect') reconnectCalls++;
+    }
+    await route.continue();
+  });
+  const restoredAddress = new URL(url); restoredAddress.searchParams.set('window', windowId);
+  await page.goto(restoredAddress.href);
+  await expect(page.getByRole('button', { name: 'Restore saved view', exact: true })).toBeVisible();
+  expect(resumeCalls).toBe(0); expect(reconnectCalls).toBe(0);
+  await page.getByRole('button', { name: 'Restore saved view', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Check recovery status', exact: true })).toBeVisible();
+  expect(resumeCalls).toBe(1); expect(reconnectCalls).toBe(0);
+  await page.reload();
+  await page.getByRole('button', { name: 'Restore saved view', exact: true }).click();
+  await expect(page.getByText('Instance restored. Continue to reconnect this view.', { exact: true })).toBeVisible();
+  expect(resumeCalls).toBe(1); expect(reconnectCalls).toBe(0);
+  for (const width of [1440, 390, 220]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+    await page.screenshot({ path: info.outputPath(`agent-host-recovery-${width}.png`) });
+  }
+  await page.getByRole('button', { name: 'Restore saved view', exact: true }).click();
+  await expect(composer).toHaveValue(next);
+  await expect(frame.getByLabel('Select task', { exact: true })).toHaveValue(task);
+  await expect(transcript).toContainText('Original scientific result observed 中文');
+  expect(resumeCalls).toBe(1); expect(reconnectCalls).toBe(1);
+  const currentConnection = await query('views.connection', { view: view.view });
+  expect(currentConnection.view.view).toBe(retainedView.view); expect(currentConnection.view.instance).toEqual(agent);
+  expect(currentConnection.connection).not.toBe(priorConnection.connection);
+  expect(currentConnection.call_token).not.toBe(priorConnection.call_token);
+  const afterRestart = await detail();
+  expect(afterRestart.summary.task.task_id).toBe(task); expect(afterRestart.summary.task.native_session_id).toBe(nativeSession);
+  expect(afterRestart.draft.content.text).toBe(next); expect(afterRestart.assets).toEqual(saved.assets);
+  expect(afterRestart.summary.attachment.state).toBe('disconnected');
+  expect((await query('operation.get', { operation_id: childId })).record.status).toBe('succeeded');
+  expect(await executions()).toHaveLength(1); expect(readFileSync(join(project, 'counter-value.txt'), 'utf8')).toBe('1\n');
+  expect((await query('plugins.instance', { instance: r })).instance.state).toBe('suspended');
+  await frame.getByRole('button', { name: 'Resume', exact: true }).click();
+  await expect.poll(async () => (await detail()).summary.attachment.state, { timeout: 45000 }).toBe('ready');
+  expect((await detail()).summary.task.native_session_id).toBe(nativeSession);
+  expect(JSON.parse(readFileSync(join(project, 'native-science-resumes.json'), 'utf8'))).toEqual({ session: nativeSession, resumes: 1, prompts: 0 });
+  expect(JSON.parse(readFileSync(join(project, 'native-science-evidence.json'), 'utf8')).prompts).toBe(1);
+  await expect(composer).toHaveValue(next); expect(await executions()).toHaveLength(1);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({ path: info.outputPath('agent-host-restored.png') });
+  expect((await query('operation.list_recent', { client_request_id: resumeRequest, limit: 10 })).operations).toHaveLength(1);
   writeFileSync(info.outputPath('agent-native-result.json'), JSON.stringify({ status: 'passed', build_mode: agentBuildMode(process.env.RHO_AGENT_PLUGIN_PACKAGE!), original_send: evidence.invocation.send_request,
     child: childId, native_session: nativeSession, r_session: session, cached_history_messages: 120,
+    host_restart: { instance: agent, task, view: view.view, resume_request: resumeRequest, resume_calls: resumeCalls, reconnect_calls: reconnectCalls, native_resume_without_prompt: true },
     assets: saved.assets.map((a: any) => ({ name: a.name, bytes: a.bytes, sha256: a.sha256 })),
-    limits: ['Local ACP fixture, no external model', 'Browser reload, not Host restart', 'No installation or publication'],
+    limits: ['Local ACP fixture, no external model', 'Graceful Host restart after the original turn settled; no abrupt crash recovery', 'No installation or publication'],
   }, null, 2));
   completed = true;
 });

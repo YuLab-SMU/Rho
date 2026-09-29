@@ -699,6 +699,51 @@ async fn suspension_reopens_original_data_and_fences_stale_or_changed_activation
 }
 
 #[tokio::test]
+async fn suspension_survives_resume_publication_conflict_without_releasing_the_original() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let first = fixture(&root.join("one"), "1.0", false);
+    fixture(&root.join("two"), "2.0", false);
+    let manifest_path = root.join("two/plugin.json");
+    let mut manifest: Value = serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["capabilities"][0]["output_schema"] = json!({"type":"string"});
+    fs::write(manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+    let second = snapshot_directory(&root.join("two"), None, "native-test").unwrap();
+    let mut repository = PluginRepository::open(&root.join("store")).unwrap();
+    repository.import(&first).unwrap();
+    repository.import(&second).unwrap();
+    let repository = Arc::new(Mutex::new(repository));
+    let owner = runtime(repository.clone());
+    let request = || {
+        let mut value = activation(&first, json!({"retained_counts":true}));
+        value.project_root = Some(root.clone());
+        value
+    };
+    let original = owner.activate(request()).await.unwrap();
+    owner.suspend(&original.identity).await.unwrap();
+    let token = owner.observe()[0].instance.suspension.clone().unwrap();
+    let conflict = owner.activate(activation(&second, json!({}))).await.unwrap();
+    assert!(owner.resume_identified(request(), original.identity.instance.clone(), &token, true)
+        .await.unwrap_err().to_string().contains("different registered contract"));
+    let retained = repository.lock().unwrap().recorded_instance(&original.identity, &original.project, &original.principal).unwrap();
+    assert_eq!(retained.state, InstanceState::Suspended);
+    let next = retained.suspension.unwrap();
+    assert_ne!(next, token);
+    assert!(repository.lock().unwrap().remove(&first.revision.id).is_err());
+    assert!(owner.resume_identified(request(), original.identity.instance.clone(), &token, true).await.is_err());
+    let active = owner.resolve(&key("fixture.read"), &original.project, &original.principal, None).unwrap();
+    assert_eq!(active.binding(None).provider, conflict.identity);
+    drop(active);
+    owner.release(&conflict.identity).await.unwrap();
+    let resumed = owner.resume_identified(request(), original.identity.instance.clone(), &next, true).await.unwrap();
+    assert_eq!(resumed.identity, original.identity);
+    let directory = root.join("store/instance-data-v1").join(format!("instance-{}", original.identity.instance));
+    assert_eq!(fs::read_to_string(directory.join("starts")).unwrap(), "3");
+    owner.release(&original.identity).await.unwrap();
+    repository.lock().unwrap().remove(&first.revision.id).unwrap();
+}
+
+#[tokio::test]
 async fn suspension_requires_acknowledged_cleanup_and_retains_uncommitted_operations() {
     let temp = tempfile::tempdir().unwrap();
     let archive = fixture(&temp.path().join("package"), "1", false);

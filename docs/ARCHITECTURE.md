@@ -489,6 +489,9 @@ fresh activation. Queries never resume a provider. Other providers may remain
 suspended; resume does not start dependencies, and subsequent calls still validate
 their exact available provider and contract. Native scientific sessions and
 unfinished work do not resume merely because their owning backend reopens.
+If a resumed process is ready but its contracts cannot be published, confirmed
+cleanup suspends it again with a new token rather than releasing the original
+identity. Cleanup failure remains unavailable with its references retained.
 
 Every accepted operation must freeze capability, plugin revision, artifact,
 instance, project, principal and native target before dispatch. Provider choice
@@ -731,6 +734,9 @@ record. An already connected view keeps its existing credentials. Explicit
 release can retire a confirmed suspended instance, or a historical UI-only instance because
 its exact manifest establishes that no native backend was created; native failure
 still requires established cleanup. Closing a view never releases its backend.
+The generic window durably saves each resume/reconnect invocation before dispatch.
+After a missing reply, inspection checks that original Operation and does not
+advance to the next action; explicit retry keeps the same request identity.
 
 Ordinary view closure requests document cooperation. The view owner fences new
 actions while each registered document flushes its own draft and acknowledges

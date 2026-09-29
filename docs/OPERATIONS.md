@@ -52,8 +52,8 @@ the shared activation/view ports; it gives no special treatment to Manager.
 `--plugins-only` also applies to `session`, `mcp` and native `invoke`; standalone
 read-only queries use their normal observer, while live plugin reads connect to
 the running Host. It cannot be combined with fixed R/remote/Skill startup flags.
-Closing views keeps their instances alive; normal Host shutdown drains its own
-instances.
+Closing views keeps their instances alive. Normal Host shutdown drains accepted
+work and suspends its runtime instances after confirmed cleanup.
 
 In the ordinary Plugins view, open **Scenarios → New R workspace** to choose
 installed scientific packages and the paths to an existing Ark executable and
@@ -64,10 +64,13 @@ can feed Console, Objects and Plots. Missing packages remain missing until an
 explicit import. If preparation loses a reply, inspect its original request before
 continuing; the retained partial instances are not recreated automatically.
 The starter requires installed packages. Default package delivery is still under
-development. A browser reload retains the window and original requests. After a
-Host restart, historical instances remain unavailable: same-instance restart
-recovery is not implemented yet. Startup does not create replacements or replay
-scientific operations.
+development. A browser reload retains the window and original requests. The
+restart recovery source now offers **Restore saved view** for retained views;
+combined native acceptance remains pending (see [Status](STATUS.md)). It explicitly
+resumes a confirmed suspended instance and reconnects its original view. A lost
+reply offers **Check recovery status** and **Retry original request**; inspection
+does not advance to the next action. Startup never creates replacements or replays
+scientific operations. Restoring an R backend does not restore R memory.
 
 The old fixed scientific composition is available only as the temporary development
 reference: `rho --fixed-workspace ... workbench`. Its R/remote/Skill startup flags
@@ -1124,9 +1127,12 @@ For a document lost to reload/navigation or a view with no handler, inspect
 This checks and retains version N; it does not save a disconnected document's
 local edits. Do not automatically substitute this recovery mode for a failed
 flush. Close retained views before releasing an instance. After a Host restart,
-historical closed records and layout placeholders retain acknowledged state;
-reading them never reconnects them. Management and Studio interfaces remain
-pending ordinary plugins.
+open records and layout placeholders retain acknowledged state; reading them
+never reconnects them. Explicit `plugins.resume` requires the recorded suspension
+token. Then `views.reconnect` requires the original open view and its exact
+`expected_version`, returning a public record with a separate fresh connection.
+Released instances and unconfirmed cleanup cannot use this path. Manager and
+Studio are ordinary plugins; their remaining integration is tracked in Status.
 
 These ports are shared by connected CLI, HTTP and official MCP. An existing MCP
 connection receives tool-list change notifications when providers appear,

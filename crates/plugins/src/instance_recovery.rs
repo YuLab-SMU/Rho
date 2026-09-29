@@ -55,7 +55,11 @@ impl PluginService {
             let repo = self.repository.lock().unwrap();
             let (record, activation) = repo
                 .suspended_activation(&args.instance, &self.project, &principal, &args.suspension)
-                .map_err(error)?;
+                .map_err(|fault| match fault {
+                    PluginError::Invalid(message) => invalid(message),
+                    PluginError::Missing(identity) => OperationError::NotFound(identity),
+                    other => error(other),
+                })?;
             let manifest = repo
                 .revision(&args.instance.revision)
                 .map_err(error)?

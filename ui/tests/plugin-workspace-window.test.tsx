@@ -64,3 +64,51 @@ it('refreshes a committed scenario immediately while keeping the original live d
   expect(screen.getByLabelText('Draft two').isConnected).toBe(true);
   expect(screen.getByLabelText('Draft one')).toBe(input); expect((input as HTMLInputElement).value).toBe('Current unsaved state'); expect(mounted.stops).toEqual([]);
 });
+
+it('restores a suspended original through retained requests and only reconnects after explicit continuation', async () => {
+  const f = fixture(), ordinaryQuery = f.query.getMockImplementation()!;
+  let saved: any = null, connected = false, nativeState = 'suspended', loseResume = true;
+  const records: any[] = [];
+  const record = (await ordinaryQuery('/project', 'views.inspect', { view: 'one' })).data as any;
+  const identity = record.instance;
+  f.query.mockImplementation(async (project, capability, args) => {
+    if (capability === 'views.connection' && !connected) return { status: 'unavailable', data: null, notices: ['The prior Host connection ended.'] } as any;
+    const data = capability === 'plugins.instance' ? { observed_in_this_host: nativeState === 'active', instance: {
+      identity, project: record.project, principal: record.principal, state: nativeState, suspension: nativeState === 'suspended' ? 'suspension-original' : undefined,
+    } } : capability === 'views.presence' ? { view: 'one', window: 'window', instance: identity, state: connected ? 'attached' : 'detached' } :
+      capability === 'operation.list_recent' ? { operations: records.filter(item => item.operation.client_request_id === args.client_request_id).map(item => ({ operation_id: item.operation.operation_id })), next_cursor: null } : null;
+    return data ? { status: 'ready', notices: [], data } : ordinaryQuery(project, capability, args);
+  });
+  f.client.readState = async (_project, key) => structuredClone(saved ?? { key, version: null, value: null });
+  f.client.writeState = async (_project, state) => {
+    expect(state.version).toBe(saved?.version ?? null);
+    saved = structuredClone({ ...state, version: String(Number(state.version ?? 0) + 1) }); return structuredClone(saved);
+  };
+  f.client.getOperation = async (_project, id) => structuredClone(records.find(item => item.operation.operation_id === id));
+  f.invoke.mockImplementation(async (_project, input) => {
+    expect(saved.value.pending).toEqual(input);
+    const output = input.capability.id === 'plugins.resume' ? { observed_in_this_host: true,
+      instance: { identity, project: record.project, principal: record.principal, state: 'active' } } : record;
+    const result = { operation: { client_request_id: input.client_request_id, capability: input.capability,
+      normalized_arguments: input.arguments, preconditions: [], operation_id: `recovery-${records.length}` }, status: 'succeeded', outcome: 'succeeded', output };
+    records.push(result);
+    if (input.capability.id === 'plugins.resume') {
+      nativeState = 'active';
+      if (loseResume) { loseResume = false; throw Error('Lost resume reply'); }
+    } else { expect(input.capability.id).toBe('views.reconnect'); connected = true; }
+    return result;
+  });
+  const first = render(<PluginWorkspace client={f.client} project="/project" />);
+  const restore = await screen.findByRole('button', { name: 'Restore saved view', exact: true });
+  expect(f.invoke).not.toHaveBeenCalled(); fireEvent.click(restore);
+  await screen.findByRole('button', { name: 'Check recovery status', exact: true });
+  expect(f.invoke).toHaveBeenCalledOnce(); expect(mounted.starts).toEqual([]); first.unmount();
+  render(<PluginWorkspace client={f.client} project="/project" />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Restore saved view', exact: true }));
+  await screen.findByText('Instance restored. Continue to reconnect this view.');
+  expect(f.invoke).toHaveBeenCalledOnce(); expect(mounted.starts).toEqual([]);
+  fireEvent.click(screen.getByRole('button', { name: 'Restore saved view', exact: true }));
+  await screen.findByLabelText('Draft one');
+  expect(f.invoke.mock.calls.map(([, input]) => input.capability.id)).toEqual(['plugins.resume', 'views.reconnect']);
+  expect(mounted.starts).toEqual(['one']); expect(saved.value).toBeNull();
+});
