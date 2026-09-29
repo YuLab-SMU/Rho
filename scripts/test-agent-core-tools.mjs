@@ -9,8 +9,15 @@ import {fileURLToPath} from 'node:url';
 import {prepareAgentAcceptance} from './build-agent-plugin.mjs';
 import {agentAcceptanceOptions, agentBuildMode, verifyAgentBuild} from './agent-plugin-artifact.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const options = agentAcceptanceOptions(process.argv.slice(2));
+const options = agentAcceptanceOptions(process.argv.slice(2), {browser: true});
 if (!options.build) verifyAgentBuild(options.packagePath);
+if (options.browser) {
+  execFileSync('npm', ['run','test:browser','--prefix','ui','--','studio-agent.spec.ts'], {
+    cwd:root,stdio:'inherit',env:{...process.env,RHO_AGENT_PLUGIN_PACKAGE:options.packagePath},
+  });
+  console.log(`Studio / native Agent / checkpoint / build / preview / scenario browser flow passed with a ${agentBuildMode(options.packagePath)}-built Agent package.`);
+  process.exit(0);
+}
 const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-core-')));
 const env = {...process.env, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '2', RHO_AGENT_NATIVE_CORE_FIXTURE:'1'};
 const nativeBin = path.join(directory, 'native-bin');

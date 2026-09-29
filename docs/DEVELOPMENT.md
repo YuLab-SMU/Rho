@@ -552,6 +552,19 @@ record and leaves the running revision unchanged. The peer also asserts no build
 preview or scenario application occurred. This establishes native transport and
 Host composition, not model quality or Studio's Ask Agent interface.
 
+For the complete Studio path, first build the current Host and retain one current
+Agent package, then run `node scripts/test-agent-core-tools.mjs --browser --package
+/absolute/retained/package`. This mode runs `studio-agent.spec.ts` without Cargo or
+another Agent build. Its disposable Host uses actual Studio/Agent views and a local
+ACP peer through private MCP: review one captured branch, recover a lost view-open
+reply, add the request to a native draft, Send, and correlate one original source
+checkpoint. Studio then explicitly builds, previews and applies that exact revision
+to a scenario while the older instance remains active. The peer refuses replacement
+branch/head fields and repeats only the same checkpoint request. Type checking or
+test discovery alone does not establish this acceptance; use Status for run evidence.
+UI iteration uses `node scripts/test-studio-plugin.mjs --browser-agent` and
+`node scripts/test-agent-view.mjs --browser`, whose peers are synthetic.
+
 The ordinary Agent metadata process uses `cargo test -p rho-agent-backend --test
 metadata --locked` for framed Host exchanges, original caller identity, task/draft
 CAS, explicit controller takeover, bounded concurrency, disconnect and settlement.

@@ -73,6 +73,13 @@ async function prompt(message) {
     await rpc('notifications/initialized', {}, null);
   }
   const catalog = await rpc('tools/call', {name:'rho_tools', arguments:{send_request:sendRequest}});
+  if (fs.existsSync(path.join(cwd, 'native-studio-input.json'))) {
+    await require('./agent-studio-tools.cjs')({cwd, sendRequest, catalog, rpc, save, session, prompts});
+    send({jsonrpc:'2.0', method:'session/update', params:{sessionId:session, update:{sessionUpdate:'agent_message_chunk', content:{type:'text', text:'The selected Studio branch has a new checkpoint. Build and preview it in Studio.'}}}});
+    result(id, {stopReason:'end_turn'});
+    pending = null;
+    return;
+  }
   if (fs.existsSync(path.join(cwd, 'native-core-input.json'))) {
     await require('./agent-core-tools.cjs')({cwd, sendRequest, catalog, rpc, save, session, prompts});
     result(id, {stopReason:'end_turn'});
