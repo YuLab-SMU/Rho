@@ -7,7 +7,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {prepareAgentAcceptance} from './build-agent-plugin.mjs';
-import {agentAcceptanceOptions, verifyAgentBuild} from './agent-plugin-artifact.mjs';
+import {agentAcceptanceOptions, agentBuildMode, verifyAgentBuild} from './agent-plugin-artifact.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const options = agentAcceptanceOptions(process.argv.slice(2));
 if (!options.build) verifyAgentBuild(options.packagePath);
@@ -38,6 +38,6 @@ try {
     assert.equal(digest(executable),original);
     execFileSync(executable,['--ignored','--nocapture'],{cwd:root,env:{...env,RHO_AGENT_PLUGIN_PACKAGE:agent},stdio:'inherit'});
     assert.equal(digest(executable),original);
-    console.log(`${name} passed with an independent Agent package. Frozen harness SHA256 ${original}`);
+    console.log(`${name} passed with a ${agentBuildMode(agent)}-built Agent package. Frozen harness SHA256 ${original}`);
   }
 } finally { fs.rmSync(directory,{recursive:true,force:true}); }

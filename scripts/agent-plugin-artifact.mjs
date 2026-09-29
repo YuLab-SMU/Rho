@@ -36,14 +36,21 @@ function treeDigest(directory, entries, exclude = () => false) {
 
 export function agentBuildInputDigest(checkout = root) {
   return treeDigest(checkout, [...agentSourceCopies.map(([from]) => from),
-    'Cargo.lock', 'LICENSE', 'rust-toolchain.toml',
+    'Cargo.toml', 'Cargo.lock', 'LICENSE', 'rust-toolchain.toml',
     'scripts/build-agent-plugin.mjs', 'scripts/agent-plugin-artifact.mjs'], excludedAgentSource);
 }
 
 const receiptPath = packagePath => `${packagePath}.build.json`;
-export function recordAgentBuild(packagePath, inputDigest, checkout = root) {
+export function agentBuildMode(packagePath) {
+  const receipt = JSON.parse(fs.readFileSync(receiptPath(packagePath), 'utf8'));
+  assert.equal(receipt.format, 1, 'Unknown Agent build receipt');
+  assert.ok(['workspace', 'independent'].includes(receipt.build_mode), 'Agent receipt must identify its build mode');
+  return receipt.build_mode;
+}
+export function recordAgentBuild(packagePath, inputDigest, checkout = root, mode = 'independent') {
+  assert.ok(['workspace', 'independent'].includes(mode), 'Unknown Agent build mode');
   assert.equal(agentBuildInputDigest(checkout), inputDigest, 'Agent build inputs changed during the build; rebuild before acceptance');
-  const receipt = {format: 1, inputs: inputDigest, platform: process.platform, arch: process.arch,
+  const receipt = {format: 1, build_mode: mode, inputs: inputDigest, platform: process.platform, arch: process.arch,
     package_sha256: treeDigest(packagePath, ['.'])};
   fs.writeFileSync(receiptPath(packagePath), JSON.stringify(receipt, null, 2) + '\n', {flag: 'wx'});
   return receipt;
@@ -55,6 +62,7 @@ export function verifyAgentBuild(packagePath, checkout = root) {
   assert.ok(fs.existsSync(receiptPath(resolved)), 'Agent package has no build receipt; use --build once for milestone acceptance');
   const receipt = JSON.parse(fs.readFileSync(receiptPath(resolved), 'utf8'));
   assert.equal(receipt.format, 1, 'Unknown Agent build receipt');
+  agentBuildMode(resolved);
   assert.equal(receipt.platform, process.platform, 'Agent package platform changed');
   assert.equal(receipt.arch, process.arch, 'Agent package architecture changed');
   assert.equal(receipt.inputs, agentBuildInputDigest(checkout), 'Agent sources changed; use focused workspace tests while iterating, then --build at the milestone');
@@ -62,13 +70,14 @@ export function verifyAgentBuild(packagePath, checkout = root) {
   return resolved;
 }
 
-export function agentAcceptanceOptions(argv, {environment = process.env, framed = false, evidence = false} = {}) {
-  const options = {build: false, packagePath: environment.RHO_AGENT_PLUGIN_PACKAGE ?? null, skipFramed: false, evidence: null};
+export function agentAcceptanceOptions(argv, {environment = process.env, framed = false, evidence = false, browser = false} = {}) {
+  const options = {build: false, packagePath: environment.RHO_AGENT_PLUGIN_PACKAGE ?? null, skipFramed: false, evidence: null, browser: false};
   const seen = new Set();
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
     assert.ok(!seen.has(arg), `Repeated option: ${arg}`); seen.add(arg);
     if (arg === '--build') options.build = true;
+    else if (arg === '--browser' && browser) options.browser = true;
     else if (arg === '--skip-framed' && framed) options.skipFramed = true;
     else if (arg === '--package' || (arg === '--evidence' && evidence)) {
       const value = argv[++index];
@@ -78,5 +87,6 @@ export function agentAcceptanceOptions(argv, {environment = process.env, framed 
   }
   assert.ok(options.build !== Boolean(options.packagePath),
     'Milestone acceptance requires --build (one retained external build) OR --package <path> / RHO_AGENT_PLUGIN_PACKAGE (reuse). For iteration use focused workspace tests.');
+  assert.ok(!options.browser || !options.build, 'Browser integration requires a retained --package; it never starts another build');
   return options;
 }

@@ -5,6 +5,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {agentSourceCopies, excludedAgentSource, agentBuildInputDigest, recordAgentBuild, verifyAgentBuild} from './agent-plugin-artifact.mjs';
+import {assembleAgentArtifact} from '../plugins/agent/build.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // Resolve in the checkout before entering a temporary independent package, where
 // rustup otherwise selects the user's unrelated default toolchain.
@@ -14,7 +15,7 @@ export function agentPluginBuildEnvironment() {
     RHO_PLUGIN_NODE_MODULES: path.join(root, 'ui/node_modules'),
     CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '2', CARGO_TARGET_DIR: path.join(root, 'target')};
 }
-export function buildAgentPlugin(destination) {
+export function buildAgentPlugin(destination, {workspace = false} = {}) {
   assert.ok(destination, 'Specify a new package directory outside the checkout');
   const output = path.join(fs.realpathSync(path.dirname(path.resolve(destination))), path.basename(destination));
   assert.ok(output !== root && !output.startsWith(root + path.sep), 'Use an independent source directory');
@@ -50,8 +51,11 @@ export function buildAgentPlugin(destination) {
     for (const dependency of pkg.dependencies) if (dependency.path)
       assert.ok(dependency.path.startsWith(output + path.sep), `${pkg.name}: dependency leaves the independent package`);
   }
-  execFileSync(process.execPath, [path.join(output, 'build.mjs')], {cwd: output, env, stdio: 'inherit'});
-  recordAgentBuild(output, inputs);
+  if (workspace) {
+    execFileSync(env.RHO_PLUGIN_CARGO, ['build', '--locked', '--offline', '-p', 'rho-agent-backend', '--bins'], {cwd: root, env, stdio: 'inherit'});
+    assembleAgentArtifact(output, env.CARGO_TARGET_DIR, env);
+  } else execFileSync(process.execPath, [path.join(output, 'build.mjs')], {cwd: output, env, stdio: 'inherit'});
+  recordAgentBuild(output, inputs, root, workspace ? 'workspace' : 'independent');
   return output;
 }
 export function prepareAgentAcceptance(options) {
@@ -63,5 +67,9 @@ export function prepareAgentAcceptance(options) {
   console.log(`Retained Agent package: ${output}`);
   return buildAgentPlugin(output);
 }
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url))
-  console.log(`Independent Agent package: ${buildAgentPlugin(process.argv[2])}`);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  assert.ok(process.argv.slice(3).every(arg => arg === '--workspace') && process.argv.length <= 4,
+    'Usage: node scripts/build-agent-plugin.mjs /new/package [--workspace]');
+  const workspace = process.argv.includes('--workspace');
+  console.log(`${workspace ? 'Workspace-built' : 'Independent'} Agent package: ${buildAgentPlugin(process.argv[2], {workspace})}`);
+}

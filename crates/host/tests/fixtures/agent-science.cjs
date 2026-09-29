@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const readline = require('node:readline');
-const {randomUUID} = require('node:crypto');
+const {randomUUID, createHash} = require('node:crypto');
 // Backend processes inherit only PATH/locale. The disposable launcher directory
 // supplies this marker without weakening the Host's environment boundary.
 assert.equal(fs.readFileSync(path.join(__dirname, 'rho-science-fixture'), 'utf8'), 'disposable');
@@ -52,6 +52,13 @@ async function prompt(message) {
   const text = message.params.prompt.filter(p => p.type === 'text').map(p => p.text).join('\n');
   const sendRequest = text.match(/Use rho_call with send_request=([0-9a-f-]{36}) /)?.[1];
   assert.ok(sendRequest, 'Original Send identity must arrive through native input');
+  assert.ok(endpoint, 'A discovery session cannot start a scientific turn');
+  const attachments = message.params.prompt.filter(p => p.type === 'resource').map(p => ({
+    mime_type: p.resource.mimeType, bytes: Buffer.byteLength(p.resource.text),
+    sha256: createHash('sha256').update(p.resource.text).digest('hex'),
+  }));
+  const expectedAttachments = path.join(cwd, 'native-science-attachments.json');
+  if (fs.existsSync(expectedAttachments)) assert.deepEqual(attachments, JSON.parse(fs.readFileSync(expectedAttachments, 'utf8')));
   if (!mcpSession) {
     await rpc('initialize', {protocolVersion:'2025-06-18', capabilities:{}, clientInfo:{name:'rho-science-fixture', version:'1'}});
     await rpc('notifications/initialized', {}, null);
@@ -67,7 +74,7 @@ async function prompt(message) {
   assert.equal(catalog.structuredContent.tools[0].selection.name, 'execute');
   const input = JSON.parse(fs.readFileSync(path.join(cwd, 'native-science-input.json'), 'utf8'));
   const invocation = {send_request:sendRequest, tool_request:randomUUID(), tool:'execute', arguments:input, preconditions:null};
-  const evidence = {session, prompts, invocation};
+  const evidence = {session, prompts, invocation, attachments};
   save(evidence);
   const original = await rpc('tools/call', {name:'rho_call', arguments:invocation});
   assert.notEqual(original.isError, true);
@@ -86,9 +93,13 @@ lines.on('line', line => {
   const message = JSON.parse(line), p = message.params || {};
   if (message.method === 'initialize') result(message.id, {protocolVersion:1, agentInfo:{name:'Local scientific fixture', version:'1'}, agentCapabilities:{promptCapabilities:{embeddedContext:true}, sessionCapabilities:{close:{}}}});
   else if (message.method === 'session/new') {
-    cwd = p.cwd; session = randomUUID(); endpoint = p.mcpServers[0].url;
-    assert.equal(new URL(endpoint).hostname, '127.0.0.1');
-    headers = Object.fromEntries(p.mcpServers[0].headers.map(h => [h.name,h.value]));
+    cwd = p.cwd; session = randomUUID();
+    assert.ok(p.mcpServers.length <= 1);
+    endpoint = p.mcpServers[0]?.url;
+    if (endpoint) {
+      assert.equal(new URL(endpoint).hostname, '127.0.0.1');
+      headers = Object.fromEntries(p.mcpServers[0].headers.map(h => [h.name,h.value]));
+    }
     result(message.id, {sessionId:session, configOptions:config()});
   } else if (message.method === 'session/set_config_option') result(message.id, {configOptions:config()});
   else if (message.method === 'session/prompt') void prompt(message).catch(error => {

@@ -29,7 +29,7 @@ written deletion condition. Internal pieces are not reported as milestones.
 
 | # | Milestone (user flow) | Replaces / deletes | State |
 | --- | --- | --- | --- |
-| M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Ordinary scientific flow verified; default entry implemented, native/browser checks pending; delivery remains |
+| M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Ordinary scientific flow verified; default entry CLI cases pass, Host/browser acceptance incomplete; delivery remains |
 | M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Native view and attachment source/renderer checked; combined native/Host path pending |
 | M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Same-instance lifecycle recovery missing; not verified |
 | M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Not started |
@@ -65,7 +65,11 @@ plugin profile, accepts project selection in the browser, and offers installed
 standalone UI views in an empty window. Opening a view retains its original
 activation and view requests before dispatch. The startup model/window checks
 pass (25 frontend cases), including no fixed Studio construction in ordinary
-startup; the updated native Host and browser path remain pending.
+startup. The three CLI argument cases also pass, and the current Host binary was
+built. The broader CLI command was interrupted while starting unrelated filtered
+targets; it is not reported as a complete pass. Host/browser acceptance remains
+incomplete: the browser run timed out before the Host became ready and a snapshot
+subprocess also stalled; no new default-entry visual acceptance is claimed.
 Existing fixed-composition acceptance explicitly uses `--fixed-workspace`. Remove
 that temporary reference and shell after M2–M4 replace the remaining fixed flows;
 missing plugins cannot select it as a fallback. Default package delivery remains.
@@ -118,6 +122,10 @@ asset to a separately saved draft. Missing replies do not repeat import or Send
 on reload; inspection and exact-file reselection remain explicit. The native
 staging quota, checksum/controller checks and backend reopen fixtures are written
 but have not run yet; this is not a new native attachment acceptance claim.
+The combined real-R browser fixture is now written and discoverable, but unrun.
+It will use the same retained Agent artifact built through the primary workspace
+cache; build receipts distinguish that integration evidence from independent
+compilation. Mapped acceptance checks reuse the explicitly selected package.
 
 Not done: native acceptance of browser attachments, Rho tasks/settings and complete history
 in the ordinary Agent view, contributed context and component input/continuation,
@@ -170,6 +178,11 @@ Per-plugin checks are mapped in `governance/source-map.json`; run
 
 ### Known open problems
 
+- Native compilation and executable startup have shown prolonged idle waits.
+  The CLI build took 104 minutes, while its selected tests ran in under a second;
+  fresh Host startup subsequently exceeded its 60-second deadline. System logs
+  repeat `syspolicyd: Unable to initialize qtn_proc: 3`; this is diagnostic evidence,
+  not a proven cause. Logs and incomplete checks remain in `target/plugin-refactor`.
 - Plugin backend native initialization occasionally exceeded ten seconds before
   reaching the program entry (Studio backend browser runs); cause not established.
   Treat a repeat as an infrastructure issue to investigate, not a product pass.

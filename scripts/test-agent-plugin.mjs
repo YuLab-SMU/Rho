@@ -10,7 +10,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {agentPluginBuildEnvironment, prepareAgentAcceptance} from './build-agent-plugin.mjs';
-import {agentAcceptanceOptions, verifyAgentBuild} from './agent-plugin-artifact.mjs';
+import {agentAcceptanceOptions, agentBuildMode, verifyAgentBuild} from './agent-plugin-artifact.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const options = agentAcceptanceOptions(process.argv.slice(2), {framed: true, evidence: true});
 const {evidence, skipFramed} = options;
@@ -37,7 +37,8 @@ try {
   const original = digest(executable);
   record.host_sha256 = original;
   const source = stage(options.build ? 'independent-build' : 'reuse-package', () => prepareAgentAcceptance(options));
-  record.package = source; save();
+  const mode = agentBuildMode(source);
+  record.package = source; record.build_mode = mode; save();
   assert.ok(!source.startsWith(root + path.sep), 'Use an independent package');
   const manifest = JSON.parse(fs.readFileSync(path.join(source, 'plugin.json'), 'utf8'));
   assert.ok(manifest.source.files.includes('backend/src/server.rs'));
@@ -45,13 +46,13 @@ try {
   record.backend_sha256 = digest(path.join(source, 'dist/rho-agent-backend'));
   if (!skipFramed) {
     const external = agentPluginBuildEnvironment();
-    stage('independent-framed', () => execFileSync(external.RHO_PLUGIN_CARGO, ['test', '-p', 'rho-agent-backend', '--lib', '--test', 'metadata', '--locked', '--offline'], {
-      cwd: source, env: external, stdio: 'inherit',
+    stage(`${mode}-framed`, () => execFileSync(external.RHO_PLUGIN_CARGO, ['test', '-p', 'rho-agent-backend', '--lib', '--test', 'metadata', '--locked', '--offline'], {
+      cwd: mode === 'workspace' ? root : source, env: external, stdio: 'inherit',
     }));
   }
   assert.equal(digest(executable), original);
   stage('generic-host', () => execFileSync(executable, ['--ignored', '--nocapture'], {cwd: root, env: {...env, RHO_AGENT_PLUGIN_PACKAGE: source}, stdio: 'inherit'}));
   assert.equal(digest(executable), original);
   record.completed = true; save();
-  console.log(`Independent Agent package passed${skipFramed ? '' : ' its framed tests and'} the frozen generic Host cases. Host harness SHA256 ${original}`);
+  console.log(`${mode}-built Agent package passed${skipFramed ? '' : ' its framed tests and'} the frozen generic Host cases. Host harness SHA256 ${original}`);
 } catch (error) { save(); throw error; }

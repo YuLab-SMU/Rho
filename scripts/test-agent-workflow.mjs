@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {agentAcceptanceOptions, agentBuildInputDigest, agentSourceCopies, recordAgentBuild, verifyAgentBuild} from './agent-plugin-artifact.mjs';
+import {agentAcceptanceOptions, agentBuildInputDigest, agentBuildMode, agentSourceCopies, recordAgentBuild, verifyAgentBuild} from './agent-plugin-artifact.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const parse = (args, extra = {}) => agentAcceptanceOptions(args, {environment: {}, ...extra});
@@ -16,19 +16,35 @@ for (const args of [['--build', '--package', '/tmp/example'], ['--package'], ['-
   assert.throws(() => parse(args));
 }
 assert.equal(parse(['--build', '--skip-framed'], {framed: true}).skipFramed, true);
+assert.equal(parse(['--package', '/tmp/example', '--browser'], {browser: true}).browser, true);
+assert.throws(() => parse(['--build', '--browser'], {browser: true}), /never starts another build/);
+assert.throws(() => parse(['--package', '/tmp/example', '--browser']), /Unknown option/);
 
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-workflow-'));
 try {
   const checkout = path.join(temporary, 'checkout'), pkg = path.join(temporary, 'external');
   const write = (file, text) => {fs.mkdirSync(path.dirname(file), {recursive: true}); fs.writeFileSync(file, text);};
   for (const [source] of agentSourceCopies) write(path.join(checkout, source, 'source.rs'), source);
-  for (const source of ['Cargo.lock', 'LICENSE', 'rust-toolchain.toml', 'scripts/build-agent-plugin.mjs', 'scripts/agent-plugin-artifact.mjs']) write(path.join(checkout, source), source);
+  for (const source of ['Cargo.toml', 'Cargo.lock', 'LICENSE', 'rust-toolchain.toml', 'scripts/build-agent-plugin.mjs', 'scripts/agent-plugin-artifact.mjs']) write(path.join(checkout, source), source);
   write(path.join(pkg, 'plugin.json'), '{}');
   write(path.join(pkg, 'dist/backend'), 'fixture artifact');
   const inputs = agentBuildInputDigest(checkout);
   assert.throws(() => verifyAgentBuild(pkg, checkout), /no build receipt/);
   recordAgentBuild(pkg, inputs, checkout);
+  assert.equal(agentBuildMode(pkg), 'independent');
   assert.equal(verifyAgentBuild(pkg, checkout), fs.realpathSync(pkg));
+  const workspacePackage = path.join(temporary, 'workspace-built');
+  write(path.join(workspacePackage, 'plugin.json'), '{}');
+  recordAgentBuild(workspacePackage, inputs, checkout, 'workspace');
+  assert.equal(agentBuildMode(workspacePackage), 'workspace');
+  assert.equal(verifyAgentBuild(workspacePackage, checkout), fs.realpathSync(workspacePackage));
+  const manifest = path.join(checkout, 'Cargo.toml');
+  fs.appendFileSync(manifest, '\nchanged workspace configuration');
+  assert.throws(() => verifyAgentBuild(workspacePackage, checkout), /Agent sources changed/);
+  write(manifest, 'Cargo.toml');
+  const receiptFile = `${workspacePackage}.build.json`, receipt = JSON.parse(fs.readFileSync(receiptFile, 'utf8'));
+  delete receipt.build_mode; fs.writeFileSync(receiptFile, JSON.stringify(receipt));
+  assert.throws(() => verifyAgentBuild(workspacePackage, checkout), /identify its build mode/);
   write(path.join(checkout, 'docs/notes.md'), 'An unrelated documentation edit');
   assert.equal(verifyAgentBuild(pkg, checkout), fs.realpathSync(pkg));
   const source = path.join(checkout, 'plugins/agent/source.rs');
@@ -63,5 +79,21 @@ try {
       assert.ok(!fs.existsSync(marker), `${runner} unexpectedly started Cargo`);
     }
   }
+  // The combined browser fixture must support the explicit model-catalog probe,
+  // whose ACP session intentionally has no scientific MCP endpoint.
+  const peer = path.join(temporary, 'kimi');
+  write(path.join(temporary, 'rho-science-fixture'), 'disposable');
+  fs.copyFileSync(path.join(root, 'crates/host/tests/fixtures/agent-science.cjs'), peer);
+  const messages = [
+    {jsonrpc:'2.0', id:1, method:'initialize', params:{protocolVersion:1}},
+    {jsonrpc:'2.0', id:2, method:'session/new', params:{cwd:temporary, mcpServers:[]}},
+    {jsonrpc:'2.0', id:3, method:'session/close', params:{}},
+  ];
+  const probe = spawnSync(process.execPath, [peer], {input:messages.map(m => JSON.stringify(m)).join('\n')+'\n', encoding:'utf8', timeout:5000});
+  assert.equal(probe.status, 0, probe.stderr);
+  const replies = probe.stdout.trim().split('\n').map(line => JSON.parse(line));
+  assert.deepEqual(replies.map(reply => reply.id), [1,2,3]);
+  assert.equal(replies[1].result.configOptions[0].currentValue, 'fixture');
+  assert.ok(!fs.existsSync(path.join(temporary, 'native-science-evidence.json')), 'Discovery must not start a scientific turn');
 } finally { fs.rmSync(temporary, {recursive: true, force: true}); }
-console.log('Agent acceptance requires an explicit mode; source/artifact reuse rejects stale, modified or missing evidence. No Cargo build ran.');
+console.log('Agent acceptance requires an explicit mode; source/artifact reuse rejects stale, modified or missing evidence. Local ACP discovery passed without a scientific turn. No Cargo build ran.');

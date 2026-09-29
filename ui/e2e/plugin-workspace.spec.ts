@@ -24,8 +24,8 @@ test.beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), "rho-external-ui-"));
   project = join(directory, "project"); await mkdir(project); project = await realpath(project);
   const plugin = buildUiFixture(directory), database = join(directory, "state.sqlite");
-  const installed = JSON.parse(execFileSync(resolve("../target/debug/rho"), ["--database", database, "plugins", "snapshot", plugin], { encoding: "utf8" })).result;
-  const native = JSON.parse(execFileSync(resolve("../target/debug/rho"), ["--database", database, "plugins", "snapshot", buildControlFixture(directory), "--target", "aarch64-apple-darwin"], { encoding: "utf8" })).result;
+  const installed = JSON.parse(execFileSync(resolve("../target/debug/rho"), ["--database", database, "plugins", "snapshot", plugin], { encoding: "utf8", timeout: 60000, killSignal: "SIGKILL" })).result;
+  const native = JSON.parse(execFileSync(resolve("../target/debug/rho"), ["--database", database, "plugins", "snapshot", buildControlFixture(directory), "--target", "aarch64-apple-darwin"], { encoding: "utf8", timeout: 60000, killSignal: "SIGKILL" })).result;
   process_ = spawn(resolve("../target/debug/rho"), ["--database", database, "--project", project, "--plugins-only", "workbench"], { stdio: ["ignore", "pipe", "pipe"] });
   url = new URL(await new Promise<string>((done, reject) => {
     let output = "", errors = "";

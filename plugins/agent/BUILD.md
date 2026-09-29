@@ -16,6 +16,13 @@ and these instructions are included in the package inventory.
 The generated manifest uses compact JSON so the complete encoded file, including
 its source inventory, remains within the public protocol's 256 KiB read limit.
 
+During repository development, add `--workspace` to the assembler to reuse the
+primary Cargo workspace cache. It still creates a complete external source/UI
+package and an immutable native artifact. The adjacent receipt records the build
+mode; acceptance runners report workspace integration separately from independent
+source compilation. Reuse that package with `--package` while its inputs match.
+The normal standalone `node build.mjs` path remains the independent build check.
+
 The current process contributes task metadata queries and model-task create,
 draft, title/archive, explicit control-transfer and model-configuration Operations.
 Configuration validates an expected settings version and credential references.
@@ -127,6 +134,13 @@ isolated PATH and disposable files; it does not need forwarded Host environment
 variables. These checks do not contact external models, use existing user sessions
 or establish native model quality/full Host restart. Required runtimes must already
 be installed.
+
+For the combined ordinary view, add `--browser --package /absolute/retained/package`
+to the real-R runner and supply `RHO_R_PLUGIN_PACKAGE`, `RHO_ARK` and `RHO_R_HOME`.
+This mode reuses the current Host and package artifacts without compiling. Its
+local ACP peer checks the captured attachment digests and calls the actual R
+plugin once under the original Send; the browser reloads during that operation.
+It is separate from both the synthetic UI renderer and actual Host restart.
 
 ## Ordinary Agent view (first slice)
 

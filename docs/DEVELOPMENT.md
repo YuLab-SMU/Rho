@@ -71,6 +71,17 @@ framed result that covers the current source. Real-R reuse also requires
 Keep retained packages through milestone acceptance and remove them when their
 evidence is no longer needed. Older packages without receipts are not adopted.
 
+For Agent integration during development, run
+`node scripts/build-agent-plugin.mjs /new/package --workspace` once, then pass
+that package to the same `--package` runners. This builds the native backend in
+the primary workspace cache and assembles the same source/UI package. The receipt
+and acceptance output identify `workspace` versus `independent` builds; workspace
+framed checks also stay in the primary checkout. This verifies integration, not
+independent-source compilation. Omit `--workspace` only when that separate
+acceptance is due. Neither mode weakens package validation or source containment.
+Mapped Agent integration checks expect `RHO_AGENT_PLUGIN_PACKAGE` to identify the
+retained package; they no longer suggest an independent rebuild at every stage.
+
 The scientific-window integration runner also reuses explicit native packages:
 `node scripts/test-scientific-workspace.mjs --packages /absolute/packages.json`,
 with `RHO_ARK` and `RHO_R_HOME` selecting an existing disposable-test runtime.
@@ -101,6 +112,14 @@ when the interaction settles to check the production UI in an opaque iframe with
 a synthetic public MessagePort peer. That fixture does not replace real combined
 Agent/Host acceptance; native manifest changes still require the serial exporter
 and backend checks before snapshotting the package.
+
+Once the combined package is current, run the existing real-R runner with
+`--browser --package /absolute/retained/package` and explicit `RHO_R_PLUGIN_PACKAGE`,
+`RHO_ARK` and `RHO_R_HOME`. This mode never invokes Cargo: `agent-workspace.spec.ts`
+uses the current Host, ordinary Agent/R packages and a local ACP peer. It checks
+browser attachment capture, lost import receipts, one original Send, real R work
+and reload during that work. It does not establish external-model quality or Host
+restart recovery. A listed/written browser case is not a passing native result.
 
 ### Status discipline
 

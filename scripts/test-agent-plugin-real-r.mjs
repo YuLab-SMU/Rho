@@ -7,13 +7,20 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {prepareAgentAcceptance} from './build-agent-plugin.mjs';
-import {agentAcceptanceOptions, verifyAgentBuild} from './agent-plugin-artifact.mjs';
+import {agentAcceptanceOptions, agentBuildMode, verifyAgentBuild} from './agent-plugin-artifact.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const options = agentAcceptanceOptions(process.argv.slice(2));
+const options = agentAcceptanceOptions(process.argv.slice(2), {browser: true});
 if (!options.build) verifyAgentBuild(options.packagePath);
 assert.ok(options.build || process.env.RHO_R_PLUGIN_PACKAGE,
   'Reuse also requires RHO_R_PLUGIN_PACKAGE; use --build only when a new independent R package is due');
 assert.ok(process.env.RHO_ARK && process.env.RHO_R_HOME, 'Set RHO_ARK and RHO_R_HOME for disposable R acceptance');
+if (options.browser) {
+  execFileSync('npm', ['run', 'test:browser', '--prefix', 'ui', '--', 'agent-workspace.spec.ts'], {
+    cwd: root, stdio: 'inherit', env: {...process.env, RHO_AGENT_PLUGIN_PACKAGE: options.packagePath},
+  });
+  console.log(`Ordinary Agent browser / real R flow passed with a ${agentBuildMode(options.packagePath)}-built Agent package.`);
+  process.exit(0);
+}
 const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-agent-science-')));
 const env = {...process.env, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '2'};
 const nativeBin = path.join(directory, 'native-bin');
@@ -44,6 +51,6 @@ try {
     assert.equal(digest(executable),original);
     execFileSync(executable,['--ignored','--nocapture'],{cwd:root,env:{...env,RHO_AGENT_PLUGIN_PACKAGE:agent,RHO_R_PLUGIN_PACKAGE:r},stdio:'inherit'});
     assert.equal(digest(executable),original);
-    console.log(`${name} passed against independent Agent/R packages. Host harness SHA256 ${original}`);
+    console.log(`${name} passed against a ${agentBuildMode(agent)}-built Agent package and the selected R package. Host harness SHA256 ${original}`);
   }
 } finally { fs.rmSync(directory,{recursive:true,force:true}); }
