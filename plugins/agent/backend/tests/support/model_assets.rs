@@ -116,6 +116,31 @@ async fn rho_attachments_reopen_with_original_identity_and_no_implicit_draft_or_
 }
 
 #[tokio::test]
+async fn rho_confirmed_attachment_reselection_releases_transient_transfer_slots() {
+    let mut f = Fixture::start().await;
+    f.run_input().await;
+    let bytes = b"original file";
+    // Staging allows 16 in-flight files. Successfully finishing and then
+    // reselecting files must not consume those slots permanently.
+    for _ in 0..17 {
+        let input = upload(bytes, "text/plain");
+        stage(&mut f, &input, bytes).await;
+        let original = finish(&mut f, &input).await;
+        stage(&mut f, &input, bytes).await;
+        assert_eq!(finish(&mut f, &input).await, original);
+    }
+    assert_eq!(
+        f.query("agent.model.assets", json!({"conversation_id":"task-one"}))
+            .await["assets"]
+            .as_array()
+            .unwrap()
+            .len(),
+        17
+    );
+    f.release().await;
+}
+
+#[tokio::test]
 async fn rho_attachment_only_send_captures_full_text_and_original_retry_never_starts_another_model()
 {
     let mut f = Fixture::start().await;

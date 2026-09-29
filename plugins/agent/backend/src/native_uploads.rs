@@ -114,6 +114,21 @@ impl Transfer for Upload {
     }
 }
 impl<T: Transfer> Uploads<T> {
+    /// A confirmed owner record makes an identical reselected transfer redundant.
+    /// Drop only this descriptor/controller pair, without touching another transfer.
+    pub fn discard(&self, upload: &T, controller: &AgentControllerRef) -> Result<(), Failure> {
+        let mut entries = self
+            .0
+            .lock()
+            .map_err(|_| Failure::invalid("Attachment staging is unavailable"))?;
+        if entries
+            .get(upload.id())
+            .is_some_and(|entry| &entry.upload == upload && &entry.controller == controller)
+        {
+            entries.remove(upload.id());
+        }
+        Ok(())
+    }
     pub fn stage(
         &self,
         upload: T,

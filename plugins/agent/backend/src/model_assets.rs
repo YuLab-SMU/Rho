@@ -213,6 +213,7 @@ impl ModelAssets {
                 {
                     return Err(Failure::invalid("The original attachment identity changed"));
                 }
+                self.uploads.discard(&upload, &controller)?;
                 return encoded(Imported {
                     conversation_id: upload.conversation_id,
                     asset: original,
