@@ -538,7 +538,7 @@ Checks:
 - `plugins.scenario-ports` (L2): `["cargo","test","-p","rho-host","--test","plugin_scenarios","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
 - `plugins.scientific-workspace` (L2): `["node","scripts/test-scientific-workspace.mjs"]`
-  Applies to: `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugins/**`, `crates/workbench/**`, `plugins/**`, `scripts/test-scientific-workspace.mjs`, `sdk/**`, `ui/e2e/scientific-workspace.spec.ts`, `ui/src/plugin*`.
+  Applies to: `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugins/**`, `crates/workbench/**`, `plugins/**`, `scripts/plugin-set.mjs`, `scripts/test-scientific-workspace.mjs`, `sdk/**`, `ui/e2e/scientific-workspace.spec.ts`, `ui/src/plugin*`.
 - `plugins.self-requirements` (L2): `["cargo","test","-p","rho-host","--test","plugin_self_requirements","--test","plugin_optional_requirements","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/src/**`.
 - `plugins.studio-agent-host` (L2): `["node","scripts/test-agent-core-tools.mjs","--browser"]`

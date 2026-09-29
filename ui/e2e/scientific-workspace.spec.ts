@@ -4,6 +4,7 @@ import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { installPluginSet } from '../../scripts/plugin-set.mjs';
 import { buildManagerPlugin } from '../../scripts/build-manager-plugin.mjs';
 import { buildConsolePlugin } from '../../scripts/build-console-plugin.mjs';
 import { buildObjectsPlugin } from '../../scripts/build-objects-plugin.mjs';
@@ -21,15 +22,23 @@ async function port(method: string, params: unknown) {
 async function query(id: string, args: unknown) { return (await port('query_snapshot', { capability: { id, version: 1 }, arguments: args })).data; }
 test.beforeAll(async () => {
   test.setTimeout(180000);
-  expect(process.env.RHO_SCIENTIFIC_PACKAGES).toBeTruthy(); expect(process.env.RHO_ARK).toBeTruthy(); expect(process.env.RHO_R_HOME).toBeTruthy();
-  const native = JSON.parse(readFileSync(process.env.RHO_SCIENTIFIC_PACKAGES!, 'utf8'));
+  expect(process.env.RHO_SCIENTIFIC_PACKAGES || process.env.RHO_SCIENTIFIC_PLUGIN_SET).toBeTruthy(); expect(process.env.RHO_ARK).toBeTruthy(); expect(process.env.RHO_R_HOME).toBeTruthy();
+  const native = process.env.RHO_SCIENTIFIC_PACKAGES ? JSON.parse(readFileSync(process.env.RHO_SCIENTIFIC_PACKAGES, 'utf8')) : {};
   directory = realpathSync(mkdtempSync(join(tmpdir(), 'rho-scientific-window-'))); project = join(directory, 'project'); mkdirSync(project);
   writeFileSync(join(project, filename), 'answer <- 1L\n'); execFileSync('git', ['init', '-q', project]);
   const binary = resolve('../target/debug/rho'), database = join(directory, 'state.sqlite');
   const snapshot = (path: string, target: string) => JSON.parse(execFileSync(binary, ['--database', database, 'plugins', 'snapshot', path, '--target', target], { encoding: 'utf8', timeout: 60000, killSignal: 'SIGKILL' })).result;
-  for (const key of ['r', 'files', 'editor']) snapshot(native[key], 'aarch64-apple-darwin');
-  for (const [key, build] of Object.entries({ console: buildConsolePlugin, objects: buildObjectsPlugin, plots: buildPlotsPlugin, viewer: buildViewerPlugin, packages: buildPackagesPlugin, help: buildHelpPlugin })) snapshot(native[key] ?? build(join(directory, key)), 'ui-web');
-  snapshot(buildManagerPlugin(join(directory, 'manager')), 'ui-web');
+  if (process.env.RHO_SCIENTIFIC_PLUGIN_SET) {
+    const delivery = JSON.parse(readFileSync(join(process.env.RHO_SCIENTIFIC_PLUGIN_SET, 'plugin-set.json'), 'utf8'));
+    expect(delivery.profile).toBe('rho-default');
+    expect(installPluginSet({rho: binary, directory: process.env.RHO_SCIENTIFIC_PLUGIN_SET, database}).imported).toHaveLength(16);
+  } else {
+    for (const key of ['r', 'files', 'editor']) snapshot(native[key], 'aarch64-apple-darwin');
+    for (const key of ['process', 'remote', 'environment', 'annotations', 'agent']) if (native[key]) snapshot(native[key], 'aarch64-apple-darwin');
+    if (native.studio) snapshot(native.studio, 'ui-web');
+    for (const [key, build] of Object.entries({ console: buildConsolePlugin, objects: buildObjectsPlugin, plots: buildPlotsPlugin, viewer: buildViewerPlugin, packages: buildPackagesPlugin, help: buildHelpPlugin })) snapshot(native[key] ?? build(join(directory, key)), 'ui-web');
+    snapshot(buildManagerPlugin(join(directory, 'manager')), 'ui-web');
+  }
   const assets = process.env.RHO_WORKBENCH_DEV_ASSETS;
   host = spawn(binary, ['--database', database, 'workbench', ...(assets ? ['--dev-assets', realpathSync(assets)] : [])], { stdio: ['ignore', 'pipe', 'pipe'] });
   url = new URL(await new Promise<string>((done, reject) => {
@@ -60,11 +69,19 @@ test('Manager prepares the ordinary scientific scene; Files opens a runnable Edi
   const choice = selector.locator('option').filter({ hasText: /^Plugins ·/ });
   await expect(choice).toHaveCount(1); await selector.selectOption((await choice.getAttribute('value'))!);
   await page.screenshot({ path: info.outputPath('scientific-launcher.png') });
-  let lost = false;
+  let lost = false, lostWorkspace = false, workspaceReplyLost = false;
+  const full = !!process.env.RHO_SCIENTIFIC_PLUGIN_SET;
   await page.route('**/api/host', async route => {
     const request = route.request().postDataJSON()?.frame?.request;
     if (!lost && request?.method === 'invoke' && request.params.capability.id === 'plugins.activate') {
       lost = true; await route.fetch(); await route.abort(); return;
+    }
+    await route.continue();
+  });
+  if (full) await page.route('**/api/plugin-view', async route => {
+    const body = route.request().postDataJSON()?.message?.body;
+    if (!lostWorkspace && body?.type === 'invoke' && body.capability.id === 'plugins.activate' && body.arguments.alias === 'r') {
+      lostWorkspace = true; await route.fetch(); await route.abort(); workspaceReplyLost = true; return;
     }
     await route.continue();
   });
@@ -89,12 +106,43 @@ test('Manager prepares the ordinary scientific scene; Files opens a runnable Edi
   await dialog.getByLabel('Existing Ark executable', { exact: true }).fill(realpathSync(process.env.RHO_ARK!));
   await dialog.getByLabel('Existing R home', { exact: true }).fill(realpathSync(process.env.RHO_R_HOME!));
   await page.screenshot({ path: info.outputPath('scientific-setup.png') });
+  if (full) {
+    for (const width of [1920, 390]) {
+      await page.setViewportSize({width,height:900});
+      await dialog.getByRole('button',{name:'Prepare workspace',exact:true}).scrollIntoViewIfNeeded();
+      await expect(dialog.getByRole('button',{name:'Prepare workspace',exact:true})).toBeVisible();
+      await page.screenshot({path:info.outputPath(`default-setup-${width}.png`)});
+    }
+    await page.setViewportSize({width:1440,height:900});
+  }
   await dialog.getByRole('button', { name: 'Prepare workspace', exact: true }).click();
-  await expect(manager.locator('#notice')).not.toHaveText('Working…', { timeout: 90000 });
+  if (full) {
+    // A transport loss fences the old iframe. Reload reconnects its retained
+    // view; expecting controls on the retired document would hide that boundary.
+    await expect.poll(() => workspaceReplyLost, {timeout:60000}).toBe(true);
+    await expect.poll(async () => (await query('plugins.instances', {after:null,limit:100})).total).toBe(2);
+    await page.reload();
+    await manager.getByRole('button', {name:'Inspect original request',exact:true}).click();
+    await expect(manager.locator('#notice')).not.toHaveText('Working…');
+    await expect.poll(async () => (await query('plugins.instances', {after:null,limit:100})).total).toBe(2);
+    await manager.getByRole('button', {name:'Continue R workspace preparation',exact:true}).click();
+    await expect(manager.locator('#notice')).not.toHaveText('Working…', {timeout:90000});
+  }
+  await expect(manager.locator('#notice')).not.toHaveText('Working…', {timeout:90000});
   await expect(manager.locator('#error')).toBeHidden();
   await expect(manager.getByRole('button', { name: 'Switch to R workspace', exact: true })).toBeEnabled();
   expect((await query('windows.scenario', { window: windowId })).scenario).toBeNull();
   const prepared = await query('views.inspect', { view: managerView.view }), mapping = prepared.state.preparation.request;
+  if (full) {
+    expect(Object.keys(mapping.instances)).toHaveLength(16);
+    expect(Object.keys(mapping.views)).toHaveLength(11);
+    const agent = await query('views.inspect', {view: mapping.views.agent});
+    expect(agent.configuration.tools).toHaveLength(14);
+    for (const tool of agent.configuration.tools) {
+      expect(tool.target.binding.provider).toEqual(mapping.instances[tool.target.binding.provider.plugin.slice(8)]);
+      expect(tool.target.binding.project).toBe(agent.project);
+    }
+  }
   const source = mapping.instances.r;
   const session = async () => query('r.session', { binding: await query('plugins.resolve', { instance: source, capability: { id: 'r.session', version: 1 } }), arguments: {} });
   expect((await session()).state).toBe('unstarted');
@@ -142,5 +190,27 @@ test('Manager prepares the ordinary scientific scene; Files opens a runnable Edi
   await page.screenshot({ path: info.outputPath('scientific-plots.png') });
   await page.reload(); await expect(editor.getByRole('textbox', { name: 'Code Editor', exact: true })).toContainText('answer <- 42L');
   expect(await executions()).toHaveLength(1); expect((await session()).session_id).toBe(nativeSession);
+  if (full) {
+    await page.getByRole('tab', {name:'Agent', exact:true}).click();
+    const agent = frame(mapping.views.agent);
+    await expect(agent.getByRole('button', {name:'New task',exact:true})).toBeVisible();
+    await agent.getByRole('button', {name:'Tools',exact:true}).click();
+    await expect(agent.locator('#tools-menu input[type=checkbox]')).toHaveCount(14);
+    expect(await agent.locator('#tools-menu input:checked').count()).toBe(0);
+    await page.screenshot({path:info.outputPath('default-agent-tools.png')});
+    await agent.locator('#tools-menu input[type=checkbox]').last().scrollIntoViewIfNeeded();
+    await page.keyboard.press('Escape');
+    await expect(agent.locator('#tools-menu')).toBeHidden();
+    await page.getByRole('tab', {name:'Plugin Studio',exact:true}).click();
+    await expect(frame(mapping.views.studio).getByRole('heading', {name:'Plugin Studio',exact:true})).toBeVisible();
+    await expect(frame(mapping.views.studio).getByRole('button', {name:'Choose revision',exact:true})).toBeEnabled();
+    expect((await query('plugins.instances',{after:null,limit:100})).total).toBe(16);
+    expect(await executions()).toHaveLength(1);
+    await page.screenshot({path:info.outputPath('default-studio.png')});
+  }
+  if (process.env.RHO_SCIENTIFIC_EVIDENCE) writeFileSync(process.env.RHO_SCIENTIFIC_EVIDENCE, JSON.stringify({completed:true,full_delivery:full,
+    set:process.env.RHO_SCIENTIFIC_PLUGIN_SET ?? null,instances:mapping.instances,views:mapping.views,scenario:mapping.revision,
+    original_execution:id,native_session:nativeSession,agent_tools_offered_unchecked:full,studio_opened:full,
+    screenshots:info.outputDir,limits:['No new model/tool execution or native service operation acceptance; no user installation or Host restart.']},null,2)+'\n');
   completed = true;
 });

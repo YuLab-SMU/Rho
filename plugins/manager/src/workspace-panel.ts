@@ -1,6 +1,6 @@
 import type { PluginCatalogPage, PluginInspection } from '../public/plugin-protocol/index.js';
 import { Manager, read, short } from './model.js';
-import { scientificPlugins, scientificWorkspace, type ScientificPlugin, type WorkspaceChoice } from './scientific-workspace.js';
+import { scientificPlugins, workspacePlugins, scientificWorkspace, type ScientificPlugin, type WorkspaceChoices, type WorkspaceChoice } from './scientific-workspace.js';
 
 /** Uses the existing reviewed scenario dialog and prepare/switch interaction. */
 export function workspacePanel(manager: Manager, act: (work: () => Promise<unknown> | void) => void, saveSoon: () => void, refresh: () => Promise<void>) {
@@ -14,8 +14,9 @@ export function workspacePanel(manager: Manager, act: (work: () => Promise<unkno
   }
   get<HTMLButtonElement>('cancel-workspace').onclick = () => act(async () => { await manager.save(); dialog.close(); });
   get<HTMLButtonElement>('prepare-workspace').onclick = () => act(async () => {
-    const selected = {} as Record<ScientificPlugin, WorkspaceChoice>;
-    for (const key of scientificPlugins) {
+    const selected = {} as WorkspaceChoices;
+    for (const key of workspacePlugins) {
+      if (!draft().choices[key] && !scientificPlugins.includes(key as ScientificPlugin)) continue;
       const value = choices.get(draft().choices[key] ?? '');
       if (!value || value.inspection.manifest.id !== `org.rho.${key}`) throw Error(`Select an installed ${key} artifact.`);
       selected[key] = value;
@@ -37,7 +38,7 @@ export function workspacePanel(manager: Manager, act: (work: () => Promise<unkno
       for (let pageNumber = 0; pageNumber < 10; pageNumber++) {
         const page: PluginCatalogPage = await read(manager.client, 'plugins.list', { after, limit: 100 });
         for (const item of page.items) {
-          if (!scientificPlugins.some(key => item.plugin === `org.rho.${key}`)) continue;
+          if (!workspacePlugins.some(key => item.plugin === `org.rho.${key}`)) continue;
           const inspection = await read<PluginInspection>(manager.client, 'plugins.inspect', { revision: item.revision });
           const target = inspection.manifest.backend ? backendTarget : 'ui-web';
           for (const artifact of inspection.artifacts.filter(a => a.target === target)) choices.set(artifact.id, { inspection, artifact: artifact.id });
@@ -47,13 +48,13 @@ export function workspacePanel(manager: Manager, act: (work: () => Promise<unkno
       }
       if (after) throw Error('The installed catalog exceeds this bounded selection. Use an explicit scenario for the desired revisions.');
       const list = get<HTMLDivElement>('workspace-packages'); list.replaceChildren();
-      for (const key of scientificPlugins) {
+      for (const key of workspacePlugins) {
         const label = document.createElement('label'); label.htmlFor = `workspace-${key}-package`; label.textContent = key === 'r' ? 'R runtime' : key[0].toUpperCase() + key.slice(1);
         const select = document.createElement('select'); select.id = label.htmlFor;
         const entries = [...choices].filter(([, value]) => value.inspection.manifest.id === `org.rho.${key}`);
-        select.add(new Option(entries.length ? 'Select revision…' : 'No revision', ''));
+        select.add(new Option(scientificPlugins.includes(key as ScientificPlugin) ? (entries.length ? 'Select revision…' : 'No revision') : 'Not included', ''));
         for (const [id, value] of entries) select.add(new Option(`${value.inspection.manifest.version} · ${short(value.inspection.summary.revision)} · ${short(id)}`, id));
-        const retained = draft().choices[key]; select.value = retained && entries.some(([id]) => id === retained) ? retained : entries.length === 1 ? entries[0][0] : '';
+        const retained = draft().choices[key]; select.value = retained !== undefined ? (entries.some(([id]) => id === retained) ? retained : '') : entries.length === 1 ? entries[0][0] : '';
         draft().choices[key] = select.value;
         select.onchange = () => { draft().choices[key] = select.value; saveSoon(); };
         list.append(label, select);

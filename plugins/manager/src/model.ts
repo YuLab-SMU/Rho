@@ -5,7 +5,7 @@ import { type Client, type Intent, type RecordReply, json, same, verifyOriginal,
 import { ViewRequestError } from '../public/plugin-ui/index.js';
 import { ArchiveUpload, verifyArchiveImport, type ArchiveUploadState } from './archive.js';
 import { ArchiveExport, type ArchiveExportState } from './export.js';
-import { scientificPlugins, scientificScenario, type ScientificWorkspace } from './scientific-workspace.js';
+import { workspacePlugins, scientificScenario, type ScientificWorkspace } from './scientific-workspace.js';
 export { same, json } from './operations.js';
 export type Purpose = { kind: 'activate' | 'view' | 'workspace_instance'; key: string } | { kind: 'apply' | 'checkpoint' | 'workspace_checkpoint' | 'archive_import' | 'archive_export' | 'resume' | 'other' };
 export interface Preparation { definition: ScenarioRevision; request: ApplyScenario; ready: boolean; }
@@ -222,7 +222,7 @@ export class Manager {
         throw Error(`Import the missing exact workspace artifact: ${wanted.revision}.`);
       inspections.set(wanted.revision, inspection);
     }
-    for (const key of scientificPlugins) {
+    for (const key of workspacePlugins.filter(key => setup.packages[key])) {
       const wanted = setup.packages[key];
       if (setup.instances[key]) {
         const observed = await read<PluginInstanceObservation>(this.client, 'plugins.instance', { instance: setup.instances[key] });

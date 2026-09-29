@@ -46,7 +46,9 @@ target/debug/rho --database /absolute/path/to/test-state/state.sqlite \
 selection for other Host edges. It opens the generic plugin window and does not
 discover or start R, import defaults or construct fixed scientific owners. The
 project must already exist; omit `--project` in Workbench to choose it in the
-browser. Install packages through the ordinary recovery CLI. The empty-window
+browser. Import an assembled [plugin delivery set](RELEASE.md#ordinary-plugin-delivery-sets)
+explicitly into the same `--database` catalog, or import individual ordinary archives
+through the recovery CLI. Startup never performs that installation. The empty-window
 selector opens any installed standalone UI contribution using exact artifacts and
 the shared activation/view ports; it gives no special treatment to Manager.
 `--plugins-only` also applies to `session`, `mcp` and native `invoke`; standalone
@@ -57,16 +59,23 @@ work and suspends its runtime instances after confirmed cleanup.
 
 In the ordinary Plugins view, open **Scenarios → New R workspace** to choose
 installed scientific packages and the paths to an existing Ark executable and
-R home. **Prepare workspace** captures exact instances and saves a scenario;
+R home. Installed Agent, Studio, Annotations, Process, Remote and Environment can
+join the same preparation; choose **Not included** to leave any of those out.
+A single installed artifact is offered initially; multiple versions require a
+choice, and a retained omitted or missing selection is not silently replaced.
+**Prepare workspace** captures exact instances and saves a scenario;
 **Switch to R workspace** applies its layout to this window. Then use **Start R**
 in Console. Files opens Editors bound to that same R provider, so **Save and Run**
 can feed Console, Objects and Plots. Missing packages remain missing until an
 explicit import. If preparation loses a reply, inspect its original request before
 continuing; the retained partial instances are not recreated automatically.
-The starter requires installed packages. Default package delivery is still under
-development. A browser reload retains the window and original requests. The
-restart recovery source now offers **Restore saved view** for retained views;
-combined native acceptance remains pending (see [Status](STATUS.md)). It explicitly
+Agent and Plugin Studio appear as ordinary tabs. Agent offers exact tools from
+the selected instances, initially unchecked; choose tools before Send. Selecting
+these packages neither sends model requests nor runs scientific operations.
+Remote and Environment keep their unconfigured defaults until an explicit target
+or runtime configuration is supplied through normal instance/scenario configuration.
+A browser reload retains the window and original requests. **Restore saved view**
+explicitly
 resumes a confirmed suspended instance and reconnects its original view. A lost
 reply offers **Check recovery status** and **Retry original request**; inspection
 does not advance to the next action. Startup never creates replacements or replays

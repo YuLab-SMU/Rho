@@ -13,7 +13,7 @@ Paper; see [Design section 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studi
 **The fixed scientific composition is still present.** Ordinary packages exist
 for R, Files/Git, Process, Remote, Environment, Editor, Console, Objects, Packages,
 Help, Plots, Viewer, Manager, Studio, Agent and Annotations (`plugins/`). Each has individual acceptance evidence. Sixteen-plugin archive delivery now passes; final scenario integration, cross-plugin
-workflows, default setup and removal of the fixed composition remain.
+workflows, installation packaging and removal of the fixed composition remain.
 
 ### Work order (reset 2026-09-28)
 
@@ -24,12 +24,12 @@ written deletion condition. Internal pieces are not reported as milestones.
 
 | # | Milestone (user flow) | Replaces / deletes | State |
 | --- | --- | --- | --- |
-| M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Default entry, real-R browser flow and Rust HTTP checks pass; delivery remains |
+| M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Default entry, full delivered-set setup, real-R browser flow and Rust HTTP checks pass |
 | M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Combined real Host/browser flow passes: Native/Rho input, attachments, real R, reload, continuation and handoff |
 | M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Graceful Host restart, same instance/view/tasks, original receipts and native session Resume pass without replay |
 | M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Editor/Help/Viewer snapshots, history, Continue and handoff pass real Host/browser checks; Rho exact-session tools and Editor/Help/Viewer/Objects/Plots/Console/Packages/Files Ask → Agent input pass; annotation text/context and Native/Rho Send pass real Editor and real-R Help/Viewer/Console/Plots/Objects/Packages source flows with same-instance restart; the picker and Native read/write tools also pass; resource-image import/read, explicit Native/Rho image context, picker thumbnails and restart pass; browser capture, annotation editor and component annotation controls remain |
 | M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Combined real Host/browser flow passes: exact-branch Agent checkpoint, explicit build, preview and scenario application |
-| M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Sixteen ordinary archives pass import, removal, empty Host startup without reinstall, and exact export after explicit restoration; default setup, fixed-path removal and final matrix remain |
+| M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Sixteen ordinary archives pass import/remove/empty Host/explicit restoration; delivered-set → Manager → full scene passes real R/browser and activation-reply recovery. Installation packaging, fixed-path removal and final matrix remain |
 
 ### Scientific scenario: current integration
 
@@ -38,8 +38,7 @@ installed exact artifacts for nine scientific plugins and existing Ark/R paths,
 activates their instances, saves a checkpoint and prepares their views. Switching
 the window and starting R are separate explicit actions. Files passes its captured
 R provider to newly opened Editors; Help has an initial empty view until a package
-is selected. Lost preparation receipts retain the original requests and instances;
-recovery does not replay them or continue later stages automatically.
+is selected. The same recipe now optionally includes installed Process, Remote, Environment, Annotations, Agent and Studio, giving sixteen instances and eleven initial views with Manager. Agent offers fourteen exact provider tools, initially unchecked; its context and Studio grants come from the selected public declarations. Remote/Environment retain unconfigured defaults. Lost preparation receipts retain their original requests and instances; recovery follows provider-before-consumer order even when saved JSON keys reorder, and never advances automatically.
 
 Verified with a disposable generic Host and real R: Manager preparation/switch →
 Console Start R → Files opens a Unicode-named file → Editor Save and Run → original
@@ -50,6 +49,7 @@ inspected; the Manager dialog also passed normal, wide and constrained layouts.
 artifact reuse and limits; browser evidence is retained beside it. Current R and
 Editor native artifacts were reused, and Files was built once through the primary
 workspace cache. This is integration evidence, not a new independent-source build.
+The expanded flow imports the actual sixteen-archive delivery set, recovers a lost first-provider activation after frame disconnection/reload, prepares and switches the full composition, runs the original R script and opens Agent/Studio. It passes in about 2.5 minutes with no native builds; only Manager was rebuilt, and fifteen archives were reused byte-for-byte. Normal/1920/390 setup and the resulting views were inspected. Evidence: `target/plugin-refactor/default-workspace-results.json`. This does not establish new Agent tool execution, remote-cluster or Environment operation behavior, a user install, or removal of fixed composition.
 
 Default entry is implemented: `rho workbench` selects the ordinary plugin profile,
 accepts browser project selection and offers installed standalone views in an
@@ -62,7 +62,7 @@ Evidence: `target/plugin-refactor/default-entry-results.json`; interrupted broad
 CLI checks and earlier startup failures remain retained, not passes.
 Existing fixed-composition acceptance explicitly uses `--fixed-workspace`. Remove
 that temporary reference and shell after M2–M4 replace the remaining fixed flows;
-missing plugins cannot select it as a fallback. `scripts/plugin-set.mjs` now assembles retained source/artifacts without compilation and explicitly imports through the ordinary CLI repository. The full sixteen-package set is 296,412,841 bytes; assembly took 73.3s. Disposable-catalog import/remove/empty-Host/reimport passes, with every restored archive matching its original SHA-256 (including source, grants and artifacts). Damaged archives fail before imports; a lost import reply retains its uncertain revision and explicit retry does not duplicate it. Evidence and exact archive inventory: `target/plugin-refactor/default-delivery-results.json`. This is local debug delivery acceptance, not user installation, signing, publication or complete default-scenario setup.
+missing plugins cannot select it as a fallback. `scripts/plugin-set.mjs` now assembles retained source/artifacts without compilation and explicitly imports through the ordinary CLI repository. Disposable-catalog import/remove/empty-Host/reimport passes, with every restored archive matching its original SHA-256 (including source, grants and artifacts). Damaged archives fail before imports; a lost import reply retains its uncertain revision and explicit retry does not duplicate it. Evidence and exact archive inventory: `target/plugin-refactor/default-delivery-results.json`. This is local debug delivery acceptance, not user installation, signing, publication or an application installation package.
 
 Restart lifecycle is now implemented in source: normal Host drain suspends exact
 runtime instances after acknowledged native cleanup, preserving original grants,

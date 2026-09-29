@@ -4,11 +4,12 @@ import fs from 'node:fs';
 export async function checkScientificWorkspace({ Manager, scientificWorkspace, scientificScenario, operationRequestId }) {
   const keys = ['r', 'files', 'editor', 'console', 'objects', 'plots', 'viewer', 'packages', 'help'];
   const hash = n => 'sha256:' + n.toString(16).padStart(64, '0');
-  const choices = Object.fromEntries(keys.map((key, i) => {
+  const makeChoices = selected => Object.fromEntries(selected.map((key, i) => {
     const manifest = JSON.parse(fs.readFileSync(new URL(`../../plugins/${key}/plugin.json`, import.meta.url)));
     const revision = hash(i + 1), artifact = hash(i + 101);
     return [key, { artifact, inspection: { manifest, summary: { plugin: manifest.id, revision }, artifacts: [{ id: artifact, target: manifest.backend ? 'aarch64-apple-darwin' : 'ui-web' }] } }];
   }));
+  const choices = makeChoices(keys);
   const runtime = { ark: '/tools/ark', r_home: '/tools/R' };
   const setup = () => scientificWorkspace(choices, 'aarch64-apple-darwin', runtime, 7, 'scientific', 'Scientific workspace');
   const viewerReads = [{ id: 'operation.get', version: 1 }, { id: 'operation.list_recent', version: 1 }, { id: 'resources.read', version: 1 }];
@@ -32,9 +33,10 @@ export async function checkScientificWorkspace({ Manager, scientificWorkspace, s
   assert.throws(() => scientificWorkspace(noExecute, 'aarch64-apple-darwin', runtime, 7, 'science'), /Editor revision/);
   assert.throws(() => scientificScenario(setup(), managerView), /exact r instance/);
   const visits = node => node.kind === 'tabs' ? node.views : node.kind === 'split' ? node.children.flatMap(visits) : [];
-  function fixture() {
+  function fixture(selected = choices) {
+    const selectedKeys = Object.keys(selected);
     let saved, fault = null, unavailable = null, definitions = new Map(), records = [], instances = new Map(), calls = [];
-    const inspections = new Map(Object.values(choices).map(value => [value.inspection.summary.revision, value.inspection]));
+    const inspections = new Map(Object.values(selected).map(value => [value.inspection.summary.revision, value.inspection]));
     inspections.set(managerIdentity.revision, { summary: { plugin: managerIdentity.plugin }, artifacts: [{ id: managerIdentity.artifact, target: 'ui-web' }] });
     const client = { view: structuredClone(managerView), setState: async value => { saved = structuredClone(value); }, operation: async id => records.find(record => record.operation.operation_id === id),
       query: async (cap, args) => {
@@ -44,8 +46,8 @@ export async function checkScientificWorkspace({ Manager, scientificWorkspace, s
         if (cap.id === 'operation.get') return { status: 'ready', data: { record: records.find(record => record.operation.operation_id === args.operation_id) } };
         if (cap.id === 'scenarios.prepare') {
           assert.equal(args.expected_layout_version, 7);
-          assert.equal(Object.keys(args.instances).length, 10);
-          assert.equal(Object.keys(args.views).length, 9);
+          assert.equal(Object.keys(args.instances).length, selectedKeys.length + 1);
+          assert.equal(Object.keys(args.views).length, 1 + Object.values(selected).filter(c => c.inspection.manifest.views.length).length);
           assert.equal(args.views.manager, managerView.view);
           return { status: 'ready', data: {} };
         }
@@ -58,7 +60,7 @@ export async function checkScientificWorkspace({ Manager, scientificWorkspace, s
         if (!record) {
           let output;
           if (cap.id === 'plugins.activate') {
-            const key = keys.find(key => choices[key].inspection.summary.revision === args.revision);
+            const key = selectedKeys.find(key => selected[key].inspection.summary.revision === args.revision);
             const identity = { instance: `${key}-instance`, plugin: `org.rho.${key}`, revision: args.revision, artifact: args.artifact };
             output = { instance: { identity, alias: args.alias, configuration: args.configuration, state: 'active', purpose: 'runtime' }, observed_in_this_host: true };
             instances.set(identity.instance, output);
@@ -122,5 +124,37 @@ export async function checkScientificWorkspace({ Manager, scientificWorkspace, s
   assert.equal(restart.calls.length, created, 'setting aside setup cannot release existing instances or rewind native work');
   assert.equal(restart.instances.size, 9); assert.ok(fresh.state.preparation);
   await fresh.startWorkspace({ ...setup(), scenario: 'corrected-setup' });
+  const complete = makeChoices([...keys, 'process', 'remote', 'environment', 'annotations', 'agent', 'studio']);
+  const fullSetup = scientificWorkspace(complete, 'aarch64-apple-darwin', runtime, 7, 'full-workspace');
+  assert.equal(Object.keys(fullSetup.packages).length, 15);
+  const full = fixture(complete); let fullManager = new Manager(full.client);
+  await fullManager.startWorkspace(fullSetup); full.lose('plugins.activate');
+  await assert.rejects(fullManager.prepareWorkspace(), /Lost original reply/);
+  const persisted = full.saved;
+  persisted.workspace.packages = Object.fromEntries(Object.entries(persisted.workspace.packages).sort(([a],[b]) => a.localeCompare(b)));
+  fullManager = new Manager(full.client, persisted); await fullManager.recover();
+  full.lose('scenarios.checkpoint');
+  await assert.rejects(fullManager.prepareWorkspace(), /Lost original reply/); await fullManager.recover();
+  const fullScene = full.definitions.get(hash(900)), fullViews = visits(fullScene.layout);
+  assert.equal(Object.keys(fullScene.instances).length, 16);
+  assert.deepEqual(full.records.filter(r => r.operation.capability.id === 'plugins.activate').map(r => r.operation.normalized_arguments.alias), Object.keys(complete), 'restored JSON key order cannot activate consumers before their providers');
+  const agent = fullViews.find(v => v.id === 'agent');
+  assert.ok(fullViews.some(v => v.id === 'studio'));
+  assert.equal(agent.configuration.tools.length, 14);
+  for (const tool of agent.configuration.tools) {
+    const instance = fullManager.state.workspace.instances[tool.target.binding.provider.plugin.slice(8)];
+    assert.deepEqual(tool.target.binding.provider, instance);
+    assert.equal(tool.target.binding.project, 'project');
+    assert.ok(fullScene.instances.agent.optional_capabilities.some(cap => JSON.stringify(cap) === JSON.stringify(tool.target.binding.capability)));
+  }
+  assert.deepEqual(agent.state, {}, 'offered tools are not selected automatically');
+  assert.ok(fullScene.instances.annotations.optional_capabilities.some(cap => cap.id === 'files.context.preview'));
+  assert.ok(fullScene.instances.agent.optional_capabilities.some(cap => cap.id === 'plugins.checkpoint'), 'Studio assistance has its declared management contracts');
+  await fullManager.prepareWorkspace();
+  assert.equal(full.calls.filter(id => id === 'plugins.activate').length, 15, 'checkpoint recovery never reactivates the complete set');
+  assert.equal(full.calls.filter(id => id === 'views.open').length, 10);
+  assert.ok(!full.calls.some(id => id.startsWith('r.') || id.startsWith('agent.') || id.startsWith('process.')));
+  const changed = structuredClone(complete); changed.agent.inspection.artifacts[0].target = 'another-target';
+  assert.throws(() => scientificWorkspace(changed, 'aarch64-apple-darwin', runtime, 7, 'full'), /agent artifact is unavailable/);
   console.log('Scientific workspace recipe passes exact provider composition, explicit switching, missing-input checks and original-request recovery without replay.');
 }

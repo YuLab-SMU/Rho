@@ -37,6 +37,10 @@ Organize work as end-to-end user flows (the milestone table in
   change, browser fixtures waiting on explicit Ready/paint. A harness failure is
   fixed and rerun for that stage only; it is not a product failure and is not
   recorded in Status.
+  Fault injection must target the actual edge: launcher calls use `/api/host`,
+  while iframe actions use `/api/plugin-view` and `message.body`. A transport loss
+  retires the frame; reload/reconnect before inspecting its saved original request.
+  A correlated error reply keeps the frame connected. Test those outcomes distinctly.
 - **Use tracked harnesses.** Acceptance runners belong in `scripts/` and in the
   governance map, not as one-off files under `target/`. Extend an existing runner
   (for example `scripts/test-agent-plugin.mjs`) instead of copying it per feature.
@@ -88,7 +92,16 @@ The scientific-window integration runner also reuses explicit native packages:
 with `RHO_ARK` and `RHO_R_HOME` selecting an existing disposable-test runtime.
 The JSON object maps `r`, `files` and `editor` to absolute built package directories;
 optional Console/Objects/Plots/Viewer/Packages/Help paths reuse unchanged UI builds.
-The runner builds only missing UI packages and the current Manager, opens a fresh plugin-only Host, and
+Optional `process`, `remote`, `environment`, `annotations`, `agent` and `studio`
+paths exercise the expanded recipe. For the actual default delivery, use
+`--set /absolute/plugin-set` instead: the fixture validates and imports the sixteen
+archives into its disposable catalog and builds nothing, including Manager.
+It exercises initial installation through the same repository, exact preparation,
+lost first-provider activation/reload recovery, real R, Agent's unchecked tools and
+the Studio tab. `RHO_SCIENTIFIC_EVIDENCE` selects a successful-run JSON report;
+Playwright retains failure traces. This is composition acceptance, not a replacement
+for individual Agent tool, remote cluster or Environment operation checks.
+In `--packages` mode, the runner builds only missing UI packages and the current Manager. Both modes open a fresh plugin-only Host and
 drives default Workbench startup → project selection → installed Manager view →
 scenario preparation/switch → Files → Editor Save and Run →
 Console/Objects/Plots → browser reload. It does not run Cargo or install software.
