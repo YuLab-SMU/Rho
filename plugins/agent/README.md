@@ -145,6 +145,19 @@ record; settings retain references only. An absent receipt is partial evidence,
 not proof that an outstanding write cannot finish. Each instance uses its own
 native data directory; it does not import existing user keys.
 
+The ordinary Agent view exposes Rho settings from its task menu. Settings and
+native drafts share one view-state writer. Model endpoints, credential references
+and original request identities survive reload; password input does not. Saving
+a key uses ephemeral Control, then a separate versioned configure Operation.
+Recovering a lost key receipt never configures or tests the model automatically.
+Connection and image tests require explicit actions and use synthetic content.
+`agent.model.key.status` observes availability at an exact settings version;
+`agent.model.key.remove` removes only that version's configured local key after a
+fresh caller observation. Configuration and removal share a gate, and storage
+errors do not masquerade as missing keys. Removal preserves original key receipts
+and leaves accepted model work's captured key untouched. Rho task/composer and
+contributed-context integration remain separate work.
+
 Generate declarations with `node plugins/agent/generate-sdk.mjs`; add `--check` to
 verify freshness. `node scripts/test-agent-plugin-types.mjs` checks an independent
 TypeScript consumer. Run `node scripts/test-agent-plugin-client.mjs` from the checkout

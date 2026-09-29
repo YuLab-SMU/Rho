@@ -253,7 +253,7 @@ impl Fixture {
 fn manifest_contains_public_bounded_agent_capabilities() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 33);
+    assert_eq!(manifest.capabilities.len(), 35);
     assert_eq!(
         manifest.requires[0].capability,
         manifest::key("views.caller")
@@ -291,6 +291,10 @@ fn manifest_contains_public_bounded_agent_capabilities() {
         "agent.native.discover",
         "agent.native.task",
         "agent.native.events",
+        "agent.model.key.status",
+        "agent.model.key.remove",
+        "agent.model.configure",
+        "agent.model.test",
     ] {
         let own = manifest
             .capabilities
@@ -640,7 +644,16 @@ async fn model_settings_use_scoped_owner_cas_without_reading_keys_or_contacting_
 
 impl Fixture {
     async fn begin_control(&mut self, request: &str, arguments: Value) -> RpcFrame {
-        let call = call(request, "agent.model.key.store", arguments, false);
+        self.begin_named_control(request, "agent.model.key.store", arguments)
+            .await
+    }
+    async fn begin_named_control(
+        &mut self,
+        request: &str,
+        capability: &str,
+        arguments: Value,
+    ) -> RpcFrame {
+        let call = call(request, capability, arguments, false);
         self.writer
             .send(call.request.clone(), RpcBody::Control(call))
             .await
@@ -675,6 +688,9 @@ impl Fixture {
         result.body
     }
 }
+
+#[path = "support/model_settings.rs"]
+mod model_settings;
 
 #[tokio::test]
 async fn key_controls_recover_original_references_without_operations_or_secret_metadata() {

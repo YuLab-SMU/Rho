@@ -22,6 +22,8 @@ events.set('task-0', [
 const originalEvents = copy(events.get('task-0'));
 let close = { phase: 'open' }, saveDelay = 0, loseFinish = false;
 const staged = new Map();
+let modelSettings = {version:0,enabled:false,connection:null}, loseSettings = '';
+const modelKeys = new Map(), modelTests = new Map();
 async function requestId(request) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('agent-view:' + request));
   return 'sha256:' + Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2, '0')).join('');
@@ -40,6 +42,13 @@ async function handle(body) {
     reads[id] = (reads[id] ?? 0) + 1;
     let data;
     if (id === 'operation.list_recent') data = { operations: records.filter(r => r.operation.client_request_id === body.arguments.client_request_id).map(r => ({ operation_id: r.operation.operation_id })) };
+    else if (id === 'agent.model.settings') data = modelSettings;
+    else if (id === 'agent.model.key.status') {
+      if (args.settings_version !== modelSettings.version) throw Error('Settings changed');
+      data = {credential:modelSettings.connection?.credential??null,available:[...modelKeys.values()].some(k=>k.key_id===modelSettings.connection?.credential.key_id&&k.available)};
+    }
+    else if (id === 'agent.model.key.receipt') { const key=modelKeys.get(args.request_id); data={credential:key?{kind:'local_file',key_id:key.key_id}:null,available:!!key?.available}; }
+    else if (id === 'agent.model.diagnostic') data = modelTests.get(args.request_id);
     else if (id === 'agent.tasks') {
       const tasks = [...details.values()].filter(d => d.summary.task.archived === args.archived).map(d => ({ reference: { kind: 'native', task_id: d.summary.task.task_id }, title: d.summary.task.title, provider: d.summary.task.provider, state: d.summary.attachment.state, archived: d.summary.task.archived }));
       const before = Number(args.before ?? 0), end = before + args.limit;
@@ -59,6 +68,21 @@ async function handle(body) {
     return { status: 'ready', completeness: 'complete', data: copy(data) };
   }
   if (body.type === 'control') {
+    if (body.capability.id.startsWith('agent.model.key.')) {
+      const args=body.arguments.arguments; if (!view.state.settings?.key) throw Error('Original key request was not retained');
+      calls.push({type:body.type,capability:copy(body.capability),arguments:{...copy(args),value:undefined}});
+      let result;
+      if (body.capability.id === 'agent.model.key.store') {
+        let key=modelKeys.get(args.request_id); if(!key){key={key_id:'key-'+modelKeys.size,available:true};modelKeys.set(args.request_id,key);}
+        result={kind:'local_file',key_id:key.key_id};
+      } else if(body.capability.id==='agent.model.key.remove') {
+        if(args.settings_version!==modelSettings.version||args.key_id!==modelSettings.connection?.credential.key_id) throw Error('Settings changed');
+        for(const key of modelKeys.values()) if(key.key_id===args.key_id) key.available=false;
+        result={credential:copy(modelSettings.connection.credential),available:false};
+      } else throw Error('Unexpected settings Control');
+      if(loseSettings===body.capability.id){loseSettings='';throw Error('Lost settings reply');}
+      return result;
+    }
     const { upload, offset, data } = body.arguments.arguments;
     if (!view.state.uploads.some(p => JSON.stringify(p.upload) === JSON.stringify(upload))) throw Error('Attachment identity was not retained');
     calls.push({ ...copy(body), arguments: { upload: copy(upload), offset, encoded_bytes: data?.length ?? 0 } });
@@ -82,6 +106,21 @@ async function handle(body) {
   }
   if (body.type === 'invoke') {
     calls.push(copy(body));
+    if (body.capability.id.startsWith('agent.model.')) {
+      if (!view.state.settings.pending.some(p=>p.intent.request===body.request_id)) throw Error('Original settings intent was not retained');
+      const scoped=await requestId(body.request_id); let record=records.find(r=>r.operation.client_request_id===scoped);
+      if(!record){
+        const args=body.arguments.arguments; let output;
+        if(body.capability.id==='agent.model.configure'){
+          if(args.version!==modelSettings.version) throw Error('Settings changed'); modelSettings={...copy(args),version:args.version+1}; output=copy(modelSettings);
+        } else if(body.capability.id==='agent.model.test'){
+          output={request_id:args.request_id,version:1,model_settings_version:args.model_settings_version,model:copy(modelSettings.connection),kind:args.kind,state:'succeeded',detail:'Synthetic connection verified. No external model was contacted.'}; modelTests.set(args.request_id,copy(output));
+        } else throw Error('Unexpected settings Operation');
+        record={operation:{operation_id:'op-'+records.length,caller:{kind:'plugin',id:view.view},client_request_id:scoped,capability:copy(body.capability),normalized_arguments:copy(body.arguments),preconditions:[]},status:'succeeded',outcome:'succeeded',output,error:null};records.push(record);
+      }
+      if(loseSettings===body.capability.id){loseSettings='';throw Error('Lost settings reply');}
+      return copy(record);
+    }
     if (!view.state.pending.some(p => p.intent.request === body.request_id)) throw Error('Original intent was not retained');
     const scoped = await requestId(body.request_id), original = records.find(r => r.operation.client_request_id === scoped);
     if (original) return copy(original);
@@ -115,6 +154,7 @@ async function handle(body) {
   throw Error('Unexpected fixture request ' + body.type);
 }
 const frame = document.querySelector('iframe');
+let reloaded = null;
 addEventListener('message', event => {
   if (event.source !== frame.contentWindow || event.data.type !== 'rho:view:ready' || event.data.nonce !== 'fixture-nonce') return;
   const channel = new MessageChannel(), connection = crypto.randomUUID(); let sequence = 0;
@@ -124,6 +164,7 @@ addEventListener('message', event => {
     channel.port1.postMessage({ protocol_version: 1, connection, view: view.view, sequence: ++sequence, request: message.request, ...reply });
   };
   frame.contentWindow.postMessage({ type: 'rho:view:connect', nonce: 'fixture-nonce', protocol_version: 1, connection, view: copy(view), features: ['view_close_v1'] }, '*', [channel.port2]);
+  if (reloaded) { const resolve = reloaded; reloaded = null; resolve(); }
 });
 window.fixture = {
   snapshot: () => copy({ view, calls, details: [...details], records, reads }),
@@ -138,7 +179,14 @@ window.fixture = {
   },
   delaySave: milliseconds => { saveDelay = milliseconds; },
   loseAttachmentReply: () => { loseFinish = true; },
+  loseSettingsReply: id => { loseSettings = id; },
   close: () => { close = { phase: 'requested', operation: 'close-original' }; },
-  reload: () => { frame.src = '/index.html#rho-view-nonce=fixture-nonce'; },
+  reload: () => new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => { reloaded = null; reject(Error('Renderer did not reconnect after reload')); }, 10000);
+    reloaded = () => { clearTimeout(timeout); resolve(); };
+    // A same-fragment assignment can be a same-document navigation. A new
+    // query forces a new document and public MessagePort handshake.
+    frame.src = '/index.html?reload=' + crypto.randomUUID() + '#rho-view-nonce=fixture-nonce';
+  }),
 };
 frame.src = '/index.html#rho-view-nonce=fixture-nonce';

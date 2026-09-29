@@ -115,10 +115,14 @@ run's browser evidence before another run replaces `target/studio-browser`, or
 pass Playwright a dedicated `--output` directory.
 
 For ordinary Agent UI iteration, `node scripts/test-agent-view.mjs --build-ui`
-checks the task/draft model and builds just the UI from public SDK copies. It uses
+checks the task/draft and Rho settings models and builds just the UI from public SDK copies. It uses
 the already installed client dependencies and never invokes Cargo. Add `--browser`
 when the interaction settles to check the production UI in an opaque iframe with
-a synthetic public MessagePort peer. That fixture does not replace real combined
+a synthetic public MessagePort peer. Reload creates a new document/connection,
+including original key/configuration/removal receipt recovery without automatic
+model tests. Settings and rename buttons work without `allow-forms`; screenshots
+cover 960/440/320/220 px, with the narrow settings panel scrolled to its diagnostics.
+That fixture does not replace real combined
 Agent/Host acceptance; native manifest changes still require the serial exporter
 and backend checks before snapshotting the package.
 
@@ -498,7 +502,10 @@ metadata --locked` for framed Host exchanges, original caller identity, task/dra
 CAS, explicit controller takeover, bounded concurrency, disconnect and settlement.
 The same target covers ephemeral key Controls, original-key receipt reads,
 wrong-port/identity refusal, lost replies/reopen and combined capacity without
-fabricated Control settlement.
+fabricated Control settlement. `support/model_settings.rs` additionally checks
+version-fenced key availability/removal, unchanged settings, retained receipts,
+environment-key refusal and storage-error visibility. These fixtures use only
+temporary synthetic keys.
 `node plugins/agent/generate-manifest.mjs` updates its contributed schemas; use
 `--check` for freshness. `node scripts/test-agent-plugin.mjs --build` first builds the
 generic Host harness, then builds one external package, checks public dependency

@@ -38,6 +38,7 @@ pub fn kind(id: &str) -> CapabilityKind {
     if matches!(
         id,
         "agent.model.key.store"
+            | "agent.model.key.remove"
             | "agent.native.assets.upload"
             | "agent.native.assets.import"
             | "agent.native.assets.stage"
@@ -83,6 +84,10 @@ fn capability(
             "Explicitly run a bounded synthetic model test with the captured settings and scoped key. Retains the original Operation until completion; it has no project context or scientific tools. Repeated original requests only observe their retained diagnostic."
         } else if id == "agent.model.test.stop" {
             "Request that the original live model diagnostic stop, using its native controller and expected version. The original Operation remains active until the model test settles."
+        } else if id == "agent.model.key.remove" {
+            "Remove only the currently configured local key at the exact settings version. Does not change settings, cancel accepted work or remove environment credentials. Repeated removal is idempotent; changed settings refuse the original removal."
+        } else if id == "agent.model.key.status" {
+            "Observe the currently configured credential at the exact settings version, without returning secret bytes, creating a credential file or contacting a model. Storage errors remain unavailable observations."
         } else if control {
             "Save a scoped model key through ephemeral input with an atomic original-request reference. Does not create an Operation, configure a model or start work; inspect the original receipt after a lost reply."
         } else if id == "agent.model.key.receipt" {
@@ -339,6 +344,20 @@ pub fn manifest() -> PluginManifest {
                 json!({"request_id":"key-request-example"}),
             ),
             capability(
+                "agent.model.key.status",
+                "Read configured model key availability",
+                schema_for!(CredentialStatus).to_value(),
+                schema_for!(ComponentCredentialStatus).to_value(),
+                json!({"settings_version":1}),
+            ),
+            capability(
+                "agent.model.key.remove",
+                "Remove the configured local model key",
+                schema_for!(RemoveCredential).to_value(),
+                schema_for!(ComponentCredentialStatus).to_value(),
+                json!({"settings_version":1,"key_id":"key-example"}),
+            ),
+            capability(
                 "agent.tasks",
                 "Read Agent tasks",
                 schema_for!(TaskList).to_value(),
@@ -423,6 +442,15 @@ pub fn manifest() -> PluginManifest {
         "agent.native.history",
         "agent.native.assets.stage",
         "agent.native.assets.finish",
+        "agent.model.settings",
+        "agent.model.configure",
+        "agent.model.key.store",
+        "agent.model.key.receipt",
+        "agent.model.key.status",
+        "agent.model.key.remove",
+        "agent.model.test",
+        "agent.model.test.stop",
+        "agent.model.diagnostic",
     ] {
         let own = manifest
             .capabilities

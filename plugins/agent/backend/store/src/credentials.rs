@@ -266,6 +266,18 @@ impl CredentialFile {
                     .is_some_and(|entry| ComponentModelKey::new(entry.key.clone()).is_ok()),
             }))
     }
+    /// Observe a scoped reference without returning its secret or creating a file.
+    /// Storage failures remain errors, rather than appearing as a missing key.
+    pub fn available(&self, scope: &AgentTaskScope, key_id: &str) -> Result<bool, AgentTaskError> {
+        let Some(_lock) = self.open_lock(false)? else {
+            return Ok(false);
+        };
+        Ok(self.read()?.entries.get(key_id).is_some_and(|entry| {
+            entry.project == scope.project
+                && entry.principal == scope.principal
+                && ComponentModelKey::new(entry.key.clone()).is_ok()
+        }))
+    }
     pub fn key(
         &self,
         scope: &AgentTaskScope,

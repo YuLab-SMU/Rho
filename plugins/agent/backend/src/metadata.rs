@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use std::{
     path::Path,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -21,6 +21,7 @@ pub struct Metadata {
     pub(crate) native: crate::native_tasks::NativeTasks,
     store: Arc<AgentStore>,
     pub(crate) credentials: CredentialFile,
+    settings_gate: Mutex<()>,
     diagnostics: crate::diagnostics::Diagnostics,
     runs: crate::runs::Runs,
     pub(crate) instance: PluginInstance,
@@ -167,6 +168,7 @@ impl Metadata {
             credentials: CredentialFile::at(
                 Path::new(&environment.data_root).join("model-credentials-v1.json"),
             ),
+            settings_gate: Mutex::new(()),
             instance,
             scope,
             grants,
@@ -251,6 +253,34 @@ impl Metadata {
                     });
                 encoded(status)
             }
+            "agent.model.key.status" => {
+                let args: CredentialStatus = decode(&call.arguments)?;
+                let _gate = self
+                    .settings_gate
+                    .lock()
+                    .map_err(|_| Failure::invalid("Model settings are unavailable"))?;
+                let settings = self.owner.store.component_settings(&self.scope)?;
+                if settings.version != args.settings_version {
+                    return Err(ComponentTaskError::Conflict.into());
+                }
+                let credential = settings.connection.map(|connection| connection.credential);
+                let available = match &credential {
+                    Some(rho_agent_api::ComponentCredentialRef::LocalFile { key_id }) => self
+                        .credentials
+                        .available(&self.scope, key_id)
+                        .map_err(ComponentTaskError::from)?,
+                    Some(rho_agent_api::ComponentCredentialRef::Environment { name }) => {
+                        std::env::var(name).ok().is_some_and(|value| {
+                            rho_agent_owner::ComponentModelKey::new(value).is_ok()
+                        })
+                    }
+                    _ => false,
+                };
+                encoded(rho_agent_api::ComponentCredentialStatus {
+                    credential,
+                    available,
+                })
+            }
             "agent.tasks" => {
                 let args: TaskList = decode(&call.arguments)?;
                 if !(1..=20).contains(&args.limit)
@@ -303,6 +333,29 @@ impl Metadata {
         }
         if call.binding.capability.id.as_str() == "agent.native.assets.upload" {
             return self.native.upload(self, call, caller).await;
+        }
+        if call.binding.capability.id.as_str() == "agent.model.key.remove" {
+            drop(caller);
+            let args: RemoveCredential = decode(&call.arguments)?;
+            let _gate = self
+                .settings_gate
+                .lock()
+                .map_err(|_| Failure::invalid("Model settings are unavailable"))?;
+            let settings = self.owner.store.component_settings(&self.scope)?;
+            let credential = settings.connection.map(|connection| connection.credential);
+            if settings.version != args.settings_version
+                || !matches!(&credential,
+                Some(rho_agent_api::ComponentCredentialRef::LocalFile { key_id }) if key_id == &args.key_id)
+            {
+                return Err(ComponentTaskError::Conflict.into());
+            }
+            self.credentials
+                .remove(&self.scope, &args.key_id)
+                .map_err(ComponentTaskError::from)?;
+            return encoded(rho_agent_api::ComponentCredentialStatus {
+                credential,
+                available: false,
+            });
         }
         if call.binding.capability.id.as_str() != "agent.model.key.store" {
             return Err(Failure::invalid("Agent control is not implemented"));
@@ -385,6 +438,10 @@ impl Metadata {
         let actor = self.actor(caller, now);
         match call.binding.capability.id.as_str() {
             "agent.model.configure" => {
+                let _gate = self
+                    .settings_gate
+                    .lock()
+                    .map_err(|_| Failure::invalid("Model settings are unavailable"))?;
                 let settings: rho_agent_api::ComponentModelSettings = decode(&call.arguments)?;
                 let updated = self.owner.configure(&actor, &settings, now)?;
                 if !updated.enabled {

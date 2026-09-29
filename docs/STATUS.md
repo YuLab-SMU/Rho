@@ -1,6 +1,6 @@
 # Rho: current state and focus
 
-Updated: 2026-09-28. This is the single current status summary: current behavior,
+Updated: 2026-09-29. This is the single current status summary: current behavior,
 the evidence that still applies, open problems and the next milestone. Git and
 `target/` logs retain history, failed attempts and superseded evidence; do not copy
 them here. Keep this page under about 300 lines (see [Development § Status
@@ -93,8 +93,9 @@ preserves the original instance with a new confirmed suspension token.
 The generic window and Manager's instance details save recovery requests before dispatch; lost replies offer
 explicit inspection/retry of the original request, with no next-step dispatch on
 reload. All 566 core frontend tests pass, including 42 recovery/view cases. The focused
-native test is compiling; the Host-reopen fixture and combined Agent/real-R browser
-restart flow are written but unrun. Rust syntax, boundary and governance checks
+native run passed 3/4 cases; its pre-fix library failed the publication-conflict
+case. The current-source rerun is compiling. Host-reopen and combined Agent/real-R
+browser restart fixtures remain unrun. Rust syntax, boundary and governance checks
 pass; public type generation, Manager model/client checks and native acceptance remain.
 Evidence: `target/plugin-refactor/restart-lifecycle-results.json`. No user Host was
 replaced, installation or publication ran.
@@ -126,12 +127,15 @@ The ordinary native-task view is implemented in source: task selection and
 creation, model selection, draft CAS/conflict handling, explicit tool selection,
 Send/Stop, native permissions and original-request inspection. Task lists and
 cached/native history now page through bounded reads, preserving earlier reading
-positions during refresh and retaining native provenance and partial status.
-Its independent UI build and 24 model cases pass. The production UI also passes a synthetic public
+positions during refresh and retaining native provenance and partial status. Its UI build,
+24 native-view and 13 Rho-settings model cases pass. The UI also passes a synthetic public
 MessagePort browser fixture (opaque iframe, IME Enter, task-switch saving, one Send,
-next draft, 8 MiB file selection, lost import receipt, reload, task/history paging
-and close without Stop); 960/440/320/220 px screenshots were
-inspected. Evidence: `target/plugin-refactor/agent-view-results.json`.
+next draft, 8 MiB file selection, lost import receipt, real document reload, task/history paging
+and close without Stop). Rho settings now provide key save/removal, versioned
+configuration and explicit synthetic tests. Lost receipts require inspection;
+keys stay out of saved view state and Operations. Settings and rename use buttons
+that work in the isolated iframe. 960/440/320/220 px screenshots were inspected.
+Evidence: `target/plugin-refactor/model-settings-results.json` (renderer only).
 This does **not** establish combined native/Host acceptance: native manifest
 regeneration, backend checks and activation of the new combined package remain
 pending behind the current serial build. The checked-in `plugin.json` still
@@ -143,13 +147,12 @@ asset to a separately saved draft. Missing replies do not repeat import or Send
 on reload; inspection and exact-file reselection remain explicit. The native
 staging quota, checksum/controller checks and backend reopen fixtures are written
 but have not run yet; this is not a new native attachment acceptance claim.
-The combined real-R browser fixture is now written and discoverable, but unrun.
-It will use the same retained Agent artifact built through the primary workspace
-cache; build receipts distinguish that integration evidence from independent
-compilation. Mapped acceptance checks reuse the explicitly selected package.
+The combined real-R browser fixture is written and discoverable, but unrun. It uses
+one retained Agent artifact built through the primary workspace cache; build receipts
+distinguish integration evidence from independent compilation. Mapped checks reuse it.
 
-Not done: native acceptance of browser attachments and history navigation, Rho
-tasks/settings in the ordinary Agent view, contributed context and component input/continuation,
+Not done: native acceptance of browser attachments, settings and history navigation, Rho
+tasks in the ordinary Agent view, contributed context and component input/continuation,
 actual Host restart recovery, Studio Agent flow.
 Synthetic peer tests for Process/Remote/Environment do not establish actual
 execution through those plugins.

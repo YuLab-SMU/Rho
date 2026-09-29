@@ -2064,6 +2064,11 @@ locking preserve immutable keys for accepted work and isolate project/principal
 reads and removals. Missing-file observations do not create a credential directory. Raw keys remain outside conversation, draft-sync, log and
 evidence records. Optional environment and existing Host-memory references do not
 change the default persistence behavior.
+The ordinary backend binds configured-key availability and removal to the exact
+model settings version. Configuration and removal share a gate; a stale removal
+cannot delete the replacement key. Storage failure stays an error, not evidence
+that a key is absent. The view retains original key-request identities without
+secret bytes, and receipt inspection does not configure or test a model.
 See [PRIVACY.md](../PRIVACY.md) and
 [SECURITY.md](../SECURITY.md) for data handling and reporting.
 

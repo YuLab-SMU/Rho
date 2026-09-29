@@ -305,6 +305,9 @@ try {
     const before = f.calls.length; assert.throws(() => f.open(), /another Agent view or instance/); assert.equal(f.calls.length, before);
   });
   console.log(`Ordinary Agent view: ${count} checks passed; original requests, draft concurrency, next-turn input, read-only control and disposal. No native/UI acceptance claimed.`);
+  const { ModelSettings } = await import(pathToFileURL(path.join(temporary, 'compiled/src/model-settings.js')));
+  const { testModelSettings } = await import('./fixtures/agent-model-settings.mjs');
+  await testModelSettings(ModelSettings, NativeAgentModel, operationRequestId);
   if (process.argv.includes('--build-ui') || process.argv.includes('--browser')) execFileSync(process.execPath, [path.join(temporary, 'build-ui.mjs')], {
     cwd: temporary, stdio: 'inherit', env: { ...process.env, RHO_PLUGIN_NODE_MODULES: path.join(root, 'ui/node_modules') },
   });

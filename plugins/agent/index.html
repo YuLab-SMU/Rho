@@ -7,7 +7,7 @@
       <button id="new-task" popovertarget="new-menu" aria-label="New task">New task</button>
       <div id="new-menu" popover><button data-provider="codex">Codex</button><button data-provider="kimi">Kimi Code</button><button data-provider="deepseek">DeepSeek Harness</button></div>
       <button id="task-actions" popovertarget="actions-menu" aria-label="Task actions">•••</button>
-      <div id="actions-menu" popover><button id="rename-task">Rename</button><button id="archive-task">Archive</button><button id="show-details">Session details</button></div>
+      <div id="actions-menu" popover><button id="rename-task">Rename</button><button id="archive-task">Archive</button><button id="show-details">Session details</button><button id="open-settings">Settings</button></div>
     </header>
     <div id="task-pages" hidden><button id="newer-tasks">Newer tasks</button><button id="older-tasks">Older tasks</button></div>
     <div class="task-state"><span id="task-state">Choose or create a task</span><button id="take-over" hidden>Take over</button><button id="resume" hidden>Resume</button></div>
@@ -24,5 +24,22 @@
       <div class="composer-meta"><span id="draft-status"></span><button id="save-draft" hidden>Save draft</button><button id="archived">Archived tasks</button></div>
     </footer>
   </section>
-  <dialog id="rename-dialog"><form id="rename-form"><label>Task title<input id="title" maxlength="160" required></label><div><button type="button" id="cancel-rename">Cancel</button><button class="primary">Save title</button></div></form></dialog>
+  <dialog id="rename-dialog"><form id="rename-form"><label>Task title<input id="title" maxlength="160" required></label><div><button type="button" id="cancel-rename">Cancel</button><button id="save-title" type="button" class="primary">Save title</button></div></form></dialog>
+  <dialog id="settings-dialog" aria-label="Agent settings">
+    <header><h2>Rho</h2><button id="settings-close" aria-label="Close settings">Close</button></header>
+    <p>Choose the model service for Rho.</p><p id="settings-loading">Reading model settings…</p><div id="settings-error" role="alert" hidden></div>
+    <form id="settings-form" hidden>
+      <label class="settings-check"><input id="settings-enabled" type="checkbox">Enable Rho</label>
+      <label>API format<select id="settings-protocol"><option value="anthropic">Anthropic Messages</option><option value="openai_completions">OpenAI Chat Completions</option></select></label>
+      <label>Base URL<input id="settings-url" type="url" placeholder="https://models.example.org" maxlength="2048"></label>
+      <small>Questions and selected context are sent to this service. Local HTTP services must use a loopback address.</small>
+      <label>Model ID<input id="settings-model" maxlength="200"></label>
+      <div id="settings-key-row"><label>API key<input id="settings-key" type="password" autocomplete="off" maxlength="16384"></label><small id="settings-key-status"></small><button id="settings-remove-key" type="button" hidden>Remove API key</button></div>
+      <div id="settings-environment-row" hidden><label>Environment variable name<input id="settings-environment" placeholder="RHO_MODEL_API_KEY" maxlength="200"></label><small id="settings-environment-status"></small></div>
+      <details><summary>Credential source</summary><label>Source<select id="settings-source" aria-label="Credential source"><option value="local_file">Saved API key</option><option value="environment">Environment variable</option></select></label></details>
+      <div class="settings-actions"><button id="settings-save" type="button" class="primary">Save</button><button id="settings-reload" type="button">Reload saved settings</button><button id="settings-test-connection" type="button">Test connection</button><button id="settings-test-images" type="button">Test image input</button></div>
+      <small>Tests use sample content. Save changes before testing.</small><p id="settings-version" role="status"></p>
+    </form>
+    <div id="settings-recovery" hidden></div><div id="settings-tests"></div>
+  </dialog>
 </main><script type="module" src="/src/main.ts"></script></body></html>

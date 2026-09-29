@@ -27,6 +27,20 @@ pub struct StoreCredential {
 
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub struct CredentialStatus {
+    pub settings_version: u64,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RemoveCredential {
+    pub settings_version: u64,
+    #[schemars(length(min = 1, max = 160))]
+    pub key_id: String,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct TaskList {
     pub archived: Option<bool>,
     #[schemars(length(max = 512))]

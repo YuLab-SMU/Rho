@@ -108,12 +108,25 @@ export async function testAgentRenderer(root, assets) {
     await expect(frame.getByRole('button', { name: 'Stop Agent' })).toBeVisible();
     await page.screenshot({ path: path.join(output, 'agent-running-reopened.png') });
     snapshot = await page.evaluate(() => window.fixture.snapshot()); assert.equal(snapshot.calls.filter(call => call.arguments?.arguments?.command?.kind === 'send').length, 1);
+    const { testSettingsRenderer } = await import('./fixtures/agent-settings-renderer.mjs');
+    await testSettingsRenderer(page, frame, expect, output);
     await page.evaluate(() => window.fixture.close());
     await expect.poll(async () => (await page.evaluate(() => window.fixture.snapshot())).calls.filter(call => call.type === 'prepare_close').length).toBe(1);
     snapshot = await page.evaluate(() => window.fixture.snapshot()); assert.equal(snapshot.calls.filter(call => call.arguments?.arguments?.command?.kind === 'stop').length, 0);
     assert.deepEqual(errors, []);
     fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify({ status: 'passed', fixture: 'synthetic public MessagePort; no Host or native Agent', checks: ['opaque iframe bootstrap', '960/440/320/220 layout and anchored menu', 'reasoning excluded', 'IME Enter', 'debounced save across task switch', 'explicit tools captured by one Send', 'next draft and original Operation after reload', 'close does not Stop', '8 MiB file selection in bounded chunks', 'lost attachment receipt reload and explicit selection without reimport', 'task pagination', 'earlier history with stable scroll through polling; explicit return to latest'] }, null, 2) + '\n');
-    console.log(`Agent renderer checks passed. Evidence: ${output}. Synthetic peer, not native/Host acceptance.`);
-  } catch (error) { await page?.screenshot({ path: path.join(output, 'failure.png') }).catch(() => {}); throw error; }
+    console.log(`Agent renderer and Rho settings checks passed (960/440/320/220, original key/configuration/removal receipt recovery, explicit synthetic model test). Evidence: ${output}. Synthetic peer, not native/Host acceptance.`);
+  } catch (error) {
+    await page?.screenshot({ path: path.join(output, 'failure.png') }).catch(() => {});
+    if (page) {
+      const snapshot = await page.evaluate(() => window.fixture.snapshot()).catch(() => null);
+      const validation = await page.frameLocator('iframe').locator('#settings-form').evaluate(form => ({
+        valid: form.checkValidity(), handler: typeof form.onsubmit,
+        controls: [...form.elements].map(element => ({ id: element.id, disabled: element.disabled, valid: element.validity?.valid, message: element.validationMessage })),
+      })).catch(() => null);
+      fs.writeFileSync(path.join(output, 'failure.json'), JSON.stringify({snapshot, validation}, null, 2));
+    }
+    throw error;
+  }
   finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
 }

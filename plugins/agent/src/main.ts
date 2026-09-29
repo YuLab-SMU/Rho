@@ -5,6 +5,7 @@ import './style.css';
 import { connectPluginView } from '../public/plugin-ui/index.js';
 import type { AgentProvider, AgentNativeToolSelection } from '../sdk/index.js';
 import { NativeAgentModel, agentBusy } from './native-model.js';
+import { mountSettings } from './settings-view.js';
 
 const get = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const client = await connectPluginView();
@@ -61,7 +62,8 @@ function render() {
   get<HTMLButtonElement>('newer-tasks').disabled = model.taskLoading || !model.newerTasksAvailable || closing;
   get<HTMLButtonElement>('older-tasks').disabled = model.taskLoading || !model.page?.next || closing;
   get<HTMLButtonElement>('new-task').disabled = model.busy || closing || model.state.pending.some(p => p.kind === 'create' || p.kind === 'discover');
-  get<HTMLButtonElement>('task-actions').disabled = !detail;
+  get<HTMLButtonElement>('task-actions').disabled = closing;
+  for (const id of ['rename-task', 'archive-task', 'show-details']) get<HTMLButtonElement>(id).disabled = !detail;
   get('task-state').textContent = !detail ? 'Choose or create a task' : detail.summary.task.archived ? 'Archived task' : !controlled ? 'Read-only · Another view' :
     `${providers[detail.summary.task.provider]} · ${detail.summary.attachment.state.replaceAll('_', ' ')}${detail.summary.history_gap ? ' · Earlier messages unavailable' : ''}`;
   const takeover = get<HTMLButtonElement>('take-over'); takeover.hidden = !detail || controlled; takeover.disabled = model.busy;
@@ -194,6 +196,7 @@ async function refresh() {
     // Accepted parent Operations are observations only. A missing admission
     // stays behind an explicit status/continuation action.
     for (const pending of [...model.state.pending]) if (pending.intent.operation && pending.status !== 'uncertain') await model.inspect(pending.intent.request);
+    await settings.refresh();
   } finally { polling = false; render(); }
 }
 function changedText() {
@@ -203,6 +206,7 @@ function changedText() {
   render();
 }
 model = new NativeAgentModel(client, render);
+const settings = mountSettings(client, model, track);
 message.addEventListener('compositionstart', () => { composing = true; compositionEnded = -Infinity; clearDraftTimers(); });
 message.addEventListener('compositionend', () => { composing = false; compositionEnded = performance.now(); changedText(); });
 message.addEventListener('input', changedText);
@@ -253,7 +257,8 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[popovertarge
 }
 get('rename-task').onclick = () => { get('actions-menu').hidePopover(); get<HTMLInputElement>('title').value = model.details.get(selected()!)?.summary.task.title ?? ''; get<HTMLDialogElement>('rename-dialog').showModal(); };
 get('cancel-rename').onclick = () => get<HTMLDialogElement>('rename-dialog').close();
-get('rename-form').onsubmit = event => { event.preventDefault(); const title = get<HTMLInputElement>('title').value, id = selected(); get<HTMLDialogElement>('rename-dialog').close(); if (id) action(() => model.rename(id, title)); };
+get('save-title').onclick = () => { if (!get<HTMLFormElement>('rename-form').reportValidity()) return; const title = get<HTMLInputElement>('title').value, id = selected(); get<HTMLDialogElement>('rename-dialog').close(); if (id) action(() => model.rename(id, title)); };
+get('rename-form').onkeydown = event => { if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) { event.preventDefault(); get<HTMLButtonElement>('save-title').click(); } };
 const tools = (client.view.configuration as { tools?: AgentNativeToolSelection[] }).tools ?? [];
 get<HTMLButtonElement>('tools').disabled = !tools.length;
 for (const tool of tools) {
@@ -265,10 +270,11 @@ await client.installCloseHandler({
   async flush() {
     closing = true; clearDraftTimers(); if (composing) throw Error('Finish the current text composition before closing.');
     await Promise.all([...flights]); await model.save();
+    settings.prepareClose();
     if (Object.values(model.state.drafts).some(draft => draft.dirty)) throw Error('A task draft is not saved yet. Keep this view open and finish saving it before closing.');
   },
   resume() { closing = false; render(); },
 });
 await refresh().catch(report); render();
 const poll = setInterval(() => { void refresh().catch(report); }, 1000);
-addEventListener('pagehide', () => { disposed = true; clearDraftTimers(); clearInterval(poll); model.dispose(); client.dispose(); }, { once: true });
+addEventListener('pagehide', () => { disposed = true; clearDraftTimers(); clearInterval(poll); settings.dispose(); model.dispose(); client.dispose(); }, { once: true });
