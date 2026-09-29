@@ -161,6 +161,7 @@ where
                         let body = match result {
                             Ok(data) => {
                                 let incomplete = (capability == "agent.model.key.receipt" && data["credential"].is_null())
+                                    || (capability == "agent.handoff.receipt" && data.is_null())
                                     || (matches!(capability.as_str(), "agent.model.tool.operation" | "agent.native.tool.operation") && data["completeness"] != "complete");
                                 RpcBody::QueryResult { data, completeness: if incomplete { ObservationCompleteness::Partial } else { ObservationCompleteness::Complete }, source: None }
                             },

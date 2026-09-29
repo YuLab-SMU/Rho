@@ -2,6 +2,128 @@ use super::*;
 use rho_agent_owner::{AgentTaskRepository, AgentTaskScope};
 use rho_agent_store::AgentStore;
 
+#[tokio::test]
+async fn handoff_checks_original_contributed_reference_and_fresh_caller_then_retries_without_reads()
+{
+    use crate::handoffs::{append, create, operation};
+    let factory = Arc::new(Factory::default());
+    let mut f = start(factory.clone()).await;
+    create(&mut f, "source", "Source document", json!([selection()])).await;
+    create(&mut f, "target", "Target draft", json!([])).await;
+    let source = f
+        .query(
+            "agent.handoff.source",
+            json!({"source":{"kind":"rho","conversation_id":"source"}}),
+        )
+        .await;
+    let target = json!({"target":{"kind":"rho","conversation_id":"target"},"draft_version":2,"control_generation":null});
+    let input = append(&source, &target);
+    let mut original_receipt = Value::Null;
+    for attempt in 0..3 {
+        let native_request = format!("handoff-context-{attempt}");
+        let mut native = call(&native_request, "agent.handoff.append", input.clone(), true);
+        native.scopes.insert("documents.read".into());
+        f.writer
+            .send(native.request.clone(), RpcBody::Invoke(native.clone()))
+            .await
+            .unwrap();
+        for (step, capability) in [
+            "views.caller",
+            "plugins.inspect",
+            "editor.context.preview",
+            "views.caller",
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let frame = f.read().await;
+            let RpcBody::HostCall {
+                parent_request,
+                capability: actual,
+                arguments,
+            } = frame.body
+            else {
+                panic!("Expected original handoff read")
+            };
+            assert_eq!(parent_request, native.request);
+            assert_eq!(actual, manifest::key(capability));
+            let data = match capability {
+                "plugins.inspect" => inspection(),
+                "editor.context.preview" => {
+                    assert_eq!(arguments["arguments"]["reference"], reference());
+                    let mut value = preview();
+                    if attempt == 0 {
+                        value["item"]["reference"]["selector"]["version"] = json!(8);
+                    }
+                    value
+                }
+                _ => {
+                    // The last caller read must still be the admitted view.
+                    if step == 3 && attempt == 1 {
+                        origin("view-two")
+                    } else {
+                        origin("view-one")
+                    }
+                }
+            };
+            f.writer
+                .send(
+                    frame.request,
+                    RpcBody::HostResult {
+                        result: json!({"status":"ready","completeness":"complete","data":data}),
+                    },
+                )
+                .await
+                .unwrap();
+            if attempt == 0 && capability == "editor.context.preview" {
+                break;
+            }
+        }
+        let frame = f.read().await;
+        assert_eq!(frame.request, native.request);
+        let RpcBody::CommitPlan(result) = frame.body else {
+            panic!("Expected handoff commit plan")
+        };
+        assert_eq!(
+            result.outcome,
+            if attempt < 2 {
+                PluginOutcome::Failed
+            } else {
+                PluginOutcome::Succeeded
+            },
+            "{result:?}"
+        );
+        if attempt == 2 {
+            original_receipt = result.output.unwrap();
+        }
+        f.settle(&native, result.outcome).await;
+        let draft = f
+            .query(
+                "agent.model.conversation",
+                json!({"conversation_id":"target"}),
+            )
+            .await;
+        assert_eq!(draft["draft_version"], if attempt < 2 { 2 } else { 3 });
+        if attempt == 2 {
+            assert_eq!(draft["draft_content"]["context"], json!([selection()]));
+        }
+    }
+    // The repeat has no document scope and receives no source/native reads.
+    let repeated = operation(
+        &mut f,
+        "handoff-repeat",
+        "agent.handoff.append",
+        input,
+        "view-one",
+    )
+    .await;
+    assert_eq!(repeated.outcome, PluginOutcome::Succeeded, "{repeated:?}");
+    assert_eq!(repeated.output.unwrap(), original_receipt);
+    assert_eq!(factory.opens.load(Ordering::SeqCst), 0);
+    assert_eq!(factory.sends.load(Ordering::SeqCst), 0);
+    f.release().await;
+}
+
 fn reference() -> Value {
     json!({"provider":{"plugin":"org.rho.editor","instance":"editor-one","revision":format!("sha256:{}","c".repeat(64)),"artifact":format!("sha256:{}","d".repeat(64))},"contribution":"documents","window":"source-window","selector":{"draft":"draft-one","version":7,"digest":format!("sha256:{}","e".repeat(64))}})
 }

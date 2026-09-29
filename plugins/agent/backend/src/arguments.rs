@@ -15,6 +15,35 @@ pub struct CredentialRequest {
     pub request_id: String,
 }
 
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HandoffSource {
+    pub source: rho_agent_api::ProjectAgentTaskRef,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HandoffTarget {
+    pub target: rho_agent_api::ProjectAgentTaskRef,
+}
+
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AppendHandoff {
+    #[schemars(length(min = 1, max = 160))]
+    pub request_id: String,
+    pub source: rho_agent_api::ProjectAgentTaskRef,
+    #[schemars(length(min = 1, max = 160))]
+    pub source_revision: String,
+    pub target: rho_agent_api::ProjectAgentTaskRef,
+    pub target_draft_version: u64,
+    pub target_control_generation: Option<u64>,
+    #[schemars(length(min = 1, max = 16384))]
+    pub body: String,
+    #[schemars(length(max = 16))]
+    pub context: Vec<rho_agent_api::AgentContextSelection>,
+}
+
 // Deliberately no Debug: diagnostics must not expose credential material.
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]

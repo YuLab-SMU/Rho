@@ -7,6 +7,7 @@ mod metadata;
 pub mod server;
 
 mod diagnostics;
+mod handoffs;
 mod runs;
 mod run_recovery;
 

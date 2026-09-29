@@ -4,6 +4,7 @@ use rho_agent_api::{
     AgentResourceAssetUpload, AgentTaskCommandResult, AgentTaskDetail, AgentTaskEventPage,
     ComponentCredentialRef, ComponentCredentialStatus, ComponentModelSettings,
     ProjectAgentTaskPage,
+    handoff::{AgentHandoffReceipt, AgentHandoffSourceSnapshot, AgentHandoffTargetSnapshot},
     component::{
         ComponentAgentConversation, ComponentAgentEventPage, ComponentAgentRun,
         ComponentModelDiagnostic, ComponentToolReceipt,
@@ -34,6 +35,7 @@ pub fn is_mutation(id: &str) -> bool {
             | "agent.model.run"
             | "agent.model.run.stop"
             | "agent.model.run.reconcile"
+            | "agent.handoff.append"
     )
 }
 pub fn kind(id: &str) -> CapabilityKind {
@@ -80,6 +82,14 @@ fn capability(
             "Import an exact controlled resource up to 8 MiB into a native task under its current controller. Reads bounded granted chunks and verifies the complete digest before admission. Retains the original resource identity atomically with its receipt; retries only observe that receipt without reading or importing again. Does not start an Agent or journal attachment bytes."
         } else if id == "agent.native.assets.upload" {
             "Store a bounded native task attachment through ephemeral input, the same task owner and runtime, without journaling its bytes or starting a native Agent. Inspect its original task receipt after a lost reply. This capability currently accepts only bounded single-message attachments."
+        } else if id == "agent.handoff.append" {
+            "Append human-reviewed source material to an existing native or Rho task draft under its exact controller, draft version and source revision. Revalidates selected contributed references through public preview queries; stale or unsupported references remain unchanged and prevent the write. Preserves target text, attachments and permission policy. One atomic original-request receipt prevents duplicate appends; retries do not reread changing sources. Never sends a message, starts a model or scientific operation, reconnects a provider or transfers attachment identities."
+        } else if id == "agent.handoff.source" {
+            "Read bounded original task text and source references for human review, including archived sources. Model answers are not promoted to confirmed scientific facts. Excludes attachment bytes and identities from the transferable references. Does not resolve or retarget references, start a model or reconnect a provider."
+        } else if id == "agent.handoff.target" {
+            "Read an existing target draft and its exact version, controller and writability using a fresh native caller observation. Does not take control, create a task or send a message."
+        } else if id == "agent.handoff.receipt" {
+            "Read the original atomic handoff receipt without appending or sending again. An absent receipt is an incomplete observation, never proof that a pending append cannot finish."
         } else if id == "agent.model.run" {
             "Run the submitted text and explicit contributed sources using captured model settings, an available scoped key and the original native controller. Source previews are checked before admission; complete text, provenance and bounded ordinary conversation history are committed with the run. Historical input does not inherit tool authority. Admission atomically consumes only a matching saved draft; failed source capture or missing credentials preserve it. Retains the native Operation until the model and dispatched native tools settle and records text and usage in its original task. An optional exact R binding permits bounded observation in Explain and execution only in Run, subject to original scopes and granted native capabilities. Explicit Continue rechecks the selected recovery digest and retains the original Agent/R provider and session; confirmed repeated mutations return their original native outcomes. Attachments are not yet composed. Identical original requests only observe the existing run and captured sources without rereading providers, preserving later drafts."
         } else if id == "agent.model.history" {
@@ -107,7 +117,7 @@ fn capability(
         }.into(),
         input_schema: input, output_schema: output, examples: vec![example],
         recovery_schema: json!({"type":"object","additionalProperties":false,"properties":{"code":{"type":"string"}},"required":["code"]}),
-        required_scopes: if id == "agent.native.assets.import" { ["application.control".into(), "plugins.read".into(), "resources.read".into()].into() } else if operation || control { ["application.control".into(), "plugins.read".into()].into() } else if matches!(id, "agent.model.tool.operation" | "agent.native.tool.operation") { ["application.read".into(), "operation.read".into()].into() } else { ["application.read".into()].into() },
+        required_scopes: if id == "agent.native.assets.import" { ["application.control".into(), "plugins.read".into(), "resources.read".into()].into() } else if operation || control { ["application.control".into(), "plugins.read".into()].into() } else if id == "agent.handoff.target" { ["application.read".into(), "plugins.read".into()].into() } else if matches!(id, "agent.model.tool.operation" | "agent.native.tool.operation") { ["application.read".into(), "operation.read".into()].into() } else { ["application.read".into()].into() },
         effects: if id == "agent.native.discover" { ["agent.native.discovery".into()].into() } else if id == "agent.native.command" { ["agent.native.command".into()].into() } else if matches!(id, "agent.native.assets.upload" | "agent.native.assets.import" | "agent.native.assets.stage" | "agent.native.assets.finish") { ["agent.assets".into()].into() } else if id == "agent.model.run" { ["agent.model.run".into()].into() } else if id == "agent.model.test" { ["agent.model.test".into()].into() } else if control { ["agent.credentials".into()].into() } else if operation { ["agent.metadata".into()].into() } else { Default::default() },
         cancellation: CancellationSupport::Unsupported, preflight: None,
     }
@@ -173,6 +183,30 @@ pub fn manifest() -> PluginManifest {
             grants
         },
         capabilities: vec![
+            capability(
+                "agent.handoff.source", "Prepare a task handoff",
+                schema_for!(HandoffSource).to_value(),
+                schema_for!(AgentHandoffSourceSnapshot).to_value(),
+                json!({"source":{"kind":"rho","conversation_id":"source-task"}}),
+            ),
+            capability(
+                "agent.handoff.target", "Inspect the existing target draft",
+                schema_for!(HandoffTarget).to_value(),
+                schema_for!(AgentHandoffTargetSnapshot).to_value(),
+                json!({"target":{"kind":"rho","conversation_id":"target-task"}}),
+            ),
+            capability(
+                "agent.handoff.receipt", "Inspect an original handoff receipt",
+                schema_for!(CredentialRequest).to_value(),
+                schema_for!(Option<AgentHandoffReceipt>).to_value(),
+                json!({"request_id":"handoff-original"}),
+            ),
+            capability(
+                "agent.handoff.append", "Add reviewed handoff to a task draft",
+                schema_for!(AppendHandoff).to_value(),
+                schema_for!(AgentHandoffReceipt).to_value(),
+                json!({"request_id":"handoff-original","source":{"kind":"rho","conversation_id":"source-task"},"source_revision":"source-digest","target":{"kind":"rho","conversation_id":"target-task"},"target_draft_version":1,"target_control_generation":null,"body":"Goal\nReview the captured source","context":[]}),
+            ),
             capability(
                 "agent.native.assets.stage",
                 "Stage a browser attachment chunk",
@@ -469,6 +503,10 @@ pub fn manifest() -> PluginManifest {
     // view. These grants expose only this Agent's ordinary task capabilities.
     for id in [
         "agent.tasks",
+        "agent.handoff.source",
+        "agent.handoff.target",
+        "agent.handoff.receipt",
+        "agent.handoff.append",
         "agent.native.command",
         "agent.native.discover",
         "agent.native.task",

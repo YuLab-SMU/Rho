@@ -19,6 +19,7 @@ use std::{
 pub struct Metadata {
     pub owner: ComponentAgentOwner,
     pub(crate) native: crate::native_tasks::NativeTasks,
+    pub(crate) handoffs: rho_agent_owner::handoff::AgentHandoffOwner,
     store: Arc<AgentStore>,
     pub(crate) credentials: CredentialFile,
     settings_gate: Mutex<()>,
@@ -162,6 +163,7 @@ impl Metadata {
         Ok(Self {
             owner,
             native,
+            handoffs: rho_agent_owner::handoff::AgentHandoffOwner::new(store.clone()),
             store,
             diagnostics: Default::default(),
             runs: Default::default(),
@@ -231,10 +233,14 @@ impl Metadata {
         if call.binding.capability.id.as_str() == "agent.model.tool.operation" {
             return crate::tools::inspect_original(self, call, host).await;
         }
+        if call.binding.capability.id.as_str() == "agent.handoff.target" {
+            return crate::handoffs::target(self, call, host).await;
+        }
         self.read(call)
     }
     pub fn read(&self, call: &PluginCall) -> Result<Value, Failure> {
         match call.binding.capability.id.as_str() {
+            "agent.handoff.source" | "agent.handoff.receipt" => crate::handoffs::read(self, call),
             "agent.model.run.get"
             | "agent.model.history"
             | "agent.model.run.request"
@@ -425,6 +431,7 @@ impl Metadata {
                 )
             }
             "agent.native.command" => self.native.command(self, call, caller, host).await,
+            "agent.handoff.append" => crate::handoffs::append(self, call, caller, host).await,
             "agent.model.run" => self.runs.start(self, call, caller, host).await,
             "agent.model.run.stop" => self.runs.stop(self, call, caller),
             "agent.model.run.reconcile" => {

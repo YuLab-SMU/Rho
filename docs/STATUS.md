@@ -123,10 +123,10 @@ Implemented in `plugins/agent` (public APIs/SDK only, no private core imports):
   original receipt; repeats observe the original. Inline attachments stay ≤ 524288
   encoded bytes per Control.
 
-Native/Rho text capture validates exact previews; Rho also freezes up to eight prior turns
-(24 KiB) under its admission gate without inheriting authority. Source bytes and history stay
-with the original Send. Check tool outcomes records recovery; explicit Continue rechecks it,
-retains exact Agent/R targets and reuses confirmed results. Native/Host checks remain pending.
+Native/Rho captures exact previews and bounded history without inheriting tool authority;
+Check tool outcomes and Continue retain exact providers and reuse confirmed results.
+Ordinary handoff source/target/receipt/append APIs now reuse the atomic draft owner in source,
+with exact view control and contributed-reference checks. UI wiring and native/Host acceptance remain.
 The ordinary native/Rho task view is implemented in source: shared task selection,
 creation, draft CAS/conflicts, Send/Stop, explicit control and original-request
 inspection. Native tasks also support model/tool selection, permissions and
@@ -155,8 +155,8 @@ checksum/controller and reopen fixtures are written but unrun; no native accepta
 The combined native/Rho–Editor–real-R/restart fixture passes type checking and discovery.
 Its model peer probe passes; the actual Host flow awaits one current Agent artifact.
 
-Not done: native acceptance of attachments/settings/Rho drafts/history/Continue, remaining
-context/component input, actual Host restart recovery and Studio Agent flow.
+Not done: native acceptance of attachments/settings/Rho drafts/history/Continue/handoffs,
+handoff UI, remaining context/component input, actual Host restart recovery and Studio Agent flow.
 Synthetic peers for Process/Remote/Environment do not establish execution through those plugins.
 
 Agent evidence in `target/plugin-refactor/`: `agent-assets-results-v3.json` and

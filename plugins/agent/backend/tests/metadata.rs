@@ -253,7 +253,7 @@ impl Fixture {
 fn manifest_contains_public_bounded_agent_capabilities() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 38);
+    assert_eq!(manifest.capabilities.len(), 42);
     assert_eq!(
         manifest.requires[0].capability,
         manifest::key("views.caller")
@@ -1361,3 +1361,6 @@ async fn disconnect_during_model_test_keeps_original_diagnostic_interrupted_with
 
 #[path = "support/native_tasks.rs"]
 mod native_tasks;
+
+#[path = "support/handoffs.rs"]
+mod handoffs;
