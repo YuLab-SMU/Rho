@@ -33,8 +33,8 @@ migration, import, archive-reader or compatibility work without a new request.
 - Agent behavior belongs to external platforms or the optional built-in component
   assistant. The built-in assistant reuses Rig through `plugins/agent/backend/engine` and
   the ordinary Agent plugin’s validated Host ports. Scientific owners, Operation
-  and native adapters do not plan Agent work or call models. Application records the user's authorized scope;
-  model output and context cannot expand it or introduce another approval decision.
+  and native adapters do not plan Agent work or call models. The Agent plugin records
+  the user's authorized scope; model output and context cannot expand it or introduce another approval decision.
 - Agent requests are trusted subject to mechanical identity, schema, scope,
   containment, quota and native-precondition checks. Do not add Rho approvals or
   re-prompt for Agent-authorized operations. Extension isolation is a separate concern.

@@ -83,15 +83,11 @@ project budget across principals. Evidence and old revisions survive a tombstone
 Captured bytes remain separate from JSON records. Successful local metadata
 transactions do not replace the Host's original Operation settlement.
 
-## Transitional fixed entry
+## Core independence
 
-The retiring Application and SQLite adapters only convert typed records, validate
-the current window and call this owner/store. Their new storage is a separate
-`*.annotations-v1.sqlite` file. They never read, migrate or import annotation
-tables from an older Application database, and never delete the older database.
-Remove those adapters with the fixed Host annotation service in M6, after the
-ordinary RPC/context flow has its acceptance evidence. There is one domain and
-transaction implementation, not separate fixed and plugin implementations.
+Application and SQLite no longer forward annotation records or open a sibling
+annotation database. Ordinary backend instances use their managed plugin storage
+and public context providers. Retired files are not read, imported or removed.
 
 ## Checks
 
@@ -100,7 +96,6 @@ During iteration, reuse the root workspace cache:
 ```sh
 cargo test -p rho-annotation-store --test annotations --locked
 cargo test -p rho-annotation-backend --lib --locked
-cargo test -p rho-sqlite --test annotations --locked
 node scripts/check-plugin-boundaries.mjs
 ```
 

@@ -7,7 +7,7 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use std::{path::Path, sync::Mutex, time::Duration};
 
 /// Local application state, never part of the scientific journal or outbox.
-pub struct ApplicationStore(pub(crate) Mutex<Connection>, pub(crate) rho_agent_store::AgentStore, pub(crate) rho_annotation_store::AnnotationStore);
+pub struct ApplicationStore(pub(crate) Mutex<Connection>);
 
 impl ApplicationStore {
     pub fn open(path: &Path) -> Result<Self, String> {
@@ -47,11 +47,7 @@ impl ApplicationStore {
             )
             .map_err(err)?;
         crate::runtime_instances::initialize(&connection)?;
-        // The new Agent namespace never reads or imports the previous Application tables.
-        let agents = rho_agent_store::AgentStore::open(&path.with_extension("agent-v1.sqlite"))?;
-        // No migration or reads of the former core-owned annotation tables.
-        let annotations = rho_annotation_store::AnnotationStore::open(&path.with_extension("annotations-v1.sqlite"))?;
-        Ok(Self(Mutex::new(connection), agents, annotations))
+        Ok(Self(Mutex::new(connection)))
     }
 
     pub fn read(&self, scope: &str, key: &str) -> Result<ApplicationState, String> {
@@ -395,6 +391,8 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("studio.sqlite");
         let store = ApplicationStore::open(&path).unwrap();
+        assert!(!path.with_extension("agent-v1.sqlite").exists());
+        assert!(!path.with_extension("annotations-v1.sqlite").exists());
         let initial = store.read("/project", "studio").unwrap();
         let first = store
             .write(
@@ -410,6 +408,36 @@ mod tests {
         let store = ApplicationStore::open(&path).unwrap();
         assert_eq!(store.read("/project", "studio").unwrap().value, first.value);
         assert!(store.read("/other", "studio").unwrap().version.is_none());
+    }
+
+    #[test]
+    fn application_state_never_opens_retired_plugin_database_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("studio.sqlite");
+        // These paths cannot be opened as databases. Core state must remain
+        // usable without inspecting, repairing or removing either one.
+        let retired = ["agent-v1.sqlite", "annotations-v1.sqlite"]
+            .map(|extension| path.with_extension(extension));
+        for directory in &retired {
+            std::fs::create_dir(directory).unwrap();
+            std::fs::write(directory.join("untouched"), b"plugin-owned").unwrap();
+        }
+        let store = ApplicationStore::open(&path).unwrap();
+        let original = store.read("/project", "layout").unwrap();
+        let saved = store.write("/project", &ApplicationState {
+            value: serde_json::json!({"views": ["viewer"]}),
+            ..original
+        }).unwrap();
+        drop(store);
+        let reopened = ApplicationStore::open(&path).unwrap();
+        let restored = reopened.read("/project", "layout").unwrap();
+        assert_eq!(restored.key, saved.key);
+        assert_eq!(restored.version, saved.version);
+        assert_eq!(restored.value, saved.value);
+        for directory in retired {
+            assert_eq!(std::fs::read(directory.join("untouched")).unwrap(), b"plugin-owned");
+            assert_eq!(std::fs::read_dir(directory).unwrap().count(), 1);
+        }
     }
 
     #[test]

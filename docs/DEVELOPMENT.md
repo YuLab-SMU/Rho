@@ -306,10 +306,8 @@ fixed-renderer test totals do not count as current plugin acceptance.
 
 Annotation ownership checks reuse the workspace: `cargo test -p rho-annotation-store
 --test annotations --locked` covers immutable evidence, revisions, idempotency,
-separate-connection races, scope isolation and transactional budgets. The retiring
-bridge uses `cargo test -p rho-sqlite --test annotations --locked` for domain
-round-trips, live-window checks and absence of old-table reads. Annotation HTTP
-checks were retired with the private routes; `node scripts/test-annotation-plugin.mjs`
+separate-connection races, scope isolation and transactional budgets. Fixed
+Application/SQLite bridge and private HTTP tests were retired with those paths; `node scripts/test-annotation-plugin.mjs`
 checks the ordinary native owner through a real generic Host. Run Cargo serially.
 `cargo test -p rho-annotation-backend --lib --locked` exercises the actual framed
 native entry with deterministic public context peers, receipts and reopen; it is
@@ -677,16 +675,13 @@ The public task state machine is `plugins/agent/backend/owner`. Iterate with
 scripts/test-agent-plugin-owner.mjs` repeats its admission/recovery fixtures from
 an independent source assembly and verifies public contract freshness. The
 transitional native request conversion is checked by `cargo test -p rho-contract
---lib public_agent_request --locked`; component document/call/receipt byte parity,
-digests and structured errors use `cargo test -p rho-application --lib
-component_boundary --locked`. Public component-owner fixtures inject controller
+--lib public_agent_request --locked`. The Application component conversion and its
+fixtures have been retired with the fixed implementation. Public component-owner fixtures inject controller
 loss and atomic write failure, and check original admission, late native receipts,
 observation-only restart, unsupported control refusal and frozen permissions.
-Public handoff ownership and the temporary core conversion use `cargo test -p
-rho-agent-owner -p rho-application --lib handoff --locked`: all task-kind pairs,
+Public handoff ownership uses `cargo test -p rho-agent-owner --lib handoff --locked`: all task-kind pairs,
 original receipt recovery, scoped/live controllers, stale or unowned context,
-target budgets and atomic commit faults. The boundary fixture checks exact
-serialized bytes, digests and the structured observation-expired diagnostic.
+target budgets and atomic commit faults. The public owner preserves original receipt digests and structured diagnostics.
 Asynchronous native reverse-call transport uses `cargo test -p rho-plugin-sdk
 --test host_calls --test transport --locked`: original request IDs, concurrent
 correlation, retained abandoned waits, queued/unknown/duplicate reply refusal,
@@ -868,11 +863,12 @@ fixtures, atomic original-request receipts, concurrent duplicate writes and
 post-removal replay refusal, and uses `cargo test -p rho-agent-store --lib --locked`; `node
 scripts/test-agent-plugin-store.mjs` repeats store and owner tests in an independent
 source assembly. Format isolation tests reject unrelated/unsupported databases
-without modifying them. The temporary core storage adapter and manual handoff use
-`cargo test -p rho-sqlite
---test agent_handoffs --test component_agents --locked`. These preserve one native
-task writer, original receipt/draft captures and component/native asset separation;
-they do not prove an ordinary Agent backend or default delivery.
+without modifying them. The core Agent/annotation storage adapters and their tests
+are removed. `cargo test -p rho-application -p rho-sqlite --lib --locked` covers
+generic state/receipt persistence, including refusal to overwrite stale drafts and
+independence from retired plugin database paths. `cargo test -p rho-sqlite --lib
+--no-default-features --locked` checks the journal-only composition. Neither entry
+replaces ordinary Agent/annotation plugin acceptance.
 `node scripts/test-real-r.mjs --agent` delegates to the ordinary Agent/R plugin
 harness (`test-agent-plugin-real-r.mjs`) using retained `RHO_AGENT_PLUGIN_PACKAGE`
 and `RHO_R_PLUGIN_PACKAGE`, plus installed `RHO_ARK`/`RHO_R_HOME`. It builds only

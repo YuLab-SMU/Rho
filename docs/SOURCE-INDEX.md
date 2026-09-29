@@ -270,8 +270,6 @@ Checks:
   Applies to: `AGENTS.md`, `README.md`, `docs/**`, `governance/**`, `scripts/governance.mjs`.
 - `plugins.agent-backend` (L1): `["cargo","test","-p","rho-agent-backend","--test","metadata","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/api/**`, `plugins/agent/backend/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
-- `plugins.agent-component-boundary` (L1): `["cargo","test","-p","rho-application","--lib","component_boundary","--locked"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/application/**`, `crates/contract/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
 - `plugins.agent-core-tools` (L2): `["node","scripts/test-agent-core-tools.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/host/**`, `crates/operation/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-core-tools.mjs`, `sdk/**`.
 - `plugins.agent-engine` (L1): `["cargo","test","-p","rho-agent-engine","--locked"]`
@@ -280,10 +278,8 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-engine.mjs`, `sdk/**`.
 - `plugins.agent-environment` (L2): `["node","scripts/test-agent-environment.mjs"]`
   Applies to: `crates/host/tests/fixtures/agent-science.cjs`, `crates/host/tests/fixtures/rhonextfixture/**`, `plugins/agent/**`, `plugins/environment/**`, `scripts/fixtures/agent-environment-tools.cjs`, `scripts/test-agent-environment.mjs`.
-- `plugins.agent-handoff` (L1): `["cargo","test","-p","rho-agent-owner","-p","rho-application","--lib","handoff","--locked"]`
+- `plugins.agent-handoff` (L1): `["cargo","test","-p","rho-agent-owner","--lib","handoff","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/application/**`, `crates/contract/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
-- `plugins.agent-handoff-store` (L1): `["cargo","test","-p","rho-sqlite","--test","agent_handoffs","--locked"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/adapters/sqlite/**`, `crates/contract/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
 - `plugins.agent-host` (L2): `["node","scripts/test-agent-plugin.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/host/**`, `crates/operation/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin.mjs`, `sdk/**`.
 - `plugins.agent-independent` (L2): `["node","scripts/test-agent-plugin-client.mjs"]`
@@ -328,8 +324,6 @@ Checks:
   Applies to: `plugins/agent/build-ui.mjs`, `plugins/agent/dependencies.lock`, `plugins/agent/index.html`, `plugins/agent/package.json`, `plugins/agent/sdk/**`, `plugins/agent/src/**`, `plugins/agent/tsconfig.json`, `scripts/agent-view-renderer.mjs`, `scripts/fixtures/agent-view-container.js`, `scripts/test-agent-view.mjs`, `sdk/plugin-protocol/**`, `sdk/plugin-ui/**`.
 - `plugins.agent-workspace-browser` (L2): `["node","scripts/test-agent-plugin-real-r.mjs","--browser"]`
   Applies to: `crates/host/**`, `crates/workbench/**`, `plugins/agent/**`, `plugins/r/**`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin-real-r.mjs`, `sdk/**`, `ui/e2e/agent-workspace.spec.ts`, `ui/src/host-client.ts`, `ui/src/plugin-*.*`.
-- `plugins.annotation-adapter` (L1): `["cargo","test","-p","rho-sqlite","--test","annotations","--locked"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/adapters/sqlite/Cargo.toml`, `crates/adapters/sqlite/src/annotations.rs`, `crates/adapters/sqlite/src/application.rs`, `crates/adapters/sqlite/tests/annotations.rs`, `crates/application/Cargo.toml`, `crates/application/src/annotations.rs`, `plugins/annotations/**`.
 - `plugins.annotation-agent-browser` (L2): `["node","scripts/test-annotation-plugin.mjs","--agent","--browser"]`
   Applies to: `crates/host/tests/fixtures/agent-science.cjs`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `plugins/agent/**`, `plugins/annotations/**`, `plugins/editor/backend/**`, `scripts/agent-plugin-artifact.mjs`, `scripts/fixtures/agent-annotation-tools.cjs`, `scripts/fixtures/annotation-agent-browser.mjs`, `scripts/fixtures/annotation-agent.mjs`, `scripts/fixtures/annotation-image-agent.mjs`, `scripts/fixtures/annotation-native-agent.mjs`, `scripts/test-annotation-plugin.mjs`, `ui/src/plugin-*.*`.
 - `plugins.annotation-backend` (L1): `["cargo","test","-p","rho-annotation-backend","--lib","--locked"]`

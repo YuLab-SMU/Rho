@@ -7,17 +7,11 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-# Host application persistence still includes the retiring fixed Agent bridge.
-# Journal-only users opt out without pulling those owners into their build graph.
+# Journal-only users do not need window/document application persistence.
 default = ["application-store"]
-application-store = ["dep:rho-annotation-api", "dep:rho-annotation-owner", "dep:rho-annotation-store", "dep:rho-agent-store", "dep:rho-agent-owner", "dep:rho-application"]
+application-store = ["dep:rho-application"]
 
 [dependencies]
-rho-annotation-api = { path = "../../../plugins/annotations/api", optional = true }
-rho-annotation-owner = { path = "../../../plugins/annotations/backend/owner", optional = true }
-rho-annotation-store = { path = "../../../plugins/annotations/backend/store", optional = true }
-rho-agent-store = { path = "../../../plugins/agent/backend/store", optional = true }
-rho-agent-owner = { path = "../../../plugins/agent/backend/owner", optional = true }
 rho-application = { path = "../../application", optional = true }
 uuid.workspace = true
 async-trait.workspace = true
@@ -30,19 +24,3 @@ serde_json.workspace = true
 [dev-dependencies]
 tempfile.workspace = true
 tokio.workspace = true
-
-[[test]]
-name = "agent_handoffs"
-required-features = ["application-store"]
-
-[[test]]
-name = "agent_store"
-required-features = ["application-store"]
-
-[[test]]
-name = "annotations"
-required-features = ["application-store"]
-
-[[test]]
-name = "component_agents"
-required-features = ["application-store"]

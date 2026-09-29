@@ -20,12 +20,12 @@ have no model-engine dependency.
 `AgentControllerRef` is owner-supplied correlation data, not a credential. Admission,
 project scope, native MCP credentials and authorized scientific execution remain
 the responsibility of the containing owner. The native and component task state machines each use their one injected
-repository. The transitional Application adapter revalidates its original live
-controller and converts captured component records into the Agent-owned atomic store
-transaction, sharing the same writer gate with manual handoff. Component public
+repository. The ordinary backend validates its live controller and captures
+component records into the Agent-owned atomic store transaction, sharing the same
+writer gate with manual handoff. Core Application/SQLite forwarding is removed. Component public
 captures include complete native document receipts; fixed-view controls cannot be
 admitted. The public API depends only on the plugin protocol and R media API,
-which are included in the independent source assemblies. The current Host converts its admitted scope/window identity at the boundary.
+which are included in the independent source assemblies. The ordinary backend binds admitted instance, scope and controller identity.
 Moving DTO ownership does not change wire field names, replay input, authorize tools or transfer scientific
 truth to the transport.
 
@@ -139,15 +139,14 @@ returns its receipt even after the source changes; changed reuse is refused.
 
 The store accepts an explicit new Agent storage path and checks its format before
 initializing tables. It does not connect to a scientific journal or read the old
-Application task tables. The temporary core composition uses a separate
-`agent-v1.sqlite` suffix, keeps one store for both task owners and only forwards
-repository calls. Existing files are not imported or deleted. Ordinary backend
+Application task tables. Core no longer opens the retired `agent-v1.sqlite` sibling
+or forwards repository calls. Existing files are not imported or deleted. Ordinary backend
 instances use their supplied managed plugin storage location.
 `CredentialFile::at` likewise takes an explicit absolute path, never searches for
 keys and performs no I/O at construction. Its locking, atomic writes and immutable
 references preserve accepted requests across replacement; reads/removals validate
 both project and principal. Missing-file observations do not create a directory.
-The temporary Host adapter supplies the existing user configuration location. Raw
+The ordinary backend supplies the explicit managed credential location. Raw
 keys are never included in task metadata, source revisions, diagnostics or archives.
 
 Ordinary instances may configure `kimi_home` as an existing absolute Kimi Code
@@ -213,10 +212,9 @@ independent package through a previously compiled generic Host, including native
 task metadata, instance separation and attachment journal exclusion.
 `node scripts/test-agent-plugin-native.mjs` repeats the runtime cases in
 an independent source assembly with the public owner/store/client dependencies.
-The temporary Host adapter delegates to this runtime while continuing to supply
-caller validation, scientific context capture and the scoped MCP lease. This
-temporary adapter remains until the remaining context, ordinary-view attachment
-capture and Agent views replace the fixed composition. Release checks persisted native process
+The ordinary backend supplies caller validation, public scientific context capture
+and its private scoped MCP endpoint. Fixed Host/Application adapters are removed.
+Release checks persisted native process
 quiet as well as live handles, including after a failed explicit disconnect.
 
 `node scripts/test-agent-plugin-owner.mjs` builds the task owner and public API
@@ -236,8 +234,8 @@ The production driver accepts captured public model input and an owner callback
 port. Tool tickets are opaque, transient handles returned to the same port;
 interrupted waits retain the original owner receipt. Model output cannot replace
 an owner-admitted request or receipt, or commit an operation. Image labels and
-verified bytes are supplied by the containing owner. The transitional core adapter
-preserves admitted actions and records owner diagnostics before returning errors.
+verified bytes are supplied by the containing owner; the ordinary backend retains
+admitted actions and owner diagnostics.
 
 The `backend/` process composes the same owner and store for task metadata.
 Its public manifest contributes task-list/conversation/settings queries plus

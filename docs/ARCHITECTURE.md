@@ -25,13 +25,11 @@ format and never introduces source-based validation exceptions or silent reinsta
 
 Annotation records, frozen evidence, capture bytes, revision CAS and receipt transactions
 now live in `plugins/annotations/api` and `backend/{owner,store}` without private
-core or Agent dependencies. The remaining fixed Application adapter validates its
-live window before calling that owner; its SQLite adapter delegates to a separate
-`*.annotations-v1.sqlite` database and never opens/imports the former annotation
-tables. These adapters and the Host's fixed source interpretation are temporary;
-remove them when the ordinary annotation RPC/context flow replaces that entry in
-M4/M6. The ordinary native adapter is now implemented in source: it resolves exact
-public context providers, requires owner-supplied lineage/content versions, and
+core or Agent dependencies. Fixed Application/SQLite annotation adapters and Host
+source interpretation are removed. Opening generic application state never opens
+or creates an annotation database; ordinary instances use their managed plugin
+storage. Existing retired files are neither read nor removed. The ordinary native
+adapter resolves exact public context providers, requires owner-supplied lineage/content versions, and
 rechecks the original live caller before freezing bounded text. Its private
 receipts do not settle the Host Operation. Note context retains frozen evidence
 and leaves current source status unknown. The ordinary Editor text flow and
@@ -1053,7 +1051,7 @@ not import other products' profiles or implement a credential migration itself.
 The public Agent task owner owns component conversations, CAS drafts/controllers,
 fixed run inputs, model configuration references, tool intents and bounded events.
 Its AgentStore keeps separate native/component records in one Agent-owned database,
-outside the science journal. Application currently provides typed forwarding.
+outside the science journal. Core Application no longer forwards these records.
 The engine never opens SQLite or calls an R adapter. The Agent backend composes
 the engine and its narrow public tool access port; all scientific reads/writes still use their real owner.
 Current implementation and unimplemented integration stages are in Status.
@@ -1101,8 +1099,9 @@ deletes the exact selected key ID, so a delayed settings writer cannot erase a
 newer writer's current credential.
 
 The fixed Host task, handoff, context, component and managed-MCP services and the
-`rho-agents` adapter are removed. Transitional Application interfaces/storage still
-remain for later removal; they are not a second running Agent implementation.
+`rho-agents` adapter are removed, along with Application Agent/annotation interfaces
+and SQLite forwarding stores. The generic Application owner and its fixed scientific
+bridge remain for later removal. Public contracts still contain legacy Agent DTOs.
 The ordinary backend connects the public `AgentModelRun` and `AgentModelPort` to
 the package-owned Rig driver. Inputs, citations, grants and original receipts belong
 to the captured plugin instance; core no longer imports the native Agent clients
@@ -1117,7 +1116,7 @@ The browser component client owns only bounded presentation caches, draft copies
 and unresolved request identities. Local request identity must be saved before a
 Start is dispatched. Lost acknowledgements are read back by that identity; reads
 and lifecycle resets never replay commands. Conversation history is indexed in the
-same ApplicationStore and paginated by immutable creation time plus run ID, within
+Agent-owned store and paginated by immutable creation time plus run ID, within
 project/principal scope. Summaries do not become a second scientific result store.
 
 Selected component context reuses the existing composer source readers. Preview
@@ -1126,7 +1125,7 @@ package-copy or object reference before capturing bounded context in the run.
 Cross-window document sources and mismatched native-session sources are refused.
 Captured text and evidence are durable application records. Scientific images use
 original MediaReferences and preview digests; their model input bytes are transient.
-User-uploaded attachments use Application-owned immutable bytes and asset IDs scoped
+User-uploaded attachments use Agent-owned immutable bytes and asset IDs scoped
 to the project/principal/conversation. UTF-8 text, PNG and JPEG uploads are validated
 and their hashes are rechecked at submission. Typed `Scientific` and `Attachment`
 image origins keep uploaded files distinct from scientific outputs; attachment bytes
@@ -1332,7 +1331,8 @@ accepts only the Workbench credential and preserves project/test-project session
 identity. Each ordinary Agent backend owns its separate private MCP endpoint;
 Workbench does not resolve Agent-issued credentials or close Agent tasks itself.
 HTML resources are presented by the ordinary Viewer through plugin resources.
-Temporary Host/Application task adapters still exist until their separate M6 removal.
+Host/Application task and storage adapters are also removed; legacy public-contract
+DTOs remain for the next cleanup.
 
 Persist a request and input digest before starting native creation or submission.
 The same request identity/content returns its receipt; altered reuse is rejected.
@@ -1997,9 +1997,8 @@ ephemeral endpoint lease; credentials are never stored in tasks or receipts.
 The lease is revoked on close, disconnect and failed native opening. A connection
 whose metadata cannot be retained is closed before reporting the failure; its
 native identity and process proof remain recovery material, and unconfirmed quiet
-cannot authorize replacement. Publication shares shutdown's live-map lock. The temporary
-Host adapter still supplies context and scientific MCP integration. The ordinary
-backend now composes native command/observation and attachment operations using
+cannot authorize replacement. Publication shares shutdown's live-map lock. The ordinary
+backend composes context, private MCP, native command/observation and attachment operations using
 the same package libraries. Fresh public caller observation precedes each write;
 persisted native controller correlation remains stable across renderer reconnection.
 The ordinary endpoint exposes generic tool catalog/call methods for the explicit
@@ -2039,29 +2038,22 @@ cancellation. Failed initialization cannot accumulate unbounded session entries.
 The containing backend checks persisted task process-quiet evidence before release,
 including tasks already removed from the live map by a failed disconnect. A failed
 release remains unconfirmed on retry; losing a live handle is not cleanup proof.
-Application retains only its scope/error conversion at this boundary; the current
-SQLite adapter only forwards to `rho-agent-store`, the single package-owned SQL
-implementation. Native/component tasks, assets, task-list projections and handoff
-share one Agent store and transactions. The temporary composition supplies a new
-`agent-v1.sqlite` sibling path; it never reads or imports previous Application task
-tables or deletes their files. The store checks its format before creating tables
-and has no scientific-journal connection. Ordinary backend process composition
-must still replace this temporary core adapter. Both Host updates and manual handoff use the
-same task writer gate. A public request conversion preserves captured wire bytes,
-so original request digests, draft versions and native session identities do not
-change merely because their Rust owner moved.
+The ordinary backend supplies managed plugin storage to `rho-agent-store`, the
+single package-owned SQL implementation. Native/component tasks, assets, task-list
+projections and handoff share one store and its transactions. Core Application and
+SQLite no longer import Agent owner/store or create the retired `agent-v1.sqlite`
+sibling. Existing files are not read, imported or removed. The plugin store checks
+its format before creating tables and has no scientific-journal connection.
+Native updates and manual handoff share the same task writer gate. Transitional
+public-contract DTO conversions still remain for later cleanup.
 The component model-task state machine also lives in `rho-agent-owner::component`.
 Its public captured task/document/call/receipt types are in `rho-agent-api::component`;
-only the public plugin protocol and R media API are dependencies. The native
-Application adapter revalidates the original live controller, converts records and
-injects the Agent-owned atomic repository. It owns no second task state machine or
-writer gate. Full native receipt captures retain save/run steps, applied document
-versions, save acknowledgements and structured diagnostics; the document call
-boundary admits only the six supported document actions. Fixed-view controls
-remain unavailable. This is a transitional data conversion, not an old-store
-reader or a migration service. A conversion failure remains an error, never a
-successful empty result. Ordinary backend/storage composition still has to remove
-these temporary core DTO/repository adapters and supply instance-owned storage.
+only the public plugin protocol and R media API are dependencies. The ordinary
+backend validates live callers and injects its Agent-owned atomic repository;
+there is no core task writer or forwarding store. Public receipt captures retain
+save/run steps, applied document versions, acknowledgements and diagnostics.
+Legacy core DTO mirrors/conversions remain separately until contract cleanup;
+they do not open an Agent store or implement a task service.
 
 Native protocol transport does not register capabilities, persist task truth or
 expand the caller's scientific authority.
@@ -2106,8 +2098,8 @@ manager jobs or rollback of external effects.
 Native CLI credentials remain with their provider. Rho model keys saved through
 Studio persist through the Agent-owned `CredentialFile`; task records contain
 LocalFile references. The public store accepts an explicit absolute path, with no
-default-location discovery or credential import. The temporary Host composition
-supplies its existing user-local configuration path. Atomic replacement and file
+default-location discovery or credential import. The ordinary backend supplies its
+explicit managed storage location. Atomic replacement and file
 locking preserve immutable keys for accepted work and isolate project/principal
 reads and removals. Missing-file observations do not create a credential directory. Raw keys remain outside conversation, draft-sync, log and
 evidence records. Optional environment and existing Host-memory references do not
