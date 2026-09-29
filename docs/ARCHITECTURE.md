@@ -37,8 +37,9 @@ receipts do not settle the Host Operation. Note context retains frozen evidence
 and leaves current source status unknown. The ordinary Editor text flow and
 same-instance graceful Host recovery are verified. Agent uses optional public
 grants and the same contributed context; its retained Send input survives restart
-without resuming the source. Captured-image RPC, other real source flows, Native
-Agent annotation tool calls and annotation UI remain incomplete. Metadata authorization
+without resuming the source. Native Agent reads and writes use explicit Send tool
+selections and retain the same original child Operations across restart. Captured-image
+RPC, other real source flows and annotation UI remain incomplete. Metadata authorization
 reuses public application read/control scopes; it does not add a scientific
 annotation branch to the generic Host.
 
@@ -2030,6 +2031,10 @@ of exact capability versions and scopes; they do not activate dependencies,
 select targets or start runtimes. Several owners can be selected in one Send,
 each retaining its own binding and semantic request. Selected grants and scopes
 are checked before a fresh caller observation and synchronous owner admission.
+Native model arguments must match the schema captured by that Send before any
+child receipt or Host dispatch. Invalid arguments are a protocol refusal, not an
+uncertain scientific result; a corrected call can still use its unadmitted identity.
+Captured Host fields remain fixed, and native owners still validate their inputs.
 A later Send cannot inherit
 an earlier tool request, target or authority. The owner retains a semantic UUID
 and exact native request before dispatch under that Send's original Host parent.

@@ -217,6 +217,27 @@ impl NativeMcpPort for Connection {
         if state.closed && !state.calls.contains_key(&input.tool_request) {
             return Err("The original Send has closed tool admission".into());
         }
+        // Refuse malformed model input before retaining a child or dispatching
+        // to Host. A schema refusal is not an uncertain scientific outcome.
+        // The schema is captured with this Send, never supplied by the model.
+        let grant = turn
+            .origin
+            .tools
+            .iter()
+            .find(|tool| tool.selection.name == input.tool)
+            .ok_or("Tool is outside the original Send selection")?;
+        if let AgentNativeToolTarget::Host {
+            fixed_arguments, ..
+        } = &grant.selection.target
+        {
+            native_host_tool_arguments(fixed_arguments, &input.arguments, &input.preconditions)
+                .map_err(|e| Failure::from(e).message)?;
+        }
+        let validator = jsonschema::validator_for(&grant.input_schema)
+            .map_err(|_| "Invalid captured native tool schema")?;
+        if !validator.is_valid(&input.arguments) {
+            return Err("Arguments do not match the captured native tool schema".into());
+        }
         let (record, repeated) = turn
             .owner
             .admit_native_tool(&turn.scope, &turn.task, turn.generation, input, now())

@@ -347,6 +347,24 @@ async fn native_science_retains_original_send_and_child_after_dropped_wait_and_s
     let mut forged = tool.clone();
     forged["binding"] = binding();
     rejected(mcp.call(forged).await);
+    for arguments in [
+        json!({"code":"original", "author":{"kind":"human","id":"forged"}}),
+        json!({"code":12}),
+        json!({}),
+    ] {
+        let mut invalid = tool.clone();
+        invalid["arguments"] = arguments;
+        let refusal = mcp.call(invalid).await;
+        assert_eq!(refusal["error"]["code"], -32602, "{refusal}");
+        assert!(
+            refusal["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("schema")
+        );
+    }
+    // Reuse the same tool request after correction. Invalid input never reached
+    // Host or occupied the original receipt; this is the first scientific child.
     let wait = mcp.start(tool.clone());
     let child = f.read().await;
     let RpcBody::HostCall {

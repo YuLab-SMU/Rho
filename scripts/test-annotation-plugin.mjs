@@ -9,6 +9,7 @@ import {execFileSync, spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {verifyAgentBuild} from './agent-plugin-artifact.mjs';
 import {annotationAgent} from './fixtures/annotation-agent.mjs';
+import {annotationNativeAgent} from './fixtures/annotation-native-agent.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const flags = process.argv.slice(2);
@@ -53,6 +54,17 @@ const directory = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'rho-ann
 const project = path.join(directory, 'project'), database = path.join(directory, 'host.sqlite');
 fs.mkdirSync(project);
 execFileSync('git', ['init', '-q', project]);
+const hostEnvironment = {...process.env};
+const nativeHome = path.join(directory, 'native-home');
+if (withAgent) {
+  const nativeBin = path.join(directory, 'native-bin');
+  fs.mkdirSync(nativeBin); fs.mkdirSync(nativeHome);
+  fs.writeFileSync(path.join(nativeBin, 'rho-science-fixture'), 'disposable');
+  fs.copyFileSync(path.join(root, 'crates/host/tests/fixtures/agent-science.cjs'), path.join(nativeBin, 'kimi'));
+  fs.copyFileSync(path.join(root, 'scripts/fixtures/agent-annotation-tools.cjs'), path.join(nativeBin, 'agent-annotation-tools.cjs'));
+  fs.chmodSync(path.join(nativeBin, 'kimi'), 0o700);
+  hostEnvironment.PATH = nativeBin + path.delimiter + process.env.PATH;
+}
 const window = 'annotation-acceptance-window';
 const result = {host_sha256: hostHash, packages, directory, stages: [], completed: false,
   manifests: Object.fromEntries(Object.entries(packages).map(([name, source]) => [name, hash(fs.readFileSync(path.join(source, 'plugin.json')))])),
@@ -62,7 +74,7 @@ const result = {host_sha256: hostHash, packages, directory, stages: [], complete
     return [name, {sha256: hash(bytes), bytes: bytes.length}];
   })), started_at: new Date().toISOString()};
 const evidence = process.env.RHO_ANNOTATION_EVIDENCE ?? path.join(directory, 'result.json');
-let host, exited, url, editor, notes, agent, agentCase;
+let host, exited, url, editor, notes, agent, agentCase, nativeCase;
 const key = id => ({id, version: 1});
 const save = () => fs.writeFileSync(evidence, JSON.stringify(result, null, 2) + '\n');
 const safe = text => String(text).replace(/token=[a-z0-9]+/g, 'token=[redacted]');
@@ -73,7 +85,7 @@ function deadline(promise, label, ms = 30000) {
   })]).finally(() => clearTimeout(timer));
 }
 async function start() {
-  host = spawn(binary, ['--database', database, '--project', project, '--plugins-only', 'workbench'], {stdio: ['ignore', 'pipe', 'pipe']});
+  host = spawn(binary, ['--database', database, '--project', project, '--plugins-only', 'workbench'], {stdio: ['ignore', 'pipe', 'pipe'], env:hostEnvironment});
   exited = new Promise(resolve => host.once('exit', (code, signal) => resolve({code, signal})));
   let output = '', errors = '';
   url = new URL(await deadline(new Promise((resolve, reject) => {
@@ -149,9 +161,9 @@ try {
   await start();
   for (const name of ['files', 'editor', 'annotation', ...(withAgent ? ['agent'] : [])]) {
     const snapshot = snapshots[name];
-    const active = (await invoke('plugins.activate', {revision: snapshot.revision, artifact: snapshot.artifacts[0], target: 'aarch64-apple-darwin', alias: name, configuration: {},
+    const active = (await invoke('plugins.activate', {revision: snapshot.revision, artifact: snapshot.artifacts[0], target: 'aarch64-apple-darwin', alias: name, configuration: name === 'agent' ? {kimi_home:nativeHome} : {},
       optional_capabilities: name === 'annotation' ? [key('editor.context.preview')] : name === 'agent'
-        ? ['plugins.instances', 'plugins.inspect', 'annotations.read', 'annotations.context.search', 'annotations.context.preview'].map(key) : []})).output.instance.identity;
+        ? ['plugins.instances', 'plugins.inspect', 'annotations.read', 'annotations.write', 'annotations.context.search', 'annotations.context.preview', 'operation.get', 'plugins.delegated_operation'].map(key) : []})).output.instance.identity;
     if (name === 'editor') editor = active;
     if (name === 'annotation') notes = active;
     if (name === 'agent') agent = active;
@@ -183,6 +195,9 @@ try {
       result.browser = await annotationAgentBrowser({url, window, agent, query, invoke, pluginQuery, notePreview, directory});
       result.stages.push('ordinary Agent picker previews and adds the exact note to an editable draft, retained after reload without Send'); save();
     }
+    nativeCase = await annotationNativeAgent({agent, notes, original, evidenceId:frozen.output.outcome.evidence_id, project, invoke, binding, pluginQuery, query, port});
+    result.native_agent = nativeCase.report;
+    result.stages.push('Native Agent exact Send tools: read-only write refusal, authenticated create/update, CAS and original child Operations'); save();
   }
 
   await draft('a🧬中z changed\n', initial.version);
@@ -205,10 +220,12 @@ try {
   assert.equal((await query('plugins.instance', {instance: editor})).instance.state, 'suspended');
   if (agentCase) {
     await agentCase.afterRestart();
+    await nativeCase.afterRestart();
     result.stages.push('same Agent instance retains Send context and receipt while its annotation source stays suspended'); save();
   }
   const resumed = (await invoke('plugins.resume', {instance: notes, suspension: suspended.instance.suspension})).output.instance;
   assert.deepEqual(resumed.identity, notes);
+  if (nativeCase) await nativeCase.afterSourceResume();
   assert.deepEqual((await write('capture-original', freeze)).output, frozen.output, 'Native replay must not reread the suspended Editor');
   assert.deepEqual((await write('note-original', create)).output, saved.output);
   const originalHostReceipt = await write('capture-original', freeze, 'host-freeze-original');

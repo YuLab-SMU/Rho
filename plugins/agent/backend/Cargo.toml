@@ -9,6 +9,7 @@ repository = "https://github.com/YuLab-SMU/Rho"
 [dependencies]
 base64 = "0.22"
 async-trait = "0.1"
+jsonschema = { version = "0.52", default-features = false }
 rho-agent-api = { path = "../api" }
 rho-agent-owner = { path = "owner" }
 rho-agent-store = { path = "store" }
