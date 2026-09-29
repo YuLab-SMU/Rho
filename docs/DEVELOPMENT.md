@@ -159,13 +159,21 @@ native or real-R acceptance can be claimed; the browser's peer is synthetic.
 Once the combined package is current, run the existing real-R runner with
 `--browser --package /absolute/retained/package` and explicit `RHO_R_PLUGIN_PACKAGE`,
 `RHO_EDITOR_PLUGIN_PACKAGE`, `RHO_FILES_PLUGIN_PACKAGE`, `RHO_ARK` and `RHO_R_HOME`. This mode never invokes Cargo: `agent-workspace.spec.ts`
-uses the current Host, retained ordinary Agent/R/Editor/Files packages and a local
-ACP peer. It checks browser attachment capture, lost import receipts, a real Editor
+uses the current Host, retained ordinary Agent/R/Editor/Files packages and local
+ACP and streaming-model peers. It checks browser attachment capture, lost import receipts, a real Editor
 context preview, one original Send, real R work and reload during that work.
 The public document owner is seeded with a synchronized Editor capture; the real
 Editor backend resolves it. The peer verifies the actual source bytes in native
 input; changing that source and restarting Host must leave the original readable
-without resuming Editor. This does not test editing through the Editor UI. It also pages a long native observation history,
+without resuming Editor. The same view also creates a Rho task, saves a disposable
+model credential, sends actual Editor input through Rig, retains ordinary followup
+history, and explicitly continues the original checked task. Lost first/Continue
+replies preserve one request each and the next draft. After Host restart, the same
+task and original input must remain readable with Editor still suspended and no
+additional model request. This Rho path is read-only; scientific R execution in
+this fixture belongs to the native task. Test discovery and the model peer's local
+protocol probe alone do not pass this combined acceptance.
+This does not test editing through the Editor UI. It also pages a long native observation history,
 keeps its earlier reading position through background refreshes and returns to
 the latest messages without another Send. After the turn settles it restarts the
 disposable Host against the same storage, restores the original instance/view

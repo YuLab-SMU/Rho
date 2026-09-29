@@ -7,9 +7,11 @@ import { tmpdir } from 'node:os';
 import { join, resolve, delimiter } from 'node:path';
 import { verifyAgentBuild, agentBuildMode } from '../../scripts/agent-plugin-artifact.mjs';
 import { buildManagerPlugin } from '../../scripts/build-manager-plugin.mjs';
+import { startRhoModelPeer, exerciseRhoInput, inspectRhoAfterRestart } from './fixtures/agent-rho-workspace';
 
 let directory: string, project: string, url: URL, host: ReturnType<typeof spawn>, agent: any, r: any, view: any, session: string;
 let completed = false, database: string, hostEnvironment: NodeJS.ProcessEnv, managerView: any, editor: any, sourceDraft: any;
+let modelPeer: Awaited<ReturnType<typeof startRhoModelPeer>>;
 const sourceText = 'context_value <- 42L # 中文 Ω\n';
 const windowId = 'agent-scientific-workspace', binary = resolve('../target/debug/rho');
 const hash = (bytes: Buffer | string) => createHash('sha256').update(bytes).digest('hex');
@@ -75,6 +77,7 @@ test.beforeAll(async () => {
   expect(process.env.RHO_ARK).toBeTruthy(); expect(process.env.RHO_R_HOME).toBeTruthy();
   const agentPackage = verifyAgentBuild(process.env.RHO_AGENT_PLUGIN_PACKAGE!);
   directory = realpathSync(mkdtempSync(join(tmpdir(), 'rho-agent-window-'))); project = join(directory, 'project'); mkdirSync(project);
+  modelPeer = await startRhoModelPeer();
   const nativeBin = join(directory, 'native-bin'); mkdirSync(nativeBin);
   const nativeHome = join(directory, 'native-home'); mkdirSync(nativeHome);
   writeFileSync(join(nativeBin, 'rho-science-fixture'), 'disposable');
@@ -114,14 +117,15 @@ test.beforeAll(async () => {
   })).view;
 });
 test.afterAll(async () => {
+  modelPeer?.release();
   if (project) writeFileSync(join(project, 'release-r'), 'finish disposable test');
-  if (host) await stopHost(host);
+  try { if (host) await stopHost(host); } finally { await modelPeer?.close(); }
   if (directory && completed) rmSync(directory, { recursive: true, force: true });
   else if (directory) console.error(`Agent browser acceptance retained at ${directory}`);
 });
 
-test('ordinary Agent attachments and Editor context reach real R; reload and Host restart preserve original input and result', async ({ page }, info) => {
-  test.setTimeout(360000);
+test('ordinary native and Rho tasks retain Editor input, real R results and explicit continuation through reload and Host restart', async ({ page }, info) => {
+  test.setTimeout(480000);
   const address = new URL(url); address.searchParams.set('window', windowId); await page.goto(address.href);
   const frame = page.locator(`[data-plugin-frame="${view.view}"]`).frameLocator('iframe');
   await frame.getByRole('button', { name: 'New task', exact: true }).click();
@@ -235,6 +239,11 @@ test('ordinary Agent attachments and Editor context reach real R; reload and Hos
   await expect(transcript).not.toContainText('History sample 001 中文');
   await expect(composer).toHaveValue(next);
   expect(await executions()).toHaveLength(1);
+  await saveContextSource(sourceText);
+  const rhoInput = await exerciseRhoInput(page,frame,info,modelPeer,nativeQuery,sourceText,
+    () => saveContextSource('changed_after_rho_send <- TRUE\n'));
+  await frame.getByLabel('Select task',{exact:true}).selectOption(`native:${task}`);
+  await expect(composer).toHaveValue(next);expect(await executions()).toHaveLength(1);
   // Normal Host exit suspends the same instances; acknowledged view/task data
   // remains available without restarting R or dispatching the old Send again.
   const retainedView = await query('views.inspect', { view: view.view });
@@ -289,6 +298,10 @@ test('ordinary Agent attachments and Editor context reach real R; reload and Hos
   expect((await query('plugins.instance',{instance:editor})).instance.state).toBe('suspended');
   expect(await nativeQuery('agent.native.context',{request_id:evidence.invocation.send_request})).toEqual(originalContext);
   expect((await query('plugins.instance',{instance:editor})).instance.state).toBe('suspended');
+  await inspectRhoAfterRestart(frame,nativeQuery,modelPeer,rhoInput);
+  expect((await query('plugins.instance',{instance:editor})).instance.state).toBe('suspended');
+  await frame.getByLabel('Select task',{exact:true}).selectOption(`native:${task}`);
+  await expect(composer).toHaveValue(next);
 
   expect(afterRestart.summary.task.task_id).toBe(task); expect(afterRestart.summary.task.native_session_id).toBe(nativeSession);
   expect(afterRestart.draft.content.text).toBe(next); expect(afterRestart.assets).toEqual(saved.assets);
@@ -343,8 +356,10 @@ test('ordinary Agent attachments and Editor context reach real R; reload and Hos
     host_restart: { instance: agent, task, view: view.view, resume_request: resumeRequest, resume_calls: resumeCalls, reconnect_calls: reconnectCalls, native_resume_without_prompt: true },
     manager_restore: { instance: r, resume_calls: rResumes, native_r_remains_unstarted: true },
     context: {provider:editor,reference:contextSelection.reference,sha256:hash(sourceText),preserved_after_source_change_and_host_restart:true},
+    rho: {task:rhoInput.task,original:rhoInput.original.run_id,continued:rhoInput.continued.run_id,model_requests:modelPeer.bodies.length,
+      source_preserved:true,next_draft_preserved:true,reload_and_host_restart_without_replay:true},
     assets: saved.assets.map((a: any) => ({ name: a.name, bytes: a.bytes, sha256: a.sha256 })),
-    limits: ['Local ACP fixture, no external model', 'Graceful Host restart after the original turn settled; no abrupt crash recovery', 'No installation or publication'],
+    limits: ['Local ACP and streaming model peers, no external model', 'Rho continuation is read-only; real R execution is through the native Agent task', 'Graceful Host restart after the original turn settled; no abrupt crash recovery', 'No installation or publication'],
   }, null, 2));
   completed = true;
 });
