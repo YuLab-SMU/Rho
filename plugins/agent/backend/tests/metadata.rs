@@ -290,6 +290,8 @@ fn manifest_contains_public_bounded_agent_capabilities() {
             .get("studio_request")
             .is_some()
     );
+    assert!(manifest.views[0].configuration_schema["properties"].get("component_request").is_some());
+    assert_eq!(manifest.views[0].configuration_schema["$defs"]["ComponentRequest"]["properties"]["sources"]["maxItems"], json!(16));
     for id in [
         "agent.tasks",
         "agent.native.command",

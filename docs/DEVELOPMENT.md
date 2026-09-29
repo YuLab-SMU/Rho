@@ -196,6 +196,20 @@ or R execution. Manager then restores the original viewless R backend through a
 lost reply and confirms that its R session stays unstarted. This does not cover abrupt process failure or external-model
 quality. A listed/written browser case is not a passing native result.
 
+The ordinary Agent's `component_request` view configuration accepts a bounded
+`{request_id, title, sources}` input. Each source uses the existing
+`AgentContextSelection` contract with `source: "plugin"`, a label, an exact
+`ContextReference` and its JSON-encoded inclusion. The source window must match
+this Agent view. It supplies context only; task choice, draft insertion and Send
+remain separate user actions. The Native/Rho receiver checks source availability,
+deduplicates exact references/inclusions and retains a one-time insertion receipt.
+Model and renderer checks cover stale/partial sources, typing during preview,
+changed task selection and lost draft replies. `agent-workspace.spec.ts` supplies
+an actual synchronized Editor reference through view configuration, then checks
+preview, insertion, Send and restart retention through the real owners. It does
+not establish the sender component's Ask button or automatic target-view routing;
+those need their own end-to-end flow.
+
 For a Rho tool-selection change, use the smaller real-R browser case:
 `npm run test:browser --prefix ui -- agent-rho-tools.spec.ts`, with retained
 `RHO_AGENT_PLUGIN_PACKAGE`, `RHO_R_PLUGIN_PACKAGE`, `RHO_ARK` and `RHO_R_HOME`.

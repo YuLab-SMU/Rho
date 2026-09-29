@@ -14,6 +14,7 @@ try {
   execFileSync(process.execPath, [path.join(root, 'ui/node_modules/typescript/bin/tsc'), '--project', 'tsconfig.json'], { cwd: temporary, stdio: 'inherit' });
   const { NativeAgentModel } = await import(pathToFileURL(path.join(temporary, 'compiled/src/native-model.js')));
   const { operationRequestId } = await import(pathToFileURL(path.join(temporary, 'compiled/public/plugin-ui/index.js')));
+  const { componentRequest, addComponentRequest } = await import(pathToFileURL(path.join(temporary, 'compiled/src/component-request.js')));
   const clone = structuredClone, blank = () => ({ text: '', assets: [], context: [] });
   function fixture() {
     let saved = {}, stateVersion = 0, lost = '', saveLost = false, gate = null;
@@ -343,13 +344,25 @@ try {
     assert.throws(()=>studioRequest({studio_request:{...studioInput,text:'中'.repeat(3000)}}));
     assert.throws(()=>studioRequest({studio_request:{...studioInput,revision:'other'}}));
   });
+  await check('component input appends to Native without choosing tools, creating or sending a task', async () => {
+    const f=fixture(),m=f.open();await m.create('kimi','fixture',null);
+    m.edit('task-0',{...blank(),text:'My original question 中文'});await m.flush('task-0');
+    const source={source:'plugin',label:'Document',reference:{provider:{instance:'editor'},window:'window'},inclusion:'{"kind":"document"}'};
+    const input={request_id:crypto.randomUUID(),title:'Ask about document',sources:[source,source]};
+    const before=f.calls.length,tools=clone(m.state.tools),picker={retained:async()=>({preview:{truncated:false,resources:[]}})};
+    await addComponentRequest(m,{state:{selected:null}},picker,input,{kind:'native',task_id:'task-0'});
+    assert.deepEqual(m.draft('task-0'),{...blank(),text:'My original question 中文',context:[source]});assert.deepEqual(m.state.tools,tools);
+    assert.ok(f.calls.slice(before).every(call=>call.args.arguments.command.kind==='save_draft'));
+    const reopened=f.open();assert.equal(reopened.state.componentRequestApplied.request,input.request_id);
+    await assert.rejects(addComponentRequest(reopened,{state:{selected:null}},picker,input,{kind:'native',task_id:'task-0'}),/already added/);
+  });
   console.log(`Ordinary Agent view: ${count} checks passed; original requests, draft concurrency, next-turn input, read-only control and disposal. No native/UI acceptance claimed.`);
   const { ModelSettings } = await import(pathToFileURL(path.join(temporary, 'compiled/src/model-settings.js')));
   const { testModelSettings } = await import('./fixtures/agent-model-settings.mjs');
   await testModelSettings(ModelSettings, NativeAgentModel, operationRequestId);
   const { RhoModel } = await import(pathToFileURL(path.join(temporary, 'compiled/src/rho-model.js')));
   const { testRhoTasks } = await import('./fixtures/agent-rho-tasks.mjs');
-  await testRhoTasks(RhoModel, NativeAgentModel, operationRequestId);
+  await testRhoTasks(RhoModel, NativeAgentModel, operationRequestId, { componentRequest, addComponentRequest });
   const { HandoffModel } = await import(pathToFileURL(path.join(temporary, 'compiled/src/handoff-model.js')));
   const { testHandoffs } = await import('./fixtures/agent-handoffs.mjs');
   await testHandoffs(HandoffModel, NativeAgentModel, operationRequestId);

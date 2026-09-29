@@ -116,6 +116,7 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
   get('context-close').onclick = () => dialog.close();
   dialog.addEventListener('close', () => { epoch++; busy = false; clearPreview(); });
   return {
+    inspectSelection(selection: AgentContextSelection) { open(selection); },
     inspectOriginal(originalTask: string, request: string, kind: 'native' | 'rho' = 'native') {
       inspecting = true; target = originalTask; clearPreview();
       get('context-dialog-title').textContent = 'Sent context';

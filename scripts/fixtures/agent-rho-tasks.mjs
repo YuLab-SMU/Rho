@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestId) {
+export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestId, { componentRequest, addComponentRequest }) {
   const clone=structuredClone, empty=()=>({text:'',assets:[],context:[]});
   function fixture(tools = []) {
     let state={},version=0,lost='',gate=null,failSave=false,keyAvailable=true;
@@ -333,6 +333,40 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
   await check('foreign retained requests are refused before any query or dispatch',async()=>{
     const f=fixture(),{model,id}=await task(f);await draft(model,id);f.lose('agent.model.run');await assert.rejects(model.send(id));const saved=f.client.view.state;saved.rho.pending[0].intent.arguments.binding.provider.instance='other';await f.client.setState(saved);
     assert.throws(()=>f.open(),/another task, view or instance/);
+  });
+  const componentSource={source:'plugin',label:'Editor input 中文',reference:{provider:{instance:'editor'},window:'window-one'},inclusion:'{"kind":"selection"}'};
+  const componentInput=()=>({request_id:crypto.randomUUID(),title:'Ask about document',sources:[clone(componentSource)]});
+  const readyPicker={retained:async()=>({preview:{truncated:false,resources:[]}})};
+  await check('component requests reject foreign windows and malformed or oversized input',async()=>{
+    const input=componentInput();assert.deepEqual(componentRequest({component_request:input},'window-one'),input);
+    assert.throws(()=>componentRequest({component_request:input},'other'),/invalid/);
+    assert.throws(()=>componentRequest({component_request:{...input,sources:[]}},'window-one'),/invalid/);
+    assert.throws(()=>componentRequest({component_request:{...input,sources:Array(17).fill(componentSource)}},'window-one'),/invalid/);
+    assert.equal(componentRequest({},'window-one'),null);
+  });
+  await check('component input preserves newer Rho typing and deduplicates references without acquiring tools',async()=>{
+    const f=fixture(),{model,native,id}=await task(f),input=componentInput();await draft(model,id);
+    model.edit(id,{...model.draft(id),context:[{...componentSource,label:'Earlier label',inclusion:'{ "kind": "selection" }'}]});await model.flush(id);
+    const picker={retained:async()=>{model.edit(id,{...model.draft(id),text:'Typed while preview was loading'});return readyPicker.retained();}};
+    const before=f.calls.length;await addComponentRequest(native,model,picker,input,{kind:'rho',conversation_id:id});
+    assert.equal(model.draft(id).text,'Typed while preview was loading');assert.equal(model.draft(id).context.length,1);assert.equal(model.state.tool,undefined);
+    assert.ok(f.calls.slice(before).every(call=>call.cap.id==='agent.model.draft'));
+    assert.equal(f.open().native.state.componentRequestApplied.request,input.request_id);
+  });
+  await check('component source failure, partial input or task switch leaves the draft unchanged',async()=>{
+    for(const fault of ['changed','partial','resources','task']){
+      const f=fixture(),{model,native,id}=await task(f),input=componentInput();await draft(model,id);const before=f.calls.length;
+      const picker={retained:async()=>{if(fault==='changed')throw Error('Source changed');if(fault==='task')model.state.selected='another';return{preview:{truncated:fault==='partial',resources:fault==='resources'?[{}]:[]}};}};
+      await assert.rejects(addComponentRequest(native,model,picker,input,{kind:'rho',conversation_id:id}));
+      assert.equal(model.draft(id).context.length,0);assert.equal(native.state.componentRequestApplied,undefined);assert.equal(f.calls.length,before);
+    }
+  });
+  await check('lost component draft receipt restores the same Rho insertion without replay',async()=>{
+    const f=fixture(),{model,native,id}=await task(f),input=componentInput();await draft(model,id);f.lose('agent.model.draft');
+    await assert.rejects(addComponentRequest(native,model,readyPicker,input,{kind:'rho',conversation_id:id}),/Lost original reply/);
+    const reopened=f.open();await reopened.model.inspect(reopened.model.state.pending[0].intent.request);
+    assert.equal(reopened.model.draft(id).context.length,1);const count=f.calls.length;
+    await assert.rejects(addComponentRequest(reopened.native,reopened.model,readyPicker,input,{kind:'rho',conversation_id:id}),/already added/);assert.equal(f.calls.length,count);
   });
   console.log(`Ordinary Rho task model: ${count} checks passed; task control, original Send, next drafts, history paging and explicit recovery. Native acceptance remains separate.`);
 }

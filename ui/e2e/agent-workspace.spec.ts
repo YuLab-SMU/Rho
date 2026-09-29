@@ -9,7 +9,7 @@ import { verifyAgentBuild, agentBuildMode } from '../../scripts/agent-plugin-art
 import { buildManagerPlugin } from '../../scripts/build-manager-plugin.mjs';
 import { startRhoModelPeer, exerciseRhoInput, inspectRhoAfterRestart } from './fixtures/agent-rho-workspace';
 import { prepareRetainedHandoff, inspectRetainedHandoff } from './fixtures/agent-handoff-workspace';
-import { observeHelp, selectContextSource, setAgentViewport, viewerText } from './fixtures/agent-scientific-context';
+import { observeHelp, setAgentViewport, viewerText } from './fixtures/agent-scientific-context';
 
 let directory: string, project: string, url: URL, host: ReturnType<typeof spawn>, agent: any, r: any, view: any, session: string;
 let completed = false, database: string, hostEnvironment: NodeJS.ProcessEnv, managerView: any, editor: any, sourceDraft: any;
@@ -126,7 +126,7 @@ test.beforeAll(async () => {
   })).view;
   const layout = await query('windows.layout', { window: windowId });
   view = (await invoke('windows.open_view', { expected_layout_version: layout.version, group: layout.layout.id,
-    view: { instance: agent, contribution: 'agent', window: windowId, configuration: { tools: [{ name: 'execute', target: { type: 'provider', binding: rBinding } }] }, state: {} },
+    view: { instance: agent, contribution: 'agent', window: windowId, configuration: { tools: [{ name: 'execute', target: { type: 'provider', binding: rBinding } }], component_request: { request_id: crypto.randomUUID(), title: 'Ask about 上下文 Ω.R', sources: [{ source: 'plugin', label: 'Editor input · 上下文 Ω.R', reference: { provider: editor, contribution: 'documents', window: windowId, selector: { draft: sourceDraft.draft, version: sourceDraft.version, digest: sourceDraft.content.digest } }, inclusion: JSON.stringify({kind:'document'}) }] } }, state: {} },
   })).view;
 });
 test.afterAll(async () => {
@@ -150,12 +150,13 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
   expect(selection).toMatch(/^native:/);
   const task = selection.slice(7);
   const detail = () => nativeQuery('agent.native.task', { task_id: task });
-  await frame.getByRole('button', {name:'Choose context',exact:true}).click();
+  await frame.locator('#component-request summary').click();
+  await frame.getByRole('button', {name:'Preview Editor input · 上下文 Ω.R',exact:true}).click();
   const picker = frame.getByRole('dialog', {name:'Choose context'});
-  await selectContextSource(frame,'Editor documents');
-  await picker.getByRole('button', {name:/上下文 Ω.R/}).click();
   await expect(picker.locator('#context-preview')).toHaveText(sourceText.trim());
-  await picker.getByRole('button', {name:'Add to draft',exact:true}).click();
+  await picker.getByRole('button', {name:'Close context'}).click();
+  await frame.getByRole('button', {name:'Add context to draft',exact:true}).click();
+  await expect(frame.getByRole('button', {name:'Add context to draft',exact:true})).toBeDisabled();
   await expect.poll(async () => (await detail()).draft.content.context.length).toBe(1);
   const contextSelection = (await detail()).draft.content.context[0], capturedDraft = structuredClone(sourceDraft);
   expect(contextSelection.reference.provider).toEqual(editor);

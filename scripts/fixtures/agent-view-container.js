@@ -286,6 +286,10 @@ addEventListener('message', event => {
   if (reloaded) { const resolve = reloaded; reloaded = null; resolve(); }
 });
 window.fixture = {
+  componentRequest: () => {
+    const request={request_id:crypto.randomUUID(),title:'Ask about 分析 Ω.R',sources:[{source:'plugin',label:'Editor selection 中文 Ω',reference:copy(contextReference),inclusion:'{"kind":"selection"}'}]};
+    view.configuration.component_request=copy(request);return request;
+  },
   studioRequest: configuration => { view.configuration = copy(configuration); },
   snapshot: () => copy({ view, calls, details: [...details], records, reads, rhoTasks:[...rhoTasks], rhoRuns:[...rhoRuns] }),
   contextFault: value => { contextFault=value; },

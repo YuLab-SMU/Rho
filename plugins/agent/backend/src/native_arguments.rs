@@ -57,6 +57,19 @@ pub struct AgentViewConfiguration {
     /// A reviewed Studio request remains input text until the user adds it to a
     /// controlled task draft. Opening the view never creates or sends a task.
     pub studio_request: Option<StudioRequest>,
+    /// Component-owned references for a user-selected draft. No task is started
+    /// and no tool selection is inherited when this view is opened.
+    pub component_request: Option<ComponentRequest>,
+}
+#[derive(Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ComponentRequest {
+    #[schemars(length(min = 36, max = 36))]
+    pub request_id: String,
+    #[schemars(length(min = 1, max = 160))]
+    pub title: String,
+    #[schemars(length(min = 1, max = 16))]
+    pub sources: Vec<rho_agent_api::AgentContextSelection>,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]

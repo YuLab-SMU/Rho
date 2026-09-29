@@ -132,7 +132,7 @@ keys stay out of saved view state and Operations. Rho now submits text and contr
 references, attachments and explicit continuation. Rho Tools selects one supplied R session,
 freezes it at Send and retains the original binding for Continue after deselection. Real Host/Rig/R checks pass; see `target/plugin-refactor/agent-rho-tools-results.json`.
 Rho uploads preserve original identity through lost replies/reselection; text ≤32 KiB and PNG/JPEG ≤2 MiB are captured before Send. The five framed backend cases and the complete actual Host/browser flow pass.
-The UI build and 102 model cases (29 native, 13 settings, 34 Rho, 15 context, 11 handoff) pass, as does
+The UI build and 107 model cases (30 native, 13 settings, 38 Rho, 15 context, 11 handoff) pass, as does
 the synthetic public MessagePort browser fixture: opaque iframe, IME Enter, task
 switching, native/Rho attachment recovery and retained context, next drafts, 8 MiB selection, lost creation/Send/import/key
 replies, actual reload, history and close without Stop. Settings/rename work without
@@ -141,8 +141,7 @@ at 960/440/220 px. Handoff also preserves edited text, references and lost recei
 Current checks pass 64 framed backend, 33 native client, one configuration and
 32 native owner/store cases: context/history/Continue, handoff, uploads and reopen.
 Earlier interrupted attempts remain incomplete evidence, not passes. The 45-capability manifest includes all attachment ports; schema annotations/local
-names are compacted without weakening validation. The 648-file source manifest
-is 247,004 bytes, within the 256 KiB limit.
+names are compacted without weakening validation. The 649-file source manifest is 247,938 bytes, within the 256 KiB limit.
 A current workspace-built Agent package and reuse receipt are available. The picker
 reads instance observations; a view calling its exact own backend retains selected
 activation scopes. Reverse calls still require individual grants; foreign
@@ -153,12 +152,13 @@ Resume evidence covers Kimi through a local ACP peer; no other provider or abrup
 crash recovery claim. Post-restart records retain the original real R result.
 R declares observed Help topics and saved HTML contexts with exact-copy/file
 checks and bounded journal paging. Twelve context tests and the real-R Host case
-pass. The Agent picker now has actual Host/browser evidence: Help excerpt and saved
-HTML join Editor input and attachments, reach the model, and survive Continue,
+pass. The Agent picker has actual Host/browser evidence: Help excerpt and saved HTML join
+Editor input and attachments, reach the model, and survive Continue,
 reload and Host restart while R stays suspended. Normal/390/220 layouts are checked.
 Concurrent foreground/background draft confirmation no longer reports a false
 missing-request error; its failing baseline and passing regression are retained.
-Remaining: annotations/component input. Evidence:
+Component-request reception now previews/rechecks sources and appends once to an editable Native/Rho draft without changing text/tools or sending. Native/Rho renderer checks and real Editor-source Host/Send/restart checks pass; the latter uses configuration input, not an Editor Ask button.
+Remaining: component sender buttons/routing and annotations. Evidence: `agent-component-input-results.json`,
 `agent-scientific-context-current-results.json` and `studio-agent-current-results.json` in `target/plugin-refactor/`.
 Synthetic peers for Process/Remote/Environment do not establish execution through those plugins.
 Agent evidence in `target/plugin-refactor/`: `agent-current-native-results.json`, `agent-handoff-ui-results.json`, `rho-continue-results.json`, `agent-assets-results-v3.json` and

@@ -694,7 +694,20 @@ recovery report, compact original tool results and prior source snapshots within
 48 KiB; combined context remains limited to 64 KiB. Labeled omission does not alter
 the stored original input. A repeated confirmed mutation reads its original
 correlated Operation through the current parent's query grants. It cannot dispatch
-another scientific mutation. Rho attachments remain uncomposed.
+another scientific mutation. Attachments are captured by the Agent-owned upload
+ports before admission; original history reads retained bytes and source snapshots.
+
+An ordinary Agent view may receive `component_request` in its immutable configuration:
+a request ID, a title and up to 16 contributed context selections. References retain
+their exact source provider, revision, artifact, window and owner selector. They
+carry no task, model, controller or tool authority. Opening and previewing do not
+create tasks or send messages. Explicit insertion rechecks each current source and
+appends unique references to the latest editable Native/Rho draft, preserving text,
+attachments and tool selection. One view-state write retains the insertion and its
+receipt; the existing task draft CAS and original-request recovery settle the owner
+write. A task change during preview, unavailable source, partial text or unsupported
+resources leave the draft unchanged. Sender components use ordinary view contracts;
+core does not interpret this Agent-specific configuration.
 
 `views.caller` exposes only the original native view/window/connection identity
 captured at authenticated ingress. Backend delegation retains that private capture;

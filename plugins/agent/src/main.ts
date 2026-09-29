@@ -10,10 +10,14 @@ import { mountSettings } from './settings-view.js';
 import { RhoModel, rhoBusy } from './rho-model.js';
 import { mountHandoff } from './handoff-view.js';
 import { studioRequest, addStudioRequest } from './studio-request.js';
+import { componentRequest, addComponentRequest } from './component-request.js';
+import { ContextPicker } from './context-model.js';
 
 const get = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const client = await connectPluginView();
 const studioInput = studioRequest(client.view.configuration);
+const componentInput = componentRequest(client.view.configuration, client.view.window);
+let addingComponent = false;
 let disposed = false, closing = false, composing = false, compositionEnded = -Infinity, renderedTask: string | null = null;
 let polling = false, model: NativeAgentModel, rho: RhoModel, context: ReturnType<typeof mountContext> | undefined, handoff: ReturnType<typeof mountHandoff> | undefined;
 const draftTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -68,6 +72,14 @@ function render() {
     const applied = model.state.studioRequestApplied?.request === studioInput.request_id;
     get('studio-request-status').textContent = applied ? 'Added to a task draft. Review it before Send.' : 'Choose or create a Codex, Kimi Code or DeepSeek task. Adding this request selects its scoped Studio tools.';
     get<HTMLButtonElement>('add-studio-request').disabled = !!rid || !editable || closing || composing || model.busy || applied || !!local?.conflict || model.state.pending.some(p => p.task === id);
+  }
+  get('component-request').hidden = !componentInput;
+  if (componentInput) {
+    const applied = model.state.componentRequestApplied?.request === componentInput.request_id;
+    const componentEditable = rid ? rho.canControl(rid) && !conversation?.archived : editable;
+    get('component-request-title').textContent = componentInput.title;
+    get('component-request-status').textContent = applied ? 'Added to a task draft. Review it before Send.' : 'Choose an editable task, preview its sources, then add this context. Your message and tool selection are kept.';
+    get<HTMLButtonElement>('add-component-request').disabled = applied || addingComponent || !componentEditable || closing || composing || model.busy || rho.busy;
   }
   const activeKey = rid ? `rho:${rid}` : id ? `native:${id}` : '';
   const tasks = model.page?.tasks ?? [];
@@ -387,6 +399,18 @@ get('rename-task').onclick = () => { get('actions-menu').hidePopover(); get<HTML
 get('cancel-rename').onclick = () => get<HTMLDialogElement>('rename-dialog').close();
 get('save-title').onclick = () => { if (!get<HTMLFormElement>('rename-form').reportValidity()) return; const title = get<HTMLInputElement>('title').value, id = rhoSelected() ?? selected(), target = rhoSelected() ? rho : model; get<HTMLDialogElement>('rename-dialog').close(); if (id) action(() => target.rename(id, title)); };
 get('rename-form').onkeydown = event => { if (event.key === 'Enter' && !event.isComposing && event.keyCode !== 229) { event.preventDefault(); get<HTMLButtonElement>('save-title').click(); } };
+if (componentInput) {
+  for (const source of componentInput.sources) {
+    const preview = document.createElement('button'); preview.textContent = source.label; preview.setAttribute('aria-label', `Preview ${source.label}`);
+    preview.onclick = () => context?.inspectSelection(source); get('component-request-sources').append(preview);
+  }
+  get('add-component-request').onclick = () => {
+    const rid = rhoSelected(), id = selected(); if ((!rid && !id) || addingComponent) return;
+    const target: ProjectAgentTaskRef = rid ? {kind:'rho',conversation_id:rid} : {kind:'native',task_id:id!};
+    addingComponent = true; render();
+    action(async () => { try { await addComponentRequest(model, rho, new ContextPicker(client), componentInput, target); } finally { addingComponent = false; } });
+  };
+}
 const tools = (client.view.configuration as { tools?: AgentNativeToolSelection[] }).tools ?? [];
 get('add-studio-request').onclick = () => { const id = selected(); if (id && studioInput && !rhoSelected()) action(() => addStudioRequest(model, id, studioInput, tools)); };
 get<HTMLButtonElement>('tools').disabled = !tools.length;

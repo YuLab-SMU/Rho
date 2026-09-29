@@ -10,7 +10,7 @@ import { type Client, type Intent, type RecordReply, json, same, terminal, verif
 type Command = Exclude<AgentTaskCommand, { kind: 'add_asset' }>;
 interface LocalDraft { content: AgentDraftContent; base: number; revision: number; dirty: boolean; conflict: AgentDraftContent | null; }
 interface Pending { intent: Intent; task: string | null; kind: Command['kind'] | 'discover'; draftRevision: number | null; status: string | null; }
-interface Saved { schema: 1; selected: string | null; archived: boolean; drafts: Record<string, LocalDraft>; pending: Pending[]; tools: AgentNativeToolSelection[]; catalogs: Partial<Record<AgentProvider, LocalAgent>>; uploads?: PendingUpload[]; settings?: ModelSettingsState; rho?: RhoState; handoffs?: HandoffState; studioRequestApplied?: {request: string; task: string}; }
+interface Saved { schema: 1; selected: string | null; archived: boolean; drafts: Record<string, LocalDraft>; pending: Pending[]; tools: AgentNativeToolSelection[]; catalogs: Partial<Record<AgentProvider, LocalAgent>>; uploads?: PendingUpload[]; settings?: ModelSettingsState; rho?: RhoState; handoffs?: HandoffState; studioRequestApplied?: {request: string; task: string}; componentRequestApplied?: {request: string; target: import('../sdk/index.js').ProjectAgentTaskRef}; }
 const empty = (): AgentDraftContent => ({ text: '', assets: [], context: [] });
 export const agentBusy = (state: string) => ['running', 'waiting_for_permission', 'connecting', 'resuming', 'stopping', 'queued', 'waiting_for_r', 'needs_input'].includes(state);
 
