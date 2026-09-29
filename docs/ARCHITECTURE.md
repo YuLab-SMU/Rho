@@ -34,9 +34,11 @@ M4/M6. The ordinary native adapter is now implemented in source: it resolves exa
 public context providers, requires owner-supplied lineage/content versions, and
 rechecks the original live caller before freezing bounded text. Its private
 receipts do not settle the Host Operation. Note context retains frozen evidence
-and leaves current source status unknown. Native compilation, real-provider/Host
-acceptance, captured-image RPC and UI remain incomplete; source extraction and
-metadata closure checks alone do not establish an installable package.
+and leaves current source status unknown. The ordinary Editor text flow and
+same-instance graceful Host recovery are verified. Captured-image RPC, other real
+source flows, Agent integration and UI remain incomplete. Metadata authorization
+reuses public application read/control scopes; it does not add a scientific
+annotation branch to the generic Host.
 
 Package transfer bytes have a native scoped owner independent of runtime resources.
 `plugins.archive_*` stages aligned immutable chunks, observes or validates the

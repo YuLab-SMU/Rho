@@ -282,6 +282,12 @@ without compilation. Reserve `--independent` for an owner/store source audit.
 `node scripts/build-annotation-plugin.mjs /new/path` defaults to the workspace cache;
 only an explicit `--independent` rebuilds standalone source. Native tests, package
 assembly, real-provider/Host acceptance and UI review are separate outcomes.
+For settled text-flow acceptance, `node scripts/test-annotation-plugin.mjs` reuses
+`RHO_ANNOTATION_PLUGIN_PACKAGE`, `RHO_EDITOR_PLUGIN_PACKAGE` and
+`RHO_FILES_PLUGIN_PACKAGE` against a frozen `RHO_TEST_BINARY` (default `target/debug/rho`).
+It refuses stale annotation/Editor source, snapshots into a disposable database,
+checks historical context and restarts only its own Host. `RHO_ANNOTATION_EVIDENCE`
+selects the retained report. It never triggers compilation or independent builds.
 
 The generic plugin-only Host uses `cargo test -p rho-host --test plugin_workspace
 --locked` for canonical project identity, native lease exclusion, empty-catalog

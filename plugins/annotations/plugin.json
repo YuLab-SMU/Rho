@@ -1,0 +1,2007 @@
+{
+  "protocol_version": 1,
+  "id": "org.rho.annotations",
+  "name": "Annotations",
+  "version": "0.1.0",
+  "description": "Version-bound notes and owner-contributed frozen text evidence",
+  "license": "AGPL-3.0-only",
+  "source": {
+    "files": [
+      "backend/src/main.rs",
+      "build.mjs"
+    ],
+    "lockfiles": [
+      "Cargo.lock"
+    ],
+    "build_instructions": "BUILD.md",
+    "build": {
+      "command": [
+        "node",
+        "build.mjs"
+      ]
+    }
+  },
+  "dependencies": {},
+  "requires": [
+    {
+      "capability": {
+        "id": "views.caller",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    }
+  ],
+  "optional_requires": [
+    {
+      "capability": {
+        "id": "editor.context.preview",
+        "version": 1
+      },
+      "scopes": [
+        "documents.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.context.help.preview",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.context.viewer.preview",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "resources.read",
+        "workspace.read"
+      ]
+    }
+  ],
+  "views": [],
+  "capabilities": [
+    {
+      "capability": {
+        "id": "annotations.write",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "annotations.write",
+      "description": "Freeze a complete owner-contributed text source or append an annotation revision with an original request receipt and CAS. Quotes use offsets within the selected preview inclusion. Does not modify scientific content, start a runtime, or send to an Agent. Capture/image import is not part of this text capability.",
+      "input_schema": {
+        "$defs": {
+          "AnnotationCharacterUnit": {
+            "enum": [
+              "utf8",
+              "utf16",
+              "unicode_scalar"
+            ],
+            "type": "string"
+          },
+          "AnnotationMark": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "pen",
+                    "type": "string"
+                  },
+                  "points": {
+                    "items": {
+                      "$ref": "#/$defs/NormalizedPoint"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "points"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "height": {
+                    "format": "double",
+                    "type": "number"
+                  },
+                  "kind": {
+                    "const": "rectangle",
+                    "type": "string"
+                  },
+                  "width": {
+                    "format": "double",
+                    "type": "number"
+                  },
+                  "x": {
+                    "format": "double",
+                    "type": "number"
+                  },
+                  "y": {
+                    "format": "double",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "x",
+                  "y",
+                  "width",
+                  "height"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "from": {
+                    "$ref": "#/$defs/NormalizedPoint"
+                  },
+                  "kind": {
+                    "const": "arrow",
+                    "type": "string"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/NormalizedPoint"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "from",
+                  "to"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "text",
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "x": {
+                    "format": "double",
+                    "type": "number"
+                  },
+                  "y": {
+                    "format": "double",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "x",
+                  "y",
+                  "text"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "AnnotationRevisionRef": {
+            "additionalProperties": false,
+            "properties": {
+              "annotation_id": {
+                "type": "string"
+              },
+              "revision": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "annotation_id",
+              "revision"
+            ],
+            "type": "object"
+          },
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          },
+          "NormalizedPoint": {
+            "additionalProperties": false,
+            "properties": {
+              "x": {
+                "format": "double",
+                "type": "number"
+              },
+              "y": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "type": "object"
+          },
+          "TextAnchor": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "whole_item",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "end": {
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "const": "text_quote",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "type": "string"
+                  },
+                  "start": {
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "unit": {
+                    "$ref": "#/$defs/AnnotationCharacterUnit"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "quote",
+                  "start",
+                  "end",
+                  "unit"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "WriteCommand": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "anchor": {
+                    "$ref": "#/$defs/TextAnchor"
+                  },
+                  "inclusion": true,
+                  "kind": {
+                    "const": "freeze",
+                    "type": "string"
+                  },
+                  "reference": {
+                    "$ref": "#/$defs/ContextReference"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "reference",
+                  "inclusion",
+                  "anchor"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "continued_from": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/AnnotationRevisionRef"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "evidence_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "create",
+                    "type": "string"
+                  },
+                  "labels": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "marks": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/AnnotationMark"
+                    },
+                    "type": "array"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "evidence_id",
+                  "note"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "expected": {
+                    "$ref": "#/$defs/AnnotationRevisionRef"
+                  },
+                  "kind": {
+                    "const": "update",
+                    "type": "string"
+                  },
+                  "labels": {
+                    "default": [],
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "marks": {
+                    "default": [],
+                    "items": {
+                      "$ref": "#/$defs/AnnotationMark"
+                    },
+                    "type": "array"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "expected",
+                  "note"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "expected": {
+                    "$ref": "#/$defs/AnnotationRevisionRef"
+                  },
+                  "kind": {
+                    "const": "delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "expected"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "$ref": "#/$defs/WriteCommand"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "command"
+        ],
+        "title": "WriteRequest",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "command": {
+            "continued_from": null,
+            "evidence_id": "frozen-source",
+            "kind": "create",
+            "labels": [],
+            "marks": [],
+            "note": "Review this result"
+          },
+          "request_id": "create-note"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AnnotationCaptureRef": {
+            "additionalProperties": false,
+            "properties": {
+              "byte_size": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "capture_id": {
+                "type": "string"
+              },
+              "height": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "original_media": {
+                "description": "True only when these are the owner's original static media bytes.",
+                "type": "boolean"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "width": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "capture_id",
+              "sha256",
+              "width",
+              "height",
+              "mime_type",
+              "byte_size",
+              "original_media"
+            ],
+            "type": "object"
+          },
+          "AnnotationCommandOutcome": {
+            "oneOf": [
+              {
+                "properties": {
+                  "evidence_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "evidence",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "evidence_id"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "capture": {
+                    "$ref": "#/$defs/AnnotationCaptureRef"
+                  },
+                  "kind": {
+                    "const": "capture",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "capture"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "annotation": {
+                    "$ref": "#/$defs/AnnotationRevisionRef"
+                  },
+                  "kind": {
+                    "const": "annotation",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "annotation"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "AnnotationRevisionRef": {
+            "additionalProperties": false,
+            "properties": {
+              "annotation_id": {
+                "type": "string"
+              },
+              "revision": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "annotation_id",
+              "revision"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "created_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outcome": {
+            "$ref": "#/$defs/AnnotationCommandOutcome"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "outcome",
+          "created_at_ms"
+        ],
+        "title": "AnnotationCommandReceipt",
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "application.control",
+        "plugins.read"
+      ],
+      "effects": [
+        "annotations.metadata"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "annotations.read",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "annotations.read",
+      "description": "Read principal/project-scoped annotation records and frozen evidence without observing a live source or starting a runtime. Exact historical note revisions stay readable; current source status remains unknown.",
+      "input_schema": {
+        "$defs": {
+          "AnnotationRevisionRef": {
+            "additionalProperties": false,
+            "properties": {
+              "annotation_id": {
+                "type": "string"
+              },
+              "revision": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "annotation_id",
+              "revision"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "after": {
+                "default": null,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "include_deleted": {
+                "default": false,
+                "type": "boolean"
+              },
+              "kind": {
+                "const": "list",
+                "type": "string"
+              },
+              "limit": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "source_id": {
+                "default": null,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "limit"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "annotation": {
+                "$ref": "#/$defs/AnnotationRevisionRef"
+              },
+              "kind": {
+                "const": "read",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "annotation"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "evidence_id": {
+                "type": "string"
+              },
+              "kind": {
+                "const": "evidence",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "evidence_id"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "receipt",
+                "type": "string"
+              },
+              "request_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "request_id"
+            ],
+            "type": "object"
+          }
+        ],
+        "title": "ReadRequest"
+      },
+      "examples": [
+        {
+          "include_deleted": false,
+          "kind": "list",
+          "limit": 20
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AnnotationAnchor": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "whole_item",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "end": {
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "const": "text_quote",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "type": "string"
+                  },
+                  "start": {
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "unit": {
+                    "$ref": "#/$defs/AnnotationCharacterUnit"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "quote",
+                  "start",
+                  "end",
+                  "unit"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "column": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "structured",
+                    "type": "string"
+                  },
+                  "path": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "row": {
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "topic": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "capture": {
+                    "$ref": "#/$defs/AnnotationCaptureRef"
+                  },
+                  "kind": {
+                    "const": "captured_view",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "capture"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "AnnotationAuthor": {
+            "additionalProperties": false,
+            "description": "Authenticated author recorded by the containing call boundary, never model output.",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/$defs/AnnotationAuthorKind"
+              }
+            },
+            "required": [
+              "kind",
+              "id"
+            ],
+            "type": "object"
+          },
+          "AnnotationAuthorKind": {
+            "oneOf": [
+              {
+                "enum": [
+                  "human",
+                  "agent",
+                  "system",
+                  "plugin"
+                ],
+                "type": "string"
+              },
+              {
+                "const": "principal",
+                "description": "Authenticated principal; the transport does not claim whether a person or Agent initiated it.",
+                "type": "string"
+              }
+            ]
+          },
+          "AnnotationAvailability": {
+            "enum": [
+              "available",
+              "unavailable",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "AnnotationCaptureRef": {
+            "additionalProperties": false,
+            "properties": {
+              "byte_size": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "capture_id": {
+                "type": "string"
+              },
+              "height": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "original_media": {
+                "description": "True only when these are the owner's original static media bytes.",
+                "type": "boolean"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "width": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "capture_id",
+              "sha256",
+              "width",
+              "height",
+              "mime_type",
+              "byte_size",
+              "original_media"
+            ],
+            "type": "object"
+          },
+          "AnnotationCharacterUnit": {
+            "enum": [
+              "utf8",
+              "utf16",
+              "unicode_scalar"
+            ],
+            "type": "string"
+          },
+          "AnnotationCommandOutcome": {
+            "oneOf": [
+              {
+                "properties": {
+                  "evidence_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "evidence",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "evidence_id"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "capture": {
+                    "$ref": "#/$defs/AnnotationCaptureRef"
+                  },
+                  "kind": {
+                    "const": "capture",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "capture"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "annotation": {
+                    "$ref": "#/$defs/AnnotationRevisionRef"
+                  },
+                  "kind": {
+                    "const": "annotation",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "annotation"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "AnnotationCommandReceipt": {
+            "properties": {
+              "created_at_ms": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "outcome": {
+                "$ref": "#/$defs/AnnotationCommandOutcome"
+              },
+              "request_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id",
+              "outcome",
+              "created_at_ms"
+            ],
+            "type": "object"
+          },
+          "AnnotationEvidence": {
+            "description": "Owner evidence frozen when selecting or drawing begins. It never changes afterwards.",
+            "properties": {
+              "anchor": {
+                "$ref": "#/$defs/AnnotationAnchor"
+              },
+              "evidence_id": {
+                "type": "string"
+              },
+              "fragment": {
+                "description": "Only the selected bounded excerpt, never a backup of an entire object."
+              },
+              "observed_at_ms": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "selection": {
+                "$ref": "#/$defs/AnnotationSelection",
+                "description": "The exact owner-issued reference used to observe the source again."
+              },
+              "session": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/AnnotationSession"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "source": {
+                "$ref": "#/$defs/AnnotationSourceRef"
+              }
+            },
+            "required": [
+              "evidence_id",
+              "source",
+              "selection",
+              "anchor",
+              "fragment",
+              "observed_at_ms"
+            ],
+            "type": "object"
+          },
+          "AnnotationListItem": {
+            "description": "A list row carries the frozen source identity so history can group by version.",
+            "properties": {
+              "anchor": {
+                "$ref": "#/$defs/AnnotationAnchor"
+              },
+              "revision": {
+                "$ref": "#/$defs/AnnotationRevision"
+              },
+              "source": {
+                "$ref": "#/$defs/AnnotationSourceRef"
+              }
+            },
+            "required": [
+              "revision",
+              "source",
+              "anchor"
+            ],
+            "type": "object"
+          },
+          "AnnotationMark": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "pen",
+                    "type": "string"
+                  },
+                  "points": {
+                    "items": {
+                      "$ref": "#/$defs/NormalizedPoint"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "points"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "height": {
+                    "format": "double",
+                    "type": "number"
+                  },
+                  "kind": {
+                    "const": "rectangle",
+                    "type": "string"
+                  },
+                  "width": {
+                    "format": "double",
+                    "type": "number"
+                  },
+                  "x": {
+                    "format": "double",
+                    "type": "number"
+                  },
+                  "y": {
+                    "format": "double",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "x",
+                  "y",
+                  "width",
+                  "height"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "from": {
+                    "$ref": "#/$defs/NormalizedPoint"
+                  },
+                  "kind": {
+                    "const": "arrow",
+                    "type": "string"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/NormalizedPoint"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "from",
+                  "to"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "text",
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  },
+                  "x": {
+                    "format": "double",
+                    "type": "number"
+                  },
+                  "y": {
+                    "format": "double",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "x",
+                  "y",
+                  "text"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "AnnotationPreview": {
+            "properties": {
+              "availability": {
+                "$ref": "#/$defs/AnnotationAvailability"
+              },
+              "current_version": {
+                "description": "The owner's current version when it could be observed; absent means unknown.",
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "evidence": {
+                "$ref": "#/$defs/AnnotationEvidence"
+              },
+              "notices": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "revision": {
+                "$ref": "#/$defs/AnnotationRevision"
+              },
+              "status": {
+                "$ref": "#/$defs/AnnotationStatus"
+              }
+            },
+            "required": [
+              "revision",
+              "evidence",
+              "status",
+              "availability",
+              "notices"
+            ],
+            "type": "object"
+          },
+          "AnnotationRevision": {
+            "properties": {
+              "annotation": {
+                "$ref": "#/$defs/AnnotationRevisionRef"
+              },
+              "author": {
+                "$ref": "#/$defs/AnnotationAuthor"
+              },
+              "continued_from": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/AnnotationRevisionRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "created_at_ms": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "deleted": {
+                "type": "boolean"
+              },
+              "evidence_id": {
+                "type": "string"
+              },
+              "labels": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "marks": {
+                "items": {
+                  "$ref": "#/$defs/AnnotationMark"
+                },
+                "type": "array"
+              },
+              "note": {
+                "type": "string"
+              },
+              "updated_at_ms": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "annotation",
+              "author",
+              "note",
+              "labels",
+              "evidence_id",
+              "marks",
+              "created_at_ms",
+              "updated_at_ms",
+              "deleted"
+            ],
+            "type": "object"
+          },
+          "AnnotationRevisionRef": {
+            "additionalProperties": false,
+            "properties": {
+              "annotation_id": {
+                "type": "string"
+              },
+              "revision": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "annotation_id",
+              "revision"
+            ],
+            "type": "object"
+          },
+          "AnnotationSelection": {
+            "additionalProperties": false,
+            "description": "Opaque, owner-issued source capture. This shape carries no Agent behavior.",
+            "properties": {
+              "inclusion": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "reference": true,
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "label",
+              "reference",
+              "inclusion"
+            ],
+            "type": "object"
+          },
+          "AnnotationSession": {
+            "additionalProperties": false,
+            "description": "Native observation identity; supplying it does not start or recover a runtime.",
+            "properties": {
+              "session_id": {
+                "type": "string"
+              },
+              "workspace_instance_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "workspace_instance_id",
+              "session_id"
+            ],
+            "type": "object"
+          },
+          "AnnotationSourceOwner": {
+            "enum": [
+              "plugin",
+              "editor",
+              "help",
+              "console",
+              "file",
+              "object",
+              "package",
+              "plot",
+              "html_viewer",
+              "agent",
+              "workspace"
+            ],
+            "type": "string"
+          },
+          "AnnotationSourceRef": {
+            "additionalProperties": false,
+            "description": "The owner-issued content identity retained when an annotation is frozen.",
+            "properties": {
+              "owner": {
+                "$ref": "#/$defs/AnnotationSourceOwner"
+              },
+              "source_id": {
+                "description": "Owner-native lineage identity, independent of the observed version.",
+                "type": "string"
+              },
+              "source_version": {
+                "description": "Owner-native content version (hash, revision, observation or session identity).",
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "owner",
+              "source_id",
+              "source_version",
+              "title"
+            ],
+            "type": "object"
+          },
+          "AnnotationStatus": {
+            "enum": [
+              "current",
+              "historical",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "NormalizedPoint": {
+            "additionalProperties": false,
+            "properties": {
+              "x": {
+                "format": "double",
+                "type": "number"
+              },
+              "y": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "oneOf": [
+          {
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/AnnotationListItem"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "const": "list",
+                "type": "string"
+              },
+              "next_after": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "items"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "evidence": {
+                "$ref": "#/$defs/AnnotationEvidence"
+              },
+              "kind": {
+                "const": "read",
+                "type": "string"
+              },
+              "revision": {
+                "$ref": "#/$defs/AnnotationRevision"
+              }
+            },
+            "required": [
+              "kind",
+              "revision",
+              "evidence"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "preview",
+                "type": "string"
+              },
+              "preview": {
+                "$ref": "#/$defs/AnnotationPreview"
+              }
+            },
+            "required": [
+              "kind",
+              "preview"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "evidence": {
+                "$ref": "#/$defs/AnnotationEvidence"
+              },
+              "kind": {
+                "const": "evidence",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "evidence"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "kind": {
+                "const": "command_status",
+                "type": "string"
+              },
+              "receipt": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/AnnotationCommandReceipt"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          }
+        ],
+        "title": "AnnotationQueryResult"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "application.read",
+        "plugins.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "annotations.context.search",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "annotations.context.search",
+      "description": "Read principal/project-scoped annotation records and frozen evidence without observing a live source or starting a runtime. Exact historical note revisions stay readable; current source status remains unknown.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "description": "Opaque owner cursor; continuation does not imply a frozen multi-page read."
+          },
+          "limit": {
+            "format": "uint16",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "text": {
+            "description": "Empty text lists available sources. Owners document which fields match.",
+            "type": "string"
+          },
+          "window": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "window",
+          "text",
+          "limit"
+        ],
+        "title": "ContextSearch",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "after": null,
+          "limit": 20,
+          "text": "",
+          "window": "window-example"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "ContextItem": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "kind": {
+                "description": "A presentation hint supplied by the owner, not a closed core view enum.",
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/ContextReference"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "reference",
+              "title",
+              "description",
+              "kind"
+            ],
+            "type": "object"
+          },
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/ContextItem"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "next": true,
+          "notices": {
+            "description": "Explain partial, cached or unavailable observations without concealing\nthem as empty results. Completeness also belongs in the query envelope.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "notices"
+        ],
+        "title": "ContextPage",
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "application.read",
+        "plugins.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "annotations.context.preview",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "annotations.context.preview",
+      "description": "Read principal/project-scoped annotation records and frozen evidence without observing a live source or starting a runtime. Exact historical note revisions stay readable; current source status remains unknown.",
+      "input_schema": {
+        "$defs": {
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "inclusion": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "note_and_evidence"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "title": "Note and frozen text evidence",
+                "type": "object"
+              }
+            ]
+          },
+          "max_bytes": {
+            "format": "uint32",
+            "maximum": 65536,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "reference": {
+            "$ref": "#/$defs/ContextReference"
+          }
+        },
+        "required": [
+          "reference",
+          "inclusion",
+          "max_bytes"
+        ],
+        "title": "PreviewContext",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "inclusion": {
+            "kind": "note_and_evidence"
+          },
+          "max_bytes": 16384,
+          "reference": {
+            "contribution": "annotations",
+            "provider": {
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "instance": "annotations-example",
+              "plugin": "org.rho.annotations",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "selector": {
+              "annotation_id": "annotation-example",
+              "revision": 1
+            },
+            "window": "window-example"
+          }
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "ContextItem": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "kind": {
+                "description": "A presentation hint supplied by the owner, not a closed core view enum.",
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/ContextReference"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "reference",
+              "title",
+              "description",
+              "kind"
+            ],
+            "type": "object"
+          },
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          },
+          "ResourceReference": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "description": "Owner-defined bounded presentation data. Large artifacts use resources."
+          },
+          "item": {
+            "$ref": "#/$defs/ContextItem"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/$defs/ResourceReference"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          "text": {
+            "description": "Plain text, never executable markup. Truncation must end at a UTF-8 boundary.",
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "item",
+          "text",
+          "truncated",
+          "data",
+          "resources"
+        ],
+        "title": "ContextPreview",
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "application.read",
+        "plugins.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    }
+  ],
+  "contexts": [
+    {
+      "id": "annotations",
+      "title": "Saved annotations",
+      "search": {
+        "id": "annotations.context.search",
+        "version": 1
+      },
+      "preview": {
+        "id": "annotations.context.preview",
+        "version": 1
+      }
+    }
+  ],
+  "backend": {
+    "executable": "dist/rho-annotation-backend",
+    "arguments": []
+  },
+  "configuration_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "title": "Empty",
+    "type": "object"
+  },
+  "default_configuration": {}
+}

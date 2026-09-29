@@ -28,7 +28,7 @@ written deletion condition. Internal pieces are not reported as milestones.
 | M1 | **Default plugin scenario as the primary composition.** `rho` opens a project in the ordinary plugin window with R, Console, Objects, Files, Editor, Plots, Viewer, Packages, Help active; Run File → Objects/Plots works with real R. | Fixed scientific panels for those views become unused in the default path | Default entry, real-R browser flow and Rust HTTP checks pass; delivery remains |
 | M2 | **Ordinary Agent view, first vertical slice.** Open Agent view → pick a document or file attachment → Send → native tool calls a real R/Files plugin → results shown → browser reload finds the original record. | Fixed Agent panel in the default scenario | Combined real Host/browser flow passes: Native/Rho input, attachments, real R, reload, continuation and handoff |
 | M3 | **Actual Host restart recovery.** Restart the generic Host during M2's flow; the same instance/task recovers its original records without replay. | — (risk reduction; do early) | Graceful Host restart, same instance/view/tasks, original receipts and native session Resume pass without replay |
-| M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Editor/Help/Viewer snapshots, history, Continue and handoff pass real Host/browser checks; Rho exact-session tools and Editor/Help/Viewer Ask → Agent input pass; annotation native text/context source implemented but compilation incomplete; real annotation flow and other component senders remain |
+| M4 | **Agent context and continuation.** Contributed context sources (help, viewer, annotations, documents), component input and continuation through the ordinary backend. | Application-side Agent context composition | Editor/Help/Viewer snapshots, history, Continue and handoff pass real Host/browser checks; Rho exact-session tools and Editor/Help/Viewer Ask → Agent input pass; annotation text/context and same-instance restart pass a real Editor/Host flow; Agent annotation integration and other component senders remain |
 | M5 | **Studio Agent assistance.** Exact development branch capture; separate checkpoint, build, preview and scenario-application actions. | — | Combined real Host/browser flow passes: exact-branch Agent checkpoint, explicit build, preview and scenario application |
 | M6 | **Final composition.** Default delivery through the same repository/lifecycle, all feature plugins removable, no silent reinstall; remove fixed registrations, panels and scientific/Agent branches; full-plan acceptance matrix. | All remaining fixed composition | Not started |
 
@@ -206,11 +206,11 @@ Per-plugin checks: `node scripts/governance.mjs impact --changed-auto`.
 - Build iteration recovered after reducing an oversized dependency directory:
   1,634,793 entries became 201,054 after retaining every referenced debug object;
   listing fell from 66.5s to 0.62s. All old files remain retained. A loader probe
-  also stalled in dyld file validation. A standalone load of the sampled macro library timed out at 25 s while existing Host `--help` took 0.036 s; this isolates a loader wait, not its root cause (see annotation evidence below).
+  also stalled in dyld file validation. A byte/attribute-identical macro library loaded outside `target/debug` in 0.246s; direct and same-directory loads timed out. A retained external copy plus cache symlink restored scoped compilation; no signing/security changes. The underlying OS cause is unproven.
   Agent/R/Files/Editor builders now default to workspace reuse; six R browser runners
   require a retained package. Plugin tests drop Application/Agent owner/store
   from their local dependency closure (16 → 13); journal/default-store/build checks pass (21/27/7).
-  Evidence: `target/plugin-refactor/development-optimization-results.json` and `editor-agent-input-results.json`; Editor assembly measured 18.23s then 1.70s with the unchanged Host reused.
+  Evidence: `target/plugin-refactor/development-optimization-results.json`, `annotation-runtime-results.json`; annotation tests recovered in 137s then 10s, Editor tests in 5s, R context tests in 12s. Preserve the recorded macro-cache backing file and original backup.
 - Plugin backend native initialization occasionally exceeded ten seconds before
   reaching the program entry (Studio backend browser runs); cause not established.
   Treat a repeat as an infrastructure issue to investigate, not a product pass.
@@ -243,11 +243,11 @@ Architecture and Git history.
   keeps the uncertain Operation. `print.htmlwidget` produces retained `text/html`
   artifacts shown in Viewer.
 - **Help, Viewer, annotations.** Help reads exact-copy Rd as text/HTML; Viewer captures HTML with inlined assets.
-  API/owner/store and ordinary native text RPC/context source live in `plugins/annotations`; Editor/Help/Viewer emit owner-authored lineage/content versions. Fixed adapters still delegate to a separate database without old-table reads.
-  Eight owner/store and six adapter cases passed before final wrapper/API changes; final adapter (3 min), HTTP (10 min), new backend check and tests (4 min each) timed out before tests. New backend/identity source is unverified.
-  Actual six-crate package source closure and private-boundary checks pass without compilation. Package build, real-provider/Host flow, Agent grants, image capture and UI remain; this is not yet an installable verified annotation plugin.
+  API/owner/store and ordinary native text RPC/context live in `plugins/annotations`; the workspace-built package passes a frozen generic Host flow with the real Editor source. Metadata scopes reuse application read/control; no Host annotation branch is added.
+  Freeze → note → context, source-change refusal, continuation, CAS, tombstone/history and actual same-instance graceful Host restart pass; the source remains suspended during receipt replay. New native (6), Editor (5), R context (12), owner/store + adapter (14) and fixed HTTP (3) cases pass; prior timeouts remain evidence.
+  Six-crate source closure passes without independent compilation. Agent grants/Send, real Help/Viewer annotation flows, captured-image RPC and UI remain; focused R source tests do not replace those flows. Fixed adapters still await M6 deletion.
   AN01–AN05 and HV01–HV07 await review ([Design 19](RHO-DESIGN.md#19-r-help-interactive-viewer-and-lighter-controls--proposal), [Design 20](RHO-DESIGN.md#20-component-annotations-for-people-and-agents--proposal)); lighter chrome, system-browser open and Help anchors remain.
-  Evidence: `target/plugin-refactor/annotation-owner-results.json`, `annotation-native-source-results.json`; retained timeouts and isolated macro-loader probe are not passes.
+  Evidence: `target/plugin-refactor/annotation-runtime-results.json` and `annotation-native-host-v2.json`; no user Host restart or package installation, no UI or abrupt-crash acceptance.
 - **Multiple R sessions and recovery copies.** R04–R10 implemented
   ([Design 17](RHO-DESIGN.md#17-sessions-and-recovery--approved-interaction));
   R01–R03 remain proposals. Restart/Stop/Quit report consequences in one panel;

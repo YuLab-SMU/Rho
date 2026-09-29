@@ -6,10 +6,12 @@ The API, owner and SQLite store depend on public libraries only; they do not dep
 on an Agent implementation, a scientific owner or a private Host crate.
 
 The native RPC entry, typed capability manifest, text-source freeze and contributed
-note context are implemented in source. **Native compilation and acceptance are
-incomplete; no installable package has been verified.** Capture/image RPC and UI
-remain unimplemented. AN01–AN05 remain a UI proposal pending user review. See the
-repository's current Status for executed checks and retained timeout evidence.
+note context are implemented. The workspace-built package passes a frozen generic
+Host flow with a real Editor provider, source changes, historical notes and an
+actual graceful Host restart of the same annotation instance. Capture/image RPC,
+Agent integration and UI remain incomplete; AN01–AN05 await user review. Help and
+Viewer source identities have focused tests, not real annotation-flow acceptance.
+See the repository's current Status for executed checks and retained timeouts.
 
 ## Ownership and admission
 
@@ -17,8 +19,9 @@ The containing runtime validates the live caller, principal, project and window
 before creating `AnnotationActor`. Request fields cannot create authority.
 Source observation and normalization happen through the contributing source owner;
 `FrozenEvidence` must be that owner's actual bounded observation, never a caller's
-claim about a file, document, R session or content version. These crates do not
-read, modify, start or recover any scientific source.
+claim about a file, document, R session or content version. The domain/store do not
+read scientific sources; the native adapter uses declared bounded public queries.
+Neither layer modifies, starts or recovers a scientific source.
 
 `AnnotationSelection` and `AnnotationSession` are captured reference values, not
 Agent task types or dispatch credentials. The native adapter resolves contributed
@@ -33,9 +36,11 @@ Freezing requires a complete text inclusion; quote offsets refer to that inclusi
 and preserve UTF-8/UTF-16/scalar boundaries. Exact request replays read the original
 receipt without querying the source again. Note context reads frozen evidence and
 labels the current underlying source status unknown: neither a retained note nor
-a failed read proves current availability. Agent grants and real-provider/Host
-acceptance remain to be connected; deterministic native peer tests do not replace
-that acceptance. The framed principal supplies author identity without guessing
+a failed read proves current availability. Reads require `application.read` and
+writes require `application.control`, both alongside `plugins.read`; the original
+caller and this instance must also hold the source query's declared grants. No
+annotation-specific Host registration or scope is introduced. Agent grants remain
+to be connected. The framed principal supplies author identity without guessing
 whether the initiating actor was human or Agent.
 
 `AnnotationStore::open` receives a private data path from its trusted container.
@@ -72,3 +77,13 @@ private Host or Agent code. An explicit `--independent` additionally runs the
 owner/store tests from that source tree; it does not run native RPC acceptance.
 Use the workspace builder in [BUILD.md](BUILD.md) during iteration. Registry
 dependencies remain pinned by the lockfile; their source is not copied here.
+
+`node scripts/test-annotation-plugin.mjs` requires retained packages through
+`RHO_ANNOTATION_PLUGIN_PACKAGE`, `RHO_EDITOR_PLUGIN_PACKAGE` and
+`RHO_FILES_PLUGIN_PACKAGE`. It snapshots them into a disposable database, uses
+the existing `RHO_TEST_BINARY` (default `target/debug/rho`), and never compiles.
+`RHO_ANNOTATION_EVIDENCE` selects its JSON report. The real Editor check covers
+freeze, current-source refusal, continuation, revision CAS, tombstones, historical
+context and same-instance graceful Host recovery with the source still suspended.
+It does not establish browser UI quality, image capture, Agent Send or abrupt-crash
+recovery. The fixture retains its disposable project and original records.

@@ -35,7 +35,7 @@ fn capability(
         capability: key(id), kind: if operation { CapabilityKind::Operation } else { CapabilityKind::Query }, title: id.into(),
         description: if operation { "Freeze a complete owner-contributed text source or append an annotation revision with an original request receipt and CAS. Quotes use offsets within the selected preview inclusion. Does not modify scientific content, start a runtime, or send to an Agent. Capture/image import is not part of this text capability." } else { "Read principal/project-scoped annotation records and frozen evidence without observing a live source or starting a runtime. Exact historical note revisions stay readable; current source status remains unknown." }.into(),
         input_schema, output_schema, examples: vec![example], recovery_schema: json!(true),
-        required_scopes: [if operation { "annotations.write" } else { "annotations.read" }.into(), "plugins.read".into()].into(),
+        required_scopes: [if operation { "application.control" } else { "application.read" }.into(), "plugins.read".into()].into(),
         effects: if operation { ["annotations.metadata".into()].into() } else { Default::default() },
         cancellation: CancellationSupport::Unsupported, preflight: None,
     }

@@ -119,9 +119,9 @@ impl Metadata {
             ));
         }
         if !call.scopes.contains(if operation {
-            "annotations.write"
+            "application.control"
         } else {
-            "annotations.read"
+            "application.read"
         }) || !call.scopes.contains("plugins.read")
         {
             return Err(Failure {

@@ -22,8 +22,8 @@ fn call(request: &str, cap: &str, arguments: Value) -> PluginCall {
         },
         principal: instance.principal,
         scopes: [
-            "annotations.read",
-            "annotations.write",
+            "application.read",
+            "application.control",
             "plugins.read",
             "documents.read",
         ]
@@ -402,6 +402,23 @@ async fn malformed_source_and_changed_caller_cannot_write_evidence() {
 #[tokio::test]
 async fn caller_scope_window_and_identity_are_not_taken_from_arguments() {
     let mut f = Fixture::new().await;
+    for (capability, scope, arguments) in [
+        (
+            "annotations.read",
+            "application.read",
+            json!({"kind":"list","limit":10}),
+        ),
+        (
+            "annotations.write",
+            "application.control",
+            freeze("missing-write-scope"),
+        ),
+    ] {
+        let mut denied = call("missing-metadata-scope", capability, arguments);
+        denied.scopes.remove(scope);
+        assert!(matches!(f.perform(denied, vec![], false).await,
+            RpcBody::Error { code, .. } if code == "access_denied"));
+    }
     let mut bad = call(
         "wrong-principal",
         "annotations.read",

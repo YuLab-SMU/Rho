@@ -171,6 +171,7 @@ Sources:
 - `scripts/test-agent-tool-grants.mjs`
 - `scripts/test-agent-view.mjs`
 - `scripts/test-annotation-plugin-store.mjs`
+- `scripts/test-annotation-plugin.mjs`
 - `scripts/test-console-plugin.mjs`
 - `scripts/test-editor-plugin.mjs`
 - `scripts/test-environment-plugin-owner.mjs`
@@ -311,6 +312,8 @@ Checks:
   Applies to: `crates/adapters/sqlite/src/annotations.rs`, `crates/adapters/sqlite/src/application.rs`, `crates/application/src/annotations.rs`, `crates/host/src/annotations.rs`, `crates/workbench/src/annotation_tests.rs`, `crates/workbench/src/annotations.rs`, `plugins/annotations/**`.
 - `plugins.annotation-independent` (L2): `["node","scripts/test-annotation-plugin-store.mjs","--independent"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/annotations/**`, `scripts/build-annotation-plugin.mjs`, `scripts/test-annotation-plugin-store.mjs`.
+- `plugins.annotation-native-host` (L2): `["node","scripts/test-annotation-plugin.mjs"]`
+  Applies to: `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `plugins/annotations/**`, `plugins/editor/backend/**`, `scripts/test-annotation-plugin.mjs`.
 - `plugins.annotation-source` (L0): `["node","scripts/test-annotation-plugin-store.mjs","--source-check"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/annotations/**`, `scripts/build-annotation-plugin.mjs`, `scripts/test-annotation-plugin-store.mjs`.
 - `plugins.annotation-store` (L1): `["cargo","test","-p","rho-annotation-store","--test","annotations","--locked"]`
