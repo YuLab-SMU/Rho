@@ -14,6 +14,22 @@ remote media never execute. The node inspector exposes properties, style tokens,
 bindings, conditions and events through the public declaration. Drag nodes onto
 another node to reparent them; Move up/down reorders siblings.
 
+View definitions in the same inspector edit data-source capabilities, arguments
+and subscription flags, plus custom source/export and properties/input/output
+schemas. Apply changes the declaration in one shared Undo transaction. Renaming
+rewrites node bindings, nested conditions, refresh/open-view bindings or custom
+component references; it never rewrites opaque component code. Referenced
+definitions cannot be removed. Add a custom source file to the package before
+pointing a component at it. These forms do not query providers or execute events.
+
+Unapplied form text, including invalid JSON, is kept in the synchronized Studio
+draft. Apply or explicitly reset before selecting another definition. Editing the
+same definition in source invalidates an older unapplied form's captured baseline;
+reset it to the current declaration before applying. Pristine forms follow source
+changes and Undo/Redo. Invalid declaration source is never overwritten by a form.
+Runtime component registrations and provider observation/action adapters remain
+the plugin's compiled code; declaring a source does not implement its adapter.
+
 Files up to 128 KiB can be edited as UTF-8. Larger and binary files remain intact;
 history restores them by immutable source reference. Checkpoints have the native
 128-edit and 256 KiB request limits. Loaded text and history share a 6 MiB editor

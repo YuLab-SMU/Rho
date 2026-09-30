@@ -1,16 +1,24 @@
-import type { CheckpointPlugin, PackageFile, VisualDocument, VisualNode, VisualNodeKind } from '../public/plugin-protocol/index.js';
+import type { CheckpointPlugin, PackageFile, VisualDocument, VisualNode, VisualNodeKind, VisualCondition, DataBinding, VisualDataSource, CustomComponent } from '../public/plugin-protocol/index.js';
 import { bytes, diagnostic, isVisual, node, own, parseVisual, put, sourcePath } from './visual.js';
 export const MAX_TEXT_BYTES=128*1024;
 const MAX_HISTORY_BYTES=4*1024*1024;
 export interface Buffer { text:string; lastValid:VisualDocument|null; removed:boolean; executable:boolean; }
 interface Original { metadata:PackageFile; text:string|null; }
 interface Change { path:string; before:Buffer|null; after:Buffer|null; }
+export type DefinitionKind='data_sources'|'components';
+export interface DefinitionDraft { original:string|null; baseline:string|null; id:string; fields:Record<string,string|boolean>; }
+function validateDefinitionDraft(value:DefinitionDraft,kind:DefinitionKind) {
+  if(!value||!(value.original===null||typeof value.original==='string')||!(value.baseline===null||typeof value.baseline==='string')||typeof value.id!=='string'||!value.fields||typeof value.fields!=='object'||Array.isArray(value.fields)||Object.values(value.fields).some(v=>typeof v!=='string'&&typeof v!=='boolean')||bytes(JSON.stringify(value)).length>MAX_TEXT_BYTES)throw Error('The definition draft exceeds 128 KiB or has invalid fields.');
+  if((value.original===null)!==(value.baseline===null))throw Error('Invalid definition baseline.');
+  if(value.original!==null)parseVisual(JSON.stringify({format_version:1,root:'root',nodes:{root:node()},data_sources:{},components:{},[kind]:{[value.original]:JSON.parse(value.baseline!)}}));
+}
 export interface Snapshot {
   revision:string; files:Record<string,Original>; buffers:Record<string,Buffer>;
   past:Change[][]; future:Change[][]; selected:string; selectedNode:string; mode:'canvas'|'declaration'|'source';
   fixtures:Record<string,unknown>;
   positions:Record<string,{start:number;end:number;top:number;left:number}>;
   inspector:{path:string;node:string;text:string}|null;
+  definitionDrafts?:Record<string,Partial<Record<DefinitionKind,DefinitionDraft>>>;
 }
 const clone = <T>(value:T):T => structuredClone(value);
 const equal = (a:unknown,b:unknown) => JSON.stringify(a)===JSON.stringify(b);
@@ -34,6 +42,13 @@ export class StudioDocument {
       sourcePath(path); if(!file?.metadata||!/^sha256:[a-f0-9]{64}$/.test(file.metadata.digest)||!Number.isSafeInteger(file.metadata.bytes)||file.metadata.bytes<0||typeof file.metadata.executable!=='boolean'||!(file.text===null||typeof file.text==='string'))throw Error('The retained source inventory is invalid.');
     }
     for(const position of Object.values(snapshot.positions))if(!position||![position.start,position.end,position.top,position.left].every(value=>Number.isFinite(value)&&value>=0))throw Error('The retained source position is invalid.');
+    if(snapshot.definitionDrafts!==undefined) {
+      if(!snapshot.definitionDrafts||typeof snapshot.definitionDrafts!=='object'||Array.isArray(snapshot.definitionDrafts))throw Error('Invalid definition drafts.');
+      for(const [path,drafts] of Object.entries(snapshot.definitionDrafts)) {
+        sourcePath(path);if(!isVisual(path)||!drafts||typeof drafts!=='object'||Array.isArray(drafts))throw Error('Invalid definition draft path.');
+        for(const [kind,draft] of Object.entries(drafts)){if(!['data_sources','components'].includes(kind))throw Error('Invalid definition draft kind.');validateDefinitionDraft(draft,kind as DefinitionKind);}
+      }
+    }
     if(snapshot.inspector!==null&&(!snapshot.inspector||typeof snapshot.inspector.text!=='string'||bytes(snapshot.inspector.text).length>MAX_TEXT_BYTES))throw Error('The retained property draft is invalid.');
   }
   static create(revision:string,files:Record<string,PackageFile>) {
@@ -99,6 +114,39 @@ export class StudioDocument {
     const doc=parseVisual(file.text);change(doc);const text=JSON.stringify(doc,null,2)+'\n';parseVisual(text);this.edit(this.data.selected,text);
   }
   updateNode(id:string,value:VisualNode) { this.changeVisual(doc=>{if(!own(doc.nodes,id))throw Error('The node no longer exists.');put(doc.nodes,id,clone(value));}); }
+  retainDefinitionDraft(kind:DefinitionKind,draft:DefinitionDraft|null) {
+    if(!isVisual(this.data.selected))throw Error('Open a visual declaration first.');
+    if(draft)validateDefinitionDraft(draft,kind as DefinitionKind);
+    const next=clone(this.data.definitionDrafts??{}),drafts=own(next,this.data.selected)??{};
+    if(draft)put(drafts,kind,clone(draft));else delete drafts[kind];put(next,this.data.selected,drafts);
+    if(bytes(JSON.stringify({...this.data,definitionDrafts:next})).length>6*1024*1024)throw Error('This draft reached its 6 MiB editing limit.');
+    this.data.definitionDrafts=next;
+  }
+  updateDefinition(kind:DefinitionKind,original:string|null,id:string,value:VisualDataSource|CustomComponent,baseline:string|null) {
+    this.changeVisual(doc=>{
+      const map=doc[kind] as Record<string,VisualDataSource|CustomComponent>;
+      if(original!==null&&(!own(map,original)||JSON.stringify(own(map,original))!==baseline))throw Error('This definition changed in the declaration. Reset the form to the current definition before applying.');
+      if(id!==original&&own(map,id))throw Error('That definition ID already exists.');
+      if(kind==='components'&&!this.paths.includes((value as CustomComponent).source))throw Error('Add the custom source file to this package before declaring its component.');
+      if(original!==null)delete map[original];put(map,id,clone(value));
+      if(original!==null&&id!==original) {
+        const binding=(b:DataBinding|null)=>{if(b?.source===original)b.source=id;};
+        const condition=(c:VisualCondition|null)=>{if(!c)return;if(c.kind==='not')condition(c.condition);else if(c.kind==='all')c.conditions.forEach(condition);else binding(c.binding);};
+        for(const node of Object.values(doc.nodes)) {
+          if(kind==='components'){if(node.component===original)node.component=id;continue;}
+          Object.values(node.bindings).forEach(binding);condition(node.visible_when);
+          for(const actions of Object.values(node.events))for(const action of actions){if(action.kind==='refresh'&&action.source===original)action.source=id;else if(action.kind==='open_view')binding(action.resource);}
+        }
+      }
+    });
+  }
+  removeDefinition(kind:DefinitionKind,id:string,baseline:string) {
+    this.changeVisual(doc=>{
+      if(!own<VisualDataSource|CustomComponent>(doc[kind],id)||JSON.stringify(own<VisualDataSource|CustomComponent>(doc[kind],id))!==baseline)throw Error('This definition changed. Reset the form before removing it.');
+      delete doc[kind][id];
+      try{parseVisual(JSON.stringify(doc));}catch{throw Error('This definition is still referenced. Remove its node bindings, conditions or actions first.');}
+    });
+  }
   append(parent:string,kind:VisualNodeKind,component:string|null=null) {
     const id=`node-${crypto.randomUUID()}`;
     this.changeVisual(doc=>{const target=own(doc.nodes,parent);if(!target)throw Error('Select a parent node.');const child=node(kind);child.component=component;if(kind==='text')child.properties.text='New text';if(kind==='button')child.properties.label='Button';put(doc.nodes,id,child);target.children.push(id);});

@@ -2,6 +2,7 @@ import { connectPluginView } from '../public/plugin-ui/index.js';
 import type { PluginCatalogPage, PluginInspection, PluginInstanceObservations, WindowScenarioSnapshot, VisualNode } from '../public/plugin-protocol/index.js';
 import { Studio, read, sourceTree, sourceText } from './model.js';
 import { bytes, diagnostic, isVisual, kinds, node, own, put } from './visual.js';
+import { definitionPanel } from './definition-panel.js';
 import { renderCanvas } from './canvas.js';
 import { developmentPanel } from './development-panel.js';
 import { scenarioPanel } from './scenario-panel.js';
@@ -24,6 +25,7 @@ const frozen=()=>!ready||busy||preparing||!!studio.assistance.data.pending||!!st
 // A document save captures an older body while typing may continue. Source
 // mutations freeze editing; an in-flight draft transfer must not drop keystrokes.
 const editable=()=>ready&&!busy&&!preparing&&!studio.assistance.data.pending&&!studio.pending&&!studio.development.data.pending&&!studio.development.data.testing?.pending&&!studio.application.data.pending&&!studio.archives.data.pending&&!!studio.branch;
+const renderDefinitions=definitionPanel(get('definitions'),()=>studio.document,()=>editable()&&!composing,change,schedule,report);
 function show(id:string,text:string){get(id).textContent=text;get(id).hidden=!text;}
 function dialogErrors(){document.querySelectorAll<HTMLElement>('.dialog-error').forEach(item=>{item.textContent=error;item.hidden=!error;});}
 function report(e:unknown){error=diagnostic(e);show('error',error);dialogErrors();}
@@ -36,7 +38,7 @@ function savePosition(){const doc=studio.document,source=get<HTMLTextAreaElement
 function chooseNode(id:string){const doc=studio.document;if(!doc)return;doc.data.selectedNode=id;doc.data.inspector=null;inspectorKey='';schedule();render();}
 function render(){
   if(stopped||composing)return;
-  renderDevelopment();renderScenario();renderArchives();renderAgent();
+  renderDevelopment();renderScenario();renderArchives();renderAgent();renderDefinitions();
   const doc=studio.document,buffer=doc?.current,invalid=doc?.error()??'',valid=!!doc?.canvas&&!invalid;
   show('error',error);dialogErrors();show('notice',notice);get('notice-banner').hidden=!notice;get('sync').textContent=sync;
   get('subtitle').textContent=studio.plugin?`${studio.plugin} / ${studio.branch?.name??'Read-only revision'}`:'Choose a revision to develop.';
@@ -145,7 +147,7 @@ document.addEventListener('keydown',event=>{if(event.isComposing||composing||!ed
 get('node-text').addEventListener('input',()=>{if(composing)return;change(()=>{const doc=studio.document!,selected=structuredClone(doc.canvas!.nodes[doc.data.selectedNode]!);put(selected.properties,selected.kind==='button'?'label':'text',get<HTMLInputElement>('node-text').value);doc.data.inspector=null;doc.updateNode(doc.data.selectedNode,selected);});});
 get('node-properties').addEventListener('input',()=>{const doc=studio.document;if(!doc||!editable())return;const text=get<HTMLTextAreaElement>('node-properties').value;if(bytes(text).length>128*1024){report(Error('Node properties exceed the 128 KiB editing limit.'));return;}doc.data.inspector={path:doc.data.selected,node:doc.data.selectedNode,text};schedule();});
 get('update-node').onclick=()=>change(()=>{const doc=studio.document!;doc.updateNode(doc.data.selectedNode,JSON.parse(get<HTMLTextAreaElement>('node-properties').value) as VisualNode);doc.data.inspector=null;inspectorKey='';});
-get('add-node').onclick=()=>change(()=>{const doc=studio.document!,kind=get<HTMLSelectElement>('node-kind').value as typeof kinds[number];const component=kind==='custom'?Object.keys(doc.canvas!.components)[0]??null:null;if(kind==='custom'&&!component)throw Error('Declare a custom component and its source in the declaration before adding it.');doc.append(doc.data.selectedNode,kind,component);});
+get('add-node').onclick=()=>change(()=>{const doc=studio.document!,kind=get<HTMLSelectElement>('node-kind').value as typeof kinds[number];const component=kind==='custom'?Object.keys(doc.canvas!.components)[0]??null:null;if(kind==='custom'&&!component)throw Error('Add a custom component in View definitions before adding its node.');doc.append(doc.data.selectedNode,kind,component);});
 get('delete-node').onclick=()=>change(()=>studio.document!.deleteNode(studio.document!.data.selectedNode));
 for(const [id,offset] of [['node-up',-1],['node-down',1]] as const)get(id).onclick=()=>change(()=>{const doc=studio.document!,selected=doc.data.selectedNode,parent=Object.entries(doc.canvas!.nodes).find(([,n])=>n.children.includes(selected));if(!parent)throw Error('The root cannot be reordered.');doc.move(selected,parent[0],Math.max(0,parent[1].children.indexOf(selected)+offset));});
 get('update-fixtures').onclick=()=>{if(busy||preparing||!studio.document)return;try{const fixtures=JSON.parse(get<HTMLTextAreaElement>('fixtures').value);if(!fixtures||Array.isArray(fixtures)||typeof fixtures!=='object'||bytes(JSON.stringify(fixtures)).length>128*1024)throw Error('Fixture data must be an object no larger than 128 KiB.');studio.document.data.fixtures=fixtures;schedule();render();}catch(e){report(e);}};

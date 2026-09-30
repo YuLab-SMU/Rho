@@ -170,6 +170,7 @@ Sources:
 - `scripts/fixtures/studio-agent*`
 - `scripts/fixtures/studio-archive.mjs`
 - `scripts/fixtures/studio-backend-test.mjs`
+- `scripts/fixtures/studio-definitions.mjs`
 - `scripts/fixtures/studio-development.mjs`
 - `scripts/generate-editor-context.mjs`
 - `scripts/plugin-protocol.mjs`
@@ -552,7 +553,7 @@ Checks:
 - `plugins.studio-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts","studio-backend-test.spec.ts","studio-scenario.spec.ts","studio-self.spec.ts","studio-archive.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/studio/**`, `rust-toolchain.toml`, `scripts/build-studio-plugin.mjs`, `sdk/**`, `ui/e2e/studio-archive.spec.ts`, `ui/e2e/studio-backend-test.spec.ts`, `ui/e2e/studio-plugin.spec.ts`, `ui/e2e/studio-scenario.spec.ts`, `ui/e2e/studio-self.spec.ts`.
 - `plugins.studio-model` (L2): `["node","scripts/test-studio-plugin.mjs"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/studio/**`, `rust-toolchain.toml`, `scripts/build-studio-plugin.mjs`, `scripts/test-studio-plugin.mjs`, `sdk/**`.
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/studio/**`, `rust-toolchain.toml`, `scripts/build-studio-plugin.mjs`, `scripts/fixtures/studio-definitions.mjs`, `scripts/test-studio-plugin.mjs`, `sdk/**`.
 - `plugins.test-project-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-test-project.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/e2e/plugin-test-project.spec.ts`, `ui/src/**`.
 - `plugins.test-project-edges` (L1): `["cargo","test","-p","rho-workbench","--lib","plugin_test_","--locked"]`

@@ -10,6 +10,7 @@
       "src/main.ts",
       "src/model.ts",
       "src/document.ts",
+      "src/definition-panel.ts",
       "src/visual.ts",
       "src/canvas.ts",
       "src/operations.ts",

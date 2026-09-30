@@ -1,3 +1,4 @@
+import {testDefinitions} from './fixtures/studio-definitions.mjs';
 import {testScenario} from './fixtures/studio-scenario.mjs';
 import {testArchives} from './fixtures/studio-archive.mjs';
 import {testBackendTest} from './fixtures/studio-backend-test.mjs';
@@ -46,6 +47,7 @@ try {
  const doc=StudioDocument.create(revision,files);
  for(const [key,text]of Object.entries(content))doc.load(key,text);
  doc.data.selected='views/panel.json';doc.data.selectedNode='title';
+ testDefinitions(StudioDocument,(await module('definition-panel')).definitionDraft,doc);
  doc.updateNode('title',{...doc.canvas.nodes.title,properties:{text:'Changed Ω'}});
  const valid=doc.current.text;doc.edit('views/panel.json',valid.slice(0,-9));assert.ok(doc.error());assert.equal(doc.canvas.nodes.title.properties.text,'Changed Ω');
  const broken=doc.current.text;assert.throws(()=>doc.append('root','button'));assert.equal(doc.current.text,broken);
