@@ -4,10 +4,6 @@ mod caller_records;
 mod application;
 #[cfg(feature = "application-store")]
 pub use application::ApplicationStore;
-#[cfg(feature = "application-store")]
-mod runtime_instances;
-#[cfg(feature = "application-store")]
-pub use runtime_instances::RuntimeInstancePage;
 mod filtered_records;
 mod commit_candidates;
 #[cfg(test)]

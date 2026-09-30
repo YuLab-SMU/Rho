@@ -21,15 +21,12 @@ assert.ok(cli, "production CLI is missing");
 assert.deepEqual(metadata.workspace_default_members, [cli.id]);
 assert.deepEqual(cli.targets.filter(target => target.kind.includes("bin")).map(target => target.name), ["rho"]);
 const sqlite = metadata.packages.find(pkg => pkg.name === "rho-sqlite");
-for (const name of ["rho-application"]) {
-  assert.equal(sqlite.dependencies.find(dep => dep.name === name)?.optional, true,
-    `Journal-only SQLite must not require ${name}`);
-  assert.ok(sqlite.features["application-store"].includes(`dep:${name}`));
-}
+assert.deepEqual(sqlite.features["application-store"], [],
+  "Generic SQLite state must not pull in a fixed Application owner");
 const journalFixture = metadata.packages.find(pkg => pkg.name === "rho-plugins")
   .dependencies.find(dep => dep.name === "rho-sqlite");
 assert.equal(journalFixture.uses_default_features, false,
-  "Plugin journal fixtures must not compile the window/document Application owner");
+  "Plugin journal fixtures must not compile the generic application state");
 assert.deepEqual(journalFixture.features, []);
 const allowed = {
   "rho-plugin-protocol": [],
@@ -55,9 +52,8 @@ const allowed = {
   "rho-environment-owner": ["rho-environment-api", "rho-process-engine", "rho-process-owner"],
   "rho-contract": ["rho-plugin-protocol", "rho-r-api", "rho-files-api", "rho-process-api", "rho-remote-api", "rho-environment-api"],
   "rho-operation": ["rho-contract", "rho-plugin-protocol"],
-  "rho-application": ["rho-contract"],
-  "rho-sqlite": ["rho-contract", "rho-operation", "rho-application"],
-  "rho-host": ["rho-plugin-protocol", "rho-plugins", "rho-contract", "rho-operation", "rho-application", "rho-sqlite"],
+  "rho-sqlite": ["rho-contract", "rho-operation"],
+  "rho-host": ["rho-plugin-protocol", "rho-plugins", "rho-contract", "rho-operation", "rho-sqlite"],
   "rho-mcp": ["rho-contract", "rho-host"],
   "rho-agent-api": ["rho-plugin-protocol", "rho-r-api"],
   "rho-agent-backend": ["rho-plugin-sdk", "rho-agent-api", "rho-agent-owner", "rho-agent-store", "rho-agent-engine", "rho-agent-client", "rho-agent-native"],

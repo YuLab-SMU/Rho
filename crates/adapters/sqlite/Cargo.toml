@@ -7,12 +7,11 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-# Journal-only users do not need window/document application persistence.
+# Generic UI state can be omitted for journal-only users.
 default = ["application-store"]
-application-store = ["dep:rho-application"]
+application-store = []
 
 [dependencies]
-rho-application = { path = "../../application", optional = true }
 uuid.workspace = true
 async-trait.workspace = true
 rho-contract = { path = "../../contract" }

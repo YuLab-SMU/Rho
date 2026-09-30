@@ -303,9 +303,10 @@ flags, R invocation shortcuts and method-binding commands are removed. HostProfi
 now contains only the database path; there is no runtime selector or deferred-R
 startup path. Standalone observation reads the journal without constructing Files
 or native output owners. Fixed scientific Host constructors, native scientific registration, runtime-instance
-management and Host Application/Skill adapters are removed. Obsolete contract DTOs,
-Application storage types remain for the next cleanup; the eleven unused fixed
-owner/adapter crates and their dedicated tests have been deleted. Missing plugins cannot select a fixed Workbench fallback. Historical
+management and Host Application/Skill adapters are removed. The fixed Application
+owner, typed persistence and runtime-instance tables are also removed; SQLite keeps
+only generic scoped versioned state. Obsolete contract DTOs remain for cleanup.
+The eleven unused fixed owner/adapter crates and their dedicated tests are deleted. Missing plugins cannot select a fixed Workbench fallback. Historical
 fixed-renderer test totals do not count as current plugin acceptance.
 
 ## Testing SOP
@@ -871,9 +872,10 @@ post-removal replay refusal, and uses `cargo test -p rho-agent-store --lib --loc
 scripts/test-agent-plugin-store.mjs` repeats store and owner tests in an independent
 source assembly. Format isolation tests reject unrelated/unsupported databases
 without modifying them. The core Agent/annotation storage adapters and their tests
-are removed. `cargo test -p rho-application -p rho-sqlite --lib --locked` covers
-generic state/receipt persistence, including refusal to overwrite stale drafts and
-independence from retired plugin database paths. `cargo test -p rho-sqlite --lib
+are removed. `cargo test -p rho-sqlite --lib --locked` covers
+generic state/journal persistence, including refusal to overwrite stale drafts,
+independence from retired plugin database paths and creation of only the generic
+state table (no fixed window, Skill or R-instance tables). `cargo test -p rho-sqlite --lib
 --no-default-features --locked` checks the journal-only composition. Neither entry
 replaces ordinary Agent/annotation plugin acceptance.
 `node scripts/test-real-r.mjs --agent` delegates to the ordinary Agent/R plugin
@@ -1247,12 +1249,12 @@ this is not a reason to expand a focused check into a workspace audit.
 
 For Operation-journal-only changes, use
 `cargo test -p rho-sqlite --no-default-features --lib --locked`.
-The SQLite `application-store` feature retains generic Application state for Host
-builds and ordinary SQLite test commands. Agent/annotation forwarding stores and
+The SQLite `application-store` feature includes only generic scoped key/value state
+for Host builds and ordinary SQLite test commands; it has no owner dependency. Agent/annotation forwarding stores and
 Host scientific composition are removed. Plugin-runtime fixtures disable this
 feature when they only need the journal. Check the selected closure with
 `cargo tree -p rho-plugins --edges normal,build,dev --locked --offline`.
-Remaining scientific DTO dependencies and Application storage types still require cleanup.
+Remaining scientific DTO dependencies still require cleanup.
 
 Scenario metadata changes use `cargo test -p rho-plugins --test package_repository
 --locked`, `cargo test -p rho-plugin-protocol --test contract --locked` and
@@ -1467,7 +1469,7 @@ storage. Check ordinary/wide/constrained layouts and copying, not only snapshots
 | --- | --- |
 | Rust behavior | `cargo test -p <crate> <filter> --locked` |
 | Shared capability contracts and result validation | `cargo test -p rho-contract --locked`, then `cargo test -p rho-operation --locked` |
-| Application windows, captures and CAS receipts | `cargo test -p rho-application --locked`, SQLite tests and the ordinary Editor/Agent plugin draft and input checks |
+| Generic state and plugin drafts/captures | `cargo test -p rho-sqlite --lib --locked`, Workbench state tests and ordinary Editor/Agent plugin draft/input checks |
 | Frontend model/component behavior | `npm run test --prefix ui` |
 | Client types and embedded assets | Generate, build, then check as above |
 | Studio interaction and real local R | `npm run test:browser --prefix ui` |

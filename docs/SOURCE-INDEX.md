@@ -279,7 +279,7 @@ Checks:
 - `plugins.agent-environment` (L2): `["node","scripts/test-agent-environment.mjs"]`
   Applies to: `crates/host/tests/fixtures/agent-science.cjs`, `crates/host/tests/fixtures/rhonextfixture/**`, `plugins/agent/**`, `plugins/environment/**`, `scripts/fixtures/agent-environment-tools.cjs`, `scripts/test-agent-environment.mjs`.
 - `plugins.agent-handoff` (L1): `["cargo","test","-p","rho-agent-owner","--lib","handoff","--locked"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/application/**`, `crates/contract/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/contract/**`, `crates/plugin-protocol/**`, `plugins/agent/api/**`, `plugins/agent/backend/owner/**`, `plugins/r/api/**`, `rust-toolchain.toml`.
 - `plugins.agent-host` (L2): `["node","scripts/test-agent-plugin.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/host/**`, `crates/operation/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/**`, `plugins/r/api/**`, `rust-toolchain.toml`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-agent-plugin.mjs`, `scripts/test-agent-plugin.mjs`, `sdk/**`.
 - `plugins.agent-independent` (L2): `["node","scripts/test-agent-plugin-client.mjs"]`

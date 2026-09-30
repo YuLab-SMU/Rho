@@ -1095,8 +1095,9 @@ newer writer's current credential.
 
 The fixed Host task, handoff, context, component and managed-MCP services and the
 `rho-agents` adapter are removed, along with Application Agent/annotation interfaces
-and SQLite forwarding stores. The generic Application owner and its fixed scientific
-bridge remain for later removal. Legacy Agent/annotation/HTML-token DTOs and
+and SQLite forwarding stores. The fixed Application owner, scientific bridge,
+window/command/Skill persistence and R-instance tables are also removed; SQLite
+retains only the generic scoped versioned state store. Legacy Agent/annotation/HTML-token DTOs and
 Agent API re-exports are removed from core contracts and generated client bindings.
 The ordinary backend connects the public `AgentModelRun` and `AgentModelPort` to
 the package-owned Rig driver. Inputs, citations, grants and original receipts belong
@@ -1690,9 +1691,11 @@ uses native job identity and never treats a lost connection as proof of job fail
 ## Application context and captured actions
 
 The fixed Application browser bridge, captured-action execution adapter and Host
-method-binding handlers are removed. Legacy DTOs and storage types still await
-cleanup; their presence does not advertise a callable capability. Generic
-application state remains scoped and versioned. Ordinary Editor/Agent plugins
+method-binding handlers are removed, along with the fixed Application owner and
+its typed SQLite storage. Legacy DTOs still await cleanup; their presence does not
+advertise a callable capability. Generic application state remains scoped and
+versioned in one key/value table. Opening it never creates fixed window, document,
+command, Skill or R-instance tables; no abandoned-state importer is provided. Ordinary Editor/Agent plugins
 own document capture, drafts, context references, handoff and user actions through
 the public plugin contracts. Only the shared Operation gateway commits scientific
 results. Querying saved state does not submit or resume work.
@@ -1728,7 +1731,7 @@ project scope for journal visibility, without constructing a Files owner or open
 R/output stores. Internal fixed Host constructors, native scientific registration, runtime-instance
 management and Application/Skill handlers are removed. Scientific execution and
 observation use ordinary provider bindings. Legacy request DTOs are refused pending
-contract cleanup; Application storage types also remain.
+contract cleanup; fixed Application storage is removed.
 
 The workspace owns window identity, saved generic layout, view connections,
 cooperative closure and explicit suspended-instance recovery. Scientific UI,
@@ -1916,7 +1919,6 @@ package inspection.
 | --- | --- |
 | `crates/contract` | Wire identities and DTOs, including generated TypeScript sources |
 | `crates/operation` | Operation and Query gateways, handler/journal ports and commit discipline |
-| `crates/application` | Generic application state; legacy context/control types await cleanup |
 | `crates/adapters/sqlite` | Operation journal and generic application persistence; scientific adapters are removed |
 | `plugins/r/api`, `plugins/r/backend` | Public R data/native ports, isolated RPC owner and the sole Ark/R engine |
 | `plugins/files/api`, `plugins/files/backend/engine` | Public filesystem/text/Git contracts and the contained native implementation |

@@ -11,7 +11,6 @@ pub use observer::QueryObserver;
 pub use config::{HostProfile, ReservedHost};
 pub use paths::default_database;
 pub use rho_sqlite::ApplicationStore;
-pub use rho_application::ApplicationError;
 pub use rho_operation::OperationError;
 use ownership::ProjectLease;
 use std::path::{Path, PathBuf};

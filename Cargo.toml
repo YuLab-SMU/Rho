@@ -24,7 +24,6 @@ members = [
   "crates/plugins",
   "crates/contract",
   "crates/operation",
-  "crates/application",
   "crates/adapters/sqlite",
   "crates/host",
   "crates/cli",

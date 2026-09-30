@@ -138,9 +138,9 @@ Host 负责装配实现与生命周期；上图不是要求每个 domain 再新�
 | `ui/src/panels/` 与设置页 | 共用已有输入、上下文、活动和证据呈现组件；内置助手设置 |
 | Cargo workspace、架构/前端 boundary checker、governance | 注册新 crate、允许依赖、源区域和对应检查 |
 
-依赖方向：`rho-agents → rho-application + rho-contract`；
-`rho-host → rho-agents`；`rho-sqlite → rho-application` 保持不变。
-Application 仅持有执行端口定义，不依赖具体引擎。Rig 类型仅存在于 `rho-agents` 内部。
+上表原设计的 `rho-agents`、`rho-application` 与固定 Host 依赖均已删除。
+当前任务、存储和模型分别属于 `plugins/agent/backend/{owner,store,engine}`；
+普通 backend 通过公开插件端口访问科学能力，核心不依赖 Agent owner 或模型引擎。
 不会新增 `AgentGateway`、科研 `AgentOperation`、跨 Agent bus 或并行事实库。
 
 ### 为什么不把 Builtin 塞进现有 AgentProvider
@@ -435,7 +435,6 @@ Cargo 与类型生成串行，工作区全量检查仅用于明确要求的审�
 ```sh
 node scripts/governance.mjs impact --changed-auto
 cargo test -p rho-contract --locked
-cargo test -p rho-application --locked
 cargo test -p rho-sqlite --locked
 cargo test -p rho-host --locked
 node scripts/check-architecture.mjs
