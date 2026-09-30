@@ -7,7 +7,6 @@ mod viewer;
 mod objects;
 mod packages;
 pub(super) use packages::Catalog as PackageCatalog;
-pub(super) use objects::Catalog as ObjectCatalog;
 
 const HELP: &str = "help";
 const HELP_SEARCH: &str = "r.context.help.search";

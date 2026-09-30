@@ -3,6 +3,14 @@ use rho_files_api::*;
 /// Bounded path traversal; continuation is tied to this root and exact query.
 pub async fn search_files(runtime: &dyn ProjectRuntime, args: &SearchFilesArguments) -> Result<FileSearchResult, String> {
     validate_search_files(args)?;
+    list_matching_files(runtime, args, 200).await
+}
+
+/// Bounded discovery also accepts an empty filter for a user-opened context picker.
+pub async fn list_matching_files(runtime: &dyn ProjectRuntime, args: &SearchFilesArguments, limit: usize) -> Result<FileSearchResult, String> {
+    if args.text.len() > 1024 || !(1..=200).contains(&limit) {
+        return Err("Invalid file discovery bounds".into());
+    }
     let mut cursor = args
         .continuation
         .clone()
@@ -39,7 +47,7 @@ pub async fn search_files(runtime: &dyn ProjectRuntime, args: &SearchFilesArgume
         result.continuation = Some(cursor.clone());
         if result.scanned_entries >= 10000
             || result.scanned_directories >= 200
-            || result.entries.len() >= 200
+            || result.entries.len() >= limit
             || serde_json::to_vec(&result).map_err(|error| error.to_string())?.len() > 56 * 1024
         {
             result.truncated = true;

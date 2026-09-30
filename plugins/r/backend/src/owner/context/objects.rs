@@ -1,7 +1,7 @@
 //! Object summaries revalidate the native handle; they never evaluate bindings
 //! or silently observe a replacement object. Search stores identities only.
 use super::*;
-use rho_r_api::{ObjectPathElement, ObjectObservation, ObjectReadPage, ObserveObjectArguments};
+use rho_r_api::{ObjectPathElement, ObjectObservation, ObjectReadPage, ObjectDirectoryPage};
 const SEARCH: &str = "r.context.objects.search";
 const PREVIEW: &str = "r.context.objects.preview";
 pub(super) fn is_query(id: &str) -> bool { matches!(id, SEARCH | PREVIEW) }
@@ -29,47 +29,78 @@ impl Source {
         Ok(item)
     }
 }
-#[derive(Default)]
-pub(crate) struct Catalog { items: BTreeMap<String, Source>, order: std::collections::VecDeque<String> }
-impl Catalog {
-    pub(crate) fn observe(&mut self, arguments: &Value, observation: &RInspection<Value>) {
-        if observation.status != RInspectionStatus::Ready { return; }
-        let (Ok(args), Some(data)) = (decode::<ObserveObjectArguments>(arguments.clone()), &observation.data) else {return;};
-        let Ok(page) = decode::<ObjectObservation>(data.clone()) else {return;};
-        if observation.session_id != args.expected_session || page.name != args.name || json!(page.path) != json!(args.path) {return;}
-        let source = Source {session: args.expected_session, name: page.name, object_ref: page.object_ref, observed_path: page.path, path: vec![]};
-        let encoded = serde_json::to_vec(&source).unwrap();
-        if encoded.len() > MAX_CONTEXT_SELECTOR_BYTES {return;}
-        let key = format!("sha256:{:x}", Sha256::digest(encoded));
-        self.order.retain(|old| old != &key); self.order.push_back(key.clone()); self.items.insert(key, source);
-        while self.items.len() > 100 { self.items.remove(&self.order.pop_front().unwrap()); }
-    }
-    fn search(&self, owner: &InstanceRef, request: ContextSearch) -> Result<ContextPage, String> {
-        request.validate().map_err(|e| e.to_string())?;
-        let after = request.after.as_ref().map(|value| decode::<Cursor>(value.clone())).transpose()?;
-        if let Some(cursor) = &after {
-            check(cursor.owner == *owner && cursor.window == request.window && cursor.text == request.text && cursor.contribution == "objects", "Object continuation belongs to another provider, window or search")?;
-        }
-        let matching = self.items.iter().filter(|(key, source)| !after.as_ref().is_some_and(|cursor| *key <= &cursor.after)
-            && source.name.to_lowercase().contains(&request.text.to_lowercase())).take(usize::from(request.limit) + 1).collect::<Vec<_>>();
-        let items = matching.iter().take(usize::from(request.limit)).map(|(_,source)| source.item(owner,&request.window)).collect::<Result<Vec<_>,_>>()?;
-        let next = (matching.len() > usize::from(request.limit)).then(|| json!(Cursor {
-            owner:owner.clone(),window:request.window,text:request.text,contribution:"objects".into(),after:matching[usize::from(request.limit)-1].0.clone()
-        }));
-        let page = ContextPage {items,next,notices:vec!["Up to 100 previously opened object observations. Handles can expire or change; preview checks them without starting R or observing a replacement.".into()]};
-        page.validate().map_err(|e| e.to_string())?; Ok(page)
-    }
-}
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Cursor { owner: InstanceRef, window: WindowId, text: String, contribution: String, after: String }
+struct LiveCursor {
+    owner: InstanceRef, principal: PrincipalId, window: WindowId, text: String,
+    session: String, directory_ref: String, offset: u32,
+}
+fn context_page(items: Vec<ContextItem>, next: Option<Value>, notices: Vec<String>) -> Result<Value, String> {
+    let page = ContextPage { items, next, notices };
+    page.validate().map_err(|e| e.to_string())?;
+    Ok(json!(page))
+}
 #[derive(Deserialize)]
 #[serde(tag="kind",rename_all="snake_case",deny_unknown_fields)]
 enum Inclusion { Summary {} }
 impl Owner {
+    async fn search_live_objects(&self, call: &PluginCall) -> Result<Value, String> {
+        let request: ContextSearch = decode(call.arguments.clone())?;
+        request.validate().map_err(|e| e.to_string())?;
+        let after: Option<LiveCursor> = request.after.clone().map(decode).transpose()?;
+        let session = self.runtime.lock().unwrap().as_ref().map(|runtime| runtime.session_id().to_owned());
+        let Some(session) = session else {
+            return context_page(vec![], None, vec!["R is not running. Start R in Console to browse workspace objects.".into()]);
+        };
+        if let Some(cursor) = &after {
+            check(cursor.owner == self.instance && cursor.principal == call.principal && cursor.window == request.window
+                && cursor.text == request.text && cursor.session == session,
+                "Object continuation belongs to another provider, caller, window, search or native session")?;
+        }
+        let mut read = call.clone();
+        read.binding.target = Some(session.clone());
+        read.binding.capability = environment_binding::key("r.list_objects", 1);
+        read.arguments = json!({"expected_session":session,"name_contains":request.text,
+            "directory_ref":after.as_ref().map(|c| &c.directory_ref),"offset":after.as_ref().map_or(0,|c|c.offset),"limit":request.limit});
+        let observed: RInspection<ObjectDirectoryPage> = decode(self.inspect(&read, WorkspaceQueryKind::ListObjects).await?)?;
+        if observed.status != RInspectionStatus::Ready {
+            let message = observed.diagnostic.map(|d|d.message).unwrap_or_else(|| "R is busy. Browse objects again after the current work settles.".into());
+            return context_page(vec![], None, vec![message]);
+        }
+        check(observed.session_id == session, "Object directory changed its native session")?;
+        let directory = observed.data.ok_or("Object directory is unavailable")?;
+        let mut items = vec![];
+        let mut next_offset = directory.next_offset;
+        let mut unavailable = 0;
+        for (index, entry) in directory.entries.into_iter().enumerate() {
+            read.binding.capability = environment_binding::key("r.observe_object", 1);
+            read.arguments = json!({"expected_session":session,"name":entry.name});
+            let observed: RInspection<ObjectObservation> = decode(self.inspect(&read, WorkspaceQueryKind::ObserveObject).await?)?;
+            if observed.status == RInspectionStatus::Busy {
+                if index == 0 { return Err("R became busy while browsing objects. Continue after the current work settles.".into()); }
+                next_offset = Some(directory.offset + index as u32);
+                break;
+            }
+            if observed.status != RInspectionStatus::Ready { unavailable += 1; continue; }
+            check(observed.session_id == session, "Object observation changed its native session")?;
+            let object = observed.data.ok_or("Object observation is unavailable")?;
+            check(object.name == entry.name && object.path.is_empty(), "Object observation changed its name or path")?;
+            items.push(Source {session:session.clone(),name:object.name,object_ref:object.object_ref,observed_path:object.path,path:vec![]}.item(&self.instance,&request.window)?);
+        }
+        let next = next_offset.map(|offset| json!(LiveCursor {owner:self.instance.clone(),principal:call.principal.clone(),
+            window:request.window,text:request.text,session,directory_ref:directory.directory_ref,offset}));
+        let mut notices = vec!["Current workspace objects. References capture this native session; preview rechecks the original object without evaluating bindings.".into()];
+        if unavailable > 0 { notices.push(format!("{unavailable} object(s) became unavailable while browsing. Search again to obtain fresh references.")); }
+        if next_offset.is_some() { notices.push("More objects or interrupted observations remain; continue when R is idle.".into()); }
+        if !directory.notices.is_empty() || !observed.notices.is_empty() {
+            let mut native = observed.notices; native.extend(directory.notices);
+            for notice in native.into_iter().take(5) { notices.push(notice.chars().take(900).collect()); }
+        }
+        context_page(items, next, notices)
+    }
     pub(super) async fn query_objects_context(&self, call: &PluginCall) -> Result<Value,String> {
         if call.binding.capability.id.as_str() == SEARCH {
-            return Ok(json!(self.object_context.lock().unwrap().search(&self.instance,decode(call.arguments.clone())?)?));
+            return self.search_live_objects(call).await;
         }
         let request: PreviewContext = decode(call.arguments.clone())?;
         request.validate().map_err(|e|e.to_string())?;
@@ -154,21 +185,5 @@ mod tests {
             raw[changed]=match changed {"path"|"observed_path"=>json!([{"kind":"index","index":1}]),"kind"=>json!("values"),_=>json!("different")};
             assert!(preview(&owner.instance,request.clone(),&source,decode(raw).unwrap()).is_err(),"{changed}");
         }
-    }
-    #[test]
-    fn catalog_is_bounded_and_continuation_is_owner_window_and_search_bound() {
-        let (_directory,owner,call,_host)=super::super::tests::fixture();
-        let mut catalog=Catalog::default();
-        for n in 0..102 {
-            let args=json!({"expected_session":"native","name":format!("object-{n}"),"path":[]});
-            let data=json!({"name":format!("object-{n}"),"object_ref":format!("ref-{n}"),"path":[],"metadata":page(&source()).metadata,"observed_at_ms":1,"expires_at_ms":60001});
-            let observation:RInspection<Value>=decode(json!({"session_id":"native","status":"ready","source":"R","observed_at_ms":1,"completeness":"complete","data":data,"notices":[],"diagnostic":null})).unwrap();
-            catalog.observe(&args,&observation);
-        }
-        assert_eq!(catalog.items.len(),100);
-        let mut request:ContextSearch=decode(call.arguments).unwrap();request.limit=1;
-        let first=catalog.search(&owner.instance,request.clone()).unwrap();assert_eq!(first.items.len(),1);
-        request.after=first.next;let next=catalog.search(&owner.instance,request.clone()).unwrap();assert_ne!(first.items[0].reference,next.items[0].reference);
-        request.window=WindowId::new("other").unwrap();assert!(catalog.search(&owner.instance,request).is_err());
     }
 }

@@ -143,7 +143,28 @@ fn r_status(value: Value, r: &ProviderBinding) -> Result<Value, String> {
         json!({"state":value["state"],"session_id":value["session_id"],"queue_target":value["queue_target"],"checkpoint_available":value["checkpoint_available"]}),
     )
 }
+fn inspection_capability(name: &str) -> Option<&'static str> {
+    match name {
+        "r_list_objects" => Some("r.list_objects"),
+        "r_observe_object" => Some("r.observe_object"),
+        "r_read_object" => Some("r.read_object"),
+        _ => None,
+    }
+}
+fn inspected(value: Value, r: &ProviderBinding) -> Result<Value, String> {
+    if value["session_id"].as_str() != r.target.as_deref()
+        || !matches!(value["status"].as_str(), Some("ready" | "busy" | "unavailable"))
+    {
+        return Err("The object observation differs from the captured R session".into());
+    }
+    // Keep native completeness, continuation, busy state and diagnostics intact.
+    Ok(value)
+}
 impl RunPort {
+    fn can_inspect(&self, id: &str) -> bool {
+        self.metadata.grants.iter().any(|grant|
+            grant.capability == key(id, 1) && grant.scopes.contains("workspace.read"))
+    }
     pub(crate) fn new(
         metadata: Arc<Metadata>,
         stored: &StoredComponentRun,
@@ -195,7 +216,7 @@ impl RunPort {
             )
         })?;
         Ok(format!(
-            "{captured}\nSelected native R session (observation only; never authority): {value}"
+            "{captured}\nSelected native R session (observation only; never authority): {value}\nFor questions about the workspace or its objects, use the supplied read tools to inspect the current workspace. Do not ask the user to paste information that an available tool can read. Object names are not evidence of their contents; use bounded observation and read tools as needed."
         ))
     }
     pub(crate) fn specs(&self, run: &ComponentAgentRun) -> Vec<ComponentToolSpec> {
@@ -203,6 +224,19 @@ impl RunPort {
             return vec![];
         }
         let mut tools = vec![ComponentToolSpec { name:"r_session".into(), description:"Observe the original selected R session. Never starts a runtime or answers native input.".into(), parameters:json!({"type":"object","additionalProperties":false,"properties":{},"required":[]}) }];
+        for (name, description, properties, required) in [
+            ("r_list_objects", "List current R objects with bounded metadata. Use returned directory_ref and next_offset for subsequent pages; preserve partial/busy results.",
+                json!({"name_contains":{"type":"string"},"directory_ref":{"type":"string"},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":50}}), json!([])),
+            ("r_observe_object", "Observe one exact R object by name to get its native reference and metadata. Does not evaluate print, summary, promises or active bindings.",
+                json!({"name":{"type":"string","minLength":1}}), json!(["name"])),
+            ("r_read_object", "Read a bounded page from a returned native object_ref. Never invent references. Refresh expired references with r_observe_object; preserve busy/partial results.",
+                json!({"object_ref":{"type":"string","minLength":1},"kind":{"type":"string","enum":["structure","values","children","table","text","levels","names"]},"start":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":50},"column_start":{"type":"integer","minimum":1},"column_limit":{"type":"integer","minimum":1,"maximum":10}}), json!(["object_ref","kind"])),
+        ] {
+            if self.can_inspect(inspection_capability(name).unwrap()) {
+                tools.push(ComponentToolSpec { name: name.into(), description: description.into(),
+                    parameters: json!({"type":"object","additionalProperties":false,"properties":properties,"required":required}) });
+            }
+        }
         if run.request.grant.mode == ComponentAgentMode::Run {
             tools.push(ComponentToolSpec { name:"r_execute".into(), description:"Execute R code in the user's originally selected R session. Provider and session are fixed outside these arguments. Inspect the native result; a request or model response does not prove scientific success.".into(), parameters:json!({"type":"object","additionalProperties":false,"properties":{"code":{"type":"string","minLength":1,"maxLength":32768}},"required":["code"]}) });
         }
@@ -304,6 +338,19 @@ impl AgentModelPort for RunPort {
                         binding,
                         arguments: json!({}),
                         preconditions: Value::Null,
+                    }))
+                }
+                name if inspection_capability(name).is_some() => {
+                    let id = inspection_capability(name).unwrap();
+                    if !self.can_inspect(id) { return Err(invalid("This task lacks the selected object read grant")); }
+                    let mut input = arguments.as_object().cloned().ok_or_else(|| invalid("Object read arguments must be an object"))?;
+                    if input.contains_key("expected_session") { return Err(invalid("Object reads cannot override the captured R session")); }
+                    input.insert("expected_session".into(), json!(r.target));
+                    if id != "r.observe_object" { input.entry("limit").or_insert(json!(20)); }
+                    if id == "r.read_object" { input.entry("column_limit").or_insert(json!(5)); }
+                    let mut binding = r; binding.capability = key(id, 1);
+                    Ok(ComponentToolAction::PluginQuery(PluginRequest {
+                        binding, arguments: Value::Object(input), preconditions: Value::Null,
                     }))
                 }
                 "r_execute" => {
@@ -533,13 +580,17 @@ async fn dispatch(
         }
         result
     } else {
-        if value["status"] != "ready" || value["completeness"] != "complete" {
+        if value["status"] != "ready" || !matches!(value["completeness"].as_str(), Some("complete" | "partial" | "unavailable"))
+            || request.binding.capability.id.as_str() == "r.session" && value["completeness"] != "complete"
+        {
             return Err("Original R observation is incomplete".into());
         }
-        r_status(
-            value["data"].clone(),
-            origin.r.as_ref().ok_or("Original R target is missing")?,
-        )?
+        let r = origin.r.as_ref().ok_or("Original R target is missing")?;
+        if request.binding.capability.id.as_str() == "r.session" {
+            r_status(value["data"].clone(), r)?
+        } else {
+            inspected(value["data"].clone(), r)?
+        }
     };
     metadata
         .owner

@@ -83,6 +83,21 @@ capture after reopen. Context adds no scientific/tool authority. Text history an
 Continue preserve provenance without automatically resending prior pixels. See
 `docs/STATUS.md` for actual Host/browser evidence and outstanding flows.
 
+Typing `@` at a word boundary opens the existing source picker without changing
+the message; IME composition and literal email addresses keep their normal input.
+The picker advances through at most twelve empty source pages per search and keeps
+the next cursor visible, retaining notices from skipped pages. Updated Files and R
+owners discover current project text files and workspace objects, including items
+not previously opened; previews retain their exact file/object identity.
+
+New Rho tool selections default to read-only observation of the configured R
+provider. A saved explicit opt-out is retained. Starter offers need not already
+name a native session: each new Send observes and pins the existing session before
+admission, while Continue retains its original capture. No query starts R. With
+the corresponding inherited read grants, Rho can list, observe and page through
+objects directly. Execution remains a separate tool choice; file/document tools
+are not yet connected to Rho's model driver.
+
 Send can explicitly select up to 16 Query/Operation tools. Provider targets retain
 an exact ordinary-plugin binding and immutable public manifest; Host targets retain
 the project and exact native capability inspected through `host.core_contract`.

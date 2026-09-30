@@ -57,10 +57,13 @@ pub(super) fn authorize(
         return Err(denied());
     }
     if !mutation {
-        if b.capability.id.as_str() != "r.session"
-            || b.capability.version != 1
-            || request.arguments != serde_json::json!({})
-        {
+        let permitted = match b.capability.id.as_str() {
+            "r.session" => request.arguments == serde_json::json!({}),
+            "r.list_objects" | "r.observe_object" | "r.read_object" =>
+                request.arguments["expected_session"].as_str() == r.target.as_deref(),
+            _ => false,
+        };
+        if b.capability.version != 1 || !permitted {
             return Err(denied());
         }
     } else {

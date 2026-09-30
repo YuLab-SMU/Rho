@@ -12,7 +12,12 @@ session, share execution's queue and original-result retention, and never evalua
 the supplied text or save it to a project file. Oversized inline values remain
 available in the complete retained report; Editor application is a separate action.
 
-The R owner also declares ordinary `help` and `viewer` context contributions:
+The R owner also declares ordinary scientific context contributions:
+
+- Objects searches the current native session in bounded pages, then captures each
+  result’s exact object handle. It includes objects not previously opened. Search
+  never starts R or evaluates a binding. Busy/expired/unavailable observations stay
+  visible; preview and Send still recheck the selected original handle.
 
 - Help searches a bounded index of the last 100 observed topic identities. Open a
   topic in Help first. Preview rereads text from its exact native session, package

@@ -69,7 +69,7 @@
     },
     {
       "id": "objects",
-      "title": "Observed objects",
+      "title": "Workspace objects",
       "search": {
         "id": "r.context.objects.search",
         "version": 1
@@ -9391,7 +9391,7 @@
     },
     {
       "kind": "query",
-      "description": "Search up to 100 previously opened object observations. Preview rechecks the exact native handle, session and structural path; never starts R, evaluates a binding or observes a replacement. Includes bounded metadata and recognition sample, not the whole object.",
+      "description": "Browse current workspace objects in bounded pages and capture native handles. Preview rechecks the exact selected handle, session and structural path; never starts R, evaluates a binding or replaces a selected source. Includes bounded metadata and recognition sample, not the whole object.",
       "required_scopes": [
         "workspace.read"
       ],
@@ -9547,7 +9547,7 @@
     },
     {
       "kind": "query",
-      "description": "Search up to 100 previously opened object observations. Preview rechecks the exact native handle, session and structural path; never starts R, evaluates a binding or observes a replacement. Includes bounded metadata and recognition sample, not the whole object.",
+      "description": "Browse current workspace objects in bounded pages and capture native handles. Preview rechecks the exact selected handle, session and structural path; never starts R, evaluates a binding or replaces a selected source. Includes bounded metadata and recognition sample, not the whole object.",
       "required_scopes": [
         "workspace.read"
       ],

@@ -30,7 +30,7 @@ fn capability(id: &str, input: Value, output: Value, example: Value) -> Capabili
             "files.read_text" => "Read file lines", "files.search_text" => "Search file contents",
             "files.list_directory" => "List a directory", "files.search_files" => "Find files",
             "files.storage_status" => "Observe project disk capacity",
-            "files.context.search" => "Previously read project files", "files.context.preview" => "Preview the original file", _ => unreachable!(),
+            "files.context.search" => "Current project text files", "files.context.preview" => "Preview the original file", _ => unreachable!(),
         }.into(), description: if operation { "Apply one native project patch using explicit file/Git preconditions; preserve uncertain effects and original settlement. Does not commit Git." } else { "Bounded Files observation in this exact project/provider. Does not start a scientific runtime or install software." }.into(),
         input_schema: input, examples: vec![example], output_schema: output,
         recovery_schema: if operation { schema_for!(ProjectPatchRecovery).to_value() } else { json!({"type":"null"}) },
@@ -165,7 +165,7 @@ pub fn manifest() -> PluginManifest {
             configuration_schema: schema_for!(FilesViewConfiguration).to_value(),
             resource_kinds: Default::default(),
         }],
-        contexts: vec![ContextContribution {id:ContributionId::new("files").unwrap(),title:"Previously read text files".into(),search:CapabilityKey{id:ContributionId::new("files.context.search").unwrap(),version:1},preview:CapabilityKey{id:ContributionId::new("files.context.preview").unwrap(),version:1}}],
+        contexts: vec![ContextContribution {id:ContributionId::new("files").unwrap(),title:"Project files".into(),search:CapabilityKey{id:ContributionId::new("files.context.search").unwrap(),version:1},preview:CapabilityKey{id:ContributionId::new("files.context.preview").unwrap(),version:1}}],
         backend: Some(BackendEntrypoint {
             executable: PackagePath::new("dist/rho-files-backend").unwrap(),
             arguments: vec![],

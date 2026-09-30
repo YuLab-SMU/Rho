@@ -100,7 +100,6 @@ struct Accepted {
 }
 pub struct Owner {
     root: String,
-    context_catalog: Mutex<context::Catalog>,
     runtime: OnceLock<GitProject>,
     paths: OnceLock<WorkspacePaths>,
     lane: Arc<tokio::sync::Mutex<()>>,
@@ -118,7 +117,6 @@ impl Owner {
         }
         Ok(Self {
             root: environment.project_root,
-            context_catalog: Mutex::new(context::Catalog::default()),
             runtime: OnceLock::new(),
             paths: OnceLock::new(),
             lane: Arc::new(tokio::sync::Mutex::new(())),
@@ -300,7 +298,6 @@ impl Owner {
                 let args = decode(&call.arguments)?;
                 validate_read(&args).map_err(Failure::text)?;
                 { let page = runtime.read_text(&args).await.map_err(Failure::text)?;
-                self.context_catalog.lock().unwrap().observe(call.principal.as_str(), &page);
                 encode(page)? }
             }
             "files.search_text" => {

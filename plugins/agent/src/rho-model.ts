@@ -34,10 +34,14 @@ export class RhoModel {
   constructor(private client: Client, private owner: NativeAgentModel, private changed = () => {}) {
     const configured = (client.view.configuration as { tools?: AgentNativeToolSelection[] } | null)?.tools ?? [];
     this.tools = structuredClone(configured.filter(tool => tool.target.type === 'provider' &&
-      tool.target.binding.project === client.view.project && !!tool.target.binding.target &&
+      tool.target.binding.project === client.view.project &&
       (tool.target.binding.capability.id === 'r.execute' && tool.target.binding.capability.version === 2 ||
        tool.target.binding.capability.id === 'r.session' && tool.target.binding.capability.version === 1)));
     this.state = owner.state.rho ??= { selected: null, drafts: {}, pending: [] };
+    // Observe the configured workspace by default. A saved explicit opt-out is
+    // retained, and execution remains a separate choice in the existing menu.
+    if (this.state.tool === undefined) this.state.tool = structuredClone(this.tools.find(tool =>
+      tool.target.type === 'provider' && tool.target.binding.capability.id === 'r.session') ?? null);
     this.selection(this.state.tool ?? null);
     for (const pending of this.uploads) {
       validateUpload(pending.upload);
@@ -60,6 +64,18 @@ export class RhoModel {
   }
   async selectTool(tool: AgentNativeToolSelection | null) {
     this.live(); this.selection(tool); this.state.tool = structuredClone(tool); await this.save(); this.notify();
+  }
+  private async resolveSession(selected: { r: ProviderBinding | null; mode: 'run' | 'explain' }) {
+    if (!selected.r || selected.r.target) return selected;
+    const binding = { ...selected.r, capability: { id: 'r.session', version: 1 } };
+    const observed = await this.client.query<{ status: string; data?: { session_id?: string | null } }>(binding.capability,
+      json({ binding, arguments: {}, preconditions: null }));
+    this.live();
+    if (observed.status !== 'ready' || !observed.data) throw Error('The configured R workspace is unavailable. Your draft is retained.');
+    const session = observed.data.session_id;
+    if (session == null && selected.mode === 'explain') return { r: null, mode: selected.mode };
+    if (typeof session !== 'string' || !session) throw Error('Start R in Console before asking Rho to run code. Your draft is retained.');
+    return { ...selected, r: { ...selected.r, target: session } };
   }
   private live() { if (this.stopped) throw Error('The Agent view is closed. Original Rho records are retained.'); }
   private notify() { if (!this.stopped) this.changed(); }
@@ -213,7 +229,7 @@ export class RhoModel {
         throw Error('Confirm the saved draft and original task state before sending.');
       const revision = local.revision, content = structuredClone(local.content);
       let continuation: ComponentAgentRun['request']['continuation'];
-      let { r, mode } = selected;
+      let { r, mode } = continueRun ? selected : await this.resolveSession(selected);
       if (continueRun) {
         const previous = await this.read<ComponentAgentRun>('agent.model.run.get', { run_id: continueRun });
         if (previous.run_id !== continueRun || previous.request.conversation_id !== task || rhoBusy(previous.state) || !previous.recovery || previous.recovery.unresolved_mutations)
@@ -223,9 +239,10 @@ export class RhoModel {
         if (!same(admission.binding, this.binding('agent.model.run')) || previous.request.grant.mode === 'run' && !admission.r)
           throw Error('The original task has a different native admission.');
         continuation = { run_id: continueRun, recovery_digest: previous.recovery.digest }; r = admission.r; mode = previous.request.grant.mode as 'run' | 'explain';
-        const current = this.state.drafts[task];
-        if (!current || current.revision !== revision || current.dirty || current.conflict || !same(current.content, content) || this.conversations.get(task)?.version !== conversation.version) throw Error('The draft changed while preparing Continue. Your input is retained.');
       }
+      const current = this.state.drafts[task];
+      if (!current || current.revision !== revision || current.dirty || current.conflict || !same(current.content, content) || this.conversations.get(task)?.version !== conversation.version)
+        throw Error('The draft changed while preparing this message. Your input is retained.');
       const request = crypto.randomUUID();
       await this.issue('run', task, { request_id: request, conversation_id: task, conversation_version: conversation.version,
         model_settings_version: this.settings.version, text: content.text, assets: content.assets.length ? content.assets : undefined, sources: content.context, continuation, r, mode }, revision, request);

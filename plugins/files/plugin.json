@@ -330,7 +330,7 @@
         "version": 1
       },
       "kind": "query",
-      "title": "Previously read project files",
+      "title": "Current project text files",
       "description": "Bounded Files observation in this exact project/provider. Does not start a scientific runtime or install software.",
       "input_schema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2806,7 +2806,7 @@
   "contexts": [
     {
       "id": "files",
-      "title": "Previously read text files",
+      "title": "Project files",
       "search": {
         "id": "files.context.search",
         "version": 1

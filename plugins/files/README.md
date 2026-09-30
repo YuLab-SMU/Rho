@@ -86,7 +86,11 @@ text before opening an active ordinary Agent view. Explicitly add it to an edita
 task and Send there. The reference retains path, content digest, native identity,
 size and encoding; subsequent changes cannot replace it silently. Text is limited
 to 16 KiB including its source header; use file information for larger files.
-The context picker lists up to 100 previously read text files for the caller.
+The context picker discovers current project text files in bounded pages, including
+files that have not been opened. Discovery selects up to 20 entries and 8 MiB of
+reported file sizes per page. Hidden files are excluded. Native containment and
+protected paths still apply; unsupported files are reported. Each result captures
+its current digest and native identity before preview; changed bytes are refused.
 Lost view-opening requests remain recoverable without reopening a fresh request.
 Viewing does not execute a script, start R or modify files.
 

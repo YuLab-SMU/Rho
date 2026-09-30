@@ -260,18 +260,17 @@ async fn file_context_pins_native_identity_and_preserves_bounded_original_text()
 }
 
 #[tokio::test]
-async fn file_context_catalog_is_bounded_scoped_and_does_not_read_unselected_paths() {
+async fn file_context_discovery_is_bounded_and_continuations_are_caller_scoped() {
     let (_temp,owner,root)=fixture();
     let args=json!({"window":"one","text":"","after":null,"limit":1});
     assert_eq!(owner.query(&call("files.context.search",args.clone(),&root,None)).await.unwrap().0["items"],json!([]));
     for i in 0..102 {
         let path=format!("file-{i:03}.R");fs::write(format!("{root}/{path}"),"x").unwrap();
-        owner.query(&call("files.read_text",json!({"path":path}),&root,None)).await.unwrap();
     }
     let first=owner.query(&call("files.context.search",args.clone(),&root,None)).await.unwrap().0;
-    assert_eq!(first["items"][0]["reference"]["selector"]["path"],"file-002.R");
+    assert_eq!(first["items"][0]["reference"]["selector"]["path"],"file-000.R");
     let mut foreign=call("files.context.search",args.clone(),&root,None);foreign.principal=PrincipalId::new("other").unwrap();
-    assert_eq!(owner.query(&foreign).await.unwrap().0["items"],json!([]));
+    assert_eq!(owner.query(&foreign).await.unwrap().0["items"][0]["reference"]["selector"]["path"],"file-000.R");
     foreign.arguments["after"]=first["next"].clone();assert!(owner.query(&foreign).await.is_err());
     let mut escaped=first["items"][0]["reference"].clone();escaped["selector"]["path"]=json!("../secret");
     assert!(owner.query(&call("files.context.preview",json!({"reference":escaped,"inclusion":{"kind":"metadata"},"max_bytes":16384}),&root,None)).await.is_err());

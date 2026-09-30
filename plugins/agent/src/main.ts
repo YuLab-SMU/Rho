@@ -353,6 +353,10 @@ message.addEventListener('compositionend', () => { composing = false; compositio
 message.addEventListener('input', changedText);
 message.addEventListener('keydown', event => {
   if (event.isComposing || event.keyCode === 229 || composing) return;
+  if (event.key === '@' && message.selectionStart === message.selectionEnd &&
+      (message.selectionStart === 0 || /\s/.test(message.value[message.selectionStart - 1])) && context?.openPicker()) {
+    event.preventDefault(); return;
+  }
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault(); if (performance.now() - compositionEnded < 100) return;
     const id = rhoSelected() ?? selected(); if (id && !get<HTMLButtonElement>('send').disabled && !get('send').hidden) action(() => rhoSelected() ? rho.send(id) : model.send(id));

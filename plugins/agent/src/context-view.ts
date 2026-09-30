@@ -58,7 +58,9 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
     get('context-items').replaceChildren(); get('context-more-items').hidden = true;
   }
   function renderSources() {
-    sourceSelect.replaceChildren(...picker.sources.map((value, index) => new Option(`${value.title} · ${value.provider.instance}`, String(index))));
+    sourceSelect.replaceChildren(...picker.sources.map((value, index) => new Option(
+      picker.sources.filter(other => other.title === value.title).length > 1
+        ? `${value.title} · ${value.provider.instance}` : value.title, String(index))));
     get('context-more-sources').hidden = !picker.nextInstances;
     get('context-source-note').textContent = [...picker.notices, ...(!picker.sources.length ? ['No active context sources are available.'] : [])].join('\n');
   }
@@ -70,12 +72,21 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
   async function search(current: () => boolean, more = false) {
     if (!source) return;
     if (!more) { items = []; next = null; cursors.clear(); text = get<HTMLInputElement>('context-search').value; item = null; clearPreview(); }
-    const page = await picker.search(source, text, more ? next : null);
+    // A native journal page can contain unrelated operations. Advance through a
+    // bounded batch before presenting an empty picker; keep its continuation.
+    let page = await picker.search(source, text, more ? next : null);
+    const notices = new Set(page.notices);
+    for (let read = 1; current(); read++) {
+      if (page.next !== null) { const cursor = JSON.stringify(page.next); if (cursors.has(cursor)) throw Error('This source repeated an earlier page.'); cursors.add(cursor); }
+      if (page.items.length || page.next === null || read === 12) break;
+      page = await picker.search(source, text, page.next);
+      for (const notice of page.notices) notices.add(notice);
+    }
     if (!current()) return;
-    if (page.next !== null) { const cursor = JSON.stringify(page.next); if (cursors.has(cursor)) throw Error('This source repeated an earlier page.'); cursors.add(cursor); }
     next = page.next;
     items = [...items, ...page.items.filter(value => !items.some(old => same(old.reference, value.reference)))];
-    get('context-search-note').textContent = [...page.notices, ...(!items.length ? ['No matching items.'] : [])].join('\n');
+    get('context-search-note').textContent = [...notices, ...(!items.length ? [next === null
+      ? 'No matching items.' : 'No matches in this batch. More items are available below.'] : [])].join('\n');
     get('context-items').replaceChildren();
     for (const value of items) {
       const button = document.createElement('button'), title = document.createElement('strong'), description = document.createElement('small');
@@ -106,7 +117,11 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
       }
     });
   }
-  get('choose-context').onclick = () => { if (task && editable && !blocked && !busy) open(); };
+  function openPicker() {
+    if (!task || !editable || blocked || busy || dialog.open) return false;
+    open(); return true;
+  }
+  get('choose-context').onclick = openPicker;
   sourceSelect.onchange = () => { const selected = picker.sources[Number(sourceSelect.value)]; if (selected) { setSource(selected); run(current => search(current)); } };
   inclusionSelect.onchange = () => { inclusion = source?.inclusions[Number(inclusionSelect.value)]?.value ?? null; run(readPreview); };
   get('context-search-button').onclick = () => run(current => search(current));
@@ -130,6 +145,7 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
   get('context-close').onclick = () => dialog.close();
   dialog.addEventListener('close', () => { epoch++; busy = false; clearPreview(); });
   return {
+    openPicker,
     inspectSelection(selection: AgentContextSelection) { open(selection); },
     inspectOriginal(originalTask: string, request: string, kind: 'native' | 'rho' = 'native') {
       inspecting = true; target = originalTask; clearPreview();

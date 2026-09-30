@@ -19,7 +19,13 @@ session instead of trusting an ended persisted session; exact object detail and
 pending-action identities remain pinned. Connection errors no longer look like
 continuous object loading. Independent package builds (including TypeScript) and
 plugin boundaries pass; no automated tests were run for these preview fixes.
-Versioned view updates recovered 22 objects and Packages without restarting R; permanent packages await application.
+Versioned view updates recovered 22 objects and Packages without restarting R; packages await application.
+Agent fixes add the `@` picker trigger and bounded continuation through empty source
+pages, discover current project text files/R objects, and resolve the configured
+R session at Send. Rho defaults to read-only R observation and can list/observe/read
+objects under inherited grants; Continue retains its original native session.
+File/document model tools remain open. Agent/Files/R package builds and five-archive
+validation pass; updates await application. Browser/model checks remain unrun.
 
 The unified-plugin plan was authorized on 2026-09-23; PS01–PS07 are approved
 ([Design 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved)).
@@ -27,24 +33,18 @@ All sixteen ordinary packages exist. Fixed scientific/Agent composition, private
 frontend/HTTP flows, Application/Skill handlers, retired owner/adapter packages
 and legacy shared-port DTOs are removed. CLI, HTTP and MCP use the generic Host.
 The declared scientific-operation slice now passes through a real Files provider.
-The annotation view has cross-component entry, source-specific anchors, note
-counts, versioned notes, image marks and explicit Agent draft inclusion. Eight
+The annotation view has cross-component entry, anchors, counts, versions, image marks and Agent draft inclusion. Eight
 source entries and the Files selected-text and live Viewer image flows pass the
 focused M4 round, including save, draft inclusion, refresh and changed sources.
 The updated bundle and imported Studio/Files flows pass. Of 33 real-model attempts,
 12 pass, 3 Plots cases provide partial metadata evidence and 18 lack document tools.
 The image diagnostic fails. Actual macOS Chinese input passes in Annotations.
 
-The development bundle includes `5a5ecc4d` Studio data-source/custom-component
-forms, synchronized references, shared Undo, draft recovery and conflict protection.
-Models and two browser flows passed; normal/wide/390/220px captures were inspected.
-Evidence: `definition-editor-results.json`, `visual-runtime-results.json`.
+Studio forms, synchronized references, Undo and recovery (`5a5ecc4d`) passed model/browser and multi-width inspection: `definition-editor-results.json`, `visual-runtime-results.json`.
 
-The public SDK now offers bounded snapshot polling and strict original-operation
-inspection. A separate ordinary UI package observes actual Files text, performs
-one explicit patch, and recovers the original Operation after a simulated lost
-acknowledgement, reload and replacement view. The original provider, target,
-arguments and native file effect remain fixed; polling stops on disposal. Files
+The public SDK offers bounded polling and original-operation inspection. A UI fixture
+reads Files text, patches once and recovers after lost acknowledgement/reload/view
+replacement with fixed provider, target, arguments and effect; polling stops on disposal. Files
 preflight fills an omitted target with the project root, so the fixture now
 captures `workspace.paths` and records that exact target before dispatch. The
 earlier strict-verification failure remains in `visual-science-native.log`;
@@ -129,7 +129,7 @@ at normal and constrained widths. Native/Rho coverage differs by source; do not
 infer every provider/mode combination from one passing flow. Evidence:
 `component-senders-results.json`, `editor-agent-input-results.json`,
 `object-context-results.json`, `plots-links-results.json`, `console-context-results.json`,
-`packages-context-results.json`, `files-context-results.json`.
+`packages-context-results.json`, `files-context-results.json`, `../preview-agent-fix/cache-recovery.json`.
 
 Native Agent through real Process, local Environment/pak and loopback OpenSSH
 passes original-effect/retry/restart checks with retained packages/core in
@@ -255,7 +255,7 @@ packages. Evidence: `final-delivery-contents-results.json`.
   existing process/log and distinguish build, startup and test body. Do not clear
   caches, duplicate Cargo work or restart user Hosts to mask a stall.
   Evidence: `development-optimization-results.json`, `annotation-output-results.json`,
-  `files-context-results.json`.
+  `files-context-results.json`, `../preview-agent-fix/cache-recovery.json`.
 - Current generic-window pointer/docking/focus and normal/wide/narrow captures pass.
   Older standalone frame pointer-routing failure remains separate. Earlier IME
   attempts were inconclusive. Current native-key input verifies Annotations on
