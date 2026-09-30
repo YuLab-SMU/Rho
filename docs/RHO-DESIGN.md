@@ -1096,18 +1096,18 @@ design date; referenced private frontend files have since been retired in M6.
 Current implementation and evidence are recorded in Status.
 
 The important distinction is between management foundations and a multiple-runtime
-product. Host currently composes one live R Workspace per selected project.
-Several Console views share it. Several native Agent tasks have independent Agent
-sessions, but this does not create independent R sessions.
+product. R instances now belong to ordinary plugins and Console views select an
+explicit provider. Independent native Agent tasks do not themselves create R
+sessions. Status records which combinations have actual acceptance evidence.
 
 | Area | Existing implementation | Interaction consequence |
 | --- | --- | --- |
-| Hosting and R selection | `crates/host/src/config.rs`, `crates/workbench/src/settings.rs`: installed R/Ark probing, project lease, selected Host replacement and startup failure reporting | Separate configuration from inspecting a running session; do not present an instance list as an existing capability |
-| R execution | `crates/workspace/src/console.rs`, `ui/src/console.ts`, `ui/src/operations.ts`: shared serial queue, pause/resume, pending cancellation, active interruption, stdin and retained request identities | Present current work and waiting work independently, with actions that name their scope |
-| Native observation | `crates/adapters/r-runtime/src/lib.rs`, `ui/src/session.ts`: starting/idle/busy/unavailable, session identity, observation time, Ark/R process memory and CPU | Separate Host connectivity, R state and observation freshness; these metrics are not total project or child-process usage |
-| Dependency environments | `crates/environment`, `crates/host/src/environment.rs`: pak/renv planning, isolated realization, verification, reconciliation and reference-aware quarantine/restore/purge; verified realization can bind a new R launch | Environment management needs its own future workflow; it is not the live Packages inventory and does not imply switching the current library in place |
-| Processes and remote jobs | `crates/execution`, Host registration: local process supervision/reconciliation and conditionally configured SSH/Slurm execution, job observations and cancellation | Remote jobs have their own lifetimes. Successful submission is not job completion; an SSH transport is not a remote interactive R Workspace |
-| Durable results and recovery | `crates/operation`, `ui/src/operations.ts`: original operation identities, immutable outcomes, reconciliation and retained unconfirmed requests | Show readable results and original evidence; an unconfirmed outcome must not become an automatic new submission |
+| Hosting and R selection | `crates/host/src/config.rs`, `plugins/manager`, `plugins/r/backend`: generic project lease/Host replacement and explicit provider configuration/startup | Separate configuration and instance lifecycle from inspecting or starting a native R session |
+| R execution | `plugins/r/backend`, `plugins/console`: shared serial queue, pause/resume, pending cancellation, active interruption, stdin and retained request identities | Present current work and waiting work independently, with actions that name their scope |
+| Native observation | `plugins/r/backend/engine`, `plugins/r/backend`: starting/idle/busy/unavailable, session identity, observation time, Ark/R process memory and CPU | Separate Host connectivity, R state and observation freshness; these metrics are not total project or child-process usage |
+| Dependency environments | `plugins/environment/backend`: pak/renv planning, isolated realization, verification, reconciliation and reference-aware quarantine/restore/purge; verified realization can bind a new R launch | Environment management needs its own future workflow; it is not the live Packages inventory and does not imply switching the current library in place |
+| Processes and remote jobs | `plugins/process/backend`, `plugins/remote/backend`: local process supervision/reconciliation and conditionally configured SSH/Slurm execution, job observations and cancellation | Remote jobs have their own lifetimes. Successful submission is not job completion; an SSH transport is not a remote interactive R Workspace |
+| Durable results and recovery | `crates/operation`, ordinary provider result views: original operation identities, immutable outcomes, reconciliation and retained unconfirmed requests | Show readable results and original evidence; an unconfirmed outcome must not become an automatic new submission |
 
 The committed Shell at investigation start (`b391d93`) routed both Local R and
 Environment to the same settings dialog, showed routine metrics in the footer and

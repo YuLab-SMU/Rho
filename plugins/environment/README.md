@@ -96,10 +96,8 @@ protection of unpublished captures, lost disposal confirmation and explicit
 completion with original records preserved, and retirement before
 material quarantine, restore and purge.
 
-The retiring `rho-r-environment` adapter delegates to the same native owner.
-`node scripts/test-environment.mjs` covers that real-R bridge, including live-library
-retention and legacy Host restart binding. These old composition paths are still
-being migrated; this package is not yet a complete replacement for all Environment
-behavior. Unresolved recovery controls and captures without confirmed disposal
-remain retained.
-Successful and uncertain source material stays retained.
+The fixed Host adapter and its `test-environment.mjs` runner are retired. Current
+native integration uses the ordinary Environment/R/Agent suites above and retained
+packages. Unresolved recovery controls and captures without confirmed disposal
+remain retained. Retired fixed-composition tests do not count as current package
+acceptance; see the repository Status page for verified behavior and limits.

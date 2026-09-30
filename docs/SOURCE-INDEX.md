@@ -404,8 +404,6 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `scripts/test-environment-plugin.mjs`, `sdk/**`.
 - `plugins.environment-types` (L1): `["node","scripts/test-environment-plugin-types.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `scripts/test-environment-plugin-types.mjs`, `sdk/**`.
-- `plugins.environment-visibility` (L1): `["cargo","test","-p","rho-environment","visibility","--locked"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/environment/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `sdk/**`.
 - `plugins.external-backend` (L2): `["node","scripts/test-plugin-backend.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `scripts/test-plugin-backend.mjs`, `sdk/**`, `ui/src/**`.
 - `plugins.files-agent-host` (L2): `["node","scripts/test-files-agent.mjs"]`
@@ -528,8 +526,6 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/remote/**`, `plugins/remote/generate-sdk.mjs`, `rust-toolchain.toml`, `scripts/build-remote-plugin.mjs`, `sdk/**`.
 - `plugins.remote-public-types` (L1): `["node","scripts/test-remote-plugin-types.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/remote/**`, `rust-toolchain.toml`, `scripts/build-remote-plugin.mjs`, `scripts/test-remote-plugin-types.mjs`, `sdk/**`.
-- `plugins.remote-visibility` (L1): `["cargo","test","-p","rho-execution","slurm","--locked"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/execution/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/remote/**`, `rust-toolchain.toml`, `scripts/build-remote-plugin.mjs`, `sdk/**`.
 - `plugins.repository` (L1): `["cargo","test","-p","rho-plugins","--locked"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `rust-toolchain.toml`, `sdk/**`.
 - `plugins.resource-download-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-resource-download.spec.ts","plugin-archive-download.spec.ts"]`

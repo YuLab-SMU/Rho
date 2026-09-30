@@ -70,8 +70,8 @@ scientific owner. All CLI, session, MCP and Workbench writer entries use this
 path; `--plugins-only` is an explicit spelling of the default. Workbench opens the generic window, skips saved/discovered R settings and
 does not fall back to scientific composition if opening fails. Packages remain
 inactive until explicitly selected. This path is the foundation for disposable
-backend-test projects. Legacy scientific contract dependencies and unused adapter
-crates remain pending cleanup, without a fixed runtime composition.
+backend-test projects. Legacy scientific contract dependencies remain pending cleanup. Fixed owner/adapter
+crates and their runtime composition are removed.
 
 Explicit backend development tests use `plugins.test_create/test_stop` and bounded
 `plugins.test_project/test_projects` observations. Host owns each fresh canonical
@@ -240,13 +240,10 @@ the contained filesystem, text and Git implementation lives in
 `plugins/files/backend/engine`. Shared native subprocess supervision and its public
 reports live under `plugins/process`. These libraries have no private core imports.
 `plugins/files/backend/owner` interprets bounded path searches, native patch
-preconditions and before/after effects. The retiring project handlers delegate to
-this owner; they retain only their Operation/Query adaptation and original commit
-records. A post-write observation failure remains an explicit possible effect
+preconditions and before/after effects. The ordinary backend returns CommitPlans
+through the public protocol; the core Operation journal commits the original records. A post-write observation failure remains an explicit possible effect
 with its original snapshot and affected paths, never an inferred pre-write failure.
-The retiring Git/process adapters reuse the same implementations while their
-ordinary backend and operation integration are completed. Moving the implementation
-does not relax canonical project roots, protected-path exclusions, symlink checks,
+The fixed Git/process adapters and project handlers are removed. This does not relax canonical project roots, protected-path exclusions, symlink checks,
 bounded reads or native file identity requirements.
 
 The ordinary Process backend uses the public framed RPC, canonical Host project
@@ -320,8 +317,9 @@ adopt a disposed payload; independently adopted copies remain intact.
 Environment data, native pak/renv execution, staged materials and recovery now
 live in `plugins/environment/api` and `backend/owner`, including the R helpers.
 The native library returns possible effects, confirmed cancellation and recovery
-material without committing records. The transitional Host port retains source
-authorization, live-library retention decisions and the core commit mechanism.
+material without committing records. The ordinary backend retains source
+authorization and live-library retention decisions; CommitPlans settle through
+the core Operation gateway.
 An observation of a realization, stage or cleanup requires the original principal
 throughout its source chain; missing and foreign references remain indistinguishable.
 Reading cached native configuration or material never starts R, loads a namespace
@@ -456,9 +454,8 @@ and its R bridge live in `plugins/r/backend/engine`. They depend only on public
 plugin contracts and third-party libraries, not Host or Operation implementation.
 The native owner receives an opaque original Operation identity and returns bounded
 observations, output evidence and recovery material. It never receives a journal
-handle. The existing in-process Host temporarily uses `rho-r-runtime` as a thin
-adapter to this one implementation; this adapter is removed with the old scientific
-composition when the complete RPC path replaces it. The ordinary `rho-r-backend`
+handle. Fixed Host scientific owners and their transitional native adapters have
+been removed; only the ordinary package owns scientific execution. The `rho-r-backend`
 entry now uses the public SDK for explicit session creation, bounded snapshots and
 original-Operation execution. Its own lane freezes native session identity and
 keeps cancellation reception independent of execution. Original reports, bounded
@@ -1066,8 +1063,7 @@ approval override. This is ordinary task interpretation by the executing Agent;
 there is no separate approval model or keyword-based authorization parser.
 
 Deterministic rules in `rho-agent-engine` consume the saved intent, policy and
-owner-classified action. The transitional adapter projects existing admitted
-actions; model arguments cannot supply the classification. Ask reuses
+owner-classified action. The ordinary backend projects admitted actions; model arguments cannot supply the classification. Ask reuses
 explicit task authorization and asks about additional effectful actions. Auto also
 permits its explicit catalog of document create/edit/save and execution in the
 already bound R session; unmatched additional actions need a decision. Full access
@@ -1693,73 +1689,24 @@ uses native job identity and never treats a lost connection as proof of job fail
 
 ## Application context and captured actions
 
-Each Studio window has a resident bridge using existing module commands, independent
-of panel mounts. `application.windows`, `application.context`,
-`application.read_document` and `application.command_status` expose bounded summaries,
-versioned text and original receipts. Commands bind window ID/incarnation, request
-ID and relevant context/document/selection versions. Multiwindow discovery never
-chooses an implicit current window; activation selects a view inside Studio, not
-an operating-system foreground window.
+The fixed Application browser bridge, captured-action execution adapter and Host
+method-binding handlers are removed. Legacy DTOs and storage types still await
+cleanup; their presence does not advertise a callable capability. Generic
+application state remains scoped and versioned. Ordinary Editor/Agent plugins
+own document capture, drafts, context references, handoff and user actions through
+the public plugin contracts. Only the shared Operation gateway commits scientific
+results. Querying saved state does not submit or resume work.
 
-The bridge renews every five seconds; a 15-second lapse makes live observations and
-new commands unavailable. Offline reads require explicit synchronized-history access
-and retain that source label. Commands unclaimed after 30 seconds expire. A new
-window incarnation cannot pick up old pending commands. SQLite persists resource
-changes and command completion in one CAS transaction. Locally applied but unsynced
-and uncertain receipts remain distinct from confirmed application state.
+## Skills and method sources
 
-Save/run capture exact document/selection versions, original text, base hash, path
-and native session. Host retains the original Agent `CallContext` and signs an
-execution association bound to the command, incarnation, capture and step. The
-browser submits that association; it cannot substitute code, path or actor. Project
-and Workspace work enters the existing OperationGateway.
-
-Run File submits its captured code only after a successful save has the capture's
-hash. An unchanged file, including an empty file, can use a Project hash-verification
-receipt without inventing an OperationId. Input typed during save remains dirty.
-After disconnection, accepted scientific work stays Host-owned; an unsubmitted next
-step does not resume automatically. Reconnection inspects receipts and operation
-records. Repeated associations return the original step result without duplicate
-execution. Draft text stays outside scientific history until explicitly saved/run.
-
-## Skills and effective method context
-
-Standard local discovery reads `.agents/skills` from an explicit project-relative
-working directory through its ancestors to the project root, plus
-`~/.agents/skills`. It does not scan arbitrary product directories or introduce a
-Rho-specific Skill package/root. Local packages use standard Agent Skills
-frontmatter; scripts/resources are data during discovery and reads.
-
-The retiring fixed Skill adapter accepts launcher-attested metadata for exact resources.
-Its `--host-skills` CLI entry is removed; this adapter is not registered by generic plugin Hosts. The native adapter reads those packages in place, preserving
-host names, directory differences, optional metadata and enabled/disabled/rejected
-state. A separate trusted byte-source port supports non-filesystem hosts. Attested
-host sources use their native discovery semantics while enforcing bounded YAML and
-resource reads; they are not repaired, renamed or converted to local standards.
-The launcher manifest is Host-private and cannot be modified through project or
-Skill access to change enablement.
-
-Every source-qualified identity remains distinct, including same-name methods.
-Equivalent physical resources retain source relationships; an explicit host denial
-cannot be bypassed through a local alias. Project links stay within the project;
-resources stay within their declared canonical package root and outside private
-data. SHA-256 identities cover the body and each resource. Body/script and source
-identity/enablement changes invalidate affected observations. `skill.list` and `skill.read` disclose
-metadata, manifests and exact byte/text pages progressively. They do not execute
-scripts, install dependencies or grant scopes through `allowed-tools`.
-
-Application metadata holds explicit method choices/exclusions, resource pins,
-module/capability mappings, external Goal/Task/Actor references and native targets.
-It does not copy external scheduling state or modify Skill files. Shared
-`application.bind_method` validates known source/digest/target conditions and
-ancestor exclusions before Application CAS; Host serializes validation with binding
-writes. Actual resource-read receipts remain in the Application store.
-
-`host.resolve_context` reports discoverable methods, explicit bindings, provenance,
-missing capabilities and conflicts. Dependencies absent from machine-readable
-application declarations remain undeclared; prose is not treated as proof of an
-available environment. Method suitability and task continuation belong to the user
-and external Agent. Binding changes cannot rewrite accepted scientific requests.
+The fixed Skills owner/adapter and `--host-skills`, `skill.list`, `skill.read`,
+`application.bind_method` and `host.resolve_context` implementation paths are removed.
+Standard `.agents/skills` sources remain available to native external clients.
+This does not introduce a replacement implicit catalog or a compatibility reader.
+Any future ordinary Skill provider must preserve explicit source authority,
+project/package containment and bounded resource reads; source text cannot grant
+capabilities or widen the caller's scope. Method selection and task planning remain
+with the user or their authorized Agent.
 
 ## Studio modules and information flow
 
@@ -1781,7 +1728,7 @@ project scope for journal visibility, without constructing a Files owner or open
 R/output stores. Internal fixed Host constructors, native scientific registration, runtime-instance
 management and Application/Skill handlers are removed. Scientific execution and
 observation use ordinary provider bindings. Legacy request DTOs are refused pending
-contract cleanup; unused adapter crates and Application storage types also remain.
+contract cleanup; Application storage types also remain.
 
 The workspace owns window identity, saved generic layout, view connections,
 cooperative closure and explicit suspended-instance recovery. Scientific UI,
@@ -1969,17 +1916,16 @@ package inspection.
 | --- | --- |
 | `crates/contract` | Wire identities and DTOs, including generated TypeScript sources |
 | `crates/operation` | Operation and Query gateways, handler/journal ports and commit discipline |
-| `crates/workspace`, `project`, `environment`, `execution` | Scientific owners and native port definitions |
-| `crates/application`, `skills` | Application context/control and method/source ports, separate from scientific execution |
-| `crates/adapters/` | SQLite and package implementations; transitional adapters to package-owned R, Files/Git, local process and SSH/Slurm owners |
+| `crates/application` | Generic application state; legacy context/control types await cleanup |
+| `crates/adapters/sqlite` | Operation journal and generic application persistence; scientific adapters are removed |
 | `plugins/r/api`, `plugins/r/backend` | Public R data/native ports, isolated RPC owner and the sole Ark/R engine |
 | `plugins/files/api`, `plugins/files/backend/engine` | Public filesystem/text/Git contracts and the contained native implementation |
 | `crates/process-engine` | Shared native process supervision for builds and plugins, using public protocol reports |
 | `plugins/process/api`, `plugins/process/backend` | Public local process requests and ordinary RPC backend; `owner` manages canonical launch scope and original-operation native recovery |
 | `plugins/remote/api`, `plugins/remote/backend/owner` | Public remote/Slurm contracts and the sole native SSH/scheduler implementation; caller-owned journal and source authorization remain outside the native library |
 | `plugins/remote/backend` | Ordinary configured Remote RPC provider; scoped original-submission reads, fixed target qualifications, resource evidence and settlement fencing; no independent journal or automatic resubmission |
-| `plugins/environment/api`, `plugins/environment/backend/owner` | Public Environment data and sole native execution, observation, staging and recovery implementation; transitional Host adapter preserves the core operation port |
-| `crates/host` | Concrete composition and runtime configuration |
+| `plugins/environment/api`, `plugins/environment/backend/owner` | Public Environment data and sole native execution, observation, staging and recovery implementation; ordinary backend returns CommitPlans through the public plugin protocol |
+| `crates/host` | Generic plugin/Operation composition, project leases and disposable test Hosts |
 | `plugins/agent/api`, `plugins/agent/backend/client` | Public native Agent observations and bounded Codex app-server / Kimi and DeepSeek ACP clients; no private core imports, scientific handlers or Agent behavior loop |
 | `plugins/agent/backend/owner` | Sole native and component task admission/recovery state machines and repository ports; captured drafts, receipts, generation fences and pure restart observations |
 | `plugins/agent/backend/native` | Native task scheduling, connection limits, event/receipt observation and process recovery through the injected task owner; ephemeral context/endpoint ports only |
@@ -1988,13 +1934,13 @@ package inspection.
 | `crates/cli`, `mcp`, `workbench` | Transport and application entry points |
 | `plugins/r/backend/engine/r/bridge`, `plugins/environment/backend/owner/r` | Native R execution, bounded observation and environment helpers |
 | `ui/src`, `scripts/` | Studio models/views and reproducible development/verification tools |
-| `.agents/skills/` | Standard method packages, read by native clients or the shared Skills owner |
+| `.agents/skills/` | Standard method packages for native external clients |
 
 The Agent transport's `AgentControllerRef` is correlation data supplied after owner
-admission, not a Host window credential. The transitional Host converts its admitted
-Application window identity when opening, sending or rebinding a native connection.
-Public native/task/context DTOs have one owner in `rho-agent-api`; the existing contract
-reexports those types while context providers and component-Agent migration continues.
+admission, not a Host window credential. The ordinary Agent backend validates its
+view/controller identity when opening, sending or rebinding a native connection.
+Public native/task/context DTOs have one owner in `rho-agent-api`; the core contract
+no longer reexports them.
 `rho-agent-owner` owns the native task state machine and repository interface.
 `rho-agent-native` owns its live scheduling, task gates, native connections,
 observation cursors and cleanup. It shares the exact injected owner and its writer

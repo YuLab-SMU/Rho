@@ -304,7 +304,8 @@ now contains only the database path; there is no runtime selector or deferred-R
 startup path. Standalone observation reads the journal without constructing Files
 or native output owners. Fixed scientific Host constructors, native scientific registration, runtime-instance
 management and Host Application/Skill adapters are removed. Obsolete contract DTOs,
-unused adapter crates and Application storage types remain for the next cleanup. Missing plugins cannot select a fixed Workbench fallback. Historical
+Application storage types remain for the next cleanup; the eleven unused fixed
+owner/adapter crates and their dedicated tests have been deleted. Missing plugins cannot select a fixed Workbench fallback. Historical
 fixed-renderer test totals do not count as current plugin acceptance.
 
 ## Testing SOP
@@ -883,8 +884,7 @@ The no-argument script checks the ordinary R engine and shared native helpers; t
 fixed component-source, mutation and MCP parity tests are no longer part of it.
 
 Environment contracts, native execution and R helpers live in
-`plugins/environment/api` and `plugins/environment/backend/owner`. The retiring
-`rho-r-environment` adapter delegates to this owner. Iterate with
+`plugins/environment/api` and `plugins/environment/backend/owner`. The fixed Host adapter has been removed. Iterate with
 `cargo test -p rho-environment-api -p rho-environment-owner --lib --locked`.
 `node scripts/test-environment-plugin-owner.mjs` copies six public/plugin crates
 outside the checkout and runs the focused storage/observation tests without R.
@@ -940,9 +940,9 @@ the shipped R `tests/environment_protocol.py` against that executable for bounde
 and reversed Host replies, lost verification acknowledgement and pending-call EOF.
 That wire check can run directly with `python3 tests/environment_protocol.py
 /absolute/r-package/dist/rho-r-backend`; its fake R/Ark must never be launched.
-`cargo test -p rho-environment visibility --locked` verifies scoped realization,
-retention and cleanup reads through the actual query gateway, including delegated
-principals and denial before native observation.
+The ordinary Environment backend checks validate captured provider/source qualification;
+generic Host delegation tests enforce original caller scope before a reverse query.
+Retired fixed Environment query tests do not count as ordinary-plugin acceptance.
 
 SSH/Slurm contracts and native execution live in `plugins/remote/api` and
 `plugins/remote/backend/owner`. Iterate with `cargo test -p rho-remote-api -p
@@ -952,8 +952,9 @@ checks and exercises fake SSH/Slurm transcripts. The fixed CLI Remote bridge run
 is retired. Ordinary Remote/Agent suites cover exact provider calls, idempotency
 and recovery. Local transcript fixtures do not establish remote-host acceptance. The native owner has no
 journal or automatic replay.
-`cargo test -p rho-execution slurm --locked` verifies that the retiring query
-gateway checks the original principal and read scope before contacting a scheduler.
+The ordinary Remote backend tests reject malformed, foreign and unqualified source
+records before native work. Generic Host delegation tests enforce the original
+principal and read scope before a reverse query.
 
 The ordinary Remote RPC backend is `plugins/remote/backend`. Iterate with
 `cargo test -p rho-remote-backend --lib --locked`. Generate its public declarations
@@ -1097,8 +1098,8 @@ Files/Git native sources now live in `plugins/files/backend/engine`; their publi
 data and provider contracts live in `plugins/files/api`. Shared bounded subprocess
 supervision lives in `crates/process-engine` with public process reports
 in `crates/plugin-protocol`. Search and patch interpretation live in
-`plugins/files/backend/owner`; the retiring adapters and project handlers reuse
-these implementations. Iterate with
+`plugins/files/backend/owner`; fixed adapters and project handlers are removed.
+Iterate with
 `cargo test -p rho-files-engine -p rho-files-owner -p rho-process-engine --lib --tests --locked`.
 For the source boundary, `node scripts/test-files-plugin-engine.mjs` materializes
 those four libraries and the public plugin protocol outside the checkout, and
@@ -1251,7 +1252,7 @@ builds and ordinary SQLite test commands. Agent/annotation forwarding stores and
 Host scientific composition are removed. Plugin-runtime fixtures disable this
 feature when they only need the journal. Check the selected closure with
 `cargo tree -p rho-plugins --edges normal,build,dev --locked --offline`.
-Remaining scientific DTO dependencies and unused adapter crates still require cleanup.
+Remaining scientific DTO dependencies and Application storage types still require cleanup.
 
 Scenario metadata changes use `cargo test -p rho-plugins --test package_repository
 --locked`, `cargo test -p rho-plugin-protocol --test contract --locked` and
@@ -1559,15 +1560,16 @@ third-party product or require its current models to pass an independent evaluat
 
 The R owner source is under `plugins/r/api` and `plugins/r/backend/engine`.
 Iterate with `cargo test -p rho-r-engine --lib --locked`; after changes to its public
-types, also cover the current `rho-contract`, `rho-operation` and `rho-workspace`
-consumers and regenerate client contracts. `node scripts/test-r-plugin-engine.mjs`
+types, cover `rho-r-backend` and any surviving `rho-contract`/`rho-operation`
+consumers and regenerate their public/client contracts. `node scripts/test-r-plugin-engine.mjs`
 constructs a standalone tree outside the checkout and runs the native owner's
 unit tests with no private core source. Add `--real-r` with explicit `RHO_ARK` and
 `RHO_R_HOME` to run its disposable native acceptance. These checks invoke Cargo;
 run them serially with all other Cargo and generation commands. The script keeps
 pinned dependency versions from the existing lock and resolves offline; it does
 not install tools. The existing `node scripts/test-real-r.mjs` suite verifies the
-remaining Host composition against the same relocated native implementation.
+ordinary R engine and shared native helpers; use retained-package browser/Host
+suites for the real plugin composition.
 
 The public plugin contracts live in `crates/plugin-protocol` and generate the
 standalone `sdk/plugin-protocol` TypeScript/schema package through the same

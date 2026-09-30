@@ -185,7 +185,7 @@ YuLab 的实例说明：连接成功之后，仍需观察实际调度器版本�
 
 ## 和现有 Rho 的关系
 
-目前已有 [RemoteExecutor](../crates/execution/src/remote.rs) 和 [SlurmRuntime](../crates/execution/src/slurm.rs) 等领域端口；[Host](../crates/host/src/lib.rs) 的默认装配仍使用具体 SshRemote，Slurm 原生调用也位于 [SSH adapter](../crates/adapters/ssh/src/slurm.rs) 中。当前还增加了标准/宿主 Skill 来源与显式方法绑定解析；这些具体实现不能被扩大解释为通用插件加载、任意连接工厂或 Space 工作图已经实现。
+本节调研时的固定 RemoteExecutor/SlurmRuntime 与 SSH 适配层已移除；现在的公开契约和原生实现位于 [Remote 插件](../plugins/remote/README.md)，[Host](../crates/host/src/lib.rs) 只组合通用插件端口。固定 Skill 来源与方法绑定入口也已移除。本文仍是早期研究；统一插件的实际实施与验收以 [Status](STATUS.md) 为准，不能由这些接口推断任意连接工厂或 Space 工作图已完成。
 
 现有五端口、Capability Registry、Operation、Query、领域提交和原生事实引用仍应复用。研究不引入独立的执行结果库、审批模型或 Agent 行为主线。
 

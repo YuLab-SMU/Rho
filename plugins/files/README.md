@@ -5,8 +5,8 @@ The ordinary `org.rho.files` backend uses the public plugin protocol and SDK.
 contracts. `backend/engine` owns the existing contained filesystem and Git adapter.
 It uses the public process supervision library, without private core dependencies.
 `backend/owner` interprets path-search continuations, native patch preconditions
-and before/after effects. The retiring `rho-git` adapter and project handlers reuse
-these implementations while the default workbench migrates. The ordinary backend
+and before/after effects. The fixed Git adapter and project handlers are removed;
+the ordinary package is the sole filesystem/Git implementation. The backend
 returns commit plans to the same Host Operation gateway; it has no journal of its
 own. A native result retains its execution lane until exact original settlement.
 
