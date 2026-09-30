@@ -1731,17 +1731,18 @@ The user requested a shared annotation capability on 2026-09-14 so each componen
 can carry thoughts about its content: selected text with comments, freehand marks,
 boxed regions and written explanations that an Agent can read. The
 [annotation review page](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/C-0)
-contains five proposed boards pending user review. This extends the Help, Viewer
+contains six proposed boards pending user review. This extends the Help, Viewer
 and lighter-control proposals in section 19; those proposals remain pending review.
 It does not establish runtime implementation, product acceptance or Host restart.
 
 | Board | Review focus |
 | --- | --- |
-| AN01 | Text selection, retained quotation and a comment attached to the source |
+| AN01 | Text selection, retained quotation and a note attached to the source |
 | AN02 | Captured Viewer with pen, rectangle, arrow and text tools; saved marks and explanation |
 | AN03 | 600 px editing flow and 320 px Agent draft inclusion without additional permanent panels |
-| AN04 | Version-bound historical annotations, annotation revision conflict and unavailable model image input |
-| AN05 | Universal component entry, source-specific anchors and accessible whole-item comments |
+| AN04 | Version-bound historical notes, note revision conflict and unavailable model image input |
+| AN05 | Universal component entry, source-specific anchors and accessible whole-item notes |
+| AN06 | Empty, filtered, deleted and source-unavailable notes; keyboard path |
 
 ### A shared layer with component-owned sources
 
@@ -1762,8 +1763,8 @@ previews and captures. Access to a visible annotation never expands access to it
 underlying source. Closing a panel does not delete its saved annotations or make
 them unreadable through the Host.
 
-Every component exposes **Annotate** and a keyboard-accessible **Comment on this
-item** action. Components add precise anchors only where their owner can provide
+Every component exposes **Annotate** and a keyboard-accessible whole-item
+**Write a whole-topic note** action. Components add precise anchors only where their owner can provide
 them. A captured view is a valid, explicitly labeled fallback; it is not a claim
 that all underlying data or page interactions were captured.
 
@@ -1781,7 +1782,7 @@ that all underlying data or page interactions were captured.
 
 ### Express a thought without crowding the content
 
-Selecting text offers **Comment** beside the selection and retains the quoted
+Selecting text offers **Add note** beside the selection and retains the quoted
 text in the editor. **Annotate** reveals the shared **Select**, **Pen**,
 **Rectangle**, **Arrow** and **Text** tools when visual marking is supported.
 The tools are hidden during ordinary reading. Marks can share a written note;
@@ -1828,9 +1829,14 @@ an annotation tool is active, **Undo** affects that annotation layer only, never
 the editor's code or scientific work. Text editing retains its own ordinary undo
 behavior when focus is in the note field.
 
+Deleting an annotation asks for confirmation and is not reversible. The owner
+retains the tombstone and its evidence, but it offers no restore command, so the
+interface does not promise an undo window; the note and its marks are removed
+while the source keeps its own content and version.
+
 The user clarified that an annotation's lifecycle is bound to its artifact
 version. When the owner publishes a new content version, notes on the previous
-version become **Historical annotations**. This is normal history, not a broken
+version become **Historical notes**. This is normal history, not a broken
 anchor requiring repair. **Current version** shows that version's notes; **History**
 opens the original version with its notes and retained quotation/capture. The
 current content never acquires old marks automatically. History membership follows
@@ -1887,8 +1893,10 @@ choose a supported model; a marks-only annotation is not silently reduced to
 text and reported as fully understood. These designs specify Rho's delivery of
 evidence, not independent acceptance of a third-party Agent's interpretation.
 
-All five Paper boards were inspected for spacing, readable text, contrast,
-alignment and clipping. The selected-text actions avoid covering the quotation;
+All six boards were inspected for spacing, readable text, contrast,
+alignment and clipping. AN06's shortcut keys and filter names are proposals: the keys avoid the Editor
+and Console bindings but were not exercised in a browser, and the user has not
+approved them. The selected-text actions avoid covering the quotation;
 the compact capture has an explicit full-size entry. The drawings and example
 notes are design fixtures, not persisted product annotations or runtime evidence.
 

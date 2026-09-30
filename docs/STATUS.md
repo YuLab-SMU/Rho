@@ -44,14 +44,14 @@ recorded artifacts; “current” labels there do not certify this newer worktre
 | --- | --- | --- | --- |
 | 1 — active | **Declared view → real Files update → explicit patch → original-operation recovery.** Public UI SDK and the consumer own observation/intent; Files and Operation own effects/truth. | Captured provider/arguments remain fixed; observation updates and stops on disposal; one explicit write; lost acknowledgement, reload and replacement view recover the original record with exactly one native effect. Affected Editor/Studio consumers still pass. | Continue the existing fixture and retained Files/core artifacts. Resolve the recorded verification mismatch first; register the settled flow in the existing governance map. No new Host push channel is required for this polling milestone. |
 | 2 — after 1 | **Updated runtime reaches the development bundle.** Existing package builders/delivery path. | Identify the changed source/runtime dependency closure; refresh affected packages once; validate exact revisions/hashes and run the affected imported-view flow. Retain unchanged archives/core and applicable installer evidence. | SDK changes can affect more than Studio: compare consumers and package contents. Repeat relocation/empty-start acceptance only if its inputs change. No installation/signing/publication. |
-| 3 — independent review dependency | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Implement the reviewed AN01–AN05 scope as a complete flow, including conflict/source-change handling and normal/wide/constrained views. | AN01–AN05 await user review. Existing text/image ownership, source contracts and Agent inclusion are already implemented. This dependency does not block orders 1–2. |
+| 3 — independent review dependency | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Implement the reviewed AN01–AN06 scope as a complete flow, including conflict/source-change handling and normal/wide/constrained views. | AN01–AN06 await user review. Existing text/image ownership, source contracts and Agent inclusion are already implemented. This dependency does not block orders 1–2. |
 | 4 — environment-dependent | **Actual system IME in ordinary views.** UI acceptance. | Real candidate window, composition/commit/Enter, focus changes and draft retention observed in the target app/browser. | Needs a stable foreground/input-method session. Synthetic composition passes are separate. Remains required for the full usability claim. |
 | 5 — model-dependent | **Real Agent/provider quality on the ordinary-plugin path.** Agent acceptance. | Map the planned 33 scenarios to current public paths; establish a representative real-provider smoke result before expanding the matrix; record remaining cases individually. | Fixed-Host harnesses were removed. Model access/configuration and current runners are prerequisites. Deterministic integration is already verified; historical 27-case evidence is not a current pass. |
 | 6 — closure | **Final evidence matches the approved scope and exact delivered artifacts.** Full-plan acceptance matrix. | Reconcile existing evidence, run only missing/invalidated checks, and keep every open requirement explicit. | Orders 1–5 have different completion conditions. A verified integration slice or development bundle does not close the full plan. No automatic workspace audit or release. |
 
 HV01–HV07 lighter Help/Viewer controls, system-browser opening and Help anchors
 remain proposed ([Design 19](RHO-DESIGN.md#19-r-help-interactive-viewer-and-lighter-controls--proposal)).
-Review them separately from AN01–AN05; do not make all Help/Viewer redesign a
+Review them separately from AN01–AN06; do not make all Help/Viewer redesign a
 prerequisite for the already approved runtime work. R01–R03 also remain proposals.
 No design approval is inferred from this reordered work plan.
 
@@ -138,7 +138,7 @@ Retry/restart preserves original images and does not resend pixels or model work
 Evidence: `image-context-results.json`, `annotation-summary-results.json`,
 `annotation-files-results.json`, `annotation-files-host.json`.
 Browser capture, the annotation editor and component controls remain unimplemented,
-with AN01–AN05 review pending ([Design 20](RHO-DESIGN.md#20-component-annotations-for-people-and-agents--proposal)).
+with AN01–AN06 review pending ([Design 20](RHO-DESIGN.md#20-component-annotations-for-people-and-agents--proposal)).
 
 ### Studio and public visual runtime
 

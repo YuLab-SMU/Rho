@@ -69,7 +69,7 @@ version must not overlay old marks. Continuing the idea on a newer version creat
 a new linked annotation while retaining the original. Agent reads identify the
 historical version and its original evidence.
 
-**Design response:** Proposed AN01–AN05 cover text comments, captured Viewer
+**Design response:** Proposed AN01–AN06 cover text comments, captured Viewer
 marks, 600 px editing and 320 px Agent inclusion, historical-version/conflict/image
 states and anchors across components. The [Paper review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/C-0)
 and [Design section 20](RHO-DESIGN.md#20-component-annotations-for-people-and-agents--proposal)

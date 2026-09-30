@@ -15,7 +15,7 @@ read/create/update, version-conflict refusal and original child Operations also 
 both Sends replay after restart without reactivating the note provider or external peer.
 Capture import/read RPC accepts bounded immutable PNG/JPEG resources, decodes and
 verifies their bytes, and retains images separately from note context. Annotation UI
-remains incomplete; AN01–AN05 await user review. Real R-owned Help and saved HTML
+remains incomplete; AN01–AN06 await user review. Real R-owned Help and saved HTML
 now have owner/RPC annotation acceptance through Agent Send and same-instance
 restart; this does not establish annotation-editor interaction.
 See the repository's current Status for executed checks and retained timeouts.
