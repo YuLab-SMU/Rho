@@ -12,6 +12,25 @@ import { checkDraftTransfers } from "./fixtures/plugin-drafts.mjs";
 const directory=fs.mkdtempSync(path.join(os.tmpdir(),"rho-public-ui-"));
 try {
   const sdk=await import(pathToFileURL(compilePublicUiSdk(directory)).href);
+  // The component declaration model must work from this outside SDK copy,
+  // without Studio sources, a DOM, a Host connection, or a private registry.
+  const visual={format_version:1,root:'root',nodes:{root:sdk.createVisualNode()},data_sources:{report:{capability:{id:'report.read',version:1},arguments:{},subscribe:true}},components:{chart:{source:'src/chart.ts',export:'Chart',properties_schema:{},input_schema:{},output_schema:{}}}};
+  for(const kind of sdk.visualNodeKinds){const item=sdk.createVisualNode(kind);if(kind==='custom')item.component='chart';visual.nodes[kind]=item;visual.nodes.root.children.push(kind);}
+  visual.nodes.text.bindings={text:{source:'report',path:['title']}};
+  visual.nodes.button.events={click:[{kind:'invoke',capability:{id:'report.export',version:1},arguments:{format:'csv'}}]};
+  const parsed=sdk.parseVisualDocument(JSON.stringify(visual));assert.deepEqual(parsed,visual);
+  assert.equal(sdk.visualBindingValue({report:{title:'中文 Ω'}},parsed.nodes.text.bindings.text),'中文 Ω');
+  const condition={kind:'equals',binding:{source:'report',path:[]},value:{title:'中文',ready:true}};
+  assert.equal(sdk.visualConditionMatches({report:{ready:true,title:'中文'}},condition),true);
+  assert.equal(sdk.visualConditionMatches({}, {kind:'exists',binding:condition.binding}),false);
+  assert.equal(sdk.visualConditionMatches({report:null}, {kind:'exists',binding:condition.binding}),true);
+  for(const mutate of [
+    d=>{d.nodes.button.events={mount:d.nodes.button.events.click};},
+    d=>{d.nodes.text.bindings.text.path=['constructor'];},
+    d=>{d.nodes.root.children.push('root');},
+    d=>{d.components.chart.source='../outside.ts';},
+  ]){const invalid=structuredClone(visual);mutate(invalid);assert.throws(()=>sdk.parseVisualDocument(JSON.stringify(invalid)));}
+  console.log('Public visual declarations: all ten node kinds, opaque custom sources, bindings/conditions and invalid graph/event/path refusal passed without a renderer or Host.');
   await checkDraftTransfers(sdk);
   await checkArchiveTransfers(sdk);
   await checkViewClose(sdk);

@@ -9,6 +9,15 @@ export { externalUrl } from "./external.js";
 export { ViewCloseCooperation } from "./view-close.js";
 export type { ViewCloseHandler, ViewCloseSnapshot } from "./view-close.js";
 export type { CapabilityKey, PluginViewRecord, PluginViewRequest } from "../plugin-protocol/index.js";
+export {
+  parseVisualDocument,
+  createVisualNode,
+  visualNodeKinds,
+  visualBindingValue,
+  visualConditionMatches,
+  validateVisualSourcePath,
+} from './visual-document.js';
+export type { VisualDocument, VisualNode, VisualNodeKind, VisualCondition, VisualAction, CustomComponent } from '../plugin-protocol/index.js';
 export const UI_PROTOCOL_VERSION = 1;
 export const MAX_UI_MESSAGE_BYTES = 1024 * 1024;
 export const MAX_UI_PENDING = 128;

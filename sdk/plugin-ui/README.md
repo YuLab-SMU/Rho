@@ -312,3 +312,18 @@ Host journal request IDs are scoped to the originating view. Use
 `operation.list_recent` request filter. Pass the unchanged original request to
 `invoke`; a reopened view may inspect the old request but must not replay it under
 a new caller identity.
+
+### Visual declarations
+
+`parseVisualDocument(text)` validates the public `VisualDocument` format without
+DOM access or Host calls. `createVisualNode` and `visualNodeKinds` cover the ten
+node kinds; `visualBindingValue` and `visualConditionMatches` evaluate captured
+query/fixture values with own-property paths and structural JSON equality.
+`validateVisualSourcePath` checks declared custom-component source paths.
+Studio uses these same exports for its editing diagnostics and fixture canvas.
+Native package validation remains authoritative for checkpoints.
+
+These helpers do not render an executable plugin, subscribe to providers, load
+custom code, resolve media or dispatch declared events. The standalone component
+runtime and declaration-to-built-view acceptance remain required work; the inert
+Studio canvas is not evidence that an edited declaration changes a running view.
