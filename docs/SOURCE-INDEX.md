@@ -164,6 +164,7 @@ Sources:
 - `scripts/fixtures/plugin-draft-view.mjs`
 - `scripts/fixtures/plugin-drafts.mjs`
 - `scripts/fixtures/plugin-ui.mjs`
+- `scripts/fixtures/python-runtime.py`
 - `scripts/fixtures/scientific-workspace.mjs`
 - `scripts/fixtures/ssh-slurm.mjs`
 - `scripts/fixtures/studio-agent*`
@@ -196,6 +197,7 @@ Sources:
 - `scripts/test-environment-plugin-owner.mjs`
 - `scripts/test-environment-plugin-types.mjs`
 - `scripts/test-environment-plugin.mjs`
+- `scripts/test-external-runtime.mjs`
 - `scripts/test-files-plugin-engine.mjs`
 - `scripts/test-files-plugin.mjs`
 - `scripts/test-files-protocol.mjs`
@@ -406,6 +408,8 @@ Checks:
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/environment/**`, `rust-toolchain.toml`, `scripts/build-environment-plugin.mjs`, `scripts/test-environment-plugin-types.mjs`, `sdk/**`.
 - `plugins.external-backend` (L2): `["node","scripts/test-plugin-backend.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `scripts/test-plugin-backend.mjs`, `sdk/**`, `ui/src/**`.
+- `plugins.external-runtime` (L2): `["node","scripts/test-external-runtime.mjs"]`
+  Applies to: `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugins/**`, `crates/workbench/**`, `scripts/fixtures/python-runtime.py`, `scripts/test-external-runtime.mjs`.
 - `plugins.files-agent-host` (L2): `["node","scripts/test-files-agent.mjs"]`
   Applies to: `plugins/agent/**`, `plugins/files/**`, `scripts/agent-plugin-artifact.mjs`, `scripts/build-files-plugin.mjs`, `scripts/test-files-agent.mjs`.
 - `plugins.files-backend` (L1): `["cargo","test","-p","rho-files-backend","--lib","--locked"]`

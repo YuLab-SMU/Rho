@@ -306,7 +306,8 @@ startup path. Standalone observation reads the journal without constructing File
 or native output owners. Fixed scientific Host constructors, native scientific registration, runtime-instance
 management and Host Application/Skill adapters are removed. The fixed Application
 owner, typed persistence and runtime-instance tables are also removed; SQLite keeps
-only generic scoped versioned state. Obsolete contract DTOs remain for cleanup.
+only generic scoped versioned state. Obsolete scientific/Application contract DTOs
+and their fixed shared-port request variants are deleted.
 The eleven unused fixed owner/adapter crates and their dedicated tests are deleted. Missing plugins cannot select a fixed Workbench fallback. Historical
 fixed-renderer test totals do not count as current plugin acceptance.
 
@@ -1594,6 +1595,22 @@ Python 3 on PATH. `node scripts/test-plugin-backend.mjs` copies the public Rust
 crates outside the repository and compiles the example with no private source;
 it invokes Cargo, so run it serially with every other Cargo command. Public
 TypeScript consumption is checked by `node scripts/test-plugin-protocol.mjs`.
+`node scripts/test-external-runtime.mjs` instead executes a real stateful Python
+runtime from an external ordinary package against the already built Host. It uses
+only the Python standard library and public framed protocol, creates two explicit
+sessions, checks real statistics, persistent variables, exact-session refusal,
+instance isolation and original-request idempotency, then releases both providers
+and reads the original result after an actual disposable Host restart. Queries do
+not start a session. Set `RHO_TEST_BINARY` to select the frozen binary and
+`RHO_EXTERNAL_RUNTIME_EVIDENCE` for a retained report. It builds nothing and checks
+that Host bytes stay identical. This is an acceptance fixture, not a shipped Python
+product, OS sandbox, cancellation or Python-memory recovery feature.
+For a retained delivery set, run `RHO_PLUGIN_SET_PACKAGE=/absolute/set node
+scripts/test-plugin-set.mjs`. It builds nothing and uses only disposable catalogs.
+The round trip compares every archive field and exact source/artifact blob,
+including capabilities and grants. It records both container hashes: JSON object
+ordering may change on export without changing canonical revision/artifact identity.
+Input archive integrity and pre-import rejection checks remain mandatory.
 Capability-grant changes require both `plugin_self_requirements` and
 `plugin_optional_requirements` Host tests. The optional case covers activation
 without an available optional provider, explicit exact selection, invalid scopes,

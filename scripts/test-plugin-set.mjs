@@ -130,19 +130,25 @@ try {
     await startupWithoutPlugins(fullDatabase, 'full-delivery-project');
     assert.equal(full('list').total, 0);
     assert.equal(installPluginSet({rho, directory: delivery, database: fullDatabase}).status, 'installed');
+    const exports = [];
     for (const [index, entry] of deliverySet.packages.entries()) {
       const restored = full('inspect', entry.revision);
       assert.deepEqual(restored, originals[index]);
-      // Inspect returns only catalog metadata, not the manifest. Export the
-      // restored package to verify all source, grants and artifacts byte-for-byte.
+      // Inspect omits the manifest. Compare the complete exported structure,
+      // including exact blob payloads, source/artifact identities and grants.
+      // JSON object ordering can change with the core's serializer features;
+      // it is not part of the canonical revision or artifact identity.
       const exported = path.join(directory, `restored-${entry.file}`);
       full('export', entry.revision, exported);
-      assert.equal(hash(fs.readFileSync(exported)), entry.sha256,
-        'Restoration retains the entire original archive, including capability/permission declarations');
+      const bytes = fs.readFileSync(exported);
+      assert.deepEqual(JSON.parse(bytes), JSON.parse(fs.readFileSync(path.join(delivery, entry.file))),
+        'Restoration retains every archive field and exact source/artifact blob, including capability/permission declarations');
+      exports.push({plugin:entry.plugin, original_sha256:entry.sha256, exported_sha256:hash(bytes),
+        exact_archive_contents:true});
     }
     report.full_set = {directory: delivery, digest: installed.digest, packages: deliverySet.packages,
       total_archive_bytes: deliverySet.packages.reduce((sum, entry) => sum + entry.bytes, 0),
-      all_removed: true, empty_host_started: true, silent_reinstall: false, restored_exact_contracts: true};
+      all_removed: true, empty_host_started: true, silent_reinstall: false, restored_exact_contracts: true, exports};
   }
   report.completed = true;
 } catch (error) { report.error = error.stack; throw error; }
