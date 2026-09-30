@@ -44,7 +44,10 @@ export class PackagesConnection extends Model<ConnectionSnapshot> {
     const saved = client.view.state as { nativeSession?: unknown; packages?: unknown; actions?: JsonValue; agent?: AgentState } | null;
     this.actions = structuredClone(saved?.actions ?? null);
     this.agentState = structuredClone(saved?.agent);
-    const session = typeof saved?.nativeSession === "string" && saved.nativeSession ? saved.nativeSession : null;
+    // Restore presentation choices, then observe the exact provider's current
+    // session. A saved session ID does not survive a Host/runtime restart.
+    const session = client.view.contribution === "packages" ? null
+      : typeof saved?.nativeSession === "string" && saved.nativeSession ? saved.nativeSession : null;
     this.identity = { epoch: 1, project: client.view.project, session, runtimeState: null, connected: false, capabilities };
     this.packages = new Packages({ context: () => this.identity,
       query: async (project, capability, args) => {

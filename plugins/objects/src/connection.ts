@@ -44,7 +44,11 @@ export class ObjectsConnection extends Model<ConnectionSnapshot> {
     const saved = client.view.state as { nativeSession?: unknown; objects?: unknown; actions?: JsonValue; agent?: AgentState } | null;
     this.actions = structuredClone(saved?.actions ?? null);
     this.agentState = structuredClone(saved?.agent);
-    const session = typeof saved?.nativeSession === "string" && saved.nativeSession ? saved.nativeSession : null;
+    // The workspace directory observes the selected provider's current session
+    // on each mount. A persisted session is not live evidence after Host restart.
+    // Object detail views still pin the session that originally opened them.
+    const session = client.view.contribution === "objects" ? null
+      : typeof saved?.nativeSession === "string" && saved.nativeSession ? saved.nativeSession : null;
     this.identity = { epoch: 1, project: client.view.project, session, runtimeState: null, connected: false, capabilities };
     this.objects = new Objects({ context: () => this.identity,
       query: async (project, capability, args) => {

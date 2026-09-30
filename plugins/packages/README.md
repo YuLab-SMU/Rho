@@ -3,7 +3,9 @@
 This is the ordinary read-only R Packages view. It uses the approved compact
 list, wide inspector and copy-specific source details through public contracts.
 An exact configured R provider and its first observed native session own all
-reads. Counts, list pages and copy details share a native package observation;
+reads. On mount, the `packages` directory restores presentation choices and
+discovers the current session of that same provider; a persisted session ID cannot
+pin a restarted workspace to an ended runtime. Counts, list pages and copy details share a native package observation;
 busy or expired observations remain identified rather than replaced implicitly.
 Refresh explicitly requests a new observation. Viewing never installs, removes,
 loads or attaches packages, changes library paths or tests loadability.

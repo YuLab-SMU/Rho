@@ -12,7 +12,10 @@ reserve the browser gesture before collecting pages and retain their observation
 fence until all text is available.
 
 The connection source pins its R provider and first native session through the
-public UI SDK. It observes `r.inspection_state`, invalidates caches on owner changes
+public UI SDK. On mount, the `objects` directory discovers the current session of
+that exact provider before requesting any object data. Persisted session IDs are
+not live evidence after a Host restart; `object` detail views retain their original
+session fence. It observes `r.inspection_state`, invalidates caches on owner changes
 and keeps busy retries bounded. Presentation state is acknowledged through the
 view owner, with explicit save errors and a flush method for container cooperation.
 The package now has `objects` and `object` contributions and an independent build

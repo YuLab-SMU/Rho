@@ -276,7 +276,11 @@ export function ObjectsPanel({ viewId = "objects" }: { viewId?: string }) {
             ? "R busy · Showing the last observation"
             : o.getSnapshot().indexExpired
               ? "Last observation retained · Refresh to read current objects"
-              : o.notice || "Refreshing objects…"}
+              : o.notice || (session.runtime?.state === "idle"
+                ? "Refreshing objects…"
+                : session.runtime
+                  ? "Object connection unavailable · See connection details below"
+                  : "Start R to observe objects.")}
         </div>
       )}
       <div className="panel-footer">

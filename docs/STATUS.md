@@ -11,13 +11,15 @@ capability assessment; full product acceptance retains the gaps listed below.
 
 ## Current focus: M6 assessment complete; document tools and real vision remain open
 
-Local macOS preview provides a native launcher, saved Demo window and explicit
-quit using Manager's recipe and Files navigation. Preview 2 restores the reviewed
-48/168 px navigation for retained views, including multiple-view selection and
-revealing panels outside a maximized group. Client build/check, frontend boundaries
-and `cargo build --locked` pass; no automated sidebar tests were run. The first app
-opened the real scientific workspace (`../preview-acceptance/workspace-open.png`).
-Closed-view management stays in Plugins; global settings/footer remain separate.
+Local macOS preview provides a native launcher, saved Demo and explicit quit.
+Preview 2 restores reviewed 48/168 px navigation; client build/check, frontend
+boundaries and `cargo build --locked` pass. Plugins manages closed views.
+Objects/Packages directory mounts now discover the selected provider's live R
+session instead of trusting an ended persisted session; exact object detail and
+pending-action identities remain pinned. Connection errors no longer look like
+continuous object loading. Independent package builds (including TypeScript) and
+plugin boundaries pass; no automated tests were run for these preview fixes.
+Versioned view updates recovered 22 objects and Packages without restarting R; permanent packages await application.
 
 The unified-plugin plan was authorized on 2026-09-23; PS01–PS07 are approved
 ([Design 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved)).
@@ -33,12 +35,10 @@ The updated bundle and imported Studio/Files flows pass. Of 33 real-model attemp
 12 pass, 3 Plots cases provide partial metadata evidence and 18 lack document tools.
 The image diagnostic fails. Actual macOS Chinese input passes in Annotations.
 
-Committed baseline `5a5ecc4d` adds Studio data-source/custom-component forms to
-the executable visual runtime: synchronized references, shared Undo, invalid draft
-recovery and conflict protection. Studio model checks and two browser flows passed
-(38.2s for the browser run); settled normal/wide/390/220px captures were inspected in a separate 17.1s
-run. Evidence: `definition-editor-results.json`, `visual-runtime-results.json`.
-The current development bundle includes this runtime work.
+The development bundle includes `5a5ecc4d` Studio data-source/custom-component
+forms, synchronized references, shared Undo, draft recovery and conflict protection.
+Models and two browser flows passed; normal/wide/390/220px captures were inspected.
+Evidence: `definition-editor-results.json`, `visual-runtime-results.json`.
 
 The public SDK now offers bounded snapshot polling and strict original-operation
 inspection. A separate ordinary UI package observes actual Files text, performs
