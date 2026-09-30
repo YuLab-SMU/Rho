@@ -18,6 +18,8 @@ export {
   validateVisualSourcePath,
 } from './visual-document.js';
 export type { VisualDocument, VisualNode, VisualNodeKind, VisualCondition, VisualAction, CustomComponent } from '../plugin-protocol/index.js';
+export { mountVisualDocument } from './visual-runtime.js';
+export type { VisualRuntimeOptions, VisualEventContext, VisualCustomInstance, VisualCustomRegistration } from './visual-runtime.js';
 export const UI_PROTOCOL_VERSION = 1;
 export const MAX_UI_MESSAGE_BYTES = 1024 * 1024;
 export const MAX_UI_PENDING = 128;

@@ -1218,6 +1218,16 @@ Listing checks cover exclusive pagination after discard, exact source filters,
 current metadata after edits, window and caller fences, and no implicit publication
 or lease collection. A list is not a snapshot across pages or a claim about edits
 that have not reached synchronized storage.
+
+`npm run test:browser --prefix ui -- visual-runtime.spec.ts visual-studio.spec.ts`
+checks the public executable visual components outside the checkout, then edits a
+declaration in ordinary Studio and proves that its checkpoint/build changes the
+fixture preview and applied plugin. It reuses the current Host binary. Component
+peers cover subscription/read races, bounded reads, custom/media cleanup and
+explicit event dispatch; the actual Host flow covers public catalog queries and
+view state, not scientific writes. Run these cases for visual-runtime changes;
+there is no native build requirement when the retained binary already matches core.
+
 `node scripts/test-plugin-ui.mjs` builds the public UI SDK outside the checkout and
 checks frozen captures, verified staging/read transfers, malformed content,
 acknowledgement identity, interruptions and view cooperation. The Host draft target

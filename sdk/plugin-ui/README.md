@@ -323,7 +323,63 @@ query/fixture values with own-property paths and structural JSON equality.
 Studio uses these same exports for its editing diagnostics and fixture canvas.
 Native package validation remains authoritative for checkpoints.
 
-These helpers do not render an executable plugin, subscribe to providers, load
-custom code, resolve media or dispatch declared events. The standalone component
-runtime and declaration-to-built-view acceptance remain required work; the inert
-Studio canvas is not evidence that an edited declaration changes a running view.
+`mountVisualDocument(container, declaration, options)` executes the same model
+inside an ordinary plugin document. It validates before mounting and owns only
+its initially empty container. Keep the returned handle: `ready` reports initial
+read outcomes, `refresh(source)` performs another read, and `dispose()` removes
+the view, observation subscriptions, custom instances and resource URLs. Disposal
+does not cancel accepted scientific work. Reads have an eight-request concurrency
+limit; stale query replies cannot overwrite a newer query or observation.
+
+Supply `reader: client` for public SDK queries and verified resource reads. Bound
+paths address the **whole query response**, including `data` when the capability
+returns a snapshot envelope. A source with `subscribe: true` requires an explicit
+provider observation adapter returning synchronous cleanup. The runtime does not
+invent a generic native subscription port or silently substitute polling. An
+adapter must preserve the source's exact provider/session and observation semantics.
+
+The first component conventions are:
+
+| Node | Properties / behavior |
+| --- | --- |
+| Container / split | Children in a column / row; container `direction: "row"` selects a row |
+| Tabs | One panel per child; child `label` names the tab; arrow keys select tabs |
+| Text / button | `text` or `label`; button `disabled` |
+| Form | Static `fields` with `name`, `label`, `value`, optional `required` and `type: "number"`; `submit_label`; refresh preserves typed values and focus |
+| List | Bound `items`; selection carries `{index, item}`; object items may have `label` |
+| Table | Bound `items` and string `columns`; first cell is the row selection button |
+| Media | `resource` is an exact PNG/JPEG ResourceReference, verified before display; `alt` supplies alternative text |
+| Custom | A compiled registration matching the declared `source` and `export`, with `mount`, `update(properties)` and `dispose` |
+
+Lists/tables present at most 1,000 rows and 64 columns; forms accept at most 128
+fields. They are bounded presentations, not general spreadsheet/form editors.
+A binding replaces the corresponding property after a value is observed.
+Custom code is opaque and precompiled by the plugin's build; the runtime does not
+evaluate arbitrary declaration strings or import source paths dynamically. A React
+adapter can implement the same mount/update/dispose contract. The declared custom
+schemas describe its public contract; the custom implementation owns schema-aware
+input/output handling. Style token keys (`gap`, `padding`, `color`, `background`,
+`font_size`, `border_radius`) resolve names through the supplied compiled `tokens`
+map. Declaration strings are never injected as CSS or HTML.
+
+Only trusted browser gestures dispatch declared events. `refresh` performs a
+public read. Supply `action(action, context)` for `invoke`, `open_view` and
+`set_state`; the adapter must use the public SDK, preserve the original caller,
+persist exact write intent before dispatch, and retain uncertain receipts for
+explicit inspection. The renderer supplies a unique request ID for each action
+in that gesture, the captured source values and form/selection value. Arguments
+remain literal declaration JSON; no expression evaluation or implicit interpolation
+occurs. A pending action suppresses additional gestures; a failure stops the
+remaining action sequence and is displayed. The runtime does not journal, retry,
+replay, route or claim success for Operations. The adapter remains responsible for
+recovery before accepting another write. Do not use render/update callbacks to
+start scientific work.
+
+For a minimal ordinary package, `scripts/fixtures/visual-plugin.mjs` builds an
+independent example from this public SDK. Its recipe validates `views/report.json`
+and emits that exact declaration into the built view. The example uses public
+catalog queries and intrinsic view-state actions only. `visual-studio.spec.ts`
+checks declaration edit → checkpoint → build → fixture preview → applied view;
+`visual-runtime.spec.ts` checks component behavior and lifecycle with controlled
+read/action peers. These checks do not establish every provider's subscription or
+scientific Operation recovery behavior. The Studio editing canvas remains inert.
