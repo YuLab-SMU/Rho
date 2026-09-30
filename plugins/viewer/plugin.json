@@ -132,6 +132,29 @@
         "operation.read",
         "resources.read"
       ]
+    },
+    {
+      "capability": {
+        "id": "annotations.read",
+        "version": 1
+      },
+      "scopes": [
+        "application.read",
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "annotations.capture.upload",
+        "version": 1
+      },
+      "scopes": [
+        "application.control",
+        "operation.read",
+        "plugins.read",
+        "resources.read",
+        "workspace.read"
+      ]
     }
   ],
   "views": [

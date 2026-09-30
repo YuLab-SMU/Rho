@@ -407,6 +407,14 @@ Files/Annotations Host flow with exact quote freezing, lost-write recovery, CAS
 conflict and tombstone checks. Inspect its normal, wide and narrow screenshots;
 component entry, source-scoped versions and retained PNG/JPEG marks have separate
 browser assertions in that same file. Synthetic composition is not OS IME evidence.
+For the shared annotation foundation, `node scripts/prepare-annotation-foundation.mjs`
+creates one retained package receipt; `--only=files` (or another changed plugin)
+refreshes just that package. `ui/e2e/annotation-foundation.spec.ts` accepts
+`RHO_ANNOTATION_FOUNDATION_STAGE=viewer|files` and
+`RHO_ANNOTATION_FOUNDATION_ENTRIES=objects,agent` to rerun a failed flow or source
+entry without activating all eleven plugins. Set `RHO_ARK` and `RHO_R_HOME` for
+stages that use real R. The eight-entry run omits these filters for milestone
+acceptance. Keep snapshot, Host activation and test-body times separate.
 `node scripts/test-annotation-plugin.mjs --files` uses retained Annotation,
 Editor and Files packages and the frozen Host for Files quote freezing, native
 identity/content-version separation and same-instance restart without source replay.

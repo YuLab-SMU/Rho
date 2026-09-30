@@ -50,6 +50,15 @@ Browser capture and annotation-editor interaction status is tracked in Status. M
 reuses public application read/control scopes; it does not add a scientific
 annotation branch to the generic Host.
 
+An imported plugin's declared capability contract can establish an activation
+grant before its provider is live. The grant remains dormant: calls still require
+an exact active provider through the scoped router. Conflicting installed kinds
+or required scopes are refused. This permits Agent task context and Annotations
+references to be activated in either order while their owners stay separate.
+A captured interactive Viewer viewport is user evidence tied to the exact
+contributed output, not an original scientific image or proof of its filters,
+data IDs or zoom.
+
 Package transfer bytes have a native scoped owner independent of runtime resources.
 `plugins.archive_*` stages aligned immutable chunks, observes or validates the
 complete encoded archive, imports exact content, and exports explicit source and

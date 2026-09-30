@@ -154,7 +154,6 @@ export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
               </Menu.Item>
               {agent?.annotate && <Menu.Item disabled={!original || navigation.blocked} onSelect={()=>{if(original)agent.annotate?.([original]);}}>Annotate</Menu.Item>}
               {agent && <Menu.Item disabled={!original || navigation.blocked} onSelect={()=>{if(original)agent.ask([original]);}}>Ask about…</Menu.Item>}
-              {agent?.annotate && <Menu.Item disabled={!original || navigation.blocked} onSelect={()=>{if(original)agent.annotate?.([original]);}}>Annotate</Menu.Item>}
               {agent && <Menu.Item disabled={!original || navigation.blocked || connection.selectedForAgent.length>=2 || connection.selectedForAgent.some(p=>p.reference.resource===original?.reference.resource)}
                 onSelect={()=>{if(original)connection.addForAgent(original);}}>Add Plot to Agent Comparison</Menu.Item>}
               <Menu.Item disabled={view.pinned} onSelect={latest}>
@@ -179,7 +178,7 @@ export function PlotPanel({ viewId = "plots" }: { viewId?: string }) {
       {agent && (connection.selectedForAgent.length>0 || connection.savedAgent?.pending) && <div className="plot-agent-selection" aria-label="Selected plots for Agent">
         {connection.selectedForAgent.map((plot,index)=><span key={plot.reference.resource}>Plot {index+1} · output {plot.native.sequence}
           <button aria-label={`Remove plot ${index+1} from Agent input`} disabled={navigation.blocked} onClick={()=>connection.removeForAgent(index)}>×</button></span>)}
-        {agent.annotate && <button disabled={navigation.blocked} onClick={()=>agent.annotate?.()}>Annotate selected plots</button>}
+        {agent.annotate && <button disabled={navigation.blocked} onClick={()=>agent.annotate?.()} data-annotation-entry="true">Annotate selected plots</button>}
         <button disabled={navigation.blocked} onClick={()=>agent.ask()}>{connection.savedAgent?.pending?'Recover Agent request':'Ask about selected plots'}</button>
       </div>}
       {(snapshot.historyError || snapshot.scanning || snapshot.limited) && <div className="observation-notice" role="status">

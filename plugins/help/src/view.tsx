@@ -27,7 +27,7 @@ export function HelpView({ help, copyText, openExternal, askAgent, annotate }: {
       <div className="help-identity" title={`${copy.package} ${copy.version}\n${copy.libraryPath}`}>
         <span className="help-package">{copy.package}</span>{topic && <><span className="help-separator">::</span><span className="help-topic">{topic}</span></>}
       </div>
-      {annotate && <button onClick={annotate} disabled={!page?.found || loading || requiresNewObservation}>Annotate</button>}
+      {annotate && <button onClick={annotate} disabled={!page?.found || loading || requiresNewObservation} data-annotation-entry="true">Annotate</button>}
       {askAgent && <button onClick={askAgent} disabled={!page?.found || loading || requiresNewObservation}>Ask about…</button>}
       <span className="help-version">{copy.version}</span>
       <button onClick={() => help.setIndexVisible(!topics)} aria-expanded={topics}>Topics</button>

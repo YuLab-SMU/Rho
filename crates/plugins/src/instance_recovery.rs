@@ -19,7 +19,7 @@ impl PluginService {
             let (required_scopes, available) =
                 if let Some(descriptor) = registry.descriptor(&capability) {
                     (
-                        &descriptor.required_scopes,
+                        descriptor.required_scopes.clone(),
                         descriptor.kind != host::CapabilityKind::Control
                             || registry.control_handler(&capability).is_ok(),
                     )
@@ -30,9 +30,35 @@ impl PluginService {
                 {
                     // Combined UI/backend packages may declare their own contract
                     // before publication. Calls still go through the scoped router.
-                    (&own.required_scopes, true)
+                    (own.required_scopes.clone(), true)
                 } else {
-                    return Err(OperationError::UnknownCapability(capability.display_key()));
+                    // A saved plugin revision can supply a contract before its
+                    // provider is activated. The grant remains dormant until a
+                    // live provider is resolved by the ordinary scoped router.
+                    // This permits two ordinary plugins to reference each
+                    // other's read capabilities without an activation cycle.
+                    let repository = self.repository.lock().unwrap();
+                    let mut after = None;
+                    let mut declared = None;
+                    for _ in 0..10 {
+                        let page = repository.list_page(after.as_ref(), 100).map_err(error)?;
+                        for installed in page.revisions {
+                            let revision = repository.revision(&installed.revision).map_err(error)?;
+                            if let Some(own) = revision.manifest.capabilities.iter().find(|own| own.capability == grant.capability) {
+                                if let Some((kind, scopes)) = &declared {
+                                    if *kind != own.kind || *scopes != own.required_scopes {
+                                        return Err(OperationError::Contract(format!("conflicting saved contracts for {}", capability.display_key())));
+                                    }
+                                } else {
+                                    declared = Some((own.kind, own.required_scopes.clone()));
+                                }
+                            }
+                        }
+                        after = page.next;
+                        if after.is_none() { break; }
+                    }
+                    let (_, scopes) = declared.ok_or_else(|| OperationError::UnknownCapability(capability.display_key()))?;
+                    (scopes, true)
                 };
             if !available
                 || !required_scopes.is_subset(&grant.scopes)

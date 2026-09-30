@@ -1,12 +1,10 @@
 import type {CapabilityKey,ContextItem,ContextPreview,ContextReference,InstanceRef,PluginInspection,PluginInstanceObservations,JsonValue} from '../public/plugin-protocol/index.js';
-import {sameOperationValue,canonicalOperationValue,type PluginViewClient} from '../public/plugin-ui/index.js';
-export type Source = {reference:ContextReference;preview:CapabilityKey;inclusion:unknown;text:string;title:string;version:string;lineage:string;resources:ContextPreview['resources']};
+import {sameOperationValue,annotationSourceId as sourceId,type PluginViewClient} from '../public/plugin-ui/index.js';
+export type Source = {reference:ContextReference;preview:CapabilityKey;inclusion:unknown;text:string;title:string;version:string;lineage:string;resources:ContextPreview['resources'];anchors?:unknown[]};
 /** The annotation owner's namespace, used only to select its existing list query. */
 export async function annotationSourceId(source:Pick<Source,'reference'|'lineage'>):Promise<string>{
   if(!source.lineage)throw Error('The source owner has not supplied a lineage.');
-  const bytes=new TextEncoder().encode(canonicalOperationValue([source.reference.provider,source.reference.contribution,source.lineage]));
-  const digest=await crypto.subtle.digest('SHA-256',bytes);
-  return 'contribution:'+Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,'0')).join('');
+  return sourceId(source.reference,source.lineage);
 }
 export type SourceChoice = {provider:InstanceRef;title:string;contribution:string;search:CapabilityKey;preview:CapabilityKey;modes:{title:string;inclusion:unknown}[]};
 export async function observe<T>(client:PluginViewClient,id:string,args:unknown,complete=false):Promise<T>{
@@ -20,7 +18,7 @@ export async function previewSource(client:PluginViewClient,reference:ContextRef
   const identity=(preview.data as {annotation_source?:{source_id:string;source_version:string}}).annotation_source;
   if(!sameOperationValue(preview.item.reference,reference)||preview.truncated||typeof preview.text!=='string'||new TextEncoder().encode(preview.text).length>16384||!identity?.source_id||!identity.source_version)
     throw Error('The exact source is unavailable, changed, or too large to capture. Choose a smaller inclusion. Your draft is retained.');
-  return {reference:structuredClone(reference),preview:structuredClone(capability),inclusion:structuredClone(inclusion),text:preview.text,title:preview.item.title,version:identity.source_version,lineage:identity.source_id,resources:preview.resources};
+  return {reference:structuredClone(reference),preview:structuredClone(capability),inclusion:structuredClone(inclusion),text:preview.text,title:preview.item.title,version:identity.source_version,lineage:identity.source_id,resources:preview.resources,anchors:(preview.data as any).annotation_anchors??[]};
 }
 export async function sourceChoices(client:PluginViewClient):Promise<SourceChoice[]>{
   const choices:SourceChoice[]=[];let cursor:string|null=null;

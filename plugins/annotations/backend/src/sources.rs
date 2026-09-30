@@ -203,10 +203,13 @@ pub async fn freeze(
             }
             quote.clone()
         }
-        _ => {
-            return Err(Failure::invalid(
-                "This source flow supports whole-item and text-quote anchors",
-            ));
+        AnnotationAnchor::Structured { .. } => {
+            let expected = serde_json::to_value(anchor).map_err(Failure::invalid)?;
+            if !preview.data.get("annotation_anchors").and_then(Value::as_array)
+                .is_some_and(|anchors| anchors.contains(&expected)) {
+                return Err(Failure::invalid("The source owner has not supplied this structured anchor"));
+            }
+            preview.text.clone()
         }
     };
     // Namespace owner-supplied lineage without interpreting any scientific selector.

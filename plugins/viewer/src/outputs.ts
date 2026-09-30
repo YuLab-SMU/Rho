@@ -66,13 +66,21 @@ export async function readOperation(reader: ResourceReader, source: InstanceRef,
   return outputsFrom(result.data.record, source);
 }
 export async function readHistory(reader: ResourceReader, source: InstanceRef, before: number | null) {
-  const result = await reader.query<{ data?: { operations: { operation_id: string; capability: { id: string; version: number }; status: string }[]; next_cursor: number | null } }>(
-    { id: "operation.list_recent", version: 1 }, { limit: 25, before_cursor: before } as JsonValue);
-  if (!result.data || !Array.isArray(result.data.operations)) throw new Error("Operation history is unavailable");
-  const items: SavedOutput[] = [];
-  for (const operation of result.data.operations) {
-    if (isRExecution(operation.capability) && ["succeeded", "failed", "cancelled", "uncertain"].includes(operation.status))
-      items.push(...await readOperation(reader, source, operation.operation_id));
+  let cursor=before,items:SavedOutput[]=[];
+  // A busy project can have many non-Viewer operations after its last HTML
+  // output. Search a bounded number of pages before showing an empty Viewer.
+  for(let page=0;page<8;page++){
+   const result = await reader.query<{ data?: { operations: { operation_id: string; capability: { id: string; version: number }; status: string }[]; next_cursor: number | null } }>(
+     { id: "operation.list_recent", version: 1 }, { limit: 25, before_cursor: cursor } as JsonValue);
+   if (!result.data || !Array.isArray(result.data.operations)) throw new Error("Operation history is unavailable");
+   for (const operation of result.data.operations) {
+     if (isRExecution(operation.capability) && ["succeeded", "failed", "cancelled", "uncertain"].includes(operation.status))
+       items.push(...await readOperation(reader, source, operation.operation_id));
+   }
+   const next=result.data.next_cursor;
+   if(next!==null&&next===cursor)throw new Error("Operation history did not advance");
+   cursor=next;
+   if(items.length||cursor===null)break;
   }
-  return { items, next: result.data.next_cursor };
+  return { items, next: cursor };
 }

@@ -897,6 +897,7 @@ impl OperationHandler for Manage {
                 )
                 .map_err(error)?;
                 grants = stored.manifest.activation_requirements(&args.optional_capabilities).map_err(error)?;
+                drop(repo);
                 self.service.validate_instance_grants(context, &stored.manifest, &grants)?;
                 revision = Some(args.revision);
                 target = host::TargetRef {

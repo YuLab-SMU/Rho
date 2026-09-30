@@ -328,6 +328,7 @@ impl Owner {
             text,
             truncated,
             data: json!({"operation":source.operation,"session":source.session,"events":source.events,"status":status,"inclusion":kind,
+                "annotation_anchors":[{"kind":"structured","path":[source.operation],"row":null,"column":null,"topic":null}],
                 "annotation_source":{"source_id":format!("run:{}",source.operation),"source_version":source_version}}),
             resources: vec![],
         };

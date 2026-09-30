@@ -89,6 +89,7 @@ where
     let mut writer = connection.writer;
     let mut jobs = JoinSet::new();
     let mut queries: BTreeSet<RequestId> = BTreeSet::new();
+    let mut controls: BTreeSet<RequestId> = BTreeSet::new();
     let mut retained: BTreeMap<OperationId, Retained> = BTreeMap::new();
     let mut settled: VecDeque<OperationSettlement> = VecDeque::new();
     let result = loop {
@@ -102,7 +103,8 @@ where
                     RpcBody::CommitPlan(commit)
                 } else {
                     if !queries.remove(&request) { break Err("Annotation result lost its original query".into()); }
-                    match output { Ok(data) => RpcBody::QueryResult { data, completeness: ObservationCompleteness::Complete, source: None }, Err(failure) => failure.body() }
+                    let control = controls.remove(&request);
+                    match output { Ok(data) if control => RpcBody::ControlResult { data }, Ok(data) => RpcBody::QueryResult { data, completeness: ObservationCompleteness::Complete, source: None }, Err(failure) => failure.body() }
                 };
                 if let Err(error) = writer.send(request, body).await { break Err(error.to_string()); }
             },
@@ -120,9 +122,11 @@ where
                 }
                 let request = frame.request;
                 let operation = matches!(&frame.body, RpcBody::Invoke(_));
+                let control = matches!(&frame.body, RpcBody::Control(_));
                 let reply = match frame.body {
-                    RpcBody::Query(call) | RpcBody::Invoke(call) => {
-                        if let Err(failure) = metadata.validate(&request, &call, operation) { Some(failure.body()) }
+                    RpcBody::Query(call) | RpcBody::Invoke(call) | RpcBody::Control(call) => {
+                        if control != (call.binding.capability.id.as_str() == "annotations.capture.upload") { Some(error("invalid_input", "Annotation capability differs from its call kind")) }
+                        else if let Err(failure) = metadata.validate(&request, &call, operation) { Some(failure.body()) }
                         else if queries.contains(&request) || retained.values().any(|e| e.request == request) { break Err("Original annotation request is still retained".into()); }
                         else if queries.len() + retained.len() >= CAPACITY { Some(error("busy", "Annotation capacity reached; inspect original Operations")) }
                         else {
@@ -131,7 +135,7 @@ where
                                 if retained.contains_key(&id) || settled.iter().any(|s| s.operation_id == id) { break Err("Original annotation Operation was dispatched twice".into()); }
                                 retained.insert(id.clone(), Retained { request: request.clone(), binding: call.binding.clone(), outcome: None });
                                 Some(id)
-                            } else { queries.insert(request.clone()); None };
+                            } else { queries.insert(request.clone()); if control { controls.insert(request.clone()); } None };
                             let metadata = metadata.clone(); let host = host.clone(); let request = request.clone();
                             jobs.spawn(async move { let result = metadata.execute(&call, &host).await; (request, id, result) });
                             None

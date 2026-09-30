@@ -36,10 +36,18 @@ try {
   const client = await connectPluginView();
   if (client.view.contribution !== "files") throw new Error("The Files contribution is missing.");
   const configuration = client.view.configuration as unknown as { editor: InstanceRef | null; editor_group: string | null; runtime?: InstanceRef | null };
-  const connection = new FilesConnection(client);
+  // Files has one native observation lane. Counts, navigation and explicit
+  // source capture share it so a quick hover followed by a click cannot race.
+  let fileReads:Promise<unknown>=Promise.resolve();
+  const query:typeof client.query=<T=unknown>(capability:Parameters<typeof client.query>[0],arguments_:Parameters<typeof client.query>[1]):Promise<T>=>{
+    if(!capability.id.startsWith('files.'))return client.query<T>(capability,arguments_);
+    const read=fileReads.then(()=>client.query<T>(capability,arguments_));
+    fileReads=read.catch(()=>undefined);return read;
+  };
+  const connection = new FilesConnection({view:client.view,query,setState:client.setState.bind(client)});
   const actions = new FilesActions(client, connection, configuration.editor_group ?? null, configuration.editor ?? null, configuration.runtime ?? null);
-  let closingSource=false, capturing=false, selectedSource:TextIdentity|null=null;
-  const sender=componentInputDialog({client,saved:connection.savedAgent,persist:state=>connection.saveAgent(state),
+  let closingSource=false, capturing=false, selectedSource:TextIdentity|null=null,noteObservation=0;
+  const sender=componentInputDialog({client:{view:client.view,query,setState:client.setState.bind(client),invoke:client.invoke.bind(client),operation:client.operation.bind(client),control:client.control.bind(client)},saved:connection.savedAgent,persist:state=>connection.saveAgent(state),
     guard:()=>{if(closingSource)throw Error('Files is closing. The original request is retained.');},
     modes:[{value:'metadata',label:'File information'},{value:'text',label:'Text (up to 16 KiB)'}],capture:kind=>fileContext(connection.source,client.view.window,selectedSource,kind)});
   const closing = await client.installCloseHandler({
@@ -51,7 +59,7 @@ try {
     const state = useSyncExternalStore(connection.subscribe, connection.getSnapshot), action = useSyncExternalStore(actions.subscribe, actions.getSnapshot);
     const close = useSyncExternalStore(closing.subscribe, closing.getSnapshot), [open, setOpen] = useState(false);
     const [askError,setAskError]=useState(''),[asking,setAsking]=useState(false);
-    const ask=async(path:string,annotation=false)=>{if(capturing||closingSource)return;if(annotation&&connection.savedAgent?.annotation?.pending){sender.annotate();return;}if(!annotation&&connection.savedAgent?.pending){sender.open();return;}capturing=true;setAsking(true);setAskError('');try {
+    const ask=async(path:string,annotation=false)=>{if(capturing||closingSource)return;if(annotation&&connection.savedAgent?.annotation?.pending){sender.annotate();return;}if(!annotation&&connection.savedAgent?.pending){sender.open();return;}capturing=true;noteObservation++;setAsking(true);setAskError('');try {
       const page=(await connection.read<TextPage>('files.read_text',{path,start_line:1,limit_lines:1})).data;
       if(!page?.file||page.skipped)throw Error(page?.skipped?.detail??'This file is not available as text.');
       selectedSource=structuredClone(page.file);if(annotation)sender.annotate();else sender.open();
@@ -60,7 +68,7 @@ try {
     return <main className="files-root" inert={close.preparing || undefined}>
       {connection.savedAgent?.pending && <button disabled={close.preparing} onClick={()=>sender.open()}>Recover Agent request</button>}
       {askError && <p role="alert">{askError}</p>}
-      <FilesPanel files={connection.files} navigation={{ blocked, ask:path=>ignore(ask(path)), annotate:path=>ignore(ask(path,true)), canOpen: !!configuration.editor,
+      <FilesPanel files={connection.files} navigation={{ blocked, observeNote:async path=>{if(capturing)return;const request=++noteObservation;try{const page=(await connection.read<TextPage>('files.read_text',{path,start_line:1,limit_lines:1})).data;if(request!==noteObservation)return;selectedSource=page?.file&&!page.skipped?structuredClone(page.file):null;const button=document.querySelector<HTMLButtonElement>('[data-annotation-entry]');if(button)button.dispatchEvent(new Event('annotation-source-ready'));}catch{if(request===noteObservation)selectedSource=null;}},ask:path=>ignore(ask(path)), annotate:path=>ignore(ask(path,true)), canOpen: !!configuration.editor,
         openDocument: path => ignore(actions.openDocument(path)), createDocument: () => ignore(actions.openDocument(null)),
         openFile: () => setOpen(true), refresh: () => ignore(connection.refresh(true)),
       }} />

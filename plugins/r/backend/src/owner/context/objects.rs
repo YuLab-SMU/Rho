@@ -101,6 +101,7 @@ fn preview(owner: &InstanceRef, request: PreviewContext, source: &Source, page: 
     let result = ContextPreview { item:source.item(owner,&request.reference.window)?,text,truncated,
         data:json!({"inclusion":"summary","native_session":source.session,"observed_at_ms":page.observed_at_ms,"structure_page_complete":page.complete,"notices":page.notices,
             "annotation_version_scope":"bounded_object_summary",
+            "annotation_anchors":[{"kind":"structured","path":std::iter::once(source.name.clone()).chain(source.observed_path.iter().chain(source.path.iter()).map(|part| match part { ObjectPathElement::Name { name } => name.clone(), ObjectPathElement::Index { index } => format!("[{index}]") })).collect::<Vec<_>>(),"row":null,"column":null,"topic":null}],
             "annotation_source":summary_identity("object-summary",json!([source.session,source.name,source.observed_path,source.path]),json!([page.metadata,page.notices,page.complete]))?}),resources:vec![] };
     check(result.item.reference == request.reference,"Object preview changed the original reference")?;
     result.validate().map_err(|e|e.to_string())?; Ok(result)

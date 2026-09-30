@@ -141,6 +141,7 @@ pub fn manifest() -> PluginManifest {
             // Navigation can delegate only these declared scopes, intersected
             // with its caller. Editor/Agent still declare and receive their own exact
             // capability grants; Files gets no direct draft/file-write grant.
+            ("annotations.read", vec!["application.read", "plugins.read"]),
             ("windows.open_view", vec!["application.control", "application.read", "documents.read", "documents.write", "environment.read", "environment.write", "operation.read", "plugins.read", "plugins.run", "plugins.write", "process.run_local", "project.read", "project.references.read", "project.write", "remote.execute", "resources.read", "skill.read", "slurm.read", "slurm.write", "workspace.read", "workspace.run_r"]),
             ("operation.get", vec!["operation.read"]),
             ("operation.list_recent", vec!["operation.read"]),

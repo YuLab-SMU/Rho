@@ -23,8 +23,8 @@ export type { VisualRuntimeOptions, VisualEventContext, VisualCustomInstance, Vi
 export { createPollingVisualSubscription } from './visual-observations.js';
 export { inspectOriginalOperation, verifyOriginalOperation, isTerminalOperation, canonicalOperationValue, sameOperationValue } from './operations.js';
 export type { OperationIntent, OriginalOperationRecord } from './operations.js';
-export { componentAnnotationDialog } from './component-annotations.js';
-export type { AnnotationComponentSource, AnnotationNavigationState, AnnotationSenderOptions } from './component-annotations.js';
+export { componentAnnotationDialog, annotationSourceId } from './component-annotations.js';
+export type { AnnotationComponentSource, AnnotationNavigationState, AnnotationSenderOptions, ComponentAnnotationAnchor } from './component-annotations.js';
 export const UI_PROTOCOL_VERSION = 1;
 export const MAX_UI_MESSAGE_BYTES = 1024 * 1024;
 export const MAX_UI_PENDING = 128;

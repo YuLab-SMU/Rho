@@ -358,6 +358,7 @@ fn help_preview(
         truncated,
         data: json!({"inclusion":name,"format":"text","topic_complete":page.complete,"total_bytes":page.total_bytes,
             "package_version":page.version,"native_session":source.session,
+            "annotation_anchors":[{"kind":"structured","path":[source.package,source.library],"row":null,"column":null,"topic":source.topic}],
             "annotation_source":{"source_id":format!("help:{:x}",Sha256::digest(serde_json::to_vec(&json!([source.library,source.package,source.topic])).map_err(|e|e.to_string())?)),
             "source_version":format!("sha256:{:x}",Sha256::digest(serde_json::to_vec(&source.help_files).map_err(|e|e.to_string())?))}}),
         resources: vec![],

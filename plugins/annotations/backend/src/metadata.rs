@@ -125,7 +125,7 @@ impl Metadata {
                 "Annotation call differs from its admitted identity, contract or native preconditions",
             ));
         }
-        if !call.scopes.contains(if operation {
+        if !call.scopes.contains(if operation || call.binding.capability.id.as_str() == "annotations.capture.upload" {
             "application.control"
         } else {
             "application.read"
@@ -158,6 +158,9 @@ impl Metadata {
     ) -> Result<Value, Failure> {
         let caller = crate::sources::caller(self, call, host).await?;
         match call.binding.capability.id.as_str() {
+            "annotations.capture.upload" => {
+                return crate::captures::upload(self, call, host, &caller).await;
+            }
             "annotations.capture.import" => {
                 return crate::captures::import(self, call, host, &caller).await;
             }

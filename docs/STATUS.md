@@ -4,11 +4,11 @@ Updated: 2026-09-30. This is the single current summary of behavior, evidence,
 open work and the next milestone. Git and run artifacts retain history; see
 [Development](DEVELOPMENT.md#status-discipline) for update and evidence rules.
 Evidence filenames below are relative to `target/plugin-refactor/` unless stated.
-The latest annotation milestone adds ordinary-view/browser and real-R owner evidence.
-The current round closes the M4 annotation foundation; delivery, model-matrix and
-OS IME acceptance are deferred to later iterations.
+M4's reviewed annotation foundation is verified through ordinary-plugin browser
+and real-R owner flows. Delivery, the model matrix and OS IME acceptance remain
+separate later iterations.
 
-## Current focus: approved annotation interface
+## Current focus: M4 annotation foundation verified
 
 The unified-plugin plan was authorized on 2026-09-23; PS01–PS07 are approved
 ([Design 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved)).
@@ -16,12 +16,12 @@ All sixteen ordinary packages exist. Fixed scientific/Agent composition, private
 frontend/HTTP flows, Application/Skill handlers, retired owner/adapter packages
 and legacy shared-port DTOs are removed. CLI, HTTP and MCP use the generic Host.
 The declared scientific-operation slice now passes through a real Files provider.
-The annotation view now has cross-component entry, versioned notes, image marks
-and explicit Agent draft inclusion. Complete the remaining M4 interactions first,
-then run one focused acceptance round: smoke the eight source entries and finish
-Files selected-text and Viewer image flows through save, Agent draft inclusion,
-refresh recovery and source change. Reuse valid browser/native evidence. Package
-refresh, the 33-scenario model matrix and system IME are outside this round.
+The annotation view has cross-component entry, source-specific anchors, note
+counts, versioned notes, image marks and explicit Agent draft inclusion. Eight
+source entries and the Files selected-text and live Viewer image flows pass the
+focused M4 round, including save, draft inclusion, refresh and changed sources.
+The next delivery bundle, the 33-scenario model matrix and system IME have not
+been accepted in this round.
 
 Committed baseline `5a5ecc4d` adds Studio data-source/custom-component forms to
 the executable visual runtime: synchronized references, shared Undo, invalid draft
@@ -45,14 +45,14 @@ This is snapshot polling, not a server-pushed native subscription.
 
 Completed flow baselines: M1 default scientific composition; M2 ordinary Agent;
 M3 graceful same-instance Host recovery; M5 Studio Agent checkpoint/build/preview/apply.
-M4 has remaining annotation UI work. M6 final composition remains incomplete.
+M4's annotation foundation is verified. M6 final composition remains incomplete.
 The audit in `final-acceptance-matrix.json` is partial and applies only to its
 recorded artifacts; “current” labels there do not certify this newer worktree.
 
 | Order | User flow / ownership | Completion condition | Dependency and scope |
 | --- | --- | --- | --- |
 | 1 — verified | **Declared view → real Files update → explicit patch → original-operation recovery.** Public UI SDK and the consumer own observation/intent; Files and Operation own effects/truth. | Captured provider/arguments remain fixed; observation updates and stops on disposal; one explicit write; lost acknowledgement, reload and replacement view recover the original record with exactly one native effect. Affected Editor/Studio consumers still pass. | Real Files/browser flow, public SDK, Editor/Studio models, visual Studio/browser and client checks pass on settled source (`visual-science-results.json`). Snapshot polling only; no Host push channel. |
-| 2 — active | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Close M4 with the reviewed interactions, eight-entry smoke and two complete Files text/Viewer image flows; include keyboard and 600/320px layouts. | Files component entry → notes → exact revisions in an existing Agent draft passes in the browser, including lost open/create acknowledgements without replay, CAS, deletion confirmation, marks/Undo, source-version history and explicit continuation (`annotation-components-browser`, `annotation-version-browser`). Eight source entries and real native owners exist; remaining implementation: counts/near-selection entry, structured anchors including Agent items, interactive Viewer capture. Reuse prior conflict/history/recovery evidence; inspect only missing or changed interactions. AN01–AN06 review is complete. M4 remains partial. |
+| 2 — verified | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Reviewed AN01–AN06 interactions, eight-entry smoke, complete Files text/Viewer image flows, keyboard and 600/320px layouts. | Shared counts/near-selection entry, structured Agent-item anchors and current Viewer viewport capture pass. Files and Viewer save → existing Agent draft → refresh/source-change flows pass (`annotation-foundation-files`, `annotation-foundation-viewer`, `annotation-foundation-entries`). Prior lost-acknowledgement, CAS, history and mark/Undo evidence remains valid (`annotation-components-browser`, `annotation-version-browser`). This closes M4's foundation, not delivery, real-model quality or OS IME. |
 | 3 — deferred | **Updated runtime reaches the development bundle.** Existing package builders/delivery path. | Identify the changed source/runtime dependency closure; refresh affected packages once; validate exact revisions/hashes and run the affected imported-view flow. Retain unchanged archives/core and applicable installer evidence. | SDK changes can affect more than Studio: compare consumers and package contents. Repeat relocation/empty-start acceptance only if its inputs change. No installation/signing/publication. |
 | 4 — deferred | **Actual system IME in ordinary views.** UI acceptance. | Real candidate window, composition/commit/Enter, focus changes and draft retention observed in the target app/browser. | Needs a stable foreground/input-method session. Synthetic composition passes are separate. Remains required for the full usability claim, outside M4 foundation closure. |
 | 5 — deferred | **Real Agent/provider quality on the ordinary-plugin path.** Agent acceptance. | Map the planned 33 scenarios to current public paths and record remaining cases individually. | Representative real-provider Send, one R effect and same-instance original-operation recovery pass (`agent-live-provider-results.json`, `agent-live-provider-wire-results.json`). The matrix stopped during fixture setup before any scenario attempt (`agent-live-matrix-results.json`); vision quality remains unrun. The unfinished opt-in harness is retained for later work. Historical 27-case evidence is not a current pass. |
@@ -167,9 +167,19 @@ flows, 23.1s test bodies); these do not establish real-provider quality.
 Source UI builds and focused SDK/Editor/Files/Plots/Objects/Packages/Viewer/Console/
 Agent view checks passed, as did annotation/Files backend and client checks.
 
-The reviewed AN01–AN06 flow remains partial: component counts and nearby selection
-entry, structured/Agent item anchors, interactive Viewer capture, eight-entry smoke
-and focused keyboard/600/320px acceptance are open. OS IME remains deferred.
+The reviewed AN01–AN06 foundation passes focused acceptance. Shared entry counts
+and the near-selection action work on Files text; eight source entries open exact
+previews, including structured Agent task-item evidence. The live Viewer viewport
+captures its changed controls/pixels, retains marks and the original PNG after a
+new R output, and labels the capture as non-original media. Files quote and Viewer
+image each save a revision, join a distinct existing Agent draft without sending,
+and survive refresh/source change. Keyboard paths, 600/320px note layouts and
+320px Agent draft inclusion were checked with screenshots. Evidence:
+`annotation-foundation-files`, `annotation-foundation-viewer`,
+`annotation-foundation-entries` (browser bodies 7.7s, 8.0s and 14.3s; setup
+45.2s, 62.0s and 116.1s respectively). Focused public SDK/Files/Viewer checks,
+client build/check, plugin boundaries and native activation tests pass. OS IME
+remains deferred.
 Current live-source status is labeled unknown unless the
 owner can establish it; an exact historical preview is not a current-version claim.
 Affected source packages are retained for milestone reuse; the development bundle

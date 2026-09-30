@@ -4,7 +4,7 @@ import type {Client} from './operations.js';
 import {componentAnnotationDialog} from '../plugin-ui/index.js';
 export interface SenderOptions {
   client:Client; saved?:AgentState; persist(state:AgentState):Promise<void>; guard():void;
-  capture(kind:string):ComponentSource; modes:{value:string;label:string}[];
+  capture(kind:string):ComponentSource; captureView?():Promise<string>; annotationMode?:string; modes:{value:string;label:string}[];
 }
 export function componentInputDialog(options:SenderOptions){
   const dialog=document.createElement('dialog');dialog.className='rho-agent-input';dialog.setAttribute('aria-label','Ask about this input');
@@ -20,7 +20,10 @@ export function componentInputDialog(options:SenderOptions){
   const agent=new ComponentAgent(options.client,options.saved,options.persist,()=>{if(disposed)throw Error('The source view is closed.');options.guard();},render);
   const annotations=componentAnnotationDialog({client:options.client,saved:options.saved?.annotation,
     persist:async value=>{agent.data.annotation=structuredClone(value);await options.persist(structuredClone(agent.data));},
-    guard:()=>{if(disposed||agent.busy||preparing)throw Error('Wait for the current source request.');options.guard();},capture:options.capture,modes:options.modes});
+    guard:()=>{if(disposed||agent.busy||preparing)throw Error('Wait for the current source request.');options.guard();},capture:options.capture,captureView:options.captureView,defaultMode:options.annotationMode,modes:options.modes});
+  const entries=new WeakSet<HTMLButtonElement>();
+  const bindEntries=()=>{for(const button of document.querySelectorAll<HTMLButtonElement>('[data-annotation-entry]'))if(!entries.has(button)){entries.add(button);annotations.bind(button);}};
+  const entryObserver=new MutationObserver(bindEntries);entryObserver.observe(document.body,{childList:true,subtree:true});bindEntries();
   function render(){
     const {input,pending,opened}=agent.data,busy=agent.busy||preparing;
     if(shown!==agent.images){clearImages();shown=agent.images;for(const [index,blob] of shown.entries()){
@@ -47,5 +50,5 @@ export function componentInputDialog(options:SenderOptions){
   get('inspect').onclick=()=>act(()=>agent.inspect());get('retry').onclick=()=>act(()=>agent.retry());get('open').onclick=()=>act(()=>agent.open());
   instance.onchange=()=>{const target=agent.candidates.find(item=>item.instance.identity.instance===instance.value)?.instance.identity??null;act(()=>agent.select(target));};
   dialog.addEventListener('cancel',event=>{if(agent.busy||preparing)event.preventDefault();});render();
-  return {open(){options.guard();dialog.showModal();if(!agent.data.pending)act(prepare);},annotate(){annotations.open();},get busy(){return agent.busy||preparing||annotations.busy;},dispose(){disposed=true;annotations.dispose();clearImages();dialog.remove();style.remove();}};
+  return {open(){options.guard();dialog.showModal();if(!agent.data.pending)act(prepare);},annotate(){annotations.open();},bindAnnotation(button:HTMLButtonElement){annotations.bind(button);},get busy(){return agent.busy||preparing||annotations.busy;},dispose(){disposed=true;entryObserver.disconnect();annotations.dispose();clearImages();dialog.remove();style.remove();}};
 }

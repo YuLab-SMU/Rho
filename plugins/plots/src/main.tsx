@@ -29,7 +29,7 @@ try{
  const sender=componentInputDialog({client,saved:connection.savedAgent,persist:state=>connection.saveAgent(state),
   guard:()=>{if(closingSource)throw Error('Plots is closing. The original request is retained.');},
   modes:[{value:'images',label:'Original images'},{value:'metadata',label:'Artifact metadata only'}],
-  capture:kind=>plotContext(connection.source,client.view.window,asking,kind)});
+  capture:kind=>plotContext(connection.source,client.view.window,(asking.length?asking:connection.selectedForAgent),kind)});
  const closing=await client.installCloseHandler({async flush(){closingSource=true;if(sender.busy)throw Error("Wait for the current Agent request before closing.");connection.pause();await actions.settled();await connection.flush();},resume(){closingSource=false;connection.resume();}});
  const ignore=(promise:Promise<unknown>)=>{void promise.catch(()=>undefined);};
  function App(){

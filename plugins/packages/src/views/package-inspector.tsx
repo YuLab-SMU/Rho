@@ -407,7 +407,7 @@ export function PackageInspector({
       {inline && selectedCopy && <button className="package-doc-button" title="View documentation for this installed copy"
         disabled={!selectedCopy.library_path || !p.session || p.expired || navigation.blocked || !navigation.canOpenDocumentation}
         onClick={() => navigation.openDocumentation(selectedCopy)}>Documentation · {selectedCopy.version}</button>}
-      {agent?.annotate && <button className="package-doc-button" disabled={agent.blocked || !selectedCopy || !p.session || p.expired || p.stale} onClick={()=>{if(selectedCopy)agent.annotate?.(selectedCopy);}}>Annotate</button>}
+      {agent?.annotate && <button className="package-doc-button" disabled={agent.blocked || !selectedCopy || !p.session || p.expired || p.stale} onClick={()=>{if(selectedCopy)agent.annotate?.(selectedCopy);}} onFocus={()=>{if(selectedCopy)agent.observeNote?.(selectedCopy);}} onPointerEnter={()=>{if(selectedCopy)agent.observeNote?.(selectedCopy);}} data-annotation-entry="true">Annotate</button>}
       {agent && <button className="package-doc-button" disabled={agent.blocked || !agent.recovering && (!selectedCopy || !p.session || p.expired || p.stale)}
         onClick={() => {if(selectedCopy)agent.ask(selectedCopy);}}>Ask about…</button>}
       {detail?.next !== null && detail?.next !== undefined && (

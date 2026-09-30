@@ -1,5 +1,6 @@
 import {componentInputDialog} from '../public/agent-input/dialog.js';
 import type {AgentState} from '../public/agent-input/input.js';
+import {captureDocument,captureViewer} from './capture.js';
 import {viewerContext} from './agent-source.js';
 import { connectPluginView, readResource } from "../public/plugin-ui/index.js";
 import type { InstanceRef } from "../public/plugin-protocol/index.js";
@@ -18,10 +19,11 @@ let closing = false, stateQueue:Promise<unknown>=Promise.resolve();
 function persistState(){const next=stateQueue.then(async()=>{await client.setState(structuredClone(state) as never);});stateQueue=next.catch(()=>undefined);return next;}
 const sender=componentInputDialog({client,saved:initial.agent,persist:async value=>{state.agent=structuredClone(value);await persistState();},
   guard:()=>{if(stopped||closing)throw Error('Viewer is closing. The original request is retained.');},
-  modes:[{value:'text',label:'Saved HTML source'},{value:'metadata',label:'Output details'}],
+  captureView:async()=>{const frame=surface.querySelector('iframe');if(!frame||!current)throw Error('Select a displayed Viewer output first.');const identity=key(current);const pixels=await captureViewer(frame);if(!current||key(current)!==identity)throw Error('The Viewer changed during capture. Prepare the selected output again.');return pixels;},
+  annotationMode:'metadata',modes:[{value:'metadata',label:'Output details'},{value:'text',label:'Saved HTML source'}],
   capture:kind=>{if(!current)throw Error('Select a saved output first.');return viewerContext(source,client.view.window,current,kind);}});
 find('ask-agent').onclick=()=>sender.open();
-const annotate=document.createElement('button');annotate.type='button';annotate.textContent='Annotate';annotate.disabled=true;annotate.onclick=()=>sender.annotate();find('ask-agent').before(annotate);
+const annotate=document.createElement('button');annotate.type='button';annotate.textContent='Annotate';annotate.disabled=true;annotate.onclick=()=>sender.annotate();find('ask-agent').before(annotate);sender.bindAnnotation(annotate);
 function notice(text: string, error = false) { message.textContent = text; message.className = error ? "notice error" : "notice"; message.hidden = !text; }
 function releaseSurface() {
   controller?.abort(); controller = null; surface.replaceChildren();
@@ -64,7 +66,7 @@ async function select(output: SavedOutput, save = false, force = false) {
     frame.setAttribute("sandbox", "allow-scripts"); frame.setAttribute("referrerpolicy", "no-referrer");
     frame.setAttribute("allow", "clipboard-read 'none'; clipboard-write 'none'; camera 'none'; microphone 'none'; geolocation 'none'");
     frame.onload = () => { if (!stopped && selectedGeneration === generation) notice(""); };
-    frame.srcdoc = html; surface.replaceChildren(frame);
+    frame.srcdoc = captureDocument(html); surface.replaceChildren(frame);
   } catch (error) {
     if (!stopped && selectedGeneration === generation && !abort.signal.aborted)
       notice(`Saved HTML could not be opened: ${String(error instanceof Error ? error.message : error)}`, true);

@@ -257,7 +257,7 @@ fn capture_replies() -> Vec<(&'static str, Value)> {
 fn public_manifest_declares_only_supported_contracts() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 6);
+    assert_eq!(manifest.capabilities.len(), 7);
     assert_eq!(manifest.contexts.len(), 1);
     assert_eq!(manifest.views.len(), 1);
     assert_eq!(manifest.views[0].id.as_str(), "annotations");

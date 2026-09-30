@@ -259,7 +259,7 @@ function wireActions() {
     capture:async kind=>{await flush();const draft=controller.drafts.snapshot.draft;if(!draft||controller.drafts.unresolved)throw Error('Synchronize the original document before annotating.');
       const metadata=draft.metadata as {name?:string;selection?:{anchor:number;head:number}};const selected=metadata.selection&&metadata.selection.anchor!==metadata.selection.head;
       return {reference:{provider:client.view.instance,contribution:'documents',window:client.view.window,selector:{draft:draft.draft,version:draft.version,digest:draft.content.digest}},title:`${selected?'Selection from':'Document'} ${metadata.name??'Untitled.R'}`.slice(0,160),inclusion:{kind:kind==='selection'&&selected?'selection':'document'},preview:{id:'editor.context.preview',version:1}};}});
-  const annotate=document.createElement('button');annotate.type='button';annotate.textContent='Annotate';annotate.onclick=()=>annotations.open();get('ask-agent').before(annotate);
+  const annotate=document.createElement('button');annotate.type='button';annotate.textContent='Annotate';annotate.onclick=()=>annotations.open();get('ask-agent').before(annotate);annotations.bind(annotate);
   window.addEventListener('pagehide',()=>annotations.dispose(),{once:true});
   const prepareAgent = async () => {
     controller.error = '';

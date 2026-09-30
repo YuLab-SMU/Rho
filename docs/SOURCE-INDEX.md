@@ -175,6 +175,7 @@ Sources:
 - `scripts/generate-editor-context.mjs`
 - `scripts/plugin-protocol.mjs`
 - `scripts/plugin-set.mjs`
+- `scripts/prepare-annotation-foundation.mjs`
 - `scripts/rho-bundle.mjs`
 - `scripts/studio-agent-renderer.mjs`
 - `scripts/test-agent-core-tools.mjs`
@@ -334,6 +335,8 @@ Checks:
   Applies to: `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `plugins/annotations/**`, `plugins/editor/backend/**`, `scripts/fixtures/annotation-capture-source.py`, `scripts/fixtures/annotation-captures.mjs`, `scripts/test-annotation-plugin.mjs`.
 - `plugins.annotation-files-host` (L2): `["node","scripts/test-annotation-plugin.mjs","--files"]`
   Applies to: `plugins/annotations/**`, `plugins/files/backend/**`, `scripts/fixtures/annotation-files.mjs`, `scripts/test-annotation-plugin.mjs`.
+- `plugins.annotation-foundation-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","annotation-foundation.spec.ts"]`
+  Applies to: `crates/plugins/src/instance_recovery.rs`, `plugins/agent/**`, `plugins/annotations/**`, `plugins/console/**`, `plugins/editor/**`, `plugins/files/**`, `plugins/help/**`, `plugins/objects/**`, `plugins/packages/**`, `plugins/plots/**`, `plugins/r/backend/src/owner/context/**`, `plugins/viewer/**`, `scripts/prepare-annotation-foundation.mjs`, `sdk/plugin-ui/**`, `ui/e2e/annotation-foundation.spec.ts`.
 - `plugins.annotation-image-agent` (L2): `["node","scripts/test-annotation-plugin.mjs","--agent","--captures","--browser"]`
   Applies to: `crates/host/tests/fixtures/agent-science.cjs`, `plugins/agent/**`, `plugins/annotations/**`, `scripts/fixtures/agent-annotation-tools.cjs`, `scripts/fixtures/annotation-agent-browser.mjs`, `scripts/fixtures/annotation-captures.mjs`, `scripts/fixtures/annotation-image-agent.mjs`, `scripts/fixtures/annotation-native-agent.mjs`, `scripts/test-annotation-plugin.mjs`.
 - `plugins.annotation-independent` (L2): `["node","scripts/test-annotation-plugin-store.mjs","--independent"]`

@@ -2,7 +2,7 @@ import '@fontsource/inter/latin-400.css';
 import '@fontsource/inter/latin-500.css';
 import '@fontsource/inter/latin-600.css';
 import './style.css';
-import { connectPluginView } from '../public/plugin-ui/index.js';
+import { connectPluginView, componentAnnotationDialog } from '../public/plugin-ui/index.js';
 import type { AgentProvider, AgentNativeToolSelection, ProjectAgentTaskRef } from '../sdk/index.js';
 import { NativeAgentModel, agentBusy } from './native-model.js';
 import { mountContext } from './context-view.js';
@@ -336,6 +336,15 @@ function changedText() {
 }
 model = new NativeAgentModel(client, render);
 rho = new RhoModel(client, model, render);
+const annotations=componentAnnotationDialog({client,saved:model.state.annotation,
+ persist:async state=>{model.state.annotation=structuredClone(state);await model.save();},
+ guard:()=>{if(disposed||closing||composing||model.busy||rho.busy)throw Error('Wait for the current Agent view update.');},
+ modes:[{value:'task',label:'Current task text'}],capture:async()=>{
+  const task:ProjectAgentTaskRef=rhoSelected()?{kind:'rho',conversation_id:rhoSelected()!}:{kind:'native',task_id:selected()!};if(!rhoSelected()&&!selected())throw Error('Select a task to annotate.');
+  const snapshot=await model.read<any>('agent.handoff.source',{source:task});
+  return {title:snapshot.title.slice(0,160),reference:{provider:client.view.instance,contribution:'agent',window:client.view.window,selector:{task,revision:snapshot.revision}},inclusion:{kind:'task'},preview:{id:'agent.context.preview',version:1}};
+ }});
+const annotate=document.createElement('button');annotate.type='button';annotate.textContent='Annotate';annotate.onclick=()=>annotations.open();get('show-details').after(annotate);annotations.bind(annotate);
 const settings = mountSettings(client, model, track);
 context = mountContext(client, model, (task, kind) => saveDraftSoon(task, kind));
 handoff = mountHandoff(client, model, rho, track, render);
@@ -450,4 +459,4 @@ await client.installCloseHandler({
 });
 await refresh().catch(report); render();
 const poll = setInterval(() => { void refresh().catch(report); }, 1000);
-addEventListener('pagehide', () => { disposed = true; clearDraftTimers(); clearInterval(poll); settings.dispose(); context?.dispose(); handoff?.dispose(); rho.dispose(); model.dispose(); client.dispose(); }, { once: true });
+addEventListener('pagehide', () => { disposed = true; clearDraftTimers(); clearInterval(poll); settings.dispose(); annotations.dispose(); context?.dispose(); handoff?.dispose(); rho.dispose(); model.dispose(); client.dispose(); }, { once: true });

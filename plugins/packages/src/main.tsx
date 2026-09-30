@@ -29,7 +29,7 @@ try {
     const state = useSyncExternalStore(connection.subscribe, connection.getSnapshot), action = useSyncExternalStore(actions.subscribe, actions.getSnapshot);
     const close = useSyncExternalStore(closing.subscribe, closing.getSnapshot), [linkError, setLinkError] = useState("");
     return <PackagesViewContext.Provider value={{ packages: connection.packages, session: state.session,
-      agent: {annotate:copy=>{const p=connection.packages;selectedSource=p.session&&p.data?.observation_id?{session:p.session,observation:p.data.observation_id,copy:structuredClone(copy)}:null;sender.annotate();},blocked:close.preparing,recovering:!!connection.savedAgent?.pending,ask:copy=>{
+      agent: {observeNote:copy=>{const p=connection.packages;selectedSource=p.session&&p.data?.observation_id?{session:p.session,observation:p.data.observation_id,copy:structuredClone(copy)}:null;},annotate:copy=>{const p=connection.packages;selectedSource=p.session&&p.data?.observation_id?{session:p.session,observation:p.data.observation_id,copy:structuredClone(copy)}:null;sender.annotate();},blocked:close.preparing,recovering:!!connection.savedAgent?.pending,ask:copy=>{
         const p=connection.packages;selectedSource=p.session&&p.data?.observation_id?{session:p.session,observation:p.data.observation_id,copy:structuredClone(copy)}:null;sender.open();}},
       navigation: { blocked: close.preparing || action.working || !!action.pending, canOpenDocumentation: !!configuration.help,
         openDocumentation: copy => ignore(actions.openDocumentation(copy)),

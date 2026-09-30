@@ -51,6 +51,10 @@ try {
   const reader={query:async(cap,args)=>{calls.push({cap,args});return cap.id==='operation.list_recent'?{data:{operations:[{operation_id:'original-run',capability:record.operation.capability,status:'succeeded'}],next_cursor:9}}:{data:{record}};}};
   const page=await readHistory(reader,owner,17);assert.equal(page.items.length,1);assert.equal(page.next,9);
   assert.deepEqual(calls.map(c=>c.cap.id),['operation.list_recent','operation.get']);assert.equal(calls[0].args.before_cursor,17);
+  const cursors=[];
+  const buried={query:async(cap,args)=>{if(cap.id==='operation.get')return {data:{record}};cursors.push(args.before_cursor);return {data:args.before_cursor===null?{operations:[],next_cursor:17}:{operations:[{operation_id:'original-run',capability:record.operation.capability,status:'succeeded'}],next_cursor:null}};}};
+  assert.equal((await readHistory(buried,owner,null)).items.length,1,'unrelated recent operations must not hide a saved Viewer output');
+  assert.deepEqual(cursors,[null,17]);
   const many=Array.from({length:220},(_,index)=>({...page.items[0],operation:`run-${index}`,accepted:index}));
   const history=mergeHistory(many.slice(20),many.slice(0,20),{operation_id:'run-215',resource_id:reference.resource},true);
   assert.equal(history.length,200);assert.equal(history[0].operation,'run-219');

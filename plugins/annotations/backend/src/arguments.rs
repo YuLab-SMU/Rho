@@ -87,12 +87,15 @@ pub struct AnnotationComponentSource {
     pub title: String,
     pub inclusion: Value,
     pub preview: CapabilityKey,
+    #[serde(default)]
+    pub anchor: Option<TextAnchor>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TextAnchor {
     WholeItem,
+    Structured { path: Vec<String>, row: Option<u64>, column: Option<String>, topic: Option<String> },
     CapturedView {
         capture: AnnotationCaptureRef,
     },
@@ -107,6 +110,7 @@ impl From<TextAnchor> for AnnotationAnchor {
     fn from(value: TextAnchor) -> Self {
         match value {
             TextAnchor::WholeItem => Self::WholeItem,
+            TextAnchor::Structured { path, row, column, topic } => Self::Structured { path, row, column, topic },
             TextAnchor::CapturedView { capture } => Self::CapturedView { capture },
             TextAnchor::TextQuote {
                 quote,
@@ -142,4 +146,15 @@ pub struct CaptureChunk {
     pub offset: u64,
     pub base64: String,
     pub next: Option<u64>,
+}
+
+/// Browser pixels are ephemeral input, never Operation arguments or scientific media.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CaptureUpload {
+    pub request_id: String,
+    pub reference: ContextReference,
+    pub inclusion: Value,
+    #[schemars(length(min = 1, max = 786432))]
+    pub base64: String,
 }

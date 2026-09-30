@@ -13,7 +13,7 @@ type Pending = {kind:'freeze'|'create'|'update'|'delete'|'import'|'agent'|'back'
 type State = {provider:InstanceRef|null;path:string;source:Source|null;draft:string;evidence:string|null;frozenText:string;frozenTitle:string;frozenVersion:string;selected:AnnotationRef|null;pending:Pending|null;last:{id:string;status:string}|null;
   labels:string[];marks:Mark[];capture:Capture|null;origin:Source|null;deleted:boolean;continuedFrom:AnnotationRef|null;filter:string;order:string;checked:AnnotationRef[];sourceRequest:string|null;agentOpened:PluginViewRecord|null;baseline:{note:string;labels:string[];marks:Mark[]}|null;scope:{id:string;title:string;version:string}|null};
 type Receipt = {request_id:string;outcome:{kind:string;evidence_id?:string;annotation?:AnnotationRef;capture?:Capture}};
-type SourceRequest = {request_id:string;source:{reference:ContextReference;title:string;inclusion:unknown;preview:{id:string;version:number}};return_view:string};
+type SourceRequest = {request_id:string;source:{reference:ContextReference;title:string;inclusion:unknown;preview:{id:string;version:number};anchor?:any};return_view:string};
 const client=await connectPluginView(),key=(id:string)=>({id,version:1}),json=(value:unknown)=>value as JsonValue;
 const errorText=(error:unknown)=>error instanceof Error?error.message:String(error);
 const find=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id) as T;
@@ -95,6 +95,10 @@ function render(){
  find<HTMLButtonElement>('undo-mark').disabled=block||!markUndo.length;
  for(const button of find('mark-tools').querySelectorAll<HTMLButtonElement>('[data-tool]')){button.setAttribute('aria-pressed',String(button.dataset.tool===tool));button.disabled=block||state.deleted;}
  find('capture-frame').dataset.tool=tool;
+ const anchorSelect=find<HTMLSelectElement>('structured-anchor'),anchorSignature=JSON.stringify(state.source?.anchors??[]);
+ if(anchorSelect.dataset.source!==anchorSignature){anchorSelect.dataset.source=anchorSignature;anchorSelect.replaceChildren();(state.source?.anchors??[]).forEach((anchor:any,index)=>anchorSelect.add(new Option([...anchor.path,anchor.topic].filter(Boolean).join(' › '),String(index))));}
+ for(const id of ['structured-label','structured-anchor','capture-structured'])find(id).hidden=!state.source?.anchors?.length||!!state.evidence;
+ find<HTMLButtonElement>('capture-structured').disabled=block;
  renderMarks();sourceControls();
 }
 function renderMarks(){
@@ -344,6 +348,7 @@ find('add-agent').onclick=()=>void work(prepareAgent);find('close-agent').onclic
 find<HTMLInputElement>('include-note-images').onchange=()=>{find('agent-issue').textContent='Refresh the preview after changing image inclusion.';find<HTMLButtonElement>('open-agent').disabled=true;};
 find('back-source').onclick=()=>void work(backSource);find('check-source').onclick=()=>void work(checkSource);find('continue-note').onclick=()=>void work(continueNote);
 find('previous-revision').onclick=()=>void work(async()=>{if(state.selected)await openNote({...state.selected,revision:state.selected.revision-1});});
+find('capture-structured').onclick=()=>void work(async()=>{if(!state.source)throw Error('Select a source.');const anchor=state.source.anchors?.[Number(find<HTMLSelectElement>('structured-anchor').value)];if(!anchor)throw Error('Choose an owner-provided anchor.');await write('freeze',{kind:'freeze',reference:state.source.reference,inclusion:state.source.inclusion,anchor},state.source.text);});
 find('capture-view').onclick=()=>void work(importImage);
 find<HTMLSelectElement>('source-image').onchange=()=>void work(previewImage);
 find('open-capture').onclick=()=>{if(!imageUrl)return;find<HTMLImageElement>('large-capture').src=imageUrl;const large=find<HTMLCanvasElement>('large-marks');large.width=image.naturalWidth;large.height=image.naturalHeight;draw(large,state.marks);find<HTMLDialogElement>('capture-dialog').showModal();};find('close-capture').onclick=()=>find<HTMLDialogElement>('capture-dialog').close();
@@ -360,10 +365,12 @@ canvas.onpointerup=event=>{if(!stroke||pointer!==event.pointerId)return;const ma
 canvas.onpointercancel=()=>{stroke=null;pointer=null;renderMarks();};
 window.addEventListener('keydown',event=>{
  if(event.isComposing||event.keyCode===229)return;
+ if(['ArrowUp','ArrowDown'].includes(event.key)&&event.target instanceof HTMLElement&&event.target.closest('#notes')){
+  const buttons=[...find('notes').querySelectorAll<HTMLButtonElement>('.note-copy')],index=buttons.indexOf(event.target as HTMLButtonElement);if(index>=0){event.preventDefault();buttons[(index+(event.key==='ArrowDown'?1:-1)+buttons.length)%buttons.length]?.focus();}
+ }
  if(event.key==='Escape'){
   if(stroke){event.preventDefault();stroke=null;renderMarks();}
-  else if(tool!=='select'){event.preventDefault();tool='select';render();}
-  else if(configuration.source_request&&!document.querySelector('dialog[open]')){event.preventDefault();void work(backSource);}
+  else if(configuration.source_request&&!document.querySelector('dialog[open]')){event.preventDefault();tool='select';void work(backSource);}
  }
  if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='z'&&event.target===canvas&&tool!=='select'){
   event.preventDefault();find<HTMLButtonElement>('undo-mark').click();
@@ -381,6 +388,12 @@ await work(async()=>{
  if(request&&state.sourceRequest!==request.request_id&&!state.pending){
   if(request.source.reference.window!==client.view.window||typeof request.return_view!=='string')throw Error('The annotation entry belongs to another window.');
   await selectSource(await previewSource(client,request.source.reference,request.source.preview,request.source.inclusion));state.sourceRequest=request.request_id;await persist();find('component-capture').querySelector('h2')!.textContent='Original source';
+  const anchor=request.source.anchor;
+  if(anchor){
+   if(anchor.kind==='captured_view'){state.capture=anchor.capture;await retainedImage();}
+   await write('freeze',{kind:'freeze',reference:state.source!.reference,inclusion:state.source!.inclusion,anchor},anchor.kind==='text_quote'?anchor.quote:state.source!.text);
+   note.focus();
+  }
  }else if(state.capture)await retainedImage();
  else if(state.source)await previewImage();
  if(state.pending)notice('An original request is unconfirmed. Inspect it before another write.');else if(catalogError)notice(`Files selection is unavailable: ${catalogError}`,true);

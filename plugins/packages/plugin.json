@@ -154,6 +154,16 @@
       "scopes": [
         "workspace.read"
       ]
+    },
+    {
+      "capability": {
+        "id": "annotations.read",
+        "version": 1
+      },
+      "scopes": [
+        "application.read",
+        "plugins.read"
+      ]
     }
   ],
   "views": [

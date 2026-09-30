@@ -125,6 +125,16 @@
     },
     {
       "capability": {
+        "id": "annotations.read",
+        "version": 1
+      },
+      "scopes": [
+        "application.read",
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
         "id": "windows.open_view",
         "version": 1
       },

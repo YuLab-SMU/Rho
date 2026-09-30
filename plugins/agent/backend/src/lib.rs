@@ -8,6 +8,7 @@ pub mod server;
 
 mod diagnostics;
 mod handoffs;
+mod contexts;
 mod model_assets;
 mod run_recovery;
 mod runs;

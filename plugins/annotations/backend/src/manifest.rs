@@ -12,7 +12,8 @@ pub fn key(id: &str) -> CapabilityKey {
 pub fn is_operation(id: &str) -> Option<bool> {
     match id {
         "annotations.write" | "annotations.capture.import" => Some(true),
-        "annotations.read"
+        "annotations.capture.upload"
+        | "annotations.read"
         | "annotations.context.search"
         | "annotations.context.preview"
         | "annotations.capture.read" => Some(false),
@@ -32,8 +33,9 @@ fn capability(
     example: Value,
 ) -> CapabilityContribution {
     let operation = is_operation(id) == Some(true);
+    let control = id == "annotations.capture.upload";
     let mut scopes = [
-        if operation {
+        if operation || control {
             "application.control"
         } else {
             "application.read"
@@ -47,11 +49,11 @@ fn capability(
         scopes.insert("resources.read".into());
     }
     CapabilityContribution {
-        capability: key(id), kind: if operation { CapabilityKind::Operation } else { CapabilityKind::Query }, title: id.into(),
+        capability: key(id), kind: if control { CapabilityKind::Control } else if operation { CapabilityKind::Operation } else { CapabilityKind::Query }, title: id.into(),
         description: if operation { "Freeze a complete owner-contributed source or append an annotation revision with an original request receipt and CAS. Quotes use offsets within the selected preview inclusion. Source image references remain references; a captured-view anchor must refer to a separately imported, validated capture. Does not modify scientific content, start a runtime, or send to an Agent." } else { "Read principal/project-scoped annotation records and frozen evidence without observing a live source or starting a runtime. Exact historical note revisions stay readable; current source status remains unknown." }.into(),
         input_schema, output_schema, examples: vec![example], recovery_schema: json!(true),
         required_scopes: scopes,
-        effects: if operation { ["annotations.metadata".into()].into() } else { Default::default() },
+        effects: if operation || control { ["annotations.metadata".into()].into() } else { Default::default() },
         cancellation: CancellationSupport::Unsupported, preflight: None,
     }
 }
@@ -97,6 +99,9 @@ pub fn manifest() -> PluginManifest {
                 "project.references.read", "project.write", "remote.execute", "resources.read",
                 "skill.read", "slurm.read", "slurm.write", "workspace.read", "workspace.run_r",
             ]),
+            requirement("annotations.capture.upload", &["application.control", "plugins.read"]),
+            requirement("agent.context.search", &["application.read"]),
+            requirement("agent.context.preview", &["application.read"]),
             requirement("annotations.capture.import", &["application.control", "plugins.read", "resources.read"]),
             requirement("annotations.capture.read", &["application.read", "plugins.read"]),
             requirement("annotations.context.preview", &["application.read", "plugins.read"]),
@@ -126,6 +131,9 @@ pub fn manifest() -> PluginManifest {
             ),
         ],
         capabilities: vec![
+            capability("annotations.capture.upload", schema_for!(CaptureUpload).to_value(),
+                schema_for!(AnnotationCommandReceipt).to_value(),
+                json!({"request_id":"capture-view","reference":example_ref,"inclusion":{"kind":"note_and_evidence"},"base64":"cG5n"})),
             capability(
                 "annotations.write",
                 schema_for!(WriteRequest).to_value(),
