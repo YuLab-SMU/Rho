@@ -2,12 +2,13 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { PluginViewConnection, PluginViewRecord, PluginViewCloseMode } from '../../sdk/plugin-protocol/index.js';
 import { HostClient, message } from './host-client';
 import { createPluginWindowClosures, createPluginWindowState, createPluginWindowViews } from './plugin-window-client';
-import { pluginLayoutDocument, pluginLayoutModel, pluginLayoutViews, namePluginLayoutViews, pluginLayoutActionChangesDocument } from './plugin-layout';
+import { pluginLayoutDocument, pluginLayoutModel, pluginLayoutViews, namePluginLayoutViews, pluginLayoutActionChangesDocument, focusPluginLayoutView, activePluginLayoutView } from './plugin-layout';
 import { PluginLayoutHost } from './plugin-layout-host';
 import { Modal } from "./primitives";
 import { mountPluginFrame } from './plugin-frame';
 import { PluginLauncherPanel } from './plugin-launcher-panel';
 import { PluginWindowRecovery } from './plugin-window-recovery';
+import {PluginSidebar} from './plugin-sidebar';
 
 function ConnectedFrame({ client, project, connection, failed, refresh }: {
   client: HostClient; project: string; connection: PluginViewConnection; failed(error: string): void; refresh(): Promise<void>;
@@ -31,6 +32,7 @@ export function PluginWorkspace({ client, project, testName }: { client: HostCli
   const [dock, setDock] = useState(() => pluginLayoutModel(saved.layout));
   const applied = useRef(saved.layout);
   const [error, setError] = useState('');
+  const [activeView, setActiveView] = useState<string | null>(null);
   const refresh = useRef<() => Promise<void>>(async () => {});
   const [recovery, setRecovery] = useState<{ record: PluginViewRecord; busy: boolean } | null>(null);
   useEffect(() => {
@@ -76,6 +78,25 @@ export function PluginWorkspace({ client, project, testName }: { client: HostCli
   useEffect(() => {
     namePluginLayoutViews(dock, new Map([...views].map(([id, entry]) => [id, entry.title])));
   }, [dock, views]);
+  useEffect(() => {
+    let frame = 0;
+    const focused = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const id = document.activeElement?.closest<HTMLElement>('[data-plugin-frame]')?.dataset.pluginFrame;
+        if (id) setActiveView(id);
+      });
+    };
+    window.addEventListener('blur', focused);
+    return () => {window.removeEventListener('blur', focused); cancelAnimationFrame(frame);};
+  }, []);
+  const focusView = (id: string) => {
+    if (focusPluginLayoutView(dock, id)) setActiveView(id);
+  };
+  const navigation = [...views].flatMap(([id, entry]) => {
+    const record = owners.views.connection(id)?.view;
+    return record && entry.visible ? [{id, title: entry.title, plugin: record.instance.plugin, contribution: record.contribution}] : [];
+  });
   const close = async (id: string, mode?: PluginViewCloseMode) => {
     try {
       await owners.layout.save();
@@ -142,8 +163,12 @@ export function PluginWorkspace({ client, project, testName }: { client: HostCli
         }}>Keep saved state and close</button>
       </div>
     </Modal>}
-    <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0 }}>
+    <div style={{ display: 'flex', flex: 1, minHeight: 0, minWidth: 0 }}>
+      <PluginSidebar views={navigation} active={activeView} focus={focusView} />
+      <div style={{ position: 'relative', flex: 1, minHeight: 0, minWidth: 0 }}>
       <PluginLayoutHost model={dock} frames={frames} close={id => void close(id)} changed={action => {
+        const selected = activePluginLayoutView(dock);
+        if (selected) setActiveView(selected);
         if (!pluginLayoutActionChangesDocument(action)) return;
         try { owners.layout.change(pluginLayoutDocument(dock)); applied.current = owners.layout.getSnapshot().layout; void owners.layout.save().catch(error => setError(message(error))); }
         catch (error) { setError(message(error)); }
@@ -151,6 +176,7 @@ export function PluginWorkspace({ client, project, testName }: { client: HostCli
       {saved.saved && pluginLayoutViews(saved.layout).length === 0 && (client.testProject
         ? <div className="empty" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>No views are open in this window.</div>
         : <div style={{ position: 'absolute', inset: 0, overflow: 'auto' }}><PluginLauncherPanel client={client} project={project} refresh={() => refresh.current()} /></div>)}
+      </div>
     </div>
   </main>;
 }

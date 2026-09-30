@@ -85,7 +85,7 @@ fs.writeFileSync(path.join(output, 'Contents/Info.plist'), `<?xml version="1.0" 
 <plist version="1.0"><dict>
 <key>CFBundleExecutable</key><string>Rho</string><key>CFBundleIdentifier</key><string>org.rho.local-preview</string>
 <key>CFBundleName</key><string>Rho Preview</string><key>CFBundleDisplayName</key><string>Rho Preview</string>
-<key>CFBundleVersion</key><string>1</string><key>CFBundleShortVersionString</key><string>0.1.0-preview.1</string>
+<key>CFBundleVersion</key><string>2</string><key>CFBundleShortVersionString</key><string>0.1.0-preview.2</string>
 <key>CFBundlePackageType</key><string>APPL</string><key>NSHighResolutionCapable</key><true/>
 <key>CFBundleIconFile</key><string>Rho.icns</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string></dict></plist>\n`);

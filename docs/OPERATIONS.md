@@ -9,6 +9,13 @@ then **Save and Run** in the editor. Files, Objects, Plots, Packages and the oth
 ordinary views share the prepared scenario. No terminal setup or plugin selection
 is needed. R starts only when requested; Agent tools remain unchecked.
 
+Preview 2 restores the left navigation rail for views already open in the window.
+Expand it for labels, choose a view when a component has several tabs, or click
+an entry to reveal its existing panel. Navigation does not close or recreate
+documents. The expansion preference survives browser refresh at the current
+address. Closed views are still managed through the ordinary Plugins interface;
+this change does not restore the retired global settings or runtime footer.
+
 Reopening the app returns to its saved window. **Open Workspace**, **Show Project**
 and **Show Logs** are in the native launch window; **Quit Rho** ends the local Host.
 Save files before quitting. Saved files and synchronized view state remain, but

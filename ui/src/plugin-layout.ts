@@ -76,6 +76,19 @@ export function pluginLayoutViews(layout: PluginWindowNode): string[] {
   return layout.kind === "tabs" ? [...layout.views] : layout.kind === "split" ? layout.children.flatMap(pluginLayoutViews) : [];
 }
 
+/** Reveal an existing retained view, including outside a maximized group. */
+export function focusPluginLayoutView(model: Model, id: string): boolean {
+  const node = model.getNodeById(id);
+  if (!(node instanceof TabNode)) return false;
+  const maximized = model.getMaximizedTabset();
+  if (maximized && maximized !== node.getParent()) model.doAction(Actions.maximizeToggle(maximized.getId()));
+  model.doAction(Actions.selectTab(id));
+  return true;
+}
+export function activePluginLayoutView(model: Model): string | null {
+  return model.getActiveTabset()?.getSelectedNode()?.getId() ?? null;
+}
+
 /** Async title observations are not layout edits. In particular an old dock may
  * receive a title while a newer native scene is being presented; persisting that
  * cosmetic notification would try to write its old composition over the scene. */

@@ -1,0 +1,24 @@
+/* Geometry and colors retained from the approved Paper Shell S01–S02. */
+.plugin-navigation {
+  width: 48px; flex-shrink: 0; display: flex; flex-direction: column;
+  align-items: center; gap: 6px; padding: 12px 0;
+  border-right: 1px solid var(--color-border); background: var(--color-surface);
+  overflow-y: auto; scrollbar-width: thin;
+}
+.plugin-navigation.is-expanded { width: 168px; padding-inline: 8px; align-items: stretch; }
+.plugin-navigation-modules, .plugin-navigation-bottom { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.plugin-navigation-bottom { margin-top: auto; padding-top: 18px; }
+.plugin-navigation-item { position: relative; width: 36px; height: 36px; min-height: 36px; padding: 0; border-radius: 7px; color: var(--color-muted); flex-shrink: 0; }
+.plugin-navigation-item svg { flex-shrink: 0; }
+.plugin-navigation-item[aria-current] { background: var(--color-accent-soft); color: var(--color-accent); }
+.plugin-navigation-label { display: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.is-expanded .plugin-navigation-item { width: 100%; justify-content: flex-start; gap: 10px; padding: 0 10px; }
+.is-expanded .plugin-navigation-label { display: inline; color: var(--color-text); }
+.is-expanded .plugin-navigation-item[aria-current] .plugin-navigation-label { color: var(--color-accent); }
+.plugin-navigation-count { position: absolute; right: 2px; top: 0; font-size: 10px; line-height: 14px; }
+.is-expanded .plugin-navigation-count { position: static; margin-left: auto; }
+.plugin-navigation-hint { background: var(--color-text); color: white; padding: 5px 9px; border-radius: 5px; font-size: 12px; line-height: 18px; z-index: 1300; max-width: 240px; }
+.plugin-navigation-menu { z-index: 1300; width: 240px; max-width: calc(100vw - 16px); max-height: var(--radix-dropdown-menu-content-available-height); overflow: auto; padding: 6px; border-radius: 8px; background: var(--color-surface); border: 1px solid var(--color-border); box-shadow: 0 6px 22px #20293620; }
+.plugin-navigation-menu [role="menuitem"] { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 34px; padding: 6px 12px; border-radius: 5px; cursor: pointer; outline: none; }
+.plugin-navigation-menu [role="menuitem"][data-highlighted] { color: var(--color-accent); background: var(--color-accent-soft); }
+.plugin-navigation-menu-heading { padding: 8px 12px; color: var(--color-muted); font-size: 12px; }

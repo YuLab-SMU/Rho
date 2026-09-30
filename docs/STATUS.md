@@ -11,13 +11,13 @@ capability assessment; full product acceptance retains the gaps listed below.
 
 ## Current focus: M6 assessment complete; document tools and real vision remain open
 
-Local macOS preview now has a native launcher, icon, first-use setup, saved Demo
-window and explicit quit. It reuses the sixteen M6 archives/core, Manager's recipe
-and Files navigation; R/Ark remain the selected local installations. Native app
-assembly and ad hoc signature verification succeeded; the actual Edge workbench
-opened `run_demo.R`, Console, Objects and Files (see
-`../preview-acceptance/workspace-open.png`). This establishes visible first launch,
-not new scientific-run or responsive acceptance. Release and Operations describe the workflow and exact build receipts.
+Local macOS preview provides a native launcher, saved Demo window and explicit
+quit using Manager's recipe and Files navigation. Preview 2 restores the reviewed
+48/168 px navigation for retained views, including multiple-view selection and
+revealing panels outside a maximized group. Client build/check, frontend boundaries
+and `cargo build --locked` pass; no automated sidebar tests were run. The first app
+opened the real scientific workspace (`../preview-acceptance/workspace-open.png`).
+Closed-view management stays in Plugins; global settings/footer remain separate.
 
 The unified-plugin plan was authorized on 2026-09-23; PS01–PS07 are approved
 ([Design 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved)).
