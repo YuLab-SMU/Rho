@@ -100,7 +100,7 @@ The old `/api/r`, `/api/r/probe` and `/api/application/bridge` endpoints are als
 removed. Workbench never reads saved R selection, discovers an interpreter or
 substitutes a project-only backend when opening the selected profile fails. Configure
 and start R through its ordinary provider. Shared-port legacy Application requests
-and explicit fixed Host profiles still await removal; see Status.
+and internal fixed Host composition still await removal; see Status.
 
 The native development ports `plugins.test_create`, `plugins.test_project`,
 `plugins.test_projects`, `plugins.test_operation` and `plugins.test_stop` create,
@@ -176,10 +176,12 @@ and configure the ordinary R instance's `checkpoint_helper_path`. Acquisition is
 separate from opening a catalog or requesting a copy; neither starts a compiler.
 No old R-settings HTTP endpoint or browser session-replacement dialog remains.
 
-CLI `invoke`, `session` and stdio `mcp` use explicit runtime flags. Omitting R flags
-there selects Project/Process-only hosting; `--rscript /path/to/Rscript` adds
-Environment capabilities without live R. `--demo` is a test-only fake runtime and
-is not accepted by the workbench.
+CLI `invoke`, `session`, stdio `mcp` and Workbench construct a generic plugin Host.
+Scientific startup flags and the fake runtime are removed. Configure R, Environment
+and Remote through explicit ordinary-plugin instances; missing packages never
+select built-in scientific owners. `--plugins-only` explicitly names the default.
+Standalone `query` remains a read-only file/journal observer pending its core cleanup;
+use a connected Host to query ordinary providers.
 
 ## Manage R sessions and recovery copies
 
@@ -321,8 +323,7 @@ For a standalone stdio Host:
 
 ```sh
 target/debug/rho --database /absolute/path/to/state.sqlite \
-  --project /absolute/path/to/project \
-  --ark /absolute/path/to/ark --r-home /absolute/path/to/R/home mcp
+  --project /absolute/path/to/project mcp
 ```
 
 Capability tools are derived from the registry as `rho.<capability>.v<version>`.
@@ -330,14 +331,16 @@ MCP schemas omit Rust numeric-width `format` annotations (such as `uint16` and
 `uint64`) that JSON Schema clients can report as unknown. Types, numeric bounds,
 references and required fields are preserved; Host validation uses the original
 capability contracts. This avoids schema-warning floods during Kimi startup.
-Query and application-control tools accept their capability arguments directly.
-Scientific operation tools accept:
+Query and Control tools accept their capability arguments directly.
+Operation tools accept an explicit request ID and capability arguments. For example,
+an empty scenario checkpoint uses:
 
 ```json
-{"client_request_id":"unique-action-id","arguments":{"code":"x <- 21; x * 2"},"preconditions":[]}
+{"client_request_id":"unique-action-id","arguments":{"scenario":"empty","expected_head":null,"name":"Empty","instances":{},"providers":[],"layout":{"kind":"empty"}},"preconditions":[]}
 ```
 
-Successful results use `structuredContent.result` and an accompanying text encoding.
+Ordinary scientific calls carry the exact `plugins.resolve` binding plus the
+provider arguments described by its public contract. Successful results use `structuredContent.result` and an accompanying text encoding.
 Errors include typed diagnostics; failed/uncertain operations retain their identity
 and outcome. `rho.output.view` additionally returns native image content and an
 original/manifest resource link, without duplicating image bytes in text metadata.
@@ -528,37 +531,11 @@ frontmatter validation. Host-attested packages retain the originating platform's
 names, directory conventions, optional metadata and enabled/disabled/rejected state.
 `allowed-tools` remains host data and cannot grant Rho scopes.
 
-An external platform launcher may provide its actual discovered roots using a
-bounded JSON manifest. This is launch metadata, not a new Skill package format:
-
-```json
-{"provider_id":"native-client","skills":[{"source_key":"plugin/method-reference","root_path":"/absolute/original/skill-directory","source_kind":"plugin","enablement":"enabled","reason":null}]}
-```
-
-`source_kind` is `project`, `user`, `plugin`, `managed` or `builtin`. Only the listed
-roots are read; Rho does not search all product directories. Project sources must
-stay within the selected project, and resources within their package root. The
-manifest itself is Host-private. Agent tools and method bindings cannot change
-its source enablement.
-
-```sh
-target/debug/rho --database /absolute/path/to/state.sqlite \
-  --project /absolute/path/to/project \
-  --host-skills /absolute/path/to/native-skills.json mcp
-```
-
-Manifest syntax and declared resources are checked before replacing a Host. Invalid
-sources are reported without renaming, repairing or substituting a method. Existing
-Skills remain in their original location and later reads verify their current bytes.
-
-Use `application.bind_method` for an explicit choice/exclusion, with a binding ID,
-new version and the expected previous version (null for creation). The CLI
-`bind-method --binding JSON [--expected-version VERSION]` reaches the same control.
-`host.resolve_context` reports current bindings, their resource pins, external work
-references, targets and unmet conditions. Clear an ancestor exclusion at its own
-scope before selecting that method below it. Host-disabled sources cannot be
-re-enabled through an alias. A binding declares method use; it does not certify
-scientific correctness or schedule another Agent.
+The old launcher `--host-skills` and `bind-method` CLI entry points are removed.
+Their fixed Application/Skill core implementation remains pending deletion, but
+is not registered by a generic plugin Host. Ordinary Agent context uses its
+explicit public provider declarations; external platforms retain their own Skill
+configuration. See [Status](STATUS.md) for the remaining context work.
 
 ## Connect the CLI to an existing Workbench
 
@@ -575,61 +552,54 @@ project change is rejected. The URL must use a literal loopback HTTP address and
 its private token fragment. The credential remains outside command output. Proxies,
 redirects and automatic request retries are disabled.
 
-Connected `query`, `invoke`, `get-operation` and `bind-method` use the same Host
+Connected `query`, `invoke`, `get-operation` and `request` use the same Host
 ports and native owners. Storage/runtime/source configuration belongs to the
 running Host; startup flags cannot be combined with `--connect-url-file`. Connect
 failures do not start a local Host. After a missing effectful acknowledgement,
 retain the original request ID and inspect its receipt/operation: accepted work
 continues under the existing Host.
 
-For other shared controls, `request --json` accepts a typed `HostRequest`. Replace
-window/incarnation/context placeholders below with current application observations:
-
-```sh
-target/debug/rho --connect-url-file /absolute/path/to/private-launch-url \
-  --project /absolute/path/to/project request --json \
-  '{"method":"application_control","params":{"window":{"window_id":"WINDOW_ID","incarnation":"INCARNATION"},"request_id":"open-console-1","action":{"kind":"open_view","view_type":"console","view_id":null,"expected_context_version":"CONTEXT_VERSION"}}}'
-```
-
-This request reaches the same Application owner as browser/MCP requests. It does
-not edit layout/draft storage directly or introduce another scientific execution
-path. HTTP replies are bounded to 8 MiB. Long work can set `return_after_acceptance: true` on the typed Invoke request, then
-query the original operation.
+For other shared controls, `request --json` accepts a typed `HostRequest`. A
+capability Control request carries the exact resolved provider binding and its
+published arguments. It uses the same Host port as the browser; it does not edit
+layout/draft storage directly. HTTP replies are bounded to 8 MiB. Long work can
+set `return_after_acceptance: true` on a typed Invoke request, then query its
+original operation.
 
 ## CLI and JSON sessions
 
-A one-shot invocation starts its Host, performs the action, and closes on exit:
+A one-shot invocation opens a generic Host, performs the explicit action and exits:
 
 ```sh
 target/debug/rho --database /absolute/path/to/state.sqlite \
   --project /absolute/path/to/project \
-  --ark /absolute/path/to/ark --r-home /absolute/path/to/R/home \
-  invoke --client-request-id example-1 --code 'x <- 21; x * 2'
+  invoke --client-request-id example-1 --capability scenarios.checkpoint \
+  --arguments '{"scenario":"empty-example","expected_head":null,"name":"Empty example","instances":{},"providers":[],"layout":{"kind":"empty"}}'
 ```
 
-Read its result with the returned ID and the same database:
+`--capability` and `--arguments` are required. No default R operation, implicit
+Main instance, `--code`, `--expected-session` or `--workspace-instance` rewriting
+remains. Use the selected capability's schema and explicit `--preconditions JSON`.
+For scientific work, keep a `session` or MCP Host alive, activate/resume the exact
+provider, resolve its binding and submit through that binding.
+
+Read the original record with its returned ID and the same database:
 
 ```sh
 target/debug/rho --database /absolute/path/to/state.sqlite get-operation OPERATION_ID
 ```
 
-Use `session` with the same startup flags for a persistent Host/R session. It emits
-a ready frame containing capability descriptors and accepts one JSON frame per
-line. After the run reply, replace `SESSION_ID` below with its actual output session
-identity before listing bindings:
+`session` emits a ready frame with its current capability descriptors and accepts
+one JSON frame per line. For example, a pure installed-package observation is:
 
 ```json
-{"id":"run","request":{"method":"invoke","params":{"client_request_id":"example-1","capability":{"id":"workspace.run_r","version":1},"arguments":{"code":"x <- 21; x * 2"},"preconditions":[]}}}
-{"id":"objects","request":{"method":"query_snapshot","params":{"capability":{"id":"workspace.list_objects","version":1},"arguments":{"expected_session":"SESSION_ID","name_contains":"x","limit":20}}}}
+{"id":"packages","request":{"method":"query_snapshot","params":{"capability":{"id":"plugins.list","version":1},"arguments":{"limit":20}}}}
 ```
 
-Replies carry the transport ID and may arrive out of order. The methods are
-`invoke`, `get_operation`, `request_cancellation`, `query_snapshot` and `subscribe`.
-Get/cancel use `operation_id`; subscribe uses `after_sequence` and `limit`.
-Shared `respond_input`, `application_control` and `bind_method` requests use their
-own typed schemas. Studio uses `application_bridge` and `application_execute`.
-End stdin to drain accepted work and close the session. Exact schemas are in the
-ready frame/MCP discovery and [Rust contract](../crates/contract/src/lib.rs).
+Replies carry the transport ID and may arrive out of order. Operations, queries,
+controls and cancellation use the shared Host request schemas. End stdin to drain
+accepted work and close the session. Exact schemas are in the ready frame/MCP
+discovery and [Rust contract](../crates/contract/src/lib.rs).
 
 ## Domain capabilities
 
@@ -734,29 +704,17 @@ unknown and retain their materials.
 
 ### Remote execution
 
-Supply an existing OpenSSH alias with `--remote-host ALIAS --remote-root /absolute/project`;
-add `--slurm-cluster NAME` for Slurm. Host startup does not connect. OpenSSH owns
-credentials and host-key verification; unknown/changed host keys are not accepted
-automatically and there is no password prompt.
+Configure an existing OpenSSH alias, remote root and optional Slurm cluster on
+an ordinary Remote instance. See [Remote package instructions](../plugins/remote/README.md).
+The fixed `--remote-host`, `--remote-root` and `--slurm-cluster` launch flags and
+their old live-test runner are removed. OpenSSH still owns credentials and host-key
+verification; discovery and instance configuration do not establish a connection.
 
-`slurm.submit` takes Bash `body` and optional explicit resource fields such as
-`cpus`, `memory_mb`, `time_minutes`, `gpus`, `partition` and `account`. Version 1
-uses one node/task allocation. The result is a submission receipt, not completion.
-Snapshot/reconcile/cancel use `submission_operation_id`. Lost receipts are reconciled
-through a unique native job reference without resubmission; missing/ambiguous
-accounting is not proof of absence. Cancel acknowledgement is separate from
-scheduler terminal state.
-
-Opt-in live verification requires a chosen host and empty writable shared scratch:
-
-```sh
-node scripts/test-remote-live.mjs HOST_ALIAS /absolute/empty/shared/scratch CLUSTER CPU_PARTITION
-```
-
-It submits two real CPU jobs and cancels only its own receipt-loss test job. It
-retains evidence and is excluded from default CI. Inspect original operations/native
-references after failure instead of resubmitting blindly. See [Status](STATUS.md)
-for the actual tested scope and [Development](DEVELOPMENT.md) for local fixtures.
+Submission receipts, scheduler observations and confirmed cancellation remain
+separate facts. Use the exact provider binding and original operation identity
+for inspection/reconciliation; do not resubmit after a missing receipt. Local
+transcript and loopback-SSH evidence do not establish remote-cluster acceptance.
+A new live-cluster run needs an explicitly selected target and scratch directory.
 
 
 ## Inspect R packages in Studio

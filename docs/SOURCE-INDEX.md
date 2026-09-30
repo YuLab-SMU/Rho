@@ -624,8 +624,6 @@ Checks:
   Applies to: `crates/contract/**`, `scripts/client.mjs`, `ui/**`.
 - `system.mcp` (L2): `["node","scripts/test-mcp.mjs"]`
   Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-mcp.mjs`.
-- `system.mcp-real-r` (L2): `["node","scripts/test-mcp.mjs","--real-r"]`
-  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-mcp.mjs`.
 - `system.workbench` (L2): `["node","scripts/test-workbench.mjs"]`
   Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-workbench.mjs`.
 
@@ -657,7 +655,6 @@ Sources:
 - `scripts/test-*.mjs`
 - `scripts/test-pack-agent-evidence.py`
 - `scripts/vendor-jet.mjs`
-- `scripts/verify-*.mjs`
 - `vendor/**`
 
 Checks:
@@ -678,10 +675,6 @@ Checks:
   Applies to: `scripts/pack-agent-evidence.py`, `scripts/test-pack-agent-evidence.py`.
 - `system.mcp` (L2): `["node","scripts/test-mcp.mjs"]`
   Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-mcp.mjs`.
-- `system.mcp-real-r` (L2): `["node","scripts/test-mcp.mjs","--real-r"]`
-  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-mcp.mjs`.
-- `system.output-media` (L2): `["node","scripts/test-output-media.mjs"]`
-  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-output-media.mjs`.
 - `system.process-recovery` (L2): `["node","scripts/test-process-recovery.mjs"]`
   Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-process-recovery.mjs`.
 - `system.project-coverage` (L1): `["cargo","test","-p","rho-sqlite","-p","rho-operation","-p","rho-plugins","--lib","project_coverage","--locked"]`
@@ -690,8 +683,6 @@ Checks:
   Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-r-checkpoints.mjs`.
 - `system.real-r` (L2): `["node","scripts/test-real-r.mjs"]`
   Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-real-r.mjs`.
-- `system.remote-protocol` (L2): `["node","scripts/test-remote-protocol.mjs"]`
-  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-remote-protocol.mjs`.
 - `system.rust` (L3): `["cargo","test","--workspace","--locked","--","--test-threads=1"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/**`, `plugins/**`, `rust-toolchain.toml`.
 - `system.vendor` (L0): `["node","scripts/vendor-jet.mjs","check"]`

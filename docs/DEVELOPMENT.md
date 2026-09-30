@@ -298,8 +298,10 @@ Private Agent/annotation/HTML HTTP routes and Workbench-owned service constructi
 have also been removed, as have R discovery/settings and the large resident
 application-bridge HTTP endpoint. Workbench startup no longer accepts a fixed
 Host profile or calls default-R continuation; its CLI escape flag is removed.
-Other CLI runtime profiles and shared-port legacy Application code remain for the
-next removal stage. Missing plugins cannot select a fixed Workbench fallback. Historical
+CLI writer/server entries now also use the generic plugin Host. Scientific startup
+flags, R invocation shortcuts and method-binding commands are removed. The standalone
+file observer, fixed Host constructors and shared-port legacy Application code remain
+for the next removal stage. Missing plugins cannot select a fixed Workbench fallback. Historical
 fixed-renderer test totals do not count as current plugin acceptance.
 
 ## Testing SOP
@@ -874,7 +876,7 @@ replaces ordinary Agent/annotation plugin acceptance.
 harness (`test-agent-plugin-real-r.mjs`) using retained `RHO_AGENT_PLUGIN_PACKAGE`
 and `RHO_R_PLUGIN_PACKAGE`, plus installed `RHO_ARK`/`RHO_R_HOME`. It builds only
 the affected Host test executables and does not rebuild plugins or call a live model.
-The no-argument script retains the broader real-R owner/CLI gate; the retired
+The no-argument script retains the native R helpers and retiring Host owner checks; the retired
 fixed component-source, mutation and MCP parity tests are no longer part of it.
 
 Environment contracts, native execution and R helpers live in
@@ -944,10 +946,9 @@ SSH/Slurm contracts and native execution live in `plugins/remote/api` and
 `plugins/remote/backend/owner`. Iterate with `cargo test -p rho-remote-api -p
 rho-remote-owner --lib --locked`. `node scripts/test-remote-plugin-owner.mjs`
 assembles only five public/plugin crates outside the checkout, runs the focused
-checks and exercises fake SSH/Slurm transcripts. `node scripts/test-remote-protocol.mjs`
-checks the retiring Host bridge, including authoritative idempotency, reconciliation
-and query purity. Both use temporary local executables and never contact a real
-cluster. They do not establish remote-host acceptance. The native owner has no
+checks and exercises fake SSH/Slurm transcripts. The fixed CLI Remote bridge runner
+is retired. Ordinary Remote/Agent suites cover exact provider calls, idempotency
+and recovery. Local transcript fixtures do not establish remote-host acceptance. The native owner has no
 journal or automatic replay.
 `cargo test -p rho-execution slurm --locked` verifies that the retiring query
 gateway checks the original principal and read scope before contacting a scheduler.
@@ -1297,7 +1298,7 @@ oversized UTF-8 and duplicate answers, then completes the original execution whi
 its instance drains. The generic Host plugin test separately proves that transient
 controls create no journal/result/event entries or direct resource uploads.
 
-The complete native matrix is:
+The remaining direct native Host/helper matrix (not ordinary-plugin composition) is:
 
 ```sh
 node scripts/test-real-r.mjs
@@ -1454,7 +1455,7 @@ to actual owner state. Studio only composes and manages the client lifecycle.
 The object viewer uses `react-data-grid` with React 19. Real native-storage checks
 in `scripts/test-r-objects.R` require Matrix and SingleCellExperiment in addition
 to the existing jsonlite/rlang bridge providers; tests never install them. Use
-`node scripts/test-real-r.mjs` for the complete native suite. The Studio browser
+`node scripts/test-real-r.mjs` for the remaining native Host/helper fixtures; ordinary-plugin acceptance is separate. The Studio browser
 scenario exercises a real 501-row table, Unicode text, array slices and SCE assay
 storage. Check ordinary/wide/constrained layouts and copying, not only snapshots.
 
@@ -1500,22 +1501,20 @@ Native/transport verification:
 
 | Script | Scope and prerequisites |
 | --- | --- |
-| `test-real-r.mjs` | Installed Ark and R with jsonlite, rlang, lintr and styler; real R, progressive object/package queries, non-forcing inspections, cancellation and code tools |
+| `test-real-r.mjs` | Installed Ark/R; remaining direct Host/helper fixtures for queries, cancellation and recovery. Fixed CLI/session checks are retired; `--agent` and `--plugin-recovery` select ordinary-plugin boundaries. |
 | `test-r-checkpoints.mjs` | Installed R with jsonlite; builds the private native checkpoint component for that R, then exercises the classifier and a capture/cold-restore round trip in disposable `--vanilla` processes. `--print-library` prints the component path for `RHO_CHECKPOINT_HELPER` |
 | `npm run test:browser --prefix ui` | Current `cargo build --locked` binary. Ordinary-plugin cases use explicit package/runtime selections; `scientific-workspace.spec.ts` requires either `RHO_SCIENTIFIC_PACKAGES` or `RHO_SCIENTIFIC_PLUGIN_SET`, plus `RHO_ARK` and `RHO_R_HOME`. Fixed-renderer browser specs have been retired with that implementation. Run the affected cases, not every fixture during iteration. |
 | `test-workbench.mjs` | Generic HTTP/MCP/connected CLI, empty-scene checkpoint idempotency, state CAS, request bounds and project fencing; accepts `RHO_TEST_BINARY=/absolute/current/rho` to skip all builds. Scientific cancellation/disconnect checks belong to the ordinary Process/R/Agent suites. |
-| `test-mcp.mjs` | Remaining fixed stdio Host reference; `--real-r` explicitly selects Ark/R. This CLI composition still awaits removal; it is not ordinary-plugin acceptance. |
+| `test-mcp.mjs` | Generic stdio MCP, schema portability, query purity, principal visibility, checkpoint idempotency across Host restart and frame bounds. `RHO_TEST_BINARY=/absolute/current/rho` skips builds. |
 | `test-environment.mjs` | R/Ark with pak, renv, ps and jsonlite; installs small local fixtures into temporary libraries, checks user-library preservation and recovery |
 | `test-process-recovery.mjs` | R-free native process crash/reconciliation |
-| `test-remote-protocol.mjs` | Local SSH/Slurm transcript fixtures; does not validate a remote cluster |
-| `test-remote-live.mjs` | Opt-in real jobs on an explicitly selected host/scratch directory; see Operations |
 | `test-deepseek-inbox.mjs` | Checks the installed, lock-matched native Inbox replay/clear implementation with a disposable journal; no provider calls or session scan |
 
 Interactive Rho integration checks need a disposable analysis project outside the Rho
 checkout's ancestry, so the native Agent does not inherit repository-development
 AGENTS.md instructions. Use a real analysis, verify its captured Editor script,
 original R operation and retained Plots media in the same live window. A successful
-greeting does not establish this integration. `test-mcp.mjs --real-r` also covers
+greeting does not establish this integration. The retired fixed MCP/R runner formerly covered
 model-readable invalid arguments and prompt acceptance behind a failed-run queue
 pause, including duplicate-request identity and explicit queue recovery.
 

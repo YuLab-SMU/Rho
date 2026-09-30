@@ -1735,8 +1735,8 @@ working directory through its ancestors to the project root, plus
 Rho-specific Skill package/root. Local packages use standard Agent Skills
 frontmatter; scripts/resources are data during discovery and reads.
 
-External launchers can supply `--host-skills` metadata listing exact resources they
-actually discovered. The native adapter reads those packages in place, preserving
+The retiring fixed Skill adapter accepts launcher-attested metadata for exact resources.
+Its `--host-skills` CLI entry is removed; this adapter is not registered by generic plugin Hosts. The native adapter reads those packages in place, preserving
 host names, directory differences, optional metadata and enabled/disabled/rejected
 state. A separate trusted byte-source port supports non-filesystem hosts. Attested
 host sources use their native discovery semantics while enforcing bounded YAML and
@@ -1778,7 +1778,10 @@ R configuration field, interpreter discovery/probe, saved runtime selection or
 scientific fallback on open failure. Its former R settings and resident
 application-bridge HTTP endpoints are removed; the shared Host port remains bounded
 at 272 KiB. Ordinary contributed documents use the plugin draft/frame contracts.
-Legacy Application code and other CLI fixed runtime profiles still await removal.
+All CLI writer/server entries now construct generic plugin Hosts. Fixed scientific
+startup flags, implicit R invocation targeting and method-binding shortcuts are removed.
+The standalone file observer, internal fixed Host constructors and legacy Application
+code still await removal.
 
 The workspace owns window identity, saved generic layout, view connections,
 cooperative closure and explicit suspended-instance recovery. Scientific UI,

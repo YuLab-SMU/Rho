@@ -449,7 +449,7 @@ cargo build --locked
 npm run test:browser --prefix ui
 node scripts/test-real-r.mjs
 node scripts/test-workbench.mjs
-node scripts/test-mcp.mjs --real-r
+node scripts/test-mcp.mjs
 RHO_PLUGIN_SET_PACKAGE=/absolute/path/to/retained/plugin-set node scripts/test-agent-process.mjs
 cargo fmt --all --check
 cargo clippy --workspace --all-targets --locked -- -D warnings

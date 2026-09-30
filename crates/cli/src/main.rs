@@ -6,9 +6,9 @@ mod session;
 
 use clap::{Parser, Subcommand};
 use rho_contract::{
-    CapabilityRef, Invocation, MAIN_WORKSPACE_INSTANCE, OperationId, Precondition, QueryRequest,
+    CapabilityRef, Invocation, OperationId, Precondition, QueryRequest,
 };
-use rho_host::{HostProfile, NextHost, RUN_R_CAPABILITY_ID, RuntimeConfiguration, SshConfig};
+use rho_host::NextHost;
 use serde_json::json;
 
 #[derive(Debug, Parser)]
@@ -22,93 +22,28 @@ struct Cli {
     /// Select an existing disposable test project on the connected Host.
     #[arg(long, requires = "connect_url_file")]
     test_project: Option<String>,
-    /// Open only generic plugin/Operation ports. Does not discover R or install packages.
-    #[arg(long, conflicts_with_all = ["demo", "ark", "r_home", "checkpoint_helper", "rscript", "environment", "remote_host", "host_skills", "connect_url_file"])]
+    /// Explicitly select the generic plugin Host (also the default).
+    #[arg(long, conflicts_with = "connect_url_file")]
     plugins_only: bool,
-    /// Explicit test-only runtime; does not run R.
-    #[arg(long, conflicts_with = "ark")]
-    demo: bool,
-    /// Materialize and open the bundled real Rho example project.
-    #[arg(long, conflicts_with_all = ["project", "demo", "remote_host", "remote_root", "slurm_cluster"])]
+    /// Materialize and open the bundled example project in Workbench.
+    #[arg(long, conflicts_with_all = ["project", "connect_url_file"])]
     demo_project: bool,
     #[arg(long)]
-    ark: Option<PathBuf>,
-    #[arg(long)]
-    r_home: Option<PathBuf>,
-    /// Prepared, verified Rho recovery component for this R installation.
-    #[arg(long)]
-    checkpoint_helper: Option<PathBuf>,
-    #[arg(long)]
-    rscript: Option<PathBuf>,
-    /// Bind a verified Environment realization when starting a new Ark session.
-    #[arg(long, requires = "ark")]
-    environment: Option<String>,
-    #[arg(long)]
     project: Option<PathBuf>,
-    /// Launcher-attested JSON manifest of exact existing Skill package roots.
-    #[arg(long, conflicts_with = "demo")]
-    host_skills: Option<PathBuf>,
-    /// An existing OpenSSH host alias. No connection is made while opening Host.
-    #[arg(long, requires = "remote_root", conflicts_with = "demo")]
-    remote_host: Option<String>,
-    #[arg(long, requires = "remote_host")]
-    remote_root: Option<String>,
-    #[arg(long, requires = "remote_host")]
-    slurm_cluster: Option<String>,
     #[command(subcommand)]
     command: Command,
 }
 
 impl Cli {
-    fn profile(&self) -> Result<HostProfile, String> {
-        let workbench = matches!(self.command, Command::Workbench { .. });
-        let plugins = self.plugins_only || workbench;
-        if plugins && (self.demo || self.ark.is_some() || self.r_home.is_some() || self.checkpoint_helper.is_some()
-            || self.rscript.is_some() || self.environment.is_some() || self.remote_host.is_some() || self.host_skills.is_some()) {
-            return Err("The workspace uses installed plugins. Configure the selected provider there".into());
-        }
-        let remote = self.remote_host.as_ref().map(|host| SshConfig {
-            host_alias: host.clone(),
-            project_root: self.remote_root.clone().unwrap_or_default(),
-            slurm_cluster: self.slurm_cluster.clone(),
-        });
-        let runtime = if plugins {
-            RuntimeConfiguration::Plugins
-        } else if let Some(executable) = &self.ark {
-            RuntimeConfiguration::Ark {
-                executable: executable.clone(),
-                r_home: self
-                    .r_home
-                    .clone()
-                    .ok_or("--r-home is required with --ark")?,
-                environment: self.environment.clone(),
-                checkpoint_helper_path: self.checkpoint_helper.clone(),
-            }
-        } else if let Some(rscript) = &self.rscript {
-            RuntimeConfiguration::Environment {
-                rscript: rscript.clone(),
-            }
-        } else {
-            RuntimeConfiguration::Project
-        };
-        Ok(HostProfile {
-            database: self.database.clone(),
-            runtime,
-            remote,
-            host_skills: self.host_skills.clone(),
-        })
+    async fn open_host(&self) -> Result<NextHost, String> {
+        NextHost::open_plugin_workspace(
+            &self.database,
+            self.project.as_deref().ok_or("--project is required")?,
+        )
+        .await
+        .map_err(|error| error.to_string())
     }
 
-    async fn open_host(&self) -> Result<NextHost, String> {
-        if self.demo {
-            return NextHost::open_demo(&self.database)
-                .await
-                .map_err(|error| error.to_string());
-        }
-        self.profile()?
-            .open(self.project.as_deref().ok_or("--project is required")?)
-            .await
-    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -120,7 +55,7 @@ enum Command {
         #[command(subcommand)]
         command: plugins::PluginCommand,
     },
-    /// Keep one Host/R session alive; read and write the typed session protocol over stdio.
+    /// Keep one generic plugin Host alive; read and write the typed session protocol over stdio.
     Session,
     /// Serve MCP over stdio using the same Host and capability registry.
     Mcp,
@@ -138,27 +73,15 @@ enum Command {
     Invoke {
         #[arg(long)]
         client_request_id: String,
-        /// Fixed logical R instance for --code. A standalone managed Host defaults
-        /// to Main; --connect-url-file needs this explicitly. Generic --arguments
-        /// carries its own target.
-        #[arg(long, requires = "code")]
-        workspace_instance: Option<String>,
-        #[arg(
-            long,
-            required_unless_present = "arguments",
-            conflicts_with = "arguments"
-        )]
-        code: Option<String>,
-        #[arg(long, conflicts_with = "code")]
-        arguments: Option<String>,
-        #[arg(long, default_value = RUN_R_CAPABILITY_ID)]
+        /// Exact arguments from the selected capability's published contract.
+        #[arg(long)]
+        arguments: String,
+        #[arg(long)]
         capability: String,
         #[arg(long, default_value_t = 1)]
         capability_version: u16,
         #[arg(long, default_value = "[]")]
         preconditions: String,
-        #[arg(long)]
-        expected_session: Option<String>,
     },
     /// Read through a standalone observer without runtime startup, writer leases or recovery.
     Query {
@@ -169,14 +92,7 @@ enum Command {
         #[arg(long, default_value = "{}")]
         arguments: String,
     },
-    /// Record an explicitly selected or excluded method through shared Application control.
-    BindMethod {
-        #[arg(long)]
-        expected_version: Option<String>,
-        #[arg(long)]
-        binding: String,
-    },
-    /// Send one typed HostRequest through --connect-url-file (including application controls).
+    /// Send one typed HostRequest through --connect-url-file.
     Request {
         #[arg(long)]
         json: String,
@@ -231,6 +147,9 @@ impl From<rho_host::OperationError> for CliFailure {
 
 async fn run() -> Result<(), CliFailure> {
     let cli = Cli::parse();
+    if cli.demo_project && !matches!(cli.command, Command::Workbench { .. }) {
+        return Err("--demo-project applies only to workbench".into());
+    }
     if let Command::Plugins { store, command } = &cli.command {
         if cli.plugins_only {
             return Err("Plugin repository commands need no Host; omit --plugins-only".into());
@@ -245,28 +164,12 @@ async fn run() -> Result<(), CliFailure> {
     }
     let context = NextHost::local_context();
     if let Some(path) = &cli.connect_url_file {
-        if cli.plugins_only
-            || cli.demo
-            || cli.demo_project
-            || cli.ark.is_some()
-            || cli.r_home.is_some()
-            || cli.checkpoint_helper.is_some()
-            || cli.rscript.is_some()
-            || cli.environment.is_some()
-            || cli.remote_host.is_some()
-            || cli.remote_root.is_some()
-            || cli.slurm_cluster.is_some()
-            || cli.host_skills.is_some()
-        {
-            return Err(rho_host::OperationError::InvalidInput("Connected commands use the existing Host configuration; runtime/source startup flags cannot be combined with --connect-url-file".into()).into());
-        }
         let (request,label)=match &cli.command {
             Command::Query {capability,capability_version,arguments}=>(json!({"method":"query_snapshot","params":{"capability":CapabilityRef::new(capability,*capability_version).map_err(|e|e.to_string())?,"arguments":serde_json::from_str::<serde_json::Value>(arguments).map_err(|e|e.to_string())?}}),"observation"),
             Command::Invoke {..}=>(json!({"method":"invoke","params":invocation(&cli.command)?}),"operation"),
             Command::GetOperation {operation_id}=>(json!({"method":"get_operation","params":{"operation_id":OperationId::new(operation_id).map_err(|e|e.to_string())?}}),"operation"),
-            Command::BindMethod {expected_version,binding}=>{let binding:rho_contract::ApplicationMethodBinding=serde_json::from_str(binding).map_err(|e|e.to_string())?;(json!({"method":"bind_method","params":{"expected_version":expected_version,"binding":binding}}),"binding")},
             Command::Request {json}=>(serde_json::from_str::<serde_json::Value>(json).map_err(|e|e.to_string())?,"result"),
-            _=>return Err(rho_host::OperationError::InvalidInput("--connect-url-file supports query, invoke, get-operation, bind-method and request; it never launches a server or runtime".into()).into()),
+            _=>return Err(rho_host::OperationError::InvalidInput("--connect-url-file supports query, invoke, get-operation and request; it never launches a server or runtime".into()).into()),
         };
         let test_project = cli.test_project.as_deref().map(rho_plugin_protocol::TestProjectId::new)
             .transpose().map_err(|error|rho_host::OperationError::InvalidInput(error.to_string()))?;
@@ -288,21 +191,12 @@ async fn run() -> Result<(), CliFailure> {
         dev_assets,
     } = &cli.command
     {
-        if cli.demo {
-            return Err("workbench requires a real project/runtime; --demo is test-only".into());
-        }
         let demo_project = if cli.demo_project {
             Some(rho_workbench::materialize_demo_project()?)
         } else {
             None
         };
         let project = demo_project.as_deref().or(cli.project.as_deref());
-        if project.is_none() && (cli.environment.is_some() || cli.remote_host.is_some()) {
-            return Err(
-                "--project is required for an initial environment or remote binding".into(),
-            );
-        }
-        cli.profile()?; // Reject fixed scientific startup flags before creating state.
         return rho_workbench::serve_with_assets(
             cli.database.clone(),
             project,
@@ -331,20 +225,6 @@ async fn run() -> Result<(), CliFailure> {
         arguments,
     } = &cli.command
     {
-        if cli.plugins_only
-            || cli.demo
-            || cli.ark.is_some()
-            || cli.r_home.is_some()
-            || cli.checkpoint_helper.is_some()
-            || cli.rscript.is_some()
-            || cli.environment.is_some()
-            || cli.remote_host.is_some()
-            || cli.remote_root.is_some()
-            || cli.slurm_cluster.is_some()
-            || cli.host_skills.is_some()
-        {
-            return Err(rho_host::OperationError::InvalidInput("Standalone query does not accept runtime or live-owner startup configuration. Connect to the existing Host session/MCP for R, Environment, remote or application/Skill queries.".into()).into());
-        }
         let observer = NextHost::open_query_observer(&cli.database, cli.project.as_deref())?;
         let observation = observer
             .query_snapshot(
@@ -368,7 +248,7 @@ async fn run() -> Result<(), CliFailure> {
     };
     let active_host = if matches!(
         cli.command,
-        Command::Invoke { .. } | Command::BindMethod { .. }
+        Command::Invoke { .. }
     ) {
         Some(cli.open_host().await?)
     } else {
@@ -387,29 +267,12 @@ async fn run() -> Result<(), CliFailure> {
             let host = active_host.expect("invoke opens one Host");
             let invocation =
                 prepared_invocation.expect("invoke uses its prepared original parameters");
-            let record = host.invoke(&context, targeted(&host, invocation)).await?;
+            let record = host.invoke(&context, invocation).await?;
             print_json(&json!({
                 "ok": true,
-                "runtime": if cli.demo { "deterministic_fake" } else if cli.ark.is_some() { "ark" } else if cli.rscript.is_some() { "environment" } else { "project" },
+                "runtime": "plugins",
                 "operation": record,
             }))
-        }
-        Command::BindMethod {
-            expected_version,
-            binding,
-        } => {
-            let host = active_host.expect("method binding opens one Host");
-            let binding = serde_json::from_str(&binding).map_err(|e| e.to_string())?;
-            let binding = host
-                .dispatch(
-                    &context,
-                    rho_contract::HostRequest::BindMethod(rho_contract::BindMethodRequest {
-                        expected_version,
-                        binding,
-                    }),
-                )
-                .await?;
-            print_json(&json!({"ok":true,"binding":binding}))
         }
         Command::GetOperation { operation_id } => {
             let host = NextHost::open_read_only(&cli.database)?;
@@ -427,34 +290,17 @@ async fn run() -> Result<(), CliFailure> {
 fn invocation(command: &Command) -> Result<Invocation, CliFailure> {
     let Command::Invoke {
         client_request_id,
-        workspace_instance,
-        code,
         arguments,
         capability,
         capability_version,
         preconditions,
-        expected_session,
     } = command
     else {
         return Err("Expected invoke arguments".into());
     };
-    let mut preconditions: Vec<Precondition> =
+    let preconditions: Vec<Precondition> =
         serde_json::from_str(preconditions).map_err(|e| e.to_string())?;
-    if let Some(session) = expected_session {
-        preconditions.push(Precondition {
-            kind: "workspace.session".into(),
-            subject: "active".into(),
-            expected: json!(session),
-        });
-    }
-    let mut arguments = if let Some(arguments) = arguments {
-        serde_json::from_str(arguments).map_err(|e| e.to_string())?
-    } else {
-        json!({"code":code.as_ref().ok_or("--code or --arguments is required")?})
-    };
-    if let Some(instance) = workspace_instance {
-        arguments["workspace_instance_id"] = json!(instance);
-    }
+    let arguments = serde_json::from_str(arguments).map_err(|e| e.to_string())?;
     let invocation = Invocation {
         client_request_id: client_request_id.clone(),
         capability: CapabilityRef::new(capability, *capability_version)
@@ -464,29 +310,6 @@ fn invocation(command: &Command) -> Result<Invocation, CliFailure> {
     };
     invocation.validate().map_err(|e| e.to_string())?;
     Ok(invocation)
-}
-
-/// A managed Host routes live R work to an explicit instance. The one-shot invoke
-/// names the Host's default instead of making the caller repeat it, and only where
-/// the published contract actually requires a target.
-fn targeted(host: &NextHost, mut invocation: Invocation) -> Invocation {
-    let requires_instance = host
-        .capabilities()
-        .iter()
-        .find(|descriptor| descriptor.capability == invocation.capability)
-        .is_some_and(|descriptor| {
-            descriptor.input_schema["required"]
-                .as_array()
-                .is_some_and(|required| {
-                    required
-                        .iter()
-                        .any(|name| name == "workspace_instance_id")
-                })
-        });
-    if requires_instance && invocation.arguments.get("workspace_instance_id").is_none() {
-        invocation.arguments["workspace_instance_id"] = json!(MAIN_WORKSPACE_INSTANCE);
-    }
-    invocation
 }
 
 fn print_json(value: &serde_json::Value) -> Result<(), String> {
@@ -501,49 +324,35 @@ fn print_json(value: &serde_json::Value) -> Result<(), String> {
 mod plugin_workspace_arguments {
     use super::*;
     #[test]
-    fn plugin_only_profile_is_explicit_and_rejects_fixed_runtime_configuration() {
+    fn generic_host_is_default_and_fixed_runtime_flags_are_rejected() {
         for command in ["session", "mcp", "workbench"] {
-            let cli = Cli::try_parse_from(["rho", "--project", "/test", "--plugins-only", command])
-                .unwrap();
-            assert!(matches!(
-                cli.profile().unwrap().runtime,
-                RuntimeConfiguration::Plugins
-            ));
+            assert!(Cli::try_parse_from(["rho", "--project", "/test", command]).is_ok());
+            assert!(Cli::try_parse_from(["rho", "--plugins-only", command]).is_ok());
+            for flag in ["--demo", "--ark", "--r-home", "--rscript", "--environment",
+                "--checkpoint-helper", "--host-skills", "--remote-host", "--remote-root",
+                "--slurm-cluster", "--fixed-workspace"] {
+                assert!(Cli::try_parse_from(["rho", flag, command]).is_err(), "{flag}");
+            }
         }
-        // Workbench can now choose its project in the browser. Other Host edges
-        // still enforce --project in open_host, before opening any owner.
-        assert!(Cli::try_parse_from(["rho", "--plugins-only", "workbench"]).is_ok());
-        for extra in [
-            vec!["--demo"],
-            vec!["--ark", "/ark"],
-            vec!["--r-home", "/R"],
-            vec!["--rscript", "/Rscript"],
-            vec!["--host-skills", "/skills"],
-            vec!["--connect-url-file", "/launch"],
-        ] {
-            let mut args = vec!["rho", "--project", "/test", "--plugins-only"];
-            args.extend(extra);
-            args.push("session");
-            assert!(Cli::try_parse_from(args).is_err());
-        }
+        assert!(Cli::try_parse_from(["rho", "--demo-project", "workbench"]).is_ok());
     }
     #[test]
-    fn ordinary_workbench_is_the_only_browser_profile() {
-        let cli = Cli::try_parse_from(["rho", "workbench"]).unwrap();
-        assert!(matches!(cli.profile().unwrap().runtime, RuntimeConfiguration::Plugins));
-        let cli = Cli::try_parse_from(["rho", "--r-home", "/R", "workbench"]).unwrap();
-        assert!(cli.profile().unwrap_err().contains("installed plugins"));
-        let cli = Cli::try_parse_from(["rho", "--demo", "workbench"]).unwrap();
-        assert!(cli.profile().unwrap_err().contains("installed plugins"));
-        for command in ["workbench", "session"] {
-            assert!(Cli::try_parse_from(["rho", "--fixed-workspace", command]).is_err());
-        }
-        let cli = Cli::try_parse_from(["rho", "--demo-project", "workbench"]).unwrap();
-        assert!(matches!(cli.profile().unwrap().runtime, RuntimeConfiguration::Plugins));
+    fn invocation_preserves_exact_arguments_and_preconditions() {
+        let args = r#"{"binding":{"instance":"explicit"},"arguments":{"code":"用户内容"}}"#;
+        let pre = r#"[{"kind":"fixture.identity","subject":"exact","expected":"v2"}]"#;
+        let cli = Cli::try_parse_from(["rho", "invoke", "--client-request-id", "one",
+            "--capability", "fixture.run", "--capability-version", "2", "--arguments", args,
+            "--preconditions", pre]).unwrap();
+        let request = invocation(&cli.command).unwrap();
+        assert_eq!(request.arguments, serde_json::from_str::<serde_json::Value>(args).unwrap());
+        assert_eq!(request.capability.version, 2);
+        assert_eq!(request.preconditions[0].expected, "v2");
+        assert!(Cli::try_parse_from(["rho", "invoke", "--client-request-id", "one", "--code", "1"]).is_err());
+        assert!(Cli::try_parse_from(["rho", "invoke", "--client-request-id", "one", "--arguments", "{}"]).is_err());
     }
     #[tokio::test]
     async fn plugin_session_without_project_cannot_open_an_owner() {
-        let cli = Cli::try_parse_from(["rho", "--plugins-only", "session"]).unwrap();
+        let cli = Cli::try_parse_from(["rho", "session"]).unwrap();
         assert!(matches!(cli.open_host().await, Err(message) if message == "--project is required"));
     }
 }

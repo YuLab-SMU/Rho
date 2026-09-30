@@ -1,9 +1,8 @@
-// Actual rmcp stdio server, local filesystem/process operations; no remote target.
+// Actual rmcp stdio server and generic plugin Host; no scientific provider required.
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import fs from "node:fs";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
@@ -15,29 +14,19 @@ const run = (program, args) => {
   assert.equal(result.status, 0, result.error?.message || result.stderr || result.signal);
   return result.stdout;
 };
-run("cargo", ["build", "--manifest-path", "Cargo.toml", "-p", "rho-cli", "--locked", "--offline"]);
-const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "Cargo.toml", "--no-deps", "--format-version", "1", "--offline"]));
-const binary = path.join(metadata.target_directory, "debug", process.platform === "win32" ? "rho.exe" : "rho");
+assert.deepEqual(process.argv.slice(2), [], "Use ordinary-plugin suites for scientific acceptance");
+let binary;
+if (process.env.RHO_TEST_BINARY) {
+  binary = fs.realpathSync(process.env.RHO_TEST_BINARY);
+} else {
+  run("cargo", ["build", "--manifest-path", "Cargo.toml", "-p", "rho-cli", "--locked", "--offline"]);
+  const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "Cargo.toml", "--no-deps", "--format-version", "1", "--offline"]));
+  binary = path.join(metadata.target_directory, "debug", process.platform === "win32" ? "rho.exe" : "rho");
+}
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rho-mcp-"));
 const project = path.join(dir, "project"); fs.mkdirSync(project);
-fs.writeFileSync(path.join(project, "analysis.R"), "x <- 1\n");
 const database = path.join(dir, "state/next.sqlite");
 const base = ["--database", database, "--project", project];
-const realR = process.argv.includes("--real-r");
-let humanPlan;
-let hosting = base;
-if (realR) {
-  const rHome = process.env.RHO_R_HOME || run("Rscript", ["--vanilla", "-e", "cat(R.home())"]).trim();
-  const ark = process.env.RHO_ARK || path.resolve(root, "target/debug", process.platform === "win32" ? "ark.exe" : "ark");
-  assert.ok(fs.existsSync(ark), "real MCP acceptance needs an installed Ark");
-  fs.cpSync(path.join(root, "crates/host/tests/fixtures/rhonextfixture"), path.join(project, "pkg"), { recursive: true });
-  const rscript = path.join(rHome, "bin", process.platform === "win32" ? "Rscript.exe" : "Rscript");
-  humanPlan = JSON.parse(run(binary, [...base, "--rscript", rscript, "invoke", "--client-request-id", "human-plan",
-    "--capability", "environment.plan", "--arguments", JSON.stringify({ manager: "pak", packages: ["local::pkg"] })])).operation;
-  assert.equal(humanPlan.status, "succeeded");
-  hosting = [...base, "--ark", ark, "--r-home", rHome];
-}
-
 async function deadline(promise, ms, message) {
   let timer;
   try { return await Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); })]); }
@@ -79,17 +68,18 @@ async function initialize(peer) {
   assert.equal(hello.serverInfo.name, "rho");
   peer.notify("notifications/initialized", {});
 }
-const peer = client([...hosting, "mcp"]);
-const sockets = [];
-let marker, oversized;
+const peer = client([...base, "mcp"]);
+let oversized;
 try {
   await initialize(peer);
   const tools = [];
   let cursor;
+  const cursors = new Set();
   do {
     const page = await peer.request("tools/list", cursor ? { cursor } : {}).result;
     tools.push(...page.tools);
     cursor = page.nextCursor;
+    if (cursor) { assert.ok(!cursors.has(cursor), "Catalog cursor must advance"); cursors.add(cursor); }
   } while (cursor);
   function portableFormats(schema, tool) {
     if (!schema || typeof schema !== "object") return;
@@ -103,23 +93,24 @@ try {
     portableFormats(tool.inputSchema, tool.name);
     portableFormats(tool.outputSchema, tool.name);
   }
-  assert.ok(tools.some((tool) => tool.name === "rho.project.apply_patch.v1"));
-  const queryTool = tools.find((tool) => tool.name === "rho.project.snapshot.v1");
+  assert.deepEqual(tools.filter(tool => !["rho.workspace.paths.v1", "rho.events.poll"].includes(tool.name)
+    && !/^rho\.(host|plugins|views|windows|scenarios|documents|resources|operation)\./.test(tool.name)).map(tool => tool.name), []);
+  const queryTool = tools.find((tool) => tool.name === "rho.plugins.list.v1");
   assert.equal(queryTool.annotations.readOnlyHint, true);
-  const commandTool = tools.find((tool) => tool.name === "rho.project.apply_patch.v1");
+  const commandTool = tools.find((tool) => tool.name === "rho.scenarios.checkpoint.v1");
   assert.deepEqual(commandTool.inputSchema.required, ["client_request_id", "arguments"]);
   const beforeEvents = (await peer.call("rho.events.poll", {}).result).structuredContent.result;
-  const snapshot = (await peer.call(queryTool.name, { paths: ["analysis.R"] }).result).structuredContent.result;
+  const snapshot = (await peer.call(queryTool.name, { limit: 10 }).result).structuredContent.result;
   assert.equal(snapshot.status, "ready");
   assert.deepEqual((await peer.call("rho.events.poll", {}).result).structuredContent.result, beforeEvents);
-  const input = { client_request_id: "mcp-patch", arguments: { patch: "--- a/analysis.R\n+++ b/analysis.R\n@@ -1 +1 @@\n-x <- 1\n+x <- 2\n" } };
+  const input = { client_request_id: "mcp-checkpoint", arguments: {scenario: "mcp", expected_head: null, name: "MCP", instances: {}, providers: [], layout: {kind: "empty"}} };
   const patched = (await peer.call(commandTool.name, input).result).structuredContent.result;
   assert.equal(patched.status, "succeeded", JSON.stringify(patched));
   assert.equal(patched.operation.caller.kind, "agent");
   assert.equal(patched.operation.caller.id, "local-mcp");
   assert.equal(patched.operation.principal.kind, "human");
   assert.equal(patched.operation.principal.id, "local-user");
-  assert.equal(fs.readFileSync(path.join(project, "analysis.R"), "utf8"), "x <- 2\n");
+
   assert.deepEqual((await peer.call(commandTool.name, input).result).structuredContent.result, patched);
   const humanRead = JSON.parse(run(binary, ["--database", database, "get-operation", patched.operation.operation_id]));
   const { next_reads: humanReads, ...humanRecord } = humanRead.operation;
@@ -127,130 +118,35 @@ try {
   assert.deepEqual(humanRecord, agentRecord, "human edge cannot read Agent owner truth");
   assert.ok(humanReads.some(read => read.capability.id === "operation.get" && read.arguments.operation_id === patched.operation.operation_id));
   assert.ok(!humanReads.some(read => read.capability.id === "project.read_text"), "a journal-only reader must not advertise an unavailable owner");
-  assert.ok(agentReads.some(read => read.capability.id === "project.read_text" && read.arguments.path === "analysis.R"));
+  assert.ok(agentReads.some(read => read.capability.id === "operation.get"));
   const beforeInjection = (await peer.call("rho.events.poll", { limit: 1000 }).result).structuredContent.result;
   const injected = await peer.call(commandTool.name, { ...input, client_request_id: "spoof", principal: { id: "other-user" } }).result.catch((error) => ({ isError: true, error: String(error) }));
   assert.equal(injected.isError, true);
   assert.deepEqual((await peer.call("rho.events.poll", { limit: 1000 }).result).structuredContent.result, beforeInjection);
 
-  if (realR) {
-    // A managed Host routes every live R request to an explicit instance.
-    const instance = "main";
-    const executed = (await peer.call("rho.workspace.run_r.v1", { client_request_id: "mcp-real-r", return_after_acceptance: false, arguments: { workspace_instance_id: instance, code: "x <- 21; x * 2" } }).result).structuredContent.result;
-    assert.equal(executed.status, "succeeded", JSON.stringify(executed));
-    assert.equal(executed.output.value, 42);
-    // A correctable input error must remain model-readable, not be replaced by
-    // outputSchema validation. A paused queue must acknowledge new work promptly.
-    const invalidMode = await peer.call("rho.workspace.run_r.v1", {client_request_id:"invalid-mode",arguments:{workspace_instance_id:instance,code:"1",output_mode:"all"}}).result;
-    assert.equal(invalidMode.isError,true);assert.equal(invalidMode.structuredContent,undefined);
-    assert.match(JSON.stringify(invalidMode.content),/output_mode/);
-    const failed = await peer.call("rho.workspace.run_r.v1",{client_request_id:"pause-error",return_after_acceptance:false,arguments:{workspace_instance_id:instance,code:"stop('expected queue recovery fixture')"}}).result;
-    assert.equal(failed.structuredContent.result.status,"failed");
-    const paused = (await peer.call("rho.workspace.console_state.v1",{workspace_instance_id:instance}).result).structuredContent.result.data;
-    assert.ok(paused.pause);
-    const retryInput={client_request_id:"after-error",arguments:{workspace_instance_id:instance,code:"queue_recovered <- TRUE"}};
-    const admitted=(await deadline(peer.call("rho.workspace.run_r.v1",retryInput).result,3000,"paused R work did not return acceptance")).structuredContent.result;
-    assert.equal(admitted.status,"accepted");
-    assert.ok(admitted.next_reads.some(r=>r.capability.id==="workspace.console_state"));
-    const duplicate=(await peer.call("rho.workspace.run_r.v1",retryInput).result).structuredContent.result;
-    assert.equal(duplicate.operation.operation_id,admitted.operation.operation_id);
-    await peer.call("rho.workspace.resume_queue.v1",{client_request_id:"resume-after-error",arguments:{workspace_instance_id:instance,session_id:paused.session_id,pause_id:paused.pause.id}}).result;
-    for(let attempt=0;attempt<100;attempt++){
-      const result=(await peer.call("rho.operation.get",{operation_id:admitted.operation.operation_id}).result).structuredContent.result;
-      if(result.status==="succeeded")break;
-      assert.notEqual(result.status,"failed");assert.ok(attempt<99);await new Promise(r=>setTimeout(r,20));
-    }
-    assert.ok(tools.some(tool=>tool.name==="rho.workspace.respond_input"));
-    const inputRun=(await peer.call("rho.workspace.run_r.v1",{client_request_id:"mcp-stdin",return_after_acceptance:true,arguments:{workspace_instance_id:instance,code:"mcp_answer <- readline('MCP answer: '); stopifnot(mcp_answer == 'verified')",output_mode:"console"}}).result).structuredContent.result;
-    assert.equal(inputRun.status,"accepted");
-    let pendingInput;
-    for(let attempt=0;attempt<100;attempt++){
-      const state=(await peer.call("rho.workspace.console_state.v1",{workspace_instance_id:instance}).result).structuredContent.result.data;
-      if(state.input){pendingInput=state.input;break;}
-      await new Promise(resolve=>setTimeout(resolve,20));
-    }
-    assert.ok(pendingInput,"native stdin request was observed");
-    const answer=(await peer.call("rho.workspace.respond_input",{session_id:pendingInput.session_id,operation_id:inputRun.operation.operation_id,request_id:pendingInput.request_id,reply_id:"mcp-stdin-answer",value:"verified"}).result).structuredContent.result;
-    assert.equal(answer.submitted,true);
-    for(let attempt=0;attempt<100;attempt++){
-      const state=(await peer.call("rho.operation.get",{operation_id:inputRun.operation.operation_id}).result).structuredContent.result;
-      if(state.status==="succeeded")break;
-      assert.notEqual(state.status,"failed",JSON.stringify(state));
-      assert.ok(attempt<99,"stdin execution completed");
-      await new Promise(resolve=>setTimeout(resolve,20));
-    }
-    // Observations and stdin remain available while all 32 terminal-wait calls are occupied.
-    const waitingCalls=[peer.call("rho.workspace.run_r.v1",{client_request_id:"mcp-full-input",return_after_acceptance:false,arguments:{workspace_instance_id:instance,code:"readline('Full queue: ')",output_mode:"console"}}).result];
-    for(let i=0;i<31;i++)waitingCalls.push(peer.call("rho.workspace.run_r.v1",{client_request_id:`mcp-full-${i}`,return_after_acceptance:false,arguments:{workspace_instance_id:instance,code:"invisible(1)"}}).result);
-    let full;
-    for(let attempt=0;attempt<100;attempt++){
-      const reply=await peer.call("rho.workspace.console_state.v1",{workspace_instance_id:instance}).result;assert.notEqual(reply.isError,true,JSON.stringify(reply));
-      full=reply.structuredContent.result.data;if(full.input&&full.pending.length===31)break;
-      assert.ok(attempt<99,"all pending calls were accepted");await new Promise(resolve=>setTimeout(resolve,20));
-    }
-    await peer.call("rho.workspace.respond_input",{session_id:full.input.session_id,operation_id:full.input.operation_id,request_id:full.input.request_id,reply_id:"mcp-full-answer",value:"continue"}).result;
-    for(const result of await Promise.all(waitingCalls))assert.equal(result.structuredContent.result.status,"succeeded");
-    for (const capability of ["help", "lint", "format"]) {
-      assert.ok(tools.some((tool) => tool.name === `rho.workspace.${capability}.v1`));
-    }
-    const help = (await peer.call("rho.workspace.help.v1", { client_request_id: "mcp-help", arguments: { workspace_instance_id: instance, topic: "mean" } }).result).structuredContent.result;
-    assert.equal(help.status, "succeeded", JSON.stringify(help));
-    assert.equal(help.output.value.found, true);
-    assert.equal(help.operation.target.identity, executed.operation.target.identity);
-    const history = (await peer.call("rho.events.poll", { limit: 1000 }).result).structuredContent.result;
-    const inspected = (await peer.call("rho.workspace.inspect_object.v1", { workspace_instance_id: instance, name: "x", max_items: 3 }).result).structuredContent.result;
-    assert.deepEqual(inspected.data.preview, [21]);
-    assert.deepEqual((await peer.call("rho.events.poll", { limit: 1000 }).result).structuredContent.result, history);
-    const realized = (await peer.call("rho.environment.realize.v1", { client_request_id: "mcp-realize-human-plan",
-      arguments: { plan_operation_id: humanPlan.operation.operation_id } }).result).structuredContent.result;
-    assert.equal(realized.status, "succeeded", JSON.stringify(realized));
-    assert.equal(realized.output.verified, true);
-    assert.equal(realized.operation.caller.kind, "agent");
-    assert.equal(realized.output.plan_operation_id, humanPlan.operation.operation_id);
-    const { next_reads: readerNavigation, ...observedRealization } = JSON.parse(run(binary, ["--database", database, "get-operation", realized.operation.operation_id])).operation;
-    const { next_reads: _liveNavigation, ...nativeRealization } = realized;
-    assert.deepEqual(observedRealization, nativeRealization);
-    assert.ok(readerNavigation.some(read => read.capability.id === "operation.get" && read.arguments.operation_id === realized.operation.operation_id));
-    console.log("Verified real Ark/R execution and Query through MCP, plus Agent realization of a Human-created environment plan under one principal.");
-  }
-
-  marker = net.createServer(); marker.listen(0, "127.0.0.1"); await once(marker, "listening");
-  async function longOperation(id, body) {
-    const started = new Promise((resolve) => marker.once("connection", (socket) => {
-      sockets.push(socket); socket.on("error", () => {});
-      socket.once("data", (data) => resolve(data.toString().trim()));
-    }));
-    const code = `const net=require('node:net'); const s=net.connect(${marker.address().port},'127.0.0.1',()=>{s.write(process.env.RHO_OPERATION_ID+'\\n'); ${body}});`;
-    const call = peer.call("rho.process.run_local.v1", { client_request_id: id, arguments: { program: process.execPath, args: ["-e", code] } });
-    call.result.catch(() => {});
-    const operationId = await deadline(Promise.race([started, call.result.then((value) => { throw new Error(`operation ended before readiness: ${JSON.stringify(value)}`); })]), 10_000, "native process did not start");
-    return { call, operationId };
-  }
-  const cancellable = await longOperation("cancel-me", "setInterval(()=>{},1000);");
-  const cancellation = (await peer.call("rho.operation.request_cancellation", { operation_id: cancellable.operationId }).result).structuredContent.result;
-  assert.equal(cancellation.accepted, true);
-  const cancelled = (await cancellable.call.result).structuredContent.result;
-  assert.equal(cancelled.status, "cancelled");
-  const effect = path.join(project, "after-disconnect.txt");
-  const detached = await longOperation("keep-after-disconnect", `setTimeout(()=>{require('node:fs').writeFileSync(${JSON.stringify(effect)},'committed');s.end();},500);`);
-  peer.notify("notifications/cancelled", { requestId: detached.call.id, reason: "stop waiting only" });
   peer.child.stdin.end();
   const [code] = await deadline(peer.ended, 10_000, "MCP did not drain Host work");
   assert.equal(code, 0);
-  assert.equal(fs.readFileSync(effect, "utf8"), "committed");
-  const saved = JSON.parse(run(binary, ["--database", database, "get-operation", detached.operationId])).operation;
-  assert.equal(saved.status, "succeeded");
-  assert.equal(saved.cancellation_requested, false);
+  // Reopen the same generic Host: the exact MCP request returns its durable record.
+  const reopened = client([...base, "mcp"]);
+  try {
+    await initialize(reopened);
+    assert.deepEqual((await reopened.call(commandTool.name, input).result).structuredContent.result, patched);
+    reopened.child.stdin.end();
+    assert.equal((await deadline(reopened.ended, 10_000, "Reopened MCP did not stop"))[0], 0);
+  } finally {
+    reopened.lines.close();
+    if (reopened.child.exitCode === null && reopened.child.signalCode === null) { reopened.child.kill(); await reopened.ended; }
+  }
   oversized = client([...base, "mcp"]);
   await initialize(oversized);
   oversized.child.stdin.on("error", () => {});
   oversized.child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: commandTool.name, arguments: { oversized: "x".repeat(300000) } } }) + "\n");
   await deadline(oversized.ended, 10_000, "oversized MCP frame did not close");
   oversized.lines.close();
-  console.log("Verified actual rmcp handshake/discovery, registry schemas, query purity, Agent/human shared principal truth, invocation idempotency, explicit cancellation, disconnect drain and bounded input.");
+  console.log("Verified actual rmcp handshake/discovery, registry schemas, query purity, Agent/human shared principal truth, checkpoint idempotency across actual Host restart, clean drain and bounded input.");
 } finally {
-  for (const socket of sockets) socket.destroy();
-  marker?.close(); peer.lines.close();
+  peer.lines.close();
   if (peer.child.exitCode === null && peer.child.signalCode === null) { peer.child.kill(); await peer.ended; }
   if (oversized && oversized.child.exitCode === null && oversized.child.signalCode === null) { oversized.child.kill(); await oversized.ended; }
   oversized?.lines.close();

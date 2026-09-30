@@ -78,9 +78,7 @@
     "system.r-checkpoints": {"command":["node","scripts/test-r-checkpoints.mjs"],"tier":"L2","sources":["scripts/test-r-checkpoints.mjs","crates/**","r/**","scripts/fixtures/**"]},
     "system.environment": {"command":["node","scripts/test-environment.mjs"],"tier":"L2","sources":["scripts/test-environment.mjs","crates/**","r/**","scripts/fixtures/**"]},
     "system.process-recovery": {"command":["node","scripts/test-process-recovery.mjs"],"tier":"L2","sources":["scripts/test-process-recovery.mjs","crates/**","r/**","scripts/fixtures/**"]},
-    "system.remote-protocol": {"command":["node","scripts/test-remote-protocol.mjs"],"tier":"L2","sources":["scripts/test-remote-protocol.mjs","crates/**","r/**","scripts/fixtures/**"]},
     "system.mcp": {"command":["node","scripts/test-mcp.mjs"],"tier":"L2","sources":["scripts/test-mcp.mjs","crates/**","r/**","scripts/fixtures/**"]},
-    "system.mcp-real-r": {"command":["node","scripts/test-mcp.mjs","--real-r"],"tier":"L2","sources":["scripts/test-mcp.mjs","crates/**","r/**","scripts/fixtures/**"]},
     "system.workbench": {"command":["node","scripts/test-workbench.mjs"],"tier":"L2","sources":["scripts/test-workbench.mjs","crates/**","r/**","scripts/fixtures/**"]},
     "docs.index": {"command":["node","scripts/governance.mjs","check"],"tier":"L0","sources":["docs/**","governance/**","AGENTS.md","README.md","scripts/governance.mjs"]},
     "docs.tool": {"command":["node","scripts/test-governance.mjs"],"tier":"L0","sources":["scripts/governance.mjs","scripts/test-governance.mjs","governance/**"]},
@@ -91,7 +89,6 @@
     "studio.boundaries": {"command":["node","scripts/check-frontend-boundaries.mjs"],"tier":"L0","sources":["ui/**","crates/contract/**","sdk/**","scripts/check-frontend-boundaries.mjs"]},
     "studio.boundary-tests": {"command":["node","scripts/test-frontend-boundaries.mjs"],"tier":"L0","sources":["ui/**","crates/contract/**","sdk/**","scripts/test-frontend-boundaries.mjs"]},
     "studio.browser": {"command":["npm","run","test:browser","--prefix","ui"],"tier":"L2","sources":["ui/**","crates/contract/**","sdk/**"]},
-    "system.output-media": {"command":["node","scripts/test-output-media.mjs"],"tier":"L2","sources":["scripts/test-output-media.mjs","crates/**","r/**","scripts/fixtures/**"]},
     "system.evidence-pack": {"command":["python3","scripts/test-pack-agent-evidence.py"],"tier":"L1","sources":["scripts/test-pack-agent-evidence.py","scripts/pack-agent-evidence.py"]},
     "system.architecture-tests": {"command":["node","scripts/test-architecture.mjs"],"tier":"L0","sources":["scripts/test-architecture.mjs","scripts/check-architecture.mjs"]},
     "plugins.protocol": {"command":["cargo","test","-p","rho-plugin-protocol","--locked"],"tier":"L1","sources":["crates/plugin-protocol/**","Cargo.toml","Cargo.lock"]},
@@ -217,7 +214,6 @@
         "scripts/test-*.mjs",
         "scripts/test-*.R",
         "scripts/fixtures/**",
-        "scripts/verify-*.mjs",
         "vendor/**",
         "patches/jet/**",
         "scripts/vendor-jet.mjs",
@@ -238,13 +234,10 @@
         "system.r-checkpoints",
         "system.environment",
         "system.process-recovery",
-        "system.remote-protocol",
         "system.mcp",
-        "system.mcp-real-r",
         "system.workbench",
         "system.vendor",
         "system.vendor-tests",
-        "system.output-media",
         "system.evidence-pack",
         "system.architecture-tests"
       ]
@@ -308,8 +301,7 @@
         "studio.browser",
         "system.client",
         "system.workbench",
-        "system.mcp",
-        "system.mcp-real-r"
+        "system.mcp"
       ]
     },
     "plugins": {

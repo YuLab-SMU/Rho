@@ -114,14 +114,14 @@ fn ensure_no_token(result: &std::process::Output) {
     assert!(!String::from_utf8_lossy(&result.stderr).contains(TOKEN));
 }
 #[test]
-fn connected_query_invoke_get_bind_and_typed_control_use_the_existing_host_frame() {
-    let server = spawn_server(10, |_, request, stream| {
+fn connected_query_invoke_get_and_typed_control_use_the_existing_host_frame() {
+    let server = spawn_server(8, |_, request, stream| {
         if request.path == "/api/info" {
             assert_eq!(request.method, "GET");
             respond(
                 stream,
                 200,
-                json!({"project_root":"/fixture-project","runtime":"project","capabilities":[]}),
+                json!({"project_root":"/fixture-project","runtime":"plugins","capabilities":[]}),
                 "",
             );
         } else {
@@ -140,27 +140,24 @@ fn connected_query_invoke_get_bind_and_typed_control_use_the_existing_host_frame
     let dir = tempfile::tempdir().unwrap();
     let file = url_file(dir.path(), server.port);
     let database = dir.path().join("never-created/next.sqlite");
-    let binding=json!({"binding_id":"choice","version":"v1","working_directory":".","external_goal_ref":null,"external_task_ref":null,"external_actor_ref":null,"skill_ref":"observed-method","source_ref":"native-source","resources":[],"modules":[],"capabilities":[],"required_capabilities":[],"target":null,"excluded":false}).to_string();
-    let control=json!({"method":"application_control","params":{"window":{"window_id":"window-1","incarnation":"instance-1"},"request_id":"control-1","action":{"kind":"open_view","view_type":"console","view_id":null,"expected_context_version":"context-1"}}}).to_string();
+    let control=json!({"method":"control","params":{"capability":{"id":"fixture.answer","version":2},"arguments":{"binding":{"instance":"exact"},"arguments":{"value":"用户内容"}}}}).to_string();
     let cases = [
         vec![
             "query",
             "--capability",
-            "workspace.list_objects",
+            "plugins.list",
             "--arguments",
-            "{\"expected_session\":\"current\"}",
+            "{\"limit\":10}",
         ],
         vec![
             "invoke",
             "--client-request-id",
             "original-request",
-            "--code",
-            "x <- 42",
-            "--expected-session",
-            "current",
+            "--capability", "fixture.run",
+            "--arguments", "{\"binding\":{\"instance\":\"exact\"},\"arguments\":{\"code\":\"x <- 42\"}}",
+            "--preconditions", "[{\"kind\":\"fixture.identity\",\"subject\":\"exact\",\"expected\":\"current\"}]",
         ],
         vec!["get-operation", "original-operation"],
-        vec!["bind-method", "--binding", binding.as_str()],
         vec!["request", "--json", control.as_str()],
     ];
     for args in cases {
@@ -183,7 +180,7 @@ fn connected_query_invoke_get_bind_and_typed_control_use_the_existing_host_frame
         .iter()
         .filter(|r| r.method == "POST")
         .collect::<Vec<_>>();
-    assert_eq!(posted.len(), 5);
+    assert_eq!(posted.len(), 4);
     assert_eq!(
         posted
             .iter()
@@ -193,8 +190,7 @@ fn connected_query_invoke_get_bind_and_typed_control_use_the_existing_host_frame
             "query_snapshot",
             "invoke",
             "get_operation",
-            "bind_method",
-            "application_control"
+            "control"
         ]
     );
     assert_eq!(
@@ -221,7 +217,7 @@ fn provided_project_precondition_is_checked_before_any_post() {
         respond(
             stream,
             200,
-            json!({"project_root":"/different-project","runtime":"project","capabilities":[]}),
+            json!({"project_root":"/different-project","runtime":"plugins","capabilities":[]}),
             "",
         )
     });
@@ -234,8 +230,8 @@ fn provided_project_precondition_is_checked_before_any_post() {
             "invoke",
             "--client-request-id",
             "must-not-run",
-            "--code",
-            "42",
+            "--capability", "fixture.run",
+            "--arguments", "{}",
         ],
     );
     assert!(!result.status.success());
@@ -254,7 +250,7 @@ fn a_missing_post_acknowledgement_is_uncertain_and_does_not_replay() {
             respond(
                 stream,
                 200,
-                json!({"project_root":"/fixture-project","runtime":"project","capabilities":[]}),
+                json!({"project_root":"/fixture-project","runtime":"plugins","capabilities":[]}),
                 "",
             );
         }
@@ -268,8 +264,8 @@ fn a_missing_post_acknowledgement_is_uncertain_and_does_not_replay() {
             "invoke",
             "--client-request-id",
             "keep-this-request",
-            "--code",
-            "42",
+            "--capability", "fixture.run",
+            "--arguments", "{}",
         ],
     );
     assert!(!result.status.success());

@@ -21,17 +21,17 @@ fn read(reader: &mut impl BufRead) -> Value {
 }
 fn invocation(frame_id: &str) -> Value {
     json!({"id":frame_id, "request":{"method":"invoke", "params":{
-        "client_request_id":frame_id, "capability":{"id":"workspace.run_r","version":1},
-        "arguments":{"code":frame_id}
+        "client_request_id":frame_id, "capability":{"id":"scenarios.checkpoint","version":1},
+        "arguments":{"scenario":frame_id,"expected_head":null,"name":frame_id,"instances":{},"providers":[],"layout":{"kind":"empty"}}
     }}})
 }
 
 #[test]
-fn one_session_handles_pipelined_frames_and_queries_with_one_runtime() {
+fn one_session_handles_pipelined_frames_and_queries_with_one_plugin_host() {
     let dir = tempfile::tempdir().unwrap();
     let mut child = ChildGuard(
         Command::new(env!("CARGO_BIN_EXE_rho"))
-            .arg("--demo")
+            .arg("--project").arg(dir.path())
             .arg("--database")
             .arg(dir.path().join("next.sqlite"))
             .arg("session")
@@ -50,13 +50,13 @@ fn one_session_handles_pipelined_frames_and_queries_with_one_runtime() {
         capabilities
             .iter()
             .any(
-                |descriptor| descriptor["capability"]["id"] == "workspace.snapshot"
+                |descriptor| descriptor["capability"]["id"] == "plugins.list"
                     && descriptor["kind"] == "query"
             )
     );
     assert!(
         capabilities.iter().any(
-            |descriptor| descriptor["capability"]["id"] == "workspace.run_r"
+            |descriptor| descriptor["capability"]["id"] == "scenarios.checkpoint"
                 && descriptor["kind"] == "operation"
         )
     );
@@ -67,14 +67,8 @@ fn one_session_handles_pipelined_frames_and_queries_with_one_runtime() {
     assert_ne!(a["id"], b["id"]);
     assert_eq!(a["result"]["status"], "succeeded");
     assert_eq!(b["result"]["status"], "succeeded");
-    assert_eq!(
-        a["result"]["operation"]["target"],
-        b["result"]["operation"]["target"]
-    );
-    assert_ne!(
-        a["result"]["output"]["value"]["execution_index"],
-        b["result"]["output"]["value"]["execution_index"]
-    );
+    assert_ne!(a["result"]["operation"]["operation_id"], b["result"]["operation"]["operation_id"]);
+    assert!(capabilities.iter().all(|d| !["application", "project", "process", "environment"].contains(&d["domain"].as_str().unwrap_or(""))));
     let op_id = a["result"]["operation"]["operation_id"].clone();
     let query =
         json!({"id":"read","request":{"method":"get_operation","params":{"operation_id":op_id}}});
@@ -99,7 +93,7 @@ fn oversized_session_frame_is_rejected_without_an_operation() {
     let dir = tempfile::tempdir().unwrap();
     let mut child = ChildGuard(
         Command::new(env!("CARGO_BIN_EXE_rho"))
-            .arg("--demo")
+            .arg("--project").arg(dir.path())
             .arg("--database")
             .arg(dir.path().join("next.sqlite"))
             .arg("session")

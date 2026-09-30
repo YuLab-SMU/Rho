@@ -76,8 +76,7 @@ fn query_rejects_runtime_startup_flags_before_creating_any_host_material() {
             .output()
             .unwrap();
         assert!(!result.status.success());
-        let error: Value = serde_json::from_slice(&result.stderr).unwrap();
-        assert_eq!(error["diagnostic"]["code"], "invalid_input");
+        assert!(String::from_utf8_lossy(&result.stderr).contains("unexpected argument"));
         assert!(!database.parent().unwrap().exists());
         assert!(!project.join(".rho").exists());
     }
@@ -122,7 +121,7 @@ fn cli_queries_read_while_a_real_project_host_owns_the_writer_and_project_lease(
     );
     assert_eq!(fs::read(&database).unwrap(), before);
     assert!(child.0.try_wait().unwrap().is_none());
-    writeln!(input,"{}",json!({"id":"still-owned","request":{"method":"query_snapshot","params":{"capability":{"id":"project.read_text","version":1},"arguments":{"path":"notes.txt"}}}})).unwrap();
+    writeln!(input,"{}",json!({"id":"still-owned","request":{"method":"query_snapshot","params":{"capability":{"id":"plugins.list","version":1},"arguments":{"limit":10}}}})).unwrap();
     input.flush().unwrap();
     line.clear();
     assert!(reader.read_line(&mut line).unwrap() > 0);

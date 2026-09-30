@@ -1,10 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { verifySession } from "./verify-session.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const extension = process.platform === "win32" ? ".exe" : "";
@@ -53,32 +51,4 @@ run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--lib"
   "recovery_copy_protects_its_library", "--no-run"], { env: instanceEnv, stdio: "inherit" });
 run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--lib", "--locked",
   "recovery_copy_protects_its_library", "--", "--ignored", "--nocapture"], { env: instanceEnv, stdio: "inherit", timeout: 120_000 });
-run("cargo", ["build", "--manifest-path", "Cargo.toml", "-p", "rho-cli", "--locked"], { stdio: "inherit" });
-const metadata = JSON.parse(run("cargo", ["metadata", "--manifest-path", "Cargo.toml", "--no-deps", "--format-version", "1", "--locked"]));
-const binary = path.join(metadata.target_directory, "debug", `rho${extension}`);
-const project = fs.mkdtempSync(path.join(os.tmpdir(), "rho-real-cli-"));
-try {
-  const database = path.join(project, "next.sqlite");
-  const output = JSON.parse(run(binary, ["--database", database, "--ark", ark, "--r-home", rHome,
-    "--project", project, "invoke", "--client-request-id", "real-cli-once",
-    "--code", "x <- 21; cat('native R ready\\n'); x * 2"]));
-  assert.equal(output.runtime, "ark");
-  assert.equal(output.operation.status, "succeeded");
-  assert.equal(output.operation.output.value, 42);
-  const id = output.operation.operation.operation_id;
-  const before = fs.readFileSync(database);
-  const query = JSON.parse(run(binary, ["--database", database, "get-operation", id]));
-  const { next_reads: originalReads, ...originalRecord } = output.operation;
-  const { next_reads: queriedReads, ...queriedRecord } = query.operation;
-  assert.deepEqual(queriedRecord, originalRecord);
-  assert.equal(queriedReads.length, 1);
-  assert.equal(queriedReads[0].capability.id, "operation.get");
-  assert.equal(queriedReads[0].arguments.operation_id, id);
-  assert.ok(originalReads.some(read => read.capability.id === "workspace.output_events"));
-  assert.deepEqual(fs.readFileSync(database), before);
-  await verifySession(binary, ["--database", path.join(project, "session.sqlite"),
-    "--ark", ark, "--r-home", rHome, "--project", project]);
-  console.log("Verified real Ark/R session state, R errors with partial effects, confirmed cancellation, kernel exit, CLI invoke and read-only result query.");
-} finally {
-  fs.rmSync(project, { recursive: true, force: true });
-}
+console.log("Verified remaining native Host R/recovery fixtures. Fixed CLI/R transport checks are retired; ordinary-plugin acceptance is separate.");
