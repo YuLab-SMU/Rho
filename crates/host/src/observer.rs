@@ -1,4 +1,4 @@
-//! Query-only Host composition. Uses the same owners and gateways without opening
+//! Query-only journal composition. Uses the shared gateway without opening
 //! a writer, creating a journal, recovering operations, or starting native runtimes.
 use super::*;
 
@@ -20,49 +20,21 @@ impl QueryObserver {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
             Err(error) => return Err(OperationError::Storage(error.to_string())),
         };
-        let project = project
-            .map(|root| {
-                let mut excluded = skills::protected_path_candidates(&database);
-                let root = root
-                    .canonicalize()
-                    .map_err(|error| OperationError::TargetResolution(error.to_string()))?;
-                excluded.push(root.join(".rho/next-host.lock"));
-                excluded.push(database.parent().unwrap_or(Path::new(".")).join("runtime"));
-                excluded.push(
-                    database
-                        .parent()
-                        .unwrap_or(Path::new("."))
-                        .join("environment"),
-                );
-                GitProject::open(root, excluded)
-                    .map(|project| Arc::new(project) as Arc<dyn ProjectRuntime>)
-                    .map_err(OperationError::TargetResolution)
-            })
-            .transpose()?;
-        let outputs = if journal.is_some() {
-            project
-                .as_ref()
-                .map(|project| {
-                    rho_r_runtime::OutputStore::open_read_only(
-                        &database.parent().unwrap_or(Path::new(".")).join("runtime"),
-                        project.root(),
-                    )
-                    .map_err(OperationError::Storage)
-                })
-                .transpose()?
-                .flatten()
-                .map(|store| Arc::new(store) as Arc<dyn rho_workspace::WorkspaceOutputs>)
-        } else {
-            None
-        };
-        Self::from_sources(journal, project, outputs)
+        let project_scope = project.map(|root| {
+            let root = root.canonicalize()
+                .map_err(|error| OperationError::TargetResolution(error.to_string()))?;
+            if !root.is_dir() {
+                return Err(OperationError::TargetResolution("project must be an existing directory".into()));
+            }
+            root.to_str().map(str::to_owned).ok_or_else(||
+                OperationError::TargetResolution("project must be a UTF-8 directory".into()))
+        }).transpose()?;
+        Self::from_sources(journal, project_scope)
     }
     pub(crate) fn from_sources(
         journal: Option<Arc<dyn OperationJournal>>,
-        project: Option<Arc<dyn ProjectRuntime>>,
-        outputs: Option<Arc<dyn rho_workspace::WorkspaceOutputs>>,
+        project_scope: Option<String>,
     ) -> Result<Self, OperationError> {
-        let project_scope = project.as_ref().map(|p| p.root().to_owned());
         let targets = project_scope
             .as_ref()
             .map(|root| {
@@ -79,22 +51,6 @@ impl QueryObserver {
                 discovery.clone(),
                 id,
             )))?;
-        }
-        if let Some(project) = project {
-            register_project_queries(
-                &mut registry,
-                project,
-                Arc::new(tokio::sync::Mutex::new(())),
-            )?;
-        }
-        if let (Some(outputs), Some(journal)) = (outputs, &journal) {
-            register_output_queries(
-                &mut registry,
-                None,
-                outputs,
-                project_scope.clone(),
-                Arc::new(JournalRecords(journal.clone())),
-            )?;
         }
         let events = if let Some(journal) = &journal {
             Some(register_record_queries(
@@ -142,7 +98,7 @@ impl QueryObserver {
         request.validate()?;
         if self.registry.descriptor(&request.capability).is_none() {
             return Err(OperationError::Unavailable(format!(
-                "{} is unavailable in this standalone query-only Host. It does not start R, recover work or attach live application state. Use the existing Host session/MCP for native or live-owner queries; use host.catalog for this observer's available reads.",
+                "{} is unavailable in this standalone query-only Host. It does not start R, recover work or attach live application state. Use the existing plugin Host session/MCP for file, output or live-provider queries; use host.catalog for this observer's available reads.",
                 request.capability.display_key()
             )));
         }
@@ -150,7 +106,7 @@ impl QueryObserver {
     }
 }
 
-/// The same project query handlers are registered by active Hosts and observers.
+/// Retiring fixed composition uses these project handlers; observers never register them.
 pub(crate) fn register_project_queries(
     registry: &mut CapabilityRegistry,
     project: Arc<dyn ProjectRuntime>,

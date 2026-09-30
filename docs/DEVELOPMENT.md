@@ -299,9 +299,11 @@ have also been removed, as have R discovery/settings and the large resident
 application-bridge HTTP endpoint. Workbench startup no longer accepts a fixed
 Host profile or calls default-R continuation; its CLI escape flag is removed.
 CLI writer/server entries now also use the generic plugin Host. Scientific startup
-flags, R invocation shortcuts and method-binding commands are removed. The standalone
-file observer, fixed Host constructors and shared-port legacy Application code remain
-for the next removal stage. Missing plugins cannot select a fixed Workbench fallback. Historical
+flags, R invocation shortcuts and method-binding commands are removed. HostProfile
+now contains only the database path; there is no runtime selector or deferred-R
+startup path. Standalone observation reads the journal without constructing Files
+or native output owners. Fixed scientific Host constructors and shared-port legacy
+Application code remain for the next removal stage. Missing plugins cannot select a fixed Workbench fallback. Historical
 fixed-renderer test totals do not count as current plugin acceptance.
 
 ## Testing SOP

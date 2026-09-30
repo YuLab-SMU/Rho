@@ -60,8 +60,12 @@ async fn fresh_project_observation_creates_no_journal_store_or_project_lease() {
             .iter()
             .all(|d| d.kind == CapabilityKind::Query)
     );
-    let page = query(&observer, "project.read_text", json!({"path":"analysis.R"})).await;
-    assert_eq!(page["fragments"][0]["text"], "evidence <- 42\n");
+    assert!(observer.capabilities().iter().all(|d| d.capability.id.starts_with("host.")));
+    for id in ["project.read_text", "output.read_text", "workspace.snapshot", "plugins.list"] {
+        assert!(observer.query_snapshot(&NextHost::local_context(), QueryRequest {
+            capability: CapabilityRef::new(id, 1).unwrap(), arguments: json!({})
+        }).await.is_err(), "{id}");
+    }
     let overview = query(&observer, "host.overview", json!({})).await;
     for module in ["operations", "objects", "console", "application", "skills"] {
         assert_eq!(
@@ -98,14 +102,10 @@ async fn observer_coexists_with_active_project_owner_without_taking_its_lease() 
     fs::create_dir(&root).unwrap();
     fs::write(root.join("analysis.R"), "native work remains owned\n").unwrap();
     let database = dir.path().join("state/next.sqlite");
-    let host = NextHost::open_project(&database, &root).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&database, &root).await.unwrap();
     let before = fs::read(&database).unwrap();
     let lock_before = fs::read(root.join(".rho/next-host.lock")).unwrap();
     let observer = NextHost::open_query_observer(&database, Some(&root)).unwrap();
-    assert_eq!(
-        query(&observer, "project.read_text", json!({"path":"analysis.R"})).await["fragments"][0]["text"],
-        "native work remains owned\n"
-    );
     assert!(
         query(&observer, "operation.list_recent", json!({"limit":10})).await["operations"]
             .as_array()
@@ -118,7 +118,7 @@ async fn observer_coexists_with_active_project_owner_without_taking_its_lease() 
         lock_before
     );
     assert!(
-        NextHost::open_project(dir.path().join("different.sqlite"), &root)
+        NextHost::open_plugin_workspace(dir.path().join("different.sqlite"), &root)
             .await
             .is_err()
     );
@@ -127,8 +127,8 @@ async fn observer_coexists_with_active_project_owner_without_taking_its_lease() 
         .query_snapshot(
             &NextHost::local_context(),
             QueryRequest {
-                capability: CapabilityRef::new("project.read_text", 1).unwrap(),
-                arguments: json!({"path":"analysis.R"}),
+                capability: CapabilityRef::new("plugins.list", 1).unwrap(),
+                arguments: json!({"limit":10}),
             },
         )
         .await
@@ -208,34 +208,50 @@ async fn orphan_accepted_and_running_records_are_observed_without_recovery_or_da
 }
 
 #[tokio::test]
-async fn existing_output_store_is_read_through_the_same_authorized_output_owner() {
+async fn retired_scientific_store_paths_are_never_opened_or_advertised() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("project");
     fs::create_dir(&root).unwrap();
     let database = dir.path().join("state/next.sqlite");
     let journal = SqliteOperationJournal::open(&database).unwrap();
-    let operation = record(&root, "output-original");
+    let operation = record(&root, "original");
     journal.admit(&operation).await.unwrap();
-    let canonical = root.canonicalize().unwrap().to_string_lossy().into_owned();
-    let store =
-        rho_r_runtime::OutputStore::open(&database.parent().unwrap().join("runtime"), &canonical)
-            .unwrap();
-    let mut writer = store.begin(&operation.operation_id).unwrap();
-    writer.finish().unwrap();
-    let reference = store
-        .append_text(&operation.operation_id, "retained original text\n")
-        .unwrap();
-    drop(writer);
-    drop(store);
     drop(journal);
+    // Deliberately invalid native store paths: journal observation must not inspect them.
+    for name in ["runtime", "environment"] {
+        fs::write(database.parent().unwrap().join(name), "untouched scientific material").unwrap();
+    }
     let before = fs::read(&database).unwrap();
     let observer = NextHost::open_query_observer(&database, Some(&root)).unwrap();
-    let page = query(
-        &observer,
-        "output.read_text",
-        json!({"reference":reference}),
-    )
-    .await;
-    assert_eq!(page["text"], "retained original text\n");
+    assert!(observer.capabilities().iter().all(|d|
+        d.capability.id.starts_with("host.") || d.capability.id.starts_with("operation.")));
+    assert_eq!(query(&observer, "operation.get", json!({"operation_id":operation.operation_id})).await["record"]["operation"]["operation_id"], "original");
     assert_eq!(fs::read(&database).unwrap(), before);
+    for name in ["runtime", "environment"] {
+        assert_eq!(fs::read_to_string(database.parent().unwrap().join(name)).unwrap(), "untouched scientific material");
+    }
+}
+
+#[tokio::test]
+async fn observer_preserves_project_and_principal_visibility_without_recovery() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("project");
+    let other = dir.path().join("other");
+    fs::create_dir(&root).unwrap(); fs::create_dir(&other).unwrap();
+    let database = dir.path().join("state/next.sqlite");
+    let journal = SqliteOperationJournal::open(&database).unwrap();
+    let operation = record(&root, "private-original");
+    journal.admit(&operation).await.unwrap(); drop(journal);
+    let before = fs::read(&database).unwrap();
+    let observer = NextHost::open_query_observer(&database, Some(&root)).unwrap();
+    let other_project = NextHost::open_query_observer(&database, Some(&other)).unwrap();
+    let request = QueryRequest { capability: CapabilityRef::new("operation.get", 1).unwrap(),
+        arguments: json!({"operation_id":operation.operation_id}) };
+    let mut denied = NextHost::local_context(); denied.caller.id = "another-user".into();
+    for (source, context) in [(&observer, denied), (&other_project, NextHost::local_context())] {
+        let result = source.query_snapshot(&context, request.clone()).await.unwrap();
+        assert!(result.data.unwrap()["record"].is_null());
+    }
+    assert_eq!(fs::read(&database).unwrap(), before);
+    assert!(!root.join(".rho").exists()); assert!(!other.join(".rho").exists());
 }

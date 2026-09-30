@@ -37,7 +37,7 @@ fn standalone_queries_leave_new_projects_and_missing_databases_uninitialized() {
     let database = dir.path().join("unused/state.sqlite");
     for (capability, args) in [
         ("host.overview", json!({})),
-        ("project.read_text", json!({"path":"notes.txt"})),
+        ("host.catalog", json!({"limit":10})),
     ] {
         let result = observer(&database, &project, capability, args);
         assert!(
@@ -47,6 +47,12 @@ fn standalone_queries_leave_new_projects_and_missing_databases_uninitialized() {
         );
         let reply: Value = serde_json::from_slice(&result.stdout).unwrap();
         assert_eq!(reply["observation"]["status"], "ready");
+    }
+    for capability in ["project.read_text", "output.read_text", "workspace.snapshot"] {
+        let result = observer(&database, &project, capability, json!({}));
+        assert!(!result.status.success(), "{capability}");
+        let error: Value = serde_json::from_slice(&result.stderr).unwrap();
+        assert!(error["error"].as_str().unwrap().contains("existing plugin Host"));
     }
     assert!(!database.parent().unwrap().exists());
     assert!(!project.join(".rho").exists());
@@ -111,8 +117,8 @@ fn cli_queries_read_while_a_real_project_host_owns_the_writer_and_project_lease(
     let result = observer(
         &database,
         &project,
-        "project.read_text",
-        json!({"path":"notes.txt"}),
+        "operation.list_recent",
+        json!({"limit":10}),
     );
     assert!(
         result.status.success(),

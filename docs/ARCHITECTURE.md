@@ -1780,8 +1780,11 @@ application-bridge HTTP endpoints are removed; the shared Host port remains boun
 at 272 KiB. Ordinary contributed documents use the plugin draft/frame contracts.
 All CLI writer/server entries now construct generic plugin Hosts. Fixed scientific
 startup flags, implicit R invocation targeting and method-binding shortcuts are removed.
-The standalone file observer, internal fixed Host constructors and legacy Application
-code still await removal.
+HostProfile contains only generic storage configuration; native project reservation
+still precedes replacement of the current Host. Standalone observers use canonical
+project scope for journal visibility, without constructing a Files owner or opening
+R/output stores. Internal fixed Host constructors and legacy Application code still
+await removal.
 
 The workspace owns window identity, saved generic layout, view connections,
 cooperative closure and explicit suspended-instance recovery. Scientific UI,

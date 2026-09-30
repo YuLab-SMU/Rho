@@ -1,9 +1,8 @@
 use rho_contract::{
-    ApplicationMethodBinding, BindMethodRequest, CapabilityRef, HostDiscoveredSkill,
-    HostDiscoveredSkills, HostRequest, HostSkillSourceKind, QueryRequest, QueryStatus,
-    ResolvedSkillContext, SkillEnablement, SkillListPage, SkillReadPage,
+    ApplicationMethodBinding, BindMethodRequest, CapabilityRef, HostRequest, QueryRequest, QueryStatus,
+    ResolvedSkillContext, SkillListPage, SkillReadPage,
 };
-use rho_host::{HostProfile, NextHost, RuntimeConfiguration};
+use rho_host::NextHost;
 use serde_json::{Value, json};
 use std::{fs, path::Path};
 
@@ -32,15 +31,6 @@ async fn query(host: &NextHost, id: &str, args: Value) -> Value {
     assert_eq!(response.status, QueryStatus::Ready);
     response.data.unwrap()
 }
-fn profile(database: &Path, manifest: Option<&Path>) -> HostProfile {
-    HostProfile {
-        database: database.into(),
-        runtime: RuntimeConfiguration::Project,
-        remote: None,
-        host_skills: manifest.map(Path::to_path_buf),
-    }
-}
-
 #[tokio::test]
 async fn project_only_host_shares_skill_queries_receipts_and_binding_control() {
     let dir = tempfile::tempdir().unwrap();
@@ -166,104 +156,5 @@ async fn project_only_host_shares_skill_queries_receipts_and_binding_control() {
             .as_array()
             .unwrap()
             .is_empty()
-    );
-}
-
-#[tokio::test]
-async fn host_profile_uses_exact_native_skill_roots_and_detects_updates() {
-    let dir = tempfile::tempdir().unwrap();
-    let project = dir.path().join("project");
-    fs::create_dir(&project).unwrap();
-    let native = create_skill(
-        &dir.path().join("native-platform"),
-        "rho-native-host-fixture",
-    );
-    create_skill(
-        &dir.path().join("native-platform"),
-        "rho-must-not-be-discovered",
-    );
-    let manifest_path = dir.path().join("native-skills.json");
-    let manifest = HostDiscoveredSkills {
-        provider_id: "codex-host-fixture".into(),
-        skills: vec![HostDiscoveredSkill {
-            source_key: "plugin/exact-fixture".into(),
-            root_path: native.to_string_lossy().into(),
-            source_kind: HostSkillSourceKind::Plugin,
-            enablement: SkillEnablement::Enabled,
-            reason: None,
-        }],
-    };
-    fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
-    let host = profile(&dir.path().join("state/next.sqlite"), Some(&manifest_path))
-        .open(&project)
-        .await
-        .unwrap();
-    let listed: SkillListPage = serde_json::from_value(
-        query(
-            &host,
-            "skill.list",
-            json!({"source_id":"codex-host-fixture"}),
-        )
-        .await,
-    )
-    .unwrap();
-    assert_eq!(listed.skills.len(), 1);
-    let skill = &listed.skills[0];
-    assert_eq!(skill.metadata.name, "rho-native-host-fixture");
-    let body:SkillReadPage=serde_json::from_value(query(&host,"skill.read",json!({"skill_ref":skill.skill_ref,"expected_digest":skill.skill_digest,"limit_bytes":65536})).await).unwrap();
-    assert_eq!(
-        body.text.unwrap().as_bytes(),
-        fs::read(native.join("SKILL.md")).unwrap()
-    );
-    fs::write(native.join("scripts/check.R"), "changed original script\n").unwrap();
-    assert!(
-        host.query_snapshot(
-            &NextHost::local_context(),
-            QueryRequest {
-                capability: CapabilityRef::new("skill.read", 1).unwrap(),
-                arguments: json!({"skill_ref":skill.skill_ref,"expected_digest":skill.skill_digest})
-            }
-        )
-        .await
-        .is_err()
-    );
-}
-
-#[tokio::test]
-async fn invalid_declared_sources_fail_before_replacing_or_reserving_a_host() {
-    let dir = tempfile::tempdir().unwrap();
-    let original = dir.path().join("original");
-    let target = dir.path().join("target");
-    fs::create_dir(&original).unwrap();
-    fs::create_dir(&target).unwrap();
-    let old = NextHost::open_project(dir.path().join("old/next.sqlite"), &original)
-        .await
-        .unwrap();
-    let manifest_path = dir.path().join("invalid-source.json");
-    let manifest = HostDiscoveredSkills {
-        provider_id: "codex-invalid-fixture".into(),
-        skills: vec![HostDiscoveredSkill {
-            source_key: "missing".into(),
-            root_path: dir.path().join("not-installed").to_string_lossy().into(),
-            source_kind: HostSkillSourceKind::Plugin,
-            enablement: SkillEnablement::Enabled,
-            reason: None,
-        }],
-    };
-    fs::write(&manifest_path, serde_json::to_vec(&manifest).unwrap()).unwrap();
-    let error = profile(
-        &dir.path().join("future/state.sqlite"),
-        Some(&manifest_path),
-    )
-    .reserve(&target)
-    .err()
-    .expect("invalid source must fail preflight");
-    assert!(error.contains("Invalid host Skill source"));
-    assert!(!target.join(".rho").exists());
-    assert!(!dir.path().join("future").exists());
-    let observations = query(&old, "host.overview", json!({})).await;
-    assert_eq!(
-        observations["project_root"],
-        original.canonicalize().unwrap().to_str().unwrap()
     );
 }

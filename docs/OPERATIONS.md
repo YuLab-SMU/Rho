@@ -47,8 +47,8 @@ target/debug/rho --database /absolute/path/to/test-state/state.sqlite \
   --project /absolute/path/to/test-project --plugins-only workbench
 ```
 
-`workbench` uses this composition by default; `--plugins-only` is still an explicit
-selection for other Host edges. It opens the generic plugin window and does not
+All writer/server entries use this composition by default; `--plugins-only` remains
+an explicit spelling of that choice. It opens the generic plugin window and does not
 discover or start R, import defaults or construct fixed scientific owners. The
 project must already exist; omit `--project` in Workbench to choose it in the
 browser. Import an assembled [plugin delivery set](RELEASE.md#ordinary-plugin-delivery-sets)
@@ -58,7 +58,7 @@ selector opens any installed standalone UI contribution using exact artifacts an
 the shared activation/view ports; it gives no special treatment to Manager.
 `--plugins-only` also applies to `session`, `mcp` and native `invoke`; standalone
 read-only queries use their normal observer, while live plugin reads connect to
-the running Host. It cannot be combined with fixed R/remote/Skill startup flags.
+the running Host. Fixed R/remote/Skill startup flags have been removed.
 Closing views keeps their instances alive. Normal Host shutdown drains accepted
 work and suspends its runtime instances after confirmed cleanup.
 
@@ -180,8 +180,8 @@ CLI `invoke`, `session`, stdio `mcp` and Workbench construct a generic plugin Ho
 Scientific startup flags and the fake runtime are removed. Configure R, Environment
 and Remote through explicit ordinary-plugin instances; missing packages never
 select built-in scientific owners. `--plugins-only` explicitly names the default.
-Standalone `query` remains a read-only file/journal observer pending its core cleanup;
-use a connected Host to query ordinary providers.
+Standalone `query` reads generic discovery and existing operation records only;
+use a connected Host to query ordinary file/output/scientific providers.
 
 ## Manage R sessions and recovery copies
 
@@ -454,20 +454,21 @@ these are `rho.host.overview.v1`, `rho.host.catalog.v1` and
 `rho.host.describe.v1`. Unavailable modules retain a reason. Overview components
 have independent timestamps and completeness.
 
-A standalone `query` opens a query-only observer. It reads project files and an
-existing journal/output store without creating a database, acquiring a writer or
-project lease, recovering unfinished operations, or starting R. A missing journal
-is unavailable, not an empty history. This works while a live Host owns the project:
+A standalone `query` opens a journal-only observer. It reads generic discovery and
+an existing operation journal without creating a database, acquiring a writer or
+project lease, recovering unfinished operations, or starting plugin backends. It
+never opens scientific file or output stores. A missing journal is unavailable,
+not an empty history. This works while a live Host owns the project:
 
 ```sh
 target/debug/rho --database /absolute/path/to/state.sqlite \
   --project /absolute/path/to/project query --capability host.overview
 ```
 
-The observer does not attach to live R, Application state or Skill-read receipt
-storage. Use `--connect-url-file`, the existing session or Workbench MCP for those
-owners. Runtime/remote/Skill-source startup flags are rejected by standalone
-`query`. Explicit Host startup still requires its own project lease. Keep returned native
+The observer does not register Files, R/output, Environment, Application or Skill
+owners. Use `--connect-url-file`, the existing session or Workbench MCP for ordinary
+provider reads. Native records preserve their original project/principal visibility.
+Explicit Host startup still requires its own project lease. Keep returned native
 identities, content hashes and continuation arguments together. `next_reads` points
 to additional evidence, not commands to execute automatically. On expired/changed
 observations, reopen deliberately; do not join pages from different versions.

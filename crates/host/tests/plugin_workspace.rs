@@ -3,7 +3,7 @@
 #[path = "fixtures/plugins.rs"]
 mod fixture;
 use rho_contract::*;
-use rho_host::{HostProfile, NextHost, OperationError, RuntimeConfiguration};
+use rho_host::{HostProfile, NextHost, OperationError};
 use rho_plugin_protocol::PluginArchive;
 use rho_plugins::{PluginRepository, backend_target, repository_path};
 use serde_json::{Value, json};
@@ -305,11 +305,7 @@ async fn empty_plugin_workspace_retains_canonical_scope_and_native_lease_without
     let database = temp.path().join("state/records.sqlite");
     let profile = HostProfile {
         database: database.clone(),
-        runtime: RuntimeConfiguration::Plugins,
-        remote: None,
-        host_skills: None,
     };
-    assert_eq!(profile.runtime_name(), "plugins");
     let host = profile.open(&project).await.unwrap();
     let context = NextHost::local_context();
     let baseline = generic_capabilities(&host);
@@ -376,8 +372,7 @@ async fn empty_plugin_workspace_retains_canonical_scope_and_native_lease_without
     host.drain().await;
     drop(host);
     let reopened = profile
-        .for_new_project()
-        .open_deferred(&project)
+        .open(&project)
         .await
         .unwrap();
     assert_eq!(generic_capabilities(&reopened), baseline);

@@ -20,7 +20,7 @@ mod plugin_tests;
 pub use rho_application::ApplicationError;
 mod environment;
 mod ownership;
-pub use config::{HostProfile, ReservedHost, RuntimeConfiguration};
+pub use config::{HostProfile, ReservedHost};
 use ownership::ProjectLease;
 mod records;
 mod usage;
@@ -766,7 +766,7 @@ impl NextHost {
         }
     }
 
-    /// Compose standalone file/history observations without writer ownership or runtime startup.
+    /// Compose standalone history observations without writer ownership or runtime startup.
     pub fn open_query_observer(
         database: impl AsRef<Path>,
         project: Option<&Path>,
@@ -775,7 +775,7 @@ impl NextHost {
     }
     pub fn open_read_only(database: impl AsRef<Path>) -> Result<Self, OperationError> {
         let journal = Arc::new(SqliteOperationJournal::open_read_only(database)?);
-        let observer = QueryObserver::from_sources(Some(journal), None, None)?;
+        let observer = QueryObserver::from_sources(Some(journal), None)?;
         let registry = observer.registry;
         let gateway = observer
             .gateway

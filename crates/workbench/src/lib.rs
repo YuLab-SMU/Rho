@@ -63,7 +63,7 @@ impl Hosting {
                 .selected
                 .as_ref()
                 .map(|s| s.root.to_string_lossy().into_owned()),
-            runtime: self.profile.runtime_name().into(),
+            runtime: "plugins".into(),
             capabilities: self
                 .selected
                 .as_ref()
@@ -273,12 +273,7 @@ async fn select_project_root(state: &AppState, root: PathBuf) -> Response {
             );
         }
     }
-    let profile = if hosting.selected.is_some() {
-        hosting.profile.for_new_project()
-    } else {
-        hosting.profile.clone()
-    };
-    let reserved = match profile.reserve(&root) {
+    let reserved = match hosting.profile.reserve(&root) {
         Ok(reserved) => reserved,
         Err(error) => {
             return failure(
@@ -291,8 +286,7 @@ async fn select_project_root(state: &AppState, root: PathBuf) -> Response {
         old.host.drain().await;
         drop(old);
     }
-    hosting.profile = profile;
-    match reserved.open_deferred().await {
+    match reserved.open().await {
         Ok(host) => {
             hosting.selected = Some(SelectedHost::new(Arc::new(host), root));
             Json(hosting.info()).into_response()
@@ -535,10 +529,7 @@ pub async fn serve_with_assets(
     url_file: Option<&Path>,
     dev_assets: Option<&Path>,
 ) -> Result<(), String> {
-    let profile = HostProfile {
-        database, runtime: rho_host::RuntimeConfiguration::Plugins,
-        remote: None, host_skills: None,
-    };
+    let profile = HostProfile { database };
     let application = Arc::new(rho_host::ApplicationStore::open(
         &profile.database.with_extension("studio.sqlite"),
     )?);
@@ -547,7 +538,7 @@ pub async fn serve_with_assets(
         .transpose()?;
     let selected = if let Some(project) = project {
         let root = project_root(&project.to_string_lossy())?;
-        let host = profile.open_deferred(&root).await?;
+        let host = profile.open(&root).await?;
         Some(SelectedHost {
             host: Arc::new(host),
             root,
@@ -623,7 +614,6 @@ pub async fn serve_with_assets(
 mod tests {
     use super::*;
     use axum::body::{Body, to_bytes};
-    use rho_host::RuntimeConfiguration;
     use serde_json::{Value, json};
     use tower::ServiceExt;
 
@@ -633,10 +623,7 @@ mod tests {
         std::fs::create_dir(&root).unwrap();
         let root = root.canonicalize().unwrap();
         let profile = HostProfile {
-            host_skills: None,
             database: temp.path().join("next.sqlite"),
-            runtime: RuntimeConfiguration::Plugins,
-            remote: None,
         };
         let host = Arc::new(profile.open(&root).await.unwrap());
         let application =

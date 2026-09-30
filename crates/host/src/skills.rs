@@ -78,23 +78,6 @@ pub(crate) fn compose(
         capabilities,
     )?))
 }
-/// Preflight every explicit declared source before releasing an existing Host.
-pub(crate) fn validate_manifest_for_project(
-    project: &Path,
-    database: &Path,
-    manifest: Option<&Path>,
-) -> Result<(), OperationError> {
-    if let Some(path) = manifest {
-        let mut exclusions = protected_path_candidates(database);
-        exclusions.push(path.to_path_buf());
-        if let Ok(canonical) = path.canonicalize() {
-            exclusions.push(canonical);
-        }
-        HostDiscoveredSkillSource::from_manifest(project, local_principal()?, path, exclusions)?
-            .validate_for_project()?;
-    }
-    Ok(())
-}
 /// Candidates include future SQLite sidecars. Adapters retain lexical and resolved exclusions.
 pub(crate) fn protected_path_candidates(database: &Path) -> Vec<PathBuf> {
     let application = database.with_extension("studio.sqlite");
