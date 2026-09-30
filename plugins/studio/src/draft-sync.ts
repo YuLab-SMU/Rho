@@ -14,10 +14,25 @@ export class DraftSync {
   private last: RecordReply | null = null;
   private acknowledged: string;
   readonly source: DraftSource;
+  private readonly fixture: boolean;
+  private fixtureContent: string | null = null;
   constructor(private readonly client: Client) {
     this.source = Object.freeze({ revision: client.view.instance.revision, contribution: client.view.contribution });
     const saved = client.view.state;
     this.acknowledged = canonical(saved);
+    this.fixture = client.view.purpose === 'fixture_preview';
+    if (this.fixture) {
+      // Fixture previews may persist their own bounded view state, but cannot
+      // stage or commit real documents. Never synthesize a document receipt.
+      if (!saved || typeof saved !== 'object' || Array.isArray(saved)) throw new Error('The saved fixture state is invalid.');
+      if (Object.keys(saved).length) {
+        if (saved.schema !== 1 || typeof saved.fixture_content !== 'string' || Object.keys(saved).some(key=>!['schema','fixture_content'].includes(key))) throw new Error('The saved fixture draft has an unsupported format.');
+        if (new TextEncoder().encode(JSON.stringify(saved)).length > 256 * 1024) throw new Error('The fixture draft exceeds the view state limit.');
+        this.fixtureContent = saved.fixture_content;
+      }
+      this.state = empty();
+      return;
+    }
     if (saved !== null && (typeof saved !== 'object' || Array.isArray(saved))) throw new Error('The saved Studio state is invalid.');
     this.state = saved && Object.keys(saved).length ? structuredClone(saved) as unknown as DraftState : empty();
     if (this.state.schema !== 1 || !Object.hasOwn(this.state, 'draft') || !Object.hasOwn(this.state, 'pending') ||
@@ -25,7 +40,7 @@ export class DraftSync {
     if (this.state.draft !== null) this.checkDraft(this.state.draft);
     if (this.state.pending !== null) this.checkIntent(this.state.pending);
   }
-  get snapshot(): DraftState { return structuredClone(this.state); }
+  get snapshot() { return this.fixture ? (this.fixtureContent === null ? {} : {schema:1,fixture_content:this.fixtureContent}) : structuredClone(this.state); }
   get unresolved() { return this.state.pending !== null; }
   private checkDraft(record: unknown): asserts record is DocumentDraft {
     const view = this.client.view;
@@ -53,15 +68,25 @@ export class DraftSync {
    * inspection first; a newer stored version is never assumed to be their result. */
   read(): Promise<Uint8Array<ArrayBuffer> | null> {
     return this.serial(async () => {
+      if (this.fixture) return this.fixtureContent === null ? null : new TextEncoder().encode(this.fixtureContent);
       const content = this.state.draft === null ? null : await readDraft(this.client, this.state.draft, { signal: this.transfers.signal }); this.live(); return content;
     });
   }
-  save(input: Uint8Array, metadata: JsonValue = null): Promise<DocumentDraft> {
+  save(input: Uint8Array, metadata: JsonValue = null): Promise<DocumentDraft | null> {
     // Freeze before entering the queue; edits made while another save settles
     // cannot modify this request. A pending original is never silently replaced.
     if (!(input instanceof Uint8Array) || input.byteLength > MAX_DRAFT_BYTES) return Promise.reject(new Error('Studio draft content exceeds its byte limit.'));
     const bytes = new Uint8Array(input), savedMetadata = structuredClone(metadata);
     return this.serial(async () => {
+      if (this.fixture) {
+        const content = new TextDecoder('utf-8', {fatal:true}).decode(bytes);
+        const saved = {schema:1,fixture_content:content};
+        if (new TextEncoder().encode(JSON.stringify(saved)).length > 256 * 1024) throw new Error('Fixture draft exceeds the 256 KiB preview state limit. Keep this preview open or reduce its draft.');
+        const encoded = canonical(saved);
+        if (encoded !== this.acknowledged) { await this.client.setState(saved); this.live(); this.acknowledged = encoded; }
+        this.fixtureContent = content;
+        return null;
+      }
       if (this.state.pending) throw new Error('Inspect the original unconfirmed draft save before synchronizing another capture.');
       const capture = await captureDraftContent(bytes, { signal: this.transfers.signal }); this.live();
       const previous = this.state.draft;

@@ -561,6 +561,20 @@ covers unacknowledged saves, replacement-view recovery, retained child journals,
 failed activation and uncertain cleanup. Public SDK tests cover selected five-port
 calls and refusal of selected intrinsic requests.
 
+`npm run test:browser --prefix ui -- studio-self.spec.ts` checks Studio developing
+itself: branch, source edit, checkpoint/build, fixture preview/save/reload/close,
+self replacement and restoration of the old revision as another scenario checkpoint.
+Set `RHO_STUDIO_PLUGIN_ARCHIVE=/absolute/studio.rho-plugin` to reuse an archive;
+otherwise it builds only the Studio UI. The disposable Host exposes the existing
+client TypeScript compiler through its build PATH, without installing tools.
+Preview drafts use the public intrinsic view-state channel (256 KiB including
+JSON encoding), never real document staging or fabricated document receipts.
+Failed or oversized preview saves keep closure unconfirmed. Runtime Studio drafts
+continue using the document owner. A fresh revised Studio has no inherited private
+retained-view list: restoring a scenario uses default state, then this fixture
+explicitly reopens the original view through the public layout port to verify its
+source draft. This does not establish automatic cross-revision state migration.
+
 `npm run test:browser --prefix ui -- studio-scenario.spec.ts` exercises ordinary
 Studio against a separate generic Host: exact previewed build selection, explicit
 new view state, lost checkpoint acknowledgement/reload inspection, preparation

@@ -17,6 +17,14 @@ try {
  const module=async name=>import(pathToFileURL(path.join(plugin,`dist/src/${name}.js`)));
  const {StudioDocument}=await module('document'),{node,parseVisual,fixtureVisible}=await module('visual'),{Studio,sourceText,sourceTree}=await module('model');
  const {operationRequestId,ViewRequestError}=await import(pathToFileURL(path.join(plugin,'dist/public/plugin-ui/index.js')));
+ const {DraftSync}=await module('draft-sync');
+ let fixtureState={},fixtureWrites=0;
+ const previewClient={view:{view:'fixture',instance:{revision:'fixture-revision'},contribution:'studio',purpose:'fixture_preview',state:fixtureState},setState:async state=>{fixtureState=structuredClone(state);fixtureWrites++;},control:()=>assert.fail('preview must not stage real documents'),invoke:()=>assert.fail('preview must not save real documents'),query:()=>assert.fail('preview must not read real documents')};
+ const fixtureDraft=new DraftSync(previewClient),fixtureText='{"draft":"中文 Ω"}',fixtureBytes=new TextEncoder().encode(fixtureText);
+ assert.equal(await fixtureDraft.read(),null);assert.equal(await fixtureDraft.save(fixtureBytes),null,'no fabricated document receipt');await fixtureDraft.save(fixtureBytes);assert.equal(fixtureWrites,1);
+ const reopenedFixture=new DraftSync({...previewClient,view:{...previewClient.view,state:fixtureState}});assert.equal(new TextDecoder().decode(await reopenedFixture.read()),fixtureText);
+ await assert.rejects(reopenedFixture.save(new TextEncoder().encode('x'.repeat(256*1024))),/preview state limit/);assert.equal(new TextDecoder().decode(await reopenedFixture.read()),fixtureText);
+ const failedFixture=new DraftSync({...previewClient,setState:async()=>{throw Error('fixture state unconfirmed');}});await assert.rejects(failedFixture.save(fixtureBytes),/unconfirmed/);assert.equal(await failedFixture.read(),null,'an unacknowledged save cannot claim a captured draft');
  const hash=text=>'sha256:'+createHash('sha256').update(text).digest('hex');
  const revision=hash('revision'),next=hash('next');
  const visual={format_version:1,root:'root',nodes:{root:{...node(),children:['title','custom']},title:{...node('text'),properties:{text:'Original 中文'}},custom:{...node('custom'),component:'chart'}},data_sources:{rows:{capability:{id:'data.observe',version:1},arguments:{},subscribe:true}},components:{chart:{source:'src/custom.ts',export:'Chart',properties_schema:{},input_schema:{},output_schema:{}}}};

@@ -265,6 +265,7 @@ Sources:
 - `ui/e2e/studio-archive.spec.ts`
 - `ui/e2e/studio-backend-test.spec.ts`
 - `ui/e2e/studio-plugin.spec.ts`
+- `ui/e2e/studio-self.spec.ts`
 
 Checks:
 
@@ -548,8 +549,8 @@ Checks:
   Applies to: `crates/host/**`, `crates/workbench/**`, `plugins/agent/**`, `plugins/studio/**`, `scripts/agent-plugin-artifact.mjs`, `scripts/test-agent-core-tools.mjs`, `sdk/**`, `ui/e2e/studio-agent.spec.ts`, `ui/src/host-client.ts`, `ui/src/plugin-*.*`.
 - `plugins.studio-agent-renderer` (L1): `["node","scripts/test-studio-plugin.mjs","--browser-agent"]`
   Applies to: `plugins/studio/**`, `scripts/build-studio-plugin.mjs`, `scripts/fixtures/studio-agent*`, `scripts/studio-agent-renderer.mjs`, `scripts/test-studio-plugin.mjs`, `sdk/plugin-protocol/**`, `sdk/plugin-ui/**`.
-- `plugins.studio-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts","studio-backend-test.spec.ts","studio-scenario.spec.ts","studio-archive.spec.ts"]`
-  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/studio/**`, `rust-toolchain.toml`, `scripts/build-studio-plugin.mjs`, `sdk/**`, `ui/e2e/studio-archive.spec.ts`, `ui/e2e/studio-backend-test.spec.ts`, `ui/e2e/studio-plugin.spec.ts`, `ui/e2e/studio-scenario.spec.ts`.
+- `plugins.studio-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","studio-plugin.spec.ts","studio-backend-test.spec.ts","studio-scenario.spec.ts","studio-self.spec.ts","studio-archive.spec.ts"]`
+  Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/studio/**`, `rust-toolchain.toml`, `scripts/build-studio-plugin.mjs`, `sdk/**`, `ui/e2e/studio-archive.spec.ts`, `ui/e2e/studio-backend-test.spec.ts`, `ui/e2e/studio-plugin.spec.ts`, `ui/e2e/studio-scenario.spec.ts`, `ui/e2e/studio-self.spec.ts`.
 - `plugins.studio-model` (L2): `["node","scripts/test-studio-plugin.mjs"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/studio/**`, `rust-toolchain.toml`, `scripts/build-studio-plugin.mjs`, `scripts/test-studio-plugin.mjs`, `sdk/**`.
 - `plugins.test-project-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-test-project.spec.ts"]`
