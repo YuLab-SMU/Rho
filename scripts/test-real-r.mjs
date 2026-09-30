@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+assert.ok(["", "--agent", "--plugin-recovery"].includes(process.argv.slice(2).join(" ")), "Use no arguments, --agent or --plugin-recovery");
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const extension = process.platform === "win32" ? ".exe" : "";
 const ark = process.env.RHO_ARK || path.resolve(root, "target/debug", `ark${extension}`);
@@ -34,21 +35,6 @@ run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", "scripts/test-
 run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", "scripts/test-r-read-help.R"], { env, stdio: "inherit" });
 run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", "scripts/test-r-packages.R"], { env, stdio: "inherit" });
 for (const script of ["scripts/test-r-objects.R", "scripts/test-r-package-index.R"]) run(path.join(rHome, "bin", `Rscript${extension}`), ["--vanilla", script], { env, stdio: "inherit" });
-run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "real_r",
-  "--locked", "--no-run"], { env, stdio: "inherit" });
-run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "real_r",
-  "--locked", "--", "--ignored", "--nocapture"], { env, stdio: "inherit", timeout: 120_000 });
-// The two-installation case in this file needs RHO_ALT_* and stays opt-in.
-const checkpointHelper = run("node", ["scripts/test-r-checkpoints.mjs", "--print-library"], { env }).trim();
-const instanceEnv = { ...env, RHO_CHECKPOINT_HELPER: checkpointHelper };
-run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "runtime_instances",
-  "--locked", "--no-run"], { env: instanceEnv, stdio: "inherit" });
-run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--test", "runtime_instances",
-  "--locked", "--", "--ignored", "--nocapture",
-  "real_instances_restore_and_clean_restart_without_cross_session_effects"],
-  { env: instanceEnv, stdio: "inherit", timeout: 300_000 });
-run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--lib", "--locked",
-  "recovery_copy_protects_its_library", "--no-run"], { env: instanceEnv, stdio: "inherit" });
-run("cargo", ["test", "--manifest-path", "Cargo.toml", "-p", "rho-host", "--lib", "--locked",
-  "recovery_copy_protects_its_library", "--", "--ignored", "--nocapture"], { env: instanceEnv, stdio: "inherit", timeout: 120_000 });
-console.log("Verified remaining native Host R/recovery fixtures. Fixed CLI/R transport checks are retired; ordinary-plugin acceptance is separate.");
+run("cargo", ["test", "-p", "rho-r-engine", "--test", "real_r", "--locked", "--offline", "--no-run"], { env, stdio: "inherit" });
+run("cargo", ["test", "-p", "rho-r-engine", "--test", "real_r", "--locked", "--offline", "--", "--ignored", "--nocapture"], { env, stdio: "inherit", timeout: 120_000 });
+console.log("Verified ordinary R engine and shared R helpers. Provider/Host composition and recovery use their separate retained-package suites.");

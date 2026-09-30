@@ -14,31 +14,23 @@ use std::{
 pub(crate) struct DiscoveryOwner {
     project: Option<String>,
     targets: Vec<TargetRef>,
-    workspace: Option<Arc<dyn rho_workspace::WorkspaceRuntime>>,
     registry: OnceLock<Weak<CapabilityRegistry>>,
-    instances: OnceLock<Weak<crate::instances::InstanceOwner>>,
 }
 impl DiscoveryOwner {
     pub(crate) fn new(
         project: Option<String>,
         targets: Vec<TargetRef>,
-        workspace: Option<Arc<dyn rho_workspace::WorkspaceRuntime>>,
-    ) -> Arc<Self> {
+        ) -> Arc<Self> {
         Arc::new(Self {
             project,
             targets,
-            workspace,
             registry: OnceLock::new(),
-            instances: OnceLock::new(),
         })
     }
     pub(crate) fn bind(&self, registry: &Arc<CapabilityRegistry>) {
         self.registry
             .set(Arc::downgrade(registry))
             .expect("discovery binds once");
-    }
-    pub(crate) fn bind_instances(&self, instances: &Arc<crate::instances::InstanceOwner>) {
-        let _ = self.instances.set(Arc::downgrade(instances));
     }
     fn registry(&self) -> Result<Arc<CapabilityRegistry>, OperationError> {
         self.registry
@@ -269,27 +261,9 @@ impl DiscoveryOwner {
         let visible = self.visible(context)?;
         let mut observations = vec![];
         let gateway = QueryGateway::new(self.registry()?);
-        for (id, mut args) in [
-            ("workspace.runtime_status", json!({})),
-            ("workspace.console_state", json!({})),
-            ("operation.list_recent", json!({"limit":3})),
-            ("application.windows", json!({"limit":3})),
-            ("environment.observe", json!({"limit":1})),
-        ] {
+        for (id, args) in [("operation.list_recent", json!({"limit":3}))] {
             if !visible.iter().any(|d| d.capability.id == id) {
                 continue;
-            }
-            if id.starts_with("workspace.")
-                && let Some(instances) = self.instances.get().and_then(Weak::upgrade)
-            {
-                let instance_id = instances
-                    .list(&RuntimeInstancesArguments {
-                        after_instance_id: None,
-                        limit: 1,
-                    })?
-                    .default_workspace_instance_id
-                    .unwrap_or_else(|| MAIN_WORKSPACE_INSTANCE.into());
-                args["workspace_instance_id"] = json!(instance_id);
             }
             let snapshot = match gateway
                 .query(
@@ -328,86 +302,12 @@ impl DiscoveryOwner {
                     }
                 }
             };
-            observations.push(match id {
-                "workspace.runtime_status"=>OverviewObservation::Session(observed(snapshot)?),
-                "workspace.console_state"=>{
-                    let mut observation:Observed<ConsoleOverview>=Observed{source:snapshot.source,observed_at_ms:snapshot.observed_at_ms,status:snapshot.status,completeness:snapshot.completeness,data:None,notices:snapshot.notices};
-                    if let Some(data)=snapshot.data {
-                        let mut console:ConsoleState=serde_json::from_value(data).map_err(invalid)?;
-                        if let Some(input)=console.input.as_mut()&& truncate(&mut input.prompt,1024){observation.completeness=ObservationCompleteness::Partial;observation.notices.push("Input prompt is shortened; read workspace.console_state for its complete bounded observation.".into());}
-                        if let Some(pause)=console.pause.as_mut()&& truncate(&mut pause.reason,1024){observation.completeness=ObservationCompleteness::Partial;observation.notices.push("Pause reason is shortened; read workspace.console_state.".into());}
-                        observation.data=Some(ConsoleOverview{session_id:console.session_id,current_operation:console.current.map(|c|c.operation_id),queued_count:console.pending.len() as u32,pause:console.pause,input:console.input});
-                    }
-                    OverviewObservation::Console(observation)
-                },
-                "application.windows"=>OverviewObservation::Application(observed(snapshot)?),
-                "environment.observe"=>OverviewObservation::Environment(observed(snapshot)?),
-                _=>OverviewObservation::Operations(observed(snapshot)?),
-            });
+            observations.push(OverviewObservation::Operations(observed(snapshot)?));
         }
-        let mut modules = self.modules(&visible, context);
-        for observation in &observations {
-            match observation {
-                OverviewObservation::Session(session)
-                    if session
-                        .data
-                        .as_ref()
-                        .is_none_or(|runtime| runtime.state == "unavailable") =>
-                {
-                    for module in modules.iter_mut().filter(|module| {
-                        matches!(
-                            module.module.as_str(),
-                            "session" | "console" | "objects" | "packages"
-                        )
-                    }) {
-                        module.available = false;
-                        module.reasons=vec!["Native R is unavailable; inspect the separately timed Session observation".into()];
-                    }
-                }
-                OverviewObservation::Application(window) => {
-                    let online = window
-                        .data
-                        .as_ref()
-                        .is_some_and(|page| page.online_count > 0);
-                    if !online {
-                        for module in modules.iter_mut().filter(|module| {
-                            matches!(
-                                module.module.as_str(),
-                                "application" | "documents" | "layout"
-                            )
-                        }) {
-                            module.available = false;
-                            module.reasons=vec!["No active Studio window; discover synchronized window history with application.windows".into()];
-                        }
-                    }
-                }
-                OverviewObservation::Environment(environment)
-                    if environment.status != QueryStatus::Ready =>
-                {
-                    if let Some(module) = modules
-                        .iter_mut()
-                        .find(|module| module.module == "environment")
-                    {
-                        module.available = false;
-                        module.reasons = environment.notices.clone();
-                    }
-                }
-                _ => {}
-            }
-        }
-        let mut targets = vec![];
-        let mut observed_targets = self.targets.clone();
-        if let Some(instances) = self.instances.get().and_then(Weak::upgrade) {
-            observed_targets.extend(instances.targets());
-        }
-        for target in &observed_targets {
-            if rho_skills::SkillCapabilityPort::target_is_current(self, context, target)
-                .await
-                .map_err(invalid)?
-            {
-                targets.push(target.clone());
-            }
-        }
+        let modules = self.modules(&visible, context);
+        let targets = self.targets.iter().filter(|target|
+            target.kind == "project" && (context.scopes.contains("plugins.read")
+                || context.scopes.contains("operation.read"))).cloned().collect();
         Ok(HostOverview {
             project_root: self.project.clone(),
             targets,
@@ -415,59 +315,6 @@ impl DiscoveryOwner {
             observations,
             atomic_snapshot: false,
         })
-    }
-}
-#[async_trait::async_trait]
-impl rho_skills::SkillCapabilityPort for DiscoveryOwner {
-    async fn available_capabilities(
-        &self,
-        context: &CallContext,
-        target: Option<&TargetRef>,
-    ) -> Result<Vec<CapabilityRef>, String> {
-        if let Some(target) = target
-            && !self.target_is_current(context, target).await?
-        {
-            return Ok(vec![]);
-        }
-        self.visible(context)
-            .map(|descriptors| descriptors.into_iter().map(|d| d.capability).collect())
-            .map_err(|e| e.to_string())
-    }
-    async fn target_is_current(
-        &self,
-        context: &CallContext,
-        target: &TargetRef,
-    ) -> Result<bool, String> {
-        context.validate().map_err(|e| e.to_string())?;
-        let allowed = match target.kind.as_str() {
-            "workspace" => {
-                context.scopes.contains("workspace.read")
-                    || context.scopes.contains("workspace.run_r")
-            }
-            "project" => {
-                context.scopes.contains("project.read") || context.scopes.contains("project.write")
-            }
-            "environment" => {
-                context.scopes.contains("environment.read")
-                    || context.scopes.contains("environment.write")
-            }
-            "local_process" => context.scopes.contains("process.run_local"),
-            "remote" => {
-                context.scopes.contains("remote.execute") || context.scopes.contains("slurm.read")
-            }
-            _ => false,
-        };
-        if target.kind == "workspace"
-            && let Some(instances) = self.instances.get().and_then(Weak::upgrade)
-        {
-            return Ok(allowed && instances.targets().contains(target));
-        }
-        let live = target.kind != "workspace"
-            || self.workspace.as_ref().is_some_and(|runtime| {
-                runtime.session_id() == target.identity
-                    && runtime.runtime_status().state != "unavailable"
-            });
-        Ok(allowed && live && self.targets.contains(target))
     }
 }
 fn observed<T: DeserializeOwned>(snapshot: QuerySnapshot) -> Result<Observed<T>, OperationError> {

@@ -459,7 +459,7 @@ node scripts/test-governance.mjs
 ```
 
 Agent 引擎变更补 `cargo test -p rho-agent-engine --locked`。触及 Quit/会话恢复时补
-`node scripts/test-r-checkpoints.mjs`；环境功能改动补 `node scripts/test-environment.mjs`。
+`node scripts/test-r-checkpoints.mjs`；环境功能改动补 带保留包的 `node scripts/test-environment-plugin.mjs`。
 第三方 Agent 接入回归默认使用 [Development](DEVELOPMENT.md) 的确定性协议 fixtures。
 实际第三方模型运行仅用于另行明确要求的接入调查；缺少依赖或第三方回答失败如实记录，
 不作为 Rho 的独立能力验收门，也不据此抹去 Rho 自身应修复的传递或记录错误。

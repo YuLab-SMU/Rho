@@ -77,7 +77,7 @@ async fn pending_cancellation_survives_view_disconnect_without_blocking_other_ad
     fs::write(ui_path.join("plugin.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
     let ui = rho_plugins::snapshot_directory(&ui_path, None, "ui-web").unwrap();
     let mut repo = PluginRepository::open(&repository_path(&db)).unwrap(); repo.import(&native).unwrap(); repo.import(&ui).unwrap();
-    let host = Arc::new(NextHost::open_project(&db, &project).await.unwrap());
+    let host = Arc::new(NextHost::open_plugin_workspace(&db, &project).await.unwrap());
     let context = NextHost::local_context();
     let mut args = activation(&native, "native");
     args["configuration"]["pending_cancellation"] = json!("gate"); args["configuration"]["cancel_confirmed"] = json!(true);
@@ -144,7 +144,7 @@ async fn native_settlement_recovery_uses_original_host_authority_and_never_repla
     repository.import(&archive).unwrap();
     let mut context = NextHost::local_context();
     context.scopes.insert("fixture:science".into());
-    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     let mut args = activation(&archive, "settlement");
     args["configuration"]["settlement"] = json!("lose_first");
     let instance = observation(&run(&host, &context, "activate", "plugins.activate", args).await);
@@ -194,7 +194,7 @@ async fn retained_plugin_resources_share_host_visibility_and_survive_provider_an
     let mut repository = PluginRepository::open(&repository_path(&db)).unwrap();
     repository.import(&archive).unwrap();
     let context = NextHost::local_context();
-    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     let instance = observation(
         &run(
             &host,
@@ -338,7 +338,7 @@ async fn retained_plugin_resources_share_host_visibility_and_survive_provider_an
     );
     host.drain().await;
     drop(host);
-    let reopened = NextHost::open_project(&db, &project).await.unwrap();
+    let reopened = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     assert!(
         reopened
             .capabilities()
@@ -392,7 +392,7 @@ async fn official_host_ports_bind_revisions_visibility_commit_and_release_withou
     let mut repository = PluginRepository::open(&repository_path(&db)).unwrap();
     repository.import(&one).unwrap();
     repository.import(&two).unwrap();
-    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     let context = NextHost::local_context();
     assert_eq!(
         query(&host, &context, "plugins.instances", json!({"limit":10})).await["total"],
@@ -563,7 +563,7 @@ async fn official_host_ports_bind_revisions_visibility_commit_and_release_withou
     );
     host.drain().await;
     drop(host);
-    let reopened = NextHost::open_project(&db, &project).await.unwrap();
+    let reopened = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     let historic = query(
         &reopened,
         &context,
@@ -591,7 +591,7 @@ async fn activation_rejects_scope_escalation_and_collisions_without_publishing_p
     let archive = fixture::package(&temp.path().join("external"), "1", true);
     let mut repo = PluginRepository::open(&repository_path(&db)).unwrap();
     repo.import(&archive).unwrap();
-    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     let context = NextHost::local_context();
     let mut limited = context.clone();
     limited.scopes.remove("plugins.write");
@@ -644,7 +644,7 @@ async fn backend_delegation_uses_shared_query_and_operation_ports() {
     let archive = fixture::package(&temp.path().join("external"), "1", false);
     let mut repo = PluginRepository::open(&repository_path(&db)).unwrap();
     repo.import(&archive).unwrap();
-    let host = Arc::new(NextHost::open_project(&db, &project).await.unwrap());
+    let host = Arc::new(NextHost::open_plugin_workspace(&db, &project).await.unwrap());
     let context = NextHost::local_context();
     let instance = observation(
         &run(
@@ -730,7 +730,7 @@ async fn window_open_is_atomic_scoped_and_idempotent_across_layout_conflicts() {
     fs::write(source.join("plugin.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
     let archive = rho_plugins::snapshot_directory(&source, None, "ui-web").unwrap();
     let mut repo = PluginRepository::open(&repository_path(&database)).unwrap(); repo.import(&archive).unwrap();
-    let host = NextHost::open_project(&database, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&database, &project).await.unwrap();
     let context = NextHost::local_context();
     let activated = observation(&run(&host, &context, "activate", "plugins.activate",
         json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":"ui-web","alias":"layout","configuration":{}})).await);
@@ -853,7 +853,7 @@ async fn window_layouts_are_scoped_versioned_and_do_not_restart_retained_views()
     fs::write(source.join("plugin.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
     let archive = rho_plugins::snapshot_directory(&source, None, "ui-web").unwrap();
     let mut repo = PluginRepository::open(&repository_path(&database)).unwrap(); repo.import(&archive).unwrap();
-    let host = NextHost::open_project(&database, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&database, &project).await.unwrap();
     let context = NextHost::local_context();
     let before = query(&host, &context, "operation.list_recent", json!({"limit":100})).await;
     assert_eq!(query(&host, &context, "windows.layout", json!({"window":"window-a"})).await["version"], 0);
@@ -907,7 +907,7 @@ async fn window_layouts_are_scoped_versioned_and_do_not_restart_retained_views()
     assert_eq!(query(&host, &context, "windows.layout", json!({"window":"window-a"})).await, closed_layout);
     assert_eq!(run(&host, &context, "release", "plugins.release", json!({"instance":activated.instance.identity})).await.status, OperationStatus::Succeeded);
     repo.remove(&archive.revision.id).unwrap(); drop(host);
-    let host = NextHost::open_project(&database, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&database, &project).await.unwrap();
     assert_eq!(query(&host, &context, "windows.layout", json!({"window":"window-a"})).await, closed_layout);
     assert_eq!(query(&host, &context, "views.inspect", json!({"view":a["view"]})).await["closed"], true);
     assert!(host.query_snapshot(&context, QueryRequest { capability: CapabilityRef::new("views.connection", 1).unwrap(), arguments: json!({"view":a["view"]}) }).await.is_err());
@@ -924,7 +924,7 @@ async fn ui_only_views_have_scoped_channels_durable_state_and_independent_instan
     let archive = ui_package(&temp.path().join("external-ui"));
     let mut repo = PluginRepository::open(&repository_path(&db)).unwrap();
     repo.import(&archive).unwrap();
-    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     let context = NextHost::local_context();
     let args = json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":"ui-web","alias":"ui","configuration":{}});
     let instance =
@@ -1168,7 +1168,7 @@ async fn ui_only_views_have_scoped_channels_durable_state_and_independent_instan
     );
     repo.remove(&archive.revision.id).unwrap();
     drop(host);
-    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     let stored = query(&host, &context, "views.inspect", json!({"view":view.view})).await;
     assert_eq!(stored["state"]["text"], "kept Ω");
     assert_eq!(stored["closed"], true);
@@ -1187,7 +1187,7 @@ async fn ui_only_views_have_scoped_channels_durable_state_and_independent_instan
     let historical=observation(&run(&host,&context,"ui-historical","plugins.activate",json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":"ui-web","alias":"historical","configuration":{}})).await);
     let old_view=run(&host,&context,"view-historical","views.open",json!({"instance":historical.instance.identity,"contribution":"view","window":"window-a","configuration":{},"state":{"text":"saved before disconnect"}})).await.output.unwrap();
     drop(host);
-    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     assert_eq!(
         query(
             &host,
@@ -1248,7 +1248,7 @@ async fn closing_a_view_does_not_cancel_or_retarget_its_accepted_native_operatio
     let mut repo = PluginRepository::open(&repository_path(&db)).unwrap();
     repo.import(&native).unwrap();
     repo.import(&ui).unwrap();
-    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     let context = NextHost::local_context();
     let native_instance = observation(
         &run(
@@ -1425,7 +1425,7 @@ async fn ephemeral_controls_share_host_and_view_authority_without_recording_answ
     let mut repo = PluginRepository::open(&repository_path(&db)).unwrap();
     repo.import(&native).unwrap();
     repo.import(&ui).unwrap();
-    let host = Arc::new(NextHost::open_project(&db, &project).await.unwrap());
+    let host = Arc::new(NextHost::open_plugin_workspace(&db, &project).await.unwrap());
     let context = NextHost::local_context();
     let native_instance = observation(
         &run(

@@ -11,8 +11,8 @@ in [Status](STATUS.md); protocol descriptions here are not acceptance results.
 
 The 2026-09-23 implementation scope replaces the fixed scientific workbench with
 a general core and composable packages. This boundary is approved; the migration
-is in progress, not complete. Status distinguishes the implemented substrate from
-the still-existing direct scientific composition described below.
+is in progress, not complete. Status distinguishes implemented ordinary-plugin flows from remaining contract,
+storage and interaction cleanup. Direct scientific Host composition is removed.
 
 The core owns packages, immutable revisions/artifacts, dependency resolution,
 instances, process/message lifetime, unique provider routing, identity/scope checks,
@@ -66,13 +66,12 @@ and filesystem recovery edge; ordinary plugins receive no special import privile
 `NextHost::open_plugin_workspace` composes the generic package, presentation and
 Operation ports without fixed Files/Git, process, R, Environment or Agent owners.
 The canonical native project lease supplies project identity independently of a
-scientific owner. `RuntimeConfiguration::Plugins` and the explicit development
-launch flag `--plugins-only` use this path through the same CLI, session and MCP
-ports. Workbench opens the generic window, skips saved/discovered R settings and
+scientific owner. All CLI, session, MCP and Workbench writer entries use this
+path; `--plugins-only` is an explicit spelling of the default. Workbench opens the generic window, skips saved/discovered R settings and
 does not fall back to scientific composition if opening fails. Packages remain
 inactive until explicitly selected. This path is the foundation for disposable
-backend-test projects; it does not itself implement Studio's test-project lifecycle
-or complete removal of the older composition and dependencies.
+backend-test projects. Legacy scientific contract dependencies and unused adapter
+crates remain pending cleanup, without a fixed runtime composition.
 
 Explicit backend development tests use `plugins.test_create/test_stop` and bounded
 `plugins.test_project/test_projects` observations. Host owns each fresh canonical
@@ -1639,16 +1638,12 @@ visible. Filesystem text cannot stand in for an unsaved Studio draft.
 
 Paginated summaries come from the journal. Runtime output logs contain ordered,
 bounded observations and media references; they do not determine execution outcome.
-A missing output event is not itself execution failure. Output storage has an
-independent owner port, so historical media queries also work in a project-only
-Host. Media is addressed by
-OperationId and output sequence, with original bytes checked against the reference.
-The Output owner supplies a bounded verified-original cache and shared read port;
-page, preview and transport adapters never open scientific storage paths themselves.
-Concurrent reads of the same original coalesce while caller/project checks still
-precede access. Native MCP image content and original resource links derive from
-`output.view`; previews/crops never create scientific results. Static SVG rendering
-disables scripts and external resource reads. Original images remain unchanged.
+A missing output event is not itself execution failure. Ordinary R/Viewer owners
+retain immutable output evidence and expose it through public provider/resource
+contracts. The fixed Host Output owner, its storage reads and the dedicated MCP
+`rho.output.view`/`rho-output://` presentation adapter are removed. The generic
+MCP edge derives tools from the live registry and preserves provider payloads;
+it does not open scientific output stores or special-case R execution.
 
 ## Native identities and concurrency
 
@@ -1783,8 +1778,10 @@ startup flags, implicit R invocation targeting and method-binding shortcuts are 
 HostProfile contains only generic storage configuration; native project reservation
 still precedes replacement of the current Host. Standalone observers use canonical
 project scope for journal visibility, without constructing a Files owner or opening
-R/output stores. Internal fixed Host constructors and legacy Application code still
-await removal.
+R/output stores. Internal fixed Host constructors, native scientific registration, runtime-instance
+management and Application/Skill handlers are removed. Scientific execution and
+observation use ordinary provider bindings. Legacy request DTOs are refused pending
+contract cleanup; unused adapter crates and Application storage types also remain.
 
 The workspace owns window identity, saved generic layout, view connections,
 cooperative closure and explicit suspended-instance recovery. Scientific UI,

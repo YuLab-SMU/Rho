@@ -111,7 +111,7 @@ async fn application_is_atomic_scoped_and_preserves_live_views_and_original_repl
         .unwrap()
         .import(&archive)
         .unwrap();
-    let host = NextHost::open_project(&db, temp.path()).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, temp.path()).await.unwrap();
     let context = NextHost::local_context();
     let owner = activate(&host, &context, &archive, "editor", json!({})).await;
     let view = open(&host, &context, &owner, "open", "a").await;
@@ -404,7 +404,7 @@ async fn switching_revisions_keeps_accepted_work_bound_and_rejects_invalid_prepa
         repo.import(archive).unwrap();
     }
     drop(repo);
-    let host = NextHost::open_project(&db, temp.path()).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, temp.path()).await.unwrap();
     let context = NextHost::local_context();
     let old_id = activate(&host, &context, &old, "old", json!({"label":"old"})).await;
     let new_id = activate(&host, &context, &new, "new", json!({"label":"new"})).await;

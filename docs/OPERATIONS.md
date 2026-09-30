@@ -99,8 +99,9 @@ credentials belong to its backend endpoint, not the public Workbench `/mcp`.
 The old `/api/r`, `/api/r/probe` and `/api/application/bridge` endpoints are also
 removed. Workbench never reads saved R selection, discovers an interpreter or
 substitutes a project-only backend when opening the selected profile fails. Configure
-and start R through its ordinary provider. Shared-port legacy Application requests
-and internal fixed Host composition still await removal; see Status.
+and start R through its ordinary provider. Internal fixed Host composition and
+Application/Skill handlers are removed. Shared-port legacy request DTOs are refused
+pending contract cleanup; see Status.
 
 The native development ports `plugins.test_create`, `plugins.test_project`,
 `plugins.test_projects`, `plugins.test_operation` and `plugins.test_stop` create,
@@ -342,11 +343,11 @@ an empty scenario checkpoint uses:
 Ordinary scientific calls carry the exact `plugins.resolve` binding plus the
 provider arguments described by its public contract. Successful results use `structuredContent.result` and an accompanying text encoding.
 Errors include typed diagnostics; failed/uncertain operations retain their identity
-and outcome. `rho.output.view` additionally returns native image content and an
-original/manifest resource link, without duplicating image bytes in text metadata.
+and outcome. The fixed `rho.output.view` image/resource adapter is removed; ordinary
+R/Viewer output reads use their published provider and resource contracts.
 The shared descriptors include `operation.get`, `operation.request_cancellation`,
-`operation.commit_status`, `operation.reconcile_commit`, `workspace.respond_input`
-and `operation.events`. Existing bare MCP aliases use
+`operation.commit_status`, `operation.reconcile_commit` and `operation.events`.
+Native stdin replies are ordinary R provider controls. Existing bare MCP aliases use
 the same contracts and owners. `operation.events` returns an explicit continuation
 page; the legacy `rho.events.poll` projects that page to its original event list.
 Events are cursor pages, not a push-delivery guarantee.
@@ -480,7 +481,7 @@ observations, reopen deliberately; do not join pages from different versions.
 | Installed package copy | `workspace.packages`, then `workspace.package_index` with observation, native session, package and exact library path |
 | Read-only package help | `workspace.read_help` with the same observation/copy and index file identities; follow its UTF-8 continuation and help-file identities without creating an Operation |
 | Help evidence | Explicit `workspace.help`, then `output.read_text` using its `text_reference`; later pages do not render help again |
-| Image evidence | MCP `rho.output.view` or shared `output.view`; crop in original pixel coordinates and keep the original reference |
+| Image evidence | Ordinary R/Viewer provider reads and resource references; preserve the original operation and digest |
 | Execution/recovery | Original operation record, output events and owner-specific status/retention reads; accepted or cancellation-requested does not mean completed/stopped |
 
 ## Read and control a Studio window

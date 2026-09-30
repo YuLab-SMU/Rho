@@ -72,7 +72,7 @@ async fn combined_package_can_declare_its_own_exact_grant_without_early_publicat
         repo.import(archive).unwrap();
     }
     drop(repo);
-    let host = NextHost::open_project(&db, &root).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &root).await.unwrap();
     let context = NextHost::local_context();
     let activation = |archive: &PluginArchive, label: &str, mode: &str| {
         invoke(

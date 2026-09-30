@@ -1,4 +1,4 @@
-import {expect, type Page, type TestInfo} from '@playwright/test';
+import {expect, type Page, type Route, type TestInfo} from '@playwright/test';
 import {existsSync, readFileSync, writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 
@@ -69,7 +69,31 @@ export async function scientificContinuity({page, info, query, port, mapping, ed
     await page.screenshot({path: info.outputPath('science-running-other-scene.png')});
     await apply(working.id, views);
     await expect(code).toContainText('unsaved across running scene 中文 Ω');
-    await page.getByRole('tab', {name: 'Console', exact: true}).click();
+    // Hold the actual layout acknowledgement to expose the saving state. Its
+    // indicator must not shift the close target underneath the next click.
+    let releaseSave!: () => void, saveObserved!: () => void;
+    const saveGate = new Promise<void>(resolve => { releaseSave = resolve; });
+    const observed = new Promise<void>(resolve => { saveObserved = resolve; });
+    const holdLayout = async (route: Route) => {
+      const request = route.request().postDataJSON()?.frame?.request;
+      if (request?.method !== 'invoke' || request.params?.capability?.id !== 'windows.update_layout') return route.fallback();
+      const response = await route.fetch(); saveObserved(); await saveGate;
+      await route.fulfill({response});
+    };
+    const consoleTab = page.getByRole('tab', {name: 'Console', exact: true});
+    const closeButton = consoleTab.locator('[data-layout-path$="/button/close"]');
+    let whileSaving: Awaited<ReturnType<typeof closeButton.boundingBox>> = null;
+    await page.route('**/api/host', holdLayout);
+    try {
+      await consoleTab.click();
+      await observed;
+      await expect(page.getByRole('status').filter({hasText: 'Saving layout…'})).toBeVisible();
+      whileSaving = await closeButton.boundingBox(); expect(whileSaving).not.toBeNull();
+    } finally { releaseSave(); await page.unroute('**/api/host', holdLayout); }
+    await expect(page.getByRole('status').filter({hasText: 'Saving layout…'})).toHaveCount(0);
+    // Compare the same selected tab on both sides of the acknowledgement;
+    // selection itself can change the docking library's border geometry.
+    expect(await closeButton.boundingBox()).toEqual(whileSaving);
     await expect(input).toHaveText(nextInput);
     // Closing the Console and Editor captures drafts, without stopping R.
     await page.getByRole('tab', {name: 'Console', exact: true}).locator('[data-layout-path$="/button/close"]').click();

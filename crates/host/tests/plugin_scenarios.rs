@@ -34,7 +34,7 @@ fn save(id: &str, arguments: Value) -> Invocation {
 #[tokio::test]
 async fn scenario_ports_preserve_scope_original_operations_and_window_runtime_independence() {
     let temp = tempfile::tempdir().unwrap();
-    let host = NextHost::open_project(&temp.path().join("records.sqlite"), temp.path())
+    let host = NextHost::open_plugin_workspace(&temp.path().join("records.sqlite"), temp.path())
         .await
         .unwrap();
     let context = NextHost::local_context();
@@ -193,7 +193,7 @@ async fn an_external_plugin_uses_scenario_ports_without_a_management_privilege()
         .unwrap()
         .import(&archive)
         .unwrap();
-    let host = NextHost::open_project(&database, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&database, &project).await.unwrap();
     let context = NextHost::local_context();
     let invoke = |id: &str, capability: &str, arguments| Invocation {
         client_request_id: id.into(),

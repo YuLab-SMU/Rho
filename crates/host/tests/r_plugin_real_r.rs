@@ -289,7 +289,7 @@ async fn independent_r_plugin_uses_original_operations_and_retains_revision_scop
     let mut repository = PluginRepository::open(&repository_path(&db)).unwrap();
     repository.import(&first).unwrap();
     repository.import(&second).unwrap();
-    let host = Arc::new(NextHost::open_project(&db, &project).await.unwrap());
+    let host = Arc::new(NextHost::open_plugin_workspace(&db, &project).await.unwrap());
     let left = activate(&host, &first, "left").await;
     let right = activate(&host, &second, "right").await;
     assert_ne!(left.revision, right.revision);
@@ -417,7 +417,7 @@ async fn independent_r_plugin_uses_original_operations_and_retains_revision_scop
     );
     host.drain().await;
     drop(host);
-    let reopened = NextHost::open_project(&db, &project).await.unwrap();
+    let reopened = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     assert_eq!(query(&reopened, "resources.read", read).await, retained);
     let replay = reopened
         .invoke(&NextHost::local_context(), request)

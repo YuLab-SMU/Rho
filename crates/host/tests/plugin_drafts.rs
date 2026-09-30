@@ -130,7 +130,7 @@ fn succeeded(record: OperationRecord) -> OperationRecord {
 #[tokio::test]
 async fn draft_listing_uses_public_scopes_and_never_publishes_or_recovers_content() {
     let fixture = Fixture::new();
-    let host = NextHost::open_project(&fixture.db, &fixture.root)
+    let host = NextHost::open_plugin_workspace(&fixture.db, &fixture.root)
         .await
         .unwrap();
     let context = NextHost::local_context();
@@ -249,7 +249,7 @@ async fn draft_listing_uses_public_scopes_and_never_publishes_or_recovers_conten
 #[tokio::test]
 async fn draft_ports_keep_bytes_scoped_and_versioned_without_implicit_runtime_or_replay() {
     let fixture = Fixture::new();
-    let host = NextHost::open_project(&fixture.db, &fixture.root)
+    let host = NextHost::open_plugin_workspace(&fixture.db, &fixture.root)
         .await
         .unwrap();
     let context = NextHost::local_context();
@@ -410,7 +410,7 @@ async fn draft_ports_keep_bytes_scoped_and_versioned_without_implicit_runtime_or
     );
     host.drain().await;
     drop(host);
-    let host = NextHost::open_project(&fixture.db, &fixture.root)
+    let host = NextHost::open_plugin_workspace(&fixture.db, &fixture.root)
         .await
         .unwrap();
     assert_eq!(
@@ -422,7 +422,7 @@ async fn draft_ports_keep_bytes_scoped_and_versioned_without_implicit_runtime_or
     // Same store, different normalized project: draft reads stay hidden.
     let other_root = fixture.temp.path().join("other-project");
     fs::create_dir(&other_root).unwrap();
-    let other_host = NextHost::open_project(&fixture.temp.path().join("other.sqlite"), &other_root)
+    let other_host = NextHost::open_plugin_workspace(&fixture.temp.path().join("other.sqlite"), &other_root)
         .await
         .unwrap();
     assert!(
@@ -485,7 +485,7 @@ async fn original_commit_recovery_preserves_captured_bytes_across_successor_edit
 {
     let fixture = Fixture::new();
     let context = NextHost::local_context();
-    let host = NextHost::open_project(&fixture.db, &fixture.root)
+    let host = NextHost::open_plugin_workspace(&fixture.db, &fixture.root)
         .await
         .unwrap();
     let journal = rusqlite::Connection::open(&fixture.db).unwrap();
@@ -591,7 +591,7 @@ async fn original_commit_recovery_preserves_captured_bytes_across_successor_edit
         .unwrap();
     host.drain().await;
     drop(host);
-    let host = NextHost::open_project(&fixture.db, &fixture.root)
+    let host = NextHost::open_plugin_workspace(&fixture.db, &fixture.root)
         .await
         .unwrap();
     assert_eq!(
@@ -658,7 +658,7 @@ async fn original_commit_recovery_preserves_captured_bytes_across_successor_edit
 async fn uncertain_original_and_failed_cleanup_retain_capture_until_real_settlement() {
     let fixture = Fixture::new();
     let context = NextHost::local_context();
-    let host = NextHost::open_project(&fixture.db, &fixture.root)
+    let host = NextHost::open_plugin_workspace(&fixture.db, &fixture.root)
         .await
         .unwrap();
     let catalog = fixture.catalog();
@@ -725,7 +725,7 @@ async fn uncertain_original_and_failed_cleanup_retain_capture_until_real_settlem
     journal
         .execute_batch("DROP TRIGGER reject_staging;")
         .unwrap();
-    let host = NextHost::open_project(&fixture.db, &fixture.root)
+    let host = NextHost::open_plugin_workspace(&fixture.db, &fixture.root)
         .await
         .unwrap();
     let original = host
@@ -777,7 +777,7 @@ async fn uncertain_original_and_failed_cleanup_retain_capture_until_real_settlem
 async fn declared_view_draft_calls_use_exact_parent_scope_and_original_window() {
     let fixture = Fixture::new();
     let context = NextHost::local_context();
-    let host = NextHost::open_project(&fixture.db, &fixture.root)
+    let host = NextHost::open_plugin_workspace(&fixture.db, &fixture.root)
         .await
         .unwrap();
     let activated=succeeded(host.invoke(&context,invoke("activate","plugins.activate",json!({"revision":fixture.archive.revision.id,"artifact":fixture.archive.artifacts[0].id,"target":"ui-web","alias":"view","configuration":{}}))).await.unwrap());
@@ -955,7 +955,7 @@ struct DraftChannel {
     sequence: u32,
 }
 async fn renderer_fixture(fixture: &Fixture, context: &CallContext) -> (NextHost, DraftChannel) {
-    let host = NextHost::open_project(&fixture.db, &fixture.root).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&fixture.db, &fixture.root).await.unwrap();
     let instance = succeeded(host.invoke(context, invoke("activate", "plugins.activate", json!({
         "revision":fixture.archive.revision.id,"artifact":fixture.archive.artifacts[0].id,
         "target":"ui-web","alias":"document","configuration":{}
@@ -1138,7 +1138,7 @@ async fn close_flush_uses_only_declared_own_draft_ports_while_draining_and_fence
         .unwrap()
         .import(&foreign)
         .unwrap();
-    let host = NextHost::open_project(&fixture.db, &fixture.root)
+    let host = NextHost::open_plugin_workspace(&fixture.db, &fixture.root)
         .await
         .unwrap();
     let empty = json!({"digest":content_digest(b""),"bytes":0,"chunks":[]});

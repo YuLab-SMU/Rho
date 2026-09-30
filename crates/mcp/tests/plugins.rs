@@ -27,7 +27,7 @@ async fn existing_mcp_connection_tracks_plugin_publications_and_invalidates_old_
     let archive = fixture::package(&temp.path().join("outside-checkout"), "1", false);
     let mut repo = PluginRepository::open(&repository_path(&db)).unwrap();
     repo.import(&archive).unwrap();
-    let host = Arc::new(NextHost::open_project(&db, &project).await.unwrap());
+    let host = Arc::new(NextHost::open_plugin_workspace(&db, &project).await.unwrap());
     let edge = McpEdge::local(host.clone()).unwrap();
     let (server_io, client_io) = tokio::io::duplex(128 * 1024);
     let server = tokio::spawn(async move { edge.serve(server_io).await.unwrap().waiting().await });

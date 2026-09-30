@@ -101,7 +101,7 @@ async fn flush_close_preserves_drafts_requires_each_document_and_commits_layout_
     let archive = ui_package(&temp.path().join("ui"));
     let mut repository = PluginRepository::open(&repository_path(&db)).unwrap();
     repository.import(&archive).unwrap();
-    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     let context = NextHost::local_context();
     let instance = observation(
         &run(

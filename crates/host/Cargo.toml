@@ -14,18 +14,7 @@ rho-contract = { path = "../contract" }
 rho-plugins = { path = "../plugins" }
 rho-operation = { path = "../operation" }
 rho-application = { path = "../application" }
-rho-skills = { path = "../skills" }
-rho-adapter-skills = { path = "../adapters/skills" }
 rho-sqlite = { path = "../adapters/sqlite" }
-rho-r-runtime = { path = "../adapters/r-runtime" }
-rho-project = { path = "../project" }
-rho-git = { path = "../adapters/git" }
-rho-environment = { path = "../environment" }
-rho-r-environment = { path = "../adapters/r-environment" }
-rho-workspace = { path = "../workspace" }
-rho-execution = { path = "../execution" }
-rho-process = { path = "../adapters/process" }
-rho-ssh = { path = "../adapters/ssh" }
 serde_json.workspace = true
 serde.workspace = true
 schemars.workspace = true

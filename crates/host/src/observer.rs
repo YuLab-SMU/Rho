@@ -44,7 +44,7 @@ impl QueryObserver {
                 }]
             })
             .unwrap_or_default();
-        let discovery = discovery::DiscoveryOwner::new(project_scope.clone(), targets, None);
+        let discovery = discovery::DiscoveryOwner::new(project_scope.clone(), targets);
         let mut registry = CapabilityRegistry::new();
         for id in ["host.overview", "host.catalog", "host.describe"] {
             registry.register_query(Arc::new(discovery::DiscoveryHandler::new(
@@ -57,7 +57,6 @@ impl QueryObserver {
                 &mut registry,
                 journal.clone(),
                 project_scope.clone(),
-                false,
                 false,
             )?)
         } else {
@@ -106,32 +105,6 @@ impl QueryObserver {
     }
 }
 
-/// Retiring fixed composition uses these project handlers; observers never register them.
-pub(crate) fn register_project_queries(
-    registry: &mut CapabilityRegistry,
-    project: Arc<dyn ProjectRuntime>,
-    lane: Arc<tokio::sync::Mutex<()>>,
-) -> Result<Arc<ProjectOwner>, OperationError> {
-    let owner = Arc::new(ProjectOwner::new(project, lane));
-    registry.register_query(Arc::new(rho_project::ProjectStorageHandler::new(
-        owner.clone(),
-    )))?;
-    registry.register_query(Arc::new(ProjectSnapshotHandler::new(owner.clone())))?;
-    registry.register_query(Arc::new(rho_project::ProjectDirectoryHandler::new(
-        owner.clone(),
-    )))?;
-    registry.register_query(Arc::new(rho_project::ProjectSearchHandler::new(
-        owner.clone(),
-    )))?;
-    registry.register_query(Arc::new(rho_project::ProjectReadTextHandler::new(
-        owner.clone(),
-    )))?;
-    registry.register_query(Arc::new(rho_project::ProjectSearchTextHandler::new(
-        owner.clone(),
-    )))?;
-    registry.register_query(Arc::new(ProjectReadHandler::new(owner.clone())))?;
-    Ok(owner)
-}
 /// The same journal-backed record/evidence/event queries are used in both modes.
 pub(crate) struct RecordPorts {
     events: Arc<port_contracts::EventsHandler>,
@@ -148,7 +121,6 @@ pub(crate) fn register_record_queries(
     registry: &mut CapabilityRegistry,
     journal: Arc<dyn OperationJournal>,
     project: Option<String>,
-    has_workspace: bool,
     writable: bool,
 ) -> Result<RecordPorts, OperationError> {
     if let Some(project) = &project {
@@ -173,39 +145,6 @@ pub(crate) fn register_record_queries(
         &registry.descriptors(),
     )?);
     registry.register_query(get.clone())?;
-    let events = port_contracts::register(registry, journal, project, has_workspace, writable)?;
+    let events = port_contracts::register(registry, journal, project, writable)?;
     Ok(RecordPorts { events, get })
-}
-
-/// All historical media/text reads stay with the existing Output owner and journal visibility port.
-pub(crate) fn register_output_queries(
-    registry: &mut CapabilityRegistry,
-    workspace: Option<Arc<WorkspaceRunHandler>>,
-    outputs: Arc<dyn rho_workspace::WorkspaceOutputs>,
-    project: Option<String>,
-    records: Arc<JournalRecords>,
-) -> Result<Arc<rho_workspace::WorkspaceOutputHandler>, OperationError> {
-    let owner = Arc::new(rho_workspace::WorkspaceOutputHandler::with_store(
-        workspace.clone(),
-        Some(outputs.clone()),
-        project.clone(),
-        records.clone(),
-        rho_workspace::OutputQueryKind::Read,
-    ));
-    for kind in [
-        rho_workspace::OutputQueryKind::Events,
-        rho_workspace::OutputQueryKind::Read,
-        rho_workspace::OutputQueryKind::List,
-        rho_workspace::OutputQueryKind::View,
-        rho_workspace::OutputQueryKind::ReadText,
-    ] {
-        registry.register_query(Arc::new(rho_workspace::WorkspaceOutputHandler::with_store(
-            workspace.clone(),
-            Some(outputs.clone()),
-            project.clone(),
-            records.clone(),
-            kind,
-        )))?;
-    }
-    Ok(owner)
 }

@@ -1,7 +1,6 @@
 #![forbid(unsafe_code)]
 mod connections;
 pub use connections::McpConnections;
-mod resources;
 mod schema;
 use rho_host::OperationError;
 use schema::object;
@@ -52,9 +51,7 @@ enum Route {
     Capability(CapabilityRef, CapabilityKind),
     Get,
     Cancel,
-    Input,
     Events,
-    View,
 }
 #[derive(Clone)]
 struct Entry {
@@ -114,20 +111,13 @@ fn build_entries(capabilities: &[rho_contract::CapabilityDescriptor]) -> Result<
         let mut entries = BTreeMap::new();
         for capability in capabilities {
             let name = tool_name(&capability.capability);
-            let (tool, route) = if capability.capability.id == "output.view"
-                && capability.kind == CapabilityKind::Query
-            {
-                (native_view_tool(&name, capability)?, Route::View)
-            } else {
+            let (tool, route) = {
                 let query = capability.kind == CapabilityKind::Query;
                 let control = capability.kind == CapabilityKind::Control;
                 let input = if query || control {
                     capability.input_schema.clone()
                 } else {
-                    command_schema(
-                        capability.input_schema.clone(),
-                        capability.capability.id == "workspace.run_r",
-                    )?
+                    command_schema(capability.input_schema.clone())?
                 };
                 let output = if query {
                     rho_contract::query_result_schema(capability.output_schema.clone())
@@ -170,12 +160,6 @@ fn build_entries(capabilities: &[rho_contract::CapabilityDescriptor]) -> Result<
                 None,
             ),
             (
-                "rho.workspace.respond_input",
-                "workspace.respond_input",
-                Route::Input,
-                None,
-            ),
-            (
                 "rho.events.poll",
                 "operation.events",
                 Route::Events,
@@ -209,17 +193,6 @@ fn build_entries(capabilities: &[rho_contract::CapabilityDescriptor]) -> Result<
             if entries.insert(name.into(), Entry { tool, route }).is_some() {
                 return Err("MCP control tool name collision".into());
             }
-        }
-        if let Some(capability) = capabilities.iter().find(|capability| {
-            capability.capability.id == "output.view" && capability.kind == CapabilityKind::Query
-        }) {
-            entries.insert(
-                "rho.output.view".into(),
-                Entry {
-                    tool: native_view_tool("rho.output.view", capability)?,
-                    route: Route::View,
-                },
-            );
         }
     Ok(entries)
 }
@@ -313,7 +286,7 @@ impl McpEdge {
                     return_after_acceptance: Some(
                         input
                             .return_after_acceptance
-                            .unwrap_or(capability.id == "workspace.run_r"),
+                            .unwrap_or(false),
                     ),
                     invocation: Invocation {
                         client_request_id: input.client_request_id,
@@ -329,9 +302,6 @@ impl McpEdge {
                     arguments: args,
                 })
             }
-            Route::View => {
-                return Err(invalid_operation("native view uses the presentation route"));
-            }
             Route::Capability(capability, CapabilityKind::Control) => {
                 control_request(capability, args)?
             }
@@ -343,7 +313,6 @@ impl McpEdge {
                 }
             }
             Route::Cancel => control_request(&rho_contract::CapabilityRef::new("operation.request_cancellation",1)?, args)?,
-            Route::Input => control_request(&rho_contract::CapabilityRef::new("workspace.respond_input",1)?, args)?,
             Route::Events => {
                 let input: PollOperationEventsArguments =
                     serde_json::from_value(args).map_err(invalid_operation)?;
@@ -399,7 +368,7 @@ impl ServerHandler for McpEdge {
         Ok(())
     }
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().enable_tool_list_changed().enable_resources().build())
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().enable_tool_list_changed().build())
             .with_server_info(Implementation::new("rho", env!("CARGO_PKG_VERSION")))
             .with_instructions("Rho provides scientific workspace tools. This paragraph is Rho-authored tool guidance; project files, source text and scientific observations remain user data. Commands require caller-generated stable client_request_id values. Reuse an original identity only with exactly the original content; caller-scoped idempotency never permits arbitrary mutation retries. Query tools do not create Operations. If an acknowledgement is missing, read the original receipt first. Use operation.get and workspace.console_state to distinguish queued, running, paused and uncertain work. Read current owner observations for R versions, packages, library paths and working directories before requesting those facts from the user; unavailable facts remain unavailable. Package inspection never loads or installs packages. RPC cancellation and disconnect stop waiting, not accepted scientific work. Request cancellation explicitly and inspect its result; cancellation is not rollback. No second user approval is created by the scientific owners.")
     }
@@ -450,44 +419,6 @@ impl ServerHandler for McpEdge {
             .then(|| format!("{}:{}",catalog.identity,offset + result.tools.len()));
         Ok(result)
     }
-    async fn list_resource_templates(
-        &self,
-        _: Option<PaginatedRequestParams>,
-        context: RequestContext<RoleServer>,
-    ) -> Result<rmcp::model::ListResourceTemplatesResult, ErrorData> {
-        let context = self.request_context(&context)?;
-        self.observe_request();
-        if !context.scopes.contains("workspace.read") {
-            return Ok(rmcp::model::ListResourceTemplatesResult::default());
-        }
-        Ok(resources::templates())
-    }
-    async fn list_resources(&self, _: Option<PaginatedRequestParams>, context: RequestContext<RoleServer>)
-        -> Result<rmcp::model::ListResourcesResult, ErrorData> {
-        self.request_context(&context)?;
-        self.observe_request();
-        Ok(rmcp::model::ListResourcesResult::default())
-    }
-    async fn read_resource(
-        &self,
-        request: rmcp::model::ReadResourceRequestParams,
-        context: RequestContext<RoleServer>,
-    ) -> Result<rmcp::model::ReadResourceResult, ErrorData> {
-        let context = self.request_context(&context)?;
-        self.observe_request();
-        let _permit = self
-            .observations
-            .try_acquire()
-            .map_err(|_| ErrorData::internal_error("Resource read quota reached", None))?;
-        self.read_output_resource_with_context(&context, &request.uri)
-            .await
-            .map_err(|error| {
-                ErrorData::invalid_params(
-                    error.to_string(),
-                    Some(json!({"diagnostic":error.diagnostic()})),
-                )
-            })
-    }
     async fn call_tool(
         &self,
         request: CallToolRequestParams,
@@ -502,7 +433,6 @@ impl ServerHandler for McpEdge {
         let quota = match entry.route {
             Route::Capability(_, CapabilityKind::Operation) => Some(&self.in_flight),
             Route::Capability(_, CapabilityKind::Query)
-            | Route::View
             | Route::Get
             | Route::Events => Some(&self.observations),
             _ => None,
@@ -520,14 +450,6 @@ impl ServerHandler for McpEdge {
             None
         };
         let args = Value::Object(request.arguments.unwrap_or_default());
-        if matches!(entry.route, Route::View) {
-            return Ok(match self.native_view_with_context(&context, args).await {
-                Ok(result) => result,
-                Err(error) => {
-                    tool_error(json!({"error":error.to_string(),"diagnostic":error.diagnostic()}))
-                }
-            });
-        }
         let result = match self.route_with_context(&context, &entry.route, args).await {
             Ok(value) => {
                 let failed = matches!(entry.route, Route::Capability(_, CapabilityKind::Operation))
@@ -608,7 +530,7 @@ fn tool_error(error: Value) -> CallToolResult {
     // clients such as Kimi's MCP SDK. Keep the original error model-readable.
     CallToolResult::error(vec![Content::text(error.to_string())])
 }
-fn command_schema(mut arguments: Value, accepted: bool) -> Result<Value, String> {
+fn command_schema(mut arguments: Value) -> Result<Value, String> {
     let definitions = arguments
         .as_object_mut()
         .ok_or("capability argument schema is not an object")?
@@ -616,45 +538,13 @@ fn command_schema(mut arguments: Value, accepted: bool) -> Result<Value, String>
     let mut schema = json!({"type":"object", "properties":{
         "client_request_id":{"type":"string","minLength":1,"maxLength":160},
         "arguments":arguments,
-        "return_after_acceptance":{"type":"boolean","default":accepted,"description":"When true, return the durable operation receipt promptly. Acceptance does not mean running or completion. Read operation.get and workspace.console_state to distinguish execution, queued work, paused queue and input. Never resubmit accepted work."},
+        "return_after_acceptance":{"type":"boolean","default":false,"description":"When true, return the durable operation receipt promptly. Acceptance does not mean running or completion. Read operation.get and the provider's observations to distinguish acceptance from execution or completion. Never resubmit accepted work."},
         "preconditions":{"type":"array","maxItems":32,"items":schema_for!(Precondition).to_value(),"default":[]}
     }, "required":["client_request_id","arguments"], "additionalProperties":false});
     if let Some(definitions) = definitions {
         schema["$defs"] = definitions;
     }
     Ok(schema)
-}
-
-/// MCP has native image content. Both names present the same Host-verified
-/// payload and remove only the duplicated image bytes from structured metadata.
-fn native_view_tool(
-    name: &str,
-    capability: &rho_contract::CapabilityDescriptor,
-) -> Result<Tool, String> {
-    let mut payload = capability.output_schema.clone();
-    let properties = payload
-        .get_mut("properties")
-        .and_then(Value::as_object_mut)
-        .ok_or("output.view must describe an object payload")?;
-    properties
-        .remove("preview_base64")
-        .ok_or("output.view must describe its bounded preview bytes")?;
-    if let Some(required) = payload.get_mut("required").and_then(Value::as_array_mut) {
-        required.retain(|field| field != "preview_base64");
-    }
-    let description = format!(
-        "{}\nMCP presentation: returns native ImageContent, the original ResourceLink, and structured preview metadata without duplicated preview_base64. Optional crop uses original coordinates; preview is not a new scientific result.",
-        capability_description(capability)
-    );
-    Ok(Tool::new(
-        name.to_string(),
-        description,
-        object(capability.input_schema.clone())?,
-    )
-    .with_raw_output_schema(Arc::new(object(result_schema(
-        rho_contract::query_result_schema(payload),
-    ))?))
-    .with_annotations(ToolAnnotations::new().read_only(true)))
 }
 
 fn capability_description(capability: &rho_contract::CapabilityDescriptor) -> String {
@@ -705,379 +595,52 @@ mod port_contract_tests {
         assert_eq!(tool_name(&CapabilityRef::new("plugins.list",1).unwrap()),"rho.plugins.list.v1");
     }
 
+    async fn host() -> (tempfile::TempDir, Arc<NextHost>) {
+        let directory = tempfile::tempdir().unwrap();
+        let project = directory.path().join("project");
+        std::fs::create_dir(&project).unwrap();
+        let host = Arc::new(NextHost::open_plugin_workspace(directory.path().join("state.sqlite"), &project).await.unwrap());
+        (directory, host)
+    }
+    async fn call(edge: &McpEdge, name: &str, arguments: Value) -> Result<Value, OperationError> {
+        let catalog = edge.entries();
+        let entry = catalog.entries.get(name).unwrap();
+        edge.route_with_context(&edge.context, &entry.route, arguments).await
+    }
     #[tokio::test]
     async fn rejected_tool_arguments_reach_the_client_without_a_false_output_schema() {
         let (_directory, host) = host().await;
         let edge = McpEdge::local(host.clone()).unwrap();
         let (server_io, client_io) = tokio::io::duplex(64 * 1024);
-        let server =
-            tokio::spawn(async move { edge.serve(server_io).await.unwrap().waiting().await });
+        let server = tokio::spawn(async move { edge.serve(server_io).await.unwrap().waiting().await });
         let client = ().serve(client_io).await.unwrap();
-        let reply = client.call_tool(CallToolRequestParams::new("rho.workspace.run_r.v1").with_arguments(
-            json!({"client_request_id":"invalid-run","arguments":{"code":"1+1","output_mode":"all"}}).as_object().unwrap().clone()
-        )).await.unwrap();
+        let reply = client.call_tool(CallToolRequestParams::new("rho.plugins.list.v1")
+            .with_arguments(json!({"limit":"invalid"}).as_object().unwrap().clone())).await.unwrap();
         assert_eq!(reply.is_error, Some(true));
-        assert!(
-            reply.structured_content.is_none(),
-            "a rejected call is not an owner result matching outputSchema"
-        );
+        assert!(reply.structured_content.is_none());
         let text = serde_json::to_string(&reply.content).unwrap();
-        assert!(
-            text.contains("all") && text.contains("/output_mode"),
-            "{text}"
-        );
-        assert!(text.contains("diagnostic"), "{text}");
-        assert!(
-            host.outbox(&NextHost::local_context(), 0, 100)
-                .await
-                .unwrap()
-                .is_empty()
-        );
-        client.cancel().await.unwrap();
-        server.await.unwrap().unwrap();
+        assert!(text.contains("limit") && text.contains("diagnostic"), "{text}");
+        assert!(host.outbox(&NextHost::local_context(), 0, 100).await.unwrap().is_empty());
+        client.cancel().await.unwrap(); server.await.unwrap().unwrap();
     }
-
-    async fn host() -> (tempfile::TempDir, Arc<NextHost>) {
-        let directory = tempfile::tempdir().unwrap();
-        let host = Arc::new(
-            NextHost::open_demo(directory.path().join("state.sqlite"))
-                .await
-                .unwrap(),
-        );
-        (directory, host)
-    }
-    async fn call(edge: &McpEdge, name: &str, arguments: Value) -> Result<Value, OperationError> {
-        edge.route(
-            &edge.entries().entries.get(name).expect("visible tool").route,
-            arguments,
-        )
-        .await
-    }
-
     #[tokio::test]
-    async fn commit_status_and_reconciliation_tools_share_the_original_host_record() {
+    async fn generic_aliases_and_versioned_routes_share_original_records_and_visibility() {
         let (_directory, host) = host().await;
         let edge = McpEdge::local(host.clone()).unwrap();
-        let result = call(&edge,"rho.workspace.run_r.v1",json!({"client_request_id":"commit-receipt","return_after_acceptance":false,"arguments":{"code":"1+1"}})).await.unwrap();
-        assert_eq!(result["status"],"succeeded");
-        let operation_id = result["operation"]["operation_id"].clone();
-        let state = call(&edge,"rho.operation.commit_status.v1",json!({"operation_id":operation_id})).await.unwrap();
-        assert_eq!(state["data"]["phase"],"committed");
-        let before = host.outbox(&NextHost::local_context(),0,100).await.unwrap();
-        let original = call(&edge,"rho.operation.reconcile_commit.v1",json!({"reference":state["data"]["reference"]})).await.unwrap();
-        assert_eq!(original,result);
-        assert_eq!(host.outbox(&NextHost::local_context(),0,100).await.unwrap(),before);
-    }
-
-    #[tokio::test]
-    async fn fixed_tools_derive_their_descriptions_and_schemas_from_discovery() {
-        let (_directory, host) = host().await;
-        let context = NextHost::local_context();
-        let edge = McpEdge::new(host.clone(), context.clone()).unwrap();
-        for (alias, id, field) in [
-            ("rho.operation.get", "operation.get", Some("record")),
-            ("rho.events.poll", "operation.events", Some("events")),
-            (
-                "rho.operation.request_cancellation",
-                "operation.request_cancellation",
-                None,
-            ),
-            (
-                "rho.workspace.respond_input",
-                "workspace.respond_input",
-                None,
-            ),
-        ] {
-            let versioned = edge.get_tool(&format!("rho.{id}.v1")).unwrap();
-            let alias = edge.get_tool(alias).unwrap();
-            assert_eq!(alias.input_schema, versioned.input_schema);
-            assert!(
-                alias
-                    .description
-                    .as_ref()
-                    .unwrap()
-                    .starts_with(versioned.description.as_ref().unwrap().as_ref())
-            );
-            let described = call(
-                &edge,
-                "rho.host.describe.v1",
-                json!({"capability":{"id":id,"version":1}}),
-            )
-            .await
-            .unwrap();
-            let descriptor = &described["data"]["descriptor"];
-            assert_eq!(
-                serde_json::to_value(&alias).unwrap()["inputSchema"],
-                Value::Object(object(descriptor["input_schema"].clone()).unwrap())
-            );
-            let expected_payload = if let Some(field) = field {
-                rho_contract::project_payload_schema(&descriptor["output_schema"], field).unwrap()
-            } else {
-                descriptor["output_schema"].clone()
-            };
-            let actual = serde_json::to_value(&alias).unwrap()["outputSchema"].clone();
-            assert_eq!(
-                actual,
-                Value::Object(object(result_schema(expected_payload)).unwrap())
-            );
-            if field.is_none() {
-                assert_eq!(alias.output_schema, versioned.output_schema);
-            }
-            // Resolve the exposed MCP schema references, including the
-            // concrete operation payload union rebased by envelope projection.
-            fn refs(node: &Value, root: &Value) {
-                match node {
-                    Value::Object(fields) => {
-                        if let Some(reference) = fields.get("$ref").and_then(Value::as_str) {
-                            assert!(reference.starts_with('#'));
-                            assert!(root.pointer(&reference[1..]).is_some(), "{reference}");
-                        }
-                        for (key, value) in fields {
-                            if !["const", "enum", "examples"].contains(&key.as_str()) {
-                                refs(value, root);
-                            }
-                        }
-                    }
-                    Value::Array(values) => {
-                        for value in values {
-                            refs(value, root);
-                        }
-                    }
-                    _ => (),
-                }
-            }
-            refs(&actual, &actual);
-        }
-        let get = serde_json::to_value(edge.get_tool("rho.operation.get").unwrap()).unwrap();
-        let branches = get["outputSchema"]["properties"]["result"]["anyOf"]
-            .as_array()
-            .unwrap();
-        assert!(
-            branches.iter().any(
-                |branch| branch["allOf"][1]["properties"]["operation"]["properties"]["capability"]
-                    ["const"]["id"]
-                    == "workspace.run_r"
-            )
-        );
-        assert!(
-            host.outbox(&context, 0, 100).await.unwrap().is_empty(),
-            "listing and describing must not admit work"
-        );
-    }
-
-    #[tokio::test]
-    async fn fixed_aliases_and_versioned_routes_share_validated_owner_results() {
-        let (_directory, host) = host().await;
-        let context = NextHost::local_context();
-        let edge = McpEdge::new(host.clone(), context.clone()).unwrap();
-        let record = call(
-            &edge,
-            "rho.workspace.run_r.v1",
-            json!({"client_request_id":"one-run","arguments":{"code":"1 + 1"},"return_after_acceptance":false}),
-        )
-        .await
-        .unwrap();
-        let arguments = json!({"operation_id":record["operation"]["operation_id"]});
-        let bare = call(&edge, "rho.operation.get", arguments.clone())
-            .await
-            .unwrap();
-        let wrapped = call(&edge, "rho.operation.get.v1", arguments.clone())
-            .await
-            .unwrap();
-        assert_eq!(bare, wrapped["data"]["record"]);
-        assert_eq!(bare, record);
-        let events = call(
-            &edge,
-            "rho.events.poll",
-            json!({"after_sequence":0,"limit":2}),
-        )
-        .await
-        .unwrap();
-        let page = call(
-            &edge,
-            "rho.operation.events.v1",
-            json!({"after_sequence":0,"limit":2}),
-        )
-        .await
-        .unwrap();
-        assert_eq!(events, page["data"]["events"]);
-        assert_eq!(page["data"]["has_more"], true);
-        let cancelled = call(
-            &edge,
-            "rho.operation.request_cancellation",
-            arguments.clone(),
-        )
-        .await
-        .unwrap();
-        let repeated = call(
-            &edge,
-            "rho.operation.request_cancellation.v1",
-            arguments.clone(),
-        )
-        .await
-        .unwrap();
-        assert_eq!(cancelled, repeated);
-        assert_eq!(cancelled["accepted"], false);
-        assert_eq!(cancelled["operation"]["status"], "succeeded");
-        for name in ["rho.events.poll", "rho.operation.events.v1"] {
-            assert!(matches!(
-                call(&edge, name, json!({"limit":1001})).await,
-                Err(OperationError::InvalidInput(_))
-            ));
-        }
-        let input = json!({"session_id":"wrong-session","operation_id":record["operation"]["operation_id"],"request_id":"input","reply_id":"reply","value":"secret"});
-        for name in [
-            "rho.workspace.respond_input",
-            "rho.workspace.respond_input.v1",
-        ] {
-            assert!(matches!(
-                call(&edge, name, input.clone()).await,
-                Err(OperationError::InvalidInput(_))
-            ));
-        }
-        let retained = host.outbox(&context, 0, 100).await.unwrap();
-        assert_eq!(
-            retained
-                .iter()
-                .filter(|event| event.topic == "operation.accepted")
-                .count(),
-            1
-        );
-        assert!(!serde_json::to_string(&retained).unwrap().contains("secret"));
-    }
-
-    #[tokio::test]
-    async fn permissions_filter_both_aliases_before_tool_enumeration_and_unavailable_runtime_stays_absent()
-     {
-        let (directory, host) = host().await;
-        for (scopes, cancel, input, events, get) in [
-            (vec![], false, false, false, false),
-            (vec!["workspace.read"], false, false, false, false),
-            (vec!["operation.read"], false, false, true, true),
-            (vec!["workspace.run_r"], true, true, false, false),
-        ] {
-            let mut context = NextHost::local_context();
-            context.scopes = scopes.iter().map(|scope| (*scope).into()).collect();
-            let edge = McpEdge::new(host.clone(), context.clone()).unwrap();
-            for (alias, id, visible) in [
-                ("rho.operation.get", "operation.get", get),
-                ("rho.events.poll", "operation.events", events),
-                (
-                    "rho.operation.request_cancellation",
-                    "operation.request_cancellation",
-                    cancel,
-                ),
-                (
-                    "rho.workspace.respond_input",
-                    "workspace.respond_input",
-                    input,
-                ),
-            ] {
-                assert_eq!(
-                    edge.get_tool(alias).is_some(),
-                    visible,
-                    "{scopes:?}: {alias}"
-                );
-                assert_eq!(edge.get_tool(&format!("rho.{id}.v1")).is_some(), visible);
-                assert_eq!(
-                    host.capabilities_for(&context)
-                        .iter()
-                        .any(|descriptor| descriptor.capability.id == id),
-                    visible
-                );
-            }
-            let mut cursor = None;
-            let mut catalog = vec![];
-            loop {
-                let page = call(
-                    &edge,
-                    "rho.host.catalog.v1",
-                    json!({"limit":2,"cursor":cursor}),
-                )
-                .await
-                .unwrap();
-                catalog.extend(
-                    page["data"]["entries"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|entry| entry["capability"]["id"].as_str().unwrap().to_string()),
-                );
-                cursor = page["data"]["next_cursor"].as_str().map(String::from);
-                if cursor.is_none() {
-                    break;
-                }
-            }
-            assert_eq!(
-                catalog.contains(&"operation.request_cancellation".to_string()),
-                cancel
-            );
-        }
-        let reader =
-            Arc::new(NextHost::open_read_only(directory.path().join("state.sqlite")).unwrap());
-        let edge = McpEdge::new(reader, NextHost::local_context()).unwrap();
-        assert!(edge.get_tool("rho.workspace.respond_input").is_none());
-        assert!(edge.get_tool("rho.workspace.respond_input.v1").is_none());
-        assert!(
-            edge.get_tool("rho.operation.request_cancellation")
-                .is_none()
-        );
-        assert!(edge.get_tool("rho.operation.events.v1").is_some());
-        assert!(edge.get_tool("rho.events.poll").is_some());
-    }
-
-    #[tokio::test]
-    async fn discovered_and_compatibility_view_tools_share_native_image_route_and_metadata_schema()
-    {
-        let directory = tempfile::tempdir().unwrap();
-        let project = directory.path().join("project");
-        std::fs::create_dir(&project).unwrap();
-        let host = Arc::new(
-            NextHost::open_project(directory.path().join("state/next.sqlite"), &project)
-                .await
-                .unwrap(),
-        );
-        let context = NextHost::local_context();
-        let edge = McpEdge::new(host.clone(), context.clone()).unwrap();
-        let bare = edge.get_tool("rho.output.view").unwrap();
-        let versioned = edge.get_tool("rho.output.view.v1").unwrap();
-        assert_eq!(bare.input_schema, versioned.input_schema);
-        assert_eq!(bare.output_schema, versioned.output_schema);
-        assert_eq!(bare.description, versioned.description);
-        for name in ["rho.output.view", "rho.output.view.v1"] {
-            assert!(
-                matches!(edge.entries().entries.get(name).unwrap().route, Route::View),
-                "{name} must emit native image content"
-            );
-        }
-        let descriptor = host
-            .capabilities_for(&context)
-            .into_iter()
-            .find(|descriptor| descriptor.capability.id == "output.view")
-            .unwrap();
-        assert!(
-            descriptor.output_schema["properties"]
-                .get("preview_base64")
-                .is_some(),
-            "Host/browser domain DTO remains unchanged"
-        );
-        let exposed = serde_json::to_value(versioned).unwrap()["outputSchema"].clone();
-        let reference = exposed["properties"]["result"]["properties"]["data"]["anyOf"][0]["$ref"]
-            .as_str()
-            .unwrap();
-        let payload = exposed.pointer(&reference[1..]).unwrap();
-        assert!(payload["properties"].get("preview_base64").is_none());
-        assert!(payload["properties"].get("preview_sha256").is_some());
-        assert!(
-            !payload["required"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("preview_base64"))
-        );
-        let mut denied = context;
-        denied.scopes.clear();
-        let edge = McpEdge::new(host, denied).unwrap();
+        let args = json!({"client_request_id":"once","arguments":{"scenario":"mcp","expected_head":null,"name":"MCP","instances":{},"providers":[],"layout":{"kind":"empty"}}});
+        let record = call(&edge,"rho.scenarios.checkpoint.v1",args.clone()).await.unwrap();
+        assert_eq!(record["status"],"succeeded");
+        assert_eq!(call(&edge,"rho.scenarios.checkpoint.v1",args).await.unwrap(),record);
+        let get = json!({"operation_id":record["operation"]["operation_id"]});
+        assert_eq!(call(&edge,"rho.operation.get",get.clone()).await.unwrap(),record);
+        assert_eq!(call(&edge,"rho.operation.get.v1",get).await.unwrap()["data"]["record"],record);
+        let legacy=call(&edge,"rho.events.poll",json!({})).await.unwrap();
+        assert_eq!(call(&edge,"rho.operation.events.v1",json!({})).await.unwrap()["data"]["events"],legacy);
+        let mut denied=NextHost::local_context(); denied.scopes.clear();
+        let denied=McpEdge::new(host,denied).unwrap();
+        assert!(denied.get_tool("rho.operation.get").is_none());
+        assert!(denied.get_tool("rho.operation.get.v1").is_none());
         assert!(edge.get_tool("rho.output.view").is_none());
-        assert!(edge.get_tool("rho.output.view.v1").is_none());
+        assert!(edge.get_tool("rho.workspace.respond_input").is_none());
     }
 }

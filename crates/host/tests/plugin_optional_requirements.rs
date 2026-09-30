@@ -33,7 +33,7 @@ async fn project_coverage_delegates_only_explicit_metadata_grants_and_preserves_
     let db=temp.path().join("state.sqlite");
     let archive=package(&temp.path().join("source"),false);
     PluginRepository::open(&repository_path(&db)).unwrap().import(&archive).unwrap();
-    let host=NextHost::open_project(&db,&project).await.unwrap();
+    let host=NextHost::open_plugin_workspace(&db,&project).await.unwrap();
     let context=NextHost::local_context();
     let choices=json!([{"id":"plugins.project_coverage","version":1},{"id":"operation.project_coverage","version":1}]);
     let activate=|id:&str,optional:Value|invoke(id,"plugins.activate",json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":"ui-web","alias":id,"configuration":{},"optional_capabilities":optional}));
@@ -82,7 +82,7 @@ async fn optional_selection_is_frozen_at_activation_and_view_delegation_cannot_e
     let weak = package(&temp.path().join("weak"), true);
     let mut repo = PluginRepository::open(&repository_path(&db)).unwrap();
     repo.import(&good).unwrap(); repo.import(&weak).unwrap(); drop(repo);
-    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     let context = NextHost::local_context();
     let mut limited = context.clone(); limited.scopes.remove("plugins.read");
     let optional = json!({"id":"plugins.list","version":1});

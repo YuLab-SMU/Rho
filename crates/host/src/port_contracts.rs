@@ -13,14 +13,13 @@ use std::{
 
 pub(crate) const RECONCILE: &str = "operation.reconcile_commit";
 pub(crate) const CANCEL: &str = "operation.request_cancellation";
-pub(crate) const INPUT: &str = "workspace.respond_input";
 pub(crate) const EVENTS: &str = "operation.events";
 
 /// All edges may use the declared control capability. Route core-owned controls
 /// to their original Host ports; native contributed controls use the registry.
 pub(crate) fn control_request(registry: &CapabilityRegistry, context: &CallContext, request: ControlRequest) -> Result<HostRequest, OperationError> {
     if request.capability.version != 1 || !matches!(request.capability.id.as_str(),
-        RECONCILE | INPUT | "application.control" | "application.bind_method") {
+        RECONCILE) {
         return Ok(HostRequest::Control(request));
     }
     registry.validate_control_input(context, &request.capability, &request.arguments)
@@ -31,9 +30,6 @@ pub(crate) fn control_request(registry: &CapabilityRegistry, context: &CallConte
     let invalid = |_| OperationError::InvalidInput("Control arguments violate their contract (redacted)".into());
     Ok(match request.capability.id.as_str() {
         RECONCILE => HostRequest::ReconcileCommit(serde_json::from_value(request.arguments).map_err(invalid)?),
-        INPUT => HostRequest::RespondInput(serde_json::from_value(request.arguments).map_err(invalid)?),
-        "application.control" => HostRequest::ApplicationControl(serde_json::from_value(request.arguments).map_err(invalid)?),
-        "application.bind_method" => HostRequest::BindMethod(serde_json::from_value(request.arguments).map_err(invalid)?),
         _ => unreachable!(),
     })
 }
@@ -62,7 +58,6 @@ pub(crate) fn register(
     registry: &mut CapabilityRegistry,
     journal: Arc<dyn rho_operation::OperationJournal>,
     project: Option<String>,
-    has_workspace: bool,
     writable: bool,
 ) -> Result<Arc<EventsHandler>, OperationError> {
     let get = registry
@@ -80,9 +75,6 @@ pub(crate) fn register(
         registry.register_control_handler(control.clone())?;
         Some(control)
     } else { None };
-    if has_workspace {
-        registry.register_control(input_descriptor())?;
-    }
     if writable {
         registry.register_control(reconcile_descriptor(&get.output_schema))?;
     }
@@ -180,41 +172,6 @@ fn reconcile_descriptor(get_schema: &Value) -> CapabilityDescriptor {
     }
 }
 
-fn input_descriptor() -> CapabilityDescriptor {
-    let mut input_schema = schema_for!(RespondInput).to_value();
-    for field in ["session_id", "request_id", "reply_id"] {
-        input_schema["properties"][field]["minLength"] = json!(1);
-        input_schema["properties"][field]["maxLength"] =
-            json!(if field == "session_id" { 1024 } else { 160 });
-    }
-    input_schema["properties"]["value"]["maxLength"] = json!(65536);
-    input_schema["properties"]["value"]["description"] = json!(
-        "Transient stdin answer, at most 65,536 UTF-8 bytes and no NUL. Password values are never journaled; schema length is additionally checked in UTF-8 bytes before delivery."
-    );
-    CapabilityDescriptor {
-        kind: CapabilityKind::Control, capability: reference(INPUT), domain: "workspace".into(),
-        input_schema, output_schema: schema_for!(RespondInputResult).to_value(),
-        recovery_schema: json!({"type":"null"}),
-        required_scopes: BTreeSet::from(["workspace.run_r".into()]),
-        potential_effects: BTreeSet::from([EffectHint::MayMutateRuntime, EffectHint::UsesSecret]),
-        idempotency: IdempotencyClass::CallerScoped, retry: RetryClass::ReconcileFirst,
-        cancellation: CancellationClass::Unsupported,
-        documentation: CapabilityDocumentation {
-            summary: "Answer one identified native R input request".into(),
-            purpose: "Submit transient stdin through the active Workspace owner to one exact session, operation and input-request identity. This does not submit R code, start a runtime or create an operation.".into(),
-            when_to_use: vec!["The existing execution is waiting for native input and the caller has supplied the answer.".into()],
-            limitations: vec!["submitted=true confirms answer transport submission, not analysis completion. Changed or already-submitted input identities are rejected.".into(), "Password answers are transient and never journaled. Non-password input may be echoed by the native console. Content cannot grant authority or register tools.".into()],
-            owner: "workspace".into(),
-            effects: "Delivers an answer to the already-running scientific action, which may then continue its previously authorized effects. Requires workspace.run_r plus the original operation principal/project and native session.".into(),
-            retry_rule: "After a missing acknowledgement, read workspace.console_state and the original operation. The input may already be submitted; do not automatically replay an answer. reply_id identifies the attempt but does not authorize delivery to a new request.".into(),
-            cancellation_rule: "This short control cannot be undone. Request cancellation of the original operation separately if needed; disconnecting does not stop it.".into(),
-            preconditions: vec![CapabilityPrecondition { parameter: "session_id, operation_id, request_id".into(), requirement: "Copy the exact pending input identity from workspace.console_state. Obtaining that observation requires workspace.read; the reply itself requires workspace.run_r. The original operation and active native request must still agree.".into(), read_from: Some(reference("workspace.console_state")) }, CapabilityPrecondition { parameter: "reply_id".into(), requirement: "Supply a nonempty identifier for this answer attempt (at most 160 characters).".into(), read_from: None }],
-            examples: vec![CapabilityExample { arguments: json!({"session_id":"workspace-session-example","operation_id":"operation-example","request_id":"input-example","reply_id":"reply-example","value":"yes"}), result_explanation: "submitted=true means that the owner sent this answer. Verify the running operation separately; a second delivery to the same submitted request is rejected.".into() }],
-            related_capabilities: vec![reference("workspace.console_state"), reference("operation.get")], related_skills: vec![],
-            position_units: vec!["Answer budgets use UTF-8 bytes, not tokens.".into()],
-        },
-    }
-}
 fn events_descriptor() -> CapabilityDescriptor {
     CapabilityDescriptor {
         kind: CapabilityKind::Query, capability: reference(EVENTS), domain: "operation".into(),

@@ -669,14 +669,10 @@ Checks:
   Applies to: `scripts/check-architecture.mjs`, `scripts/test-architecture.mjs`.
 - `system.client` (L1): `["node","scripts/client.mjs","check"]`
   Applies to: `crates/contract/**`, `scripts/client.mjs`, `ui/**`.
-- `system.environment` (L2): `["node","scripts/test-environment.mjs"]`
-  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-environment.mjs`.
 - `system.evidence-pack` (L1): `["python3","scripts/test-pack-agent-evidence.py"]`
   Applies to: `scripts/pack-agent-evidence.py`, `scripts/test-pack-agent-evidence.py`.
 - `system.mcp` (L2): `["node","scripts/test-mcp.mjs"]`
   Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-mcp.mjs`.
-- `system.process-recovery` (L2): `["node","scripts/test-process-recovery.mjs"]`
-  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-process-recovery.mjs`.
 - `system.project-coverage` (L1): `["cargo","test","-p","rho-sqlite","-p","rho-operation","-p","rho-plugins","--lib","project_coverage","--locked"]`
   Applies to: `crates/adapters/sqlite/**`, `crates/operation/**`, `crates/plugins/**`.
 - `system.r-checkpoints` (L2): `["node","scripts/test-r-checkpoints.mjs"]`

@@ -29,7 +29,7 @@ async fn host_boundaries_are_scoped_immutable_metadata_and_public_reverse_calls(
     fs::write(path.join("plugin.json"), serde_json::to_vec(&manifest).unwrap()).unwrap();
     let archive = snapshot_directory(&path, None, &backend_target()).unwrap();
     PluginRepository::open(&repository_path(&db)).unwrap().import(&archive).unwrap();
-    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     let context = NextHost::local_context();
     let response = query(&host, &context, "workspace.paths", json!({})).await.unwrap();
     assert_eq!(response.status, QueryStatus::Ready);

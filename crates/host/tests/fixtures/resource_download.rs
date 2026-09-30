@@ -26,7 +26,7 @@ async fn original_download_requires_declared_read_scope_exact_resource_and_live_
     let allowed = rho_plugins::snapshot_directory(&path, None, "ui-web").unwrap();
     let mut repository = PluginRepository::open(&repository_path(&db)).unwrap();
     for archive in [&native, &denied, &allowed] { repository.import(archive).unwrap(); }
-    let host = NextHost::open_project(&db, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
     let context = NextHost::local_context();
     let owner = observation(&run(&host, &context, "native", "plugins.activate", activation(&native, "native")).await);
     let binding = query(&host, &context, "plugins.resolve", json!({"instance":owner.instance.identity,"capability":{"id":"fixture.read","version":1}})).await;

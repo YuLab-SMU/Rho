@@ -302,8 +302,9 @@ CLI writer/server entries now also use the generic plugin Host. Scientific start
 flags, R invocation shortcuts and method-binding commands are removed. HostProfile
 now contains only the database path; there is no runtime selector or deferred-R
 startup path. Standalone observation reads the journal without constructing Files
-or native output owners. Fixed scientific Host constructors and shared-port legacy
-Application code remain for the next removal stage. Missing plugins cannot select a fixed Workbench fallback. Historical
+or native output owners. Fixed scientific Host constructors, native scientific registration, runtime-instance
+management and Host Application/Skill adapters are removed. Obsolete contract DTOs,
+unused adapter crates and Application storage types remain for the next cleanup. Missing plugins cannot select a fixed Workbench fallback. Historical
 fixed-renderer test totals do not count as current plugin acceptance.
 
 ## Testing SOP
@@ -579,7 +580,7 @@ The fixtures construct ordinary packages outside the checkout and exercise scope
 checkpoint/application ports, exact dependency/grant validation, delegated view
 calls, transaction rollback, concurrent window conflicts, native work across
 version switching and unavailable-default refusal. `--test plugins` covers the
-shared view/lifecycle ports and `--test port_contracts` their public discovery.
+shared view/lifecycle ports; `cargo test -p rho-mcp --test plugins --locked` checks live public discovery.
 These tests do not establish the management UI, iframe continuity in a browser or
 real-R scenario acceptance. View resource context is qualified against bounded
 retained metadata; the separate byte ports remain responsible for byte integrity.
@@ -878,7 +879,7 @@ replaces ordinary Agent/annotation plugin acceptance.
 harness (`test-agent-plugin-real-r.mjs`) using retained `RHO_AGENT_PLUGIN_PACKAGE`
 and `RHO_R_PLUGIN_PACKAGE`, plus installed `RHO_ARK`/`RHO_R_HOME`. It builds only
 the affected Host test executables and does not rebuild plugins or call a live model.
-The no-argument script retains the native R helpers and retiring Host owner checks; the retired
+The no-argument script checks the ordinary R engine and shared native helpers; the retired
 fixed component-source, mutation and MCP parity tests are no longer part of it.
 
 Environment contracts, native execution and R helpers live in
@@ -887,10 +888,9 @@ Environment contracts, native execution and R helpers live in
 `cargo test -p rho-environment-api -p rho-environment-owner --lib --locked`.
 `node scripts/test-environment-plugin-owner.mjs` copies six public/plugin crates
 outside the checkout and runs the focused storage/observation tests without R.
-`node scripts/test-environment.mjs` exercises the real R Host bridge, including
-isolated pak/renv realization, cancellation, retention, recovery and restart
-binding. It requires the already installed R, Ark and package prerequisites and
-does not install tools. The ordinary backend is `plugins/environment/backend`. Iterate with
+The fixed Environment Host bridge and its runner are retired. Use the ordinary
+Environment/Agent suites below with retained packages and explicit R prerequisites;
+the retired tests do not establish current plugin acceptance. The ordinary backend is `plugins/environment/backend`. Iterate with
 `cargo test -p rho-environment-backend --lib --locked`; generate public declarations
 and contributed schemas with `node plugins/environment/generate-sdk.mjs` and
 `node plugins/environment/generate-manifest.mjs` (both support `--check`).
@@ -977,10 +977,9 @@ Local process launch and native recovery live in `plugins/process/backend/owner`
 Use `cargo test -p rho-process-owner --lib --locked` while
 iterating, and `node scripts/test-process-plugin-owner.mjs` to assemble the public
 protocol/API/engine/owner sources independently and run their native tests.
-The retiring Host bridge is covered by `cargo test -p rho-host --test process
---locked`. `node scripts/test-process-recovery.mjs` builds the current binary and
-checks actual Host interruption, original-operation recovery and unrelated-process
-preservation in a disposable project. It never operates on a user Host.
+The fixed Process Host bridge and its recovery runner are retired. The ordinary
+Process and Agent/Process suites below own current native-operation and recovery
+acceptance; no retired test counts as a current pass.
 
 The ordinary Process RPC backend is `plugins/process/backend`. Iterate with
 `cargo test -p rho-process-backend --lib --locked`; generate its public declarations
@@ -1017,7 +1016,7 @@ assemble Editor with the native artifact target before that case. The three
 Editor/Files browser fixtures now use that combined package target.
 
 `cargo test -p rho-host --test plugin_view_delegation --test plugin_drafts
---test port_contracts --locked` checks Host-owned view restrictions through an
+--test plugin_workspace --locked` checks Host-owned view restrictions through an
 independent public-RPC backend, including nested delegation, preflight, controls,
 close-time encoding scope and accepted work after closure. The fixture waits for
 native settlement before releasing the instance; a terminal journal record alone
@@ -1108,9 +1107,10 @@ Generate public Files declarations with `node plugins/files/generate-sdk.mjs`,
 then run `node scripts/test-files-protocol.mjs`. Contract moves also require the
 normal client generation check, even when wire shapes remain unchanged.
 The Host boundary check is
-`cargo test -p rho-host --test project --test ownership --test plugin_workspace_paths --locked`.
-It covers the original file operations and public protected-path metadata,
-including an external backend's explicitly granted reverse query.
+`cargo test -p rho-host --test plugin_workspace --test plugin_workspace_paths --locked`.
+It covers generic Host leases and public protected-path metadata, including an
+external backend's explicitly granted reverse query. Actual Files operations use
+`files_plugin` with an explicitly retained package.
 
 The ordinary native Files package is assembled with
 `node scripts/build-files-plugin.mjs /absolute/new/directory`. Iterate on its owner
@@ -1246,13 +1246,12 @@ this is not a reason to expand a focused check into a workspace audit.
 
 For Operation-journal-only changes, use
 `cargo test -p rho-sqlite --no-default-features --lib --locked`.
-The SQLite `application-store` feature retains the existing Application and fixed
-Agent persistence bridge for Host builds and ordinary SQLite test commands.
-Plugin-runtime fixtures explicitly disable it, avoiding Agent owner/store and
-Application dependencies when they only need the journal. Check the selected
-closure with `cargo tree -p rho-plugins --edges normal,build,dev --locked --offline`;
-public Agent API types in the common contract are still present. This is a first
-dependency cut, not removal of the remaining fixed Host composition.
+The SQLite `application-store` feature retains generic Application state for Host
+builds and ordinary SQLite test commands. Agent/annotation forwarding stores and
+Host scientific composition are removed. Plugin-runtime fixtures disable this
+feature when they only need the journal. Check the selected closure with
+`cargo tree -p rho-plugins --edges normal,build,dev --locked --offline`.
+Remaining scientific DTO dependencies and unused adapter crates still require cleanup.
 
 Scenario metadata changes use `cargo test -p rho-plugins --test package_repository
 --locked`, `cargo test -p rho-plugin-protocol --test contract --locked` and
@@ -1267,22 +1266,22 @@ HTML widget, Viewer and Plot changes should cover both native and browser paths:
 Rscript --vanilla scripts/test-r-tools.R
 RHO_ARK="$PWD/target/debug/ark" \
 RHO_R_HOME=/Library/Frameworks/R.framework/Resources \
-cargo test -p rho-host --test html_widgets_real_r --locked -- --ignored --nocapture
+cargo test -p rho-r-engine --test real_r --locked -- --ignored --nocapture
 node scripts/test-viewer-plugin.mjs
 npm run test:browser --prefix ui -- r-plugin-viewer.spec.ts r-plugin-plots.spec.ts
 ```
 
-Runtime/recovery changes should cover the focused Host tests and the R-free process
-recovery check:
+Runtime/recovery changes should select the affected generic Host, journal and
+ordinary backend checks:
 
 ```sh
 cargo test -p rho-operation -p rho-sqlite --lib --locked
-cargo test -p rho-host --test port_contracts --test observer --test recovery --locked
+cargo test -p rho-host --test observer --test plugin_restart --test plugin_archives --locked
 cargo test -p rho-plugins --test backend_runtime --locked
 cargo test -p rho-plugins --lib --test resources --locked
 cargo test -p rho-host -p rho-mcp --test plugins --locked
 cargo test -p rho-host --lib --locked
-node scripts/test-process-recovery.mjs
+RHO_PLUGIN_SET_PACKAGE=/absolute/retained/set node scripts/test-agent-process.mjs
 ```
 
 Real R acceptance uses disposable projects and explicit bindings. The retained
@@ -1300,7 +1299,7 @@ oversized UTF-8 and duplicate answers, then completes the original execution whi
 its instance drains. The generic Host plugin test separately proves that transient
 controls create no journal/result/event entries or direct resource uploads.
 
-The remaining direct native Host/helper matrix (not ordinary-plugin composition) is:
+The ordinary R engine and shared native helper check is:
 
 ```sh
 node scripts/test-real-r.mjs
@@ -1457,7 +1456,7 @@ to actual owner state. Studio only composes and manages the client lifecycle.
 The object viewer uses `react-data-grid` with React 19. Real native-storage checks
 in `scripts/test-r-objects.R` require Matrix and SingleCellExperiment in addition
 to the existing jsonlite/rlang bridge providers; tests never install them. Use
-`node scripts/test-real-r.mjs` for the remaining native Host/helper fixtures; ordinary-plugin acceptance is separate. The Studio browser
+`node scripts/test-real-r.mjs` for the ordinary R engine and shared native helper fixtures; ordinary-plugin acceptance is separate. The Studio browser
 scenario exercises a real 501-row table, Unicode text, array slices and SCE assay
 storage. Check ordinary/wide/constrained layouts and copying, not only snapshots.
 
@@ -1468,7 +1467,6 @@ storage. Check ordinary/wide/constrained layouts and copying, not only snapshots
 | Rust behavior | `cargo test -p <crate> <filter> --locked` |
 | Shared capability contracts and result validation | `cargo test -p rho-contract --locked`, then `cargo test -p rho-operation --locked` |
 | Application windows, captures and CAS receipts | `cargo test -p rho-application --locked`, SQLite tests and the ordinary Editor/Agent plugin draft and input checks |
-| Skill sources, resource identity and method binding | `cargo test -p rho-adapter-skills --locked`, then `cargo test -p rho-host --test skills --locked` |
 | Frontend model/component behavior | `npm run test --prefix ui` |
 | Client types and embedded assets | Generate, build, then check as above |
 | Studio interaction and real local R | `npm run test:browser --prefix ui` |
@@ -1503,13 +1501,11 @@ Native/transport verification:
 
 | Script | Scope and prerequisites |
 | --- | --- |
-| `test-real-r.mjs` | Installed Ark/R; remaining direct Host/helper fixtures for queries, cancellation and recovery. Fixed CLI/session checks are retired; `--agent` and `--plugin-recovery` select ordinary-plugin boundaries. |
+| `test-real-r.mjs` | Installed Ark/R; ordinary R engine and shared R helper checks. Fixed Host/CLI tests are retired; `--agent` and `--plugin-recovery` select their focused ordinary-plugin boundaries. |
 | `test-r-checkpoints.mjs` | Installed R with jsonlite; builds the private native checkpoint component for that R, then exercises the classifier and a capture/cold-restore round trip in disposable `--vanilla` processes. `--print-library` prints the component path for `RHO_CHECKPOINT_HELPER` |
 | `npm run test:browser --prefix ui` | Current `cargo build --locked` binary. Ordinary-plugin cases use explicit package/runtime selections; `scientific-workspace.spec.ts` requires either `RHO_SCIENTIFIC_PACKAGES` or `RHO_SCIENTIFIC_PLUGIN_SET`, plus `RHO_ARK` and `RHO_R_HOME`. Fixed-renderer browser specs have been retired with that implementation. Run the affected cases, not every fixture during iteration. |
 | `test-workbench.mjs` | Generic HTTP/MCP/connected CLI, empty-scene checkpoint idempotency, state CAS, request bounds and project fencing; accepts `RHO_TEST_BINARY=/absolute/current/rho` to skip all builds. Scientific cancellation/disconnect checks belong to the ordinary Process/R/Agent suites. |
 | `test-mcp.mjs` | Generic stdio MCP, schema portability, query purity, principal visibility, checkpoint idempotency across Host restart and frame bounds. `RHO_TEST_BINARY=/absolute/current/rho` skips builds. |
-| `test-environment.mjs` | R/Ark with pak, renv, ps and jsonlite; installs small local fixtures into temporary libraries, checks user-library preservation and recovery |
-| `test-process-recovery.mjs` | R-free native process crash/reconciliation |
 | `test-deepseek-inbox.mjs` | Checks the installed, lock-matched native Inbox replay/clear implementation with a disposable journal; no provider calls or session scan |
 
 Interactive Rho integration checks need a disposable analysis project outside the Rho
@@ -1626,13 +1622,17 @@ force active/lazy bindings nor change loaded namespaces, search paths or library
 paths. The fixture explicitly loads its test prerequisite before taking the
 read-only baseline. It also checks busy/unstarted behavior and unchanged Operation
 history. Public declarations alone do not establish those native results.
+The combined `scientific-workspace.spec.ts` continuity case holds a real layout-save
+reply while checking that the close button stays in place, then closes/reopens
+Console and Editor while the same R operation remains running. Routine saving
+indicators must not reflow the window or intercept pointer input.
 The native Console browser case also checks `r.inspection_state`: short runs and
 failed scripts with prior object mutations invalidate cached inspection data,
 while read-only queries preserve the key. The backend's manifest-to-route test
 checks that every declared query/operation reaches the proper transport handler.
 Generic window layout changes use the `rho-plugin-protocol` and `rho-plugins`
 library checks, followed by `cargo test -p rho-host --test plugins --test
-port_contracts --locked`. These cover bounded layout structure, scoped view
+plugin_workspace --locked`. These cover bounded layout structure, scoped view
 references, expected versions, original request replay and retained closed views
 after package removal/restart. They do not establish a visual window shell,
 scenario switching, or iframe drag/focus behavior; those need their own browser

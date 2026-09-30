@@ -67,7 +67,7 @@ async fn source_ports_validate_without_effects_and_preserve_original_checkpoint_
     let branch = repo
         .create_branch(&package.revision.id, "Public editing")
         .unwrap();
-    let host = NextHost::open_project(&db, temp.path()).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, temp.path()).await.unwrap();
     let context = NextHost::local_context();
     let input = json!({"branch":branch,"expected_head":package.revision.id,"changes":{"main.js":{"kind":"put","content_base64":STANDARD.encode("const text = '继续编辑';"),"executable":false}}});
     let before = host.outbox(&context, 0, 100).await.unwrap();
@@ -269,7 +269,7 @@ async fn ordinary_view_edits_through_declared_ports_without_manager_privilege() 
     let branch = repo
         .create_branch(&package.revision.id, "View editing")
         .unwrap();
-    let host = NextHost::open_project(&db, temp.path()).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, temp.path()).await.unwrap();
     let context = NextHost::local_context();
     let activated = host.invoke(&context,invocation("activate","plugins.activate",json!({"revision":package.revision.id,"artifact":package.artifacts[0].id,"target":"ui-web","alias":"editor","configuration":{}}))).await.unwrap();
     assert_eq!(

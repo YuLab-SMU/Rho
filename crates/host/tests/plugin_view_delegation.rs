@@ -189,7 +189,7 @@ async fn reverse_calls_keep_window_and_source_across_queries_controls_preflight_
         .unwrap()
         .import(&archive)
         .unwrap();
-    let host = NextHost::open_project(&db, &root).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &root).await.unwrap();
     let context = NextHost::local_context();
     let instance=invoke(&host,&context,"activate","plugins.activate",json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":backend_target(),"alias":"fixture","configuration":{}})).await["instance"]["identity"].clone();
     for (window, draft, contribution) in [

@@ -51,7 +51,7 @@ impl Fixture {
             .unwrap()
             .import(&archive)
             .unwrap();
-        let host = NextHost::open_project(&database, temp.path())
+        let host = NextHost::open_plugin_workspace(&database, temp.path())
             .await
             .unwrap();
         let context = NextHost::local_context();

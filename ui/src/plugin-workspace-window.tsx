@@ -119,11 +119,13 @@ export function PluginWorkspace({ client, project, testName }: { client: HostCli
       </div>}
     </div> };
   });
-  return <main aria-label="Plugin workspace" style={{ height: '100dvh', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+  return <main aria-label="Plugin workspace" style={{ position: 'relative', height: '100dvh', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
     {client.testProject && <div role="note" style={{ flex: 'none', padding: '8px 12px', borderBottom: '1px solid var(--color-border)', background: 'var(--color-subtle)', overflowWrap: 'anywhere' }}>Disposable test workspace · {testName ?? client.testProject}</div>}
-    {(error || saved.error || saved.saving || [...closes.values()].some(entry => entry.busy || entry.error)) && <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--color-border)', overflowWrap: 'anywhere', maxHeight: '30vh', overflow: 'auto' }}>
+    {/* A routine save must not move tab controls or their sibling iframe layer
+        underneath a pointer action that already started. */}
+    {saved.saving && <div role="status" style={{ position: 'absolute', top: 4, right: 8, zIndex: 10, pointerEvents: 'none', padding: '4px 8px', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 4 }}>Saving layout…</div>}
+    {(error || saved.error || [...closes.values()].some(entry => entry.busy || entry.error)) && <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--color-border)', overflowWrap: 'anywhere', maxHeight: '30vh', overflow: 'auto' }}>
       {(error || saved.error) && <div role="alert">{saved.error || error}</div>}
-      {saved.saving && <span role="status">Saving layout…</span>}
       {saved.error && <><button onClick={() => void retryLayout()}>Retry original layout save</button><button disabled={saved.saving} onClick={() => void owners.layout.discardAndReload().catch(error => setError(message(error)))}>Use saved layout</button></>}
       {[...closes].map(([id, entry]) => <div key={id}>
         {entry.busy ? <span role="status">Saving and closing {views.get(id)?.title ?? id}…</span> : <><span>{entry.error}</span> <button onClick={() => void close(id)}>{entry.confirmedFailure ? 'Try closing again' : 'Retry original close'}</button>{entry.confirmedFailure && <button onClick={() => void inspectRecovery(id)}>Close with saved state…</button>}</>}
