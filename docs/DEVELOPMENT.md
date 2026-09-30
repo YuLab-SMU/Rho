@@ -673,10 +673,11 @@ The explicit live provider probe now belongs to `rho-agent-engine`'s
 The public task state machine is `plugins/agent/backend/owner`. Iterate with
 `cargo test -p rho-agent-owner --lib --locked`; `node
 scripts/test-agent-plugin-owner.mjs` repeats its admission/recovery fixtures from
-an independent source assembly and verifies public contract freshness. The
-transitional native request conversion is checked by `cargo test -p rho-contract
---lib public_agent_request --locked`. The Application component conversion and its
-fixtures have been retired with the fixed implementation. Public component-owner fixtures inject controller
+an independent source assembly and verifies public contract freshness. Core Agent
+request/controller conversions and private-route DTOs are removed, along with
+their obsolete fixtures and generated client exports. `node
+scripts/test-agent-plugin-types.mjs` checks an external consumer using only the
+plugin SDK. The Application component conversion is also retired. Public component-owner fixtures inject controller
 loss and atomic write failure, and check original admission, late native receipts,
 observation-only restart, unsupported control refusal and frozen permissions.
 Public handoff ownership uses `cargo test -p rho-agent-owner --lib handoff --locked`: all task-kind pairs,

@@ -1,15 +1,4 @@
 #![forbid(unsafe_code)]
-mod agent_client;
-pub use agent_client::*;
-mod agent_task;
-pub use agent_task::*;
-pub use rho_agent_api::*;
-mod project_agent_task;
-pub use project_agent_task::*;
-mod agent_handoff;
-pub use agent_handoff::*;
-mod component_agent;
-pub use component_agent::*;
 
 pub mod checkpoints;
 pub use checkpoints::*;
@@ -62,10 +51,6 @@ pub mod instances;
 pub use instances::*;
 mod recovery_protection;
 pub use recovery_protection::*;
-mod annotation;
-pub use annotation::*;
-mod html_surface;
-pub use html_surface::*;
 
 use std::collections::BTreeSet;
 

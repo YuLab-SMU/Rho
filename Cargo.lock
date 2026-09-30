@@ -6142,7 +6142,6 @@ dependencies = [
 name = "rho-contract"
 version = "0.1.0"
 dependencies = [
- "rho-agent-api",
  "rho-environment-api",
  "rho-files-api",
  "rho-plugin-protocol",

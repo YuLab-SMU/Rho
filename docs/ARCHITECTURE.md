@@ -1101,11 +1101,13 @@ newer writer's current credential.
 The fixed Host task, handoff, context, component and managed-MCP services and the
 `rho-agents` adapter are removed, along with Application Agent/annotation interfaces
 and SQLite forwarding stores. The generic Application owner and its fixed scientific
-bridge remain for later removal. Public contracts still contain legacy Agent DTOs.
+bridge remain for later removal. Legacy Agent/annotation/HTML-token DTOs and
+Agent API re-exports are removed from core contracts and generated client bindings.
 The ordinary backend connects the public `AgentModelRun` and `AgentModelPort` to
 the package-owned Rig driver. Inputs, citations, grants and original receipts belong
 to the captured plugin instance; core no longer imports the native Agent clients
-or model engine. No second scientific commit path is introduced.
+or model engine; no Agent package occurs in the core dependency graph. No second
+scientific commit path is introduced.
 Model-facing schemas are derived from current descriptors without modifying the
 registry. Host-bound identity fields are removed from that schema, injected from
 the accepted run, then validated against the original native schema. Dispatch
@@ -1331,8 +1333,9 @@ accepts only the Workbench credential and preserves project/test-project session
 identity. Each ordinary Agent backend owns its separate private MCP endpoint;
 Workbench does not resolve Agent-issued credentials or close Agent tasks itself.
 HTML resources are presented by the ordinary Viewer through plugin resources.
-Host/Application task and storage adapters are also removed; legacy public-contract
-DTOs remain for the next cleanup.
+Host/Application task and storage adapters and their private-route DTOs are removed.
+Generic caller classification and public MCP connection observations remain core
+transport concepts; they do not depend on the Agent package.
 
 Persist a request and input digest before starting native creation or submission.
 The same request identity/content returns its receipt; altered reuse is rejected.
@@ -2044,16 +2047,16 @@ projections and handoff share one store and its transactions. Core Application a
 SQLite no longer import Agent owner/store or create the retired `agent-v1.sqlite`
 sibling. Existing files are not read, imported or removed. The plugin store checks
 its format before creating tables and has no scientific-journal connection.
-Native updates and manual handoff share the same task writer gate. Transitional
-public-contract DTO conversions still remain for later cleanup.
+Native updates and manual handoff share the same task writer gate. Plugin-owned
+contracts are exported by its independent API/SDK, not through `rho-contract`.
 The component model-task state machine also lives in `rho-agent-owner::component`.
 Its public captured task/document/call/receipt types are in `rho-agent-api::component`;
 only the public plugin protocol and R media API are dependencies. The ordinary
 backend validates live callers and injects its Agent-owned atomic repository;
 there is no core task writer or forwarding store. Public receipt captures retain
 save/run steps, applied document versions, acknowledgements and diagnostics.
-Legacy core DTO mirrors/conversions remain separately until contract cleanup;
-they do not open an Agent store or implement a task service.
+Legacy core DTO mirrors and controller conversions are removed. Public consumers
+use the Agent API/SDK directly without a core dependency.
 
 Native protocol transport does not register capabilities, persist task truth or
 expand the caller's scientific authority.

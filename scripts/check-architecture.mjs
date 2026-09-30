@@ -53,7 +53,7 @@ const allowed = {
   "rho-environment-api": ["rho-process-api", "rho-plugin-protocol"],
   "rho-environment-backend": ["rho-environment-api", "rho-environment-owner", "rho-process-api", "rho-plugin-sdk", "rho-r-api"],
   "rho-environment-owner": ["rho-environment-api", "rho-process-engine", "rho-process-owner"],
-  "rho-contract": ["rho-agent-api", "rho-plugin-protocol", "rho-r-api", "rho-files-api", "rho-process-api", "rho-remote-api", "rho-environment-api"],
+  "rho-contract": ["rho-plugin-protocol", "rho-r-api", "rho-files-api", "rho-process-api", "rho-remote-api", "rho-environment-api"],
   "rho-operation": ["rho-contract", "rho-plugin-protocol"],
   "rho-application": ["rho-contract"],
   "rho-skills": ["rho-contract", "rho-operation"],
