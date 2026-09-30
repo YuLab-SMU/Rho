@@ -26,7 +26,7 @@ test.beforeAll(async () => {
   const plugin = buildUiFixture(directory), database = join(directory, "state.sqlite");
   const installed = JSON.parse(execFileSync(resolve("../target/debug/rho"), ["--database", database, "plugins", "snapshot", plugin], { encoding: "utf8", timeout: 60000, killSignal: "SIGKILL" })).result;
   const native = JSON.parse(execFileSync(resolve("../target/debug/rho"), ["--database", database, "plugins", "snapshot", buildControlFixture(directory), "--target", "aarch64-apple-darwin"], { encoding: "utf8", timeout: 60000, killSignal: "SIGKILL" })).result;
-  process_ = spawn(resolve("../target/debug/rho"), ["--database", database, "--project", project, "--plugins-only", "workbench"], { stdio: ["ignore", "pipe", "pipe"] });
+  process_ = spawn(resolve("../target/debug/rho"), ["--database", database, "--project", project, "--plugins-only", "workbench", ...(process.env.RHO_WORKBENCH_DEV_ASSETS ? ["--dev-assets", process.env.RHO_WORKBENCH_DEV_ASSETS] : [])], { stdio: ["ignore", "pipe", "pipe"] });
   url = new URL(await new Promise<string>((done, reject) => {
     let output = "", errors = "";
     const timer = setTimeout(() => reject(new Error(`Fixture Host startup timed out: ${errors}`)), 40000);
@@ -65,10 +65,42 @@ test('the generic window composes live plugin views, captures closure and retrie
   const second = opened.view, secondFrame = region(second.view).frameLocator('iframe');
   await expect(secondFrame.getByLabel('View note')).toHaveValue('Second view'); await expect(input).toBeHidden();
   const tabs = page.getByRole('tab', { name: 'Independent View', exact: true }); await expect(tabs).toHaveCount(2);
-  await tabs.nth(0).click(); await expect(input).toHaveValue('Still live — 未保存 Ω');
+  const readyForPointer = async () => {
+    await expect.poll(() => page.evaluate(id => {
+      const slot = document.querySelector<HTMLElement>(`[data-plugin-slot="${id}"]`);
+      const surface = document.querySelector<HTMLElement>(`[data-plugin-frame="${id}"]`);
+      if (!slot || !surface || surface.inert) return false;
+      const a = slot.getBoundingClientRect(), b = surface.getBoundingClientRect();
+      return a.width > 0 && a.height > 0 && ['x', 'y', 'width', 'height'].every(key =>
+        Math.abs(a[key as keyof DOMRect] as number - (b[key as keyof DOMRect] as number)) < 1);
+    }, view.view)).toBe(true);
+    // Parent layout can settle before the isolated child has painted its newly
+    // visible surface. Wait for that paint before sending a real pointer event.
+    await input.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+    await page.evaluate(() => new Promise<void>(done => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+  };
+  // Hold an actual committed layout reply across a pointer action. The save
+  // indicator and acknowledgement must neither move nor blur the live document.
+  let releaseSelection!: () => void, selectionSent!: () => void;
+  const selection = new Promise<void>(done => { selectionSent = done; });
+  const acknowledgement = new Promise<void>(done => { releaseSelection = done; });
+  await page.route('**/api/host', async route => {
+    const payload = route.request().postDataJSON()?.frame?.request;
+    if (payload?.method === 'invoke' && payload.params.capability.id === 'windows.update_layout') {
+      const reply = await route.fetch(); selectionSent(); await acknowledgement;
+      await route.fulfill({ response: reply });
+    } else await route.continue();
+  });
+  try {
+    await tabs.nth(0).click(); await selection; await readyForPointer();
+    await expect(input).toHaveValue('Still live — 未保存 Ω');
+    await input.click(); await expect(input).toBeFocused();
+  } finally { releaseSelection(); }
+  await expect(page.getByText('Saving layout…', { exact: true })).toHaveCount(0);
+  await expect(input).toBeFocused(); await page.unroute('**/api/host');
   expect(await input.evaluate(() => (window as any).fixtureLifetime)).toBe(lifetime);
   for (const width of [1440, 1920, 390]) {
-    await page.setViewportSize({ width, height: 900 }); await input.click(); await expect(input).toBeFocused();
+    await page.setViewportSize({ width, height: 900 }); await readyForPointer(); await input.click(); await expect(input).toBeFocused();
     expect(await input.evaluate(() => (window as any).fixtureLifetime)).toBe(lifetime);
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
     await page.screenshot({ path: info.outputPath(`plugin-workspace-${width}.png`) });

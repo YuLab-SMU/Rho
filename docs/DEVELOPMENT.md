@@ -143,10 +143,11 @@ are retired. Workbench serves only the generic plugin profile; `--fixed-workspac
 is removed. `test-workbench.mjs` tests generic HTTP/MCP/connected CLI and empty
 scenario checkpoints. Scientific behavior uses the ordinary-plugin suites.
 
-For frontend-only startup/scientific-window iteration, build the client and set
-`RHO_WORKBENCH_DEV_ASSETS` to the absolute `crates/workbench/assets` directory.
-Those two fixtures use the existing Host's `--dev-assets` option, so a label/layout
-fix does not need a new native binary. Record this as current-client integration
+For frontend-only startup/scientific-window and external plugin-window iteration,
+build the client and set `RHO_WORKBENCH_DEV_ASSETS` to the absolute `crates/workbench/assets` directory.
+These fixtures (`plugin-startup`, `scientific-workspace`, `plugin-workspace`) use
+the existing Host's `--dev-assets` option, so a label/layout fix does not need a
+new native binary. Record this as current-client integration
 with a retained Host; it does not verify new Host capabilities or updated embedded
 assets. Omit the variable for embedded-artifact acceptance. Preserve each settled
 run's browser evidence before another run replaces `target/studio-browser`, or
