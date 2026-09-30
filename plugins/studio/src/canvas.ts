@@ -1,19 +1,10 @@
 /** Inert fixture rendering: no client, capability dispatcher, code evaluator or remote media. */
-import type { JsonValue, VisualCondition, VisualDocument } from '../public/plugin-protocol/index.js';
-import { own, valueAt } from './visual.js';
+import type { VisualDocument } from '../public/plugin-protocol/index.js';
+import { own, fixtureValue, fixtureVisible } from './visual.js';
 const element=(tag:string,text='')=>{const item=document.createElement(tag);item.textContent=text;return item;};
 const shown=(value:unknown)=>typeof value==='string'?value:JSON.stringify(value)??'';
 export function renderCanvas(host:HTMLElement,doc:VisualDocument,fixtures:Record<string,unknown>,selected:string,select:(id:string)=>void) {
   host.replaceChildren();
-  const binding=(value:{source:string;path:string[]})=>valueAt((own(fixtures,value.source)??null) as JsonValue,value.path);
-  function visible(condition:VisualCondition):boolean {
-    switch(condition.kind) {
-      case 'exists': return binding(condition.binding)!==undefined;
-      case 'equals': return JSON.stringify(binding(condition.binding))===JSON.stringify(condition.value);
-      case 'not': return !visible(condition.condition);
-      case 'all': return condition.conditions.every(visible);
-    }
-  }
   const tokens:Record<string,string>={'color.text':'var(--color-text)','color.muted':'var(--color-muted)','color.surface':'var(--color-surface)','color.subtle':'var(--color-subtle)','color.accent':'var(--color-accent)','space.1':'4px','space.2':'8px','space.3':'12px','space.4':'16px','space.6':'24px','space.8':'32px'};
   const styles:Record<string,string>={color:'color',background:'background-color',padding:'padding',gap:'gap',font_size:'font-size',border_radius:'border-radius'};
   function draw(id:string):HTMLElement {
@@ -21,13 +12,13 @@ export function renderCanvas(host:HTMLElement,doc:VisualDocument,fixtures:Record
     box.setAttribute('role','group');box.setAttribute('aria-label',`${node.kind} ${id}`);box.setAttribute('aria-current',String(id===selected));
     box.onclick=event=>{event.stopPropagation();select(id);};box.onkeydown=event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();select(id);}};
     const props:Record<string,unknown>=Object.fromEntries(Object.entries(node.properties));
-    for(const [key,value] of Object.entries(node.bindings))Object.defineProperty(props,key,{value:binding(value),enumerable:true,writable:true,configurable:true});
+    for(const [key,value] of Object.entries(node.bindings))Object.defineProperty(props,key,{value:fixtureValue(fixtures,value),enumerable:true,writable:true,configurable:true});
     for(const [key,value] of Object.entries(node.style_tokens)) {
       const property=own(styles,key),token=own(tokens,value);
       // Token names, bounded numeric lengths and literal hex colors only. No URL or CSS execution.
       if(property&&(token||/^(?:\d{1,3}(?:px|rem|%)|#[a-fA-F0-9]{3,8})$/.test(value)))box.style.setProperty(property,token??value);
     }
-    if(node.visible_when&&!visible(node.visible_when)) { box.classList.add('condition-hidden');box.append(element('small','Hidden by fixture condition')); }
+    if(node.visible_when&&!fixtureVisible(fixtures,node.visible_when)) { box.classList.add('condition-hidden');box.append(element('small','Hidden by fixture condition')); }
     if(node.kind==='split') {box.style.flexDirection=props.direction==='vertical'?'column':'row';}
     if(node.kind==='text')box.append(element('span',shown(props.text??'Text')));
     if(node.kind==='button') {const button=element('button',shown(props.label??'Button')) as HTMLButtonElement;button.type='button';button.tabIndex=-1;box.append(button);}

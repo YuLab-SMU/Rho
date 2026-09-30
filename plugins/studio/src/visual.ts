@@ -1,5 +1,6 @@
 /** Local editing diagnostics. Native check_source remains the checkpoint authority. */
-import type { VisualDocument, VisualNode, VisualNodeKind, JsonValue } from '../public/plugin-protocol/index.js';
+import { same } from './operations.js';
+import type { VisualDocument, VisualNode, VisualNodeKind, VisualCondition, JsonValue } from '../public/plugin-protocol/index.js';
 export const kinds: VisualNodeKind[] = ['container','split','tabs','text','button','form','list','table','media','custom'];
 export const own = <T>(map: Record<string,T>, key: string): T | undefined => Object.hasOwn(map,key) ? map[key] : undefined;
 export function put<T>(map: Record<string,T>, key: string, value: NoInfer<T>) { Object.defineProperty(map,key,{value,writable:true,enumerable:true,configurable:true}); }
@@ -79,4 +80,18 @@ export function valueAt(data: JsonValue, path: string[]): JsonValue | undefined 
   let current:any=data;
   for(const key of path) { if(!current||typeof current!=='object'||['__proto__','prototype','constructor'].includes(key)||!Object.hasOwn(current,key))return; current=current[key]; }
   return current;
+}
+
+/** Fixture-only evaluation; never dispatches a query or declared action. */
+export function fixtureValue(fixtures: Record<string, unknown>, binding: {source: string; path: string[]}) {
+  const source=own(fixtures,binding.source);
+  return source===undefined?undefined:valueAt(source as JsonValue,binding.path);
+}
+export function fixtureVisible(fixtures: Record<string, unknown>, condition: VisualCondition): boolean {
+  switch(condition.kind) {
+    case 'exists': return fixtureValue(fixtures,condition.binding)!==undefined;
+    case 'equals': return same(fixtureValue(fixtures,condition.binding),condition.value);
+    case 'not': return !fixtureVisible(fixtures,condition.condition);
+    case 'all': return condition.conditions.every(item=>fixtureVisible(fixtures,item));
+  }
 }

@@ -8,7 +8,7 @@ import {buildUiFixture} from '../../scripts/fixtures/plugin-ui.mjs';
 let directory:string,project:string,url:URL,host:ReturnType<typeof spawn>,completed=false,studioView:any,subject:any;
 const windowId='studio-window';
 const node=(kind='container')=>({kind,children:[],properties:{},style_tokens:{},bindings:{},visible_when:null,events:{},component:null});
-const declaration={format_version:1,root:'root',nodes:{root:{...node(),children:['heading','controls','plot']},heading:{...node('text'),properties:{text:'Report overview'},style_tokens:{font_size:'24px'}},controls:{...node('split'),children:['open-report','caption'],properties:{direction:'horizontal'}},'open-report':{...node('button'),properties:{label:'Open report'},events:{click:[{kind:'invoke',capability:{id:'science.should_never_run',version:1},arguments:{}}]}},caption:{...node('text'),properties:{text:'Choose a report to inspect.'}},plot:{...node('custom'),component:'report-frame'}},data_sources:{},components:{'report-frame':{source:'src/ReportFrame.ts',export:'ReportFrame',properties_schema:{},input_schema:{},output_schema:{}}}};
+const declaration={format_version:1,root:'root',nodes:{root:{...node(),children:['heading','controls','plot']},heading:{...node('text'),properties:{text:'Report overview'},style_tokens:{font_size:'24px'}},controls:{...node('split'),children:['open-report','caption'],properties:{direction:'horizontal'}},'open-report':{...node('button'),properties:{label:'Open report'},events:{click:[{kind:'invoke',capability:{id:'science.should_never_run',version:1},arguments:{}}]}},caption:{...node('text'),properties:{text:'Choose a report to inspect.'},visible_when:{kind:'equals',binding:{source:'report',path:[]},value:{ready:true,count:2}}},plot:{...node('custom'),component:'report-frame'}},data_sources:{report:{capability:{id:'science.fixture_only',version:1},arguments:{},subscribe:false}},components:{'report-frame':{source:'src/ReportFrame.ts',export:'ReportFrame',properties_schema:{},input_schema:{},output_schema:{}}}};
 async function port(method:string,params:any){const response=await fetch(new URL('/api/host',url),{method:'POST',headers:{Authorization:`Bearer ${url.hash.slice(7)}`,'Content-Type':'application/json','X-Rho-Studio-Window':windowId},body:JSON.stringify({project_root:project,frame:{id:crypto.randomUUID(),request:{method,params}}})}).then(r=>r.json());if(!response.ok)throw Error(response.error);return response.result;}
 async function query(id:string,args:any){return(await port('query_snapshot',{capability:{id,version:1},arguments:args})).data;}
 async function allOperations(){const operations:any[]=[];let before_cursor:number|null=null;for(let page=0;page<20;page++){const result=await query('operation.list_recent',{limit:100,before_cursor});operations.push(...result.operations);if(result.next_cursor===null)return operations;before_cursor=result.next_cursor;}throw Error('Fixture operation history exceeded its 2000-record bound.');}
@@ -37,6 +37,15 @@ test('ordinary Studio edits real source with inert fixtures, shared history and 
  // The source package identity is authoritative, even if the fixture ID changes.
  const branches=await query('plugins.branches',{plugin:(await query('plugins.inspect',{revision:subject.revision})).summary.plugin,after:null,limit:100});const branchId=branches.branches[0].id;
  await expect(frame.locator('#canvas')).toContainText('Report overview');const countBefore=(await query('operation.list_recent',{limit:100})).operations.length;
+ // Real canvas conditions use structural JSON equality and do not query their source.
+ const caption=frame.locator('#canvas [data-node="caption"]');
+ await expect(caption).toHaveClass(/condition-hidden/);
+ await frame.getByLabel('Fixture data by source name',{exact:true}).fill(JSON.stringify({report:{count:2,ready:true}}));
+ await frame.getByRole('button',{name:'Update fixture data',exact:true}).click();
+ await expect(caption).not.toHaveClass(/condition-hidden/);
+ await frame.getByRole('button',{name:'Save draft',exact:true}).click();
+ await expect(frame.locator('#sync')).toHaveText('Draft synchronized');await page.reload();
+ await expect(caption).not.toHaveClass(/condition-hidden/);
  await frame.locator('#canvas').getByRole('button',{name:'Open report',exact:true}).click();await expect(frame.locator('#node-id')).toContainText('open-report');
  await frame.getByLabel('Text / label',{exact:true}).fill('Open analysis report');await expect(frame.locator('#canvas').getByRole('button',{name:'Open analysis report',exact:true})).toBeVisible();
  await frame.getByRole('button',{name:'Declaration',exact:true}).click();const valid=await source.inputValue();expect(valid).toContain('Open analysis report');
@@ -107,5 +116,5 @@ test('ordinary Studio edits real source with inert fixtures, shared history and 
  await expect(frame.locator('#build-status')).toContainText('Build cancelled');await expect(frame.locator('#development-pending')).toBeHidden();await expect(frame.getByRole('button',{name:'Start preview',exact:true})).toBeDisabled();
  expect((await query('plugins.inspect',{revision:slowHead})).artifacts).toHaveLength(0);expect((await query('plugins.inspect',{revision:restoredHead})).artifacts).toHaveLength(1);
  await page.screenshot({path:info.outputPath('studio-build-cancelled.png')});
- const operations=await allOperations();expect(operations.filter((r:any)=>r.capability.id==='plugins.checkpoint')).toHaveLength(3);expect(operations.filter((r:any)=>r.capability.id==='science.should_never_run')).toHaveLength(0);expect(countBefore).toBeGreaterThan(0);expect(errors).toEqual([]);expect(lost).toBe(true);completed=true;
+ const operations=await allOperations();expect(operations.filter((r:any)=>r.capability.id==='plugins.checkpoint')).toHaveLength(3);expect(operations.filter((r:any)=>r.capability.id==='science.should_never_run'||r.capability.id==='science.fixture_only')).toHaveLength(0);expect(countBefore).toBeGreaterThan(0);expect(errors).toEqual([]);expect(lost).toBe(true);completed=true;
 });
