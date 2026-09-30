@@ -227,10 +227,14 @@ async fn original_reverse_request_is_observable_while_pending_after_lost_reply_a
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 let observed = query(&host, "plugins.instance", json!({"instance":instance})).await;
-                if observed["retained_calls"] == 0 && observed["pending_messages"] == 0 { break; }
+                if observed["retained_calls"] == 0 && observed["pending_messages"] == 0 {
+                    break;
+                }
                 tokio::task::yield_now().await;
             }
-        }).await.unwrap();
+        })
+        .await
+        .unwrap();
         invoke(
             &host,
             &format!("release-{i}"),
@@ -263,8 +267,17 @@ async fn original_reverse_request_is_observable_while_pending_after_lost_reply_a
                 .is_err()
         );
     }
-    invoke(&host, "remove-fixture", "plugins.remove", json!({"revision":archive.revision.id})).await;
-    assert_eq!(query(&host, "plugins.list", json!({"limit":20})).await["items"], json!([]));
+    invoke(
+        &host,
+        "remove-fixture",
+        "plugins.remove",
+        json!({"revision":archive.revision.id}),
+    )
+    .await;
+    assert_eq!(
+        query(&host, "plugins.list", json!({"limit":20})).await["items"],
+        json!([])
+    );
     drop(host);
     let reopened = NextHost::open_plugin_workspace(&db, &root).await.unwrap();
     assert_eq!(

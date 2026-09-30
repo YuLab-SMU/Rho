@@ -428,7 +428,7 @@ mod tests {
                             principal: call.principal.clone(),
                             alias: InstanceAlias::new("original").unwrap(),
                             configuration: json!({}),
-                            state: state.clone(),
+                            state,
                             suspension: None,
                             diagnostic: None
                         },
@@ -472,7 +472,7 @@ mod tests {
             let (directory, owner, mut call, requests) = super::super::tests::fixture();
             call.binding.capability = key(ATTEMPT);
             call.arguments = json!({"source_operation_id":"capture"});
-            let source = source_record(&owner, &call, status.clone());
+            let source = source_record(&owner, &call, status);
             let responder = serve(requests, source, call.clone(), state, None);
             let observed: RCaptureAttemptObservation =
                 decode(owner.query_recovery(&call).await.unwrap()).unwrap();

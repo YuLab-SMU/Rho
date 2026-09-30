@@ -42,8 +42,9 @@ fn verify(
             .ok_or("Original native Operation identity is missing")?,
     )
     .map_err(|_| "Invalid native Operation identity")?;
-    let normalized: PluginRequest = serde_json::from_value(operation["normalized_arguments"].clone())
-        .map_err(|_| "Invalid admitted plugin request")?;
+    let normalized: PluginRequest =
+        serde_json::from_value(operation["normalized_arguments"].clone())
+            .map_err(|_| "Invalid admitted plugin request")?;
     let original_request_matches = match expected {
         Some(expected) => &id == expected,
         None => true,
@@ -107,33 +108,56 @@ mod tests {
         let mut normalized = record.clone();
         normalized["operation"]["normalized_arguments"]["binding"]["target"] = json!("/project");
         normalized["operation"]["normalized_arguments"]["arguments"]["args"] = json!([]);
-        normalized["operation"]["admission"]["owner_context"]["binding"] = normalized["operation"]["normalized_arguments"]["binding"].clone();
+        normalized["operation"]["admission"]["owner_context"]["binding"] =
+            normalized["operation"]["normalized_arguments"]["binding"].clone();
         assert!(operation_result("/project", &caller, &parent, &request, &normalized).is_err());
-        let verify = |value: &Value| correlated_operation_result("/project", &caller, &parent, &request, &expected, value);
-        assert_eq!(verify(&normalized).unwrap().1["output"], json!({"exit_code":0}));
+        let verify = |value: &Value| {
+            correlated_operation_result("/project", &caller, &parent, &request, &expected, value)
+        };
+        assert_eq!(
+            verify(&normalized).unwrap().1["output"],
+            json!({"exit_code":0})
+        );
         for (field, value) in [
-            ("operation_id", json!("different-operation")), ("caller", json!({"kind":"plugin","id":"another-agent"})),
-            ("causation_id", json!("another-send")), ("idempotency_scope", json!("/another-project")),
+            ("operation_id", json!("different-operation")),
+            ("caller", json!({"kind":"plugin","id":"another-agent"})),
+            ("causation_id", json!("another-send")),
+            ("idempotency_scope", json!("/another-project")),
             ("capability", json!({"id":"process.run_local","version":1})),
         ] {
-            let mut wrong = normalized.clone(); wrong["operation"][field] = value;
+            let mut wrong = normalized.clone();
+            wrong["operation"][field] = value;
             assert!(verify(&wrong).is_err(), "{field}");
         }
         for (field, value) in [
-            ("provider", json!({"instance":"another-process","plugin":"org.rho.process",
-                "revision":format!("sha256:{}", "a".repeat(64)),"artifact":format!("sha256:{}", "b".repeat(64))})),
-            ("project", json!("another-project")), ("capability", json!({"id":"process.run_local","version":1})),
+            (
+                "provider",
+                json!({"instance":"another-process","plugin":"org.rho.process",
+                "revision":format!("sha256:{}", "a".repeat(64)),"artifact":format!("sha256:{}", "b".repeat(64))}),
+            ),
+            ("project", json!("another-project")),
+            ("capability", json!({"id":"process.run_local","version":1})),
         ] {
-            let mut wrong = normalized.clone(); wrong["operation"]["normalized_arguments"]["binding"][field] = value;
-            wrong["operation"]["admission"]["owner_context"]["binding"] = wrong["operation"]["normalized_arguments"]["binding"].clone();
+            let mut wrong = normalized.clone();
+            wrong["operation"]["normalized_arguments"]["binding"][field] = value;
+            wrong["operation"]["admission"]["owner_context"]["binding"] =
+                wrong["operation"]["normalized_arguments"]["binding"].clone();
             assert!(verify(&wrong).is_err(), "{field}");
         }
-        let mut wrong = normalized.clone(); wrong["operation"]["normalized_arguments"]["preconditions"] = json!({"invented":true});
+        let mut wrong = normalized.clone();
+        wrong["operation"]["normalized_arguments"]["preconditions"] = json!({"invented":true});
         assert!(verify(&wrong).is_err());
-        let mut wrong = normalized.clone(); wrong["operation"]["admission"]["owner_context"]["binding"] = json!(request.binding);
+        let mut wrong = normalized.clone();
+        wrong["operation"]["admission"]["owner_context"]["binding"] = json!(request.binding);
         assert!(verify(&wrong).is_err());
-        wrong = normalized.clone(); wrong["status"] = json!("completed"); assert!(verify(&wrong).is_err());
+        wrong = normalized.clone();
+        wrong["status"] = json!("completed");
+        assert!(verify(&wrong).is_err());
         normalized["status"] = json!("uncertain");
-        assert_eq!(verify(&normalized).unwrap().1["status"], "uncertain", "Identity is not a claim of terminal success");
+        assert_eq!(
+            verify(&normalized).unwrap().1["status"],
+            "uncertain",
+            "Identity is not a claim of terminal success"
+        );
     }
 }

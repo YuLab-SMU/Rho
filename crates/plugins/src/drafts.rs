@@ -252,12 +252,9 @@ impl PluginRepository {
             observed(&transaction, project, principal, &args.window, &args.draft)?,
             args.expected_version,
         ) {
-            (None, None) => (),
+            (None, None) => {}
             (Some(old), Some(version))
-                if !old.discarded && old.version == version && old.source == args.source =>
-            {
-                ()
-            }
+                if !old.discarded && old.version == version && old.source == args.source => {}
             _ => return Err(PluginError::Conflict),
         }
         verify_staged_content(&transaction, project, principal, args)?;
@@ -1097,13 +1094,12 @@ mod tests {
     fn scope_source_hash_size_and_metadata_are_validated_before_publication() {
         let mut f = Fixture::new();
         let args = f.stage("draft", "upload", b"contents", 100);
-        for other in [ProjectId::new("other").unwrap()] {
-            assert!(
-                f.repo
-                    .save_document_draft(&other, &f.principal, args.clone(), 100)
-                    .is_err()
-            );
-        }
+        let other = ProjectId::new("other").unwrap();
+        assert!(
+            f.repo
+                .save_document_draft(&other, &f.principal, args.clone(), 100)
+                .is_err()
+        );
         assert!(
             f.repo
                 .save_document_draft(

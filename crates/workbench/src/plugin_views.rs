@@ -19,17 +19,20 @@ pub(crate) async fn test_asset(
 ) -> Response {
     let id = match rho_contract::TestProjectId::new(test_project) {
         Ok(id) => id,
-        Err(_) => return failure(StatusCode::NOT_FOUND,"Test view is unavailable"),
+        Err(_) => return failure(StatusCode::NOT_FOUND, "Test view is unavailable"),
     };
     let hosting = state.hosting.read().await;
     let Some(selected) = &hosting.selected else {
-        return failure(StatusCode::CONFLICT,"select a project first");
+        return failure(StatusCode::CONFLICT, "select a project first");
     };
-    let host = match selected.host.plugin_test_host(&NextHost::local_context(),&id) {
+    let host = match selected
+        .host
+        .plugin_test_host(&NextHost::local_context(), &id)
+    {
         Ok(host) => host,
-        Err(error) => return failure(StatusCode::NOT_FOUND,error.to_string()),
+        Err(error) => return failure(StatusCode::NOT_FOUND, error.to_string()),
     };
-    asset_response(&host,&connection,&token,&path)
+    asset_response(&host, &connection, &token, &path)
 }
 
 fn asset_response(host: &NextHost, connection: &str, token: &str, path: &str) -> Response {
@@ -84,16 +87,18 @@ pub(crate) async fn dispatch(
     if selected.root.to_str() != Some(project) {
         return failure(StatusCode::CONFLICT, "project changed");
     }
-    let test_project: Option<rho_contract::TestProjectId> = match serde_json::from_value(
-        value.get("test_project").cloned().unwrap_or_default(),
-    ) {
-        Ok(id) => id,
-        Err(error) => return failure(StatusCode::BAD_REQUEST,error.to_string()),
-    };
+    let test_project: Option<rho_contract::TestProjectId> =
+        match serde_json::from_value(value.get("test_project").cloned().unwrap_or_default()) {
+            Ok(id) => id,
+            Err(error) => return failure(StatusCode::BAD_REQUEST, error.to_string()),
+        };
     let host = match test_project {
-        Some(id) => match selected.host.plugin_test_host(&NextHost::local_context(),&id) {
+        Some(id) => match selected
+            .host
+            .plugin_test_host(&NextHost::local_context(), &id)
+        {
             Ok(host) => host,
-            Err(error) => return failure(StatusCode::CONFLICT,error.to_string()),
+            Err(error) => return failure(StatusCode::CONFLICT, error.to_string()),
         },
         None => selected.host.clone(),
     };

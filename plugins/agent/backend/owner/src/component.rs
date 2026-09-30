@@ -1331,8 +1331,8 @@ impl ComponentAgentOwner {
             *document = self.prior_saved_identity(scope, document, &ancestors)?;
         }
         let digest = component_digest(&semantic_action)?;
-        if action.mutation() {
-            if let Some((ancestor, previous)) = prior_tools.iter().find(|(ancestor, tool)| {
+        if action.mutation()
+            && let Some((ancestor, previous)) = prior_tools.iter().find(|(ancestor, tool)| {
                 tool.receipt.mutation
                     && tool.receipt.action_digest == digest
                     && ancestor.run.recovery.as_ref().is_some_and(|r| {
@@ -1341,24 +1341,24 @@ impl ComponentAgentOwner {
                                 && entry.state == ComponentRecoveryState::Confirmed
                         })
                     })
-            }) {
-                action = ComponentToolAction::PreviousResult {
-                    capability: CapabilityRef::new(
-                        action.capability(),
-                        match &action {
-                            ComponentToolAction::PluginInvoke(request) => {
-                                u16::try_from(request.binding.capability.version).map_err(|_| {
-                                    invalid("Previous-result capability version exceeds the Agent reference range")
-                                })?
-                            }
-                            _ => 1,
-                        },
-                    )
-                    .map_err(|e| invalid(e.to_string()))?,
-                    run_id: ancestor.run.run_id.clone(),
-                    receipt_id: previous.receipt.receipt_id.clone(),
-                };
-            }
+            })
+        {
+            action = ComponentToolAction::PreviousResult {
+                capability: CapabilityRef::new(
+                    action.capability(),
+                    match &action {
+                        ComponentToolAction::PluginInvoke(request) => {
+                            u16::try_from(request.binding.capability.version).map_err(|_| {
+                                invalid("Previous-result capability version exceeds the Agent reference range")
+                            })?
+                        }
+                        _ => 1,
+                    },
+                )
+                .map_err(|e| invalid(e.to_string()))?,
+                run_id: ancestor.run.run_id.clone(),
+                receipt_id: previous.receipt.receipt_id.clone(),
+            };
         }
         for previous in &previous_tools {
             if previous

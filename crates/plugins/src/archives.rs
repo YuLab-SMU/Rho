@@ -152,7 +152,7 @@ impl PluginRepository {
         args.reference.validate()?;
         ensure(
             args.offset < args.reference.bytes
-                && args.offset % ARCHIVE_CHUNK_BYTES as u64 == 0
+                && args.offset.is_multiple_of(ARCHIVE_CHUNK_BYTES as u64)
                 && args.base64.len() <= ARCHIVE_CHUNK_BYTES.div_ceil(3) * 4,
             "invalid archive chunk range",
         )?;

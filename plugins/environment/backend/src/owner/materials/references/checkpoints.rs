@@ -132,14 +132,13 @@ impl Owner {
             return Ok(());
         }
         if capture && status != "succeeded" {
-            if matches!(status, "failed" | "cancelled") {
-                if let Ok(out) =
+            if matches!(status, "failed" | "cancelled")
+                && let Ok(out) =
                     serde_json::from_value::<RExecutionNotStarted>(record["output"].clone())
-                {
-                    if out.operation_id == *id && !out.started {
-                        return Ok(());
-                    }
-                }
+                && out.operation_id == *id
+                && !out.started
+            {
+                return Ok(());
             }
             let provider = reader(self.checkpoint_reader.as_ref(), &binding.provider, readers)?;
             let observed: RCaptureAttemptObservation = serde_json::from_value(self.reference_query(

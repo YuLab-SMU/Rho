@@ -1,4 +1,4 @@
-use crate::{RegistrySnapshot, CommitPlan, OperationError, UncommittedEvidence, evidence_sha256};
+use crate::{CommitPlan, OperationError, RegistrySnapshot, UncommittedEvidence, evidence_sha256};
 use rho_contract::*;
 use serde_json::Value;
 
@@ -47,9 +47,12 @@ impl RegistrySnapshot {
         }
         for fact in &plan.facts {
             if fact.domain != operation.domain
-                || [&fact.domain, &fact.schema, &fact.key]
-                    .iter()
-                    .any(|s| s.is_empty() || s.len() > 512 || s.trim() != s.as_str() || s.chars().any(char::is_control))
+                || [&fact.domain, &fact.schema, &fact.key].iter().any(|s| {
+                    s.is_empty()
+                        || s.len() > 512
+                        || s.trim() != s.as_str()
+                        || s.chars().any(char::is_control)
+                })
             {
                 violation(
                     "facts",
@@ -60,10 +63,16 @@ impl RegistrySnapshot {
             }
         }
         for event in &plan.events {
-            if event.kind.is_empty() || event.kind.len() > 160
-                || event.kind.trim() != event.kind || event.kind.chars().any(char::is_control)
-                || !event.kind.starts_with(&format!("{}.", operation.domain)) {
-                violation("events", "An event has invalid identity or belongs to another owner.".into());
+            if event.kind.is_empty()
+                || event.kind.len() > 160
+                || event.kind.trim() != event.kind
+                || event.kind.chars().any(char::is_control)
+                || !event.kind.starts_with(&format!("{}.", operation.domain))
+            {
+                violation(
+                    "events",
+                    "An event has invalid identity or belongs to another owner.".into(),
+                );
                 break;
             }
         }

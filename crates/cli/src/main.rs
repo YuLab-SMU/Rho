@@ -5,9 +5,7 @@ mod plugins;
 mod session;
 
 use clap::{Parser, Subcommand};
-use rho_contract::{
-    CapabilityRef, Invocation, OperationId, Precondition, QueryRequest,
-};
+use rho_contract::{CapabilityRef, Invocation, OperationId, Precondition, QueryRequest};
 use rho_host::NextHost;
 use serde_json::json;
 
@@ -43,7 +41,6 @@ impl Cli {
         .await
         .map_err(|error| error.to_string())
     }
-
 }
 
 #[derive(Debug, Subcommand)]
@@ -157,7 +154,9 @@ async fn run() -> Result<(), CliFailure> {
         if cli.connect_url_file.is_some() {
             return Err("Plugin recovery commands address a local --store; they do not use --connect-url-file".into());
         }
-        let repository = store.clone().unwrap_or_else(|| rho_plugins::repository_path(&cli.database));
+        let repository = store
+            .clone()
+            .unwrap_or_else(|| rho_plugins::repository_path(&cli.database));
         let result = plugins::run(&repository, command).map_err(|e| e.to_string())?;
         return print_json(&json!({"ok":true,"mode":"plugin_repository","result":result}))
             .map_err(Into::into);
@@ -171,9 +170,14 @@ async fn run() -> Result<(), CliFailure> {
             Command::Request {json}=>(serde_json::from_str::<serde_json::Value>(json).map_err(|e|e.to_string())?,"result"),
             _=>return Err(rho_host::OperationError::InvalidInput("--connect-url-file supports query, invoke, get-operation and request; it never launches a server or runtime".into()).into()),
         };
-        let test_project = cli.test_project.as_deref().map(rho_plugin_protocol::TestProjectId::new)
-            .transpose().map_err(|error|rho_host::OperationError::InvalidInput(error.to_string()))?;
-        let host = connection::ConnectedHost::open(path, cli.project.as_deref(), test_project).await?;
+        let test_project = cli
+            .test_project
+            .as_deref()
+            .map(rho_plugin_protocol::TestProjectId::new)
+            .transpose()
+            .map_err(|error| rho_host::OperationError::InvalidInput(error.to_string()))?;
+        let host =
+            connection::ConnectedHost::open(path, cli.project.as_deref(), test_project).await?;
         let result = host.submit(request).await?;
         let mut response = json!({"ok":true,"mode":"connected_host"});
         response[label] = result;
@@ -246,10 +250,7 @@ async fn run() -> Result<(), CliFailure> {
     } else {
         None
     };
-    let active_host = if matches!(
-        cli.command,
-        Command::Invoke { .. }
-    ) {
+    let active_host = if matches!(cli.command, Command::Invoke { .. }) {
         Some(cli.open_host().await?)
     } else {
         None
@@ -328,10 +329,23 @@ mod plugin_workspace_arguments {
         for command in ["session", "mcp", "workbench"] {
             assert!(Cli::try_parse_from(["rho", "--project", "/test", command]).is_ok());
             assert!(Cli::try_parse_from(["rho", "--plugins-only", command]).is_ok());
-            for flag in ["--demo", "--ark", "--r-home", "--rscript", "--environment",
-                "--checkpoint-helper", "--host-skills", "--remote-host", "--remote-root",
-                "--slurm-cluster", "--fixed-workspace"] {
-                assert!(Cli::try_parse_from(["rho", flag, command]).is_err(), "{flag}");
+            for flag in [
+                "--demo",
+                "--ark",
+                "--r-home",
+                "--rscript",
+                "--environment",
+                "--checkpoint-helper",
+                "--host-skills",
+                "--remote-host",
+                "--remote-root",
+                "--slurm-cluster",
+                "--fixed-workspace",
+            ] {
+                assert!(
+                    Cli::try_parse_from(["rho", flag, command]).is_err(),
+                    "{flag}"
+                );
             }
         }
         assert!(Cli::try_parse_from(["rho", "--demo-project", "workbench"]).is_ok());
@@ -340,19 +354,49 @@ mod plugin_workspace_arguments {
     fn invocation_preserves_exact_arguments_and_preconditions() {
         let args = r#"{"binding":{"instance":"explicit"},"arguments":{"code":"用户内容"}}"#;
         let pre = r#"[{"kind":"fixture.identity","subject":"exact","expected":"v2"}]"#;
-        let cli = Cli::try_parse_from(["rho", "invoke", "--client-request-id", "one",
-            "--capability", "fixture.run", "--capability-version", "2", "--arguments", args,
-            "--preconditions", pre]).unwrap();
+        let cli = Cli::try_parse_from([
+            "rho",
+            "invoke",
+            "--client-request-id",
+            "one",
+            "--capability",
+            "fixture.run",
+            "--capability-version",
+            "2",
+            "--arguments",
+            args,
+            "--preconditions",
+            pre,
+        ])
+        .unwrap();
         let request = invocation(&cli.command).unwrap();
-        assert_eq!(request.arguments, serde_json::from_str::<serde_json::Value>(args).unwrap());
+        assert_eq!(
+            request.arguments,
+            serde_json::from_str::<serde_json::Value>(args).unwrap()
+        );
         assert_eq!(request.capability.version, 2);
         assert_eq!(request.preconditions[0].expected, "v2");
-        assert!(Cli::try_parse_from(["rho", "invoke", "--client-request-id", "one", "--code", "1"]).is_err());
-        assert!(Cli::try_parse_from(["rho", "invoke", "--client-request-id", "one", "--arguments", "{}"]).is_err());
+        assert!(
+            Cli::try_parse_from(["rho", "invoke", "--client-request-id", "one", "--code", "1"])
+                .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "rho",
+                "invoke",
+                "--client-request-id",
+                "one",
+                "--arguments",
+                "{}"
+            ])
+            .is_err()
+        );
     }
     #[tokio::test]
     async fn plugin_session_without_project_cannot_open_an_owner() {
         let cli = Cli::try_parse_from(["rho", "session"]).unwrap();
-        assert!(matches!(cli.open_host().await, Err(message) if message == "--project is required"));
+        assert!(
+            matches!(cli.open_host().await, Err(message) if message == "--project is required")
+        );
     }
 }

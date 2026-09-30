@@ -201,9 +201,13 @@ impl PluginService {
             .ok_or_else(|| OperationError::NotFound("view connection".into()))?;
         if let Some(close) = &live.closing {
             match request {
-                request if !selecting_test && crate::draft_service::view_persistence_write(request) => {
+                request
+                    if !selecting_test && crate::draft_service::view_persistence_write(request) =>
+                {
                     if close.sealed(live.renderers.len()) {
-                        return Err(OperationError::ContentChanged("view drafts are sealed for closure".into()));
+                        return Err(OperationError::ContentChanged(
+                            "view drafts are sealed for closure".into(),
+                        ));
                     }
                 }
                 PluginViewRequest::Invoke { .. }
@@ -288,7 +292,9 @@ impl PluginService {
         // smaller participant set must never turn that loss into flush proof.
         {
             let views = self.views.lock().unwrap();
-            let close = views.get(&args.view).and_then(|live| live.closing.as_ref())
+            let close = views
+                .get(&args.view)
+                .and_then(|live| live.closing.as_ref())
                 .ok_or_else(|| invalid("view close preparation ended"))?;
             if let Some(reason) = &close.refused {
                 return Err(invalid(format!("view state was not flushed: {reason}")));

@@ -1,13 +1,13 @@
 #![forbid(unsafe_code)]
-mod caller_records;
 #[cfg(feature = "application-store")]
 mod application;
+mod caller_records;
 #[cfg(feature = "application-store")]
 pub use application::ApplicationStore;
-mod filtered_records;
 mod commit_candidates;
 #[cfg(test)]
 mod commit_recovery_tests;
+mod filtered_records;
 
 use std::fs::{File, OpenOptions, TryLockError};
 use std::path::Path;
@@ -212,7 +212,9 @@ impl SqliteOperationJournal {
                 ",
             )
             .map_err(storage)?;
-        connection.execute_batch(commit_candidates::SCHEMA).map_err(storage)?;
+        connection
+            .execute_batch(commit_candidates::SCHEMA)
+            .map_err(storage)?;
         Ok(Self {
             connection: Mutex::new(connection),
             _writer_lock: None,
@@ -228,11 +230,17 @@ impl SqliteOperationJournal {
 
 #[async_trait]
 impl OperationJournal for SqliteOperationJournal {
-    async fn project_read_coverage(&self, scope: &str, principal: &CallerIdentity) -> Result<rho_contract::ProjectReadCoverage, OperationError> {
+    async fn project_read_coverage(
+        &self,
+        scope: &str,
+        principal: &CallerIdentity,
+    ) -> Result<rho_contract::ProjectReadCoverage, OperationError> {
         let hidden: bool = self.connection()?.query_row(
             "SELECT EXISTS(SELECT 1 FROM operations op WHERE json_extract(op.operation_json,'$.idempotency_scope')=?1 AND (COALESCE(json_extract(op.operation_json,'$.principal.kind'),op.caller_kind) IS NOT ?2 OR COALESCE(json_extract(op.operation_json,'$.principal.id'),op.caller_id) IS NOT ?3))",
             params![scope,caller_kind(principal.kind),principal.id], |row| row.get(0)).map_err(storage)?;
-        Ok(rho_contract::ProjectReadCoverage { all_visible: !hidden })
+        Ok(rho_contract::ProjectReadCoverage {
+            all_visible: !hidden,
+        })
     }
     async fn events_checkpoint(
         &self,
@@ -321,8 +329,14 @@ impl OperationJournal for SqliteOperationJournal {
     ) -> Result<rho_contract::RecentOperations, OperationError> {
         filtered_records::read(self, scope, caller, args, filter)
     }
-    async fn list_recent_for_caller(&self, scope: &str, principal: &CallerIdentity, caller: &CallerIdentity, args: &rho_contract::RecentOperationsArguments) -> Result<rho_contract::RecentOperations, OperationError> {
-        caller_records::read(self,scope,principal,caller,args)
+    async fn list_recent_for_caller(
+        &self,
+        scope: &str,
+        principal: &CallerIdentity,
+        caller: &CallerIdentity,
+        args: &rho_contract::RecentOperationsArguments,
+    ) -> Result<rho_contract::RecentOperations, OperationError> {
+        caller_records::read(self, scope, principal, caller, args)
     }
 
     async fn admit(&self, operation: &Operation) -> Result<Admission, OperationError> {
@@ -421,13 +435,24 @@ impl OperationJournal for SqliteOperationJournal {
         Ok(record)
     }
 
-    async fn stage_commit(&self, id: &OperationId, plan: &CommitPlan, at_ms: i64) -> Result<rho_operation::CommitReceipt, OperationError> {
+    async fn stage_commit(
+        &self,
+        id: &OperationId,
+        plan: &CommitPlan,
+        at_ms: i64,
+    ) -> Result<rho_operation::CommitReceipt, OperationError> {
         commit_candidates::stage(self, id, plan, at_ms)
     }
-    async fn commit_receipt(&self, id: &OperationId) -> Result<Option<rho_operation::CommitReceipt>, OperationError> {
+    async fn commit_receipt(
+        &self,
+        id: &OperationId,
+    ) -> Result<Option<rho_operation::CommitReceipt>, OperationError> {
         commit_candidates::receipt(&*self.connection()?, id)
     }
-    async fn read_commit_candidate(&self, reference: &rho_contract::OperationCommitReference) -> Result<CommitPlan, OperationError> {
+    async fn read_commit_candidate(
+        &self,
+        reference: &rho_contract::OperationCommitReference,
+    ) -> Result<CommitPlan, OperationError> {
         commit_candidates::read(self, reference)
     }
 
@@ -445,7 +470,9 @@ impl OperationJournal for SqliteOperationJournal {
         let reference = rho_operation::commit_reference(operation_id, plan)?;
         if let Some(receipt) = commit_candidates::receipt(&transaction, operation_id)? {
             if receipt.reference != reference {
-                return Err(OperationError::ContentChanged("commit differs from the original immutable candidate".into()));
+                return Err(OperationError::ContentChanged(
+                    "commit differs from the original immutable candidate".into(),
+                ));
             }
             if current.status.is_terminal() && receipt.committed {
                 return Ok(current);
@@ -655,12 +682,20 @@ impl OperationJournal for SqliteOperationJournal {
         let mut recovered = Vec::new();
         for (raw_id, previous_status) in identities {
             let operation_id = OperationId::new(raw_id)?;
-            if commit_candidates::receipt(&transaction, &operation_id)?.is_some_and(|r| !r.committed) {
+            if commit_candidates::receipt(&transaction, &operation_id)?
+                .is_some_and(|r| !r.committed)
+            {
                 // A checked native result exists. Startup records its pending
                 // commit without replacing it, committing facts or replaying work.
                 if previous_status != "reconciling" {
                     transaction.execute("UPDATE operations SET status='reconciling',updated_at_ms=MAX(updated_at_ms,?2) WHERE operation_id=?1", params![operation_id.as_str(),at_ms]).map_err(storage)?;
-                    append_event_and_outbox(&transaction, &operation_id, "operation.commit_pending", &json!({"previous_status":previous_status,"status":"reconciling"}), at_ms)?;
+                    append_event_and_outbox(
+                        &transaction,
+                        &operation_id,
+                        "operation.commit_pending",
+                        &json!({"previous_status":previous_status,"status":"reconciling"}),
+                        at_ms,
+                    )?;
                 }
                 recovered.push(required_operation(&transaction, &operation_id)?);
                 continue;
@@ -1673,20 +1708,60 @@ mod evidence_tests {
         let repeated = gateway.invoke(&context(), request()).await.unwrap();
         assert_eq!(repeated.status, OperationStatus::Running);
         assert_eq!(owner.executed.load(Ordering::SeqCst), 1);
-        let receipt = journal.commit_receipt(&operation_id).await.unwrap().unwrap();
+        let receipt = journal
+            .commit_receipt(&operation_id)
+            .await
+            .unwrap()
+            .unwrap();
         assert!(!receipt.committed);
-        let candidate = journal.read_commit_candidate(&receipt.reference).await.unwrap();
+        let candidate = journal
+            .read_commit_candidate(&receipt.reference)
+            .await
+            .unwrap();
         let evidence = candidate.uncommitted_evidence.as_ref().unwrap();
-        assert_eq!(rho_operation::evidence_sha256(&evidence.bytes), evidence.reference.sha256);
+        assert_eq!(
+            rho_operation::evidence_sha256(&evidence.bytes),
+            evidence.reference.sha256
+        );
         let original = evidence.bytes.clone();
         drop(gateway);
-        journal.connection().unwrap().execute_batch("DROP TRIGGER fail_contract_terminal").unwrap();
-        let restored = OperationGateway::new(Arc::new(CapabilityRegistry::new()), journal.clone(), Arc::new(SystemClock), Arc::new(UuidOperationIdGenerator))
-            .with_project_scope(Some("/evidence-project".into()));
-        let terminal = restored.reconcile_commit(&context(), &ReconcileOperationCommit {reference:receipt.reference}).await.unwrap();
+        journal
+            .connection()
+            .unwrap()
+            .execute_batch("DROP TRIGGER fail_contract_terminal")
+            .unwrap();
+        let restored = OperationGateway::new(
+            Arc::new(CapabilityRegistry::new()),
+            journal.clone(),
+            Arc::new(SystemClock),
+            Arc::new(UuidOperationIdGenerator),
+        )
+        .with_project_scope(Some("/evidence-project".into()));
+        let terminal = restored
+            .reconcile_commit(
+                &context(),
+                &ReconcileOperationCommit {
+                    reference: receipt.reference,
+                },
+            )
+            .await
+            .unwrap();
         assert_eq!(terminal.status, OperationStatus::Uncertain);
-        assert!(journal.facts_for_operation(&operation_id).await.unwrap().is_empty());
-        let page = journal.read_evidence(&OperationReadEvidenceArguments {reference:evidence.reference.clone(), offset:0, limit_bytes:65536}).await.unwrap();
+        assert!(
+            journal
+                .facts_for_operation(&operation_id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        let page = journal
+            .read_evidence(&OperationReadEvidenceArguments {
+                reference: evidence.reference.clone(),
+                offset: 0,
+                limit_bytes: 65536,
+            })
+            .await
+            .unwrap();
         assert_eq!(page.bytes, original[..65536]);
         assert_eq!(owner.executed.load(Ordering::SeqCst), 1);
     }
@@ -1702,7 +1777,8 @@ mod tests {
     use super::*;
 
     fn operation(id: &str, request: &str, digest: &str) -> Operation {
-        Operation { admission: None,
+        Operation {
+            admission: None,
             principal: None,
             operation_id: OperationId::new(id).unwrap(),
             client_request_id: request.to_string(),
@@ -1734,11 +1810,23 @@ mod tests {
         let path = directory.path().join("coverage.sqlite");
         let journal = SqliteOperationJournal::open(&path).unwrap();
         let principal = operation("unused", "unused", "unused").caller;
-        assert!(journal.project_read_coverage("/project", &principal).await.unwrap().all_visible);
-        for (id, scope, delegated) in [("other-project", "/other", false), ("own", "/project", false), ("delegated", "/project", true)] {
-            let mut op = operation(id,id,id);
+        assert!(
+            journal
+                .project_read_coverage("/project", &principal)
+                .await
+                .unwrap()
+                .all_visible
+        );
+        for (id, scope, delegated) in [
+            ("other-project", "/other", false),
+            ("own", "/project", false),
+            ("delegated", "/project", true),
+        ] {
+            let mut op = operation(id, id, id);
             op.idempotency_scope = Some(scope.into());
-            if scope == "/other" { op.caller.id = "foreign".into(); }
+            if scope == "/other" {
+                op.caller.id = "foreign".into();
+            }
             if delegated {
                 op.principal = Some(principal.clone());
                 op.caller.kind = CallerKind::Plugin;
@@ -1747,22 +1835,72 @@ mod tests {
             journal.admit(&op).await.unwrap();
         }
         let reader = SqliteOperationJournal::open_read_only(&path).unwrap();
-        assert!(reader.project_read_coverage("/project", &principal).await.unwrap().all_visible);
-        let checkpoint = journal.events_checkpoint("/project", &principal).await.unwrap();
+        assert!(
+            reader
+                .project_read_coverage("/project", &principal)
+                .await
+                .unwrap()
+                .all_visible
+        );
+        let checkpoint = journal
+            .events_checkpoint("/project", &principal)
+            .await
+            .unwrap();
         // The same textual identity with another caller kind is a different principal.
         let mut hidden = operation("hidden-original", "hidden-request", "hidden-digest");
         hidden.idempotency_scope = Some("/project".into());
-        hidden.principal = Some(CallerIdentity { kind: CallerKind::Agent, id: principal.id.clone() });
+        hidden.principal = Some(CallerIdentity {
+            kind: CallerKind::Agent,
+            id: principal.id.clone(),
+        });
         journal.admit(&hidden).await.unwrap();
-        let coverage = reader.project_read_coverage("/project", &principal).await.unwrap();
-        assert_eq!(serde_json::to_value(coverage).unwrap(),json!({"all_visible":false}));
-        assert!(reader.project_read_coverage("/empty-project", &principal).await.unwrap().all_visible);
-        assert_eq!(reader.events_checkpoint("/project", &principal).await.unwrap(),checkpoint);
-        for id in ["own","delegated","hidden-original"] {
-            assert_eq!(journal.get(&OperationId::new(id).unwrap()).await.unwrap().unwrap().status,OperationStatus::Accepted);
+        let coverage = reader
+            .project_read_coverage("/project", &principal)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(coverage).unwrap(),
+            json!({"all_visible":false})
+        );
+        assert!(
+            reader
+                .project_read_coverage("/empty-project", &principal)
+                .await
+                .unwrap()
+                .all_visible
+        );
+        assert_eq!(
+            reader
+                .events_checkpoint("/project", &principal)
+                .await
+                .unwrap(),
+            checkpoint
+        );
+        for id in ["own", "delegated", "hidden-original"] {
+            assert_eq!(
+                journal
+                    .get(&OperationId::new(id).unwrap())
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .status,
+                OperationStatus::Accepted
+            );
         }
-        let page=reader.list_recent("/project",&principal,&rho_contract::RecentOperationsArguments {before_cursor:None,client_request_id:None,operation_id:None,limit:100}).await.unwrap();
-        assert_eq!(page.operations.len(),2);
+        let page = reader
+            .list_recent(
+                "/project",
+                &principal,
+                &rho_contract::RecentOperationsArguments {
+                    before_cursor: None,
+                    client_request_id: None,
+                    operation_id: None,
+                    limit: 100,
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(page.operations.len(), 2);
         assert!(!serde_json::to_string(&page).unwrap().contains("hidden-"));
     }
 
@@ -1775,29 +1913,78 @@ mod tests {
             let id = format!("history-{index:04}");
             let mut op = operation(&id, &id, &id);
             op.idempotency_scope = Some("/project".into());
-            if index < 5 || index >= 220 { op.capability = checkpoint.clone(); }
-            if index == 223 { op.idempotency_scope = Some("/other-project".into()); }
-            if index == 224 { op.principal = Some(CallerIdentity { kind: principal.kind, id: "other-person".into() }); }
+            if !(5..220).contains(&index) {
+                op.capability = checkpoint.clone();
+            }
+            if index == 223 {
+                op.idempotency_scope = Some("/other-project".into());
+            }
+            if index == 224 {
+                op.principal = Some(CallerIdentity {
+                    kind: principal.kind,
+                    id: "other-person".into(),
+                });
+            }
             journal.admit(&op).await.unwrap();
             journal.mark_running(&op.operation_id, 2).await.unwrap();
-            journal.commit(&op.operation_id, &CommitPlan::succeeded(json!({
-                "workspace_instance_id": if index == 220 {"scratch"} else {"main"},
-                "continuation_lineage_id": if index == 221 {"old"} else {"current"},
-            })), 3).await.unwrap();
+            journal
+                .commit(
+                    &op.operation_id,
+                    &CommitPlan::succeeded(json!({
+                        "workspace_instance_id": if index == 220 {"scratch"} else {"main"},
+                        "continuation_lineage_id": if index == 221 {"old"} else {"current"},
+                    })),
+                    3,
+                )
+                .await
+                .unwrap();
         }
-        let filter = rho_operation::OperationRecordFilter { capability:checkpoint, secondary_capability:None,
-            workspace_instance_id:Some("main".into()), continuation_lineage_id:Some("current".into()) };
-        let mut args = rho_contract::RecentOperationsArguments {
-            before_cursor:None, client_request_id:None, operation_id:None, limit:2,
+        let filter = rho_operation::OperationRecordFilter {
+            capability: checkpoint,
+            secondary_capability: None,
+            workspace_instance_id: Some("main".into()),
+            continuation_lineage_id: Some("current".into()),
         };
-        let first = journal.list_recent_for_capability("/project", &principal, &args, &filter).await.unwrap();
-        assert_eq!(first.operations.iter().map(|r|r.operation_id.as_str()).collect::<Vec<_>>(), vec!["history-0222","history-0004"]);
+        let mut args = rho_contract::RecentOperationsArguments {
+            before_cursor: None,
+            client_request_id: None,
+            operation_id: None,
+            limit: 2,
+        };
+        let first = journal
+            .list_recent_for_capability("/project", &principal, &args, &filter)
+            .await
+            .unwrap();
+        assert_eq!(
+            first
+                .operations
+                .iter()
+                .map(|r| r.operation_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["history-0222", "history-0004"]
+        );
         args.before_cursor = first.next_cursor;
-        let second = journal.list_recent_for_capability("/project", &principal, &args, &filter).await.unwrap();
-        assert_eq!(second.operations.iter().map(|r|r.operation_id.as_str()).collect::<Vec<_>>(), vec!["history-0003","history-0002"]);
-        let all_lineages = rho_operation::OperationRecordFilter { continuation_lineage_id:None, ..filter };
+        let second = journal
+            .list_recent_for_capability("/project", &principal, &args, &filter)
+            .await
+            .unwrap();
+        assert_eq!(
+            second
+                .operations
+                .iter()
+                .map(|r| r.operation_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["history-0003", "history-0002"]
+        );
+        let all_lineages = rho_operation::OperationRecordFilter {
+            continuation_lineage_id: None,
+            ..filter
+        };
         args.before_cursor = None;
-        let all = journal.list_recent_for_capability("/project", &principal, &args, &all_lineages).await.unwrap();
+        let all = journal
+            .list_recent_for_capability("/project", &principal, &args, &all_lineages)
+            .await
+            .unwrap();
         assert_eq!(all.operations[1].operation_id.as_str(), "history-0221");
     }
 
@@ -2019,13 +2206,21 @@ mod tests {
         let journal = SqliteOperationJournal::open_in_memory().unwrap();
         let mut first = operation("op_prepared", "request_prepared", "sha256:normalized-one");
         first.admission = Some(rho_contract::OperationAdmission {
-            request_digest:"sha256:raw-original".into(), owner_context:json!({"native":"first"}),
-            descriptor:rho_contract::CapabilityDescriptor {
-                capability:first.capability.clone(), domain:first.domain.clone(), kind:rho_contract::CapabilityKind::Operation,
-                input_schema:json!({}),output_schema:json!({}),recovery_schema:json!({}),
-                documentation:rho_contract::builtin_documentation("host.overview"), required_scopes:Default::default(),
-                potential_effects:first.potential_effects.clone(),idempotency:rho_contract::IdempotencyClass::CallerScoped,
-                retry:rho_contract::RetryClass::Never,cancellation:rho_contract::CancellationClass::Unsupported,
+            request_digest: "sha256:raw-original".into(),
+            owner_context: json!({"native":"first"}),
+            descriptor: rho_contract::CapabilityDescriptor {
+                capability: first.capability.clone(),
+                domain: first.domain.clone(),
+                kind: rho_contract::CapabilityKind::Operation,
+                input_schema: json!({}),
+                output_schema: json!({}),
+                recovery_schema: json!({}),
+                documentation: rho_contract::builtin_documentation("host.overview"),
+                required_scopes: Default::default(),
+                potential_effects: first.potential_effects.clone(),
+                idempotency: rho_contract::IdempotencyClass::CallerScoped,
+                retry: rho_contract::RetryClass::Never,
+                cancellation: rho_contract::CancellationClass::Unsupported,
             },
         });
         journal.admit(&first).await.unwrap();
@@ -2034,16 +2229,30 @@ mod tests {
         raced.invocation_digest = "sha256:normalized-two".into();
         raced.normalized_arguments = json!({"code":"different native qualification"});
         raced.admission.as_mut().unwrap().owner_context = json!({"native":"second"});
-        let Admission::Existing(existing) = journal.admit(&raced).await.unwrap() else {panic!("first admission wins")};
-        assert_eq!(existing.operation,first);
+        let Admission::Existing(existing) = journal.admit(&raced).await.unwrap() else {
+            panic!("first admission wins")
+        };
+        assert_eq!(existing.operation, first);
         raced.idempotency_scope = Some("/another-project".into());
-        assert_eq!(journal.admit(&raced).await.unwrap_err(),OperationError::IdempotencyConflict);
+        assert_eq!(
+            journal.admit(&raced).await.unwrap_err(),
+            OperationError::IdempotencyConflict
+        );
         raced.idempotency_scope = None;
-        raced.principal = Some(CallerIdentity {kind:CallerKind::Human,id:"foreign".into()});
-        assert_eq!(journal.admit(&raced).await.unwrap_err(),OperationError::IdempotencyConflict);
+        raced.principal = Some(CallerIdentity {
+            kind: CallerKind::Human,
+            id: "foreign".into(),
+        });
+        assert_eq!(
+            journal.admit(&raced).await.unwrap_err(),
+            OperationError::IdempotencyConflict
+        );
         raced.principal = None;
         raced.admission.as_mut().unwrap().request_digest = "sha256:different-raw".into();
-        assert_eq!(journal.admit(&raced).await.unwrap_err(),OperationError::IdempotencyConflict);
+        assert_eq!(
+            journal.admit(&raced).await.unwrap_err(),
+            OperationError::IdempotencyConflict
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -2090,11 +2299,22 @@ mod tests {
             1
         );
         let events = journal.events(&operation.operation_id).await.unwrap();
-        let same = journal.commit(&operation.operation_id, &plan, 4).await.unwrap();
+        let same = journal
+            .commit(&operation.operation_id, &plan, 4)
+            .await
+            .unwrap();
         assert_eq!(same.updated_at_ms, record.updated_at_ms);
-        assert_eq!(journal.events(&operation.operation_id).await.unwrap(), events);
+        assert_eq!(
+            journal.events(&operation.operation_id).await.unwrap(),
+            events
+        );
         plan.output = Some(json!({"answer":3}));
-        assert!(journal.commit(&operation.operation_id, &plan, 5).await.is_err());
+        assert!(
+            journal
+                .commit(&operation.operation_id, &plan, 5)
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]

@@ -64,17 +64,28 @@ impl PluginService {
         protected_paths: Vec<PathBuf>,
         journal: Arc<dyn OperationJournal>,
     ) -> Result<Arc<Self>, OperationError> {
-        let mut protected_paths = protected_paths.into_iter().map(|path| {
-            std::path::absolute(path).map_err(error)?.into_os_string().into_string()
-                .map_err(|_| invalid("protected paths must be UTF-8"))
-        }).collect::<Result<Vec<_>, _>>()?;
+        let mut protected_paths = protected_paths
+            .into_iter()
+            .map(|path| {
+                std::path::absolute(path)
+                    .map_err(error)?
+                    .into_os_string()
+                    .into_string()
+                    .map_err(|_| invalid("protected paths must be UTF-8"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         protected_paths.sort();
         protected_paths.dedup();
-        if protected_paths.len() > 256 || protected_paths.iter().any(|path| path.len() > 4096)
-            || serde_json::to_vec(&protected_paths).map_err(error)?.len() > 128 * 1024 {
+        if protected_paths.len() > 256
+            || protected_paths.iter().any(|path| path.len() > 4096)
+            || serde_json::to_vec(&protected_paths).map_err(error)?.len() > 128 * 1024
+        {
             return Err(invalid("Host protected paths exceed the metadata budget"));
         }
-        let workspace_paths = WorkspacePaths { project_root: project.clone(), protected_paths };
+        let workspace_paths = WorkspacePaths {
+            project_root: project.clone(),
+            protected_paths,
+        };
         let repository = Arc::new(Mutex::new(PluginRepository::open(store).map_err(error)?));
         let resources = Arc::new(PluginResources::open(store).map_err(error)?);
         let services = Arc::new(Services {
@@ -92,11 +103,8 @@ impl PluginService {
             services.clone(),
             BackendPolicy::default(),
         ));
-        let bridge = PluginCapabilityBridge::new(
-            runtime.clone(),
-            project.clone(),
-            resources.clone(),
-        );
+        let bridge =
+            PluginCapabilityBridge::new(runtime.clone(), project.clone(), resources.clone());
         Ok(Arc::new(Self {
             repository,
             resources,
@@ -175,7 +183,6 @@ impl PluginService {
         self.services
             .lifetime
             .set(Arc::downgrade(&lifetime))
-            .ok()
             .expect("Host lifetime binds once");
         self.services
             .tasks
@@ -276,17 +283,35 @@ impl PluginService {
                 missing,
             });
         }
-        if record.operation.domain == "documents" && record.operation.capability.id == "documents.save" {
+        if record.operation.domain == "documents"
+            && record.operation.capability.id == "documents.save"
+        {
             self.complete_draft_save(record)?;
-        } else if matches!(record.operation.capability.id.as_str(), "plugins.archive_import" | "plugins.archive_export") {
+        } else if matches!(
+            record.operation.capability.id.as_str(),
+            "plugins.archive_import" | "plugins.archive_export"
+        ) {
             self.complete_archive(record)?;
         } else if record.operation.capability.id == "plugins.build" {
             if record.status == host::OperationStatus::Uncertain {
-                return Err(error("Native build settlement is uncertain; retain its evidence and source protection. Reference reconciliation cannot confirm process cleanup."));
+                return Err(error(
+                    "Native build settlement is uncertain; retain its evidence and source protection. Reference reconciliation cannot confirm process cleanup.",
+                ));
             }
-            let revision = admission.owner_context.get("build_revision").and_then(Value::as_str)
+            let revision = admission
+                .owner_context
+                .get("build_revision")
+                .and_then(Value::as_str)
                 .ok_or_else(|| invalid("original build revision is missing"))?;
-            self.repository.lock().unwrap().release_reference("build", record.operation.operation_id.as_str(), &RevisionId::new(revision).map_err(error)?).map_err(error)?;
+            self.repository
+                .lock()
+                .unwrap()
+                .release_reference(
+                    "build",
+                    record.operation.operation_id.as_str(),
+                    &RevisionId::new(revision).map_err(error)?,
+                )
+                .map_err(error)?;
         } else if record.operation.domain == "plugins"
             && let Some(revision) = admission
                 .owner_context
@@ -329,10 +354,16 @@ impl PluginService {
     async fn shutdown(&self, retain: bool) {
         self.stopped.cancel();
         let guard = self.gate.lock().await;
-        if retain { self.detach_live_views(); } else { self.close_live_views(); }
+        if retain {
+            self.detach_live_views();
+        } else {
+            self.close_live_views();
+        }
         for observation in self.runtime.observe() {
-            if retain && observation.instance.state == InstanceState::Active
-                && observation.instance.purpose == PluginInstancePurpose::Runtime {
+            if retain
+                && observation.instance.state == InstanceState::Active
+                && observation.instance.purpose == PluginInstancePurpose::Runtime
+            {
                 if let Err(error) = self.runtime.suspend(&observation.instance.identity).await {
                     eprintln!("plugin suspension is unconfirmed: {error}");
                 }
@@ -368,7 +399,9 @@ pub(crate) struct Services {
 }
 #[async_trait]
 impl PluginHostServices for Services {
-    fn resources(&self) -> Option<Arc<PluginResources>> { Some(self.resources.clone()) }
+    fn resources(&self) -> Option<Arc<PluginResources>> {
+        Some(self.resources.clone())
+    }
     async fn call(&self, call: DelegatedPluginCall) -> Result<Value, String> {
         self.delegate(call).await.map_err(|e| e.to_string())
     }

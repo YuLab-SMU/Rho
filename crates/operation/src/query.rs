@@ -65,8 +65,7 @@ impl QueryGateway {
         }
         .validate()?;
         let mut snapshot = handler.query_for(context, &arguments).await?;
-        registry
-            .prepare_query_result(context, &capability, &mut snapshot)?;
+        registry.prepare_query_result(context, &capability, &mut snapshot)?;
         snapshot.target.validate()?;
         if serde_json::to_vec(&snapshot).map_or(true, |bytes| bytes.len() > 1024 * 1024) {
             return Err(OperationError::InvalidInput(

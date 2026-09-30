@@ -79,6 +79,7 @@ pub trait AgentTaskRepository: Send + Sync {
         ))
     }
     /// Bounded projection of the two existing task owners in one read snapshot.
+    #[allow(clippy::too_many_arguments)] // Keep every bounded task filter explicit in this store contract.
     fn project_agent_tasks(
         &self,
         _scope: &AgentTaskScope,

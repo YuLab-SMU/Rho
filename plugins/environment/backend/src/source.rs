@@ -82,7 +82,16 @@ pub fn scopes(id: &str) -> BTreeSet<String> {
         scopes.insert("resources.read".into());
     }
     if material_capability(id) {
-        scopes.extend(["operation.read", "resources.read", "plugins.read", "project.references.read", "workspace.read"].map(str::to_owned));
+        scopes.extend(
+            [
+                "operation.read",
+                "resources.read",
+                "plugins.read",
+                "project.references.read",
+                "workspace.read",
+            ]
+            .map(str::to_owned),
+        );
     }
     scopes
 }
@@ -110,7 +119,8 @@ pub fn normalize(id: &str, value: Value) -> Result<Value, String> {
             json!(args)
         }
         RETENTION => {
-            let args: EnvironmentSourceArguments = serde_json::from_value(value).map_err(invalid)?;
+            let args: EnvironmentSourceArguments =
+                serde_json::from_value(value).map_err(invalid)?;
             OperationId::new(&args.operation_id).map_err(|e| e.to_string())?;
             json!(args)
         }
@@ -120,13 +130,15 @@ pub fn normalize(id: &str, value: Value) -> Result<Value, String> {
             json!(args)
         }
         CLEANUP => {
-            let args: EnvironmentCleanupArguments = serde_json::from_value(value).map_err(invalid)?;
+            let args: EnvironmentCleanupArguments =
+                serde_json::from_value(value).map_err(invalid)?;
             OperationId::new(&args.operation_id).map_err(|e| e.to_string())?;
             ContentDigest::new(&args.expected_fingerprint).map_err(|e| e.to_string())?;
             json!(args)
         }
         RESTORE | PURGE => {
-            let args: EnvironmentChangeTrashArguments = serde_json::from_value(value).map_err(invalid)?;
+            let args: EnvironmentChangeTrashArguments =
+                serde_json::from_value(value).map_err(invalid)?;
             OperationId::new(&args.cleanup_operation_id).map_err(|e| e.to_string())?;
             ContentDigest::new(&args.expected_fingerprint).map_err(|e| e.to_string())?;
             json!(args)

@@ -21,7 +21,9 @@ fn action_title(run: &ComponentAgentRun, action: &ComponentToolAction) -> String
         None => "the selected R session".to_owned(),
     };
     match action {
-        ComponentToolAction::PluginInvoke(request) => format!("Run R code in {}", request.binding.provider.instance),
+        ComponentToolAction::PluginInvoke(request) => {
+            format!("Run R code in {}", request.binding.provider.instance)
+        }
         ComponentToolAction::Control(command) => {
             let session = || {
                 session_name(
@@ -103,6 +105,7 @@ impl ComponentAgentOwner {
         self.save(scope, conversation, Some(&run), &[], &[], now)
     }
 
+    #[allow(clippy::too_many_arguments)] // Preserve the explicit run, receipt, tool, authorization, and time inputs.
     pub fn record_permission(
         &self,
         scope: &ApplicationScope,

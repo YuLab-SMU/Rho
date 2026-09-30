@@ -116,7 +116,18 @@ fn decode(value: &Value) -> p::PluginTestProjectObservation {
 
 fn controller_package(path: &Path, selector: bool, control_scope: bool) -> p::PluginArchive {
     fs::create_dir_all(path.join("dist")).unwrap();
-    for (name, content) in [("index.html", "<!doctype html><p>Independent test controller</p>"), ("dist/index.html", "<!doctype html><p>Independent test controller</p>"), ("deps.lock", "No dependencies"), ("BUILD.md", "Copy index.html to dist/index.html")] {
+    for (name, content) in [
+        (
+            "index.html",
+            "<!doctype html><p>Independent test controller</p>",
+        ),
+        (
+            "dist/index.html",
+            "<!doctype html><p>Independent test controller</p>",
+        ),
+        ("deps.lock", "No dependencies"),
+        ("BUILD.md", "Copy index.html to dist/index.html"),
+    ] {
         fs::write(path.join(name), content).unwrap();
     }
     let mut requires = vec![
@@ -126,7 +137,9 @@ fn controller_package(path: &Path, selector: bool, control_scope: bool) -> p::Pl
         json!({"capability":{"id":"fixture.answer","version":2},"scopes":if control_scope {vec!["plugins.run"]} else {vec![]}}),
         json!({"capability":{"id":"documents.save","version":1},"scopes":["documents.write"]}),
     ];
-    if selector { requires.push(json!({"capability":{"id":"plugins.test_project","version":1},"scopes":["plugins.read","plugins.run"]})); }
+    if selector {
+        requires.push(json!({"capability":{"id":"plugins.test_project","version":1},"scopes":["plugins.read","plugins.run"]}));
+    }
     fs::write(path.join("plugin.json"), serde_json::to_vec(&json!({
         "protocol_version":1,"id":"example.test-controller","name":"Test controller","version":"1","description":"An ordinary external view","license":"MIT",
         "source":{"files":["index.html"],"lockfiles":["deps.lock"],"build_instructions":"BUILD.md","build":null},
@@ -136,21 +149,67 @@ fn controller_package(path: &Path, selector: bool, control_scope: bool) -> p::Pl
     })).unwrap()).unwrap();
     rho_plugins::snapshot_directory(path, None, "ui-web").unwrap()
 }
-struct TestView { connection: p::PluginViewConnection, sequence: u32 }
+struct TestView {
+    connection: p::PluginViewConnection,
+    sequence: u32,
+}
 impl TestView {
-    async fn open(host: &NextHost, context: &CallContext, package: &p::PluginArchive, alias: &str, preview: bool) -> Self {
-        let activation = if preview { invoke(alias, "plugins.preview", json!({"revision":package.revision.id,"artifact":package.artifacts[0].id,"alias":alias,"configuration":{},"queries":[]})) }
-            else { invoke(alias, "plugins.activate", json!({"revision":package.revision.id,"artifact":package.artifacts[0].id,"target":"ui-web","alias":alias,"configuration":{}})) };
-        let instance = succeeded(host,context,activation).await.output.unwrap()["instance"]["identity"].clone();
+    async fn open(
+        host: &NextHost,
+        context: &CallContext,
+        package: &p::PluginArchive,
+        alias: &str,
+        preview: bool,
+    ) -> Self {
+        let activation = if preview {
+            invoke(
+                alias,
+                "plugins.preview",
+                json!({"revision":package.revision.id,"artifact":package.artifacts[0].id,"alias":alias,"configuration":{},"queries":[]}),
+            )
+        } else {
+            invoke(
+                alias,
+                "plugins.activate",
+                json!({"revision":package.revision.id,"artifact":package.artifacts[0].id,"target":"ui-web","alias":alias,"configuration":{}}),
+            )
+        };
+        let instance =
+            succeeded(host, context, activation).await.output.unwrap()["instance"]["identity"]
+                .clone();
         let view=succeeded(host,context,invoke(&format!("open-{alias}"),"views.open",json!({"instance":instance,"contribution":"view","window":"window-test-controller","configuration":{},"state":{}}))).await.output.unwrap();
-        let connection=serde_json::from_value(query(host,context,"views.connection",json!({"view":view["view"]})).await).unwrap();
-        Self { connection, sequence: 0 }
+        let connection = serde_json::from_value(
+            query(
+                host,
+                context,
+                "views.connection",
+                json!({"view":view["view"]}),
+            )
+            .await,
+        )
+        .unwrap();
+        Self {
+            connection,
+            sequence: 0,
+        }
     }
-    async fn send(&mut self, host: &NextHost, context: &CallContext, selected: Option<&p::TestProjectId>, body: Value) -> Result<Value, OperationError> {
+    async fn send(
+        &mut self,
+        host: &NextHost,
+        context: &CallContext,
+        selected: Option<&p::TestProjectId>,
+        body: Value,
+    ) -> Result<Value, OperationError> {
         self.sequence += 1;
         let message = serde_json::from_value(json!({"protocol_version":1,"connection":self.connection.connection,"view":self.connection.view.view,
             "sequence":self.sequence,"request":format!("view-{}",self.sequence),"test_project":selected,"body":body})).unwrap();
-        host.dispatch_plugin_view(context,self.connection.view.window.as_str(),&self.connection.call_token,message).await
+        host.dispatch_plugin_view(
+            context,
+            self.connection.view.window.as_str(),
+            &self.connection.call_token,
+            message,
+        )
+        .await
     }
 }
 
@@ -158,76 +217,275 @@ impl TestView {
 async fn ordinary_view_selects_child_ports_without_expanding_grants_or_intrinsic_authority() {
     let temp = tempfile::tempdir().unwrap();
     let backend = fixture::package(&temp.path().join("backend"), "1", false);
-    let controller = controller_package(&temp.path().join("controller"),true,true);
-    let undeclared = controller_package(&temp.path().join("undeclared"),false,true);
-    let weak = controller_package(&temp.path().join("weak"),true,false);
+    let controller = controller_package(&temp.path().join("controller"), true, true);
+    let undeclared = controller_package(&temp.path().join("undeclared"), false, true);
+    let weak = controller_package(&temp.path().join("weak"), true, false);
     let (host, context) = setup(temp.path(), &backend).await;
-    let mut repository = PluginRepository::open(&repository_path(&temp.path().join("state/operations.sqlite"))).unwrap();
-    for package in [&controller,&undeclared,&weak] { repository.import(package).unwrap(); } drop(repository);
+    let mut repository = PluginRepository::open(&repository_path(
+        &temp.path().join("state/operations.sqlite"),
+    ))
+    .unwrap();
+    for package in [&controller, &undeclared, &weak] {
+        repository.import(package).unwrap();
+    }
+    drop(repository);
     let analysis=succeeded(&host,&context,invoke("analysis","plugins.activate",json!({"revision":backend.revision.id,"artifact":backend.artifacts[0].id,"target":rho_plugins::backend_target(),"alias":"analysis","configuration":{"cancel_confirmed":true}}))).await.output.unwrap()["instance"]["identity"].clone();
-    let created=succeeded(&host,&context,invoke("test","plugins.test_create",selection(&backend,json!({"cancel_confirmed":true})))).await;
-    let observed=decode(created.output.as_ref().unwrap()); let id=&observed.project.id;
-    let child=host.plugin_test_host(&context,id).unwrap();
-    let instance=json!(observed.project.instances[&p::InstanceAlias::new("subject").unwrap()]);
-    let read=binding(&child,&context,&instance,"fixture.read").await;
-    let run=binding(&child,&context,&instance,"fixture.run").await;
-    let answer=query(&child,&context,"plugins.resolve",json!({"instance":instance,"capability":{"id":"fixture.answer","version":2}})).await;
-    let parent_run=binding(&host,&context,&analysis,"fixture.run").await;
-    let mut view=TestView::open(&host,&context,&controller,"controller",false).await;
-    let list=json!({"type":"query","capability":{"id":"plugins.instances","version":1},"arguments":{"limit":20}});
-    let selected=view.send(&host,&context,Some(id),list.clone()).await.unwrap();
-    assert_eq!(selected["data"]["instances"].as_array().unwrap().len(),1);
-    assert_eq!(selected["data"]["instances"][0]["instance"]["identity"],instance);
-    assert_eq!(view.send(&host,&context,None,list.clone()).await.unwrap()["data"]["instances"].as_array().unwrap().len(),2);
+    let created = succeeded(
+        &host,
+        &context,
+        invoke(
+            "test",
+            "plugins.test_create",
+            selection(&backend, json!({"cancel_confirmed":true})),
+        ),
+    )
+    .await;
+    let observed = decode(created.output.as_ref().unwrap());
+    let id = &observed.project.id;
+    let child = host.plugin_test_host(&context, id).unwrap();
+    let instance = json!(observed.project.instances[&p::InstanceAlias::new("subject").unwrap()]);
+    let read = binding(&child, &context, &instance, "fixture.read").await;
+    let run = binding(&child, &context, &instance, "fixture.run").await;
+    let answer = query(
+        &child,
+        &context,
+        "plugins.resolve",
+        json!({"instance":instance,"capability":{"id":"fixture.answer","version":2}}),
+    )
+    .await;
+    let parent_run = binding(&host, &context, &analysis, "fixture.run").await;
+    let mut view = TestView::open(&host, &context, &controller, "controller", false).await;
+    let list = json!({"type":"query","capability":{"id":"plugins.instances","version":1},"arguments":{"limit":20}});
+    let selected = view
+        .send(&host, &context, Some(id), list.clone())
+        .await
+        .unwrap();
+    assert_eq!(selected["data"]["instances"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        selected["data"]["instances"][0]["instance"]["identity"],
+        instance
+    );
+    assert_eq!(
+        view.send(&host, &context, None, list.clone())
+            .await
+            .unwrap()["data"]["instances"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
     let environment=view.send(&host,&context,Some(id),json!({"type":"query","capability":{"id":"fixture.read","version":1},"arguments":{"binding":read,"arguments":{"action":"environment"}}})).await.unwrap();
-    assert_eq!(environment["data"]["environment"]["project_root"],observed.project.directory);
-    let control=json!({"type":"control","capability":{"id":"fixture.answer","version":2},"arguments":{"binding":answer,"arguments":{"value":"test only"}}});
-    assert_eq!(view.send(&host,&context,Some(id),control.clone()).await.unwrap()["submitted"],true);
+    assert_eq!(
+        environment["data"]["environment"]["project_root"],
+        observed.project.directory
+    );
+    let control = json!({"type":"control","capability":{"id":"fixture.answer","version":2},"arguments":{"binding":answer,"arguments":{"value":"test only"}}});
+    assert_eq!(
+        view.send(&host, &context, Some(id), control.clone())
+            .await
+            .unwrap()["submitted"],
+        true
+    );
     assert!(host.invoke(&context,invoke("weak", "plugins.activate", json!({"revision":weak.revision.id,"artifact":weak.artifacts[0].id,"target":"ui-web","alias":"weak","configuration":{}}))).await.is_err(),"selector scopes cannot satisfy another capability’s missing grant");
-    let mut undeclared_view=TestView::open(&host,&context,&undeclared,"undeclared",false).await;
-    assert!(undeclared_view.send(&host,&context,Some(id),list.clone()).await.is_err());
-    let mut preview=TestView::open(&host,&context,&controller,"preview",true).await;
-    assert!(preview.send(&host,&context,Some(id),list.clone()).await.is_err());
-    for scope in ["plugins.read","plugins.run"] {
-        let mut reduced=context.clone(); reduced.scopes.remove(scope);
-        assert!(view.send(&host,&reduced,Some(id),list.clone()).await.is_err());
+    let mut undeclared_view =
+        TestView::open(&host, &context, &undeclared, "undeclared", false).await;
+    assert!(
+        undeclared_view
+            .send(&host, &context, Some(id), list.clone())
+            .await
+            .is_err()
+    );
+    let mut preview = TestView::open(&host, &context, &controller, "preview", true).await;
+    assert!(
+        preview
+            .send(&host, &context, Some(id), list.clone())
+            .await
+            .is_err()
+    );
+    for scope in ["plugins.read", "plugins.run"] {
+        let mut reduced = context.clone();
+        reduced.scopes.remove(scope);
+        assert!(
+            view.send(&host, &reduced, Some(id), list.clone())
+                .await
+                .is_err()
+        );
     }
-    assert!(view.send(&host,&context,Some(&p::TestProjectId::new("missing").unwrap()),list.clone()).await.is_err());
-    assert!(view.send(&host,&context,Some(id),json!({"type":"query","capability":{"id":"resources.list","version":1},"arguments":{}})).await.is_err());
-    for body in [json!({"type":"set_state","expected_version":0,"state":{"wrong":true}}),json!({"type":"register_close_handler","renderer":"forged"}),json!({"type":"open_test_workspace","test_project":id})] {
-        assert!(view.send(&host,&context,Some(id),body).await.is_err());
+    assert!(
+        view.send(
+            &host,
+            &context,
+            Some(&p::TestProjectId::new("missing").unwrap()),
+            list.clone()
+        )
+        .await
+        .is_err()
+    );
+    assert!(
+        view.send(
+            &host,
+            &context,
+            Some(id),
+            json!({"type":"query","capability":{"id":"resources.list","version":1},"arguments":{}})
+        )
+        .await
+        .is_err()
+    );
+    for body in [
+        json!({"type":"set_state","expected_version":0,"state":{"wrong":true}}),
+        json!({"type":"register_close_handler","renderer":"forged"}),
+        json!({"type":"open_test_workspace","test_project":id}),
+    ] {
+        assert!(view.send(&host, &context, Some(id), body).await.is_err());
     }
-    let navigation=view.send(&host,&context,None,json!({"type":"open_test_workspace","test_project":id})).await.unwrap();
-    assert_eq!(navigation,json!({"authorized_view":view.connection.view.view,"test_project":id,"window":view.connection.view.window}));
-    let command=|binding: Value| json!({"type":"invoke","capability":{"id":"fixture.run","version":1},"arguments":{"binding":binding,"arguments":{"action":"hold"}},"request_id":"same-original-request","preconditions":[]});
-    let original:OperationRecord=serde_json::from_value(view.send(&host,&context,Some(id),command(run.clone())).await.unwrap()).unwrap();
-    pending(&child,&context,&read).await;
-    assert_eq!(view.send(&host,&context,Some(id),command(run)).await.unwrap()["operation"]["operation_id"],json!(original.operation.operation_id));
-    let parent:OperationRecord=serde_json::from_value(view.send(&host,&context,None,command(parent_run)).await.unwrap()).unwrap();
-    let get=json!({"type":"get_operation","operation_id":original.operation.operation_id});
-    assert!(view.send(&host,&context,None,get.clone()).await.is_err());
-    assert_eq!(view.send(&host,&context,Some(id),get).await.unwrap()["operation"]["caller"]["id"],view.connection.view.view.as_str());
+    let navigation = view
+        .send(
+            &host,
+            &context,
+            None,
+            json!({"type":"open_test_workspace","test_project":id}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        navigation,
+        json!({"authorized_view":view.connection.view.view,"test_project":id,"window":view.connection.view.window})
+    );
+    let command = |binding: Value| json!({"type":"invoke","capability":{"id":"fixture.run","version":1},"arguments":{"binding":binding,"arguments":{"action":"hold"}},"request_id":"same-original-request","preconditions":[]});
+    let original: OperationRecord = serde_json::from_value(
+        view.send(&host, &context, Some(id), command(run.clone()))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    pending(&child, &context, &read).await;
+    assert_eq!(
+        view.send(&host, &context, Some(id), command(run))
+            .await
+            .unwrap()["operation"]["operation_id"],
+        json!(original.operation.operation_id)
+    );
+    let parent: OperationRecord = serde_json::from_value(
+        view.send(&host, &context, None, command(parent_run))
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let get = json!({"type":"get_operation","operation_id":original.operation.operation_id});
+    assert!(view.send(&host, &context, None, get.clone()).await.is_err());
+    assert_eq!(
+        view.send(&host, &context, Some(id), get).await.unwrap()["operation"]["caller"]["id"],
+        view.connection.view.view.as_str()
+    );
     assert!(view.send(&host,&context,Some(id),json!({"type":"get_operation","operation_id":observed.project.activation_operations.values().next().unwrap()})).await.is_err());
-    let cancellation=view.send(&host,&context,Some(id),json!({"type":"cancel","operation_id":original.operation.operation_id})).await.unwrap();
-    assert_eq!(cancellation["accepted"],true);
-    assert_eq!(settled(&child,&context,&original.operation.operation_id).await.status,OperationStatus::Cancelled);
+    let cancellation = view
+        .send(
+            &host,
+            &context,
+            Some(id),
+            json!({"type":"cancel","operation_id":original.operation.operation_id}),
+        )
+        .await
+        .unwrap();
+    assert_eq!(cancellation["accepted"], true);
+    assert_eq!(
+        settled(&child, &context, &original.operation.operation_id)
+            .await
+            .status,
+        OperationStatus::Cancelled
+    );
     drop(child); // Parent idle also requires releasing this explicit native lease.
-    assert!(!host.get_operation(&context,&parent.operation.operation_id).await.unwrap().unwrap().status.is_terminal());
-    view.send(&host,&context,None,json!({"type":"cancel","operation_id":parent.operation.operation_id})).await.unwrap();
-    settled(&host,&context,&parent.operation.operation_id).await;
-    view.send(&host,&context,None,json!({"type":"register_close_handler","renderer":"current"})).await.unwrap();
-    let close=host.invoke_accepted(&context,invoke("closing-controller","views.close",json!({"view":view.connection.view.view}))).await.unwrap();
-    tokio::time::timeout(Duration::from_secs(5),async { loop {
-        if view.send(&host,&context,None,json!({"type":"observe_lifecycle","renderer":"current"})).await.unwrap()["close"]["phase"]=="requested" { break; }
-        tokio::task::yield_now().await;
-    }}).await.unwrap();
+    assert!(
+        !host
+            .get_operation(&context, &parent.operation.operation_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .status
+            .is_terminal()
+    );
+    view.send(
+        &host,
+        &context,
+        None,
+        json!({"type":"cancel","operation_id":parent.operation.operation_id}),
+    )
+    .await
+    .unwrap();
+    settled(&host, &context, &parent.operation.operation_id).await;
+    view.send(
+        &host,
+        &context,
+        None,
+        json!({"type":"register_close_handler","renderer":"current"}),
+    )
+    .await
+    .unwrap();
+    let close = host
+        .invoke_accepted(
+            &context,
+            invoke(
+                "closing-controller",
+                "views.close",
+                json!({"view":view.connection.view.view}),
+            ),
+        )
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if view
+                .send(
+                    &host,
+                    &context,
+                    None,
+                    json!({"type":"observe_lifecycle","renderer":"current"}),
+                )
+                .await
+                .unwrap()["close"]["phase"]
+                == "requested"
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
     assert!(view.send(&host,&context,Some(id),json!({"type":"invoke","capability":{"id":"documents.save","version":1},"arguments":{},"request_id":"not-a-self-flush","preconditions":[]})).await.unwrap_err().to_string().contains("fenced"));
     view.send(&host,&context,None,json!({"type":"refuse_close","renderer":"current","operation":close.operation.operation_id,"reason":"Keep controller for target check"})).await.unwrap();
-    assert_eq!(settled(&host,&context,&close.operation.operation_id).await.status,OperationStatus::Failed);
-    succeeded(&host,&context,invoke("stop","plugins.test_stop",json!({"id":id,"expected_version":observed.project.version}))).await;
-    assert!(view.send(&host,&context,Some(id),list.clone()).await.is_err());
-    assert!(view.send(&host,&context,None,json!({"type":"open_test_workspace","test_project":id})).await.is_err());
-    assert!(view.send(&host,&context,None,list).await.is_ok());
+    assert_eq!(
+        settled(&host, &context, &close.operation.operation_id)
+            .await
+            .status,
+        OperationStatus::Failed
+    );
+    succeeded(
+        &host,
+        &context,
+        invoke(
+            "stop",
+            "plugins.test_stop",
+            json!({"id":id,"expected_version":observed.project.version}),
+        ),
+    )
+    .await;
+    assert!(
+        view.send(&host, &context, Some(id), list.clone())
+            .await
+            .is_err()
+    );
+    assert!(
+        view.send(
+            &host,
+            &context,
+            None,
+            json!({"type":"open_test_workspace","test_project":id})
+        )
+        .await
+        .is_err()
+    );
+    assert!(view.send(&host, &context, None, list).await.is_ok());
     host.drain().await;
 }
 

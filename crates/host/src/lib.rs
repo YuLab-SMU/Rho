@@ -1,26 +1,30 @@
 #![forbid(unsafe_code)]
+mod config;
 mod discovery;
 mod observer;
-mod port_contracts;
-mod config;
-mod paths;
-mod plugin_views;
-mod plugin_tests;
 mod ownership;
-pub use observer::QueryObserver;
+mod paths;
+mod plugin_tests;
+mod plugin_views;
+mod port_contracts;
 pub use config::{HostProfile, ReservedHost};
-pub use paths::default_database;
-pub use rho_sqlite::ApplicationStore;
-pub use rho_operation::OperationError;
+pub use observer::QueryObserver;
 use ownership::ProjectLease;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use rho_contract::{CallContext, CallerIdentity, CallerKind, CapabilityDescriptor, Invocation,
-    OperationEventRecord, OperationId, OperationRecord, OutboxRecord, QueryRequest, QuerySnapshot};
-use rho_operation::{CancellationRequestOutcome, CapabilityRegistry, Clock, OperationGateway,
-    OperationIdGenerator, OperationJournal, QueryGateway, StoredDomainFact, SystemClock, UuidOperationIdGenerator};
+pub use paths::default_database;
+use rho_contract::{
+    CallContext, CallerIdentity, CallerKind, CapabilityDescriptor, Invocation,
+    OperationEventRecord, OperationId, OperationRecord, OutboxRecord, QueryRequest, QuerySnapshot,
+};
+pub use rho_operation::OperationError;
+use rho_operation::{
+    CancellationRequestOutcome, CapabilityRegistry, Clock, OperationGateway, OperationIdGenerator,
+    OperationJournal, QueryGateway, StoredDomainFact, SystemClock, UuidOperationIdGenerator,
+};
+pub use rho_sqlite::ApplicationStore;
 use rho_sqlite::SqliteOperationJournal;
 use serde_json::json;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 pub struct NextHost {
     runtime: Arc<HostRuntime>,
@@ -66,11 +70,18 @@ impl NextHost {
         Self::open_generic_reserved(database, lease, false).await
     }
 
-    async fn open_plugin_test_workspace(database: &Path, root: &Path) -> Result<Self, OperationError> {
+    async fn open_plugin_test_workspace(
+        database: &Path,
+        root: &Path,
+    ) -> Result<Self, OperationError> {
         Self::open_generic_reserved(database, ProjectLease::acquire(root)?, true).await
     }
 
-    async fn open_generic_reserved(database: &Path, lease: ProjectLease, disable_test_projects: bool) -> Result<Self, OperationError> {
+    async fn open_generic_reserved(
+        database: &Path,
+        lease: ProjectLease,
+        disable_test_projects: bool,
+    ) -> Result<Self, OperationError> {
         let journal = Arc::new(SqliteOperationJournal::open(database)?);
         let mut protected = paths::protected_path_candidates(database);
         protected.push(lease.path().to_owned());
@@ -81,7 +92,6 @@ impl NextHost {
                 disable_test_projects,
                 protected_paths: protected,
                 project_lease: Some(lease),
-                ..HostDomains::default()
             },
             Arc::new(SystemClock),
             Arc::new(UuidOperationIdGenerator),
@@ -96,18 +106,24 @@ impl NextHost {
     ) -> Result<serde_json::Value, OperationError> {
         use rho_contract::HostRequest;
         let request = match request {
-            HostRequest::Control(control) => port_contracts::control_request(&self.runtime.registry, context, control)?,
+            HostRequest::Control(control) => {
+                port_contracts::control_request(&self.runtime.registry, context, control)?
+            }
             request => request,
         };
         let result = match request {
             HostRequest::Control(request) => {
                 let runtime = self.runtime.clone();
                 let context = context.clone();
-                return self.tasks.spawn(async move {
-                    runtime.registry.control(&context, request).await
-                }).await.map_err(|_| OperationError::Unavailable(
+                return self
+                    .tasks
+                    .spawn(async move { runtime.registry.control(&context, request).await })
+                    .await
+                    .map_err(|_| {
+                        OperationError::Unavailable(
                     "Control completion was lost; inspect the native request before retrying".into()
-                ))?;
+                )
+                    })?;
             }
             HostRequest::Invoke(invocation) => {
                 serde_json::to_value(if invocation.return_after_acceptance == Some(true) {
@@ -215,55 +231,126 @@ impl NextHost {
         clock: Arc<dyn Clock>,
         id_generator: Arc<dyn OperationIdGenerator>,
     ) -> Result<Self, OperationError> {
-        let HostDomains { disable_test_projects, plugin_store, protected_paths, project_lease } = domains;
+        let HostDomains {
+            disable_test_projects,
+            plugin_store,
+            protected_paths,
+            project_lease,
+        } = domains;
         let project_lease = project_lease.map(Arc::new);
-        let project = project_lease.as_ref().map(|lease| lease.root().to_string_lossy().into_owned());
-        let targets = project.as_ref().map(|root| vec![rho_contract::TargetRef {
-            kind: "project".into(), identity: root.clone(),
-        }]).unwrap_or_default();
+        let project = project_lease
+            .as_ref()
+            .map(|lease| lease.root().to_string_lossy().into_owned());
+        let targets = project
+            .as_ref()
+            .map(|root| {
+                vec![rho_contract::TargetRef {
+                    kind: "project".into(),
+                    identity: root.clone(),
+                }]
+            })
+            .unwrap_or_default();
         let discovery = discovery::DiscoveryOwner::new(project.clone(), targets);
         let mut registry = CapabilityRegistry::new();
-        for id in ["host.overview", "host.catalog", "host.describe", "host.core_contract"] {
-            registry.register_query(Arc::new(discovery::DiscoveryHandler::new(discovery.clone(), id)))?;
+        for id in [
+            "host.overview",
+            "host.catalog",
+            "host.describe",
+            "host.core_contract",
+        ] {
+            registry.register_query(Arc::new(discovery::DiscoveryHandler::new(
+                discovery.clone(),
+                id,
+            )))?;
         }
-        let test_projects = if disable_test_projects { None } else {
-            plugin_store.as_ref().zip(project.clone())
-                .map(|(store, project)| plugin_tests::TestProjects::open(store, project)).transpose()?
+        let test_projects = if disable_test_projects {
+            None
+        } else {
+            plugin_store
+                .as_ref()
+                .zip(project.clone())
+                .map(|(store, project)| plugin_tests::TestProjects::open(store, project))
+                .transpose()?
         };
-        if let Some(owner) = &test_projects { owner.register(&mut registry)?; }
-        let plugins = plugin_store.zip(project.clone())
-            .map(|(store, project)| rho_plugins::PluginService::open(&store, project, protected_paths, journal.clone()))
+        if let Some(owner) = &test_projects {
+            owner.register(&mut registry)?;
+        }
+        let plugins = plugin_store
+            .zip(project.clone())
+            .map(|(store, project)| {
+                rho_plugins::PluginService::open(&store, project, protected_paths, journal.clone())
+            })
             .transpose()?;
-        if let Some(plugins) = &plugins { plugins.register(&mut registry)?; }
-        let event_port = observer::register_record_queries(&mut registry, journal.clone(), project.clone(), true)?;
+        if let Some(plugins) = &plugins {
+            plugins.register(&mut registry)?;
+        }
+        let event_port = observer::register_record_queries(
+            &mut registry,
+            journal.clone(),
+            project.clone(),
+            true,
+        )?;
         registry.validate_links()?;
         let registry = Arc::new(registry);
         discovery.bind(&registry);
-        let gateway = Arc::new(OperationGateway::new(registry.clone(), journal, clock, id_generator)
-            .with_project_scope(project));
+        let gateway = Arc::new(
+            OperationGateway::new(registry.clone(), journal, clock, id_generator)
+                .with_project_scope(project),
+        );
         event_port.bind(&gateway, &registry);
-        if let Some(plugins) = &plugins { plugins.bind(&registry, &gateway); }
+        if let Some(plugins) = &plugins {
+            plugins.bind(&registry, &gateway);
+        }
         let recovered_on_open = gateway.recover_incomplete().await?;
         let tasks = tokio_util::task::TaskTracker::new();
         let runtime = Arc::new(HostRuntime {
-            gateway, queries: Arc::new(QueryGateway::new(registry.clone())), registry,
-            plugins, test_projects, _project_lease: project_lease,
+            gateway,
+            queries: Arc::new(QueryGateway::new(registry.clone())),
+            registry,
+            plugins,
+            test_projects,
+            _project_lease: project_lease,
         });
-        if let Some(plugins) = &runtime.plugins { plugins.bind_lifetime(&runtime, &tasks); }
-        Ok(Self { runtime, recovered_on_open, tasks })
+        if let Some(plugins) = &runtime.plugins {
+            plugins.bind_lifetime(&runtime, &tasks);
+        }
+        Ok(Self {
+            runtime,
+            recovered_on_open,
+            tasks,
+        })
     }
 
     /// Select an already running disposable Host. Holding this handle prevents
     /// its stop operation from racing requests through the ordinary Host ports.
-    pub fn plugin_test_host(&self, context: &CallContext, id: &rho_plugin_protocol::TestProjectId) -> Result<Arc<NextHost>, OperationError> {
-        self.runtime.test_projects.as_ref().ok_or_else(||OperationError::Unavailable("Test project hosting is unavailable".into()))?.host(context, id)
+    pub fn plugin_test_host(
+        &self,
+        context: &CallContext,
+        id: &rho_plugin_protocol::TestProjectId,
+    ) -> Result<Arc<NextHost>, OperationError> {
+        self.runtime
+            .test_projects
+            .as_ref()
+            .ok_or_else(|| {
+                OperationError::Unavailable("Test project hosting is unavailable".into())
+            })?
+            .host(context, id)
     }
 
     /// Transport selection preserves the same caller and the selected Host's
     /// ordinary ports. Holding the child handle fences native stop through the call.
-    pub async fn dispatch_selected(&self, context: &CallContext, test_project: Option<&rho_plugin_protocol::TestProjectId>, request: rho_contract::HostRequest) -> Result<serde_json::Value, OperationError> {
+    pub async fn dispatch_selected(
+        &self,
+        context: &CallContext,
+        test_project: Option<&rho_plugin_protocol::TestProjectId>,
+        request: rho_contract::HostRequest,
+    ) -> Result<serde_json::Value, OperationError> {
         match test_project {
-            Some(id) => self.plugin_test_host(context, id)?.dispatch(context, request).await,
+            Some(id) => {
+                self.plugin_test_host(context, id)?
+                    .dispatch(context, request)
+                    .await
+            }
             None => self.dispatch(context, request).await,
         }
     }
@@ -290,7 +377,9 @@ impl NextHost {
         if let Some(plugins) = &self.runtime.plugins {
             // Native failure can withdraw capabilities; this observes only state
             // already held by the owner, and never starts or repairs a process.
-            if let Err(error) = plugins.refresh() { eprintln!("plugin registration refresh: {error}"); }
+            if let Err(error) = plugins.refresh() {
+                eprintln!("plugin registration refresh: {error}");
+            }
         }
     }
 
@@ -381,8 +470,17 @@ impl NextHost {
     }
     /// Hosting lifecycle only: keep accepted work alive after an edge disconnects.
     pub fn is_idle(&self) -> bool {
-        self.tasks.is_empty() && !self.runtime.gateway.commit_recovery().has_retained_results()
-            && self.runtime.test_projects.as_ref().is_none_or(|owner| owner.is_idle())
+        self.tasks.is_empty()
+            && !self
+                .runtime
+                .gateway
+                .commit_recovery()
+                .has_retained_results()
+            && self
+                .runtime
+                .test_projects
+                .as_ref()
+                .is_none_or(|owner| owner.is_idle())
     }
 
     /// The caller must first stop accepting new work through every edge.
@@ -409,10 +507,15 @@ impl NextHost {
     async fn drain_plugins(&self, retain_plugins: bool) {
         self.tasks.close();
         self.tasks.wait().await;
-        if let Some(owner) = &self.runtime.test_projects { Box::pin(owner.drain()).await; }
+        if let Some(owner) = &self.runtime.test_projects {
+            Box::pin(owner.drain()).await;
+        }
         if let Some(plugins) = &self.runtime.plugins {
-            if retain_plugins { plugins.suspend_for_restart().await; }
-            else { plugins.drain().await; }
+            if retain_plugins {
+                plugins.suspend_for_restart().await;
+            } else {
+                plugins.drain().await;
+            }
         }
     }
 
@@ -431,10 +534,10 @@ impl NextHost {
             runtime.registry.validate_control_input(&context, &capability, &json!(args))?;
             let record = runtime.gateway.reconcile_commit(&context, &args).await?;
             runtime.registry.validate_control_output(&capability, &json!(record))?;
-            if let Some(plugins) = &runtime.plugins {
-                if let Err(error) = plugins.complete_record(&context, &record).await {
-                    eprintln!("committed operation retains plugin protections; use plugins.reconcile_references: {error}");
-                }
+            if let Some(plugins) = &runtime.plugins
+                && let Err(error) = plugins.complete_record(&context, &record).await
+            {
+                eprintln!("committed operation retains plugin protections; use plugins.reconcile_references: {error}");
             }
             Ok(record)
         }).await.map_err(|error| OperationError::Storage(format!("commit reconciliation task ended: {error}")))?

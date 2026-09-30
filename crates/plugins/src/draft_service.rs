@@ -452,11 +452,9 @@ impl OperationHandler for Write {
             )
             .map_err(fault)?;
         match (current, version) {
-            (None, None) if self.saving() => (),
+            (None, None) if self.saving() => {}
             (Some(current), Some(version))
-                if !current.discarded && current.version == version && current.source == source =>
-            {
-                ()
+                if !current.discarded && current.version == version && current.source == source => {
             }
             _ => {
                 return Err(OperationError::ContentChanged(
@@ -538,10 +536,9 @@ impl ExecutionLease for DraftLease {
     async fn completed(&mut self, result: &Result<host::OperationRecord, OperationError>) {
         if self.saving
             && let Ok(record) = result
+            && let Err(error) = self.service.complete_draft_save(record)
         {
-            if let Err(error) = self.service.complete_draft_save(record) {
-                eprintln!("original draft save retains its capture: {error}");
-            }
+            eprintln!("original draft save retains its capture: {error}");
         }
     }
 }
@@ -556,7 +553,10 @@ impl PluginService {
         writing: bool,
     ) -> Result<Option<DraftSource>, OperationError> {
         self.check_window_context(context, window)?;
-        let inherited = context.view_scope.as_ref().and_then(|scope| scope.draft_source.clone());
+        let inherited = context
+            .view_scope
+            .as_ref()
+            .and_then(|scope| scope.draft_source.clone());
         if context.caller.kind != host::CallerKind::Plugin {
             return Ok(inherited);
         }
@@ -597,7 +597,10 @@ impl PluginService {
                 revision: record.instance.revision,
                 contribution: record.contribution,
             };
-            if inherited.as_ref().is_some_and(|original| original != &source) {
+            if inherited
+                .as_ref()
+                .is_some_and(|original| original != &source)
+            {
                 return Err(invalid("call is restricted to its original draft source"));
             }
             Ok(Some(source))

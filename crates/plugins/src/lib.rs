@@ -1,42 +1,42 @@
 //! Package and instance ownership. Does not start a scientific runtime when read.
 #![forbid(unsafe_code)]
 
-mod archives;
 mod archive_service;
-mod package;
-mod repository;
-mod development;
+mod archives;
+mod backend;
 mod build;
 mod build_service;
-mod backend;
-mod runtime;
+mod development;
 mod instance_records;
 mod instance_recovery;
-mod test_projects;
 mod operations;
+mod package;
+mod repository;
 mod resources;
+mod runtime;
+mod test_projects;
 pub use resources::*;
+mod preview;
 #[cfg(unix)]
 mod resource_channel;
-mod views;
-mod preview;
+mod scenario_application;
+mod scenarios;
 mod view_close;
 mod view_renderer;
+mod views;
 mod window_layout;
-mod scenarios;
-mod scenario_application;
 pub use scenarios::scenario_digest;
-mod drafts;
 mod draft_service;
+mod drafts;
 pub use views::PluginViewAsset;
-mod service;
 mod delegated;
+mod service;
 mod service_handlers;
-pub use service::*;
+pub use operations::*;
 pub use package::*;
 pub use repository::*;
 pub use runtime::*;
-pub use operations::*;
+pub use service::*;
 
 #[derive(Debug, thiserror::Error)]
 pub enum PluginError {
@@ -61,7 +61,10 @@ pub enum PluginError {
     #[error(transparent)]
     Transport(#[from] rho_plugin_sdk::SdkError),
     #[error("plugin response violates its contract: {message}")]
-    InvalidResponse { message: String, response: Box<rho_plugin_protocol::RpcBody> },
+    InvalidResponse {
+        message: String,
+        response: Box<rho_plugin_protocol::RpcBody>,
+    },
 }
 
 pub(crate) fn ensure(condition: bool, message: impl Into<String>) -> Result<(), PluginError> {

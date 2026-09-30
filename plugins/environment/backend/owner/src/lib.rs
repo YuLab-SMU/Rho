@@ -928,6 +928,13 @@ fn uncertain(error: impl std::fmt::Display) -> EnvironmentOwnerError {
     EnvironmentOwnerError::after_possible_effect(error.to_string(), None)
 }
 
+fn now_ms() -> Result<i64, String> {
+    let elapsed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(display)?;
+    i64::try_from(elapsed.as_millis()).map_err(display)
+}
+
 #[cfg(test)]
 mod recovery_tests {
     use super::*;
@@ -1000,11 +1007,4 @@ mod recovery_tests {
         std::os::unix::fs::symlink(target, file).unwrap();
         assert!(runtime.read_marker("op_test").is_err());
     }
-}
-
-fn now_ms() -> Result<i64, String> {
-    let elapsed = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(display)?;
-    i64::try_from(elapsed.as_millis()).map_err(display)
 }

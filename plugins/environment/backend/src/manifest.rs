@@ -19,7 +19,14 @@ fn contribution(
 ) -> CapabilityContribution {
     let operation = matches!(
         id,
-        source::PLAN | source::REALIZE | source::VERIFY | source::RECONCILE | source::REFRESH | source::CLEANUP | source::RESTORE | source::PURGE
+        source::PLAN
+            | source::REALIZE
+            | source::VERIFY
+            | source::RECONCILE
+            | source::REFRESH
+            | source::CLEANUP
+            | source::RESTORE
+            | source::PURGE
     );
     let prepare = match id {
         source::PLAN => Some("environment.prepare_plan"),
@@ -58,8 +65,20 @@ fn contribution(
 }
 pub fn manifest() -> PluginManifest {
     let mut capabilities = vec![
-        contribution(source::RETENTION, schema_for!(EnvironmentSourceArguments).to_value(), schema_for!(RetentionView).to_value(), json!({"operation_id":"original-environment"}), "Inspect original material retention"),
-        contribution(source::CLEANUP_STATUS, schema_for!(EnvironmentTrashArguments).to_value(), schema_for!(RetentionView).to_value(), json!({"cleanup_operation_id":"original-quarantine"}), "Inspect original quarantine"),
+        contribution(
+            source::RETENTION,
+            schema_for!(EnvironmentSourceArguments).to_value(),
+            schema_for!(RetentionView).to_value(),
+            json!({"operation_id":"original-environment"}),
+            "Inspect original material retention",
+        ),
+        contribution(
+            source::CLEANUP_STATUS,
+            schema_for!(EnvironmentTrashArguments).to_value(),
+            schema_for!(RetentionView).to_value(),
+            json!({"cleanup_operation_id":"original-quarantine"}),
+            "Inspect original quarantine",
+        ),
         contribution(
             source::STATUS,
             schema_for!(Empty).to_value(),
@@ -83,9 +102,27 @@ pub fn manifest() -> PluginManifest {
         ),
     ];
     for (id, input, example, title, prepare) in [
-        (source::CLEANUP, schema_for!(EnvironmentCleanupArguments).to_value(), json!({"operation_id":"original-environment","expected_fingerprint":format!("sha256:{}","0".repeat(64))}), "Quarantine original material", "environment.prepare_cleanup"),
-        (source::RESTORE, schema_for!(EnvironmentChangeTrashArguments).to_value(), json!({"cleanup_operation_id":"original-quarantine","expected_fingerprint":format!("sha256:{}","0".repeat(64))}), "Restore original material", "environment.prepare_restore_cleanup"),
-        (source::PURGE, schema_for!(EnvironmentChangeTrashArguments).to_value(), json!({"cleanup_operation_id":"original-quarantine","expected_fingerprint":format!("sha256:{}","0".repeat(64))}), "Purge original quarantine", "environment.prepare_purge_cleanup"),
+        (
+            source::CLEANUP,
+            schema_for!(EnvironmentCleanupArguments).to_value(),
+            json!({"operation_id":"original-environment","expected_fingerprint":format!("sha256:{}","0".repeat(64))}),
+            "Quarantine original material",
+            "environment.prepare_cleanup",
+        ),
+        (
+            source::RESTORE,
+            schema_for!(EnvironmentChangeTrashArguments).to_value(),
+            json!({"cleanup_operation_id":"original-quarantine","expected_fingerprint":format!("sha256:{}","0".repeat(64))}),
+            "Restore original material",
+            "environment.prepare_restore_cleanup",
+        ),
+        (
+            source::PURGE,
+            schema_for!(EnvironmentChangeTrashArguments).to_value(),
+            json!({"cleanup_operation_id":"original-quarantine","expected_fingerprint":format!("sha256:{}","0".repeat(64))}),
+            "Purge original quarantine",
+            "environment.prepare_purge_cleanup",
+        ),
         (
             source::PLAN,
             schema_for!(PlanArguments).to_value(),

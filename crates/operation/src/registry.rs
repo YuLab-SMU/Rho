@@ -81,12 +81,17 @@ impl CapabilityRegistry {
             .insert(key.clone(), next.descriptors[&key].clone());
         Ok(())
     }
-    pub fn register_control_handler(&mut self, handler: Arc<dyn ControlHandler>) -> Result<(), OperationError> {
+    pub fn register_control_handler(
+        &mut self,
+        handler: Arc<dyn ControlHandler>,
+    ) -> Result<(), OperationError> {
         let state = self.state.get_mut().unwrap();
         let key = handler.descriptor().capability.clone();
         let next = Arc::make_mut(&mut state.current);
         next.register_control_handler(handler)?;
-        state.contracts.insert(key.clone(), next.descriptors[&key].clone());
+        state
+            .contracts
+            .insert(key.clone(), next.descriptors[&key].clone());
         Ok(())
     }
     pub fn validate_links(&mut self) -> Result<(), OperationError> {
@@ -165,13 +170,13 @@ impl CapabilityRegistry {
                     capability.display_key(),
                 ));
             }
-            if let Some(previous) = state.contracts.get(capability) {
-                if !same_contract(previous, descriptor) {
-                    return Err(OperationError::Contract(format!(
-                        "{} must use a new capability version for a changed contract",
-                        capability.display_key()
-                    )));
-                }
+            if let Some(previous) = state.contracts.get(capability)
+                && !same_contract(previous, descriptor)
+            {
+                return Err(OperationError::Contract(format!(
+                    "{} must use a new capability version for a changed contract",
+                    capability.display_key()
+                )));
             }
         }
         let owned = prepared.descriptors.keys().cloned().collect();
@@ -201,7 +206,8 @@ impl CapabilityRegistry {
         state.contracts.extend(prepared.descriptors);
         state.groups.insert(owner.into(), (generation, owned));
         state.current = Arc::new(next);
-        self.publication.send_modify(|revision| *revision = revision.wrapping_add(1));
+        self.publication
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
         Ok(RegistrationRevision {
             owner: owner.into(),
             generation,
@@ -215,7 +221,8 @@ impl CapabilityRegistry {
         self.replace_batch(
             &expected.owner,
             Some(expected),
-            ContributionBatch { controls: vec![],
+            ContributionBatch {
+                controls: vec![],
                 operations: vec![],
                 queries: vec![],
             },

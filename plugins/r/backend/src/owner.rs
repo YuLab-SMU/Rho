@@ -13,8 +13,8 @@ use std::{
     time::Duration,
 };
 use tokio::sync::{Mutex as Lane, watch};
-pub(crate) mod recovery;
 pub(crate) mod context;
+pub(crate) mod recovery;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -96,7 +96,10 @@ impl Owner {
         }
         if config.ark.as_ref().is_some_and(|path| !path.is_file())
             || config.r_home.as_ref().is_some_and(|path| !path.is_dir())
-            || config.checkpoint_helper_path.as_ref().is_some_and(|path| !path.is_file())
+            || config
+                .checkpoint_helper_path
+                .as_ref()
+                .is_some_and(|path| !path.is_file())
         {
             return Err("select an existing Ark executable and R installation".into());
         }
@@ -121,17 +124,37 @@ impl Owner {
             context_grants: context::Grants::new(grants),
         })
     }
-    fn admitted_environment(&self, call: &PluginCall, target: &str) -> Result<Option<EnvironmentLibrary>, String> {
-        if call.binding.capability.id.as_str()=="r.create_session" && call.binding.capability.version==2 {
-            let r_home=self.config.r_home.as_deref().ok_or("R is not configured")?;
-            environment_binding::qualify(call,target,self.environment_enabled,&self.environment.project_root,r_home).map(Some)
-        } else if call.owner_context==json!({"session_target":target}) { Ok(None) }
-        else {Err("R target or environment changed after admission".into())}
+    fn admitted_environment(
+        &self,
+        call: &PluginCall,
+        target: &str,
+    ) -> Result<Option<EnvironmentLibrary>, String> {
+        if call.binding.capability.id.as_str() == "r.create_session"
+            && call.binding.capability.version == 2
+        {
+            let r_home = self.config.r_home.as_deref().ok_or("R is not configured")?;
+            environment_binding::qualify(
+                call,
+                target,
+                self.environment_enabled,
+                &self.environment.project_root,
+                r_home,
+            )
+            .map(Some)
+        } else if call.owner_context == json!({"session_target":target}) {
+            Ok(None)
+        } else {
+            Err("R target or environment changed after admission".into())
+        }
     }
-    fn can_create_session(&self) -> Result<(),String> {
-        if self.config.ark.is_none() || self.config.r_home.is_none() {return Err("Configure existing Ark and R paths before creating a session".into());}
+    fn can_create_session(&self) -> Result<(), String> {
+        if self.config.ark.is_none() || self.config.r_home.is_none() {
+            return Err("Configure existing Ark and R paths before creating a session".into());
+        }
         if self.runtime.lock().unwrap().is_some() || self.launch_attempt.lock().unwrap().is_some() {
-            return Err("This instance already owns a session or an unconfirmed creation attempt".into());
+            return Err(
+                "This instance already owns a session or an unconfirmed creation attempt".into(),
+            );
         }
         Ok(())
     }
@@ -177,9 +200,14 @@ impl Owner {
         Ok(run)
     }
     fn validate_format(&self, value: &Value, version: u32) -> Result<FormatRCode, String> {
-        if version != 1 { return Err("Unsupported R formatting version".into()); }
-        let args: FormatRCode = serde_json::from_value(value.clone()).map_err(|error| error.to_string())?;
-        if args.expected_session != self.runtime()?.session_id() { return Err("R session precondition changed".into()); }
+        if version != 1 {
+            return Err("Unsupported R formatting version".into());
+        }
+        let args: FormatRCode =
+            serde_json::from_value(value.clone()).map_err(|error| error.to_string())?;
+        if args.expected_session != self.runtime()?.session_id() {
+            return Err("R session precondition changed".into());
+        }
         validate_r_format(&args.code, args.source.as_ref())?;
         Ok(args)
     }
@@ -192,12 +220,14 @@ impl Owner {
         if recovery::is_operation(call.binding.capability.id.as_str()) {
             self.admit_recovery(call)?;
             if call.binding.capability.id.as_str() == recovery::CAPTURE
-                && call.arguments["automatic"] == true && !self.queue.is_empty() {
+                && call.arguments["automatic"] == true
+                && !self.queue.is_empty()
+            {
                 return Err("Automatic capture requires an idle, settled native queue".into());
             }
             return self.queue.admit(call);
         }
-        self.admitted_environment(call,&self.target())?;
+        self.admitted_environment(call, &self.target())?;
         match call.binding.capability.id.as_str() {
             "r.execute" => {
                 self.validate_execute(&call.arguments, call.binding.capability.version)?;
@@ -205,7 +235,11 @@ impl Owner {
             "r.format" => {
                 self.validate_format(&call.arguments, call.binding.capability.version)?;
             }
-            "r.create_session" if call.binding.capability.version==2 || call.arguments == json!({}) => (),
+            "r.create_session"
+                if call.binding.capability.version == 2 || call.arguments == json!({}) =>
+            {
+                // Session creation has no additional arguments to validate.
+            }
             _ => return Err("Unsupported R invocation".into()),
         }
         self.queue.admit(call)
@@ -317,20 +351,50 @@ impl Owner {
             }
             "r.prepare_environment" => {
                 self.can_create_session()?;
-                let target=self.target();
-                let request:PluginPreflightRequest=serde_json::from_value(call.arguments.clone()).map_err(|e|e.to_string())?;
-                if request.capability!=environment_binding::key("r.create_session",2)
-                    || request.target.as_ref().is_some_and(|value|value!=&target)
-                    || call.binding.target.as_ref().is_some_and(|value|value!=&target)
-                    || !call.owner_context.is_null() || !(call.preconditions.is_null() || call.preconditions==json!({}))
-                    || !(request.preconditions.is_null() || request.preconditions==json!({})) {
-                    return Err("Environment session preflight changed its target or preconditions".into());
+                let target = self.target();
+                let request: PluginPreflightRequest =
+                    serde_json::from_value(call.arguments.clone()).map_err(|e| e.to_string())?;
+                if request.capability != environment_binding::key("r.create_session", 2)
+                    || request
+                        .target
+                        .as_ref()
+                        .is_some_and(|value| value != &target)
+                    || call
+                        .binding
+                        .target
+                        .as_ref()
+                        .is_some_and(|value| value != &target)
+                    || !call.owner_context.is_null()
+                    || !(call.preconditions.is_null() || call.preconditions == json!({}))
+                    || !(request.preconditions.is_null() || request.preconditions == json!({}))
+                {
+                    return Err(
+                        "Environment session preflight changed its target or preconditions".into(),
+                    );
                 }
-                let mut args=environment_binding::arguments(call,request.arguments,self.environment_enabled)?;
-                let environment=environment_binding::select(&self.host,call,&args.environment,&self.environment.project_root,self.config.r_home.as_deref().unwrap()).await?;
+                let mut args = environment_binding::arguments(
+                    call,
+                    request.arguments,
+                    self.environment_enabled,
+                )?;
+                let environment = environment_binding::select(
+                    &self.host,
+                    call,
+                    &args.environment,
+                    &self.environment.project_root,
+                    self.config.r_home.as_deref().unwrap(),
+                )
+                .await?;
                 self.can_create_session()?;
-                args.environment.binding=environment.binding.clone();
-                Ok(json!(PluginPreflightResult {arguments:json!(args),target:Some(target.clone()),owner_context:json!(environment_binding::Qualification {session_target:target,environment})}))
+                args.environment.binding = environment.binding.clone();
+                Ok(json!(PluginPreflightResult {
+                    arguments: json!(args),
+                    target: Some(target.clone()),
+                    owner_context: json!(environment_binding::Qualification {
+                        session_target: target,
+                        environment
+                    })
+                }))
             }
             "r.prepare" => {
                 let args: PluginPreflightRequest =
@@ -469,11 +533,17 @@ impl Owner {
         }
     }
     async fn inspect(&self, call: &PluginCall, kind: WorkspaceQueryKind) -> Result<Value, String> {
-        let mut query = kind.parse(&call.arguments).map_err(|error| error.to_string())?;
+        let mut query = kind
+            .parse(&call.arguments)
+            .map_err(|error| error.to_string())?;
         let runtime = self.runtime()?;
         let session = runtime.session_id();
         if query.expected_session() != Some(session)
-            || call.binding.target.as_deref().is_some_and(|target| target != session)
+            || call
+                .binding
+                .target
+                .as_deref()
+                .is_some_and(|target| target != session)
         {
             return Err("R inspection requires this exact native session".into());
         }
@@ -489,11 +559,16 @@ impl Owner {
             status: RInspectionStatus::Busy,
             source: "org.rho.r".into(),
             observed_at_ms: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH).map_err(|error| error.to_string())?
-                .as_millis().try_into().map_err(|_| "Observation time exceeds its contract")?,
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|error| error.to_string())?
+                .as_millis()
+                .try_into()
+                .map_err(|_| "Observation time exceeds its contract")?,
             completeness: NativeCompleteness::Unknown,
             data: None,
-            notices: vec!["R has active, queued or unsettled work; no inspection was submitted.".into()],
+            notices: vec![
+                "R has active, queued or unsettled work; no inspection was submitted.".into(),
+            ],
             diagnostic: None,
         };
         if !self.queue.is_empty() {
@@ -515,8 +590,17 @@ impl Owner {
                 observation.status = RInspectionStatus::Unavailable;
                 observation.notices.clear();
                 let (code, message) = match result {
-                    Err(error) => (error.query_code.map(|code| code.to_string()).unwrap_or_else(|| "unavailable".into()), error.message),
-                    Ok(_) => ("session_changed".into(), "The native observation belongs to a different R session".into()),
+                    Err(error) => (
+                        error
+                            .query_code
+                            .map(|code| code.to_string())
+                            .unwrap_or_else(|| "unavailable".into()),
+                        error.message,
+                    ),
+                    Ok(_) => (
+                        "session_changed".into(),
+                        "The native observation belongs to a different R session".into(),
+                    ),
                 };
                 observation.diagnostic = Some(RInspectionDiagnostic {
                     code,
@@ -525,10 +609,17 @@ impl Owner {
             }
         }
         if call.binding.capability.id.as_str() == "r.packages" {
-            self.package_context.lock().unwrap().observe(call.principal.as_str(), &call.arguments, &observation);
+            self.package_context.lock().unwrap().observe(
+                call.principal.as_str(),
+                &call.arguments,
+                &observation,
+            );
         }
         if call.binding.capability.id.as_str() == "r.read_help" {
-            self.help_context.lock().unwrap().observe(&call.arguments, &observation);
+            self.help_context
+                .lock()
+                .unwrap()
+                .observe(&call.arguments, &observation);
         }
         inspection_value(observation)
     }
@@ -587,20 +678,33 @@ impl Owner {
         let args: RInspectionStateArguments =
             serde_json::from_value(call.arguments.clone()).map_err(|error| error.to_string())?;
         let runtime = self.runtime.lock().unwrap().clone();
-        let session = runtime.as_ref().map(|runtime| runtime.session_id().to_owned());
-        if args.expected_session.as_ref().is_some_and(|expected| Some(expected) != session.as_ref())
-            || call.binding.target.as_ref().is_some_and(|target| Some(target) != session.as_ref())
+        let session = runtime
+            .as_ref()
+            .map(|runtime| runtime.session_id().to_owned());
+        if args
+            .expected_session
+            .as_ref()
+            .is_some_and(|expected| Some(expected) != session.as_ref())
+            || call
+                .binding
+                .target
+                .as_ref()
+                .is_some_and(|target| Some(target) != session.as_ref())
         {
             return Err("R inspection readiness requires the exact native session".into());
         }
         let (status, cache_key, notices) = match runtime {
-            None => (RInspectionStatus::Unavailable, None, vec![
+            None => (
+                RInspectionStatus::Unavailable,
+                None,
+                vec![
                 if self.launch_attempt.lock().unwrap().is_some() {
                     "R session creation is not confirmed; inspect the original launch Operation."
                 } else {
                     "Create an R session to inspect objects, packages and Help."
                 }.into(),
-            ]),
+            ],
+            ),
             Some(runtime) => {
                 let key = Some(self.inspection_cache_key.lock().unwrap().clone());
                 match runtime.execution_state().as_str() {
@@ -614,12 +718,18 @@ impl Owner {
             }
         };
         serde_json::to_value(RInspectionState {
-            session_id: session, status, cache_key,
-            observed_at_ms: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
-                .map_err(|error| error.to_string())?.as_millis().try_into()
+            session_id: session,
+            status,
+            cache_key,
+            observed_at_ms: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|error| error.to_string())?
+                .as_millis()
+                .try_into()
                 .map_err(|_| "Observation time exceeds its contract")?,
             notices,
-        }).map_err(|error| error.to_string())
+        })
+        .map_err(|error| error.to_string())
     }
     async fn execute(
         &self,
@@ -640,7 +750,9 @@ impl Owner {
         if recovery::is_operation(call.binding.capability.id.as_str()) {
             return self.execute_recovery(call, cancellation).await;
         }
-        let environment=self.admitted_environment(call,&target).map_err(NativeError::before_effect)?;
+        let environment = self
+            .admitted_environment(call, &target)
+            .map_err(NativeError::before_effect)?;
         if *cancellation.borrow() {
             return Ok(plan(
                 PluginOutcome::Cancelled,
@@ -652,29 +764,49 @@ impl Owner {
             "r.create_session" => {
                 if self.runtime.lock().unwrap().is_some()
                     || self.launch_attempt.lock().unwrap().is_some()
-                    || (call.binding.capability.version==1 && call.arguments != json!({}))
+                    || (call.binding.capability.version == 1 && call.arguments != json!({}))
                 {
                     return Err(NativeError::before_effect(
                         "This instance already owns a session or creation arguments are invalid",
                     ));
                 }
                 *self.launch_attempt.lock().unwrap() = Some(operation.clone());
-                if let Some(library)=&environment {
-                    *self.creation_state.lock().unwrap()=Some("verifying_environment");
-                    let verified=match environment_binding::verify(&self.host,call,library,&self.environment.project_root,self.config.r_home.as_deref().unwrap(),Duration::from_secs(self.config.execution_timeout_seconds)).await {
-                        Ok(verified)=>verified,
-                        Err(error)=>{
-                            *self.creation_state.lock().unwrap()=Some(if error.effect_may_have_occurred {"environment_unconfirmed"}else{"environment_failed"});
+                if let Some(library) = &environment {
+                    *self.creation_state.lock().unwrap() = Some("verifying_environment");
+                    let verified = match environment_binding::verify(
+                        &self.host,
+                        call,
+                        library,
+                        &self.environment.project_root,
+                        self.config.r_home.as_deref().unwrap(),
+                        Duration::from_secs(self.config.execution_timeout_seconds),
+                    )
+                    .await
+                    {
+                        Ok(verified) => verified,
+                        Err(error) => {
+                            *self.creation_state.lock().unwrap() =
+                                Some(if error.effect_may_have_occurred {
+                                    "environment_unconfirmed"
+                                } else {
+                                    "environment_failed"
+                                });
                             return Err(error);
                         }
                     };
-                    *self.selected_environment.lock().unwrap()=Some(verified);
+                    *self.selected_environment.lock().unwrap() = Some(verified);
                     if *cancellation.borrow() {
-                        *self.creation_state.lock().unwrap()=Some("environment_verified_without_session");
-                        return Err(NativeError::after_possible_effect("Control channel ended after Environment verification; R session launch was not started",Some(json!({"operation_id":operation,"environment":*self.selected_environment.lock().unwrap(),"automatic_reexecution":false,"action":"inspect_original_creation_and_verification"}))));
+                        *self.creation_state.lock().unwrap() =
+                            Some("environment_verified_without_session");
+                        return Err(NativeError::after_possible_effect(
+                            "Control channel ended after Environment verification; R session launch was not started",
+                            Some(
+                                json!({"operation_id":operation,"environment":*self.selected_environment.lock().unwrap(),"automatic_reexecution":false,"action":"inspect_original_creation_and_verification"}),
+                            ),
+                        ));
                     }
                 }
-                *self.creation_state.lock().unwrap()=Some("launch_unconfirmed");
+                *self.creation_state.lock().unwrap() = Some("launch_unconfirmed");
                 let runtime = Arc::new(ArkRuntime::launch(ArkConfig {
                     checkpoint_helper_path: self.config.checkpoint_helper_path.clone(), executable: self.config.ark.clone().ok_or_else(|| NativeError::before_effect("Ark is not configured"))?,
                     r_home: self.config.r_home.clone().ok_or_else(|| NativeError::before_effect("R is not configured"))?,
@@ -682,23 +814,44 @@ impl Owner {
                     execution_timeout: Duration::from_secs(self.config.execution_timeout_seconds), library_path: environment.as_ref().map(|selected|selected.library_path.clone().into()),
                 }).await.map_err(|error| NativeError::after_possible_effect(error, Some(json!({"instance":self.instance, "data_root":self.environment.data_root, "action":"inspect_native_launch_before_retry"}))))?);
                 *self.runtime.lock().unwrap() = Some(runtime.clone());
-                if let Some(selected)=environment {
-                    if !runtime.installation_identity().is_some_and(|actual|actual.r_version==selected.r_version && actual.platform==selected.platform && Some(PathBuf::from(actual.r_home))==self.config.r_home) {
-                        runtime.begin_shutdown();
-                        let stopped=runtime.shutdown().await;
-                        return Err(NativeError::after_possible_effect("New native R installation differs from the selected Environment",Some(json!({"operation_id":operation,"session_id":runtime.session_id(),"process":runtime.process_identity(),"environment":*self.selected_environment.lock().unwrap(),"shutdown_confirmed":stopped.is_ok(),"shutdown_error":stopped.err().map(|e|e.message),"automatic_reexecution":false,"action":"inspect_original_native_session_before_new_creation"}))));
-                    }
+                if let Some(selected) = environment
+                    && !runtime.installation_identity().is_some_and(|actual| {
+                        actual.r_version == selected.r_version
+                            && actual.platform == selected.platform
+                            && Some(PathBuf::from(actual.r_home)) == self.config.r_home
+                    })
+                {
+                    runtime.begin_shutdown();
+                    let stopped = runtime.shutdown().await;
+                    return Err(NativeError::after_possible_effect(
+                        "New native R installation differs from the selected Environment",
+                        Some(
+                            json!({"operation_id":operation,"session_id":runtime.session_id(),"process":runtime.process_identity(),"environment":*self.selected_environment.lock().unwrap(),"shutdown_confirmed":stopped.is_ok(),"shutdown_error":stopped.err().map(|e|e.message),"automatic_reexecution":false,"action":"inspect_original_native_session_before_new_creation"}),
+                        ),
+                    ));
                 }
                 let native_root=runtime.project_root().filter(|root|*root==self.environment.project_root).ok_or_else(||NativeError::after_possible_effect("New R session did not confirm its original project",Some(json!({"operation_id":operation,"session_id":runtime.session_id(),"automatic_reexecution":false}))))?;
-                let output = json!(RSessionCreated {operation_id:operation,session_id:runtime.session_id().into(),process:runtime.process_identity(),installation:runtime.installation_identity(),project_root:native_root.into(),environment:self.selected_environment.lock().unwrap().clone()});
+                let output = json!(RSessionCreated {
+                    operation_id: operation,
+                    session_id: runtime.session_id().into(),
+                    process: runtime.process_identity(),
+                    installation: runtime.installation_identity(),
+                    project_root: native_root.into(),
+                    environment: self.selected_environment.lock().unwrap().clone()
+                });
                 Ok(plan(PluginOutcome::Succeeded, output, vec![]))
             }
             "r.execute" | "r.format" => {
                 let formatting = call.binding.capability.id.as_str() == "r.format";
                 let args = if formatting {
-                    let format = self.validate_format(&call.arguments, call.binding.capability.version)
+                    let format = self
+                        .validate_format(&call.arguments, call.binding.capability.version)
                         .map_err(NativeError::before_effect)?;
-                    RunRArguments { code: format.code, source: format.source, output_mode: None }
+                    RunRArguments {
+                        code: format.code,
+                        source: format.source,
+                        output_mode: None,
+                    }
                 } else {
                     self.validate_execute(&call.arguments, call.binding.capability.version)
                         .map_err(NativeError::before_effect)?
@@ -706,10 +859,19 @@ impl Owner {
                 let runtime = self.runtime().map_err(NativeError::before_effect)?;
                 *self.inspection_cache_key.lock().unwrap() = format!("{operation}:running");
                 let report = if formatting {
-                    runtime.execute_tool_controlled(&operation,
-                        &WorkspaceToolRequest::Format(FormatArguments { code: args.code.clone() }), cancellation).await
+                    runtime
+                        .execute_tool_controlled(
+                            &operation,
+                            &WorkspaceToolRequest::Format(FormatArguments {
+                                code: args.code.clone(),
+                            }),
+                            cancellation,
+                        )
+                        .await
                 } else {
-                    runtime.execute_controlled(&operation, &args, cancellation).await
+                    runtime
+                        .execute_controlled(&operation, &args, cancellation)
+                        .await
                 };
                 // Native return includes failure/uncertainty. This invalidates
                 // presentation only; the original journal decides the outcome.
@@ -848,10 +1010,18 @@ impl Owner {
             .await
             .map_err(|e| e.to_string())
     }
-    pub fn prepare_pending_cancellation(&self, cancellation: &PendingCancellation) -> Result<bool, String> {
+    pub fn prepare_pending_cancellation(
+        &self,
+        cancellation: &PendingCancellation,
+    ) -> Result<bool, String> {
         let binding = &cancellation.binding;
-        if binding.provider != self.instance || binding.target.as_deref() != Some(self.target().as_str())
-            || !matches!((binding.capability.id.as_str(), binding.capability.version), ("r.execute", 1 | 2) | ("r.format" | recovery::CAPTURE | recovery::RESTORE, 1)) {
+        if binding.provider != self.instance
+            || binding.target.as_deref() != Some(self.target().as_str())
+            || !matches!(
+                (binding.capability.id.as_str(), binding.capability.version),
+                ("r.execute", 1 | 2) | ("r.format" | recovery::CAPTURE | recovery::RESTORE, 1)
+            )
+        {
             return Err("Pending cancellation requires the exact admitted R execution".into());
         }
         self.queue.prepare_pending_cancellation(cancellation)
@@ -874,7 +1044,11 @@ impl Owner {
 /// page becomes an explicit unavailable result, never a silently shortened page.
 fn inspection_value(mut observation: RInspection<Value>) -> Result<Value, String> {
     let encoded = serde_json::to_value(&observation).map_err(|error| error.to_string())?;
-    if serde_json::to_vec(&encoded).map_err(|error| error.to_string())?.len() <= 256 * 1024 {
+    if serde_json::to_vec(&encoded)
+        .map_err(|error| error.to_string())?
+        .len()
+        <= 256 * 1024
+    {
         return Ok(encoded);
     }
     observation.status = RInspectionStatus::Unavailable;
@@ -914,15 +1088,43 @@ fn bound_events(mut output: OutputEvents, after: u64) -> Result<OutputEvents, St
     Ok(output)
 }
 
+fn plan(
+    outcome: PluginOutcome,
+    output: Value,
+    evidence: Vec<ResourceReference>,
+) -> PluginCommitPlan {
+    PluginCommitPlan {
+        outcome,
+        output: Some(output),
+        error: None,
+        recovery: None,
+        facts: vec![],
+        evidence,
+        cancellation_confirmed: outcome == PluginOutcome::Cancelled,
+    }
+}
+fn preview(text: &str) -> &str {
+    let mut end = text.len().min(16384);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    &text[..end]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn oversized_inspection_preserves_identity_and_reports_missing_data() {
         let observation = RInspection {
-            session_id: "original-session".into(), status: RInspectionStatus::Ready,
-            source: "native".into(), observed_at_ms: 42, completeness: NativeCompleteness::Complete,
-            data: Some(json!({"text":"\0".repeat(65536)})), notices: vec![], diagnostic: None,
+            session_id: "original-session".into(),
+            status: RInspectionStatus::Ready,
+            source: "native".into(),
+            observed_at_ms: 42,
+            completeness: NativeCompleteness::Complete,
+            data: Some(json!({"text":"\0".repeat(65536)})),
+            notices: vec![],
+            diagnostic: None,
         };
         let value = inspection_value(observation).unwrap();
         assert_eq!(value["session_id"], "original-session");
@@ -968,26 +1170,4 @@ mod tests {
         assert_eq!(second.events[0].sequence, first.next_sequence + 1);
         assert_eq!(second.notices, vec!["Original gap"]);
     }
-}
-fn plan(
-    outcome: PluginOutcome,
-    output: Value,
-    evidence: Vec<ResourceReference>,
-) -> PluginCommitPlan {
-    PluginCommitPlan {
-        outcome,
-        output: Some(output),
-        error: None,
-        recovery: None,
-        facts: vec![],
-        evidence,
-        cancellation_confirmed: outcome == PluginOutcome::Cancelled,
-    }
-}
-fn preview(text: &str) -> &str {
-    let mut end = text.len().min(16384);
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    &text[..end]
 }

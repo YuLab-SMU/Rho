@@ -114,7 +114,7 @@ enum Phase {
         inclusion: Inclusion,
     },
     Read {
-        request: PreviewContext,
+        request: Box<PreviewContext>,
         inclusion: Inclusion,
         draft: DocumentDraft,
         bytes: Vec<u8>,
@@ -322,7 +322,7 @@ impl Job {
                 )?;
                 let step = read_step(&draft, 0);
                 self.phase = Phase::Read {
-                    request,
+                    request: Box::new(request),
                     inclusion,
                     draft,
                     bytes: vec![],
@@ -376,7 +376,7 @@ impl Job {
                             == draft.content.digest.as_str(),
                         "Draft content digest does not match its capture",
                     )?;
-                    let preview = preview(&self.instance, request, inclusion, draft, &bytes)?;
+                    let preview = preview(&self.instance, *request, inclusion, draft, &bytes)?;
                     Ok(Step::Complete {
                         data: json!(preview),
                         completeness: ObservationCompleteness::Complete,

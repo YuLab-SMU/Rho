@@ -41,11 +41,21 @@ fn capability(id: &str, input: Value, output: Value, example: Value) -> Capabili
 }
 pub fn manifest() -> PluginManifest {
     let patch = "diff --git a/example.txt b/example.txt\nnew file mode 100644\n--- /dev/null\n+++ b/example.txt\n@@ -0,0 +1 @@\n+Example\n";
-    let mut preview_schema=schema_for!(PreviewContext).to_value();
-    preview_schema["properties"]["inclusion"]=json!({"oneOf":[{"title":"File information","const":{"kind":"metadata"}},{"title":"Text (up to 16 KiB)","const":{"kind":"text"}}]});
+    let mut preview_schema = schema_for!(PreviewContext).to_value();
+    preview_schema["properties"]["inclusion"] = json!({"oneOf":[{"title":"File information","const":{"kind":"metadata"}},{"title":"Text (up to 16 KiB)","const":{"kind":"text"}}]});
     let capabilities = vec![
-        capability("files.context.search", schema_for!(ContextSearch).to_value(), schema_for!(ContextPage).to_value(), json!({"window":"window","text":"","after":null,"limit":20})),
-        capability("files.context.preview", preview_schema, schema_for!(ContextPreview).to_value(), json!({"reference":{"provider":{"plugin":"org.rho.files","instance":"original-files","revision":format!("sha256:{}","a".repeat(64)),"artifact":format!("sha256:{}","b".repeat(64))},"window":"window","contribution":"files","selector":{"path":"analysis.R","sha256":"copy-original-digest","native_identity":"copy-original-native-identity","byte_size":10,"encoding":"utf-8"}},"inclusion":{"kind":"text"},"max_bytes":16384})),
+        capability(
+            "files.context.search",
+            schema_for!(ContextSearch).to_value(),
+            schema_for!(ContextPage).to_value(),
+            json!({"window":"window","text":"","after":null,"limit":20}),
+        ),
+        capability(
+            "files.context.preview",
+            preview_schema,
+            schema_for!(ContextPreview).to_value(),
+            json!({"reference":{"provider":{"plugin":"org.rho.files","instance":"original-files","revision":format!("sha256:{}","a".repeat(64)),"artifact":format!("sha256:{}","b".repeat(64))},"window":"window","contribution":"files","selector":{"path":"analysis.R","sha256":"copy-original-digest","native_identity":"copy-original-native-identity","byte_size":10,"encoding":"utf-8"}},"inclusion":{"kind":"text"},"max_bytes":16384}),
+        ),
         capability(
             "files.storage_status",
             schema_for!(Empty).to_value(),
@@ -142,7 +152,32 @@ pub fn manifest() -> PluginManifest {
             // with its caller. Editor/Agent still declare and receive their own exact
             // capability grants; Files gets no direct draft/file-write grant.
             ("annotations.read", vec!["application.read", "plugins.read"]),
-            ("windows.open_view", vec!["application.control", "application.read", "documents.read", "documents.write", "environment.read", "environment.write", "operation.read", "plugins.read", "plugins.run", "plugins.write", "process.run_local", "project.read", "project.references.read", "project.write", "remote.execute", "resources.read", "skill.read", "slurm.read", "slurm.write", "workspace.read", "workspace.run_r"]),
+            (
+                "windows.open_view",
+                vec![
+                    "application.control",
+                    "application.read",
+                    "documents.read",
+                    "documents.write",
+                    "environment.read",
+                    "environment.write",
+                    "operation.read",
+                    "plugins.read",
+                    "plugins.run",
+                    "plugins.write",
+                    "process.run_local",
+                    "project.read",
+                    "project.references.read",
+                    "project.write",
+                    "remote.execute",
+                    "resources.read",
+                    "skill.read",
+                    "slurm.read",
+                    "slurm.write",
+                    "workspace.read",
+                    "workspace.run_r",
+                ],
+            ),
             ("operation.get", vec!["operation.read"]),
             ("operation.list_recent", vec!["operation.read"]),
         ]
@@ -165,7 +200,18 @@ pub fn manifest() -> PluginManifest {
             configuration_schema: schema_for!(FilesViewConfiguration).to_value(),
             resource_kinds: Default::default(),
         }],
-        contexts: vec![ContextContribution {id:ContributionId::new("files").unwrap(),title:"Project files".into(),search:CapabilityKey{id:ContributionId::new("files.context.search").unwrap(),version:1},preview:CapabilityKey{id:ContributionId::new("files.context.preview").unwrap(),version:1}}],
+        contexts: vec![ContextContribution {
+            id: ContributionId::new("files").unwrap(),
+            title: "Project files".into(),
+            search: CapabilityKey {
+                id: ContributionId::new("files.context.search").unwrap(),
+                version: 1,
+            },
+            preview: CapabilityKey {
+                id: ContributionId::new("files.context.preview").unwrap(),
+                version: 1,
+            },
+        }],
         backend: Some(BackendEntrypoint {
             executable: PackagePath::new("dist/rho-files-backend").unwrap(),
             arguments: vec![],

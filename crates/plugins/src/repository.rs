@@ -240,20 +240,31 @@ impl PluginRepository {
     pub fn export(&self, id: &RevisionId) -> Result<PluginArchive, PluginError> {
         let snapshot = self.connection.unchecked_transaction()?;
         let archive = self.export_selection(&ExportPluginArchive {
-            revision: id.clone(), artifacts: self.inspect(id)?.artifacts,
+            revision: id.clone(),
+            artifacts: self.inspect(id)?.artifacts,
         })?;
         snapshot.commit()?;
         Ok(archive)
     }
 
-    pub fn export_selection(&self, args: &ExportPluginArchive) -> Result<PluginArchive, PluginError> {
+    pub fn export_selection(
+        &self,
+        args: &ExportPluginArchive,
+    ) -> Result<PluginArchive, PluginError> {
         args.validate()?;
         let revision = self.revision(&args.revision)?;
-        let artifacts = args.artifacts.iter().map(|id| {
-            let artifact = self.artifact(id)?;
-            ensure(artifact.revision == args.revision, "export artifact belongs to another revision")?;
-            Ok(artifact)
-        }).collect::<Result<Vec<_>, PluginError>>()?;
+        let artifacts = args
+            .artifacts
+            .iter()
+            .map(|id| {
+                let artifact = self.artifact(id)?;
+                ensure(
+                    artifact.revision == args.revision,
+                    "export artifact belongs to another revision",
+                )?;
+                Ok(artifact)
+            })
+            .collect::<Result<Vec<_>, PluginError>>()?;
         let mut blobs = BTreeMap::new();
         for file in revision
             .files
@@ -308,7 +319,17 @@ impl PluginRepository {
         ensure(
             matches!(
                 owner_kind,
-                "instance" | "view" | "operation" | "management" | "build" | "scenario" | "document" | "checkpoint" | "test_project" | "archive_export" | "archive_import"
+                "instance"
+                    | "view"
+                    | "operation"
+                    | "management"
+                    | "build"
+                    | "scenario"
+                    | "document"
+                    | "checkpoint"
+                    | "test_project"
+                    | "archive_export"
+                    | "archive_import"
             ),
             "unknown reference owner",
         )?;
@@ -347,7 +368,17 @@ impl PluginRepository {
         ensure(
             matches!(
                 owner_kind,
-                "instance" | "view" | "operation" | "management" | "build" | "scenario" | "document" | "checkpoint" | "test_project" | "archive_export" | "archive_import"
+                "instance"
+                    | "view"
+                    | "operation"
+                    | "management"
+                    | "build"
+                    | "scenario"
+                    | "document"
+                    | "checkpoint"
+                    | "test_project"
+                    | "archive_export"
+                    | "archive_import"
             ),
             "unknown reference owner",
         )?;
@@ -555,21 +586,35 @@ pub(crate) fn store_archive(
     // Repeated builds/imports must leave one exportable package, rather than
     // individually valid artifacts accumulating beyond the archive quota. Check
     // the complete retained inventory inside the same rollback-capable transaction.
-    let documents = transaction.prepare("SELECT document FROM artifacts WHERE revision=? LIMIT 33")?
+    let documents = transaction
+        .prepare("SELECT document FROM artifacts WHERE revision=? LIMIT 33")?
         .query_map([revision.id.as_str()], |row| row.get::<_, String>(0))?
         .collect::<Result<Vec<_>, _>>()?;
-    ensure(documents.len() <= 32, "retained artifact inventory exceeds limit")?;
+    ensure(
+        documents.len() <= 32,
+        "retained artifact inventory exceeds limit",
+    )?;
     let mut files = revision.files.len();
-    let mut bytes: u64 = revision.files.values().map(|file|file.bytes).sum();
+    let mut bytes: u64 = revision.files.values().map(|file| file.bytes).sum();
     for document in documents {
         let artifact: BuildArtifact = serde_json::from_str(&document)?;
-        ensure(artifact.revision == revision.id && crate::artifact_digest(&artifact)? == artifact.id, "stored artifact identity mismatch")?;
-        files = files.checked_add(artifact.files.len()).ok_or_else(||PluginError::Invalid("package inventory overflow".into()))?;
+        ensure(
+            artifact.revision == revision.id && crate::artifact_digest(&artifact)? == artifact.id,
+            "stored artifact identity mismatch",
+        )?;
+        files = files
+            .checked_add(artifact.files.len())
+            .ok_or_else(|| PluginError::Invalid("package inventory overflow".into()))?;
         for file in artifact.files.values() {
-            bytes = bytes.checked_add(file.bytes).ok_or_else(||PluginError::Invalid("package size overflow".into()))?;
+            bytes = bytes
+                .checked_add(file.bytes)
+                .ok_or_else(|| PluginError::Invalid("package size overflow".into()))?;
         }
     }
-    ensure(files <= MAX_PACKAGE_FILES && bytes <= MAX_PACKAGE_BYTES, "retained package exceeds archive quota")?;
+    ensure(
+        files <= MAX_PACKAGE_FILES && bytes <= MAX_PACKAGE_BYTES,
+        "retained package exceeds archive quota",
+    )?;
     if let Some(parent) = &revision.parent {
         transaction.execute(
             "INSERT OR IGNORE INTO revision_refs VALUES('revision',?,?)",

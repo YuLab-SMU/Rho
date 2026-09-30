@@ -153,7 +153,10 @@ fn inspection_capability(name: &str) -> Option<&'static str> {
 }
 fn inspected(value: Value, r: &ProviderBinding) -> Result<Value, String> {
     if value["session_id"].as_str() != r.target.as_deref()
-        || !matches!(value["status"].as_str(), Some("ready" | "busy" | "unavailable"))
+        || !matches!(
+            value["status"].as_str(),
+            Some("ready" | "busy" | "unavailable")
+        )
     {
         return Err("The object observation differs from the captured R session".into());
     }
@@ -162,8 +165,10 @@ fn inspected(value: Value, r: &ProviderBinding) -> Result<Value, String> {
 }
 impl RunPort {
     fn can_inspect(&self, id: &str) -> bool {
-        self.metadata.grants.iter().any(|grant|
-            grant.capability == key(id, 1) && grant.scopes.contains("workspace.read"))
+        self.metadata
+            .grants
+            .iter()
+            .any(|grant| grant.capability == key(id, 1) && grant.scopes.contains("workspace.read"))
     }
     pub(crate) fn new(
         metadata: Arc<Metadata>,
@@ -225,12 +230,24 @@ impl RunPort {
         }
         let mut tools = vec![ComponentToolSpec { name:"r_session".into(), description:"Observe the original selected R session. Never starts a runtime or answers native input.".into(), parameters:json!({"type":"object","additionalProperties":false,"properties":{},"required":[]}) }];
         for (name, description, properties, required) in [
-            ("r_list_objects", "List current R objects with bounded metadata. Use returned directory_ref and next_offset for subsequent pages; preserve partial/busy results.",
-                json!({"name_contains":{"type":"string"},"directory_ref":{"type":"string"},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":50}}), json!([])),
-            ("r_observe_object", "Observe one exact R object by name to get its native reference and metadata. Does not evaluate print, summary, promises or active bindings.",
-                json!({"name":{"type":"string","minLength":1}}), json!(["name"])),
-            ("r_read_object", "Read a bounded page from a returned native object_ref. Never invent references. Refresh expired references with r_observe_object; preserve busy/partial results.",
-                json!({"object_ref":{"type":"string","minLength":1},"kind":{"type":"string","enum":["structure","values","children","table","text","levels","names"]},"start":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":50},"column_start":{"type":"integer","minimum":1},"column_limit":{"type":"integer","minimum":1,"maximum":10}}), json!(["object_ref","kind"])),
+            (
+                "r_list_objects",
+                "List current R objects with bounded metadata. Use returned directory_ref and next_offset for subsequent pages; preserve partial/busy results.",
+                json!({"name_contains":{"type":"string"},"directory_ref":{"type":"string"},"offset":{"type":"integer","minimum":0},"limit":{"type":"integer","minimum":1,"maximum":50}}),
+                json!([]),
+            ),
+            (
+                "r_observe_object",
+                "Observe one exact R object by name to get its native reference and metadata. Does not evaluate print, summary, promises or active bindings.",
+                json!({"name":{"type":"string","minLength":1}}),
+                json!(["name"]),
+            ),
+            (
+                "r_read_object",
+                "Read a bounded page from a returned native object_ref. Never invent references. Refresh expired references with r_observe_object; preserve busy/partial results.",
+                json!({"object_ref":{"type":"string","minLength":1},"kind":{"type":"string","enum":["structure","values","children","table","text","levels","names"]},"start":{"type":"integer","minimum":1},"limit":{"type":"integer","minimum":1,"maximum":50},"column_start":{"type":"integer","minimum":1},"column_limit":{"type":"integer","minimum":1,"maximum":10}}),
+                json!(["object_ref", "kind"]),
+            ),
         ] {
             if self.can_inspect(inspection_capability(name).unwrap()) {
                 tools.push(ComponentToolSpec { name: name.into(), description: description.into(),
@@ -342,15 +359,31 @@ impl AgentModelPort for RunPort {
                 }
                 name if inspection_capability(name).is_some() => {
                     let id = inspection_capability(name).unwrap();
-                    if !self.can_inspect(id) { return Err(invalid("This task lacks the selected object read grant")); }
-                    let mut input = arguments.as_object().cloned().ok_or_else(|| invalid("Object read arguments must be an object"))?;
-                    if input.contains_key("expected_session") { return Err(invalid("Object reads cannot override the captured R session")); }
+                    if !self.can_inspect(id) {
+                        return Err(invalid("This task lacks the selected object read grant"));
+                    }
+                    let mut input = arguments
+                        .as_object()
+                        .cloned()
+                        .ok_or_else(|| invalid("Object read arguments must be an object"))?;
+                    if input.contains_key("expected_session") {
+                        return Err(invalid(
+                            "Object reads cannot override the captured R session",
+                        ));
+                    }
                     input.insert("expected_session".into(), json!(r.target));
-                    if id != "r.observe_object" { input.entry("limit").or_insert(json!(20)); }
-                    if id == "r.read_object" { input.entry("column_limit").or_insert(json!(5)); }
-                    let mut binding = r; binding.capability = key(id, 1);
+                    if id != "r.observe_object" {
+                        input.entry("limit").or_insert(json!(20));
+                    }
+                    if id == "r.read_object" {
+                        input.entry("column_limit").or_insert(json!(5));
+                    }
+                    let mut binding = r;
+                    binding.capability = key(id, 1);
                     Ok(ComponentToolAction::PluginQuery(PluginRequest {
-                        binding, arguments: Value::Object(input), preconditions: Value::Null,
+                        binding,
+                        arguments: Value::Object(input),
+                        preconditions: Value::Null,
                     }))
                 }
                 "r_execute" => {
@@ -551,11 +584,20 @@ async fn dispatch(
             Err(error) if error == crate::native_result::NORMALIZED => {
                 let observed = query(host, &origin.request, key("plugins.delegated_operation", 1),
                     json!({"parent_operation":origin.operation,"request":tool.receipt.client_request_id})).await?;
-                let found: rho_plugin_sdk::protocol::PluginDelegatedOperation = serde_json::from_value(observed)
-                    .map_err(|_| "Invalid original operation correlation")?;
-                let id = found.operation_id.ok_or("Original operation is unconfirmed; no work was replayed")?;
-                crate::native_result::correlated_operation_result(&metadata.scope.project,
-                    &origin.binding.provider.instance, &origin.operation, request, &id, &value)?
+                let found: rho_plugin_sdk::protocol::PluginDelegatedOperation =
+                    serde_json::from_value(observed)
+                        .map_err(|_| "Invalid original operation correlation")?;
+                let id = found
+                    .operation_id
+                    .ok_or("Original operation is unconfirmed; no work was replayed")?;
+                crate::native_result::correlated_operation_result(
+                    &metadata.scope.project,
+                    &origin.binding.provider.instance,
+                    &origin.operation,
+                    request,
+                    &id,
+                    &value,
+                )?
             }
             Err(error) => return Err(error),
         };
@@ -580,8 +622,13 @@ async fn dispatch(
         }
         result
     } else {
-        if value["status"] != "ready" || !matches!(value["completeness"].as_str(), Some("complete" | "partial" | "unavailable"))
-            || request.binding.capability.id.as_str() == "r.session" && value["completeness"] != "complete"
+        if value["status"] != "ready"
+            || !matches!(
+                value["completeness"].as_str(),
+                Some("complete" | "partial" | "unavailable")
+            )
+            || request.binding.capability.id.as_str() == "r.session"
+                && value["completeness"] != "complete"
         {
             return Err("Original R observation is incomplete".into());
         }
@@ -703,16 +750,22 @@ async fn observe_original(
         ));
     }
     let data = query(
-        &host,
+        host,
         parent,
         key("operation.get", 1),
         json!({"operation_id":id}),
     )
     .await
     .map_err(|_| Failure::invalid("Original Operation record is unavailable"))?;
-    let (found, result) = crate::native_result::correlated_operation_result(&metadata.scope.project,
-        &origin.binding.provider.instance, &origin.operation, request, &id, &data["record"])
-        .map_err(|_| Failure::invalid("Original Operation differs from the recorded tool"))?;
+    let (found, result) = crate::native_result::correlated_operation_result(
+        &metadata.scope.project,
+        &origin.binding.provider.instance,
+        &origin.operation,
+        request,
+        &id,
+        &data["record"],
+    )
+    .map_err(|_| Failure::invalid("Original Operation differs from the recorded tool"))?;
     if found != id {
         return Err(Failure::invalid(
             "Original Operation lookup returned another identity",

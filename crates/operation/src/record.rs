@@ -3,7 +3,10 @@ use async_trait::async_trait;
 use rho_contract::*;
 use schemars::schema_for;
 use serde_json::{Value, json};
-use std::{collections::BTreeSet, sync::{Arc, OnceLock, Weak}};
+use std::{
+    collections::BTreeSet,
+    sync::{Arc, OnceLock, Weak},
+};
 
 pub(crate) async fn visible_record(
     journal: &dyn OperationJournal,
@@ -69,11 +72,17 @@ impl OperationGetHandler {
         })
     }
     pub fn bind_registry(&self, registry: &Arc<crate::CapabilityRegistry>) {
-        self.registry.set(Arc::downgrade(registry)).expect("record query binds once");
+        self.registry
+            .set(Arc::downgrade(registry))
+            .expect("record query binds once");
     }
     fn registered(&self, capability: &CapabilityRef) -> bool {
         match self.registry.get() {
-            Some(registry) => registry.upgrade().is_some_and(|registry| registry.descriptor(capability).is_some_and(|d| d.kind == CapabilityKind::Operation)),
+            Some(registry) => registry.upgrade().is_some_and(|registry| {
+                registry
+                    .descriptor(capability)
+                    .is_some_and(|d| d.kind == CapabilityKind::Operation)
+            }),
             None => self.known.contains(capability),
         }
     }

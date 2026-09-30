@@ -1,6 +1,8 @@
 //! Bounded ordinary-plugin results. Full native reports travel as resources.
 use crate::EnvironmentObservation;
-use rho_plugin_protocol::{ContentDigest, InstanceRef, OperationId, ProviderBinding, ResourceReference};
+use rho_plugin_protocol::{
+    ContentDigest, InstanceRef, OperationId, ProviderBinding, ResourceReference,
+};
 use rho_process_api::ProcessActivity;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

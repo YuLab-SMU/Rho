@@ -349,10 +349,17 @@ impl RpcFrame {
             "unsupported protocol or sequence",
         )?;
         if let RpcBody::Ready { features, .. } = &frame.body {
-            require(features.len() <= 16 && features.iter().all(|feature|
-                !feature.is_empty() && feature.len() <= 64 && feature.bytes().all(|b|
-                    b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))),
-                "invalid backend protocol features")?;
+            require(
+                features.len() <= 16
+                    && features.iter().all(|feature| {
+                        !feature.is_empty()
+                            && feature.len() <= 64
+                            && feature.bytes().all(|b| {
+                                b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-')
+                            })
+                    }),
+                "invalid backend protocol features",
+            )?;
         }
         Ok(frame)
     }

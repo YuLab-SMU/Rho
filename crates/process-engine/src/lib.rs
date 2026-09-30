@@ -6,14 +6,28 @@ use process_wrap::tokio::JobObject;
 use process_wrap::tokio::ProcessGroup;
 use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
 pub use rho_plugin_protocol::{OutputCapture, ProcessReport, ProcessTermination};
-use std::{io, process::{ExitStatus, Stdio}, sync::{Arc, Mutex}, time::{Duration, Instant}};
-use tokio::{io::{AsyncRead, AsyncReadExt, AsyncWriteExt}, process::Command, sync::watch, task::JoinHandle};
+use std::{
+    io,
+    process::{ExitStatus, Stdio},
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
+    process::Command,
+    sync::watch,
+    task::JoinHandle,
+};
 
 // Dropping the caller's channel does not authorize cancellation.
 async fn wait_cancellation(receiver: &mut watch::Receiver<bool>) {
     loop {
-        if *receiver.borrow() { return; }
-        if receiver.changed().await.is_err() { std::future::pending::<()>().await; }
+        if *receiver.borrow() {
+            return;
+        }
+        if receiver.changed().await.is_err() {
+            std::future::pending::<()>().await;
+        }
     }
 }
 

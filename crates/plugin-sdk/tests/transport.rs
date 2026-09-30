@@ -133,7 +133,10 @@ async fn sdk_initialization_and_call_validation_keep_the_host_binding() {
             RpcBody::Initialize {
                 instance: instance.clone(),
                 grants: vec![],
-                environment: Some(BackendEnvironment { project_root: "/project".into(), data_root: "/instance".into() }),
+                environment: Some(BackendEnvironment {
+                    project_root: "/project".into(),
+                    data_root: "/instance".into(),
+                }),
                 resource_channel: None,
             },
         )
@@ -143,7 +146,10 @@ async fn sdk_initialization_and_call_validation_keep_the_host_binding() {
         .await
         .unwrap();
     assert_eq!(backend.instance, instance);
-    assert_eq!(backend.environment.as_ref().unwrap().project_root, "/project");
+    assert_eq!(
+        backend.environment.as_ref().unwrap().project_root,
+        "/project"
+    );
     backend.ready().await.unwrap();
     let ready = host_reader.receive().await.unwrap().unwrap();
     assert_eq!(ready.request, initialize);
@@ -185,7 +191,13 @@ async fn sdk_initialization_and_call_validation_keep_the_host_binding() {
         binding: call.binding.clone(),
         outcome: PluginOutcome::Uncertain,
     };
-    host_writer.send(RequestId::new("settled").unwrap(), RpcBody::OperationSettled(settlement.clone())).await.unwrap();
+    host_writer
+        .send(
+            RequestId::new("settled").unwrap(),
+            RpcBody::OperationSettled(settlement.clone()),
+        )
+        .await
+        .unwrap();
     let frame = backend.reader.receive().await.unwrap().unwrap();
     assert_eq!(frame.body, RpcBody::OperationSettled(settlement.clone()));
     backend.validate_settlement(&settlement).unwrap();
@@ -193,7 +205,8 @@ async fn sdk_initialization_and_call_validation_keep_the_host_binding() {
     wrong.binding.project = ProjectId::new("other-project").unwrap();
     assert!(backend.validate_settlement(&wrong).is_err());
     wrong = settlement;
-    wrong.binding.provider.revision = RevisionId::new(format!("sha256:{}", "c".repeat(64))).unwrap();
+    wrong.binding.provider.revision =
+        RevisionId::new(format!("sha256:{}", "c".repeat(64))).unwrap();
     assert!(backend.validate_settlement(&wrong).is_err());
     let mut spoof = call;
     spoof.principal = PrincipalId::new("different-principal").unwrap();

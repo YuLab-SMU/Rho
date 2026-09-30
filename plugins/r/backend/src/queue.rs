@@ -1,6 +1,7 @@
 //! Native scheduling only. Terminal scientific truth comes from Host settlement.
 use rho_plugin_sdk::protocol::{
-    OperationId, OperationSettlement, PendingCancellation, PluginCall, PluginOutcome, ProviderBinding,
+    OperationId, OperationSettlement, PendingCancellation, PluginCall, PluginOutcome,
+    ProviderBinding,
 };
 use rho_r_api::{ConsoleState, InputRequest, QueueControlArguments, QueuePause, QueuedRun};
 use serde::Serialize;
@@ -141,9 +142,12 @@ impl Queue {
                 .filter(|(_, e)| e.phase == Phase::AwaitingSettlement)
                 .map(|(id, _)| id.clone())
                 .collect(),
-            pending_cancellations: state.entries.iter()
+            pending_cancellations: state
+                .entries
+                .iter()
                 .filter(|(_, entry)| entry.pending_cancellation)
-                .map(|(id, _)| id.clone()).collect(),
+                .map(|(id, _)| id.clone())
+                .collect(),
             accepting: !state.closing && state.entries.len() < MAX_ACCEPTED,
             capacity: MAX_ACCEPTED,
         }
@@ -151,11 +155,20 @@ impl Queue {
     pub fn is_empty(&self) -> bool {
         self.state.lock().unwrap().entries.is_empty()
     }
-    pub fn prepare_pending_cancellation(&self, cancellation: &PendingCancellation) -> Result<bool, String> {
+    pub fn prepare_pending_cancellation(
+        &self,
+        cancellation: &PendingCancellation,
+    ) -> Result<bool, String> {
         let mut state = self.state.lock().unwrap();
-        let Some(entry) = state.entries.get_mut(&cancellation.operation_id) else { return Ok(false); };
-        if entry.binding != cancellation.binding { return Err("Pending cancellation differs from the original binding".into()); }
-        if entry.phase != Phase::Waiting { return Ok(false); }
+        let Some(entry) = state.entries.get_mut(&cancellation.operation_id) else {
+            return Ok(false);
+        };
+        if entry.binding != cancellation.binding {
+            return Err("Pending cancellation differs from the original binding".into());
+        }
+        if entry.phase != Phase::Waiting {
+            return Ok(false);
+        }
         entry.pending_cancellation = true;
         drop(state);
         self.signal();
@@ -166,7 +179,10 @@ impl Queue {
             && state.pause.is_none()
             && state.current.is_none()
             && state.pending.front() == Some(id)
-            && state.entries.get(id).is_some_and(|entry| !entry.pending_cancellation)
+            && state
+                .entries
+                .get(id)
+                .is_some_and(|entry| !entry.pending_cancellation)
             && !state
                 .entries
                 .values()
@@ -312,18 +328,17 @@ impl Queue {
         if state.pause.as_ref().map(|p| p.id.as_str()) != args.pause_id.as_deref() {
             return Err("Queue pause changed; inspect the current queue".into());
         }
-        if let Some(allowed) = &args.only_operation_ids {
-            if allowed.is_empty()
+        if let Some(allowed) = &args.only_operation_ids
+            && (allowed.is_empty()
                 || allowed.len() > MAX_ACCEPTED + 1
                 || state.entries.keys().any(|id| !allowed.contains(id))
                 || state
                     .pause
                     .as_ref()
                     .and_then(|p| p.operation_id.as_ref())
-                    .is_some_and(|id| !allowed.contains(id))
-            {
-                return Err("Queue contains work outside the supplied operation identities".into());
-            }
+                    .is_some_and(|id| !allowed.contains(id)))
+        {
+            return Err("Queue contains work outside the supplied operation identities".into());
         }
         if pause {
             if state.pause.is_none() {
@@ -333,7 +348,11 @@ impl Queue {
             if state.pause.is_none() {
                 return Err("Observe an existing pause before resuming".into());
             }
-            if state.entries.values().any(|entry| entry.pending_cancellation) {
+            if state
+                .entries
+                .values()
+                .any(|entry| entry.pending_cancellation)
+            {
                 return Err("An original cancellation awaits journal confirmation; retry that cancellation before resuming".into());
             }
             if state

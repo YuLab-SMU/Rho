@@ -152,9 +152,18 @@ async fn exact_artifact_preview_has_no_backend_grants_routes_or_project_queries(
     assert_eq!(observed["instance"]["purpose"], "fixture_preview");
     assert_eq!(observed["instance"]["state"], "active");
     assert_eq!(observed["process_id"], Value::Null);
-    assert_eq!(h.query("plugins.instances", json!({"after":null,"limit":1})).await,
-        json!({"instances":[],"next":null,"total":0}), "old runtime readers do not receive new preview records");
-    let all = h.query("plugins.instances", json!({"after":null,"limit":1,"include_previews":true})).await;
+    assert_eq!(
+        h.query("plugins.instances", json!({"after":null,"limit":1}))
+            .await,
+        json!({"instances":[],"next":null,"total":0}),
+        "old runtime readers do not receive new preview records"
+    );
+    let all = h
+        .query(
+            "plugins.instances",
+            json!({"after":null,"limit":1,"include_previews":true}),
+        )
+        .await;
     assert_eq!(all["instances"][0]["instance"], observed["instance"]);
     assert_eq!(all["total"], 1);
     assert_eq!(all["next"], Value::Null);
@@ -272,10 +281,19 @@ async fn preview_rejects_spoofed_identity_replay_and_revoked_parent_authority() 
     let mut channel = h.open(&output["instance"]["identity"], "open").await;
     let mut foreign = h.context.clone();
     foreign.caller.id = "other-principal".into();
-    let hidden = h.host.query_snapshot(&foreign, QueryRequest {
-        capability: CapabilityRef::new("plugins.instances", 1).unwrap(),
-        arguments: json!({"after":null,"limit":10,"include_previews":true}),
-    }).await.unwrap().data.unwrap();
+    let hidden = h
+        .host
+        .query_snapshot(
+            &foreign,
+            QueryRequest {
+                capability: CapabilityRef::new("plugins.instances", 1).unwrap(),
+                arguments: json!({"after":null,"limit":10,"include_previews":true}),
+            },
+        )
+        .await
+        .unwrap()
+        .data
+        .unwrap();
     assert_eq!(hidden, json!({"instances":[],"total":0,"next":null}));
     for (context, window, token) in [
         (
@@ -438,29 +456,62 @@ async fn invalid_fixture_definitions_are_rejected_before_admission() {
 #[tokio::test]
 async fn a_preview_contract_cannot_shadow_or_block_a_real_provider() {
     let h = Fixture::new().await;
-    let preview = h.invoke("preview", "plugins.preview", h.args()).await.output.unwrap();
+    let preview = h
+        .invoke("preview", "plugins.preview", h.args())
+        .await
+        .output
+        .unwrap();
     let native = native_fixture::package(&h.temp.path().join("native"), "native", false);
-    PluginRepository::open(&repository_path(&h.database)).unwrap().import(&native).unwrap();
+    PluginRepository::open(&repository_path(&h.database))
+        .unwrap()
+        .import(&native)
+        .unwrap();
     let running = h.invoke("activate", "plugins.activate", json!({
         "revision":native.revision.id,"artifact":native.artifacts[0].id,"target":rho_plugins::backend_target(),"alias":"runtime","configuration":{}
     })).await.output.unwrap();
-    assert!(running["instance"].get("purpose").is_none(), "normal instances keep the original native wire shape");
-    let normal = h.query("plugins.instances", json!({"after":null,"limit":1})).await;
+    assert!(
+        running["instance"].get("purpose").is_none(),
+        "normal instances keep the original native wire shape"
+    );
+    let normal = h
+        .query("plugins.instances", json!({"after":null,"limit":1}))
+        .await;
     assert_eq!(normal["total"], 1);
     assert_eq!(normal["instances"][0]["instance"], running["instance"]);
     assert_eq!(normal["next"], Value::Null);
-    let all = h.query("plugins.instances", json!({"after":null,"limit":1,"include_previews":true})).await;
+    let all = h
+        .query(
+            "plugins.instances",
+            json!({"after":null,"limit":1,"include_previews":true}),
+        )
+        .await;
     assert_eq!(all["total"], 2);
     assert!(all["next"].is_string());
-    let next = h.query("plugins.instances", json!({"after":all["next"],"limit":1,"include_previews":true})).await;
+    let next = h
+        .query(
+            "plugins.instances",
+            json!({"after":all["next"],"limit":1,"include_previews":true}),
+        )
+        .await;
     assert_eq!(next["total"], 2);
     assert_eq!(next["instances"].as_array().unwrap().len(), 1);
-    assert_ne!(next["instances"][0]["instance"]["identity"], all["instances"][0]["instance"]["identity"]);
+    assert_ne!(
+        next["instances"][0]["instance"]["identity"],
+        all["instances"][0]["instance"]["identity"]
+    );
     assert_eq!(next["next"], Value::Null);
-    let binding = h.query("plugins.resolve", json!({"capability":{"id":"fixture.read","version":1},"instance":null})).await;
+    let binding = h
+        .query(
+            "plugins.resolve",
+            json!({"capability":{"id":"fixture.read","version":1},"instance":null}),
+        )
+        .await;
     assert_eq!(binding["provider"], running["instance"]["identity"]);
     assert_ne!(binding["provider"], preview["instance"]["identity"]);
     let mut channel = h.open(&preview["instance"]["identity"], "open").await;
-    assert_eq!(channel.send(&h, read(0)).await.unwrap()["data"]["text"], "测试 fixture");
+    assert_eq!(
+        channel.send(&h, read(0)).await.unwrap()["data"]["text"],
+        "测试 fixture"
+    );
     h.host.drain().await;
 }

@@ -22,8 +22,8 @@ pub const OBSERVE: &str = "r.checkpoint";
 pub const CONTROL: &str = "r.checkpoint_control";
 pub const READ: &str = "r.read_checkpoint";
 pub const LIST: &str = "r.checkpoints";
-mod controls;
 mod attempts;
+mod controls;
 use attempts::{ATTEMPT, DISCARD, PREPARE_DISCARD};
 
 const MAX_MANIFEST: u64 = 1024 * 1024;
@@ -31,10 +31,16 @@ const PAGE: u32 = 32;
 const PAGES: usize = 128;
 
 pub fn is_operation(id: &str) -> bool {
-    matches!(id, CAPTURE | RESTORE | RECONCILE | PIN | DELETE | PURGE | DISCARD)
+    matches!(
+        id,
+        CAPTURE | RESTORE | RECONCILE | PIN | DELETE | PURGE | DISCARD
+    )
 }
 pub fn is_query(id: &str) -> bool {
-    matches!(id, PREPARE | OBSERVE | READ | LIST | CONTROL | ATTEMPT | PREPARE_DISCARD)
+    matches!(
+        id,
+        PREPARE | OBSERVE | READ | LIST | CONTROL | ATTEMPT | PREPARE_DISCARD
+    )
 }
 fn key(id: &str) -> CapabilityKey {
     environment_binding::key(id, 1)
@@ -187,7 +193,9 @@ impl Owner {
     }
 
     pub(super) fn admit_recovery(&self, call: &PluginCall) -> Result<(), String> {
-        if call.binding.capability.id.as_str() == DISCARD { return self.admit_capture_disposal(call); }
+        if call.binding.capability.id.as_str() == DISCARD {
+            return self.admit_capture_disposal(call);
+        }
         if !supported_version(&call.binding.capability) {
             return Err("Unsupported recovery version".into());
         }
@@ -232,17 +240,16 @@ impl Owner {
             if item.binding != settlement.binding {
                 return Err("Recovery settlement changed its admitted binding".into());
             }
-            if settlement.outcome == PluginOutcome::Succeeded {
-                if let Some(deletion) = &item.deletion {
-                    if let Err(error) = item.leases[0].remove_payload_after_commit(deletion) {
-                        // The core committed logical retirement. A cleanup failure
-                        // does not rewrite that truth or strand the native queue.
-                        eprintln!(
-                            "Committed recovery deletion needs explicit cleanup: {}",
-                            preview(&error)
-                        );
-                    }
-                }
+            if settlement.outcome == PluginOutcome::Succeeded
+                && let Some(deletion) = &item.deletion
+                && let Err(error) = item.leases[0].remove_payload_after_commit(deletion)
+            {
+                // The core committed logical retirement. A cleanup failure
+                // does not rewrite that truth or strand the native queue.
+                eprintln!(
+                    "Committed recovery deletion needs explicit cleanup: {}",
+                    preview(&error)
+                );
             }
         }
         pending.remove(&settlement.operation_id);
@@ -383,8 +390,10 @@ impl Owner {
         if call.binding.capability.id.as_str() == PREPARE_DISCARD {
             return self.prepare_capture_disposal(call).await;
         }
-        self.recovery_grants
-            .check(call, !matches!(call.binding.capability.id.as_str(), LIST | ATTEMPT))?;
+        self.recovery_grants.check(
+            call,
+            !matches!(call.binding.capability.id.as_str(), LIST | ATTEMPT),
+        )?;
         if !call.owner_context.is_null()
             || !(call.preconditions.is_null() || call.preconditions == json!({}))
             || call
@@ -610,18 +619,14 @@ impl Owner {
                     expected_session: Some(runtime.session_id().into()),
                 }))
                 .await
+                && observation.session_id == runtime.session_id()
+                && let Ok(snapshot) = decode::<WorkspaceSnapshotData>(observation.data)
+                && snapshot.library_paths == libraries.library_paths
+                && snapshot.library_usage_complete
+                && snapshot.namespace_paths.len() <= 512
             {
-                if observation.session_id == runtime.session_id() {
-                    if let Ok(snapshot) = decode::<WorkspaceSnapshotData>(observation.data) {
-                        if snapshot.library_paths == libraries.library_paths
-                            && snapshot.library_usage_complete
-                            && snapshot.namespace_paths.len() <= 512
-                        {
-                            libraries.namespace_paths = snapshot.namespace_paths;
-                            libraries.complete = true;
-                        }
-                    }
-                }
+                libraries.namespace_paths = snapshot.namespace_paths;
+                libraries.complete = true;
             }
             let manifest = RCheckpointManifest {
                 reference: reference(lease.scope(), &capture)
@@ -1188,13 +1193,12 @@ fn validate_manifest(
     {
         return Err("Recovery manifest differs from the original native capture, environment or bounded library references".into());
     }
-    if let Some(result) = &source.result {
-        if result.saved_count as usize != manifest.report.saved_names.len()
+    if let Some(result) = &source.result
+        && (result.saved_count as usize != manifest.report.saved_names.len()
             || result.skipped_count as usize != manifest.report.skipped.len()
-            || result.coverage != manifest.report.coverage
-        {
-            return Err("Recovery summary differs from its complete retained manifest".into());
-        }
+            || result.coverage != manifest.report.coverage)
+    {
+        return Err("Recovery summary differs from its complete retained manifest".into());
     }
     Ok(())
 }

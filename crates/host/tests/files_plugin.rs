@@ -142,7 +142,11 @@ async fn independent_files_versions_preserve_native_boundaries_and_original_comm
     repository.import(&first).unwrap();
     repository.import(&second).unwrap();
     drop(repository);
-    let host = Arc::new(NextHost::open_plugin_workspace(&db, &project).await.unwrap());
+    let host = Arc::new(
+        NextHost::open_plugin_workspace(&db, &project)
+            .await
+            .unwrap(),
+    );
     let left = activate(&host, &first, "files-left").await;
     let right = activate(&host, &second, "files-right").await;
     assert_ne!(left.revision, right.revision);
@@ -262,7 +266,9 @@ async fn independent_files_versions_preserve_native_boundaries_and_original_comm
     }
     host.drain().await;
     drop(host);
-    let reopened = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
+    let reopened = NextHost::open_plugin_workspace(&db, &project)
+        .await
+        .unwrap();
     assert!(
         !reopened
             .capabilities()

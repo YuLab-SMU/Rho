@@ -371,10 +371,7 @@ async fn empty_plugin_workspace_retains_canonical_scope_and_native_lease_without
     no_scientific_stores(database.parent().unwrap());
     host.drain().await;
     drop(host);
-    let reopened = profile
-        .open(&project)
-        .await
-        .unwrap();
+    let reopened = profile.open(&project).await.unwrap();
     assert_eq!(generic_capabilities(&reopened), baseline);
     assert_eq!(
         query(

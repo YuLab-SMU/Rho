@@ -633,38 +633,135 @@ async fn ordinary_view_uses_declared_archive_ports_and_native_principal() {
             .await,
         Err(OperationError::InvalidInput(message)) if message == "capability is not granted to this view"
     ));
-    let download = json!({"type":"download_archive","reference":reference,"filename":"源码 Ω.rho-plugin"});
-    let admitted = h.dispatch_plugin_view(&c, "window", &connection.call_token, message(5, download.clone())).await.unwrap();
-    assert_eq!(admitted, json!({"authorized_view":view}), "native admission is not a file-save receipt");
+    let download =
+        json!({"type":"download_archive","reference":reference,"filename":"源码 Ω.rho-plugin"});
+    let admitted = h
+        .dispatch_plugin_view(
+            &c,
+            "window",
+            &connection.call_token,
+            message(5, download.clone()),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        admitted,
+        json!({"authorized_view":view}),
+        "native admission is not a file-save receipt"
+    );
     let mut sequence = 6;
-    for name in ["../outside", "x/y", "x\\y", "a:b", "", " leading", "..", "line\nbreak"] {
-        let mut invalid = download.clone(); invalid["filename"] = json!(name);
-        assert!(matches!(h.dispatch_plugin_view(&c,"window",&connection.call_token,message(sequence,invalid)).await, Err(OperationError::InvalidInput(_))));
+    for name in [
+        "../outside",
+        "x/y",
+        "x\\y",
+        "a:b",
+        "",
+        " leading",
+        "..",
+        "line\nbreak",
+    ] {
+        let mut invalid = download.clone();
+        invalid["filename"] = json!(name);
+        assert!(matches!(
+            h.dispatch_plugin_view(
+                &c,
+                "window",
+                &connection.call_token,
+                message(sequence, invalid)
+            )
+            .await,
+            Err(OperationError::InvalidInput(_))
+        ));
         sequence += 1;
     }
-    assert!(matches!(h.dispatch_plugin_view(&weak,"window",&connection.call_token,message(sequence,download.clone())).await,Err(OperationError::AccessDenied { .. })));
+    assert!(matches!(
+        h.dispatch_plugin_view(
+            &weak,
+            "window",
+            &connection.call_token,
+            message(sequence, download.clone())
+        )
+        .await,
+        Err(OperationError::AccessDenied { .. })
+    ));
     sequence += 1;
-    let mut no_view = c.clone(); no_view.scopes.remove("plugins.run");
-    assert!(h.dispatch_plugin_view(&no_view,"window",&connection.call_token,message(sequence,download.clone())).await.is_err());
+    let mut no_view = c.clone();
+    no_view.scopes.remove("plugins.run");
+    assert!(
+        h.dispatch_plugin_view(
+            &no_view,
+            "window",
+            &connection.call_token,
+            message(sequence, download.clone())
+        )
+        .await
+        .is_err()
+    );
     sequence += 1;
-    let mut changed = download.clone(); changed["reference"]["digest"] = json!(format!("sha256:{}", "f".repeat(64)));
-    assert!(h.dispatch_plugin_view(&c,"window",&connection.call_token,message(sequence,changed)).await.is_err());
+    let mut changed = download.clone();
+    changed["reference"]["digest"] = json!(format!("sha256:{}", "f".repeat(64)));
+    assert!(
+        h.dispatch_plugin_view(
+            &c,
+            "window",
+            &connection.call_token,
+            message(sequence, changed)
+        )
+        .await
+        .is_err()
+    );
     sequence += 1;
-    h.dispatch_plugin_view(&c,"window",&connection.call_token,message(sequence,json!({"type":"register_close_handler","renderer":"download"}))).await.unwrap();
+    h.dispatch_plugin_view(
+        &c,
+        "window",
+        &connection.call_token,
+        message(
+            sequence,
+            json!({"type":"register_close_handler","renderer":"download"}),
+        ),
+    )
+    .await
+    .unwrap();
     sequence += 1;
-    let close:OperationRecord=serde_json::from_value(h.dispatch(&c,HostRequest::Invoke(InvokeRequest {
-        invocation:invocation("close-download","views.close",json!({"view":view})),return_after_acceptance:Some(true),
-    })).await.unwrap()).unwrap();
-    tokio::time::timeout(std::time::Duration::from_secs(5),async {
+    let close: OperationRecord = serde_json::from_value(
+        h.dispatch(
+            &c,
+            HostRequest::Invoke(InvokeRequest {
+                invocation: invocation("close-download", "views.close", json!({"view":view})),
+                return_after_acceptance: Some(true),
+            }),
+        )
+        .await
+        .unwrap(),
+    )
+    .unwrap();
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
-            let lifecycle=h.dispatch_plugin_view(&c,"window",&connection.call_token,message(sequence,json!({"type":"observe_lifecycle","renderer":"download"}))).await.unwrap();
-            sequence+=1;
-            if lifecycle["close"]["phase"]=="requested" {break;}
+            let lifecycle = h
+                .dispatch_plugin_view(
+                    &c,
+                    "window",
+                    &connection.call_token,
+                    message(
+                        sequence,
+                        json!({"type":"observe_lifecycle","renderer":"download"}),
+                    ),
+                )
+                .await
+                .unwrap();
+            sequence += 1;
+            if lifecycle["close"]["phase"] == "requested" {
+                break;
+            }
             tokio::task::yield_now().await;
         }
-    }).await.unwrap();
-    assert!(matches!(h.dispatch_plugin_view(&c,"window",&connection.call_token,message(sequence,download)).await,Err(OperationError::ContentChanged(message)) if message.contains("closure is preparing")));
-    sequence+=1;
+    })
+    .await
+    .unwrap();
+    assert!(
+        matches!(h.dispatch_plugin_view(&c,"window",&connection.call_token,message(sequence,download)).await,Err(OperationError::ContentChanged(message)) if message.contains("closure is preparing"))
+    );
+    sequence += 1;
     h.dispatch_plugin_view(&c,"window",&connection.call_token,message(sequence,json!({"type":"refuse_close","renderer":"download","operation":close.operation.operation_id,"reason":"Preserve fixture"}))).await.unwrap();
     h.drain().await;
 }

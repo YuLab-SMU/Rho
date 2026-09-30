@@ -6,16 +6,16 @@ pub mod manifest;
 mod metadata;
 pub mod server;
 
+mod contexts;
 mod diagnostics;
 mod handoffs;
-mod contexts;
 mod model_assets;
 mod run_recovery;
 mod runs;
 
+mod context_images;
 pub mod native_arguments;
 mod native_context;
-mod context_images;
 mod native_controller;
 mod native_core_grants;
 mod native_grants;

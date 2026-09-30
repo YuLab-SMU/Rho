@@ -92,12 +92,21 @@ pub fn run(root: &Path, command: &PluginCommand) -> Result<Value, PluginError> {
         }
         PluginCommand::Instances { limit, after } => {
             if !(1..=100).contains(limit) {
-                return Err(PluginError::Invalid("instance page size must be 1–100".into()));
+                return Err(PluginError::Invalid(
+                    "instance page size must be 1–100".into(),
+                ));
             }
-            let after = after.as_ref().map(rho_plugin_protocol::PluginInstanceId::new).transpose()?;
+            let after = after
+                .as_ref()
+                .map(rho_plugin_protocol::PluginInstanceId::new)
+                .transpose()?;
             let recorded = match PluginRepository::observe(root)? {
                 Some(repo) => repo.recorded_instances(after.as_ref(), *limit)?,
-                None => rho_plugin_protocol::PluginInstancePage { instances: vec![], next: None, total: 0 },
+                None => rho_plugin_protocol::PluginInstancePage {
+                    instances: vec![],
+                    next: None,
+                    total: 0,
+                },
             };
             Ok(json!({"recorded":recorded,"live_verified":false}))
         }

@@ -205,9 +205,15 @@ pub async fn freeze(
         }
         AnnotationAnchor::Structured { .. } => {
             let expected = serde_json::to_value(anchor).map_err(Failure::invalid)?;
-            if !preview.data.get("annotation_anchors").and_then(Value::as_array)
-                .is_some_and(|anchors| anchors.contains(&expected)) {
-                return Err(Failure::invalid("The source owner has not supplied this structured anchor"));
+            if !preview
+                .data
+                .get("annotation_anchors")
+                .and_then(Value::as_array)
+                .is_some_and(|anchors| anchors.contains(&expected))
+            {
+                return Err(Failure::invalid(
+                    "The source owner has not supplied this structured anchor",
+                ));
             }
             preview.text.clone()
         }
@@ -255,9 +261,25 @@ fn quoted(text: &str, start: u64, end: u64, unit: AnnotationCharacterUnit) -> Op
     };
     text.get(byte(start)?..byte(end)?)
 }
+// Inclusion is stored as a portable JSON string; key order must not change its receipt identity.
+pub(crate) fn canonical(value: Value) -> Value {
+    match value {
+        Value::Object(map) => Value::Object(
+            map.into_iter()
+                .map(|(key, value)| (key, canonical(value)))
+                .collect::<std::collections::BTreeMap<_, _>>()
+                .into_iter()
+                .collect(),
+        ),
+        Value::Array(values) => Value::Array(values.into_iter().map(canonical).collect()),
+        other => other,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn quote_ranges_preserve_unicode_and_reject_split_characters() {
         assert_eq!(
@@ -274,20 +296,5 @@ mod tests {
             Some("🧬中")
         );
         assert_eq!(quoted("a", 9, 10, AnnotationCharacterUnit::Utf8), None);
-    }
-}
-
-// Inclusion is stored as a portable JSON string; key order must not change its receipt identity.
-pub(crate) fn canonical(value: Value) -> Value {
-    match value {
-        Value::Object(map) => Value::Object(
-            map.into_iter()
-                .map(|(key, value)| (key, canonical(value)))
-                .collect::<std::collections::BTreeMap<_, _>>()
-                .into_iter()
-                .collect(),
-        ),
-        Value::Array(values) => Value::Array(values.into_iter().map(canonical).collect()),
-        other => other,
     }
 }

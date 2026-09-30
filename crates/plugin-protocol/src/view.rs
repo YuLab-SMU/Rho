@@ -45,9 +45,17 @@ pub struct ClosePluginView {
 #[serde(tag = "phase", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PluginViewCloseState {
     Open,
-    Requested { operation: OperationId },
-    Prepared { operation: OperationId, state_version: u32 },
-    Refused { operation: OperationId, reason: String },
+    Requested {
+        operation: OperationId,
+    },
+    Prepared {
+        operation: OperationId,
+        state_version: u32,
+    },
+    Refused {
+        operation: OperationId,
+        reason: String,
+    },
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(deny_unknown_fields)]
@@ -169,8 +177,12 @@ pub struct PluginViewConnection {
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum PluginViewRequest {
     /// Register only after installing the local close-time flush handler.
-    RegisterCloseHandler { renderer: RequestId },
-    ObserveLifecycle { renderer: RequestId },
+    RegisterCloseHandler {
+        renderer: RequestId,
+    },
+    ObserveLifecycle {
+        renderer: RequestId,
+    },
     PrepareClose {
         renderer: RequestId,
         operation: OperationId,
@@ -193,16 +205,26 @@ pub enum PluginViewRequest {
     },
     /// Request a new browser tab after an explicit gesture. The Host verifies
     /// view authority; only the container can acknowledge native navigation.
-    OpenExternalUrl { url: String },
+    OpenExternalUrl {
+        url: String,
+    },
     /// Open this containing window's counterpart in an explicitly selected
     /// disposable project. The shell alone constructs its private launch URL.
-    OpenTestWorkspace { test_project: TestProjectId },
+    OpenTestWorkspace {
+        test_project: TestProjectId,
+    },
     /// Admit an explicit original-resource download. This is not evidence that
     /// the containing browser requested or completed a file download.
-    DownloadResource { reference: ResourceReference, filename: String },
+    DownloadResource {
+        reference: ResourceReference,
+        filename: String,
+    },
     /// Download exact package bytes through the declared archive-read port.
     /// Presentation acknowledgement alone does not prove that a file was saved.
-    DownloadArchive { reference: PluginArchiveReference, filename: String },
+    DownloadArchive {
+        reference: PluginArchiveReference,
+        filename: String,
+    },
     Control {
         capability: CapabilityKey,
         arguments: Value,

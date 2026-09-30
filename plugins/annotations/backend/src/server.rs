@@ -160,7 +160,11 @@ where
                     RpcBody::HostResult { .. } | RpcBody::Error { .. } => break Err("Uncorrelated annotation Host response".into()),
                     _ => Some(error("unsupported", "Annotations support declared queries and metadata Operations")),
                 };
-                if let Some(reply) = reply { if let Err(error) = writer.send(request, reply).await { break Err(error.to_string()); } }
+                if let Some(reply) = reply
+                    && let Err(error) = writer.send(request, reply).await
+                {
+                    break Err(error.to_string());
+                }
             },
         }
     };

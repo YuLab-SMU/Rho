@@ -27,7 +27,11 @@ async fn existing_mcp_connection_tracks_plugin_publications_and_invalidates_old_
     let archive = fixture::package(&temp.path().join("outside-checkout"), "1", false);
     let mut repo = PluginRepository::open(&repository_path(&db)).unwrap();
     repo.import(&archive).unwrap();
-    let host = Arc::new(NextHost::open_plugin_workspace(&db, &project).await.unwrap());
+    let host = Arc::new(
+        NextHost::open_plugin_workspace(&db, &project)
+            .await
+            .unwrap(),
+    );
     let edge = McpEdge::local(host.clone()).unwrap();
     let (server_io, client_io) = tokio::io::duplex(128 * 1024);
     let server = tokio::spawn(async move { edge.serve(server_io).await.unwrap().waiting().await });
@@ -93,19 +97,46 @@ async fn existing_mcp_connection_tracks_plugin_publications_and_invalidates_old_
         result.structured_content.unwrap()["result"]["data"]["arguments"]["message"],
         "public MCP"
     );
-    let result = client.call_tool(CallToolRequestParams::new("rho.plugins.resolve.v1").with_arguments(
-        json!({"capability":{"id":"fixture.answer","version":2},"instance":identity}).as_object().unwrap().clone()
-    )).await.unwrap();
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("rho.plugins.resolve.v1").with_arguments(
+                json!({"capability":{"id":"fixture.answer","version":2},"instance":identity})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        )
+        .await
+        .unwrap();
     let control_binding = result.structured_content.unwrap()["result"]["data"].clone();
-    let result = client.call_tool(CallToolRequestParams::new("rho.fixture.answer.v2").with_arguments(
-        json!({"binding":control_binding,"arguments":{"value":"transient MCP input"}}).as_object().unwrap().clone()
-    )).await.unwrap();
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("rho.fixture.answer.v2").with_arguments(
+                json!({"binding":control_binding,"arguments":{"value":"transient MCP input"}})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        )
+        .await
+        .unwrap();
     assert_ne!(result.is_error, Some(true), "{result:?}");
-    assert_eq!(result.structured_content.unwrap()["result"], json!({"submitted":true}));
+    assert_eq!(
+        result.structured_content.unwrap()["result"],
+        json!({"submitted":true})
+    );
     let secret = "do-not-echo-MCP-control-error";
-    let result = client.call_tool(CallToolRequestParams::new("rho.fixture.answer.v2").with_arguments(
-        json!({"binding":control_binding,"arguments":{"action":"reject","value":secret}}).as_object().unwrap().clone()
-    )).await.unwrap();
+    let result = client
+        .call_tool(
+            CallToolRequestParams::new("rho.fixture.answer.v2").with_arguments(
+                json!({"binding":control_binding,"arguments":{"action":"reject","value":secret}})
+                    .as_object()
+                    .unwrap()
+                    .clone(),
+            ),
+        )
+        .await
+        .unwrap();
     assert_eq!(result.is_error, Some(true));
     assert!(!serde_json::to_string(&result).unwrap().contains(secret));
     // The MCP connection sees publication changes made through another official

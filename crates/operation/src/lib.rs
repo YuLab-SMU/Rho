@@ -1,28 +1,30 @@
 #![forbid(unsafe_code)]
 
-mod recent;
 mod project_coverage;
+mod recent;
 pub use project_coverage::OperationProjectCoverageHandler;
 pub use recent::{RecentOperationsHandler, validate_recent_arguments};
 mod checkpoint;
 pub use checkpoint::OperationEventsCheckpointHandler;
 mod commit_contract;
 mod commit_recovery;
-pub use commit_recovery::{CommitRecovery, CommitReceipt, OperationCommitStatusHandler, commit_reference};
+pub use commit_recovery::{
+    CommitReceipt, CommitRecovery, OperationCommitStatusHandler, commit_reference,
+};
 mod evidence;
 pub use evidence::{OperationEvidenceHandler, evidence_sha256};
+mod control;
 mod navigation;
 mod query;
-mod control;
 pub use control::ControlHandler;
 mod record;
-mod schema;
 mod registry;
 mod registry_snapshot;
-pub use registry::{CapabilityRegistry, ContributionBatch, RegistrationRevision};
-pub use registry_snapshot::RegistrySnapshot;
+mod schema;
 pub use query::{QueryGateway, QueryHandler};
 pub use record::OperationGetHandler;
+pub use registry::{CapabilityRegistry, ContributionBatch, RegistrationRevision};
+pub use registry_snapshot::RegistrySnapshot;
 
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
@@ -30,9 +32,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use rho_contract::{
-    CallContext, CallerIdentity, CancellationClass, CapabilityDescriptor,
-    CapabilityRef, ContractError, EffectObservation, Invocation, Operation, OperationEventRecord,
-    OperationId, OperationOutcome, OperationRecord, OutboxRecord, TargetRef,
+    CallContext, CallerIdentity, CancellationClass, CapabilityDescriptor, CapabilityRef,
+    ContractError, EffectObservation, Invocation, Operation, OperationEventRecord, OperationId,
+    OperationOutcome, OperationRecord, OutboxRecord, TargetRef,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -108,8 +110,12 @@ impl OperationError {
                     .unwrap_or(Code::Unavailable);
                 let continuation = match code {
                     Code::Busy => Continue::ReadAgain,
-                    Code::StaleSession | Code::ObservationExpired | Code::ContentChanged => Continue::RefreshObservation,
-                    Code::BudgetExceeded | Code::InvalidInput | Code::NotFound => Continue::CorrectInput,
+                    Code::StaleSession | Code::ObservationExpired | Code::ContentChanged => {
+                        Continue::RefreshObservation
+                    }
+                    Code::BudgetExceeded | Code::InvalidInput | Code::NotFound => {
+                        Continue::CorrectInput
+                    }
                     Code::IdempotencyConflict | Code::OutcomeUncertain => Continue::InspectOriginal,
                     _ => Continue::None,
                 };
@@ -353,7 +359,10 @@ pub trait OperationHandler: Send + Sync {
     /// must not itself finish the operation: wait for the original journal's
     /// cancellation signal. Lost acknowledgement/storage failure preserves the
     /// fence so the same authorized cancellation can be retried without starting.
-    async fn prepare_pending_cancellation(&self, operation: &Operation) -> Result<bool, OperationError> {
+    async fn prepare_pending_cancellation(
+        &self,
+        operation: &Operation,
+    ) -> Result<bool, OperationError> {
         Ok(self.cancel_pending(operation))
     }
     async fn acquire_execution(
@@ -405,12 +414,26 @@ pub struct OperationRecordFilter {
 pub trait OperationJournal: Send + Sync {
     /// Whether this principal can read every recorded operation in this project.
     /// Missing support is unknown, never an empty/complete reference inventory.
-    async fn project_read_coverage(&self, _scope: &str, _principal: &CallerIdentity) -> Result<rho_contract::ProjectReadCoverage, OperationError> {
-        Err(OperationError::Unavailable("Project operation coverage is unavailable".into()))
+    async fn project_read_coverage(
+        &self,
+        _scope: &str,
+        _principal: &CallerIdentity,
+    ) -> Result<rho_contract::ProjectReadCoverage, OperationError> {
+        Err(OperationError::Unavailable(
+            "Project operation coverage is unavailable".into(),
+        ))
     }
     /// An owner's exact actor filter, in addition to the authenticated principal.
-    async fn list_recent_for_caller(&self, _scope: &str, _principal: &CallerIdentity, _caller: &CallerIdentity, _args: &rho_contract::RecentOperationsArguments) -> Result<rho_contract::RecentOperations, OperationError> {
-        Err(OperationError::Unavailable("Caller-filtered operation history is unavailable".into()))
+    async fn list_recent_for_caller(
+        &self,
+        _scope: &str,
+        _principal: &CallerIdentity,
+        _caller: &CallerIdentity,
+        _args: &rho_contract::RecentOperationsArguments,
+    ) -> Result<rho_contract::RecentOperations, OperationError> {
+        Err(OperationError::Unavailable(
+            "Caller-filtered operation history is unavailable".into(),
+        ))
     }
     async fn events_checkpoint(
         &self,
@@ -437,7 +460,9 @@ pub trait OperationJournal: Send + Sync {
         _args: &rho_contract::RecentOperationsArguments,
         _filter: &OperationRecordFilter,
     ) -> Result<rho_contract::RecentOperations, OperationError> {
-        Err(OperationError::Unavailable("filtered operation history is unavailable".into()))
+        Err(OperationError::Unavailable(
+            "filtered operation history is unavailable".into(),
+        ))
     }
     async fn admit(&self, operation: &Operation) -> Result<Admission, OperationError>;
 
@@ -570,7 +595,6 @@ impl OperationIdGenerator for UuidOperationIdGenerator {
         OperationId::new(format!("op_{}", Uuid::new_v4().simple())).map_err(Into::into)
     }
 }
-
 
 pub struct OperationGateway {
     admission: tokio::sync::Mutex<()>,
@@ -863,7 +887,9 @@ impl OperationGateway {
                 CommitPlan::from_handler_error(error)
             }
         };
-        let result = self.commit_result(&registry, &operation, plan, true, Some(lease)).await;
+        let result = self
+            .commit_result(&registry, &operation, plan, true, Some(lease))
+            .await;
         result.map(|record| registry.public_record(context, record))
     }
     async fn commit_result(
@@ -874,9 +900,10 @@ impl OperationGateway {
         execution_started: bool,
         lease: Option<Box<dyn ExecutionLease>>,
     ) -> Result<OperationRecord, OperationError> {
-        let plan = registry
-            .checked_plan(operation, plan, execution_started)?;
-        self.commits.submit(&operation.operation_id, plan, lease).await
+        let plan = registry.checked_plan(operation, plan, execution_started)?;
+        self.commits
+            .submit(&operation.operation_id, plan, lease)
+            .await
     }
 
     pub fn commit_recovery(&self) -> Arc<CommitRecovery> {
@@ -888,7 +915,9 @@ impl OperationGateway {
         context: &CallContext,
         args: &rho_contract::ReconcileOperationCommit,
     ) -> Result<OperationRecord, OperationError> {
-        self.commits.reconcile(context, self.project_scope.as_deref(), args).await
+        self.commits
+            .reconcile(context, self.project_scope.as_deref(), args)
+            .await
             .map(|record| self.registry.snapshot().public_record(context, record))
     }
 
@@ -912,7 +941,13 @@ impl OperationGateway {
             diagnostic.next_reads.push(read);
         }
         if let OperationError::CommitPending { operation_id, .. } = error
-            && let Ok(Some(read)) = self.registry.read_link(context, "operation.commit_status", "Inspect retained result durability and its exact reconciliation reference", json!({"operation_id":operation_id})) {
+            && let Ok(Some(read)) = self.registry.read_link(
+                context,
+                "operation.commit_status",
+                "Inspect retained result durability and its exact reconciliation reference",
+                json!({"operation_id":operation_id}),
+            )
+        {
             diagnostic.next_reads.push(read);
         }
         diagnostic
@@ -927,12 +962,21 @@ impl OperationGateway {
         self.owner_record(context, operation_id).await
     }
     /// Task owners may find their original operations without changing read authority.
-    pub async fn recent_for_caller(&self, context: &CallContext, caller: &CallerIdentity, args: &rho_contract::RecentOperationsArguments) -> Result<rho_contract::RecentOperations, OperationError> {
+    pub async fn recent_for_caller(
+        &self,
+        context: &CallContext,
+        caller: &CallerIdentity,
+        args: &rho_contract::RecentOperationsArguments,
+    ) -> Result<rho_contract::RecentOperations, OperationError> {
         require_read_scope(context)?;
         caller.validate()?;
         crate::recent::validate_recent_arguments(args)?;
-        let project = self.project_scope.as_deref().ok_or_else(|| OperationError::Unavailable("A project is required for task operation history".into()))?;
-        self.journal.list_recent_for_caller(project, context.principal(), caller, args).await
+        let project = self.project_scope.as_deref().ok_or_else(|| {
+            OperationError::Unavailable("A project is required for task operation history".into())
+        })?;
+        self.journal
+            .list_recent_for_caller(project, context.principal(), caller, args)
+            .await
     }
     /// Trusted owner/control lookup. Public record reads use get_operation;
     /// cancellation and stdin retain their own native authority requirements.
@@ -1047,7 +1091,11 @@ impl OperationGateway {
         drop(_admission);
         if only_if_pending {
             let prepared = match retained.as_ref() {
-                Some(handler) => handler.prepare_pending_cancellation(&operation.operation).await?,
+                Some(handler) => {
+                    handler
+                        .prepare_pending_cancellation(&operation.operation)
+                        .await?
+                }
                 None => false,
             };
             if !prepared {
@@ -1166,17 +1214,33 @@ mod tests {
     fn provider_observation_codes_survive_without_parsing_message_text() {
         use rho_contract::{DiagnosticCode as Code, DiagnosticContinuation as Continue};
         let changed = OperationError::ProviderObservation {
-            code: "content_changed".into(), message: "unavailable appears in native output".into(),
-        }.diagnostic();
-        assert_eq!((changed.code, changed.continuation), (Code::ContentChanged, Continue::RefreshObservation));
+            code: "content_changed".into(),
+            message: "unavailable appears in native output".into(),
+        }
+        .diagnostic();
+        assert_eq!(
+            (changed.code, changed.continuation),
+            (Code::ContentChanged, Continue::RefreshObservation)
+        );
         let unknown = OperationError::ProviderObservation {
-            code: "owner.future_diagnostic".into(), message: "content_changed is only text".into(),
+            code: "owner.future_diagnostic".into(),
+            message: "content_changed is only text".into(),
         };
-        assert_eq!((unknown.diagnostic().code, unknown.diagnostic().continuation), (Code::Unavailable, Continue::None));
+        assert_eq!(
+            (unknown.diagnostic().code, unknown.diagnostic().continuation),
+            (Code::Unavailable, Continue::None)
+        );
         assert!(unknown.to_string().contains("owner.future_diagnostic"));
         assert!(unknown.diagnostic().next_reads.is_empty());
-        let busy = OperationError::ProviderObservation { code: "busy".into(), message: "Original result awaits settlement".into() }.diagnostic();
-        assert_eq!((busy.code, busy.continuation), (Code::Busy, Continue::ReadAgain));
+        let busy = OperationError::ProviderObservation {
+            code: "busy".into(),
+            message: "Original result awaits settlement".into(),
+        }
+        .diagnostic();
+        assert_eq!(
+            (busy.code, busy.continuation),
+            (Code::Busy, Continue::ReadAgain)
+        );
     }
 
     #[test]

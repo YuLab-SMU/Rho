@@ -1,11 +1,14 @@
 //! Ordinary public-protocol executable; no Host, journal or edge implementation.
-mod owner;
-mod queue;
 mod environment;
 mod host_calls;
+mod owner;
+mod queue;
 use owner::Owner;
 use rho_plugin_sdk::{ResourceClient, accept_stdio, protocol::*, validate_settlement};
-use std::{collections::{BTreeMap,BTreeSet}, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 use tokio::{
     sync::{mpsc, watch},
     task::JoinSet,
@@ -26,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     let mut connection = accept_stdio().await?;
-    let (host_sender,mut host_calls)=mpsc::channel::<host_calls::HostRequest>(32);
+    let (host_sender, mut host_calls) = mpsc::channel::<host_calls::HostRequest>(32);
     let owner = Arc::new(Owner::new(
         connection.instance.configuration.clone(),
         connection
@@ -44,7 +47,9 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
         environment::granted(&connection.grants),
         &connection.grants,
     )?);
-    connection.ready_with_features([PENDING_CANCELLATION_FEATURE.into()].into()).await?;
+    connection
+        .ready_with_features([PENDING_CANCELLATION_FEATURE.into()].into())
+        .await?;
     let instance = connection.instance.clone();
     let (frames_tx, mut frames) = mpsc::channel(32);
     let mut reader = connection.reader;
@@ -61,9 +66,9 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
     let mut jobs = JoinSet::new();
     let mut query_jobs = 0_usize;
     let mut cancellations: BTreeMap<String, watch::Sender<bool>> = BTreeMap::new();
-    let mut active=BTreeSet::new();
-    let mut delegated:BTreeMap<RequestId,host_calls::HostRequest>=BTreeMap::new();
-    let mut serial=0u64;
+    let mut active = BTreeSet::new();
+    let mut delegated: BTreeMap<RequestId, host_calls::HostRequest> = BTreeMap::new();
+    let mut serial = 0u64;
     let result: Result<(), String> = 'serve: loop {
         tokio::select! {
             call=host_calls.recv() => {
@@ -207,8 +212,10 @@ async fn serve() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     _ => Some(error("unsupported", "Unexpected Host message")),
                 };
-                if let Some(reply) = reply {
-                    if let Err(error) = writer.send(frame.request, reply).await { break Err(error.to_string()); }
+                if let Some(reply) = reply
+                    && let Err(error) = writer.send(frame.request, reply).await
+                {
+                    break Err(error.to_string());
                 }
             }
         }
@@ -232,42 +239,61 @@ fn supported_call(capability: &CapabilityKey, is_query: bool) -> bool {
     if owner::context::is_query(capability.id.as_str()) {
         return is_query && capability.version == 1;
     }
-    if owner::recovery::is_operation(capability.id.as_str()) || owner::recovery::is_query(capability.id.as_str()) {
-        return owner::recovery::supported_version(capability) && owner::recovery::is_query(capability.id.as_str()) == is_query;
+    if owner::recovery::is_operation(capability.id.as_str())
+        || owner::recovery::is_query(capability.id.as_str())
+    {
+        return owner::recovery::supported_version(capability)
+            && owner::recovery::is_query(capability.id.as_str()) == is_query;
     }
     let valid_kind = match capability.id.as_str() {
-        "r.session" | "r.console" | "r.snapshot" | "r.prepare" | "r.prepare_environment" | "r.check_code" | "r.output_events" | "r.inspection_state" => is_query,
+        "r.session"
+        | "r.console"
+        | "r.snapshot"
+        | "r.prepare"
+        | "r.prepare_environment"
+        | "r.check_code"
+        | "r.output_events"
+        | "r.inspection_state" => is_query,
         id if rho_r_api::r_inspection_kind(id).is_some() => is_query,
         "r.create_session" | "r.execute" | "r.format" => !is_query,
         _ => false,
     };
-    valid_kind && match capability.id.as_str() {
-        "r.prepare_environment"=>capability.version==2,
-        "r.create_session"|"r.execute"=>matches!(capability.version,1|2),
-        _=>capability.version==1,
-    }
-}
-#[cfg(test)]
-mod routing_tests {
-    use super::*;
-    #[test]
-    fn contributed_queries_and_operations_have_matching_transport_routes() {
-        let manifest: PluginManifest = serde_json::from_str(include_str!("../../plugin.json")).unwrap();
-        for contribution in manifest.capabilities {
-            if contribution.kind == CapabilityKind::Control { continue; }
-            let query = contribution.kind == CapabilityKind::Query;
-            assert!(supported_call(&contribution.capability, query), "missing route for {:?}", contribution.capability);
-            assert!(!supported_call(&contribution.capability, !query));
-            let mut unsupported = contribution.capability;
-            unsupported.version = 99;
-            assert!(!supported_call(&unsupported, query));
+    valid_kind
+        && match capability.id.as_str() {
+            "r.prepare_environment" => capability.version == 2,
+            "r.create_session" | "r.execute" => matches!(capability.version, 1 | 2),
+            _ => capability.version == 1,
         }
-    }
 }
 fn error(code: &str, message: &str) -> RpcBody {
     RpcBody::Error {
         code: code.into(),
         message: message.into(),
         recovery: None,
+    }
+}
+
+#[cfg(test)]
+mod routing_tests {
+    use super::*;
+    #[test]
+    fn contributed_queries_and_operations_have_matching_transport_routes() {
+        let manifest: PluginManifest =
+            serde_json::from_str(include_str!("../../plugin.json")).unwrap();
+        for contribution in manifest.capabilities {
+            if contribution.kind == CapabilityKind::Control {
+                continue;
+            }
+            let query = contribution.kind == CapabilityKind::Query;
+            assert!(
+                supported_call(&contribution.capability, query),
+                "missing route for {:?}",
+                contribution.capability
+            );
+            assert!(!supported_call(&contribution.capability, !query));
+            let mut unsupported = contribution.capability;
+            unsupported.version = 99;
+            assert!(!supported_call(&unsupported, query));
+        }
     }
 }

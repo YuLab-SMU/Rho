@@ -2,7 +2,11 @@ use rho_files_api::*;
 use serde_json::{Value, json};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PatchOutcome { Succeeded, Failed, Uncertain }
+pub enum PatchOutcome {
+    Succeeded,
+    Failed,
+    Uncertain,
+}
 
 #[derive(Debug)]
 pub enum PatchFailure {
@@ -10,8 +14,17 @@ pub enum PatchFailure {
     AfterPossibleEffect { message: String, recovery: Value },
 }
 impl PatchFailure {
-    fn before_effect(message: impl Into<String>) -> Self { Self::BeforeEffect { message: message.into() } }
-    fn after_possible_effect(message: impl Into<String>, recovery: Value) -> Self { Self::AfterPossibleEffect { message: message.into(), recovery } }
+    fn before_effect(message: impl Into<String>) -> Self {
+        Self::BeforeEffect {
+            message: message.into(),
+        }
+    }
+    fn after_possible_effect(message: impl Into<String>, recovery: Value) -> Self {
+        Self::AfterPossibleEffect {
+            message: message.into(),
+            recovery,
+        }
+    }
 }
 
 pub struct PatchAssessment {
@@ -23,7 +36,11 @@ pub struct PatchAssessment {
 
 /// Caller owns its execution lane and original Operation. A native invocation is
 /// never retried here; evidence after possible effects is retained for recovery.
-pub async fn apply_patch(runtime: &dyn ProjectRuntime, args: &ApplyPatchArguments, preconditions: &[FilePrecondition]) -> Result<PatchAssessment, PatchFailure> {
+pub async fn apply_patch(
+    runtime: &dyn ProjectRuntime,
+    args: &ApplyPatchArguments,
+    preconditions: &[FilePrecondition],
+) -> Result<PatchAssessment, PatchFailure> {
     validate_patch(args).map_err(PatchFailure::before_effect)?;
     let paths = runtime
         .patch_paths(&args.patch)
@@ -96,8 +113,15 @@ pub async fn apply_patch(runtime: &dyn ProjectRuntime, args: &ApplyPatchArgument
         }
     }
     let report = runtime.apply_patch(&args.patch).await;
-    let after = runtime.snapshot(&observed_paths, 200).await.map_err(|error|
-        PatchFailure::after_possible_effect(error, json!({"project_root":runtime.root(), "before":before, "affected_paths":paths})))?;
+    let after = runtime
+        .snapshot(&observed_paths, 200)
+        .await
+        .map_err(|error| {
+            PatchFailure::after_possible_effect(
+                error,
+                json!({"project_root":runtime.root(), "before":before, "affected_paths":paths}),
+            )
+        })?;
     let changed_paths = paths
         .iter()
         .filter(|path| {
@@ -141,5 +165,10 @@ pub async fn apply_patch(runtime: &dyn ProjectRuntime, args: &ApplyPatchArgument
     };
     let recovery = (outcome == PatchOutcome::Uncertain).then(||
         json!({"action":"query_project_snapshot_before_retry", "root":runtime.root(), "affected_paths":result.affected_paths}));
-    Ok(PatchAssessment { result, outcome, error, recovery })
+    Ok(PatchAssessment {
+        result,
+        outcome,
+        error,
+        recovery,
+    })
 }

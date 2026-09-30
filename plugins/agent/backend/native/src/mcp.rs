@@ -462,9 +462,10 @@ impl ServerHandler for Edge {
                 None,
             ));
         }
-        let mut result = ListToolsResult::default();
-        result.tools = self.shared.tools.values().cloned().collect();
-        Ok(result)
+        Ok(ListToolsResult {
+            tools: self.shared.tools.values().cloned().collect(),
+            ..ListToolsResult::default()
+        })
     }
     async fn call_tool(
         &self,

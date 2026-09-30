@@ -220,7 +220,13 @@ impl Owner {
             ));
         }
         let runtime = self.runtime()?;
-        if call.binding.capability.id.as_str().starts_with("files.context.") {
+        if call
+            .binding
+            .capability
+            .id
+            .as_str()
+            .starts_with("files.context.")
+        {
             return Ok((self.context(call).await?, ObservationCompleteness::Complete));
         }
         if call.binding.capability.id.as_str() == "files.prepare_patch" {
@@ -297,8 +303,10 @@ impl Owner {
             "files.read_text" => {
                 let args = decode(&call.arguments)?;
                 validate_read(&args).map_err(Failure::text)?;
-                { let page = runtime.read_text(&args).await.map_err(Failure::text)?;
-                encode(page)? }
+                {
+                    let page = runtime.read_text(&args).await.map_err(Failure::text)?;
+                    encode(page)?
+                }
             }
             "files.search_text" => {
                 let args = decode(&call.arguments)?;

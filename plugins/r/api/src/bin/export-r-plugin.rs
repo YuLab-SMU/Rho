@@ -68,36 +68,111 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     RCheckpointPurgeOutput::export_all(&types)?;
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
-        ("context-search", schemars::schema_for!(rho_plugin_protocol::ContextSearch)),
-        ("context-page", schemars::schema_for!(rho_plugin_protocol::ContextPage)),
-        ("context-preview", schemars::schema_for!(rho_plugin_protocol::ContextPreview)),
-        ("preview-context", schemars::schema_for!(rho_plugin_protocol::PreviewContext)),
-        ("prepare", schemars::schema_for!(rho_plugin_protocol::PluginPreflightRequest)),
-        ("prepared", schemars::schema_for!(rho_plugin_protocol::PluginPreflightResult)),
-        ("capture-checkpoint", schemars::schema_for!(CheckpointCaptureArguments)),
-        ("checkpoint-capture-output", schemars::schema_for!(RCheckpointCaptureOutput)),
-        ("checkpoint-manifest", schemars::schema_for!(RCheckpointManifest)),
-        ("checkpoint-arguments", schemars::schema_for!(RCheckpointArguments)),
+        (
+            "context-search",
+            schemars::schema_for!(rho_plugin_protocol::ContextSearch),
+        ),
+        (
+            "context-page",
+            schemars::schema_for!(rho_plugin_protocol::ContextPage),
+        ),
+        (
+            "context-preview",
+            schemars::schema_for!(rho_plugin_protocol::ContextPreview),
+        ),
+        (
+            "preview-context",
+            schemars::schema_for!(rho_plugin_protocol::PreviewContext),
+        ),
+        (
+            "prepare",
+            schemars::schema_for!(rho_plugin_protocol::PluginPreflightRequest),
+        ),
+        (
+            "prepared",
+            schemars::schema_for!(rho_plugin_protocol::PluginPreflightResult),
+        ),
+        (
+            "capture-checkpoint",
+            schemars::schema_for!(CheckpointCaptureArguments),
+        ),
+        (
+            "checkpoint-capture-output",
+            schemars::schema_for!(RCheckpointCaptureOutput),
+        ),
+        (
+            "checkpoint-manifest",
+            schemars::schema_for!(RCheckpointManifest),
+        ),
+        (
+            "checkpoint-arguments",
+            schemars::schema_for!(RCheckpointArguments),
+        ),
         ("read-checkpoint", schemars::schema_for!(RCheckpointRead)),
         ("checkpoint-chunk", schemars::schema_for!(RCheckpointChunk)),
-        ("restore-checkpoint", schemars::schema_for!(RestoreRCheckpoint)),
-        ("checkpoint-restore-output", schemars::schema_for!(RCheckpointRestoreOutput)),
-        ("checkpoint-restore-report", schemars::schema_for!(CheckpointNativeRestoreReport)),
-        ("reconcile-checkpoint", schemars::schema_for!(ReconcileRCheckpoint)),
-        ("capture-attempt-arguments", schemars::schema_for!(RCaptureAttemptArguments)),
-        ("capture-attempt-observation", schemars::schema_for!(RCaptureAttemptObservation)),
+        (
+            "restore-checkpoint",
+            schemars::schema_for!(RestoreRCheckpoint),
+        ),
+        (
+            "checkpoint-restore-output",
+            schemars::schema_for!(RCheckpointRestoreOutput),
+        ),
+        (
+            "checkpoint-restore-report",
+            schemars::schema_for!(CheckpointNativeRestoreReport),
+        ),
+        (
+            "reconcile-checkpoint",
+            schemars::schema_for!(ReconcileRCheckpoint),
+        ),
+        (
+            "capture-attempt-arguments",
+            schemars::schema_for!(RCaptureAttemptArguments),
+        ),
+        (
+            "capture-attempt-observation",
+            schemars::schema_for!(RCaptureAttemptObservation),
+        ),
         ("discard-capture", schemars::schema_for!(DiscardRCapture)),
-        ("capture-discard-output", schemars::schema_for!(RCaptureDiscardOutput)),
+        (
+            "capture-discard-output",
+            schemars::schema_for!(RCaptureDiscardOutput),
+        ),
         ("pin-checkpoint", schemars::schema_for!(PinRCheckpoint)),
-        ("delete-checkpoint", schemars::schema_for!(DeleteRCheckpoint)),
+        (
+            "delete-checkpoint",
+            schemars::schema_for!(DeleteRCheckpoint),
+        ),
         ("purge-checkpoint", schemars::schema_for!(PurgeRCheckpoint)),
-        ("checkpoint-control-output", schemars::schema_for!(RCheckpointControlOutput)),
-        ("resolve-checkpoint-control", schemars::schema_for!(ResolveRCheckpointControl)),
-        ("checkpoint-control-resolution-output", schemars::schema_for!(RCheckpointControlResolutionOutput)),
-        ("checkpoint-control-arguments", schemars::schema_for!(RCheckpointControlArguments)),
-        ("checkpoint-control-observation", schemars::schema_for!(RCheckpointControlObservation)),
-        ("checkpoint-purge-output", schemars::schema_for!(RCheckpointPurgeOutput)),
-        ("checkpoint-observation", schemars::schema_for!(RCheckpointObservation)),
+        (
+            "checkpoint-control-output",
+            schemars::schema_for!(RCheckpointControlOutput),
+        ),
+        (
+            "resolve-checkpoint-control",
+            schemars::schema_for!(ResolveRCheckpointControl),
+        ),
+        (
+            "checkpoint-control-resolution-output",
+            schemars::schema_for!(RCheckpointControlResolutionOutput),
+        ),
+        (
+            "checkpoint-control-arguments",
+            schemars::schema_for!(RCheckpointControlArguments),
+        ),
+        (
+            "checkpoint-control-observation",
+            schemars::schema_for!(RCheckpointControlObservation),
+        ),
+        (
+            "checkpoint-purge-output",
+            schemars::schema_for!(RCheckpointPurgeOutput),
+        ),
+        (
+            "checkpoint-observation",
+            schemars::schema_for!(RCheckpointObservation),
+        ),
         ("list-checkpoints", schemars::schema_for!(RCheckpointList)),
         ("checkpoint-page", schemars::schema_for!(RCheckpointPage)),
         ("execute", schemars::schema_for!(ExecuteR)),
@@ -114,21 +189,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             schemars::schema_for!(REventsObservation),
         ),
         ("list-objects", schemars::schema_for!(ListObjectsArguments)),
-        ("inspection-state-arguments", schemars::schema_for!(RInspectionStateArguments)),
+        (
+            "inspection-state-arguments",
+            schemars::schema_for!(RInspectionStateArguments),
+        ),
         ("inspection-state", schemars::schema_for!(RInspectionState)),
-        ("object-directory", schemars::schema_for!(RInspection<ObjectDirectoryPage>)),
-        ("observe-object", schemars::schema_for!(ObserveObjectArguments)),
-        ("object-observation", schemars::schema_for!(RInspection<ObjectObservation>)),
+        (
+            "object-directory",
+            schemars::schema_for!(RInspection<ObjectDirectoryPage>),
+        ),
+        (
+            "observe-object",
+            schemars::schema_for!(ObserveObjectArguments),
+        ),
+        (
+            "object-observation",
+            schemars::schema_for!(RInspection<ObjectObservation>),
+        ),
         ("read-object", schemars::schema_for!(ReadObjectArguments)),
-        ("object-read", schemars::schema_for!(RInspection<ObjectReadPage>)),
+        (
+            "object-read",
+            schemars::schema_for!(RInspection<ObjectReadPage>),
+        ),
         ("inspect-object", schemars::schema_for!(InspectArguments)),
-        ("object-preview", schemars::schema_for!(RInspection<BindingSummary>)),
+        (
+            "object-preview",
+            schemars::schema_for!(RInspection<BindingSummary>),
+        ),
         ("packages", schemars::schema_for!(PackageQueryArguments)),
-        ("package-observation", schemars::schema_for!(RInspection<PackageSnapshotData>)),
-        ("package-index", schemars::schema_for!(PackageIndexArguments)),
-        ("package-index-observation", schemars::schema_for!(RInspection<PackageIndexPage>)),
+        (
+            "package-observation",
+            schemars::schema_for!(RInspection<PackageSnapshotData>),
+        ),
+        (
+            "package-index",
+            schemars::schema_for!(PackageIndexArguments),
+        ),
+        (
+            "package-index-observation",
+            schemars::schema_for!(RInspection<PackageIndexPage>),
+        ),
         ("read-help", schemars::schema_for!(ReadPackageHelpArguments)),
-        ("help-observation", schemars::schema_for!(RInspection<PackageHelpPage>)),
+        (
+            "help-observation",
+            schemars::schema_for!(RInspection<PackageHelpPage>),
+        ),
     ] {
         fs::write(
             root.join("schema").join(format!("{name}.json")),

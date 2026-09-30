@@ -16,6 +16,8 @@ use tokio::{
 use uuid::Uuid;
 
 type Response = oneshot::Sender<Result<RpcBody, String>>;
+// These transport messages carry a bounded PluginCall inline to avoid a heap allocation per dispatch.
+#[allow(clippy::large_enum_variant)]
 enum CommandMessage {
     Call {
         call: PluginCall,
@@ -48,11 +50,25 @@ pub(crate) struct ProcessClient {
     features: BTreeSet<String>,
 }
 impl ProcessClient {
-    pub async fn prepare_pending_cancellation(&self, cancellation: PendingCancellation) -> Result<bool, PluginError> {
-        if !self.features.contains(PENDING_CANCELLATION_FEATURE) { return Ok(false); }
+    pub async fn prepare_pending_cancellation(
+        &self,
+        cancellation: PendingCancellation,
+    ) -> Result<bool, PluginError> {
+        if !self.features.contains(PENDING_CANCELLATION_FEATURE) {
+            return Ok(false);
+        }
         let (response, receiver) = oneshot::channel();
-        self.sender.send(CommandMessage::PrepareCancellation { cancellation: cancellation.clone(), response })
-            .await.map_err(|_| PluginError::Unavailable("pending cancellation is unconfirmed; inspect the original operation".into()))?;
+        self.sender
+            .send(CommandMessage::PrepareCancellation {
+                cancellation: cancellation.clone(),
+                response,
+            })
+            .await
+            .map_err(|_| {
+                PluginError::Unavailable(
+                    "pending cancellation is unconfirmed; inspect the original operation".into(),
+                )
+            })?;
         match receive(receiver).await? {
             RpcBody::PendingCancellationPrepared { cancellation: acknowledged, prepared } if acknowledged == cancellation => Ok(prepared),
             _ => Err(PluginError::Unavailable("pending cancellation preparation is unconfirmed; retry the same original cancellation".into())),
@@ -60,14 +76,28 @@ impl ProcessClient {
     }
     pub async fn settle(&self, settlement: OperationSettlement) -> Result<(), PluginError> {
         let (response, receiver) = oneshot::channel();
-        self.sender.send(CommandMessage::Settle { settlement: settlement.clone(), response })
-            .await.map_err(|_| PluginError::Unavailable("original backend settlement is unconfirmed".into()))?;
+        self.sender
+            .send(CommandMessage::Settle {
+                settlement: settlement.clone(),
+                response,
+            })
+            .await
+            .map_err(|_| {
+                PluginError::Unavailable("original backend settlement is unconfirmed".into())
+            })?;
         match receive(receiver).await? {
             RpcBody::SettlementAcknowledged(acknowledged) if acknowledged == settlement => Ok(()),
-            _ => Err(PluginError::Invalid("native settlement was not acknowledged".into())),
+            _ => Err(PluginError::Invalid(
+                "native settlement was not acknowledged".into(),
+            )),
         }
     }
-    pub async fn call(&self, call: PluginCall, kind: CapabilityKind, view_scope: Option<rho_contract::ViewCallScope>) -> Result<RpcBody, PluginError> {
+    pub async fn call(
+        &self,
+        call: PluginCall,
+        kind: CapabilityKind,
+        view_scope: Option<rho_contract::ViewCallScope>,
+    ) -> Result<RpcBody, PluginError> {
         let (response, receiver) = oneshot::channel();
         self.sender
             .send(CommandMessage::Call {
@@ -109,12 +139,19 @@ impl ProcessClient {
         }
     }
     pub async fn release(&self) -> Result<(), PluginError> {
-        self.shutdown(crate::runtime::ShutdownDisposition::Release).await
+        self.shutdown(crate::runtime::ShutdownDisposition::Release)
+            .await
     }
-    pub async fn shutdown(&self, disposition: crate::runtime::ShutdownDisposition) -> Result<(), PluginError> {
+    pub async fn shutdown(
+        &self,
+        disposition: crate::runtime::ShutdownDisposition,
+    ) -> Result<(), PluginError> {
         let (response, receiver) = oneshot::channel();
         self.sender
-            .send(CommandMessage::Release { disposition, response })
+            .send(CommandMessage::Release {
+                disposition,
+                response,
+            })
             .await
             .map_err(|_| {
                 PluginError::Unavailable("backend is disconnected; cleanup is unconfirmed".into())
@@ -153,12 +190,20 @@ pub(crate) async fn start(
 ) -> Result<ProcessClient, PluginError> {
     let identity = prepared.record.identity.clone();
     #[cfg(unix)]
-    let data_channel = services.resources().map(crate::resource_channel::DataChannel::start).transpose()?;
+    let data_channel = services
+        .resources()
+        .map(crate::resource_channel::DataChannel::start)
+        .transpose()?;
     #[cfg(unix)]
     let resource_channel = data_channel.as_ref().map(|c| c.endpoint.clone());
     #[cfg(not(unix))]
     let resource_channel = None;
-    let mut command = Command::new(prepared.executable.as_ref().ok_or_else(|| PluginError::Invalid("package has no backend".into()))?);
+    let mut command = Command::new(
+        prepared
+            .executable
+            .as_ref()
+            .ok_or_else(|| PluginError::Invalid("package has no backend".into()))?,
+    );
     command
         .args(&prepared.manifest.backend.as_ref().unwrap().arguments)
         .current_dir(prepared.directory.path())
@@ -229,7 +274,12 @@ pub(crate) async fn start(
         match frames_rx.recv().await {
             Some(Ok(Some(RpcFrame {
                 request,
-                body: RpcBody::Ready { revision, artifact, features },
+                body:
+                    RpcBody::Ready {
+                        revision,
+                        artifact,
+                        features,
+                    },
                 ..
             }))) if request == initialize
                 && revision == identity.revision
@@ -244,23 +294,23 @@ pub(crate) async fn start(
     .await
     .unwrap_or_else(|_| Err("backend initialization timed out".into()));
     let features = match handshake {
-      Ok(features) => features,
-      Err(error) => {
-        let killed = child.kill().await;
-        let mut record = state.lock().unwrap();
-        record.record.state = if killed.is_ok() {
-            InstanceState::Failed
-        } else {
-            InstanceState::CleanupFailed
-        };
-        record.record.diagnostic = Some(format!("{error}; initialization was not published"));
-        if killed.is_ok() {
-            record.pid = None;
+        Ok(features) => features,
+        Err(error) => {
+            let killed = child.kill().await;
+            let mut record = state.lock().unwrap();
+            record.record.state = if killed.is_ok() {
+                InstanceState::Failed
+            } else {
+                InstanceState::CleanupFailed
+            };
+            record.record.diagnostic = Some(format!("{error}; initialization was not published"));
+            if killed.is_ok() {
+                record.pid = None;
+            }
+            drop(record);
+            prepared.persist_state(&state);
+            return Err(PluginError::Unavailable(error));
         }
-        drop(record);
-        prepared.persist_state(&state);
-        return Err(PluginError::Unavailable(error));
-      }
     };
     let (sender, receiver) = mpsc::channel(MAX_PENDING_PLUGIN_CALLS);
     tokio::spawn(run(
@@ -280,9 +330,17 @@ pub(crate) async fn start(
     Ok(ProcessClient { sender, features })
 }
 
+// Pending entries are quota-bounded; keep their checked call identity inline.
+#[allow(clippy::large_enum_variant)]
 enum PendingKind {
-    Call { call: PluginCall, kind: CapabilityKind, view_scope: Option<rho_contract::ViewCallScope> },
-    Cancel { operation: String },
+    Call {
+        call: PluginCall,
+        kind: CapabilityKind,
+        view_scope: Option<rho_contract::ViewCallScope>,
+    },
+    Cancel {
+        operation: String,
+    },
     PrepareCancellation(PendingCancellation),
     Settlement(OperationSettlement),
 }
@@ -292,7 +350,9 @@ struct Pending {
 }
 impl Pending {
     fn respond(self, result: Result<RpcBody, String>) {
-        for response in self.responses { let _ = response.send(result.clone()); }
+        for response in self.responses {
+            let _ = response.send(result.clone());
+        }
     }
 }
 type IncomingFrames = mpsc::Receiver<Result<Option<RpcFrame>, String>>;
@@ -317,7 +377,8 @@ async fn run(
     let mut settled: VecDeque<(RequestId, OperationSettlement)> = VecDeque::new();
     // None means the original invocation returned before preparation replied.
     // Its late acknowledgement is transport cleanup, never a cancellation result.
-    let mut cancellation_prepared: VecDeque<(RequestId, PendingCancellation, Option<bool>)> = VecDeque::new();
+    let mut cancellation_prepared: VecDeque<(RequestId, PendingCancellation, Option<bool>)> =
+        VecDeque::new();
     let mut reverse = BTreeSet::new();
     let mut counter = 0_u64;
     let (host_results_tx, mut host_results_rx) = mpsc::channel::<(RequestId, RpcBody)>(32);
@@ -334,7 +395,11 @@ async fn run(
                         }
                         call.request = request.clone();
                         #[cfg(unix)]
-                        if kind != CapabilityKind::Control { if let Some(channel) = &data_channel { channel.session.insert(&call); } }
+                        if kind != CapabilityKind::Control
+                            && let Some(channel) = &data_channel
+                        {
+                            channel.session.insert(&call);
+                        }
                         let body = match kind { CapabilityKind::Query => RpcBody::Query(call.clone()), CapabilityKind::Control => RpcBody::Control(call.clone()), _ => RpcBody::Invoke(call.clone()) };
                         (body, Pending { kind: PendingKind::Call { call, kind, view_scope }, responses: vec![response] })
                     }

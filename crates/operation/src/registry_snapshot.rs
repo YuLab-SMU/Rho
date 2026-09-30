@@ -13,13 +13,22 @@ pub struct RegistrySnapshot {
 }
 
 impl RegistrySnapshot {
-    pub fn register_control_handler(&mut self, handler: Arc<dyn ControlHandler>) -> Result<(), OperationError> {
+    pub fn register_control_handler(
+        &mut self,
+        handler: Arc<dyn ControlHandler>,
+    ) -> Result<(), OperationError> {
         self.register_control(handler.descriptor().clone())?;
-        self.controls.insert(handler.descriptor().capability.clone(), handler);
+        self.controls
+            .insert(handler.descriptor().capability.clone(), handler);
         Ok(())
     }
-    pub fn control_handler(&self, capability: &CapabilityRef) -> Result<Arc<dyn ControlHandler>, OperationError> {
-        self.controls.get(capability).cloned()
+    pub fn control_handler(
+        &self,
+        capability: &CapabilityRef,
+    ) -> Result<Arc<dyn ControlHandler>, OperationError> {
+        self.controls
+            .get(capability)
+            .cloned()
             .ok_or_else(|| OperationError::UnknownCapability(capability.display_key()))
     }
     pub fn new() -> Self {

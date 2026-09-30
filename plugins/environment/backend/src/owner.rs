@@ -246,7 +246,9 @@ impl Owner {
     ) -> Result<Value, String> {
         let (action, args) = self.query_arguments(call)?;
         if source::material_capability(&action) {
-            return self.prepare_material(call, &action, &args, observation).await;
+            return self
+                .prepare_material(call, &action, &args, observation)
+                .await;
         }
         let qualified = source::qualify(
             call,
@@ -382,7 +384,9 @@ impl Owner {
         let id = original(call).expect("validated admission");
         let lane = tokio::select! { biased; _ = cancelled(&mut cancellation) => None, lane = self.lane.clone().lock_owned() => Some(lane) };
         let result = if lane.is_none() || *cancellation.borrow() {
-            if call.binding.capability.id.as_str() == source::RECONCILE || source::material_operation(call.binding.capability.id.as_str()) {
+            if call.binding.capability.id.as_str() == source::RECONCILE
+                || source::material_operation(call.binding.capability.id.as_str())
+            {
                 failed("Recovery or material work did not start before its control channel ended")
             } else {
                 PluginCommitPlan {
@@ -399,7 +403,9 @@ impl Owner {
             self.accepted.lock().unwrap().get_mut(&id).unwrap().phase = ProcessPhase::Running;
             if source::material_operation(call.binding.capability.id.as_str()) {
                 match self.perform_material(call, &id, cancellation).await {
-                    Ok((kind, value, verified)) => self.publish(call, &id, kind, value, verified).await,
+                    Ok((kind, value, verified)) => {
+                        self.publish(call, &id, kind, value, verified).await
+                    }
                     Err(error) => self.native_error(call, &id, error).await,
                 }
             } else {

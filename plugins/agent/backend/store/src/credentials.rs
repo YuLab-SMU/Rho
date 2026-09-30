@@ -292,7 +292,7 @@ impl CredentialFile {
             .get(key_id)
             .filter(|entry| entry.project == scope.project && entry.principal == scope.principal)
             .ok_or_else(unavailable)?;
-        ComponentModelKey::new(entry.key.clone()).map_err(Into::into)
+        ComponentModelKey::new(entry.key.clone())
     }
     pub fn remove(&self, scope: &AgentTaskScope, key_id: &str) -> Result<(), AgentTaskError> {
         let Some(_lock) = self.open_lock(false)? else {

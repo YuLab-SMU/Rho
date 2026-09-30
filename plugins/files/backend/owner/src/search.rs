@@ -1,13 +1,20 @@
 use rho_files_api::*;
 
 /// Bounded path traversal; continuation is tied to this root and exact query.
-pub async fn search_files(runtime: &dyn ProjectRuntime, args: &SearchFilesArguments) -> Result<FileSearchResult, String> {
+pub async fn search_files(
+    runtime: &dyn ProjectRuntime,
+    args: &SearchFilesArguments,
+) -> Result<FileSearchResult, String> {
     validate_search_files(args)?;
     list_matching_files(runtime, args, 200).await
 }
 
 /// Bounded discovery also accepts an empty filter for a user-opened context picker.
-pub async fn list_matching_files(runtime: &dyn ProjectRuntime, args: &SearchFilesArguments, limit: usize) -> Result<FileSearchResult, String> {
+pub async fn list_matching_files(
+    runtime: &dyn ProjectRuntime,
+    args: &SearchFilesArguments,
+    limit: usize,
+) -> Result<FileSearchResult, String> {
     if args.text.len() > 1024 || !(1..=200).contains(&limit) {
         return Err("Invalid file discovery bounds".into());
     }
@@ -28,7 +35,9 @@ pub async fn list_matching_files(runtime: &dyn ProjectRuntime, args: &SearchFile
         || cursor.show_hidden != args.show_hidden
         || cursor.directories.len() > 64
     {
-        return Err(String::from("path search continuation project/query mismatch"));
+        return Err(String::from(
+            "path search continuation project/query mismatch",
+        ));
     }
     let mut result = FileSearchResult {
         entries: vec![],
@@ -39,19 +48,22 @@ pub async fn list_matching_files(runtime: &dyn ProjectRuntime, args: &SearchFile
         continuation: None,
     };
     let needle = args.text.to_lowercase();
-    let mut cache: Option<(
-        String,
-        std::collections::VecDeque<DirectoryEntry>,
-    )> = None;
+    let mut cache: Option<(String, std::collections::VecDeque<DirectoryEntry>)> = None;
     while !cursor.directories.is_empty() {
         result.continuation = Some(cursor.clone());
         if result.scanned_entries >= 10000
             || result.scanned_directories >= 200
             || result.entries.len() >= limit
-            || serde_json::to_vec(&result).map_err(|error| error.to_string())?.len() > 56 * 1024
+            || serde_json::to_vec(&result)
+                .map_err(|error| error.to_string())?
+                .len()
+                > 56 * 1024
         {
             result.truncated = true;
-            result.notices.push("Page budget reached; continue with the unchanged query and returned continuation.".into());
+            result.notices.push(
+                "Page budget reached; continue with the unchanged query and returned continuation."
+                    .into(),
+            );
             break;
         }
         let frame = cursor.directories.last_mut().unwrap();
@@ -137,7 +149,11 @@ pub async fn list_matching_files(runtime: &dyn ProjectRuntime, args: &SearchFile
         }
     }
     result.continuation = (!cursor.directories.is_empty()).then_some(cursor);
-    if serde_json::to_vec(&result).map_err(|error| error.to_string())?.len() > 64 * 1024 {
+    if serde_json::to_vec(&result)
+        .map_err(|error| error.to_string())?
+        .len()
+        > 64 * 1024
+    {
         return Err(String::from(
             "path search continuation exceeds 64 KiB; browse a narrower directory",
         ));

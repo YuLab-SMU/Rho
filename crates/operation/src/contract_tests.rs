@@ -62,19 +62,51 @@ impl OperationJournal for TestJournal {
         record.updated_at_ms = at;
         Ok(record.clone())
     }
-    async fn stage_commit(&self, id: &OperationId, plan: &CommitPlan, _: i64) -> Result<CommitReceipt, OperationError> {
+    async fn stage_commit(
+        &self,
+        id: &OperationId,
+        plan: &CommitPlan,
+        _: i64,
+    ) -> Result<CommitReceipt, OperationError> {
         let reference = commit_reference(id, plan)?;
-        self.0.lock().unwrap().candidates.insert(id.clone(), plan.clone());
-        Ok(CommitReceipt { reference, committed: false })
+        self.0
+            .lock()
+            .unwrap()
+            .candidates
+            .insert(id.clone(), plan.clone());
+        Ok(CommitReceipt {
+            reference,
+            committed: false,
+        })
     }
-    async fn commit_receipt(&self, id: &OperationId) -> Result<Option<CommitReceipt>, OperationError> {
+    async fn commit_receipt(
+        &self,
+        id: &OperationId,
+    ) -> Result<Option<CommitReceipt>, OperationError> {
         let state = self.0.lock().unwrap();
-        state.candidates.get(id).map(|plan| Ok(CommitReceipt { reference: commit_reference(id, plan)?, committed: state.records[id].status.is_terminal() })).transpose()
+        state
+            .candidates
+            .get(id)
+            .map(|plan| {
+                Ok(CommitReceipt {
+                    reference: commit_reference(id, plan)?,
+                    committed: state.records[id].status.is_terminal(),
+                })
+            })
+            .transpose()
     }
-    async fn read_commit_candidate(&self, reference: &OperationCommitReference) -> Result<CommitPlan, OperationError> {
+    async fn read_commit_candidate(
+        &self,
+        reference: &OperationCommitReference,
+    ) -> Result<CommitPlan, OperationError> {
         let state = self.0.lock().unwrap();
-        let plan = state.candidates.get(&reference.operation_id).ok_or_else(|| OperationError::NotFound("candidate".into()))?;
-        if commit_reference(&reference.operation_id, plan)? != *reference { return Err(OperationError::ContentChanged("candidate".into())); }
+        let plan = state
+            .candidates
+            .get(&reference.operation_id)
+            .ok_or_else(|| OperationError::NotFound("candidate".into()))?;
+        if commit_reference(&reference.operation_id, plan)? != *reference {
+            return Err(OperationError::ContentChanged("candidate".into()));
+        }
         Ok(plan.clone())
     }
     async fn commit(
@@ -224,7 +256,11 @@ async fn project_coverage_without_journal_support_stays_unknown() {
     let result = handler.query_for(&context(), &json!({})).await;
     assert!(matches!(result, Err(OperationError::Unavailable(_))));
     assert!(handler.query(&json!({})).await.is_err());
-    assert!(handler.normalize_arguments(&json!({"principal":"someone-else"})).is_err());
+    assert!(
+        handler
+            .normalize_arguments(&json!({"principal":"someone-else"}))
+            .is_err()
+    );
     let state = journal.0.lock().unwrap();
     assert!(state.records.is_empty());
     assert!(state.plans.is_empty());
@@ -274,39 +310,93 @@ struct TestHandler {
 
 fn dynamic_handler(value: i64) -> TestHandler {
     let mut handler = TestHandler::new(CommitPlan::succeeded(json!({"value":value})));
-    handler.descriptor.documentation.related_capabilities.clear();
+    handler
+        .descriptor
+        .documentation
+        .related_capabilities
+        .clear();
     handler
 }
 
 #[test]
 fn dynamic_registration_is_atomic_owned_and_compare_and_swap() {
     let registry = CapabilityRegistry::new();
-    let first = registry.replace_batch("plugin.test", None, ContributionBatch { controls: vec![],
-        operations: vec![Arc::new(dynamic_handler(1))], queries: vec![],
-    }).unwrap();
+    let first = registry
+        .replace_batch(
+            "plugin.test",
+            None,
+            ContributionBatch {
+                controls: vec![],
+                operations: vec![Arc::new(dynamic_handler(1))],
+                queries: vec![],
+            },
+        )
+        .unwrap();
     let before = registry.snapshot();
     let mut bad = TestQuery::new("test.partial");
     bad.descriptor.input_schema = json!({"$ref":"https://invalid.test/schema"});
-    assert!(registry.replace_batch("plugin.test", Some(&first), ContributionBatch { controls: vec![],
-        operations:vec![Arc::new(dynamic_handler(2))], queries:vec![Arc::new(bad)],
-    }).is_err());
+    assert!(
+        registry
+            .replace_batch(
+                "plugin.test",
+                Some(&first),
+                ContributionBatch {
+                    controls: vec![],
+                    operations: vec![Arc::new(dynamic_handler(2))],
+                    queries: vec![Arc::new(bad)],
+                }
+            )
+            .is_err()
+    );
     assert!(Arc::ptr_eq(&before, &registry.snapshot()));
-    assert!(registry.query_handler(&CapabilityRef::new("test.partial",1).unwrap()).is_err());
-    assert!(registry.replace_batch("another.owner", None, ContributionBatch { controls: vec![],
-        operations:vec![Arc::new(dynamic_handler(2))],queries:vec![],
-    }).is_err());
+    assert!(
+        registry
+            .query_handler(&CapabilityRef::new("test.partial", 1).unwrap())
+            .is_err()
+    );
+    assert!(
+        registry
+            .replace_batch(
+                "another.owner",
+                None,
+                ContributionBatch {
+                    controls: vec![],
+                    operations: vec![Arc::new(dynamic_handler(2))],
+                    queries: vec![],
+                }
+            )
+            .is_err()
+    );
     let removed = registry.remove_batch(&first).unwrap();
     assert!(registry.descriptors().is_empty());
     assert!(registry.remove_batch(&first).is_err());
     let mut changed = dynamic_handler(3);
     changed.descriptor.output_schema = json!({"type":"string"});
-    assert!(registry.replace_batch("plugin.test", Some(&removed), ContributionBatch { controls: vec![],
-        operations:vec![Arc::new(changed)],queries:vec![],
-    }).is_err());
+    assert!(
+        registry
+            .replace_batch(
+                "plugin.test",
+                Some(&removed),
+                ContributionBatch {
+                    controls: vec![],
+                    operations: vec![Arc::new(changed)],
+                    queries: vec![],
+                }
+            )
+            .is_err()
+    );
     assert!(registry.descriptors().is_empty());
-    let restored = registry.replace_batch("plugin.test", Some(&removed), ContributionBatch { controls: vec![],
-        operations:vec![Arc::new(dynamic_handler(4))],queries:vec![],
-    }).unwrap();
+    let restored = registry
+        .replace_batch(
+            "plugin.test",
+            Some(&removed),
+            ContributionBatch {
+                controls: vec![],
+                operations: vec![Arc::new(dynamic_handler(4))],
+                queries: vec![],
+            },
+        )
+        .unwrap();
     assert_eq!(restored.generation, removed.generation + 1);
     // Existing observations retain a consistent original handler/schema pair.
     assert_eq!(before.descriptors(), registry.descriptors());
@@ -366,103 +456,264 @@ async fn accepted_operation_retains_handler_contract_and_cancellation_after_unre
     let started = Arc::new(tokio::sync::Notify::new());
     let finish = Arc::new(tokio::sync::Notify::new());
     let mut handler = dynamic_handler(17);
-    handler.started = Some(started.clone()); handler.finish = Some(finish.clone());
+    handler.started = Some(started.clone());
+    handler.finish = Some(finish.clone());
     let journal = Arc::new(TestJournal::default());
     let mut registry = CapabilityRegistry::new();
     register_get(&mut registry, journal.clone(), Some("/project".into()));
     let registry = Arc::new(registry);
-    let registration = registry.replace_batch("plugin.test", None, ContributionBatch { controls: vec![],
-        operations:vec![Arc::new(handler)],queries:vec![],
-    }).unwrap();
+    let registration = registry
+        .replace_batch(
+            "plugin.test",
+            None,
+            ContributionBatch {
+                controls: vec![],
+                operations: vec![Arc::new(handler)],
+                queries: vec![],
+            },
+        )
+        .unwrap();
     let gateway = Arc::new(gateway(registry.clone(), journal.clone()));
     let runner = gateway.clone();
-    let running = tokio::spawn(async move { runner.invoke(&context(), invocation(json!({"value":1}))).await });
+    let running = tokio::spawn(async move {
+        runner
+            .invoke(&context(), invocation(json!({"value":1})))
+            .await
+    });
     started.notified().await;
-    let operation = journal.0.lock().unwrap().records.values().next().unwrap().operation.operation_id.clone();
+    let operation = journal
+        .0
+        .lock()
+        .unwrap()
+        .records
+        .values()
+        .next()
+        .unwrap()
+        .operation
+        .operation_id
+        .clone();
     registry.remove_batch(&registration).unwrap();
-    assert!(registry.handler(&CapabilityRef::new("test.execute",1).unwrap()).is_err());
-    let cancellation = gateway.request_cancellation(&context(), &operation).await.unwrap();
-    assert!(cancellation.accepted); assert_eq!(cancellation.operation.status, OperationStatus::Running);
+    assert!(
+        registry
+            .handler(&CapabilityRef::new("test.execute", 1).unwrap())
+            .is_err()
+    );
+    let cancellation = gateway
+        .request_cancellation(&context(), &operation)
+        .await
+        .unwrap();
+    assert!(cancellation.accepted);
+    assert_eq!(cancellation.operation.status, OperationStatus::Running);
     finish.notify_one();
     let result = running.await.unwrap().unwrap();
-    assert_eq!(result.status, OperationStatus::Succeeded); assert_eq!(result.output, Some(json!({"value":17})));
-    let read = QueryGateway::new(registry).query(&context(), query("operation.get", json!({"operation_id":operation}))).await.unwrap();
+    assert_eq!(result.status, OperationStatus::Succeeded);
+    assert_eq!(result.output, Some(json!({"value":17})));
+    let read = QueryGateway::new(registry)
+        .query(
+            &context(),
+            query("operation.get", json!({"operation_id":operation})),
+        )
+        .await
+        .unwrap();
     let data: OperationGetResult = serde_json::from_value(read.data.unwrap()).unwrap();
     assert_eq!(data.record.unwrap().operation.operation_id, operation);
-    assert!(matches!(data.output_contract.unwrap().availability, RecordedContractAvailability::OwnerUnavailableInThisHost));
+    assert!(matches!(
+        data.output_contract.unwrap().availability,
+        RecordedContractAvailability::OwnerUnavailableInThisHost
+    ));
     assert_eq!(journal.0.lock().unwrap().plans.len(), 1);
 }
 
-struct DelayedQuery { base: TestQuery, started: Arc<tokio::sync::Notify>, finish: Arc<tokio::sync::Notify> }
+struct DelayedQuery {
+    base: TestQuery,
+    started: Arc<tokio::sync::Notify>,
+    finish: Arc<tokio::sync::Notify>,
+}
 #[async_trait]
 impl QueryHandler for DelayedQuery {
-    fn descriptor(&self) -> &CapabilityDescriptor { self.base.descriptor() }
-    fn normalize_arguments(&self, arguments: &Value) -> Result<Value, OperationError> { self.base.normalize_arguments(arguments) }
+    fn descriptor(&self) -> &CapabilityDescriptor {
+        self.base.descriptor()
+    }
+    fn normalize_arguments(&self, arguments: &Value) -> Result<Value, OperationError> {
+        self.base.normalize_arguments(arguments)
+    }
     async fn query(&self, arguments: &Value) -> Result<QuerySnapshot, OperationError> {
-        self.started.notify_one(); self.finish.notified().await; self.base.query(arguments).await
+        self.started.notify_one();
+        self.finish.notified().await;
+        self.base.query(arguments).await
     }
 }
 #[tokio::test]
 async fn query_in_flight_uses_one_registry_snapshot_through_result_validation() {
-    let started = Arc::new(tokio::sync::Notify::new()); let finish = Arc::new(tokio::sync::Notify::new());
-    let mut base = TestQuery::new("test.delayed"); base.descriptor.documentation.related_capabilities.clear();
+    let started = Arc::new(tokio::sync::Notify::new());
+    let finish = Arc::new(tokio::sync::Notify::new());
+    let mut base = TestQuery::new("test.delayed");
+    base.descriptor.documentation.related_capabilities.clear();
     let registry = Arc::new(CapabilityRegistry::new());
-    let registration = registry.replace_batch("plugin.query", None, ContributionBatch { controls: vec![], operations:vec![],queries:vec![Arc::new(DelayedQuery {
-        base, started:started.clone(), finish:finish.clone(),
-    })]}).unwrap();
+    let registration = registry
+        .replace_batch(
+            "plugin.query",
+            None,
+            ContributionBatch {
+                controls: vec![],
+                operations: vec![],
+                queries: vec![Arc::new(DelayedQuery {
+                    base,
+                    started: started.clone(),
+                    finish: finish.clone(),
+                })],
+            },
+        )
+        .unwrap();
     let reader = QueryGateway::new(registry.clone());
-    let reading = tokio::spawn(async move { reader.query(&context(), query("test.delayed",json!({"value":1}))).await });
+    let reading = tokio::spawn(async move {
+        reader
+            .query(&context(), query("test.delayed", json!({"value":1})))
+            .await
+    });
     started.notified().await;
     registry.remove_batch(&registration).unwrap();
     finish.notify_one();
-    assert_eq!(reading.await.unwrap().unwrap().data, Some(json!({"value":1})));
-    assert!(QueryGateway::new(registry).query(&context(), query("test.delayed", json!({"value":1}))).await.is_err());
+    assert_eq!(
+        reading.await.unwrap().unwrap().data,
+        Some(json!({"value":1}))
+    );
+    assert!(
+        QueryGateway::new(registry)
+            .query(&context(), query("test.delayed", json!({"value":1})))
+            .await
+            .is_err()
+    );
 }
 
 #[tokio::test]
 async fn captured_request_returns_original_after_provider_removal_without_preparation_or_replay() {
     let registry = Arc::new(CapabilityRegistry::new());
     let handler = Arc::new(dynamic_handler(23));
-    let registration = registry.replace_batch("plugin.original", None, ContributionBatch { controls: vec![],operations:vec![handler.clone()],queries:vec![]}).unwrap();
-    let journal = Arc::new(TestJournal::default()); let gateway = gateway(registry.clone(), journal.clone());
-    let original = gateway.invoke(&context(), invocation(json!({"value":1}))).await.unwrap();
-    assert_eq!(original.operation.admission.as_ref().unwrap().descriptor.capability, original.operation.capability);
+    let registration = registry
+        .replace_batch(
+            "plugin.original",
+            None,
+            ContributionBatch {
+                controls: vec![],
+                operations: vec![handler.clone()],
+                queries: vec![],
+            },
+        )
+        .unwrap();
+    let journal = Arc::new(TestJournal::default());
+    let gateway = gateway(registry.clone(), journal.clone());
+    let original = gateway
+        .invoke(&context(), invocation(json!({"value":1})))
+        .await
+        .unwrap();
+    assert_eq!(
+        original
+            .operation
+            .admission
+            .as_ref()
+            .unwrap()
+            .descriptor
+            .capability,
+        original.operation.capability
+    );
     registry.remove_batch(&registration).unwrap();
-    let repeated = gateway.invoke(&context(), invocation(json!({"value":1}))).await.unwrap();
-    assert_eq!(repeated.operation.operation_id, original.operation.operation_id);
+    let repeated = gateway
+        .invoke(&context(), invocation(json!({"value":1})))
+        .await
+        .unwrap();
+    assert_eq!(
+        repeated.operation.operation_id,
+        original.operation.operation_id
+    );
     assert_eq!(handler.execute_calls.load(Ordering::SeqCst), 1);
-    let mut denied = context(); denied.scopes.remove("test.run");
-    assert!(matches!(gateway.invoke(&denied, invocation(json!({"value":1}))).await, Err(OperationError::AccessDenied {..})));
+    let mut denied = context();
+    denied.scopes.remove("test.run");
+    assert!(matches!(
+        gateway
+            .invoke(&denied, invocation(json!({"value":1})))
+            .await,
+        Err(OperationError::AccessDenied { .. })
+    ));
     assert_eq!(journal.0.lock().unwrap().plans.len(), 1);
 }
 
-struct BindingHandler { base: TestHandler, bound: Arc<TestHandler>, reject: bool }
+struct BindingHandler {
+    base: TestHandler,
+    bound: Arc<TestHandler>,
+    reject: bool,
+}
 #[async_trait]
 impl OperationHandler for BindingHandler {
-    fn descriptor(&self) -> &CapabilityDescriptor { self.base.descriptor() }
-    fn normalize_arguments(&self, arguments: &Value) -> Result<Value, OperationError> { self.base.normalize_arguments(arguments) }
-    fn resolve_target(&self, arguments: &Value) -> Result<TargetRef, OperationError> { self.base.resolve_target(arguments) }
-    async fn bind(&self, _: &CallContext, _: &Value, _: &[Precondition]) -> Result<Option<Arc<dyn OperationHandler>>, OperationError> {
-        if self.reject { Err(OperationError::InvalidInput("native preflight rejected the request".into())) }
-        else { Ok(Some(self.bound.clone())) }
+    fn descriptor(&self) -> &CapabilityDescriptor {
+        self.base.descriptor()
     }
-    async fn execute(&self, _: &Operation) -> Result<CommitPlan, HandlerError> { panic!("unbound routing handler must never execute") }
+    fn normalize_arguments(&self, arguments: &Value) -> Result<Value, OperationError> {
+        self.base.normalize_arguments(arguments)
+    }
+    fn resolve_target(&self, arguments: &Value) -> Result<TargetRef, OperationError> {
+        self.base.resolve_target(arguments)
+    }
+    async fn bind(
+        &self,
+        _: &CallContext,
+        _: &Value,
+        _: &[Precondition],
+    ) -> Result<Option<Arc<dyn OperationHandler>>, OperationError> {
+        if self.reject {
+            Err(OperationError::InvalidInput(
+                "native preflight rejected the request".into(),
+            ))
+        } else {
+            Ok(Some(self.bound.clone()))
+        }
+    }
+    async fn execute(&self, _: &Operation) -> Result<CommitPlan, HandlerError> {
+        panic!("unbound routing handler must never execute")
+    }
 }
 #[tokio::test]
 async fn preparation_freezes_the_owner_before_admission_and_cannot_expand_its_authority() {
-    for (reject, expand, succeeds) in [(false,false,true),(true,false,false),(false,true,false)] {
+    for (reject, expand, succeeds) in [
+        (false, false, true),
+        (true, false, false),
+        (false, true, false),
+    ] {
         let mut bound = dynamic_handler(37);
-        if expand { bound.descriptor.required_scopes.clear(); }
+        if expand {
+            bound.descriptor.required_scopes.clear();
+        }
         let bound = Arc::new(bound);
         let registry = Arc::new(CapabilityRegistry::new());
-        registry.replace_batch("plugin.bound", None, ContributionBatch { controls: vec![],operations:vec![Arc::new(BindingHandler {
-            base:dynamic_handler(0),bound:bound.clone(),reject,
-        })],queries:vec![]}).unwrap();
+        registry
+            .replace_batch(
+                "plugin.bound",
+                None,
+                ContributionBatch {
+                    controls: vec![],
+                    operations: vec![Arc::new(BindingHandler {
+                        base: dynamic_handler(0),
+                        bound: bound.clone(),
+                        reject,
+                    })],
+                    queries: vec![],
+                },
+            )
+            .unwrap();
         let journal = Arc::new(TestJournal::default());
-        let result = gateway(registry,journal.clone()).invoke(&context(),invocation(json!({"value":1}))).await;
-        if succeeds { assert_eq!(result.unwrap().output, Some(json!({"value":37}))); }
-        else { assert!(result.is_err()); assert!(journal.0.lock().unwrap().records.is_empty()); }
-        assert_eq!(bound.execute_calls.load(Ordering::SeqCst), usize::from(succeeds));
+        let result = gateway(registry, journal.clone())
+            .invoke(&context(), invocation(json!({"value":1})))
+            .await;
+        if succeeds {
+            assert_eq!(result.unwrap().output, Some(json!({"value":37})));
+        } else {
+            assert!(result.is_err());
+            assert!(journal.0.lock().unwrap().records.is_empty());
+        }
+        assert_eq!(
+            bound.execute_calls.load(Ordering::SeqCst),
+            usize::from(succeeds)
+        );
     }
 }
 impl TestHandler {

@@ -56,7 +56,9 @@ impl Endpoint {
         if url.scheme() != "http"
             || !url.username().is_empty()
             || url.password().is_some()
-            || url.query().is_some_and(|query| query != "plugin-window" && query != "plugin-window=")
+            || url
+                .query()
+                .is_some_and(|query| query != "plugin-window" && query != "plugin-window=")
             || url.path() != "/"
         {
             return Err(invalid(
@@ -201,7 +203,9 @@ impl ConnectedHost {
                 .as_nanos()
         );
         let mut frame = json!({"project_root":self.project,"frame":{"id":id,"request":request}});
-        if let Some(id) = &self.test_project { frame["frame"]["test_project"] = json!(id); }
+        if let Some(id) = &self.test_project {
+            frame["frame"]["test_project"] = json!(id);
+        }
         let bytes =
             serde_json::to_vec(&frame).map_err(|_| invalid("Host request cannot be encoded"))?;
         if bytes.len() > REQUEST_BYTES {

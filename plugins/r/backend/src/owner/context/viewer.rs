@@ -5,8 +5,8 @@ const PREVIEW: &str = "r.context.viewer.preview";
 const CONTRIBUTION: &str = "viewer";
 const PLOT_SEARCH: &str = "r.context.plots.search";
 const PLOT_PREVIEW: &str = "r.context.plots.preview";
-mod plots;
 mod console;
+mod plots;
 pub(super) fn is_query(id: &str) -> bool {
     matches!(id, SEARCH | PREVIEW | PLOT_SEARCH | PLOT_PREVIEW) || console::is_query(id)
 }
@@ -185,7 +185,9 @@ impl Owner {
             .ok_or("Missing original Viewer observation".into())
     }
     pub(super) async fn query_viewer_context(&self, call: &PluginCall) -> Result<Value, String> {
-        if console::is_query(call.binding.capability.id.as_str()) { return self.query_console_context(call).await; }
+        if console::is_query(call.binding.capability.id.as_str()) {
+            return self.query_console_context(call).await;
+        }
         let plot = matches!(
             call.binding.capability.id.as_str(),
             PLOT_SEARCH | PLOT_PREVIEW

@@ -50,7 +50,10 @@ async fn pending_cancellation_fences_start_until_the_original_journal_signal() {
     let acquiring = queue.acquire(&a_id, lane.clone(), cancellation);
     tokio::pin!(acquiring);
     pending(acquiring.as_mut()).await;
-    let preparation = PendingCancellation { binding: a.binding.clone(), operation_id: a_id.clone() };
+    let preparation = PendingCancellation {
+        binding: a.binding.clone(),
+        operation_id: a_id.clone(),
+    };
     let mut wrong = preparation.clone();
     wrong.binding.target = Some("another-session".into());
     assert!(queue.prepare_pending_cancellation(&wrong).is_err());
@@ -64,26 +67,55 @@ async fn pending_cancellation_fences_start_until_the_original_journal_signal() {
     assert!(observed.console.current.is_none());
     assert_eq!(observed.console.pending[0].operation_id, a_id);
     control(&queue, true, None).unwrap();
-    assert!(control(&queue, false, None).unwrap_err().contains("journal confirmation"));
-    assert!(queue.prepare_pending_cancellation(&preparation).unwrap(), "same original preparation is retryable");
+    assert!(
+        control(&queue, false, None)
+            .unwrap_err()
+            .contains("journal confirmation")
+    );
+    assert!(
+        queue.prepare_pending_cancellation(&preparation).unwrap(),
+        "same original preparation is retryable"
+    );
     pending(acquiring.as_mut()).await;
     cancel.send_replace(true);
     assert!(acquiring.await.unwrap().is_none());
     assert!(!queue.prepare_pending_cancellation(&preparation).unwrap());
-    assert_eq!(queue.observe("native-session", None).awaiting_commit, vec![a_id.clone()]);
-    queue.settle(&settled(&a, PluginOutcome::Cancelled)).unwrap();
-    assert!(queue.observe("native-session", None).pending_cancellations.is_empty());
+    assert_eq!(
+        queue.observe("native-session", None).awaiting_commit,
+        vec![a_id.clone()]
+    );
+    queue
+        .settle(&settled(&a, PluginOutcome::Cancelled))
+        .unwrap();
+    assert!(
+        queue
+            .observe("native-session", None)
+            .pending_cancellations
+            .is_empty()
+    );
     control(&queue, false, None).unwrap();
     let b = call("already-running");
     queue.admit(&b).unwrap();
     let (_cancel, cancellation) = watch::channel(false);
-    let running = queue.acquire(&id(&b), lane, cancellation).await.unwrap().unwrap();
-    assert!(!queue.prepare_pending_cancellation(&PendingCancellation {
-        binding: b.binding.clone(), operation_id: id(&b),
-    }).unwrap(), "conditional cancellation never interrupts a running native call");
+    let running = queue
+        .acquire(&id(&b), lane, cancellation)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(
+        !queue
+            .prepare_pending_cancellation(&PendingCancellation {
+                binding: b.binding.clone(),
+                operation_id: id(&b),
+            })
+            .unwrap(),
+        "conditional cancellation never interrupts a running native call"
+    );
     queue.finished(&id(&b), PluginOutcome::Succeeded).unwrap();
     drop(running);
-    queue.settle(&settled(&b, PluginOutcome::Succeeded)).unwrap();
+    queue
+        .settle(&settled(&b, PluginOutcome::Succeeded))
+        .unwrap();
 }
 
 #[test]
@@ -185,19 +217,31 @@ async fn fifo_waits_for_original_settlement_and_old_ack_cannot_advance_the_next_
 fn formatting_retains_its_own_binding_and_source_in_the_shared_queue() {
     let queue = Queue::default();
     let mut current = call("format-original");
-    current.binding.capability.id = rho_plugin_sdk::protocol::ContributionId::new("r.format").unwrap();
+    current.binding.capability.id =
+        rho_plugin_sdk::protocol::ContributionId::new("r.format").unwrap();
     let source = json!({"view_id":"document:one","label":"分析.R","kind":"format"});
-    current.arguments = json!({"expected_session":"native-session","code":"中文=42","source":source});
+    current.arguments =
+        json!({"expected_session":"native-session","code":"中文=42","source":source});
     queue.admit(&current).unwrap();
     current.arguments["code"] = json!("later edits");
     let observed = queue.observe("native-session", None);
     assert_eq!(observed.console.pending[0].summary, "中文=42");
-    assert_eq!(serde_json::to_value(&observed.console.pending[0].source).unwrap(), source);
-    let cancellation = PendingCancellation { operation_id: id(&current), binding: current.binding.clone() };
+    assert_eq!(
+        serde_json::to_value(&observed.console.pending[0].source).unwrap(),
+        source
+    );
+    let cancellation = PendingCancellation {
+        operation_id: id(&current),
+        binding: current.binding.clone(),
+    };
     assert!(queue.prepare_pending_cancellation(&cancellation).unwrap());
-    assert_eq!(queue.observe("native-session", None).pending_cancellations, vec![id(&current)]);
+    assert_eq!(
+        queue.observe("native-session", None).pending_cancellations,
+        vec![id(&current)]
+    );
     let mut wrong = cancellation;
-    wrong.binding.capability.id = rho_plugin_sdk::protocol::ContributionId::new("r.execute").unwrap();
+    wrong.binding.capability.id =
+        rho_plugin_sdk::protocol::ContributionId::new("r.execute").unwrap();
     assert!(queue.prepare_pending_cancellation(&wrong).is_err());
 }
 

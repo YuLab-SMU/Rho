@@ -171,9 +171,15 @@ impl ScenarioRevision {
         )?;
         for (alias, instance) in &self.instances {
             let mut grants = BTreeSet::new();
-            require(instance.optional_capabilities.len() <= 512, "too many scenario optional capabilities")?;
+            require(
+                instance.optional_capabilities.len() <= 512,
+                "too many scenario optional capabilities",
+            )?;
             for capability in &instance.optional_capabilities {
-                require(capability.version > 0 && grants.insert(capability), "invalid or duplicate scenario optional capability")?;
+                require(
+                    capability.version > 0 && grants.insert(capability),
+                    "invalid or duplicate scenario optional capability",
+                )?;
             }
             for target in instance.dependencies.values() {
                 require(
@@ -280,6 +286,12 @@ impl ScenarioRevision {
             }
             require(*count <= 1024, "layout exceeds node limit")
         }
-        layout(&self.layout, 0, &mut 0, &mut BTreeSet::new(), &self.instances)
+        layout(
+            &self.layout,
+            0,
+            &mut 0,
+            &mut BTreeSet::new(),
+            &self.instances,
+        )
     }
 }

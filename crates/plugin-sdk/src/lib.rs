@@ -3,8 +3,8 @@
 
 mod host_calls;
 pub use host_calls::*;
-mod transport;
 mod resources;
+mod transport;
 pub use resources::*;
 pub use rho_plugin_protocol as protocol;
 pub use transport::*;
@@ -42,7 +42,13 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> BackendConnection<R, W> {
         let frame = read_frame(&mut input)
             .await?
             .ok_or_else(|| SdkError::Invalid("Host disconnected before initialization".into()))?;
-        let RpcBody::Initialize { instance, grants, environment, resource_channel } = &frame.body else {
+        let RpcBody::Initialize {
+            instance,
+            grants,
+            environment,
+            resource_channel,
+        } = &frame.body
+        else {
             return Err(SdkError::Invalid(
                 "first frame must initialize the backend".into(),
             ));
@@ -72,7 +78,10 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> BackendConnection<R, W> {
         self.ready_with_features(Default::default()).await
     }
 
-    pub async fn ready_with_features(&mut self, features: std::collections::BTreeSet<String>) -> Result<(), SdkError> {
+    pub async fn ready_with_features(
+        &mut self,
+        features: std::collections::BTreeSet<String>,
+    ) -> Result<(), SdkError> {
         self.writer
             .send(
                 self.initialization_request.clone(),
@@ -114,9 +123,16 @@ impl<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> BackendConnection<R, W> {
 }
 
 /// Available after splitting the connection's reader and writer.
-pub fn validate_settlement(instance: &PluginInstance, settlement: &OperationSettlement) -> Result<(), SdkError> {
-    if settlement.binding.provider != instance.identity || settlement.binding.project != instance.project {
-        return Err(SdkError::Invalid("settlement differs from the initialized instance or project".into()));
+pub fn validate_settlement(
+    instance: &PluginInstance,
+    settlement: &OperationSettlement,
+) -> Result<(), SdkError> {
+    if settlement.binding.provider != instance.identity
+        || settlement.binding.project != instance.project
+    {
+        return Err(SdkError::Invalid(
+            "settlement differs from the initialized instance or project".into(),
+        ));
     }
     Ok(())
 }

@@ -147,10 +147,15 @@ mod tests {
         }
         let store = ApplicationStore::open(&path).unwrap();
         let original = store.read("/project", "layout").unwrap();
-        let saved = store.write("/project", &ApplicationState {
-            value: serde_json::json!({"views": ["viewer"]}),
-            ..original
-        }).unwrap();
+        let saved = store
+            .write(
+                "/project",
+                &ApplicationState {
+                    value: serde_json::json!({"views": ["viewer"]}),
+                    ..original
+                },
+            )
+            .unwrap();
         drop(store);
         let reopened = ApplicationStore::open(&path).unwrap();
         let restored = reopened.read("/project", "layout").unwrap();
@@ -158,7 +163,10 @@ mod tests {
         assert_eq!(restored.version, saved.version);
         assert_eq!(restored.value, saved.value);
         for directory in retired {
-            assert_eq!(std::fs::read(directory.join("untouched")).unwrap(), b"plugin-owned");
+            assert_eq!(
+                std::fs::read(directory.join("untouched")).unwrap(),
+                b"plugin-owned"
+            );
             assert_eq!(std::fs::read_dir(directory).unwrap().count(), 1);
         }
     }
@@ -169,17 +177,25 @@ mod tests {
         let path = temp.path().join("studio.sqlite");
         let store = ApplicationStore::open(&path).unwrap();
         let original = store.read("/project", "layout").unwrap();
-        store.write("/project", &ApplicationState {
-            value: serde_json::json!({"selected": "插件 Ω"}),
-            ..original
-        }).unwrap();
+        store
+            .write(
+                "/project",
+                &ApplicationState {
+                    value: serde_json::json!({"selected": "插件 Ω"}),
+                    ..original
+                },
+            )
+            .unwrap();
         drop(store);
         let connection = Connection::open(&path).unwrap();
-        let mut query = connection.prepare(
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-        ).unwrap();
-        let tables: Vec<String> = query.query_map([], |row| row.get(0)).unwrap()
-            .collect::<Result<_, _>>().unwrap();
+        let mut query = connection
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            .unwrap();
+        let tables: Vec<String> = query
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
         assert_eq!(tables, ["application_state"]);
     }
 }

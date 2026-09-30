@@ -417,12 +417,11 @@ impl AgentStore {
                 let retained: StoredAgentNativeAdmission =
                     serde_json::from_str(&value).map_err(error)?;
                 retained.validate(scope, receipt)?;
-                if let Some(admission) = admission {
-                    if serde_json::to_value(&retained).map_err(error)?
+                if let Some(admission) = admission
+                    && serde_json::to_value(&retained).map_err(error)?
                         != serde_json::to_value(admission).map_err(error)?
-                    {
-                        return Err(AgentTaskError::RequestConflict);
-                    }
+                {
+                    return Err(AgentTaskError::RequestConflict);
                 }
             } else if let Some(admission) = admission {
                 let reused:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM agent_task_receipts WHERE project=?1 AND principal=?2 AND request_id=?3) OR EXISTS(SELECT 1 FROM agent_native_admissions WHERE project=?1 AND principal=?2 AND (native_operation=?4 OR native_request=?5))",params![scope.project,scope.principal,receipt.request_id,admission.origin.operation.as_str(),admission.origin.request.as_str()],|r|r.get(0)).map_err(error)?;

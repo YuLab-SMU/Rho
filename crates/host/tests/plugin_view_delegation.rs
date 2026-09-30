@@ -1,7 +1,7 @@
-#[path = "fixtures/plugins.rs"]
-mod fixture;
 #[path = "fixtures/view_authority.rs"]
 mod authority;
+#[path = "fixtures/plugins.rs"]
+mod fixture;
 use rho_contract::*;
 use rho_host::{NextHost, OperationError};
 use rho_plugin_protocol::{PluginArchive, PluginViewConnection};
@@ -681,11 +681,21 @@ async fn caller_view_observation_is_native_credential_free_and_survives_backend_
     // the original execution lease rather than treating it as already released.
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
-            let owner = query(&host, &context, "plugins.instance", json!({"instance":instance})).await;
-            if owner["retained_calls"] == 0 && owner["pending_messages"] == 0 { break; }
+            let owner = query(
+                &host,
+                &context,
+                "plugins.instance",
+                json!({"instance":instance}),
+            )
+            .await;
+            if owner["retained_calls"] == 0 && owner["pending_messages"] == 0 {
+                break;
+            }
             tokio::task::yield_now().await;
         }
-    }).await.unwrap();
+    })
+    .await
+    .unwrap();
     invoke(
         &host,
         &context,

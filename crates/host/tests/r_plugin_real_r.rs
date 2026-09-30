@@ -6,14 +6,14 @@ use rho_plugins::{PluginRepository, backend_target, repository_path, snapshot_di
 use serde_json::{Value, json};
 use std::{fs, path::Path, sync::Arc, time::Duration};
 
-#[path = "fixtures/r_queue.rs"]
-mod queue;
 #[path = "fixtures/r_console.rs"]
 mod console;
-#[path = "fixtures/r_inspection.rs"]
-mod inspection;
 #[path = "fixtures/r_context.rs"]
 mod context;
+#[path = "fixtures/r_inspection.rs"]
+mod inspection;
+#[path = "fixtures/r_queue.rs"]
+mod queue;
 
 async fn query(host: &NextHost, id: &str, args: Value) -> Value {
     host.query_snapshot(
@@ -274,9 +274,21 @@ async fn independent_r_plugin_uses_original_operations_and_retains_revision_scop
     fs::create_dir(&project).unwrap();
     let db = temp.path().join("state/state.sqlite");
     let first = snapshot_directory(&source, None, &backend_target()).unwrap();
-    for capability in ["r.context.help.search", "r.context.help.preview", "r.context.viewer.search", "r.context.viewer.preview"] {
-        assert!(first.revision.manifest.capabilities.iter().any(|entry| entry.capability.id.as_str() == capability),
-            "Retained R package lacks {capability}; choose a package matching this fixture before starting native sessions");
+    for capability in [
+        "r.context.help.search",
+        "r.context.help.preview",
+        "r.context.viewer.search",
+        "r.context.viewer.preview",
+    ] {
+        assert!(
+            first
+                .revision
+                .manifest
+                .capabilities
+                .iter()
+                .any(|entry| entry.capability.id.as_str() == capability),
+            "Retained R package lacks {capability}; choose a package matching this fixture before starting native sessions"
+        );
     }
     let second_source = temp.path().join("revision-two");
     copy_tree(&source, &second_source);
@@ -293,9 +305,16 @@ async fn independent_r_plugin_uses_original_operations_and_retains_revision_scop
     let mut repository = PluginRepository::open(&repository_path(&db)).unwrap();
     repository.import(&first).unwrap();
     repository.import(&second).unwrap();
-    let host = Arc::new(NextHost::open_plugin_workspace(&db, &project).await.unwrap());
+    let host = Arc::new(
+        NextHost::open_plugin_workspace(&db, &project)
+            .await
+            .unwrap(),
+    );
     let left = activate(&host, &first, "left").await;
-    assert_eq!(native_query(&host, &left, "r.session", json!({})).await["state"], "unstarted");
+    assert_eq!(
+        native_query(&host, &left, "r.session", json!({})).await["state"],
+        "unstarted"
+    );
     console::unstarted(&host, &left).await;
     inspection::unstarted(&host, &left).await;
     let premature = host.query_snapshot(&NextHost::local_context(), QueryRequest {
@@ -303,23 +322,51 @@ async fn independent_r_plugin_uses_original_operations_and_retains_revision_scop
         arguments: json!({"binding":binding(&host,&left,"r.snapshot").await,"arguments":{"expected_session":"absent","limit":10}}),
     }).await;
     assert!(premature.is_err());
-    assert_eq!(native_query(&host, &left, "r.session", json!({})).await["state"], "unstarted");
-    let left_create = run(&host, "left-session", "r.create_session", json!({"binding":binding(&host,&left,"r.create_session").await,"arguments":{}})).await;
+    assert_eq!(
+        native_query(&host, &left, "r.session", json!({})).await["state"],
+        "unstarted"
+    );
+    let left_create = run(
+        &host,
+        "left-session",
+        "r.create_session",
+        json!({"binding":binding(&host,&left,"r.create_session").await,"arguments":{}}),
+    )
+    .await;
     let old_session = left_create.output.as_ref().unwrap()["session_id"].clone();
     // Native readiness holds an original execution across the new revision's
     // activation. The second provider must not replace its binding or session.
     let gate = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let code = format!("con <- socketConnection('127.0.0.1', port={}, open='r+', blocking=TRUE, timeout=30); writeLines('started', con); flush(con); invisible(readLines(con, n=1)); close(con); old_revision_value <- 41; old_revision_value", gate.local_addr().unwrap().port());
-    let original = invocation("old-revision-in-flight", "r.execute", json!({
-        "binding":binding(&host,&left,"r.execute").await,
-        "arguments":{"expected_session":old_session,"code":code}
-    }));
+    let code = format!(
+        "con <- socketConnection('127.0.0.1', port={}, open='r+', blocking=TRUE, timeout=30); writeLines('started', con); flush(con); invisible(readLines(con, n=1)); close(con); old_revision_value <- 41; old_revision_value",
+        gate.local_addr().unwrap().port()
+    );
+    let original = invocation(
+        "old-revision-in-flight",
+        "r.execute",
+        json!({
+            "binding":binding(&host,&left,"r.execute").await,
+            "arguments":{"expected_session":old_session,"code":code}
+        }),
+    );
     let pending = queue::start(&host, original.clone());
-    let (mut gate_socket, _) = tokio::time::timeout(Duration::from_secs(20), gate.accept()).await.unwrap().unwrap();
+    let (mut gate_socket, _) = tokio::time::timeout(Duration::from_secs(20), gate.accept())
+        .await
+        .unwrap()
+        .unwrap();
     let mut signal = [0; 8];
-    tokio::time::timeout(Duration::from_secs(10), tokio::io::AsyncReadExt::read_exact(&mut gate_socket, &mut signal)).await.unwrap().unwrap();
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        tokio::io::AsyncReadExt::read_exact(&mut gate_socket, &mut signal),
+    )
+    .await
+    .unwrap()
+    .unwrap();
     assert_eq!(&signal, b"started\n");
-    let running = host.invoke(&NextHost::local_context(), original.clone()).await.unwrap();
+    let running = host
+        .invoke(&NextHost::local_context(), original.clone())
+        .await
+        .unwrap();
     assert_eq!(running.status, OperationStatus::Running);
     let right = activate(&host, &second, "right").await;
     assert_ne!(left.revision, right.revision);
@@ -459,7 +506,9 @@ async fn independent_r_plugin_uses_original_operations_and_retains_revision_scop
     );
     host.drain().await;
     drop(host);
-    let reopened = NextHost::open_plugin_workspace(&db, &project).await.unwrap();
+    let reopened = NextHost::open_plugin_workspace(&db, &project)
+        .await
+        .unwrap();
     assert_eq!(query(&reopened, "resources.read", read).await, retained);
     let replay = reopened
         .invoke(&NextHost::local_context(), request)

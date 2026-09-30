@@ -1,5 +1,5 @@
-use crate::{PluginError, PluginRepository, backend, ensure, validate_archive};
 use crate::instance_records::StoredActivation;
+use crate::{PluginError, PluginRepository, backend, ensure, validate_archive};
 use async_trait::async_trait;
 use base64::{Engine, engine::general_purpose::STANDARD};
 use rho_plugin_protocol::*;
@@ -9,7 +9,10 @@ use std::{
     fs,
     io::Write,
     path::PathBuf,
-    sync::{Arc, Mutex, OnceLock, atomic::{AtomicBool, Ordering}},
+    sync::{
+        Arc, Mutex, OnceLock,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 use tempfile::TempDir;
@@ -40,8 +43,14 @@ pub(crate) enum ShutdownDisposition {
 }
 impl ShutdownDisposition {
     pub(crate) fn apply(&self, record: &mut PluginInstance) {
-        record.state = match self { Self::Release => InstanceState::Released, Self::Suspend(_) => InstanceState::Suspended };
-        record.suspension = match self { Self::Release => None, Self::Suspend(token) => Some(token.clone()) };
+        record.state = match self {
+            Self::Release => InstanceState::Released,
+            Self::Suspend(_) => InstanceState::Suspended,
+        };
+        record.suspension = match self {
+            Self::Release => None,
+            Self::Suspend(token) => Some(token.clone()),
+        };
         record.diagnostic = None;
     }
 }
@@ -79,7 +88,9 @@ pub struct DelegatedPluginCall {
 
 #[async_trait]
 pub trait PluginHostServices: Send + Sync {
-    fn resources(&self) -> Option<Arc<crate::PluginResources>> { None }
+    fn resources(&self) -> Option<Arc<crate::PluginResources>> {
+        None
+    }
     async fn call(&self, call: DelegatedPluginCall) -> Result<Value, String>;
 }
 
@@ -144,42 +155,89 @@ impl PluginRuntime {
         }
     }
 
-    pub(crate) fn subscribe_lifecycle(&self) -> tokio::sync::watch::Receiver<u64> { self.lifecycle.subscribe() }
+    pub(crate) fn subscribe_lifecycle(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.lifecycle.subscribe()
+    }
 
-    pub async fn activate(
-        &self,
-        request: PluginActivation,
-    ) -> Result<PluginInstance, PluginError> {
-        self.activate_identified(request, PluginInstanceId::new(format!("plugin-{}", Uuid::new_v4().simple()))?, true).await
+    pub async fn activate(&self, request: PluginActivation) -> Result<PluginInstance, PluginError> {
+        self.activate_identified(
+            request,
+            PluginInstanceId::new(format!("plugin-{}", Uuid::new_v4().simple()))?,
+            true,
+        )
+        .await
     }
 
     /// Host publication stages readiness before exposing any new invocation route.
-    pub async fn activate_identified(&self, request: PluginActivation, identity: PluginInstanceId, publish: bool) -> Result<PluginInstance, PluginError> {
-        self.activate_purpose(request, identity, publish, PluginInstancePurpose::Runtime, vec![]).await
+    pub async fn activate_identified(
+        &self,
+        request: PluginActivation,
+        identity: PluginInstanceId,
+        publish: bool,
+    ) -> Result<PluginInstance, PluginError> {
+        self.activate_purpose(
+            request,
+            identity,
+            publish,
+            PluginInstancePurpose::Runtime,
+            vec![],
+        )
+        .await
     }
 
-    pub(crate) async fn preview_identified(&self, request: PluginActivation, identity: PluginInstanceId,
-        fixtures: Vec<PluginPreviewQuery>) -> Result<PluginInstance, PluginError> {
-        self.activate_purpose(request, identity, false, PluginInstancePurpose::FixturePreview, fixtures).await
+    pub(crate) async fn preview_identified(
+        &self,
+        request: PluginActivation,
+        identity: PluginInstanceId,
+        fixtures: Vec<PluginPreviewQuery>,
+    ) -> Result<PluginInstance, PluginError> {
+        self.activate_purpose(
+            request,
+            identity,
+            false,
+            PluginInstancePurpose::FixturePreview,
+            fixtures,
+        )
+        .await
     }
 
-    async fn activate_purpose(&self, request: PluginActivation, identity: PluginInstanceId, publish: bool,
-        purpose: PluginInstancePurpose, fixtures: Vec<PluginPreviewQuery>) -> Result<PluginInstance, PluginError> {
+    async fn activate_purpose(
+        &self,
+        request: PluginActivation,
+        identity: PluginInstanceId,
+        publish: bool,
+        purpose: PluginInstancePurpose,
+        fixtures: Vec<PluginPreviewQuery>,
+    ) -> Result<PluginInstance, PluginError> {
         let prepared = PreparedInstance::new(&self.repository, request, identity, purpose, None)?;
         self.start_prepared(prepared, publish, fixtures).await
     }
 
     /// Explicitly reopen a confirmed suspension of this exact identity. Every
     /// activation input must still match its original durable authority.
-    pub async fn resume_identified(&self, request: PluginActivation, identity: PluginInstanceId,
-        suspension: &RequestId, publish: bool) -> Result<PluginInstance, PluginError> {
-        let prepared = PreparedInstance::new(&self.repository, request, identity,
-            PluginInstancePurpose::Runtime, Some(suspension))?;
+    pub async fn resume_identified(
+        &self,
+        request: PluginActivation,
+        identity: PluginInstanceId,
+        suspension: &RequestId,
+        publish: bool,
+    ) -> Result<PluginInstance, PluginError> {
+        let prepared = PreparedInstance::new(
+            &self.repository,
+            request,
+            identity,
+            PluginInstancePurpose::Runtime,
+            Some(suspension),
+        )?;
         self.start_prepared(prepared, publish, vec![]).await
     }
 
-    async fn start_prepared(&self, mut prepared: PreparedInstance, publish: bool,
-        fixtures: Vec<PluginPreviewQuery>) -> Result<PluginInstance, PluginError> {
+    async fn start_prepared(
+        &self,
+        mut prepared: PreparedInstance,
+        publish: bool,
+        fixtures: Vec<PluginPreviewQuery>,
+    ) -> Result<PluginInstance, PluginError> {
         prepared.lifecycle = Some(self.lifecycle.clone());
         let identity = prepared.record.identity.clone();
         let purpose = prepared.record.purpose;
@@ -231,9 +289,15 @@ impl PluginRuntime {
             let mut entries = self.entries.lock().unwrap();
             // Stopped processes remain in durable history, not in the live quota.
             entries.retain(|_, entry| {
-                !matches!(entry.state.lock().unwrap().record.state, InstanceState::Released | InstanceState::Suspended)
+                !matches!(
+                    entry.state.lock().unwrap().record.state,
+                    InstanceState::Released | InstanceState::Suspended
+                )
             });
-            ensure(!entries.contains_key(&identity.instance), "instance already exists in this Host")?;
+            ensure(
+                !entries.contains_key(&identity.instance),
+                "instance already exists in this Host",
+            )?;
             ensure(
                 entries.len() < MAX_PLUGIN_INSTANCES,
                 "plugin instance quota reached",
@@ -282,10 +346,12 @@ impl PluginRuntime {
             let entries = self.entries.lock().unwrap();
             let compatible = entries.values().all(|other| {
                 let state = other.state.lock().unwrap();
-                state.record.purpose == PluginInstancePurpose::FixturePreview || !matches!(
-                    state.record.state,
-                    InstanceState::Active | InstanceState::Draining
-                ) || compatible_contracts(&entry.manifest, &other.manifest)
+                state.record.purpose == PluginInstancePurpose::FixturePreview
+                    || !matches!(
+                        state.record.state,
+                        InstanceState::Active | InstanceState::Draining
+                    )
+                    || compatible_contracts(&entry.manifest, &other.manifest)
             });
             if compatible {
                 // The process can exit after Ready. Never resurrect an instance
@@ -315,7 +381,10 @@ impl PluginRuntime {
             // original identity, retained views or revision. A later explicit
             // recovery must observe the new suspension token.
             let disposition = if resuming {
-                ShutdownDisposition::Suspend(RequestId::new(format!("suspension-{}", Uuid::new_v4().simple()))?)
+                ShutdownDisposition::Suspend(RequestId::new(format!(
+                    "suspension-{}",
+                    Uuid::new_v4().simple()
+                ))?)
             } else {
                 ShutdownDisposition::Release
             };
@@ -326,31 +395,52 @@ impl PluginRuntime {
 
     /// Exact authority frozen at activation. An absent optional provider cannot
     /// add a grant later merely by becoming available.
-    pub(crate) fn view_grants(&self, identity: &InstanceRef) -> Result<Vec<CapabilityRequirement>, PluginError> {
+    pub(crate) fn view_grants(
+        &self,
+        identity: &InstanceRef,
+    ) -> Result<Vec<CapabilityRequirement>, PluginError> {
         let entries = self.entries.lock().unwrap();
-        let entry = entries.get(&identity.instance).ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?;
+        let entry = entries
+            .get(&identity.instance)
+            .ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?;
         let state = entry.state.lock().unwrap();
-        ensure(state.record.identity == *identity && state.record.state == InstanceState::Active,
-            "view requires the exact active instance")?;
+        ensure(
+            state.record.identity == *identity && state.record.state == InstanceState::Active,
+            "view requires the exact active instance",
+        )?;
         Ok(entry.grants.clone())
     }
     pub(crate) fn owns_active_capability(&self, binding: &ProviderBinding) -> bool {
         let entries = self.entries.lock().unwrap();
-        entries.get(&binding.provider.instance).is_some_and(|entry| {
-            let state = entry.state.lock().unwrap();
-            state.record.identity == binding.provider && state.record.project == binding.project
-                && state.record.state == InstanceState::Active
-                && state.record.purpose == PluginInstancePurpose::Runtime
-                && entry.published.load(Ordering::Acquire)
-                && entry.manifest.capabilities.iter().any(|cap| cap.capability == binding.capability)
-        })
+        entries
+            .get(&binding.provider.instance)
+            .is_some_and(|entry| {
+                let state = entry.state.lock().unwrap();
+                state.record.identity == binding.provider
+                    && state.record.project == binding.project
+                    && state.record.state == InstanceState::Active
+                    && state.record.purpose == PluginInstancePurpose::Runtime
+                    && entry.published.load(Ordering::Acquire)
+                    && entry
+                        .manifest
+                        .capabilities
+                        .iter()
+                        .any(|cap| cap.capability == binding.capability)
+            })
     }
-    pub(crate) fn view_fixtures(&self, identity: &InstanceRef) -> Result<Vec<PluginPreviewQuery>, PluginError> {
+    pub(crate) fn view_fixtures(
+        &self,
+        identity: &InstanceRef,
+    ) -> Result<Vec<PluginPreviewQuery>, PluginError> {
         let entries = self.entries.lock().unwrap();
-        let entry = entries.get(&identity.instance).ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?;
+        let entry = entries
+            .get(&identity.instance)
+            .ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?;
         let state = entry.state.lock().unwrap();
-        ensure(state.record.identity == *identity && state.record.state == InstanceState::Active,
-            "view requires the exact active instance")?;
+        ensure(
+            state.record.identity == *identity && state.record.state == InstanceState::Active,
+            "view requires the exact active instance",
+        )?;
         Ok(entry.fixtures.clone())
     }
     /// Bounded observations do not create processes, reconnect, or recover work.
@@ -375,18 +465,37 @@ impl PluginRuntime {
     pub fn contributions(&self, project: &ProjectId) -> Vec<CapabilityContribution> {
         self.contributions_including(project, None)
     }
-    pub(crate) fn contributions_including(&self, project: &ProjectId, pending: Option<&InstanceRef>) -> Vec<CapabilityContribution> {
+    pub(crate) fn contributions_including(
+        &self,
+        project: &ProjectId,
+        pending: Option<&InstanceRef>,
+    ) -> Vec<CapabilityContribution> {
         let mut capabilities = BTreeMap::new();
         for entry in self.entries.lock().unwrap().values() {
             let state = entry.state.lock().unwrap();
-            if state.record.purpose == PluginInstancePurpose::Runtime && &state.record.project == project && matches!(state.record.state, InstanceState::Active | InstanceState::Draining)
-                && (entry.published.load(Ordering::Acquire) || pending == Some(&state.record.identity)) {
+            if state.record.purpose == PluginInstancePurpose::Runtime
+                && &state.record.project == project
+                && matches!(
+                    state.record.state,
+                    InstanceState::Active | InstanceState::Draining
+                )
+                && (entry.published.load(Ordering::Acquire)
+                    || pending == Some(&state.record.identity))
+            {
                 for contribution in &entry.manifest.capabilities {
                     // A draining owner must remain observable and able to answer
                     // existing native requests. New scientific work is withdrawn.
                     if state.record.state == InstanceState::Draining
-                        && !matches!(contribution.kind, CapabilityKind::Query | CapabilityKind::Control) { continue; }
-                    capabilities.entry(contribution.capability.clone()).or_insert_with(|| contribution.clone());
+                        && !matches!(
+                            contribution.kind,
+                            CapabilityKind::Query | CapabilityKind::Control
+                        )
+                    {
+                        continue;
+                    }
+                    capabilities
+                        .entry(contribution.capability.clone())
+                        .or_insert_with(|| contribution.clone());
                 }
             }
         }
@@ -395,10 +504,18 @@ impl PluginRuntime {
 
     pub(crate) fn publish_instance(&self, identity: &InstanceRef) -> Result<(), PluginError> {
         let entries = self.entries.lock().unwrap();
-        let entry = entries.get(&identity.instance).ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?;
+        let entry = entries
+            .get(&identity.instance)
+            .ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?;
         let state = entry.state.lock().unwrap();
-        ensure(state.record.purpose == PluginInstancePurpose::Runtime, "fixture previews cannot publish providers")?;
-        ensure(state.record.identity == *identity && state.record.state == InstanceState::Active, "ready instance ended before Host publication")?;
+        ensure(
+            state.record.purpose == PluginInstancePurpose::Runtime,
+            "fixture previews cannot publish providers",
+        )?;
+        ensure(
+            state.record.identity == *identity && state.record.state == InstanceState::Active,
+            "ready instance ended before Host publication",
+        )?;
         entry.published.store(true, Ordering::Release);
         Ok(())
     }
@@ -406,51 +523,119 @@ impl PluginRuntime {
     /// Linearize a presentation commit while every chosen owner is still Ready.
     /// State locks precede the catalog lock, as in release and native failure.
     /// This does not acquire execution pins, call a provider or change lifetime.
-    pub(crate) fn with_ready_instances<T>(&self, identities: &BTreeMap<InstanceAlias, InstanceRef>,
-        project: &ProjectId, principal: &PrincipalId, commit: impl FnOnce() -> Result<T, PluginError>,
+    pub(crate) fn with_ready_instances<T>(
+        &self,
+        identities: &BTreeMap<InstanceAlias, InstanceRef>,
+        project: &ProjectId,
+        principal: &PrincipalId,
+        commit: impl FnOnce() -> Result<T, PluginError>,
     ) -> Result<T, PluginError> {
         let entries = self.entries.lock().unwrap();
         let mut guards = Vec::new();
         let mut seen = std::collections::BTreeSet::new();
         for identity in identities.values() {
-            ensure(seen.insert(&identity.instance), "scenario aliases must use distinct instances")?;
-            let entry = entries.get(&identity.instance).ok_or_else(|| PluginError::Unavailable("scenario instance is unavailable".into()))?;
+            ensure(
+                seen.insert(&identity.instance),
+                "scenario aliases must use distinct instances",
+            )?;
+            let entry = entries.get(&identity.instance).ok_or_else(|| {
+                PluginError::Unavailable("scenario instance is unavailable".into())
+            })?;
             let state = entry.state.lock().unwrap();
-            ensure(state.record.identity == *identity && &state.record.project == project
-                && &state.record.principal == principal && state.record.state == InstanceState::Active
-                && state.record.purpose == PluginInstancePurpose::Runtime
-                && entry.published.load(Ordering::Acquire), "scenario instance is not Ready in this scope")?;
+            ensure(
+                state.record.identity == *identity
+                    && &state.record.project == project
+                    && &state.record.principal == principal
+                    && state.record.state == InstanceState::Active
+                    && state.record.purpose == PluginInstancePurpose::Runtime
+                    && entry.published.load(Ordering::Acquire),
+                "scenario instance is not Ready in this scope",
+            )?;
             guards.push(state);
         }
         commit()
     }
 
-    pub(crate) fn hold_operation(&self, identity: &InstanceRef, operation: &str) -> Result<(), PluginError> {
-        self.repository.lock().unwrap().retain("operation", &format!("{}:{operation}",identity.instance), &identity.revision)
+    pub(crate) fn hold_operation(
+        &self,
+        identity: &InstanceRef,
+        operation: &str,
+    ) -> Result<(), PluginError> {
+        self.repository.lock().unwrap().retain(
+            "operation",
+            &format!("{}:{operation}", identity.instance),
+            &identity.revision,
+        )
     }
-    pub(crate) fn release_operation(&self, identity: &InstanceRef, operation: &str) -> Result<(), PluginError> {
-        self.repository.lock().unwrap().release_reference("operation", &format!("{}:{operation}",identity.instance), &identity.revision)
+    pub(crate) fn release_operation(
+        &self,
+        identity: &InstanceRef,
+        operation: &str,
+    ) -> Result<(), PluginError> {
+        self.repository.lock().unwrap().release_reference(
+            "operation",
+            &format!("{}:{operation}", identity.instance),
+            &identity.revision,
+        )
     }
 
     /// Only the Operation bridge may supply this original-journal proof. Neither
     /// public capabilities nor reverse calls expose a caller-written settlement.
-    pub(crate) async fn settle_operation(&self, settlement: OperationSettlement) -> Result<(), PluginError> {
+    pub(crate) async fn settle_operation(
+        &self,
+        settlement: OperationSettlement,
+    ) -> Result<(), PluginError> {
         let identity = &settlement.binding.provider;
-        let reference = format!("operation:{}:{}", identity.instance, settlement.operation_id);
-        if !self.repository.lock().unwrap().references(&identity.revision)?.contains(&reference) {
+        let reference = format!(
+            "operation:{}:{}",
+            identity.instance, settlement.operation_id
+        );
+        if !self
+            .repository
+            .lock()
+            .unwrap()
+            .references(&identity.revision)?
+            .contains(&reference)
+        {
             return Ok(());
         }
-        let entry = self.entries.lock().unwrap().get(&identity.instance).cloned();
+        let entry = self
+            .entries
+            .lock()
+            .unwrap()
+            .get(&identity.instance)
+            .cloned();
         let process = if let Some(entry) = entry {
             let state = entry.state.lock().unwrap();
-            ensure(state.record.identity == *identity && state.record.project == settlement.binding.project,
-                "settlement differs from the original provider")?;
-            if matches!(state.record.state, InstanceState::Active | InstanceState::Draining) {
-                Some(entry.process.get().ok_or_else(|| PluginError::Unavailable("original backend has no connection".into()))?.clone())
-            } else { None }
-        } else { None };
+            ensure(
+                state.record.identity == *identity
+                    && state.record.project == settlement.binding.project,
+                "settlement differs from the original provider",
+            )?;
+            if matches!(
+                state.record.state,
+                InstanceState::Active | InstanceState::Draining
+            ) {
+                Some(
+                    entry
+                        .process
+                        .get()
+                        .ok_or_else(|| {
+                            PluginError::Unavailable("original backend has no connection".into())
+                        })?
+                        .clone(),
+                )
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         if let Some(process) = process {
-            preflight_control(&identity.instance, RpcBody::OperationSettled(settlement.clone()))?;
+            preflight_control(
+                &identity.instance,
+                RpcBody::OperationSettled(settlement.clone()),
+            )?;
             tokio::time::timeout(Duration::from_secs(5), process.settle(settlement))
                 .await
                 .map_err(|_| PluginError::Unavailable("Original result is committed; native settlement acknowledgement is pending. Reconcile its reference explicitly.".into()))?
@@ -475,10 +660,17 @@ impl PluginRuntime {
         let entries = self.entries.lock().unwrap();
         let mut candidates = entries.values().filter(|entry| {
             let state = entry.state.lock().unwrap();
-            state.record.purpose == PluginInstancePurpose::Runtime && (state.record.state == InstanceState::Active
-                || (state.record.state == InstanceState::Draining && selected.is_some()
-                    && entry.manifest.capabilities.iter().any(|cap| &cap.capability == capability
-                        && matches!(cap.kind, CapabilityKind::Query | CapabilityKind::Control))))
+            state.record.purpose == PluginInstancePurpose::Runtime
+                && (state.record.state == InstanceState::Active
+                    || (state.record.state == InstanceState::Draining
+                        && selected.is_some()
+                        && entry.manifest.capabilities.iter().any(|cap| {
+                            &cap.capability == capability
+                                && matches!(
+                                    cap.kind,
+                                    CapabilityKind::Query | CapabilityKind::Control
+                                )
+                        })))
                 && entry.published.load(Ordering::Acquire)
                 && &state.record.project == project
                 && &state.record.principal == principal
@@ -507,8 +699,12 @@ impl PluginRuntime {
         let mut state = entry.state.lock().unwrap();
         ensure(
             state.record.state == InstanceState::Active
-                || (state.record.state == InstanceState::Draining && selected.is_some()
-                    && matches!(contribution.kind, CapabilityKind::Query | CapabilityKind::Control)),
+                || (state.record.state == InstanceState::Draining
+                    && selected.is_some()
+                    && matches!(
+                        contribution.kind,
+                        CapabilityKind::Query | CapabilityKind::Control
+                    )),
             "provider stopped receiving new work",
         )?;
         state.pins += 1;
@@ -549,35 +745,63 @@ impl PluginRuntime {
             let suspended = state.record.state == InstanceState::Suspended;
             if !suspended {
                 state.record.state = InstanceState::Draining;
-                self.repository.lock().unwrap().record_instance(&state.record)?;
+                self.repository
+                    .lock()
+                    .unwrap()
+                    .record_instance(&state.record)?;
             }
             ensure(
                 state.pins == 0 && state.pending == 0,
                 "instance still owns accepted calls",
             )?;
             let view_prefix = format!("view:{}:", identity.instance);
-            ensure(!self.repository.lock().unwrap().references(&identity.revision)?.iter().any(|reference| reference.starts_with(&view_prefix)),
-                "instance still has open views; close those views before releasing it")?;
+            ensure(
+                !self
+                    .repository
+                    .lock()
+                    .unwrap()
+                    .references(&identity.revision)?
+                    .iter()
+                    .any(|reference| reference.starts_with(&view_prefix)),
+                "instance still has open views; close those views before releasing it",
+            )?;
             let prefix = format!("operation:{}:", identity.instance);
-            ensure(!self.repository.lock().unwrap().references(&identity.revision)?.iter().any(|reference| reference.starts_with(&prefix)),
-                "instance has an operation awaiting authoritative completion")?;
+            ensure(
+                !self
+                    .repository
+                    .lock()
+                    .unwrap()
+                    .references(&identity.revision)?
+                    .iter()
+                    .any(|reference| reference.starts_with(&prefix)),
+                "instance has an operation awaiting authoritative completion",
+            )?;
             if suspended {
                 let mut record = state.record.clone();
                 ShutdownDisposition::Release.apply(&mut record);
                 self.repository.lock().unwrap().record_instance(&record)?;
                 state.record = record;
-                self.lifecycle.send_modify(|revision| *revision = revision.wrapping_add(1));
+                self.lifecycle
+                    .send_modify(|revision| *revision = revision.wrapping_add(1));
                 return Ok(());
             }
         }
         if let Some(process) = entry.process.get() {
             process.release().await
         } else {
-            ensure(entry.state.lock().unwrap().record.purpose == PluginInstancePurpose::FixturePreview || entry.manifest.backend.is_none(), "backend release is unconfirmed")?;
+            ensure(
+                entry.state.lock().unwrap().record.purpose == PluginInstancePurpose::FixturePreview
+                    || entry.manifest.backend.is_none(),
+                "backend release is unconfirmed",
+            )?;
             let mut state = entry.state.lock().unwrap();
             state.record.state = InstanceState::Released;
-            self.repository.lock().unwrap().record_instance(&state.record)?;
-            self.lifecycle.send_modify(|revision| *revision = revision.wrapping_add(1));
+            self.repository
+                .lock()
+                .unwrap()
+                .record_instance(&state.record)?;
+            self.lifecycle
+                .send_modify(|revision| *revision = revision.wrapping_add(1));
             Ok(())
         }
     }
@@ -586,20 +810,44 @@ impl PluginRuntime {
     /// identity, open-view references and data only after cleanup is confirmed.
     /// Accepted calls and uncommitted results remain fences, never cancellations.
     pub async fn suspend(&self, identity: &InstanceRef) -> Result<(), PluginError> {
-        let entry = self.entries.lock().unwrap().get(&identity.instance).cloned()
+        let entry = self
+            .entries
+            .lock()
+            .unwrap()
+            .get(&identity.instance)
+            .cloned()
             .ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?;
-        let disposition = ShutdownDisposition::Suspend(RequestId::new(format!("suspension-{}", Uuid::new_v4().simple()))?);
+        let disposition = ShutdownDisposition::Suspend(RequestId::new(format!(
+            "suspension-{}",
+            Uuid::new_v4().simple()
+        ))?);
         {
             let mut state = entry.state.lock().unwrap();
-            ensure(&state.record.identity == identity, "instance revision does not match")?;
-            if state.record.state == InstanceState::Suspended { return Ok(()); }
-            ensure(state.record.state == InstanceState::Active && state.record.purpose == PluginInstancePurpose::Runtime,
-                "only an active runtime instance can be suspended")?;
-            ensure(state.pins == 0 && state.pending == 0, "instance still owns accepted calls")?;
+            ensure(
+                &state.record.identity == identity,
+                "instance revision does not match",
+            )?;
+            if state.record.state == InstanceState::Suspended {
+                return Ok(());
+            }
+            ensure(
+                state.record.state == InstanceState::Active
+                    && state.record.purpose == PluginInstancePurpose::Runtime,
+                "only an active runtime instance can be suspended",
+            )?;
+            ensure(
+                state.pins == 0 && state.pending == 0,
+                "instance still owns accepted calls",
+            )?;
             let prefix = format!("operation:{}:", identity.instance);
             let mut repo = self.repository.lock().unwrap();
-            ensure(!repo.references(&identity.revision)?.iter().any(|reference| reference.starts_with(&prefix)),
-                "instance has an operation awaiting authoritative completion")?;
+            ensure(
+                !repo
+                    .references(&identity.revision)?
+                    .iter()
+                    .any(|reference| reference.starts_with(&prefix)),
+                "instance has an operation awaiting authoritative completion",
+            )?;
             let mut record = state.record.clone();
             record.state = InstanceState::Suspending;
             repo.record_instance(&record)?;
@@ -608,13 +856,17 @@ impl PluginRuntime {
         if let Some(process) = entry.process.get() {
             process.shutdown(disposition).await
         } else {
-            ensure(entry.manifest.backend.is_none(), "backend suspension is unconfirmed")?;
+            ensure(
+                entry.manifest.backend.is_none(),
+                "backend suspension is unconfirmed",
+            )?;
             let mut state = entry.state.lock().unwrap();
             let mut record = state.record.clone();
             disposition.apply(&mut record);
             self.repository.lock().unwrap().record_instance(&record)?;
             state.record = record;
-            self.lifecycle.send_modify(|revision| *revision = revision.wrapping_add(1));
+            self.lifecycle
+                .send_modify(|revision| *revision = revision.wrapping_add(1));
             Ok(())
         }
     }
@@ -684,9 +936,18 @@ impl ProviderLease {
                 _ => RpcBody::Invoke(call.clone()),
             },
         )?;
-        let reply = self.entry.process.get().unwrap().call(call, kind, view_scope).await?;
+        let reply = self
+            .entry
+            .process
+            .get()
+            .unwrap()
+            .call(call, kind, view_scope)
+            .await?;
         if let Err(error) = validate_reply(&self.contribution, &self.identity, &reply) {
-            return Err(PluginError::InvalidResponse {message:error.to_string(),response:Box::new(reply)});
+            return Err(PluginError::InvalidResponse {
+                message: error.to_string(),
+                response: Box::new(reply),
+            });
         }
         Ok(reply)
     }
@@ -703,11 +964,18 @@ impl ProviderLease {
             .cancel(operation_id, &self.contribution.capability)
             .await
     }
-    pub async fn prepare_pending_cancellation(&self, cancellation: PendingCancellation) -> Result<bool, PluginError> {
-        ensure(self.contribution.cancellation == CancellationSupport::Request,
-            "provider does not support cancellation")?;
-        ensure(cancellation.binding == self.binding(cancellation.binding.target.clone()),
-            "pending cancellation differs from the admitted provider")?;
+    pub async fn prepare_pending_cancellation(
+        &self,
+        cancellation: PendingCancellation,
+    ) -> Result<bool, PluginError> {
+        ensure(
+            self.contribution.cancellation == CancellationSupport::Request,
+            "provider does not support cancellation",
+        )?;
+        ensure(
+            cancellation.binding == self.binding(cancellation.binding.target.clone()),
+            "pending cancellation differs from the admitted provider",
+        )?;
         tokio::time::timeout(Duration::from_secs(5), self.entry.process.get().unwrap()
             .prepare_pending_cancellation(cancellation)).await
             .map_err(|_| PluginError::Unavailable("pending cancellation acknowledgement is unconfirmed; inspect the owner queue and retry the same original cancellation".into()))?
@@ -767,7 +1035,12 @@ fn validate_reply(
         RpcBody::ControlResult { data } if cap.kind == CapabilityKind::Control => {
             validate_value(&cap.output_schema, data, "control result")?;
         }
-        RpcBody::CommitPlan(plan) if matches!(cap.kind, CapabilityKind::Operation | CapabilityKind::Runtime) => {
+        RpcBody::CommitPlan(plan)
+            if matches!(
+                cap.kind,
+                CapabilityKind::Operation | CapabilityKind::Runtime
+            ) =>
+        {
             if let Some(output) = &plan.output {
                 validate_value(&cap.output_schema, output, "operation output")?;
             }
@@ -867,9 +1140,19 @@ impl PreparedInstance {
             &request.configuration,
             "configuration",
         )?;
-        if purpose == PluginInstancePurpose::Runtime { manifest.validate_activation_grants(&request.grants)?; }
-        else { ensure(request.grants.is_empty() && request.project_root.is_none(), "fixture preview cannot receive Host grants or a project path")?; }
-        for dependency in manifest.dependencies.values().filter(|_| purpose == PluginInstancePurpose::Runtime) {
+        if purpose == PluginInstancePurpose::Runtime {
+            manifest.validate_activation_grants(&request.grants)?;
+        } else {
+            ensure(
+                request.grants.is_empty() && request.project_root.is_none(),
+                "fixture preview cannot receive Host grants or a project path",
+            )?;
+        }
+        for dependency in manifest
+            .dependencies
+            .values()
+            .filter(|_| purpose == PluginInstancePurpose::Runtime)
+        {
             ensure(
                 repo.revision(&dependency.revision)?.manifest.id == dependency.plugin,
                 "dependency identity mismatch",
@@ -878,7 +1161,11 @@ impl PreparedInstance {
         let directory = tempfile::Builder::new()
             .prefix("rho-plugin-instance-")
             .tempdir()?;
-        for (path, file) in artifact.files.iter().filter(|_| purpose == PluginInstancePurpose::Runtime) {
+        for (path, file) in artifact
+            .files
+            .iter()
+            .filter(|_| purpose == PluginInstancePurpose::Runtime)
+        {
             let destination = directory.path().join(path.as_str());
             fs::create_dir_all(destination.parent().unwrap())?;
             let bytes = STANDARD
@@ -900,7 +1187,11 @@ impl PreparedInstance {
                 }))?;
             }
         }
-        let executable = manifest.backend.as_ref().filter(|_| purpose == PluginInstancePurpose::Runtime).map(|backend| directory.path().join(backend.executable.as_str()));
+        let executable = manifest
+            .backend
+            .as_ref()
+            .filter(|_| purpose == PluginInstancePurpose::Runtime)
+            .map(|backend| directory.path().join(backend.executable.as_str()));
         let record = PluginInstance {
             purpose,
             identity: InstanceRef {
@@ -918,15 +1209,33 @@ impl PreparedInstance {
             diagnostic: None,
         };
         let activation = if let Some(suspension) = suspension {
-            let (_, stored) = repo.suspended_activation(&record.identity, &record.project, &record.principal, suspension)?;
-            ensure(stored.target == request.target && stored.grants == request.grants,
-                "resume must retain the original target and grants")?;
-            verify_environment(repo.root(), request.project_root.as_deref().filter(|_| manifest.backend.is_some()),
-                &record.identity.instance, &stored)?;
+            let (_, stored) = repo.suspended_activation(
+                &record.identity,
+                &record.project,
+                &record.principal,
+                suspension,
+            )?;
+            ensure(
+                stored.target == request.target && stored.grants == request.grants,
+                "resume must retain the original target and grants",
+            )?;
+            verify_environment(
+                repo.root(),
+                request
+                    .project_root
+                    .as_deref()
+                    .filter(|_| manifest.backend.is_some()),
+                &record.identity.instance,
+                &stored,
+            )?;
             stored
         } else {
-            let environment = request.project_root.as_ref().filter(|_| manifest.backend.is_some())
-                .map(|project| prepare_environment(repo.root(), project, &record.identity.instance)).transpose()?;
+            let environment = request
+                .project_root
+                .as_ref()
+                .filter(|_| manifest.backend.is_some())
+                .map(|project| prepare_environment(repo.root(), project, &record.identity.instance))
+                .transpose()?;
             StoredActivation {
                 target: request.target,
                 grants: request.grants.clone(),
@@ -948,8 +1257,11 @@ impl PreparedInstance {
                 }),
             },
         )?;
-        if let Some(suspension) = suspension { repo.begin_instance_resume(&record, suspension)?; }
-        else { repo.register_instance(&record, &activation)?; }
+        if let Some(suspension) = suspension {
+            repo.begin_instance_resume(&record, suspension)?;
+        } else {
+            repo.register_instance(&record, &activation)?;
+        }
         Ok(Self {
             record,
             manifest,
@@ -964,7 +1276,10 @@ impl PreparedInstance {
             lifecycle: None,
         })
     }
-    pub fn finish_shutdown(&mut self, disposition: &ShutdownDisposition) -> Result<(), PluginError> {
+    pub fn finish_shutdown(
+        &mut self,
+        disposition: &ShutdownDisposition,
+    ) -> Result<(), PluginError> {
         let mut record = self.record.clone();
         disposition.apply(&mut record);
         self.repository.lock().unwrap().record_instance(&record)?;
@@ -973,7 +1288,9 @@ impl PreparedInstance {
         Ok(())
     }
     pub fn persist_state(&self, state: &SharedBackendState) {
-        if let Some(lifecycle)=&self.lifecycle { lifecycle.send_modify(|revision| *revision=revision.wrapping_add(1)); }
+        if let Some(lifecycle) = &self.lifecycle {
+            lifecycle.send_modify(|revision| *revision = revision.wrapping_add(1));
+        }
         let record = state.lock().unwrap().record.clone();
         if let Err(error) = self.repository.lock().unwrap().record_instance(&record) {
             state.lock().unwrap().record.diagnostic = Some(format!(
@@ -984,55 +1301,98 @@ impl PreparedInstance {
     }
 }
 
-fn prepare_environment(root: &std::path::Path, project: &std::path::Path, instance: &PluginInstanceId) -> Result<(BackendEnvironment, String), PluginError> {
+fn prepare_environment(
+    root: &std::path::Path,
+    project: &std::path::Path,
+    instance: &PluginInstanceId,
+) -> Result<(BackendEnvironment, String), PluginError> {
     let project = project.canonicalize()?;
     ensure(project.is_dir(), "native project root must be a directory")?;
     let parent = root.join("instance-data-v1");
     match fs::create_dir(&parent) {
-        Ok(()) => {},
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {},
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
         Err(error) => return Err(error.into()),
     }
     let metadata = parent.symlink_metadata()?;
-    ensure(metadata.is_dir() && !metadata.file_type().is_symlink() && parent.canonicalize()? == parent,
-        "instance data parent must be a contained directory")?;
+    ensure(
+        metadata.is_dir() && !metadata.file_type().is_symlink() && parent.canonicalize()? == parent,
+        "instance data parent must be a contained directory",
+    )?;
     // Never reuse an old instance's files, including after a failed activation.
     let data = parent.join(format!("instance-{instance}"));
     fs::create_dir(&data)?;
-    #[cfg(unix)] {
+    #[cfg(unix)]
+    {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&data, fs::Permissions::from_mode(0o700))?;
     }
     let data_identity = Uuid::new_v4().to_string();
-    let mut marker = fs::OpenOptions::new().write(true).create_new(true).open(data.join(".rho-instance-owner"))?;
+    let mut marker = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(data.join(".rho-instance-owner"))?;
     marker.write_all(data_identity.as_bytes())?;
     marker.sync_all()?;
-    Ok((BackendEnvironment {
-        project_root: project.to_str().ok_or_else(|| PluginError::Invalid("project root must be UTF-8".into()))?.into(),
-        data_root: data.to_str().ok_or_else(|| PluginError::Invalid("instance data root must be UTF-8".into()))?.into(),
-    }, data_identity))
+    Ok((
+        BackendEnvironment {
+            project_root: project
+                .to_str()
+                .ok_or_else(|| PluginError::Invalid("project root must be UTF-8".into()))?
+                .into(),
+            data_root: data
+                .to_str()
+                .ok_or_else(|| PluginError::Invalid("instance data root must be UTF-8".into()))?
+                .into(),
+        },
+        data_identity,
+    ))
 }
 
-fn verify_environment(root: &std::path::Path, project: Option<&std::path::Path>, instance: &PluginInstanceId,
-    activation: &StoredActivation) -> Result<(), PluginError> {
+fn verify_environment(
+    root: &std::path::Path,
+    project: Option<&std::path::Path>,
+    instance: &PluginInstanceId,
+    activation: &StoredActivation,
+) -> Result<(), PluginError> {
     let Some(environment) = &activation.environment else {
-        return ensure(project.is_none() && activation.data_identity.is_none(), "resume environment changed");
+        return ensure(
+            project.is_none() && activation.data_identity.is_none(),
+            "resume environment changed",
+        );
     };
-    let project = project.ok_or_else(|| PluginError::Invalid("resume requires its original project root".into()))?.canonicalize()?;
-    ensure(project.is_dir() && project.to_str() == Some(environment.project_root.as_str()), "resume project root changed")?;
+    let project = project
+        .ok_or_else(|| PluginError::Invalid("resume requires its original project root".into()))?
+        .canonicalize()?;
+    ensure(
+        project.is_dir() && project.to_str() == Some(environment.project_root.as_str()),
+        "resume project root changed",
+    )?;
     let parent = root.join("instance-data-v1");
     let data = parent.join(format!("instance-{instance}"));
     for directory in [&parent, &data] {
         let metadata = directory.symlink_metadata()?;
-        ensure(metadata.is_dir() && !metadata.file_type().is_symlink() && directory.canonicalize()? == *directory,
-            "retained instance data must be an existing contained directory")?;
+        ensure(
+            metadata.is_dir()
+                && !metadata.file_type().is_symlink()
+                && directory.canonicalize()? == *directory,
+            "retained instance data must be an existing contained directory",
+        )?;
     }
-    ensure(data.to_str() == Some(environment.data_root.as_str()), "resume data root changed")?;
+    ensure(
+        data.to_str() == Some(environment.data_root.as_str()),
+        "resume data root changed",
+    )?;
     let marker = data.join(".rho-instance-owner");
     let metadata = marker.symlink_metadata()?;
-    ensure(metadata.is_file() && !metadata.file_type().is_symlink() && metadata.len() == 36,
-        "retained instance data identity is unavailable")?;
-    ensure(activation.data_identity.as_deref() == Some(fs::read_to_string(marker)?.as_str()), "retained instance data identity changed")
+    ensure(
+        metadata.is_file() && !metadata.file_type().is_symlink() && metadata.len() == 36,
+        "retained instance data identity is unavailable",
+    )?;
+    ensure(
+        activation.data_identity.as_deref() == Some(fs::read_to_string(marker)?.as_str()),
+        "retained instance data identity changed",
+    )
 }
 impl Drop for PreparedInstance {
     fn drop(&mut self) {

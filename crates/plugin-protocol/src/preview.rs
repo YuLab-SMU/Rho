@@ -36,5 +36,7 @@ pub enum PluginInstancePurpose {
     FixturePreview,
 }
 impl PluginInstancePurpose {
-    pub fn is_runtime(&self) -> bool { *self == Self::Runtime }
+    pub fn is_runtime(&self) -> bool {
+        *self == Self::Runtime
+    }
 }

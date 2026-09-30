@@ -138,7 +138,7 @@ impl<T: Transfer> Uploads<T> {
     ) -> Result<Progress<T>, Failure> {
         upload.validate()?;
         if offset > upload.bytes()
-            || offset % CHUNK_BYTES as u64 != 0
+            || !offset.is_multiple_of(CHUNK_BYTES as u64)
             || part.len() != (upload.bytes() - offset).min(CHUNK_BYTES as u64) as usize
             || (part.is_empty() && upload.bytes() != 0)
         {

@@ -316,7 +316,11 @@ impl OutputStore {
             .iter()
             .filter(|event| event.kind == "media")
             .filter_map(|event| event.media.as_ref())
-            .find(|reference| reference.mime_type == "text/html" && reference.sha256 == sha256 && reference.byte_size == html.len() as u64)
+            .find(|reference| {
+                reference.mime_type == "text/html"
+                    && reference.sha256 == sha256
+                    && reference.byte_size == html.len() as u64
+            })
         {
             return Ok(reference.clone());
         }
@@ -528,9 +532,9 @@ impl rho_r_api::NativeOutputs for OutputStore {
             .into_iter()
             .filter(|e| e.sequence > args.after_sequence)
             .filter(|e| {
-                e.media
-                    .as_ref()
-                    .is_some_and(|reference| reference.mime_type.starts_with("image/") || reference.mime_type == "text/html")
+                e.media.as_ref().is_some_and(|reference| {
+                    reference.mime_type.starts_with("image/") || reference.mime_type == "text/html"
+                })
             })
             .filter_map(|e| {
                 e.media.map(|reference| rho_r_api::MediaSummary {

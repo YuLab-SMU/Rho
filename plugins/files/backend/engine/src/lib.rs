@@ -2,11 +2,11 @@
 mod text;
 
 use async_trait::async_trait;
-use rho_process_engine::{ProcessOptions, ProcessTermination, run_command};
 use rho_files_api::{
     FileObservation, FilePage, GitApplyReport, GitObservation, GitStatusEntry, MAX_PROJECT_PATHS,
     ProjectRuntime, ProjectSnapshot, ReadFileArguments, validate_path,
 };
+use rho_process_engine::{ProcessOptions, ProcessTermination, run_command};
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeSet,

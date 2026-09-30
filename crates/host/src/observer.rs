@@ -20,15 +20,21 @@ impl QueryObserver {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
             Err(error) => return Err(OperationError::Storage(error.to_string())),
         };
-        let project_scope = project.map(|root| {
-            let root = root.canonicalize()
-                .map_err(|error| OperationError::TargetResolution(error.to_string()))?;
-            if !root.is_dir() {
-                return Err(OperationError::TargetResolution("project must be an existing directory".into()));
-            }
-            root.to_str().map(str::to_owned).ok_or_else(||
-                OperationError::TargetResolution("project must be a UTF-8 directory".into()))
-        }).transpose()?;
+        let project_scope = project
+            .map(|root| {
+                let root = root
+                    .canonicalize()
+                    .map_err(|error| OperationError::TargetResolution(error.to_string()))?;
+                if !root.is_dir() {
+                    return Err(OperationError::TargetResolution(
+                        "project must be an existing directory".into(),
+                    ));
+                }
+                root.to_str().map(str::to_owned).ok_or_else(|| {
+                    OperationError::TargetResolution("project must be a UTF-8 directory".into())
+                })
+            })
+            .transpose()?;
         Self::from_sources(journal, project_scope)
     }
     pub(crate) fn from_sources(
@@ -124,9 +130,9 @@ pub(crate) fn register_record_queries(
     writable: bool,
 ) -> Result<RecordPorts, OperationError> {
     if let Some(project) = &project {
-        registry.register_query(Arc::new(rho_operation::OperationProjectCoverageHandler::new(
-            journal.clone(), project.clone(),
-        )))?;
+        registry.register_query(Arc::new(
+            rho_operation::OperationProjectCoverageHandler::new(journal.clone(), project.clone()),
+        ))?;
         registry.register_query(Arc::new(
             rho_operation::OperationEventsCheckpointHandler::new(journal.clone(), project.clone()),
         ))?;

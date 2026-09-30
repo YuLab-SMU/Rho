@@ -79,6 +79,7 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<ProjectAgentTaskSummary> {
 }
 
 impl AgentStore {
+    #[allow(clippy::too_many_arguments)] // Keep the bounded owner filters explicit at this query boundary.
     pub(crate) fn read_project_agent_tasks(
         &self,
         scope: &AgentTaskScope,
@@ -158,7 +159,13 @@ impl AgentStore {
         let mut query = tx.prepare(&format!("{TASKS} SELECT * FROM tasks WHERE permissions>0 OR attention_reason IS NOT NULL ORDER BY created_at DESC,backend DESC,id DESC LIMIT 8")).map_err(error)?;
         let attention = query
             .query_map(
-                params![scope.project, scope.principal, native_host, component_host, live],
+                params![
+                    scope.project,
+                    scope.principal,
+                    native_host,
+                    component_host,
+                    live
+                ],
                 row,
             )
             .map_err(error)?
@@ -365,7 +372,15 @@ mod tests {
         }
         assert_eq!(
             store
-                .read_project_agent_tasks(&scope, None, None, 20, "native-host", "component-host", &[])
+                .read_project_agent_tasks(
+                    &scope,
+                    None,
+                    None,
+                    20,
+                    "native-host",
+                    "component-host",
+                    &[]
+                )
                 .unwrap()
                 .attention_count,
             0
@@ -389,7 +404,15 @@ mod tests {
             .unwrap();
         assert_eq!(
             store
-                .read_project_agent_tasks(&scope, None, None, 20, "native-host", "component-host", &[])
+                .read_project_agent_tasks(
+                    &scope,
+                    None,
+                    None,
+                    20,
+                    "native-host",
+                    "component-host",
+                    &[]
+                )
                 .unwrap()
                 .attention_count,
             1

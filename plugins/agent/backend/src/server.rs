@@ -297,8 +297,10 @@ where
                                 break Err("Agent settlement differs from its original submitted result".into());
                             }
                             retained.remove(&settlement.operation_id);
-                        } else if let Some(previous) = settled.iter().find(|entry| entry.operation_id == settlement.operation_id) {
-                            if previous != &settlement { break Err("Repeated Agent settlement changed its original result".into()); }
+                        } else if let Some(previous) = settled.iter().find(|entry| entry.operation_id == settlement.operation_id)
+                            && previous != &settlement
+                        {
+                            break Err("Repeated Agent settlement changed its original result".into());
                         }
                         // Core can settle work rejected before native admission (for
                         // example capacity) or cancelled before dispatch. No owner
@@ -322,8 +324,10 @@ where
                     RpcBody::HostResult { .. } | RpcBody::Error { .. } => break Err("Agent received an uncorrelated Host response".into()),
                     _ => Some(error("unsupported", "Agent does not support this message")),
                 };
-                if let Some(reply) = reply {
-                    if let Err(error) = writer.send(request, reply).await { break Err(error.to_string()); }
+                if let Some(reply) = reply
+                    && let Err(error) = writer.send(request, reply).await
+                {
+                    break Err(error.to_string());
                 }
             },
         }

@@ -3,11 +3,26 @@ use std::path::{Path, PathBuf};
 const DEMO_VERSION: &str = "1";
 
 const FILES: &[(&str, &[u8])] = &[
-    ("README.md", include_bytes!("../../../examples/rho-demo/README.md")),
-    (".gitignore", include_bytes!("../../../examples/rho-demo/.gitignore")),
-    ("demo-manifest.json", include_bytes!("../../../examples/rho-demo/demo-manifest.json")),
-    ("rho-demo.Rproj", include_bytes!("../../../examples/rho-demo/rho-demo.Rproj")),
-    ("R/demo_helpers.R", include_bytes!("../../../examples/rho-demo/R/demo_helpers.R")),
+    (
+        "README.md",
+        include_bytes!("../../../examples/rho-demo/README.md"),
+    ),
+    (
+        ".gitignore",
+        include_bytes!("../../../examples/rho-demo/.gitignore"),
+    ),
+    (
+        "demo-manifest.json",
+        include_bytes!("../../../examples/rho-demo/demo-manifest.json"),
+    ),
+    (
+        "rho-demo.Rproj",
+        include_bytes!("../../../examples/rho-demo/rho-demo.Rproj"),
+    ),
+    (
+        "R/demo_helpers.R",
+        include_bytes!("../../../examples/rho-demo/R/demo_helpers.R"),
+    ),
     (
         "scripts/01_import_clean.R",
         include_bytes!("../../../examples/rho-demo/scripts/01_import_clean.R"),
@@ -24,7 +39,10 @@ const FILES: &[(&str, &[u8])] = &[
         "scripts/04_report.R",
         include_bytes!("../../../examples/rho-demo/scripts/04_report.R"),
     ),
-    ("run_demo.R", include_bytes!("../../../examples/rho-demo/run_demo.R")),
+    (
+        "run_demo.R",
+        include_bytes!("../../../examples/rho-demo/run_demo.R"),
+    ),
     (
         "report/development_report.qmd",
         include_bytes!("../../../examples/rho-demo/report/development_report.qmd"),
@@ -77,7 +95,8 @@ pub fn materialize_demo_project_at(root: &Path) -> Result<PathBuf, String> {
             std::fs::create_dir_all(parent)
                 .map_err(|error| format!("create demo resource directory: {error}"))?;
         }
-        std::fs::write(&path, bytes).map_err(|error| format!("write demo resource {relative}: {error}"))?;
+        std::fs::write(&path, bytes)
+            .map_err(|error| format!("write demo resource {relative}: {error}"))?;
     }
     let manifest = root.join("demo-manifest.json");
     let value: serde_json::Value = serde_json::from_slice(
@@ -97,7 +116,7 @@ fn default_path() -> Result<PathBuf, String> {
         .ok_or("the user home directory is unavailable")?;
     #[cfg(target_os = "macos")]
     {
-        return Ok(home.join("Library/Application Support/Rho/demo-project"));
+        Ok(home.join("Library/Application Support/Rho/demo-project"))
     }
     #[cfg(target_os = "windows")]
     {
@@ -132,7 +151,10 @@ mod tests {
         assert!(manifest.contains("\"version\": \"1\""));
         std::fs::write(root.join("README.md"), "my notes\n").unwrap();
         materialize_demo_project_at(&root).unwrap();
-        assert_eq!(std::fs::read_to_string(root.join("README.md")).unwrap(), "my notes\n");
+        assert_eq!(
+            std::fs::read_to_string(root.join("README.md")).unwrap(),
+            "my notes\n"
+        );
     }
 
     #[test]
@@ -140,6 +162,10 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("not-a-directory");
         std::fs::write(&root, "x").unwrap();
-        assert!(materialize_demo_project_at(&root).unwrap_err().contains("not a directory"));
+        assert!(
+            materialize_demo_project_at(&root)
+                .unwrap_err()
+                .contains("not a directory")
+        );
     }
 }

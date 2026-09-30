@@ -12,6 +12,7 @@ pub struct WriteRequest {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+#[allow(clippy::large_enum_variant)] // Keep this public tagged request DTO's Rust shape stable.
 pub enum WriteCommand {
     Freeze {
         reference: ContextReference,
@@ -95,7 +96,12 @@ pub struct AnnotationComponentSource {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TextAnchor {
     WholeItem,
-    Structured { path: Vec<String>, row: Option<u64>, column: Option<String>, topic: Option<String> },
+    Structured {
+        path: Vec<String>,
+        row: Option<u64>,
+        column: Option<String>,
+        topic: Option<String>,
+    },
     CapturedView {
         capture: AnnotationCaptureRef,
     },
@@ -110,7 +116,17 @@ impl From<TextAnchor> for AnnotationAnchor {
     fn from(value: TextAnchor) -> Self {
         match value {
             TextAnchor::WholeItem => Self::WholeItem,
-            TextAnchor::Structured { path, row, column, topic } => Self::Structured { path, row, column, topic },
+            TextAnchor::Structured {
+                path,
+                row,
+                column,
+                topic,
+            } => Self::Structured {
+                path,
+                row,
+                column,
+                topic,
+            },
             TextAnchor::CapturedView { capture } => Self::CapturedView { capture },
             TextAnchor::TextQuote {
                 quote,

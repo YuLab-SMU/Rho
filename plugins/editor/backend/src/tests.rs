@@ -283,9 +283,18 @@ fn annotation_lineage_uses_document_bytes_not_selection_or_draft_observation() {
     b.version = 9;
     let first = preview(&a, &a_bytes, "document", 16384).unwrap();
     let moved = preview(&b, &b_bytes, "selection", 16384).unwrap();
-    assert_eq!(first["data"]["annotation_source"], moved["data"]["annotation_source"], "moving a selection is not a content revision");
+    assert_eq!(
+        first["data"]["annotation_source"], moved["data"]["annotation_source"],
+        "moving a selection is not a content revision"
+    );
     let (c, c_bytes) = capture("changed", 0, 1);
     let changed = preview(&c, &c_bytes, "document", 16384).unwrap();
-    assert_eq!(first["data"]["annotation_source"]["source_id"], changed["data"]["annotation_source"]["source_id"]);
-    assert_ne!(first["data"]["annotation_source"]["source_version"], changed["data"]["annotation_source"]["source_version"]);
+    assert_eq!(
+        first["data"]["annotation_source"]["source_id"],
+        changed["data"]["annotation_source"]["source_id"]
+    );
+    assert_ne!(
+        first["data"]["annotation_source"]["source_version"],
+        changed["data"]["annotation_source"]["source_version"]
+    );
 }

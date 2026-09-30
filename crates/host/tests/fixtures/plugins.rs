@@ -56,7 +56,13 @@ pub fn package(path: &Path, version: &str, collision: bool) -> PluginArchive {
             "required_scopes":[scope],"effects":effects,"cancellation":cancellation
         })
     };
-    let mut control = capability("fixture.answer", "control", "plugins.run", json!(["fixture.input"]), "unsupported");
+    let mut control = capability(
+        "fixture.answer",
+        "control",
+        "plugins.run",
+        json!(["fixture.input"]),
+        "unsupported",
+    );
     control["capability"]["version"] = json!(2);
     control["input_schema"] = json!({"type":"object","properties":{"value":{"type":"string","maxLength":65536},"action":{"type":"string"}},"required":["value"],"additionalProperties":false});
     control["examples"] = json!([{"value":"example"}]);

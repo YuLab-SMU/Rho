@@ -13,14 +13,14 @@ fn now() -> u64 {
 use std::sync::{Mutex as SyncMutex, atomic::AtomicUsize};
 use tokio::sync::Notify;
 
-#[path = "native_science.rs"]
-mod science;
 #[path = "native_assets.rs"]
 mod assets;
-#[path = "native_uploads.rs"]
-mod uploads;
 #[path = "native_context.rs"]
 mod context;
+#[path = "native_science.rs"]
+mod science;
+#[path = "native_uploads.rs"]
+mod uploads;
 
 #[derive(Default)]
 struct Factory {
@@ -415,13 +415,14 @@ async fn native_command_retains_parent_uploaded_input_next_draft_and_reopen_iden
                 .is_none()
         );
     }
-    let input = factory.inputs.lock().unwrap();
-    assert!(
-        input[0]
-            .iter()
-            .any(|p| matches!(p, NativeInput::Resource {text, ..} if text == "Notes"))
-    );
-    drop(input);
+    {
+        let input = factory.inputs.lock().unwrap();
+        assert!(
+            input[0]
+                .iter()
+                .any(|p| matches!(p, NativeInput::Resource {text, ..} if text == "Notes"))
+        );
+    }
     finish(&factory);
     let reply = f.read().await;
     assert_eq!(reply.request, parent.request);

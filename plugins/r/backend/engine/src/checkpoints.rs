@@ -388,7 +388,7 @@ impl ArkRuntime {
         if !self.checkpoint_ready {
             return Err(before("Checkpoint native component unavailable"));
         }
-        let path = self.checkpoints.prepare(&op).map_err(before)?;
+        let path = self.checkpoints.prepare(op).map_err(before)?;
         let report = self.capture_native_graph(op, &path, args, cancel).await?;
         let store = self.checkpoints.clone();
         let id = op.clone();
@@ -398,7 +398,11 @@ impl ArkRuntime {
                 .await
                 .map_err(before)?
                 .map_err(before)?;
-        Ok(CheckpointArtifact { report, sha256, byte_size })
+        Ok(CheckpointArtifact {
+            report,
+            sha256,
+            byte_size,
+        })
     }
     pub(super) async fn capture_native_graph(
         &self,
@@ -446,7 +450,16 @@ impl ArkRuntime {
         {
             return Err(before("Checkpoint payload integrity differs"));
         }
-        self.restore_native_graph(op, &self.checkpoints.dir(&manifest.checkpoint_id).join("payload.rds"), &manifest.report, cancel).await
+        self.restore_native_graph(
+            op,
+            &self
+                .checkpoints
+                .dir(&manifest.checkpoint_id)
+                .join("payload.rds"),
+            &manifest.report,
+            cancel,
+        )
+        .await
     }
     pub(super) async fn restore_native_graph(
         &self,
@@ -524,6 +537,205 @@ impl ArkRuntime {
         fs::remove_file(path).map_err(|e| e.to_string())?;
         CheckpointStore::sync_directory(&self.checkpoints.dir(id))
     }
+}
+
+/// Opens only project-private artifact storage. No Client, R process, native
+/// bootstrap, checkpoint replay, or scientific recovery is constructed here.
+pub struct CheckpointArchiveRuntime {
+    store: CheckpointStore,
+    project: String,
+}
+impl CheckpointArchiveRuntime {
+    pub fn open(project: &Path, data_root: &Path) -> Result<Self, String> {
+        let project = project.canonicalize().map_err(|e| e.to_string())?;
+        Ok(Self {
+            store: CheckpointStore::readonly(data_root, &project)?,
+            project: project.to_string_lossy().into_owned(),
+        })
+    }
+}
+#[async_trait]
+impl NativeRuntime for CheckpointArchiveRuntime {
+    fn session_id(&self) -> &str {
+        "checkpoint-archive"
+    }
+    fn project_root(&self) -> Option<&str> {
+        Some(&self.project)
+    }
+    fn checkpoint_archive_only(&self) -> bool {
+        true
+    }
+    async fn checkpoint_artifact_lease(
+        &self,
+        id: &OperationId,
+    ) -> Result<Box<dyn rho_r_api::CheckpointArtifactLease>, NativeError> {
+        Ok(self.store.artifact_lease(id).await)
+    }
+    async fn checkpoint_original_manifest(
+        &self,
+        id: &OperationId,
+    ) -> Result<Option<CheckpointManifest>, NativeError> {
+        self.store.original_manifest(id).map_err(before)
+    }
+    async fn checkpoint_adopt(
+        &self,
+        source: &CheckpointManifest,
+        adopted: &CheckpointManifest,
+    ) -> Result<(), NativeError> {
+        let store = self.store.clone();
+        let source = source.clone();
+        let adopted = adopted.clone();
+        tokio::task::spawn_blocking(move || store.adopt(&source, &adopted))
+            .await
+            .map_err(before)?
+            .map_err(before)
+    }
+    async fn checkpoint_candidates(&self) -> Result<Vec<CheckpointManifest>, NativeError> {
+        let store = self.store.clone();
+        tokio::task::spawn_blocking(move || store.candidates())
+            .await
+            .map_err(before)?
+            .map_err(before)
+    }
+    async fn checkpoint_control_evidence(
+        &self,
+        id: &OperationId,
+    ) -> Result<Vec<CheckpointControlEvidence>, NativeError> {
+        self.store.controls(id).map_err(before)
+    }
+    async fn checkpoint_write_control(
+        &self,
+        evidence: &CheckpointControlEvidence,
+    ) -> Result<(), NativeError> {
+        let filename = format!(
+            "{:x}.control.json",
+            Sha256::digest(evidence.operation_id.as_str().as_bytes())
+        );
+        self.store
+            .write_json(
+                &self
+                    .store
+                    .dir(&evidence.report.checkpoint_id)
+                    .join(filename),
+                evidence,
+            )
+            .map_err(before)
+    }
+    async fn checkpoint_present(&self, manifest: &CheckpointManifest) -> Result<bool, NativeError> {
+        self.store.present(manifest).map_err(before)
+    }
+    async fn checkpoint_verify(&self, manifest: &CheckpointManifest) -> Result<bool, NativeError> {
+        let store = self.store.clone();
+        let manifest = manifest.clone();
+        tokio::task::spawn_blocking(move || store.verify(&manifest))
+            .await
+            .map_err(before)?
+            .map_err(before)
+    }
+    fn checkpoint_remove_payload(&self, id: &OperationId) -> Result<(), String> {
+        let path = self.store.dir(id).join("payload.rds");
+        if !path.exists() {
+            return Ok(());
+        }
+        let path = self.store.checked(&path)?;
+        fs::remove_file(path).map_err(|e| e.to_string())?;
+        CheckpointStore::sync_directory(&self.store.dir(id))
+    }
+    async fn execute(
+        &self,
+        _: &OperationId,
+        _: &RunRArguments,
+    ) -> Result<NativeReport, NativeError> {
+        Err(before(
+            "This is a read-only checkpoint archive, not a live R process",
+        ))
+    }
+}
+
+impl ArkRuntime {
+    pub(super) async fn shutdown_confirmed(&self) -> Result<(), NativeError> {
+        let Some((pid, recorded_start)) = self.native_process else {
+            return Err(before(
+                "Original native process identity is unavailable; stop cannot be confirmed",
+            ));
+        };
+        let identity = process_start(pid).await?;
+        if identity.is_none() || identity != Some(recorded_start) {
+            self.client.lock().unwrap_or_else(|e| e.into_inner()).take();
+            return Ok(());
+        }
+        let mut client = {
+            let mut slot = self.client.lock().unwrap_or_else(|e| e.into_inner());
+            let Some(existing) = slot.as_ref() else {
+                return Err(NativeError::after_possible_effect(
+                    "Original R process still exists but its native handle is unavailable",
+                    Some(
+                        json!({"session_id":self.session_id,"pid":pid,"process_start":recorded_start}),
+                    ),
+                ));
+            };
+            if Arc::strong_count(existing) != 1 {
+                return Err(before(
+                    "Native R has active observation/execution leases; shutdown was not started",
+                ));
+            }
+            let value = slot.take().unwrap();
+            match Arc::try_unwrap(value) {
+                Ok(client) => client,
+                Err(value) => {
+                    *slot = Some(value);
+                    return Err(before("Native R lease changed; shutdown was not started"));
+                }
+            }
+        };
+        self.closing
+            .store(true, std::sync::atomic::Ordering::Release);
+        self.input_changed.send_modify(|v| *v = v.wrapping_add(1));
+        let _ = tokio::time::timeout(Duration::from_secs(1), client.shutdown()).await;
+        drop(client); // Jet's owned ChildGuard terminates/reaps its own child.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let current = process_start(pid).await?;
+            if current.is_none() || (identity.is_some() && current != identity) {
+                self.input.lock().unwrap_or_else(|e| e.into_inner()).take();
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                return Err(NativeError::after_possible_effect(
+                    "Original R process still exists after shutdown deadline",
+                    Some(
+                        json!({"session_id":self.session_id,"pid":pid,"process_start":identity,"action":"inspect_original_process_before_replacement"}),
+                    ),
+                ));
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+}
+pub(super) async fn process_start(pid: u32) -> Result<Option<u64>, NativeError> {
+    tokio::task::spawn_blocking(move || {
+        let mut system = sysinfo::System::new();
+        system.refresh_processes_specifics(
+            sysinfo::ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]),
+            true,
+            sysinfo::ProcessRefreshKind::nothing(),
+        );
+        system
+            .process(sysinfo::Pid::from_u32(pid))
+            .map(|p| p.start_time())
+    })
+    .await
+    .map_err(before)
+}
+
+/// Observe an originally recorded process without connecting to or signalling it.
+pub async fn recorded_process_alive(
+    identity: &RuntimeProcessIdentity,
+) -> Result<Option<bool>, String> {
+    process_start(identity.pid)
+        .await
+        .map(|current| Some(current == Some(identity.start_time)))
+        .map_err(|e| e.message)
 }
 
 #[cfg(test)]
@@ -678,211 +890,4 @@ mod tests {
         assert!(store.verify(&manifest).is_err());
         assert!(store.present(&manifest).is_err());
     }
-}
-
-/// Opens only project-private artifact storage. No Client, R process, native
-/// bootstrap, checkpoint replay, or scientific recovery is constructed here.
-pub struct CheckpointArchiveRuntime {
-    store: CheckpointStore,
-    project: String,
-}
-impl CheckpointArchiveRuntime {
-    pub fn open(project: &Path, data_root: &Path) -> Result<Self, String> {
-        let project = project.canonicalize().map_err(|e| e.to_string())?;
-        Ok(Self {
-            store: CheckpointStore::readonly(data_root, &project)?,
-            project: project.to_string_lossy().into_owned(),
-        })
-    }
-}
-#[async_trait]
-impl NativeRuntime for CheckpointArchiveRuntime {
-    fn session_id(&self) -> &str {
-        "checkpoint-archive"
-    }
-    fn project_root(&self) -> Option<&str> {
-        Some(&self.project)
-    }
-    fn checkpoint_archive_only(&self) -> bool {
-        true
-    }
-    async fn checkpoint_artifact_lease(
-        &self,
-        id: &OperationId,
-    ) -> Result<Box<dyn rho_r_api::CheckpointArtifactLease>, NativeError> {
-        Ok(self.store.artifact_lease(id).await)
-    }
-    async fn checkpoint_original_manifest(
-        &self,
-        id: &OperationId,
-    ) -> Result<Option<CheckpointManifest>, NativeError> {
-        self.store.original_manifest(id).map_err(before)
-    }
-    async fn checkpoint_adopt(
-        &self,
-        source: &CheckpointManifest,
-        adopted: &CheckpointManifest,
-    ) -> Result<(), NativeError> {
-        let store = self.store.clone();
-        let source = source.clone();
-        let adopted = adopted.clone();
-        tokio::task::spawn_blocking(move || store.adopt(&source, &adopted))
-            .await
-            .map_err(before)?
-            .map_err(before)
-    }
-    async fn checkpoint_candidates(
-        &self,
-    ) -> Result<Vec<CheckpointManifest>, NativeError> {
-        let store = self.store.clone();
-        tokio::task::spawn_blocking(move || store.candidates())
-            .await
-            .map_err(before)?
-            .map_err(before)
-    }
-    async fn checkpoint_control_evidence(
-        &self,
-        id: &OperationId,
-    ) -> Result<Vec<CheckpointControlEvidence>, NativeError> {
-        self.store.controls(id).map_err(before)
-    }
-    async fn checkpoint_write_control(
-        &self,
-        evidence: &CheckpointControlEvidence,
-    ) -> Result<(), NativeError> {
-        let filename = format!(
-            "{:x}.control.json",
-            Sha256::digest(evidence.operation_id.as_str().as_bytes())
-        );
-        self.store
-            .write_json(
-                &self
-                    .store
-                    .dir(&evidence.report.checkpoint_id)
-                    .join(filename),
-                evidence,
-            )
-            .map_err(before)
-    }
-    async fn checkpoint_present(
-        &self,
-        manifest: &CheckpointManifest,
-    ) -> Result<bool, NativeError> {
-        self.store.present(manifest).map_err(before)
-    }
-    async fn checkpoint_verify(
-        &self,
-        manifest: &CheckpointManifest,
-    ) -> Result<bool, NativeError> {
-        let store = self.store.clone();
-        let manifest = manifest.clone();
-        tokio::task::spawn_blocking(move || store.verify(&manifest))
-            .await
-            .map_err(before)?
-            .map_err(before)
-    }
-    fn checkpoint_remove_payload(&self, id: &OperationId) -> Result<(), String> {
-        let path = self.store.dir(id).join("payload.rds");
-        if !path.exists() {
-            return Ok(());
-        }
-        let path = self.store.checked(&path)?;
-        fs::remove_file(path).map_err(|e| e.to_string())?;
-        CheckpointStore::sync_directory(&self.store.dir(id))
-    }
-    async fn execute(
-        &self,
-        _: &OperationId,
-        _: &RunRArguments,
-    ) -> Result<NativeReport, NativeError> {
-        Err(before(
-            "This is a read-only checkpoint archive, not a live R process",
-        ))
-    }
-}
-
-impl ArkRuntime {
-    pub(super) async fn shutdown_confirmed(&self) -> Result<(), NativeError> {
-        let Some((pid, recorded_start)) = self.native_process else {
-            return Err(before(
-                "Original native process identity is unavailable; stop cannot be confirmed",
-            ));
-        };
-        let identity = process_start(pid).await?;
-        if identity.is_none() || identity != Some(recorded_start) {
-            self.client.lock().unwrap_or_else(|e| e.into_inner()).take();
-            return Ok(());
-        }
-        let mut client = {
-            let mut slot = self.client.lock().unwrap_or_else(|e| e.into_inner());
-            let Some(existing) = slot.as_ref() else {
-                return Err(NativeError::after_possible_effect(
-                    "Original R process still exists but its native handle is unavailable",
-                    Some(
-                        json!({"session_id":self.session_id,"pid":pid,"process_start":recorded_start}),
-                    ),
-                ));
-            };
-            if Arc::strong_count(existing) != 1 {
-                return Err(before(
-                    "Native R has active observation/execution leases; shutdown was not started",
-                ));
-            }
-            let value = slot.take().unwrap();
-            match Arc::try_unwrap(value) {
-                Ok(client) => client,
-                Err(value) => {
-                    *slot = Some(value);
-                    return Err(before("Native R lease changed; shutdown was not started"));
-                }
-            }
-        };
-        self.closing
-            .store(true, std::sync::atomic::Ordering::Release);
-        self.input_changed.send_modify(|v| *v = v.wrapping_add(1));
-        let _ = tokio::time::timeout(Duration::from_secs(1), client.shutdown()).await;
-        drop(client); // Jet's owned ChildGuard terminates/reaps its own child.
-        let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
-            let current = process_start(pid).await?;
-            if current.is_none() || (identity.is_some() && current != identity) {
-                self.input.lock().unwrap_or_else(|e| e.into_inner()).take();
-                return Ok(());
-            }
-            if Instant::now() >= deadline {
-                return Err(NativeError::after_possible_effect(
-                    "Original R process still exists after shutdown deadline",
-                    Some(
-                        json!({"session_id":self.session_id,"pid":pid,"process_start":identity,"action":"inspect_original_process_before_replacement"}),
-                    ),
-                ));
-            }
-            tokio::time::sleep(Duration::from_millis(50)).await;
-        }
-    }
-}
-pub(super) async fn process_start(pid: u32) -> Result<Option<u64>, NativeError> {
-    tokio::task::spawn_blocking(move || {
-        let mut system = sysinfo::System::new();
-        system.refresh_processes_specifics(
-            sysinfo::ProcessesToUpdate::Some(&[sysinfo::Pid::from_u32(pid)]),
-            true,
-            sysinfo::ProcessRefreshKind::nothing(),
-        );
-        system
-            .process(sysinfo::Pid::from_u32(pid))
-            .map(|p| p.start_time())
-    })
-    .await
-    .map_err(before)
-}
-
-/// Observe an originally recorded process without connecting to or signalling it.
-pub async fn recorded_process_alive(
-    identity: &RuntimeProcessIdentity,
-) -> Result<Option<bool>, String> {
-    process_start(identity.pid)
-        .await
-        .map(|current| Some(current == Some(identity.start_time)))
-        .map_err(|e| e.message)
 }

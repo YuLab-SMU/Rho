@@ -268,12 +268,15 @@ fn public_manifest_declares_only_supported_contracts() {
             .iter()
             .all(|cap| cap.cancellation == CancellationSupport::Unsupported)
     );
-    assert!(
-        manifest
-            .requires
-            .iter()
-            .all(|g| ["views.caller", "plugins.inspect", "annotations.read", "annotations.write"].contains(&g.capability.id.as_str()))
-    );
+    assert!(manifest.requires.iter().all(|g| {
+        [
+            "views.caller",
+            "plugins.inspect",
+            "annotations.read",
+            "annotations.write",
+        ]
+        .contains(&g.capability.id.as_str())
+    }));
 }
 #[tokio::test]
 async fn exact_freeze_note_context_and_reopen_preserve_original_receipts() {
@@ -368,7 +371,17 @@ async fn exact_freeze_note_context_and_reopen_preserve_original_receipts() {
 }
 #[tokio::test]
 async fn malformed_source_and_changed_caller_cannot_write_evidence() {
-    for variant in ["lineage", "reference", "partial", "quote", "caller", "foreign_image", "unsupported_image", "oversized_image", "too_many_images"] {
+    for variant in [
+        "lineage",
+        "reference",
+        "partial",
+        "quote",
+        "caller",
+        "foreign_image",
+        "unsupported_image",
+        "oversized_image",
+        "too_many_images",
+    ] {
         let mut f = Fixture::new().await;
         let mut preview = source();
         let mut request = freeze("invalid-source");
@@ -385,7 +398,11 @@ async fn malformed_source_and_changed_caller_cannot_write_evidence() {
                     "oversized_image" => image["bytes"] = json!(8 * 1024 * 1024 + 1),
                     _ => (),
                 }
-                preview["resources"] = if variant == "too_many_images" {json!([image.clone(),image.clone(),image])} else {json!([image])};
+                preview["resources"] = if variant == "too_many_images" {
+                    json!([image.clone(), image.clone(), image])
+                } else {
+                    json!([image])
+                };
             }
             _ => {}
         }
@@ -428,10 +445,40 @@ async fn source_images_are_retained_as_exact_references_without_claiming_a_captu
     let image = json!({"owner":reference()["provider"],"resource":"source-image","digest":format!("sha256:{}","f".repeat(64)),"media_type":"image/png","bytes":123});
     let mut preview = source();
     preview["resources"] = json!([image.clone()]);
-    let frozen = succeeded(f.perform(call("image-source-freeze","annotations.write",freeze("image-source-original")),vec![("views.caller",origin()),("plugins.inspect",inspection()),("editor.context.preview",preview),("views.caller",origin())],true).await);
-    let evidence = observed(f.perform(call("image-source-read","annotations.read",json!({"kind":"evidence","evidence_id":frozen["outcome"]["evidence_id"]})),vec![("views.caller",origin())],false).await);
-    assert_eq!(evidence["evidence"]["fragment"]["resources"],json!([image]));
-    assert_eq!(evidence["evidence"]["anchor"]["kind"],"text_quote");
+    let frozen = succeeded(
+        f.perform(
+            call(
+                "image-source-freeze",
+                "annotations.write",
+                freeze("image-source-original"),
+            ),
+            vec![
+                ("views.caller", origin()),
+                ("plugins.inspect", inspection()),
+                ("editor.context.preview", preview),
+                ("views.caller", origin()),
+            ],
+            true,
+        )
+        .await,
+    );
+    let evidence = observed(
+        f.perform(
+            call(
+                "image-source-read",
+                "annotations.read",
+                json!({"kind":"evidence","evidence_id":frozen["outcome"]["evidence_id"]}),
+            ),
+            vec![("views.caller", origin())],
+            false,
+        )
+        .await,
+    );
+    assert_eq!(
+        evidence["evidence"]["fragment"]["resources"],
+        json!([image])
+    );
+    assert_eq!(evidence["evidence"]["anchor"]["kind"], "text_quote");
     f.stop().await;
 }
 #[tokio::test]

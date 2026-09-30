@@ -17,10 +17,7 @@ pub(crate) struct DiscoveryOwner {
     registry: OnceLock<Weak<CapabilityRegistry>>,
 }
 impl DiscoveryOwner {
-    pub(crate) fn new(
-        project: Option<String>,
-        targets: Vec<TargetRef>,
-        ) -> Arc<Self> {
+    pub(crate) fn new(project: Option<String>, targets: Vec<TargetRef>) -> Arc<Self> {
         Arc::new(Self {
             project,
             targets,
@@ -73,16 +70,22 @@ impl DiscoveryOwner {
         })
     }
     fn modules(&self, descriptors: &[CapabilityDescriptor]) -> Vec<ModuleAvailability> {
-        descriptors.iter().map(|d| d.domain.as_str()).collect::<BTreeSet<_>>()
-            .into_iter().map(|module| ModuleAvailability {
+        descriptors
+            .iter()
+            .map(|d| d.domain.as_str())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|module| ModuleAvailability {
                 module: module.into(),
                 available: true,
                 reasons: vec![],
                 catalog: NextRead::query(
-                    "host.catalog", format!("Discover {module} capabilities"),
+                    "host.catalog",
+                    format!("Discover {module} capabilities"),
                     json!({"module":module,"limit":20}),
                 ),
-            }).collect()
+            })
+            .collect()
     }
     fn catalog(
         &self,
@@ -249,9 +252,16 @@ impl DiscoveryOwner {
             observations.push(OverviewObservation::Operations(observed(snapshot)?));
         }
         let modules = self.modules(&visible);
-        let targets = self.targets.iter().filter(|target|
-            target.kind == "project" && (context.scopes.contains("plugins.read")
-                || context.scopes.contains("operation.read"))).cloned().collect();
+        let targets = self
+            .targets
+            .iter()
+            .filter(|target| {
+                target.kind == "project"
+                    && (context.scopes.contains("plugins.read")
+                        || context.scopes.contains("operation.read"))
+            })
+            .cloned()
+            .collect();
         Ok(HostOverview {
             project_root: self.project.clone(),
             targets,
@@ -371,8 +381,10 @@ impl QueryHandler for DiscoveryHandler {
             )
             .map_err(invalid),
             "host.core_contract" => serde_json::to_value(
-                serde_json::from_value::<rho_plugin_protocol::HostCapabilityArguments>(args.clone())
-                    .map_err(invalid)?,
+                serde_json::from_value::<rho_plugin_protocol::HostCapabilityArguments>(
+                    args.clone(),
+                )
+                .map_err(invalid)?,
             )
             .map_err(invalid),
             _ => {
@@ -420,9 +432,10 @@ impl QueryHandler for DiscoveryHandler {
                 DESCRIPTION_BYTES,
             ),
             "host.core_contract" => (
-                serde_json::to_value(self.owner.core_contract(
-                    serde_json::from_value(args.clone()).map_err(invalid)?,
-                )?),
+                serde_json::to_value(
+                    self.owner
+                        .core_contract(serde_json::from_value(args.clone()).map_err(invalid)?)?,
+                ),
                 DESCRIPTION_BYTES,
             ),
             _ => {
@@ -497,24 +510,57 @@ mod tests {
         let modules = owner.modules(&owner.visible(&context).unwrap());
         assert_eq!(modules.len(), 1);
         assert_eq!(modules[0].module, "custom-domain");
-        let catalog = owner.catalog(&context, HostCatalogArguments {
-            module: Some("custom-domain".into()), keyword: None, cursor: None, limit: 1,
-        }).unwrap();
+        let catalog = owner
+            .catalog(
+                &context,
+                HostCatalogArguments {
+                    module: Some("custom-domain".into()),
+                    keyword: None,
+                    cursor: None,
+                    limit: 1,
+                },
+            )
+            .unwrap();
         assert_eq!(catalog.entries.len(), 1);
         assert_eq!(catalog.entries[0].module, "custom-domain");
         let cursor = catalog.next_cursor.unwrap();
-        let description = owner.describe(&context, HostDescribeArguments {
-            capability: None, module: Some("custom-domain".into()),
-        }).unwrap();
-        let HostDescription::Module { capabilities, .. } = description else { panic!("module expected") };
+        let description = owner
+            .describe(
+                &context,
+                HostDescribeArguments {
+                    capability: None,
+                    module: Some("custom-domain".into()),
+                },
+            )
+            .unwrap();
+        let HostDescription::Module { capabilities, .. } = description else {
+            panic!("module expected")
+        };
         assert_eq!(capabilities.len(), 2);
-        assert!(owner.describe(&context, HostDescribeArguments {
-            capability: None, module: Some("private-domain".into()),
-        }).is_err());
+        assert!(
+            owner
+                .describe(
+                    &context,
+                    HostDescribeArguments {
+                        capability: None,
+                        module: Some("private-domain".into()),
+                    }
+                )
+                .is_err()
+        );
         context.scopes.clear();
         assert!(owner.modules(&owner.visible(&context).unwrap()).is_empty());
-        assert!(matches!(owner.catalog(&context, HostCatalogArguments {
-            module: Some("custom-domain".into()), keyword: None, cursor: Some(cursor), limit: 1,
-        }), Err(OperationError::ObservationExpired(_))));
+        assert!(matches!(
+            owner.catalog(
+                &context,
+                HostCatalogArguments {
+                    module: Some("custom-domain".into()),
+                    keyword: None,
+                    cursor: Some(cursor),
+                    limit: 1,
+                }
+            ),
+            Err(OperationError::ObservationExpired(_))
+        ));
     }
 }

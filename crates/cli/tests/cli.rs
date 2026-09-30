@@ -79,20 +79,46 @@ fn missing_scientific_plugins_never_fall_back_to_fixed_owners() {
     std::fs::create_dir(&project).unwrap();
     std::fs::write(project.join("analysis.R"), "original\n").unwrap();
     for (capability, arguments) in [
-        ("workspace.run_r", json!({"code":"writeLines('effect', 'produced.txt')"})),
-        ("project.apply_patch", json!({"patch":"--- a/analysis.R\n+++ b/analysis.R\n@@ -1 +1 @@\n-original\n+changed\n"})),
-        ("process.run_local", json!({"program":"must-not-start", "args":[]})),
+        (
+            "workspace.run_r",
+            json!({"code":"writeLines('effect', 'produced.txt')"}),
+        ),
+        (
+            "project.apply_patch",
+            json!({"patch":"--- a/analysis.R\n+++ b/analysis.R\n@@ -1 +1 @@\n-original\n+changed\n"}),
+        ),
+        (
+            "process.run_local",
+            json!({"program":"must-not-start", "args":[]}),
+        ),
     ] {
         let result = Command::new(env!("CARGO_BIN_EXE_rho"))
-            .arg("--project").arg(&project)
-            .arg("--database").arg(dir.path().join("state/records.sqlite"))
-            .args(["invoke", "--client-request-id", capability, "--capability", capability, "--arguments"])
-            .arg(arguments.to_string()).output().unwrap();
+            .arg("--project")
+            .arg(&project)
+            .arg("--database")
+            .arg(dir.path().join("state/records.sqlite"))
+            .args([
+                "invoke",
+                "--client-request-id",
+                capability,
+                "--capability",
+                capability,
+                "--arguments",
+            ])
+            .arg(arguments.to_string())
+            .output()
+            .unwrap();
         assert!(!result.status.success(), "{capability}");
         let error: Value = serde_json::from_slice(&result.stderr).unwrap();
-        assert!(error["error"].as_str().unwrap().contains(capability), "{error}");
+        assert!(
+            error["error"].as_str().unwrap().contains(capability),
+            "{error}"
+        );
     }
-    assert_eq!(std::fs::read_to_string(project.join("analysis.R")).unwrap(), "original\n");
+    assert_eq!(
+        std::fs::read_to_string(project.join("analysis.R")).unwrap(),
+        "original\n"
+    );
     assert!(!project.join("produced.txt").exists());
     assert!(!dir.path().join("state/runtime").exists());
     assert!(!dir.path().join("state/environment").exists());

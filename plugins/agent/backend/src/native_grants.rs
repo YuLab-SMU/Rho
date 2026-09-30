@@ -3,8 +3,12 @@
 //! Send still captures exact user-selected bindings and the original call scopes.
 use rho_plugin_sdk::protocol::*;
 
+type ScopeGroup = &'static [&'static str];
+type CapabilityGroup = &'static [(&'static str, u32)];
+type RequirementGroup = (ScopeGroup, CapabilityGroup);
+
 pub(crate) fn scientific_requirements() -> Vec<CapabilityRequirement> {
-    let groups: &[(&[&str], &[(&str, u32)])] = &[
+    let groups: &[RequirementGroup] = &[
         (
             &["application.read", "plugins.read"],
             &[

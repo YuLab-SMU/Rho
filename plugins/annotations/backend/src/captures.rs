@@ -169,9 +169,70 @@ pub fn read(metadata: &Metadata, input: CaptureRead) -> Result<Value, Failure> {
     })
 }
 
+/// A labeled captured view from a contributed source; retained separately from source media.
+pub async fn upload(
+    metadata: &Metadata,
+    call: &PluginCall,
+    host: &HostCallClient,
+    caller: &PluginViewCaller,
+) -> Result<Value, Failure> {
+    let input: CaptureUpload = decode(&call.arguments)?;
+    if input.base64.is_empty() || input.base64.len() > 768 * 1024 {
+        return Err(Failure::invalid(
+            "Captured view exceeds the 576 KiB PNG limit",
+        ));
+    }
+    sources::window(caller, &input.reference.window)?;
+    let bytes = STANDARD.decode(&input.base64).map_err(Failure::invalid)?;
+    let (width, height) = dimensions(&bytes, "image/png")?;
+    let actor = metadata.actor(caller);
+    let identity = serde_json::json!({"reference":input.reference,"inclusion":input.inclusion,
+        "sha256":sha256(&bytes),"width":width,"height":height,"kind":"browser_captured_view"});
+    if let Some(receipt) =
+        metadata
+            .owner
+            .replay_capture_import(&actor, &input.request_id, &identity)?
+    {
+        return encoded(receipt);
+    }
+    // Validate the exact original contributed source before admitting browser evidence.
+    let selection = AnnotationSelection {
+        source: "plugin".into(),
+        label: "Captured view".into(),
+        reference: encoded(&input.reference)?,
+        inclusion: serde_json::to_string(&input.inclusion).map_err(Failure::invalid)?,
+    };
+    sources::freeze(
+        metadata,
+        call,
+        host,
+        &selection,
+        &AnnotationAnchor::WholeItem,
+    )
+    .await?;
+    if sources::caller(metadata, call, host).await? != *caller {
+        return Err(Failure::invalid(
+            "The source view changed before capture admission",
+        ));
+    }
+    encoded(metadata.owner.import_capture(
+        &actor,
+        &input.request_id,
+        &identity,
+        ImportedCapture {
+            mime_type: "image/png",
+            width,
+            height,
+            bytes: &bytes,
+        },
+        now(),
+    )?)
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
     pub(crate) fn png() -> Vec<u8> {
         let mut bytes = Cursor::new(Vec::new());
         image::RgbImage::from_pixel(3, 2, image::Rgb([30, 90, 180]))
@@ -179,6 +240,7 @@ pub(crate) mod tests {
             .unwrap();
         bytes.into_inner()
     }
+
     #[test]
     fn captures_decode_bytes_and_refuse_corruption_or_false_media_type() {
         let png = png();
@@ -192,31 +254,4 @@ pub(crate) mod tests {
             .unwrap();
         assert_eq!(dimensions(jpeg.get_ref(), "image/jpeg").unwrap(), (3, 2));
     }
-}
-
-/// A labeled captured view from a contributed source; retained separately from source media.
-pub async fn upload(metadata: &Metadata, call: &PluginCall, host: &HostCallClient,
-    caller: &PluginViewCaller) -> Result<Value, Failure> {
-    let input: CaptureUpload = decode(&call.arguments)?;
-    if input.base64.is_empty() || input.base64.len() > 768 * 1024 {
-        return Err(Failure::invalid("Captured view exceeds the 576 KiB PNG limit"));
-    }
-    sources::window(caller, &input.reference.window)?;
-    let bytes = STANDARD.decode(&input.base64).map_err(Failure::invalid)?;
-    let (width, height) = dimensions(&bytes, "image/png")?;
-    let actor = metadata.actor(caller);
-    let identity = serde_json::json!({"reference":input.reference,"inclusion":input.inclusion,
-        "sha256":sha256(&bytes),"width":width,"height":height,"kind":"browser_captured_view"});
-    if let Some(receipt) = metadata.owner.replay_capture_import(&actor, &input.request_id, &identity)? {
-        return encoded(receipt);
-    }
-    // Validate the exact original contributed source before admitting browser evidence.
-    let selection = AnnotationSelection { source:"plugin".into(), label:"Captured view".into(),
-        reference:encoded(&input.reference)?, inclusion:serde_json::to_string(&input.inclusion).map_err(Failure::invalid)? };
-    sources::freeze(metadata, call, host, &selection, &AnnotationAnchor::WholeItem).await?;
-    if sources::caller(metadata, call, host).await? != *caller {
-        return Err(Failure::invalid("The source view changed before capture admission"));
-    }
-    encoded(metadata.owner.import_capture(&actor, &input.request_id, &identity,
-        ImportedCapture { mime_type:"image/png", width, height, bytes:&bytes }, now())?)
 }

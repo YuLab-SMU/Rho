@@ -48,11 +48,20 @@ fn standalone_queries_leave_new_projects_and_missing_databases_uninitialized() {
         let reply: Value = serde_json::from_slice(&result.stdout).unwrap();
         assert_eq!(reply["observation"]["status"], "ready");
     }
-    for capability in ["project.read_text", "output.read_text", "workspace.snapshot"] {
+    for capability in [
+        "project.read_text",
+        "output.read_text",
+        "workspace.snapshot",
+    ] {
         let result = observer(&database, &project, capability, json!({}));
         assert!(!result.status.success(), "{capability}");
         let error: Value = serde_json::from_slice(&result.stderr).unwrap();
-        assert!(error["error"].as_str().unwrap().contains("existing plugin Host"));
+        assert!(
+            error["error"]
+                .as_str()
+                .unwrap()
+                .contains("existing plugin Host")
+        );
     }
     assert!(!database.parent().unwrap().exists());
     assert!(!project.join(".rho").exists());

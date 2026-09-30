@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
-mod settings;
-mod mcp_sessions;
 mod demo_project;
+mod mcp_sessions;
 mod plugin_views;
+mod settings;
 
 pub use demo_project::materialize_demo_project;
 
@@ -23,10 +23,10 @@ use axum::{
 use rho_contract::{HostRequest, SelectProject, SessionReply, WorkbenchFrame, WorkbenchInfo};
 use rho_host::{HostProfile, NextHost};
 use rho_mcp::McpEdge;
+use rmcp::transport::streamable_http_server::session::SessionManager;
 use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
 };
-use rmcp::transport::streamable_http_server::session::SessionManager;
 use tokio::io::AsyncReadExt;
 use tokio::sync::{RwLock, Semaphore};
 use tokio_util::sync::CancellationToken;
@@ -103,20 +103,23 @@ fn failure(status: StatusCode, error: impl Into<String>) -> Response {
 
 async fn boundary(State(state): State<AppState>, mut request: Request, next: Next) -> Response {
     let deleting = request.method() == axum::http::Method::DELETE;
-    let plugin_asset = request.method() == axum::http::Method::GET &&
-        (request.uri().path().starts_with("/view/plugin/") || request.uri().path().starts_with("/view/plugin-test/"));
+    let plugin_asset = request.method() == axum::http::Method::GET
+        && (request.uri().path().starts_with("/view/plugin/")
+            || request.uri().path().starts_with("/view/plugin-test/"));
     let headers = request.headers();
     if headers.get(header::HOST).and_then(|h| h.to_str().ok()) != Some(&state.authority) {
         return failure(StatusCode::FORBIDDEN, "unexpected local Host");
     }
     if headers.get_all(header::ORIGIN).iter().count() > 1
-        || headers
-            .get(header::ORIGIN)
-            .is_some_and(|h| h.to_str().ok() != Some(&state.origin) && !(plugin_asset && h.to_str().ok() == Some("null")))
+        || headers.get(header::ORIGIN).is_some_and(|h| {
+            h.to_str().ok() != Some(&state.origin)
+                && !(plugin_asset && h.to_str().ok() == Some("null"))
+        })
     {
         return failure(StatusCode::FORBIDDEN, "foreign Origin");
     }
-    let public_asset = matches!(request.uri().path(), "/" | "/app.js" | "/style.css") || plugin_asset;
+    let public_asset =
+        matches!(request.uri().path(), "/" | "/app.js" | "/style.css") || plugin_asset;
     let credential = headers
         .get(header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok());
@@ -127,32 +130,52 @@ async fn boundary(State(state): State<AppState>, mut request: Request, next: Nex
     let mut session_access = None;
     if mcp_request {
         let hosting = state.hosting.read().await;
-        let Some(selected) = &hosting.selected else { return failure(StatusCode::CONFLICT, "Select a project first"); };
+        let Some(selected) = &hosting.selected else {
+            return failure(StatusCode::CONFLICT, "Select a project first");
+        };
         let project = selected.root.to_string_lossy().into_owned();
-        if request.headers().get_all("x-rho-test-project").iter().count() > 1 {
-            return failure(StatusCode::BAD_REQUEST,"Duplicate test project selection");
+        if request
+            .headers()
+            .get_all("x-rho-test-project")
+            .iter()
+            .count()
+            > 1
+        {
+            return failure(StatusCode::BAD_REQUEST, "Duplicate test project selection");
         }
         let test_project = match request.headers().get("x-rho-test-project") {
             None => None,
-            Some(value) => match value.to_str().ok().and_then(|id|rho_contract::TestProjectId::new(id).ok()) {
+            Some(value) => match value
+                .to_str()
+                .ok()
+                .and_then(|id| rho_contract::TestProjectId::new(id).ok())
+            {
                 Some(id) => Some(id),
-                None => return failure(StatusCode::BAD_REQUEST,"Invalid test project selection"),
+                None => return failure(StatusCode::BAD_REQUEST, "Invalid test project selection"),
             },
         };
         if let Some(id) = &test_project {
             let context = NextHost::local_context();
-            if let Err(error) = selected.host.plugin_test_host(&context,id) {
-                return failure(StatusCode::CONFLICT,error.to_string());
+            if let Err(error) = selected.host.plugin_test_host(&context, id) {
+                return failure(StatusCode::CONFLICT, error.to_string());
             }
         }
         let identity = rho_mcp::McpRequestIdentity {
-            project, identity: "manual-mcp".into(), test_project,
+            project,
+            identity: "manual-mcp".into(),
+            test_project,
         };
         if request.headers().get_all("mcp-session-id").iter().count() > 1 {
             return failure(StatusCode::BAD_REQUEST, "Duplicate MCP session identity");
         }
-        let session = match request.headers().get("mcp-session-id").map(|value| value.to_str()) {
-            Some(Err(_)) => return failure(StatusCode::BAD_REQUEST, "Invalid MCP session identity"),
+        let session = match request
+            .headers()
+            .get("mcp-session-id")
+            .map(|value| value.to_str())
+        {
+            Some(Err(_)) => {
+                return failure(StatusCode::BAD_REQUEST, "Invalid MCP session identity");
+            }
             value => value.and_then(Result::ok).map(str::to_owned),
         };
         session_access = match state.mcp_sessions.enter(identity.clone(), session) {
@@ -167,15 +190,21 @@ async fn boundary(State(state): State<AppState>, mut request: Request, next: Nex
         let mut cleanup = tokio::task::JoinSet::new();
         for id in access.take_expired() {
             let manager = state.mcp_manager.clone();
-            cleanup.spawn(async move { let _ = manager.close_session(&id.into()).await; });
+            cleanup.spawn(async move {
+                let _ = manager.close_session(&id.into()).await;
+            });
         }
         let _ = tokio::time::timeout(std::time::Duration::from_secs(2), async {
             while cleanup.join_next().await.is_some() {}
-        }).await;
+        })
+        .await;
     }
     let mut response = next.run(request).await;
     if let Some(access) = &mut session_access {
-        let session = response.headers().get("mcp-session-id").and_then(|value| value.to_str().ok());
+        let session = response
+            .headers()
+            .get("mcp-session-id")
+            .and_then(|value| value.to_str().ok());
         if let Err(error) = access.finish(session, deleting && response.status().is_success()) {
             return failure(StatusCode::CONFLICT, error);
         }
@@ -264,9 +293,7 @@ async fn select_project_root(state: &AppState, root: PathBuf) -> Response {
         if selected.root == root {
             return Json(hosting.info()).into_response();
         }
-        if !selected.host.is_idle()
-            || Arc::strong_count(&selected.host) != 1
-        {
+        if !selected.host.is_idle() || Arc::strong_count(&selected.host) != 1 {
             return failure(
                 StatusCode::CONFLICT,
                 "Host is busy or an MCP session is attached; finish work and disconnect the session before switching",
@@ -344,7 +371,11 @@ async fn dispatch(
     }
     let result = selected
         .host
-        .dispatch_selected(&context, request.frame.test_project.as_ref(), request.frame.request)
+        .dispatch_selected(
+            &context,
+            request.frame.test_project.as_ref(),
+            request.frame.request,
+        )
         .await;
     let reply = match result {
         Ok(result) => SessionReply {
@@ -450,7 +481,10 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
                 .as_ref()
                 .ok_or_else(|| std::io::Error::other("select a project first"))?;
             McpEdge::local(host.host.clone())
-                .map(|edge| edge.observe_connections(&host.connections).http_project(host.root.to_string_lossy().into_owned()))
+                .map(|edge| {
+                    edge.observe_connections(&host.connections)
+                        .http_project(host.root.to_string_lossy().into_owned())
+                })
                 .map_err(std::io::Error::other)
         },
         state.mcp_manager.clone(),
@@ -491,8 +525,14 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
             ),
         )
         .route("/api/agent-connection", get(agent_connection))
-        .route("/view/plugin/{connection}/{token}/{*path}", get(plugin_views::asset))
-        .route("/view/plugin-test/{test_project}/{connection}/{token}/{*path}", get(plugin_views::test_asset))
+        .route(
+            "/view/plugin/{connection}/{token}/{*path}",
+            get(plugin_views::asset),
+        )
+        .route(
+            "/view/plugin-test/{test_project}/{connection}/{token}/{*path}",
+            get(plugin_views::test_asset),
+        )
         .route("/api/plugin-view", post(plugin_views::dispatch))
         .route("/api/project", post(select_project))
         .route("/api/project/demo", post(select_demo_project))
@@ -547,10 +587,7 @@ pub async fn serve_with_assets(
     } else {
         None
     };
-    let hosting = Arc::new(RwLock::new(Hosting {
-        selected,
-        profile,
-    }));
+    let hosting = Arc::new(RwLock::new(Hosting { selected, profile }));
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port))
         .await
         .map_err(|e| e.to_string())?;
@@ -699,9 +736,15 @@ mod tests {
         let body = frame(&state, "query_snapshot", json!({"capability":{"id":"plugins.list","version":1},"arguments":{"after":null,"limit":100}})).await;
         let inventory = json_body(request(&app, "/api/host", Some(body)).await).await;
         assert_eq!(inventory["result"]["data"]["total"], 0);
-        assert_eq!(request(&app, "/api/r", None).await.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            request(&app, "/api/r", None).await.status(),
+            StatusCode::NOT_FOUND
+        );
         for path in ["/api/r", "/api/r/probe", "/api/application/bridge"] {
-            assert_eq!(request(&app, path, Some(json!({}))).await.status(), StatusCode::NOT_FOUND);
+            assert_eq!(
+                request(&app, path, Some(json!({}))).await.status(),
+                StatusCode::NOT_FOUND
+            );
         }
         let other = temp.path().join("other-project");
         std::fs::create_dir(&other).unwrap();
@@ -726,7 +769,15 @@ mod tests {
         let info = json_body(request(&app, "/api/info", None).await).await;
         assert!(info["project_root"].is_null());
         assert_eq!(info["runtime"], "plugins");
-        let opened = json_body(request(&app, "/api/project", Some(json!({"project_root":temp.path().join("project")}))).await).await;
+        let opened = json_body(
+            request(
+                &app,
+                "/api/project",
+                Some(json!({"project_root":temp.path().join("project")})),
+            )
+            .await,
+        )
+        .await;
         assert_eq!(opened["runtime"], "plugins");
         assert!(opened["project_root"].is_string());
         assert!(!temp.path().join("runtime").exists());
@@ -755,33 +806,78 @@ mod tests {
     #[tokio::test]
     async fn retired_scientific_http_routes_have_no_builtin_fallback() {
         let (_temp, state, app) = fixture().await;
-        let host = state.hosting.read().await.selected.as_ref().unwrap().host.clone();
-        let before = host.outbox(&NextHost::local_context(), 0, 100).await.unwrap();
+        let host = state
+            .hosting
+            .read()
+            .await
+            .selected
+            .as_ref()
+            .unwrap()
+            .host
+            .clone();
+        let before = host
+            .outbox(&NextHost::local_context(), 0, 100)
+            .await
+            .unwrap();
         for path in [
-            "/api/agents/discover", "/api/agents/setup", "/api/agents/test",
-            "/api/agents/tasks/query", "/api/agents/tasks/command", "/api/agents/tasks/asset",
-            "/api/agents/handoff/query", "/api/agents/handoff/command",
-            "/api/agents/components/query", "/api/agents/components/command",
-            "/api/agents/components/credential", "/api/agents/components/context",
-            "/api/agents/components/context/search", "/api/agents/components/test",
-            "/api/agents/components/asset", "/api/agents/components/asset/upload",
-            "/api/annotations/query", "/api/annotations/command", "/api/annotations/capture",
+            "/api/agents/discover",
+            "/api/agents/setup",
+            "/api/agents/test",
+            "/api/agents/tasks/query",
+            "/api/agents/tasks/command",
+            "/api/agents/tasks/asset",
+            "/api/agents/handoff/query",
+            "/api/agents/handoff/command",
+            "/api/agents/components/query",
+            "/api/agents/components/command",
+            "/api/agents/components/credential",
+            "/api/agents/components/context",
+            "/api/agents/components/context/search",
+            "/api/agents/components/test",
+            "/api/agents/components/asset",
+            "/api/agents/components/asset/upload",
+            "/api/annotations/query",
+            "/api/annotations/command",
+            "/api/annotations/capture",
             "/api/html/token",
         ] {
-            assert_eq!(request(&app, path, Some(json!({}))).await.status(), StatusCode::NOT_FOUND, "{path}");
+            assert_eq!(
+                request(&app, path, Some(json!({}))).await.status(),
+                StatusCode::NOT_FOUND,
+                "{path}"
+            );
         }
-        assert_eq!(request(&app, "/view/html/retired-token", None).await.status(), StatusCode::NOT_FOUND);
+        assert_eq!(
+            request(&app, "/view/html/retired-token", None)
+                .await
+                .status(),
+            StatusCode::NOT_FOUND
+        );
         // Only the explicit Workbench credential reaches its public MCP edge.
         // Ordinary Agent backends issue credentials on their own private endpoint.
         for method in ["POST", "GET", "DELETE"] {
-            let response = app.clone().oneshot(Request::builder().method(method).uri("/mcp")
-                .header(header::HOST, "127.0.0.1:10001")
-                .header(header::AUTHORIZATION, "Bearer native-fixture-only")
-                .body(Body::empty()).unwrap()).await.unwrap();
+            let response = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri("/mcp")
+                        .header(header::HOST, "127.0.0.1:10001")
+                        .header(header::AUTHORIZATION, "Bearer native-fixture-only")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
         assert!(host.is_idle());
-        assert_eq!(host.outbox(&NextHost::local_context(), 0, 100).await.unwrap(), before);
+        assert_eq!(
+            host.outbox(&NextHost::local_context(), 0, 100)
+                .await
+                .unwrap(),
+            before
+        );
     }
 
     #[tokio::test]
@@ -1024,10 +1120,7 @@ mod tests {
             );
         }
     }
-
-
 }
-
 
 #[cfg(test)]
 mod plugin_test_project_tests;

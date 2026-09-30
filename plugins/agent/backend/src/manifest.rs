@@ -136,7 +136,10 @@ pub fn manifest() -> PluginManifest {
     // Resource references retain root-relative definition links when nested.
     let mut native_context_resource = schema_for!(ResourceReference).to_value();
     let native_context_definitions = native_context_resource
-        .as_object_mut().unwrap().remove("$defs").unwrap_or(json!({}));
+        .as_object_mut()
+        .unwrap()
+        .remove("$defs")
+        .unwrap_or(json!({}));
     let mut manifest = PluginManifest {
         protocol_version: PLUGIN_PROTOCOL_VERSION,
         id: PluginId::new("org.rho.agent").unwrap(),
@@ -408,11 +411,24 @@ pub fn manifest() -> PluginManifest {
                 schema_for!(ComponentAgentEventPage).to_value(),
                 json!({"run_id":"run-example","after":0,"limit":50}),
             ),
-            capability("agent.context.search", "Find versioned Agent task items", schema_for!(ContextSearch).to_value(), schema_for!(ContextPage).to_value(), json!({"window":"window-example","text":"","after":null,"limit":20})),
-            capability("agent.context.preview", "Preview exact Agent task evidence", {
-                let mut input=schema_for!(PreviewContext).to_value();
-                input["properties"]["inclusion"]=json!({"type":"object","additionalProperties":false,"required":["kind"],"properties":{"kind":{"const":"task"}}});input
-            }, schema_for!(ContextPreview).to_value(), json!({"reference":{"provider":{"plugin":"org.rho.agent","instance":"agent-example","revision":format!("sha256:{}","a".repeat(64)),"artifact":format!("sha256:{}","b".repeat(64))},"contribution":"agent","window":"window-example","selector":{"task":{"kind":"rho","conversation_id":"task-example"},"revision":"task-revision"}},"inclusion":{"kind":"task"},"max_bytes":16384})),
+            capability(
+                "agent.context.search",
+                "Find versioned Agent task items",
+                schema_for!(ContextSearch).to_value(),
+                schema_for!(ContextPage).to_value(),
+                json!({"window":"window-example","text":"","after":null,"limit":20}),
+            ),
+            capability(
+                "agent.context.preview",
+                "Preview exact Agent task evidence",
+                {
+                    let mut input = schema_for!(PreviewContext).to_value();
+                    input["properties"]["inclusion"] = json!({"type":"object","additionalProperties":false,"required":["kind"],"properties":{"kind":{"const":"task"}}});
+                    input
+                },
+                schema_for!(ContextPreview).to_value(),
+                json!({"reference":{"provider":{"plugin":"org.rho.agent","instance":"agent-example","revision":format!("sha256:{}","a".repeat(64)),"artifact":format!("sha256:{}","b".repeat(64))},"contribution":"agent","window":"window-example","selector":{"task":{"kind":"rho","conversation_id":"task-example"},"revision":"task-revision"}},"inclusion":{"kind":"task"},"max_bytes":16384}),
+            ),
             capability(
                 "agent.model.history",
                 "Read a model task's original run history",
@@ -541,7 +557,12 @@ pub fn manifest() -> PluginManifest {
             configuration_schema: schema_for!(AgentViewConfiguration).to_value(),
             resource_kinds: Default::default(),
         }],
-        contexts: vec![ContextContribution {id:ContributionId::new("agent").unwrap(),title:"Agent task items".into(),search:key("agent.context.search"),preview:key("agent.context.preview")}],
+        contexts: vec![ContextContribution {
+            id: ContributionId::new("agent").unwrap(),
+            title: "Agent task items".into(),
+            search: key("agent.context.search"),
+            preview: key("agent.context.preview"),
+        }],
         backend: Some(BackendEntrypoint {
             executable: PackagePath::new("dist/rho-agent-backend").unwrap(),
             arguments: vec![],
@@ -610,11 +631,36 @@ pub fn manifest() -> PluginManifest {
         capability: key("operation.list_recent"),
         scopes: ["operation.read".into()].into(),
     });
-    for (id,scopes) in [("plugins.instances",vec!["plugins.read"]),("windows.layout",vec!["plugins.run"]),("annotations.read",vec!["application.read","plugins.read"])] {
-        if !manifest.requires.iter().any(|g|g.capability.id.as_str()==id){manifest.requires.push(CapabilityRequirement {capability:key(id),scopes:scopes.into_iter().map(String::from).collect()});}
+    for (id, scopes) in [
+        ("plugins.instances", vec!["plugins.read"]),
+        ("windows.layout", vec!["plugins.run"]),
+        ("annotations.read", vec!["application.read", "plugins.read"]),
+    ] {
+        if !manifest
+            .requires
+            .iter()
+            .any(|g| g.capability.id.as_str() == id)
+        {
+            manifest.requires.push(CapabilityRequirement {
+                capability: key(id),
+                scopes: scopes.into_iter().map(String::from).collect(),
+            });
+        }
     }
     // Navigation follows the same public view-opening grant used by other sources.
-    if let Some(grant)=manifest.optional_requires.iter().find(|g|g.capability.id.as_str()=="windows.open_view").cloned(){manifest.requires.push(grant);}
-    manifest.optional_requires.retain(|grant| !manifest.requires.iter().any(|required|required.capability==grant.capability));
+    if let Some(grant) = manifest
+        .optional_requires
+        .iter()
+        .find(|g| g.capability.id.as_str() == "windows.open_view")
+        .cloned()
+    {
+        manifest.requires.push(grant);
+    }
+    manifest.optional_requires.retain(|grant| {
+        !manifest
+            .requires
+            .iter()
+            .any(|required| required.capability == grant.capability)
+    });
     manifest
 }

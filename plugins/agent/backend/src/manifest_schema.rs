@@ -22,10 +22,10 @@ pub(super) fn compact(mut schema: Value) -> Value {
                         object.remove(annotation);
                     }
                 }
-                if let Some(reference) = object.get_mut("$ref") {
-                    if let Some(replacement) = reference.as_str().and_then(|name| names.get(name)) {
-                        *reference = Value::String(replacement.clone());
-                    }
+                if let Some(reference) = object.get_mut("$ref")
+                    && let Some(replacement) = reference.as_str().and_then(|name| names.get(name))
+                {
+                    *reference = Value::String(replacement.clone());
                 }
                 for (key, value) in object.iter_mut() {
                     if matches!(

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use crate::ownership::ProjectLease;
 use crate::NextHost;
+use crate::ownership::ProjectLease;
 
 /// Generic Host storage configuration. Scientific providers belong to plugins.
 #[derive(Debug, Clone)]

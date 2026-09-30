@@ -1,6 +1,6 @@
 use crate::{InvokeRequest, OperationId, QueryRequest};
-use serde::{Deserialize, Serialize};
 pub use rho_plugin_protocol::TestProjectId;
+use serde::{Deserialize, Serialize};
 
 /// Ephemeral owner control. Arguments may contain secrets and never become an
 /// Operation, receipt, event or diagnostic payload.
@@ -12,8 +12,10 @@ pub struct ControlRequest {
 }
 impl std::fmt::Debug for ControlRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ControlRequest").field("capability", &self.capability)
-            .field("arguments", &"[redacted]").finish()
+        f.debug_struct("ControlRequest")
+            .field("capability", &self.capability)
+            .field("arguments", &"[redacted]")
+            .finish()
     }
 }
 
@@ -80,17 +82,28 @@ mod tests {
 
     #[test]
     fn removed_fixed_methods_cannot_enter_the_shared_port() {
-        for method in ["respond_input", "application_control", "application_bridge", "application_execute", "bind_method"] {
+        for method in [
+            "respond_input",
+            "application_control",
+            "application_bridge",
+            "application_execute",
+            "bind_method",
+        ] {
             let error = serde_json::from_value::<HostRequest>(serde_json::json!({
                 "method": method, "params": {}
-            })).unwrap_err();
-            assert!(error.to_string().contains("unknown variant"), "{method}: {error}");
+            }))
+            .unwrap_err();
+            assert!(
+                error.to_string().contains("unknown variant"),
+                "{method}: {error}"
+            );
         }
         let request = serde_json::from_value::<HostRequest>(serde_json::json!({
             "method": "control", "params": {
                 "capability": {"id":"custom.respond_input", "version":1}, "arguments":{}
             }
-        })).unwrap();
+        }))
+        .unwrap();
         assert!(matches!(request, HostRequest::Control(_)));
     }
 }

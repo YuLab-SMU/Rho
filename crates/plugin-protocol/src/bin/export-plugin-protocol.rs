@@ -118,44 +118,125 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     VisualDocument::export_all(&types)?;
     fs::create_dir_all(root.join("schema"))?;
     for (name, schema) in [
-        ("list-plugin-source", schemars::schema_for!(ListPluginSource)),
-        ("plugin-source-page", schemars::schema_for!(PluginSourcePage)),
-        ("read-plugin-source", schemars::schema_for!(ReadPluginSource)),
-        ("plugin-source-chunk", schemars::schema_for!(PluginSourceChunk)),
-        ("list-plugin-branches", schemars::schema_for!(ListPluginBranches)),
-        ("plugin-branch-page", schemars::schema_for!(PluginBranchPage)),
+        (
+            "list-plugin-source",
+            schemars::schema_for!(ListPluginSource),
+        ),
+        (
+            "plugin-source-page",
+            schemars::schema_for!(PluginSourcePage),
+        ),
+        (
+            "read-plugin-source",
+            schemars::schema_for!(ReadPluginSource),
+        ),
+        (
+            "plugin-source-chunk",
+            schemars::schema_for!(PluginSourceChunk),
+        ),
+        (
+            "list-plugin-branches",
+            schemars::schema_for!(ListPluginBranches),
+        ),
+        (
+            "plugin-branch-page",
+            schemars::schema_for!(PluginBranchPage),
+        ),
         ("build-plugin", schemars::schema_for!(BuildPlugin)),
         ("preview-plugin", schemars::schema_for!(PreviewPlugin)),
-        ("plugin-build-result", schemars::schema_for!(PluginBuildResult)),
-        ("create-plugin-test-project", schemars::schema_for!(CreatePluginTestProject)),
-        ("plugin-test-project-observation", schemars::schema_for!(PluginTestProjectObservation)),
-        ("plugin-test-project-arguments", schemars::schema_for!(PluginTestProjectArguments)),
-        ("plugin-test-operation-arguments", schemars::schema_for!(PluginTestOperationArguments)),
-        ("stop-plugin-test-project", schemars::schema_for!(StopPluginTestProject)),
-        ("list-plugin-test-projects", schemars::schema_for!(ListPluginTestProjects)),
-        ("plugin-test-project-page", schemars::schema_for!(PluginTestProjectPage)),
+        (
+            "plugin-build-result",
+            schemars::schema_for!(PluginBuildResult),
+        ),
+        (
+            "create-plugin-test-project",
+            schemars::schema_for!(CreatePluginTestProject),
+        ),
+        (
+            "plugin-test-project-observation",
+            schemars::schema_for!(PluginTestProjectObservation),
+        ),
+        (
+            "plugin-test-project-arguments",
+            schemars::schema_for!(PluginTestProjectArguments),
+        ),
+        (
+            "plugin-test-operation-arguments",
+            schemars::schema_for!(PluginTestOperationArguments),
+        ),
+        (
+            "stop-plugin-test-project",
+            schemars::schema_for!(StopPluginTestProject),
+        ),
+        (
+            "list-plugin-test-projects",
+            schemars::schema_for!(ListPluginTestProjects),
+        ),
+        (
+            "plugin-test-project-page",
+            schemars::schema_for!(PluginTestProjectPage),
+        ),
         ("checkpoint-plugin", schemars::schema_for!(CheckpointPlugin)),
         ("plugin-checkpoint", schemars::schema_for!(PluginCheckpoint)),
-        ("project-read-coverage", schemars::schema_for!(ProjectReadCoverage)),
-        ("project-read-coverage-arguments", schemars::schema_for!(ProjectReadCoverageArguments)),
+        (
+            "project-read-coverage",
+            schemars::schema_for!(ProjectReadCoverage),
+        ),
+        (
+            "project-read-coverage-arguments",
+            schemars::schema_for!(ProjectReadCoverageArguments),
+        ),
         ("manifest", schemars::schema_for!(PluginManifest)),
         ("archive", schemars::schema_for!(PluginArchive)),
         ("stage-archive", schemars::schema_for!(StagePluginArchive)),
         ("read-archive", schemars::schema_for!(ReadPluginArchive)),
         ("export-archive", schemars::schema_for!(ExportPluginArchive)),
-        ("archive-reference", schemars::schema_for!(PluginArchiveReference)),
-        ("archive-arguments", schemars::schema_for!(PluginArchiveArguments)),
-        ("archive-progress", schemars::schema_for!(PluginArchiveProgress)),
-        ("archive-discarded", schemars::schema_for!(PluginArchiveDiscarded)),
+        (
+            "archive-reference",
+            schemars::schema_for!(PluginArchiveReference),
+        ),
+        (
+            "archive-arguments",
+            schemars::schema_for!(PluginArchiveArguments),
+        ),
+        (
+            "archive-progress",
+            schemars::schema_for!(PluginArchiveProgress),
+        ),
+        (
+            "archive-discarded",
+            schemars::schema_for!(PluginArchiveDiscarded),
+        ),
         ("archive-chunk", schemars::schema_for!(PluginArchiveChunk)),
-        ("archive-receipt", schemars::schema_for!(PluginArchiveReceipt)),
-        ("archive-inspection", schemars::schema_for!(PluginArchiveInspection)),
-        ("archive-operation-arguments", schemars::schema_for!(PluginArchiveOperationArguments)),
+        (
+            "archive-receipt",
+            schemars::schema_for!(PluginArchiveReceipt),
+        ),
+        (
+            "archive-inspection",
+            schemars::schema_for!(PluginArchiveInspection),
+        ),
+        (
+            "archive-operation-arguments",
+            schemars::schema_for!(PluginArchiveOperationArguments),
+        ),
         ("rpc", schemars::schema_for!(RpcFrame)),
-        ("delegated-operation-arguments", schemars::schema_for!(PluginDelegatedOperationArguments)),
-        ("delegated-operation", schemars::schema_for!(PluginDelegatedOperation)),
-        ("host-capability-arguments", schemars::schema_for!(HostCapabilityArguments)),
-        ("host-capability-contract", schemars::schema_for!(HostCapabilityContract)),
+        (
+            "delegated-operation-arguments",
+            schemars::schema_for!(PluginDelegatedOperationArguments),
+        ),
+        (
+            "delegated-operation",
+            schemars::schema_for!(PluginDelegatedOperation),
+        ),
+        (
+            "host-capability-arguments",
+            schemars::schema_for!(HostCapabilityArguments),
+        ),
+        (
+            "host-capability-contract",
+            schemars::schema_for!(HostCapabilityContract),
+        ),
         ("workspace-paths", schemars::schema_for!(WorkspacePaths)),
         ("view-message", schemars::schema_for!(PluginViewMessage)),
         ("view-caller", schemars::schema_for!(PluginViewCaller)),
@@ -163,8 +244,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ("view-close", schemars::schema_for!(ClosePluginView)),
         ("view-reconnect", schemars::schema_for!(ReconnectPluginView)),
         ("plugin-resume", schemars::schema_for!(ResumePlugin)),
-        ("release-view-renderer", schemars::schema_for!(ReleasePluginViewRenderer)),
-        ("view-renderer-release", schemars::schema_for!(PluginViewRendererRelease)),
+        (
+            "release-view-renderer",
+            schemars::schema_for!(ReleasePluginViewRenderer),
+        ),
+        (
+            "view-renderer-release",
+            schemars::schema_for!(PluginViewRendererRelease),
+        ),
         ("window-layout", schemars::schema_for!(PluginWindowLayout)),
         (
             "window-open-view",
@@ -197,12 +284,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
         ("scenario", schemars::schema_for!(ScenarioRevision)),
         ("apply-scenario", schemars::schema_for!(ApplyScenario)),
-        ("window-scenario-snapshot", schemars::schema_for!(WindowScenarioSnapshot)),
-        ("resolve-window-provider", schemars::schema_for!(ResolveWindowProvider)),
+        (
+            "window-scenario-snapshot",
+            schemars::schema_for!(WindowScenarioSnapshot),
+        ),
+        (
+            "resolve-window-provider",
+            schemars::schema_for!(ResolveWindowProvider),
+        ),
         ("save-scenario", schemars::schema_for!(SaveScenario)),
         ("list-scenarios", schemars::schema_for!(ListScenarios)),
         ("scenario-page", schemars::schema_for!(ScenarioPage)),
-        ("scenario-revision-arguments", schemars::schema_for!(ScenarioRevisionArguments)),
+        (
+            "scenario-revision-arguments",
+            schemars::schema_for!(ScenarioRevisionArguments),
+        ),
         ("visual-document", schemars::schema_for!(VisualDocument)),
     ] {
         fs::write(

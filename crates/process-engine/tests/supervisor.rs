@@ -1,6 +1,6 @@
 #![cfg(unix)]
 
-use rho_process_engine::{ProcessTermination, ProcessOptions, run_command};
+use rho_process_engine::{ProcessOptions, ProcessTermination, run_command};
 use std::{
     io::{BufRead, Read, Write},
     process::Stdio,

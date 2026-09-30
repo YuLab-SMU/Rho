@@ -226,15 +226,42 @@ fn help_preview_retains_original_identity_and_marks_incomplete_excerpts() {
     assert_eq!(preview.text, "研究🙂\n".repeat(12));
     assert!(!preview.truncated);
     assert_eq!(preview.item.reference, request.reference);
-    assert!(preview.data["annotation_source"]["source_id"].as_str().unwrap().starts_with("help:"));
-    assert_eq!(preview.data["annotation_source"]["source_version"], format!("sha256:{:x}", Sha256::digest(serde_json::to_vec(&source.help_files).unwrap())));
+    assert!(
+        preview.data["annotation_source"]["source_id"]
+            .as_str()
+            .unwrap()
+            .starts_with("help:")
+    );
+    assert_eq!(
+        preview.data["annotation_source"]["source_version"],
+        format!(
+            "sha256:{:x}",
+            Sha256::digest(serde_json::to_vec(&source.help_files).unwrap())
+        )
+    );
     let mut reobserved = source.clone();
     reobserved.observation = "new-observation-same-content".into();
-    let fresh_request = PreviewContext { reference: reobserved.item(&owner.instance, &request.reference.window).unwrap().reference, ..request.clone() };
+    let fresh_request = PreviewContext {
+        reference: reobserved
+            .item(&owner.instance, &request.reference.window)
+            .unwrap()
+            .reference,
+        ..request.clone()
+    };
     let mut fresh_page = page.clone();
     fresh_page.observation_id = reobserved.observation.clone();
-    let fresh = help_preview(&owner.instance, fresh_request, &reobserved, HelpInclusion::Text {}, fresh_page).unwrap();
-    assert_eq!(preview.data["annotation_source"], fresh.data["annotation_source"], "a new package observation is not a new content version");
+    let fresh = help_preview(
+        &owner.instance,
+        fresh_request,
+        &reobserved,
+        HelpInclusion::Text {},
+        fresh_page,
+    )
+    .unwrap();
+    assert_eq!(
+        preview.data["annotation_source"], fresh.data["annotation_source"],
+        "a new package observation is not a new content version"
+    );
 
     let mut partial = page.clone();
     partial.text = "研究".into();

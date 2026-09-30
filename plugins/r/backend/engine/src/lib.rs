@@ -1,8 +1,8 @@
 #![forbid(unsafe_code)]
-mod outputs;
 mod checkpoints;
+mod outputs;
 pub mod recovery;
-pub use checkpoints::{CheckpointArchiveRuntime, verify_checkpoint_helper, recorded_process_alive};
+pub use checkpoints::{CheckpointArchiveRuntime, recorded_process_alive, verify_checkpoint_helper};
 pub use outputs::OutputStore;
 
 use async_trait::async_trait;
@@ -14,13 +14,13 @@ use jet_core::{
     },
     kernel_spec::{InterruptMode, KernelSpec},
 };
-use rho_r_api::{NativeEffect, NativeCompleteness, OperationId};
 use rho_plugin_protocol::PluginOutcome as OperationOutcome;
 use rho_r_api::{
-    BindingSummary, FormatArguments, HelpArguments, InspectArguments, LintArguments, RunRArguments,
-    SnapshotArguments, NativeObservation, WorkspaceQuery, NativeRuntime,
-    NativeError, NativeReport, WorkspaceSnapshotData, WorkspaceToolRequest,
+    BindingSummary, FormatArguments, HelpArguments, InspectArguments, LintArguments, NativeError,
+    NativeObservation, NativeReport, NativeRuntime, RunRArguments, SnapshotArguments,
+    WorkspaceQuery, WorkspaceSnapshotData, WorkspaceToolRequest,
 };
+use rho_r_api::{NativeCompleteness, NativeEffect, OperationId};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -64,7 +64,7 @@ struct ActiveInput {
 pub struct ArkRuntime {
     checkpoints: checkpoints::CheckpointStore,
     checkpoint_ready: bool,
-    native_process: Option<(u32,u64)>,
+    native_process: Option<(u32, u64)>,
     installation: Option<rho_r_api::RuntimeInstallationIdentity>,
     client: Mutex<Option<Arc<Client>>>,
     session_id: String,
@@ -96,7 +96,11 @@ impl ArkRuntime {
             return Err("execution timeout must be positive".into());
         }
         // Refuse an invalid native component before starting any child process.
-        let helper = config.checkpoint_helper_path.as_ref().map(|p|checkpoints::verify_checkpoint_helper(p,&config.r_home)).transpose()?;
+        let helper = config
+            .checkpoint_helper_path
+            .as_ref()
+            .map(|p| checkpoints::verify_checkpoint_helper(p, &config.r_home))
+            .transpose()?;
         let session_id = format!("ark_{}", Uuid::new_v4().simple());
         let data_root = config.data_root.join(&session_id);
         std::fs::create_dir_all(&data_root).map_err(|error| error.to_string())?;
@@ -150,13 +154,19 @@ impl ArkRuntime {
         .map_err(|_| "Ark startup timed out".to_string())?
         .map_err(|error| error.to_string())?;
         drop(boot);
-        let native_process=match client.child_pid(){Some(pid)=>checkpoints::process_start(pid).await.map_err(|e|e.message)?.map(|start|(pid,start)),None=>None};
-        let checkpoint_store = checkpoints::CheckpointStore::new(&config.data_root,&project)?;
+        let native_process = match client.child_pid() {
+            Some(pid) => checkpoints::process_start(pid)
+                .await
+                .map_err(|e| e.message)?
+                .map(|start| (pid, start)),
+            None => None,
+        };
+        let checkpoint_store = checkpoints::CheckpointStore::new(&config.data_root, &project)?;
         let mut runtime = Self {
-            checkpoints:checkpoint_store,
-            checkpoint_ready:helper.is_some(),
+            checkpoints: checkpoint_store,
+            checkpoint_ready: helper.is_some(),
             native_process,
-            installation:None,
+            installation: None,
             client: Mutex::new(Some(Arc::new(client))),
             session_id,
             project_root: project.to_string_lossy().into_owned(),
@@ -183,8 +193,11 @@ impl ArkRuntime {
             let manifest_path=path.parent().unwrap().join("manifest.json");
             format!("m <- jsonlite::fromJSON({}); if (!identical(as.character(getRversion()),m$r_version) || !identical(R.version$platform,m$platform)) stop('Checkpoint native provider ABI differs'); e$rho_checkpoint_initialize({});",quote(&manifest_path.to_string_lossy()).unwrap(),quote(&path.to_string_lossy()).unwrap())
         }).unwrap_or_default();
-        let handshake=runtime.data_root.join("installation-handshake.json");
-        let handshake_code=format!("jsonlite::write_json(list(r_home=normalizePath(R.home(),winslash='/',mustWork=TRUE),r_version=as.character(getRversion()),platform=R.version$platform),{},auto_unbox=TRUE);",quote(&handshake.to_string_lossy())?);
+        let handshake = runtime.data_root.join("installation-handshake.json");
+        let handshake_code = format!(
+            "jsonlite::write_json(list(r_home=normalizePath(R.home(),winslash='/',mustWork=TRUE),r_version=as.character(getRversion()),platform=R.version$platform),{},auto_unbox=TRUE);",
+            quote(&handshake.to_string_lossy())?
+        );
         let viewer_pending = runtime.data_root.join("viewer-pending");
         let bootstrap = format!(
             "local({{ requireNamespace('jsonlite'); requireNamespace('tools'); e <- new.env(parent = asNamespace('utils')); e$can_inspect_bindings <- requireNamespace('rlang', quietly=TRUE); eval(parse(text = {}), e); options(rho.next.bridge = e, viewer = e$rho_viewer({})); setwd({}); {library_setup} {helper_setup} {handshake_code} invisible(TRUE) }})",
@@ -201,11 +214,20 @@ impl ArkRuntime {
         if let Some(error) = bootstrap_output.protocol_error {
             return Err(format!("Ark bridge initialization failed: {error}"));
         }
-        let bytes=std::fs::read(&handshake).map_err(|e|e.to_string())?;
-        if bytes.len()>8192{return Err("Native R installation handshake exceeded limit".into());}
-        let installation:rho_r_api::RuntimeInstallationIdentity=serde_json::from_slice(&bytes).map_err(|e|e.to_string())?;
-        if Path::new(&installation.r_home).canonicalize().map_err(|e|e.to_string())? != config.r_home.canonicalize().map_err(|e|e.to_string())? {return Err("Ark loaded a different R installation from its launch binding".into());}
-        runtime.installation=Some(installation);
+        let bytes = std::fs::read(&handshake).map_err(|e| e.to_string())?;
+        if bytes.len() > 8192 {
+            return Err("Native R installation handshake exceeded limit".into());
+        }
+        let installation: rho_r_api::RuntimeInstallationIdentity =
+            serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+        if Path::new(&installation.r_home)
+            .canonicalize()
+            .map_err(|e| e.to_string())?
+            != config.r_home.canonicalize().map_err(|e| e.to_string())?
+        {
+            return Err("Ark loaded a different R installation from its launch binding".into());
+        }
+        runtime.installation = Some(installation);
         Ok(runtime)
     }
 
@@ -261,9 +283,8 @@ impl ArkRuntime {
         operation_id: Option<&rho_r_api::OperationId>,
         result_path: Option<&Path>,
     ) -> Result<Arc<Client>, NativeError> {
-        self.client().map_err(|error| {
-            self.transport_error(operation_id, None, error.message, result_path)
-        })
+        self.client()
+            .map_err(|error| self.transport_error(operation_id, None, error.message, result_path))
     }
 
     fn invalidate(&self) {
@@ -295,7 +316,12 @@ impl ArkRuntime {
         .into();
         let request_id = message.header.msg_id.clone();
         let stream = client.request(message).map_err(|error| {
-            self.transport_error(operation_id, Some(&request_id), error.to_string(), result_path)
+            self.transport_error(
+                operation_id,
+                Some(&request_id),
+                error.to_string(),
+                result_path,
+            )
         })?;
         drop(stream);
         let mut captured = CapturedOutput::default();
@@ -310,12 +336,19 @@ impl ArkRuntime {
         loop {
             let bridge_failed = result_path.is_some_and(|path| {
                 read_bridge_response(path, &request_id, 128 * 1024 * 1024).is_ok_and(|response| {
-                    matches!(response.outcome, OperationOutcome::Failed | OperationOutcome::Cancelled)
+                    matches!(
+                        response.outcome,
+                        OperationOutcome::Failed | OperationOutcome::Cancelled
+                    )
                 })
             });
             if bridge_failed {
                 self.input.lock().unwrap_or_else(|e| e.into_inner()).take();
-                if let Some(writer) = &mut writer && let Err(error) = writer.finish() { captured.observation_error = Some(error); }
+                if let Some(writer) = &mut writer
+                    && let Err(error) = writer.finish()
+                {
+                    captured.observation_error = Some(error);
+                }
                 return Ok(captured);
             }
             if waiting_input {
@@ -336,10 +369,14 @@ impl ArkRuntime {
                 && !interrupted
                 && self.closing.load(std::sync::atomic::Ordering::Acquire)
             {
-                client
-                    .interrupt()
-                    .await
-                    .map_err(|e| self.transport_error(operation_id, Some(&request_id), e.to_string(), result_path))?;
+                client.interrupt().await.map_err(|e| {
+                    self.transport_error(
+                        operation_id,
+                        Some(&request_id),
+                        e.to_string(),
+                        result_path,
+                    )
+                })?;
                 interrupted = true;
                 interrupt_deadline = Instant::now() + Duration::from_secs(5);
             }
@@ -502,7 +539,6 @@ impl BridgeReadError {
             Self::Correlation => "correlation_mismatch",
         }
     }
-
 }
 
 fn read_bridge_response(
@@ -542,9 +578,7 @@ enum BridgeAction<'a> {
     Packages(&'a rho_r_api::PackageQueryArguments),
     InspectObject(&'a InspectArguments),
     ListObjects(&'a rho_r_api::ScopedWorkspaceArguments<rho_r_api::ListObjectsArguments>),
-    ObserveObject(
-        &'a rho_r_api::ScopedWorkspaceArguments<rho_r_api::ObserveObjectArguments>,
-    ),
+    ObserveObject(&'a rho_r_api::ScopedWorkspaceArguments<rho_r_api::ObserveObjectArguments>),
     ReadObject(&'a rho_r_api::ScopedWorkspaceArguments<rho_r_api::ReadObjectArguments>),
     PackageIndex(&'a rho_r_api::ScopedWorkspaceArguments<rho_r_api::PackageIndexArguments>),
     ReadHelp(&'a rho_r_api::ScopedWorkspaceArguments<rho_r_api::ReadPackageHelpArguments>),
@@ -563,26 +597,117 @@ struct BridgeRequest<'a> {
 
 #[async_trait]
 impl NativeRuntime for ArkRuntime {
-    fn checkpoint_available(&self)->bool { self.checkpoint_ready }
-    fn process_identity(&self)->Option<rho_r_api::RuntimeProcessIdentity>{self.native_process.map(|(pid,start_time)|rho_r_api::RuntimeProcessIdentity {native_session_id:self.session_id.clone(),pid,start_time})}
-    fn installation_identity(&self)->Option<rho_r_api::RuntimeInstallationIdentity>{self.installation.clone()}
-    async fn shutdown(&self)->Result<(),NativeError>{self.shutdown_confirmed().await}
-    async fn native_process_alive(&self)->Result<Option<bool>,NativeError>{
-        let Some((pid,start))=self.native_process else{return Ok(None)};
-        Ok(Some(checkpoints::process_start(pid).await?==Some(start)))
+    fn checkpoint_available(&self) -> bool {
+        self.checkpoint_ready
     }
-    async fn checkpoint_capture(&self,op:&OperationId,args:&rho_r_api::CheckpointCaptureArguments,cancel:watch::Receiver<bool>)->Result<rho_r_api::CheckpointArtifact,NativeError>{self.capture_checkpoint(op,args,cancel).await}
-    async fn checkpoint_artifact_lease(&self,id:&rho_r_api::OperationId)->Result<Box<dyn rho_r_api::CheckpointArtifactLease>,NativeError>{Ok(self.checkpoints.artifact_lease(id).await)}
-    async fn checkpoint_original_manifest(&self,id:&rho_r_api::OperationId)->Result<Option<rho_r_api::CheckpointManifest>,NativeError>{self.checkpoints.original_manifest(id).map_err(before)}
-    async fn checkpoint_adopt(&self,source:&rho_r_api::CheckpointManifest,adopted:&rho_r_api::CheckpointManifest)->Result<(),NativeError>{let store=self.checkpoints.clone();let source=source.clone();let adopted=adopted.clone();tokio::task::spawn_blocking(move||store.adopt(&source,&adopted)).await.map_err(before)?.map_err(before)}
-    async fn checkpoint_publish(&self,manifest:&rho_r_api::CheckpointManifest)->Result<(),NativeError>{self.publish_checkpoint(manifest)}
-    async fn checkpoint_candidates(&self)->Result<Vec<rho_r_api::CheckpointManifest>,NativeError>{let store=self.checkpoints.clone();tokio::task::spawn_blocking(move||store.candidates()).await.map_err(before)?.map_err(before)}
-    async fn checkpoint_control_evidence(&self,id:&rho_r_api::OperationId)->Result<Vec<rho_r_api::CheckpointControlEvidence>,NativeError>{self.checkpoints.controls(id).map_err(before)}
-    async fn checkpoint_write_control(&self,evidence:&rho_r_api::CheckpointControlEvidence)->Result<(),NativeError>{self.write_checkpoint_control(evidence)}
-    fn checkpoint_remove_payload(&self,id:&rho_r_api::OperationId)->Result<(),String>{self.remove_checkpoint_payload(id)}
-    async fn checkpoint_present(&self,manifest:&rho_r_api::CheckpointManifest)->Result<bool,NativeError>{self.checkpoints.present(manifest).map_err(before)}
-    async fn checkpoint_verify(&self,manifest:&rho_r_api::CheckpointManifest)->Result<bool,NativeError>{let store=self.checkpoints.clone();let manifest=manifest.clone();tokio::task::spawn_blocking(move||store.verify(&manifest)).await.map_err(before)?.map_err(before)}
-    async fn checkpoint_restore(&self,op:&OperationId,manifest:&rho_r_api::CheckpointManifest,cancel:watch::Receiver<bool>)->Result<rho_r_api::CheckpointNativeRestoreReport,NativeError>{self.restore_checkpoint(op,manifest,cancel).await}
+    fn process_identity(&self) -> Option<rho_r_api::RuntimeProcessIdentity> {
+        self.native_process
+            .map(|(pid, start_time)| rho_r_api::RuntimeProcessIdentity {
+                native_session_id: self.session_id.clone(),
+                pid,
+                start_time,
+            })
+    }
+    fn installation_identity(&self) -> Option<rho_r_api::RuntimeInstallationIdentity> {
+        self.installation.clone()
+    }
+    async fn shutdown(&self) -> Result<(), NativeError> {
+        self.shutdown_confirmed().await
+    }
+    async fn native_process_alive(&self) -> Result<Option<bool>, NativeError> {
+        let Some((pid, start)) = self.native_process else {
+            return Ok(None);
+        };
+        Ok(Some(checkpoints::process_start(pid).await? == Some(start)))
+    }
+    async fn checkpoint_capture(
+        &self,
+        op: &OperationId,
+        args: &rho_r_api::CheckpointCaptureArguments,
+        cancel: watch::Receiver<bool>,
+    ) -> Result<rho_r_api::CheckpointArtifact, NativeError> {
+        self.capture_checkpoint(op, args, cancel).await
+    }
+    async fn checkpoint_artifact_lease(
+        &self,
+        id: &rho_r_api::OperationId,
+    ) -> Result<Box<dyn rho_r_api::CheckpointArtifactLease>, NativeError> {
+        Ok(self.checkpoints.artifact_lease(id).await)
+    }
+    async fn checkpoint_original_manifest(
+        &self,
+        id: &rho_r_api::OperationId,
+    ) -> Result<Option<rho_r_api::CheckpointManifest>, NativeError> {
+        self.checkpoints.original_manifest(id).map_err(before)
+    }
+    async fn checkpoint_adopt(
+        &self,
+        source: &rho_r_api::CheckpointManifest,
+        adopted: &rho_r_api::CheckpointManifest,
+    ) -> Result<(), NativeError> {
+        let store = self.checkpoints.clone();
+        let source = source.clone();
+        let adopted = adopted.clone();
+        tokio::task::spawn_blocking(move || store.adopt(&source, &adopted))
+            .await
+            .map_err(before)?
+            .map_err(before)
+    }
+    async fn checkpoint_publish(
+        &self,
+        manifest: &rho_r_api::CheckpointManifest,
+    ) -> Result<(), NativeError> {
+        self.publish_checkpoint(manifest)
+    }
+    async fn checkpoint_candidates(
+        &self,
+    ) -> Result<Vec<rho_r_api::CheckpointManifest>, NativeError> {
+        let store = self.checkpoints.clone();
+        tokio::task::spawn_blocking(move || store.candidates())
+            .await
+            .map_err(before)?
+            .map_err(before)
+    }
+    async fn checkpoint_control_evidence(
+        &self,
+        id: &rho_r_api::OperationId,
+    ) -> Result<Vec<rho_r_api::CheckpointControlEvidence>, NativeError> {
+        self.checkpoints.controls(id).map_err(before)
+    }
+    async fn checkpoint_write_control(
+        &self,
+        evidence: &rho_r_api::CheckpointControlEvidence,
+    ) -> Result<(), NativeError> {
+        self.write_checkpoint_control(evidence)
+    }
+    fn checkpoint_remove_payload(&self, id: &rho_r_api::OperationId) -> Result<(), String> {
+        self.remove_checkpoint_payload(id)
+    }
+    async fn checkpoint_present(
+        &self,
+        manifest: &rho_r_api::CheckpointManifest,
+    ) -> Result<bool, NativeError> {
+        self.checkpoints.present(manifest).map_err(before)
+    }
+    async fn checkpoint_verify(
+        &self,
+        manifest: &rho_r_api::CheckpointManifest,
+    ) -> Result<bool, NativeError> {
+        let store = self.checkpoints.clone();
+        let manifest = manifest.clone();
+        tokio::task::spawn_blocking(move || store.verify(&manifest))
+            .await
+            .map_err(before)?
+            .map_err(before)
+    }
+    async fn checkpoint_restore(
+        &self,
+        op: &OperationId,
+        manifest: &rho_r_api::CheckpointManifest,
+        cancel: watch::Receiver<bool>,
+    ) -> Result<rho_r_api::CheckpointNativeRestoreReport, NativeError> {
+        self.restore_checkpoint(op, manifest, cancel).await
+    }
 
     fn begin_shutdown(&self) {
         self.closing
@@ -668,12 +793,18 @@ impl NativeRuntime for ArkRuntime {
     ) -> Result<rho_r_api::OutputPage, String> {
         self.outputs.read(args)
     }
-    fn execution_state(&self)->String {
-        let client=self.client.lock().unwrap_or_else(|e|e.into_inner());
+    fn execution_state(&self) -> String {
+        let client = self.client.lock().unwrap_or_else(|e| e.into_inner());
         match client.as_ref() {
-            None=>"unavailable",
-            Some(client)=>match *client.watch_status().borrow(){KernelStatus::Starting=>"starting",KernelStatus::Idle=>"idle",KernelStatus::Busy=>"busy",KernelStatus::Exited=>"unavailable"},
-        }.into()
+            None => "unavailable",
+            Some(client) => match *client.watch_status().borrow() {
+                KernelStatus::Starting => "starting",
+                KernelStatus::Idle => "idle",
+                KernelStatus::Busy => "busy",
+                KernelStatus::Exited => "unavailable",
+            },
+        }
+        .into()
     }
     fn runtime_status(&self) -> rho_r_api::RuntimeStatus {
         let (state, pid) = match self.client() {
@@ -719,10 +850,7 @@ impl NativeRuntime for ArkRuntime {
         &self.session_id
     }
 
-    async fn query(
-        &self,
-        query: &WorkspaceQuery,
-    ) -> Result<NativeObservation, NativeError> {
+    async fn query(&self, query: &WorkspaceQuery) -> Result<NativeObservation, NativeError> {
         let id = format!("query_{}", Uuid::new_v4().simple());
         let action = match query {
             WorkspaceQuery::Snapshot(args) => BridgeAction::Snapshot(args),
@@ -770,8 +898,10 @@ impl NativeRuntime for ArkRuntime {
             )
             .map_err(before)?,
             WorkspaceQuery::ReadHelp(_) => serde_json::to_value(
-                serde_json::from_value::<rho_r_api::PackageHelpPage>(response.value).map_err(before)?,
-            ).map_err(before)?,
+                serde_json::from_value::<rho_r_api::PackageHelpPage>(response.value)
+                    .map_err(before)?,
+            )
+            .map_err(before)?,
             WorkspaceQuery::Packages(_) => {
                 let data: rho_r_api::PackageSnapshotData =
                     serde_json::from_value(response.value).map_err(before)?;
@@ -855,10 +985,17 @@ impl NativeRuntime for ArkRuntime {
 impl ArkRuntime {
     /// Retain viewer documents written during a run, oldest first. Files that
     /// cannot be retained stay on disk with the error rather than being dropped.
-    fn drain_viewer(&self, id: &rho_r_api::OperationId) -> Result<Vec<rho_r_api::MediaReference>, String> {
+    fn drain_viewer(
+        &self,
+        id: &rho_r_api::OperationId,
+    ) -> Result<Vec<rho_r_api::MediaReference>, String> {
         let pending = self.data_root.join("viewer-pending");
         let mut names: Vec<_> = match std::fs::read_dir(&pending) {
-            Ok(entries) => entries.filter_map(Result::ok).map(|entry| entry.path()).filter(|path| path.extension().is_some_and(|ext| ext == "html")).collect(),
+            Ok(entries) => entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|path| path.extension().is_some_and(|ext| ext == "html"))
+                .collect(),
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(vec![]),
             Err(error) => return Err(error.to_string()),
         };
@@ -886,9 +1023,11 @@ impl ArkRuntime {
         if action_name == "execute" {
             // Documents the run handed to the viewer belong to this run: the lane
             // serializes executions, so pending files cannot come from another one.
-            match self.drain_viewer(&operation) {
+            match self.drain_viewer(operation) {
                 Ok(references) => captured.displays.extend(references),
-                Err(error) => { captured.observation_error.get_or_insert(error); }
+                Err(error) => {
+                    captured.observation_error.get_or_insert(error);
+                }
             }
         }
         if action_name == "help"
@@ -896,7 +1035,7 @@ impl ArkRuntime {
             && let Some(text) = response.value.get("text").and_then(Value::as_str)
             && response.value.get("found").and_then(Value::as_bool) == Some(true)
         {
-            let reference = self.outputs.append_text(&operation, text)
+            let reference = self.outputs.append_text(operation, text)
                 .map_err(|error| NativeError::after_possible_effect(error,
                     Some(json!({"operation_id":operation, "session_id":self.session_id, "result_path":result_path, "next_read":"workspace.output_events"}))))?;
             captured.displays.push(reference.clone());
@@ -1040,9 +1179,8 @@ impl ArkRuntime {
                 }
             }
         }
-        let response = read_bridge_response(&result_path, id, response_limit).map_err(|error| {
-            self.bridge_error(id, readonly, error.kind(), None, &result_path)
-        })?;
+        let response = read_bridge_response(&result_path, id, response_limit)
+            .map_err(|error| self.bridge_error(id, readonly, error.kind(), None, &result_path))?;
         Ok((response, captured, result_path))
     }
 }
@@ -1093,8 +1231,9 @@ mod tests {
     #[test]
     fn missing_bridge_result_is_a_typed_transport_failure() {
         let temp = tempfile::tempdir().unwrap();
-        let error = read_bridge_response(&temp.path().join("missing.json"), "request", OUTPUT_LIMIT)
-            .unwrap_err();
+        let error =
+            read_bridge_response(&temp.path().join("missing.json"), "request", OUTPUT_LIMIT)
+                .unwrap_err();
         assert!(matches!(error, BridgeReadError::Missing));
         assert_eq!(error.kind(), "missing_result");
     }
@@ -1135,6 +1274,9 @@ mod tests {
 
     #[test]
     fn effectful_connection_loss_uses_the_friendly_message() {
-        assert_eq!(RUN_CONNECTION_LOST, "R session connection was lost. The run result is not confirmed. Inspect the original run before retrying.");
+        assert_eq!(
+            RUN_CONNECTION_LOST,
+            "R session connection was lost. The run result is not confirmed. Inspect the original run before retrying."
+        );
     }
 }

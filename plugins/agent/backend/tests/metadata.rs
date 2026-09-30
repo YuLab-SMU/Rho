@@ -253,7 +253,12 @@ impl Fixture {
 fn manifest_contains_public_bounded_agent_capabilities() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert!(manifest.capabilities.iter().any(|cap| cap.capability.id.as_str()=="agent.context.preview"));
+    assert!(
+        manifest
+            .capabilities
+            .iter()
+            .any(|cap| cap.capability.id.as_str() == "agent.context.preview")
+    );
     assert_eq!(
         manifest.requires[0].capability,
         manifest::key("views.caller")
@@ -273,7 +278,9 @@ fn manifest_contains_public_bounded_agent_capabilities() {
             "path",
             "credential",
         ] {
-            if contribution.capability.id.as_str()=="agent.context.search" && name=="window" {continue;}
+            if contribution.capability.id.as_str() == "agent.context.search" && name == "window" {
+                continue;
+            }
             assert!(contribution.input_schema["properties"].get(name).is_none());
         }
     }
@@ -291,8 +298,16 @@ fn manifest_contains_public_bounded_agent_capabilities() {
             .get("studio_request")
             .is_some()
     );
-    assert!(manifest.views[0].configuration_schema["properties"].get("component_request").is_some());
-    assert_eq!(manifest.views[0].configuration_schema["$defs"]["ComponentRequest"]["properties"]["sources"]["maxItems"], json!(16));
+    assert!(
+        manifest.views[0].configuration_schema["properties"]
+            .get("component_request")
+            .is_some()
+    );
+    assert_eq!(
+        manifest.views[0].configuration_schema["$defs"]["ComponentRequest"]["properties"]["sources"]
+            ["maxItems"],
+        json!(16)
+    );
     for id in [
         "agent.tasks",
         "agent.native.command",
@@ -1380,29 +1395,65 @@ mod model_assets;
 fn native_context_output_schema_accepts_serialized_images_and_rejects_invalid_metadata() {
     use rho_agent_api::AgentContextSelection;
     use rho_agent_owner::{AgentContextImage, AgentNativeContextSnapshot};
-    let manifest=manifest::manifest();
-    let contract=manifest.capabilities.iter().find(|cap|cap.capability.id.as_str()=="agent.native.context").unwrap();
-    let validator=jsonschema::validator_for(&contract.output_schema).unwrap();
-    let resource=json!({"owner":instance().identity,"resource":"original-image","digest":format!("sha256:{}","c".repeat(64)),"media_type":"image/png","bytes":100});
-    let mut captured=AgentNativeContextSnapshot{
-        selection:AgentContextSelection{source:"plugin".into(),label:"Original 中文".into(),reference:json!({}),inclusion:"{}".into()},
-        title:"Original plot".into(),description:"Saved source".into(),text:"Original text".into(),data:json!({}),images:vec![],
+    let manifest = manifest::manifest();
+    let contract = manifest
+        .capabilities
+        .iter()
+        .find(|cap| cap.capability.id.as_str() == "agent.native.context")
+        .unwrap();
+    let validator = jsonschema::validator_for(&contract.output_schema).unwrap();
+    let resource = json!({"owner":instance().identity,"resource":"original-image","digest":format!("sha256:{}","c".repeat(64)),"media_type":"image/png","bytes":100});
+    let mut captured = AgentNativeContextSnapshot {
+        selection: AgentContextSelection {
+            source: "plugin".into(),
+            label: "Original 中文".into(),
+            reference: json!({}),
+            inclusion: "{}".into(),
+        },
+        title: "Original plot".into(),
+        description: "Saved source".into(),
+        text: "Original text".into(),
+        data: json!({}),
+        images: vec![],
     };
-    let reply=|capture:&AgentNativeContextSnapshot|json!({"request_id":"send","task_id":"task","contexts":[capture]});
+    let reply = |capture: &AgentNativeContextSnapshot| json!({"request_id":"send","task_id":"task","contexts":[capture]});
     assert!(validator.is_valid(&reply(&captured)));
     assert!(reply(&captured)["contexts"][0].get("images").is_none());
-    captured.images=vec![AgentContextImage{reference:resource,sha256:format!("sha256:{}","c".repeat(64)),mime_type:"image/png".into(),bytes:100};2];
+    captured.images = vec![
+        AgentContextImage {
+            reference: resource,
+            sha256: format!("sha256:{}", "c".repeat(64)),
+            mime_type: "image/png".into(),
+            bytes: 100
+        };
+        2
+    ];
     assert!(validator.is_valid(&reply(&captured)));
-    for change in ["excess","bytes","format","digest","payload","reference"]{
-        let mut changed=reply(&captured);
+    for change in [
+        "excess",
+        "bytes",
+        "format",
+        "digest",
+        "payload",
+        "reference",
+    ] {
+        let mut changed = reply(&captured);
         match change {
-            "excess"=>{let image=changed["contexts"][0]["images"][0].clone();changed["contexts"][0]["images"].as_array_mut().unwrap().push(image);},
-            "bytes"=>changed["contexts"][0]["images"][0]["bytes"]=json!(2*1024*1024+1),
-            "format"=>changed["contexts"][0]["images"][0]["mime_type"]=json!("image/svg+xml"),
-            "digest"=>changed["contexts"][0]["images"][0]["sha256"]=json!("changed"),
-            "payload"=>changed["contexts"][0]["images"][0]["data"]=json!("no raw pixels in this query"),
-            _=>changed["contexts"][0]["images"][0]["reference"]=json!({}),
+            "excess" => {
+                let image = changed["contexts"][0]["images"][0].clone();
+                changed["contexts"][0]["images"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(image);
+            }
+            "bytes" => changed["contexts"][0]["images"][0]["bytes"] = json!(2 * 1024 * 1024 + 1),
+            "format" => changed["contexts"][0]["images"][0]["mime_type"] = json!("image/svg+xml"),
+            "digest" => changed["contexts"][0]["images"][0]["sha256"] = json!("changed"),
+            "payload" => {
+                changed["contexts"][0]["images"][0]["data"] = json!("no raw pixels in this query")
+            }
+            _ => changed["contexts"][0]["images"][0]["reference"] = json!({}),
         }
-        assert!(!validator.is_valid(&changed),"{change}");
+        assert!(!validator.is_valid(&changed), "{change}");
     }
 }

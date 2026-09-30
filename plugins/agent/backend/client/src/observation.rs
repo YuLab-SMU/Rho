@@ -43,23 +43,58 @@ pub(crate) struct Observer {
 }
 impl Observer {
     pub(crate) fn observe_usage(&mut self, source: &str, scope: &str, value: &Value) {
-        if self.session.is_none() || !value.is_object() || self.replaying { return; }
-        if scope == "turn_total" && (!self.active || self.request.is_none()) { return; }
+        if self.session.is_none() || !value.is_object() || self.replaying {
+            return;
+        }
+        if scope == "turn_total" && (!self.active || self.request.is_none()) {
+            return;
+        }
         let usage = AgentUsageObservation {
-            source: source.into(), scope: scope.into(),
+            source: source.into(),
+            scope: scope.into(),
             input_tokens: value["inputTokens"].as_u64(),
             output_tokens: value["outputTokens"].as_u64(),
-            cached_input_tokens: value["cachedInputTokens"].as_u64().or_else(|| value["cachedReadTokens"].as_u64()),
-            cache_write_tokens: value["cacheWriteInputTokens"].as_u64().or_else(|| value["cachedWriteTokens"].as_u64()),
-            reasoning_tokens: value["reasoningOutputTokens"].as_u64().or_else(|| value["thoughtTokens"].as_u64()),
+            cached_input_tokens: value["cachedInputTokens"]
+                .as_u64()
+                .or_else(|| value["cachedReadTokens"].as_u64()),
+            cache_write_tokens: value["cacheWriteInputTokens"]
+                .as_u64()
+                .or_else(|| value["cachedWriteTokens"].as_u64()),
+            reasoning_tokens: value["reasoningOutputTokens"]
+                .as_u64()
+                .or_else(|| value["thoughtTokens"].as_u64()),
             total_tokens: value["totalTokens"].as_u64(),
-            context_used: if scope == "context_window" { value["used"].as_u64() } else { None },
-            context_capacity: if scope == "context_window" { value["size"].as_u64() } else { None },
+            context_used: if scope == "context_window" {
+                value["used"].as_u64()
+            } else {
+                None
+            },
+            context_capacity: if scope == "context_window" {
+                value["size"].as_u64()
+            } else {
+                None
+            },
         };
-        let key = format!("usage:{scope}:{}", if scope == "turn_total" { self.request.as_deref().unwrap_or("") } else { "session" });
-        if self.events.iter().any(|event| event.key == key && event.usage.as_ref() == Some(&usage)) { return; }
+        let key = format!(
+            "usage:{scope}:{}",
+            if scope == "turn_total" {
+                self.request.as_deref().unwrap_or("")
+            } else {
+                "session"
+            }
+        );
+        if self
+            .events
+            .iter()
+            .any(|event| event.key == key && event.usage.as_ref() == Some(&usage))
+        {
+            return;
+        }
         let mut event = self.event(key, "usage", String::new(), None);
-        if scope != "turn_total" { event.request_id = None; event.turn = None; }
+        if scope != "turn_total" {
+            event.request_id = None;
+            event.turn = None;
+        }
         event.usage = Some(usage);
         self.push(event);
     }
@@ -244,16 +279,25 @@ impl Observer {
             // A thread-total update may follow turn/completed. It is not text
             // from an active turn and must not be lost behind the turn fence.
             if p["threadId"].as_str() == self.session.as_deref() {
-                self.observe_usage("codex.token_usage", "session_total", &p["tokenUsage"]["total"]);
+                self.observe_usage(
+                    "codex.token_usage",
+                    "session_total",
+                    &p["tokenUsage"]["total"],
+                );
             }
             return;
         }
-        if !self.accepts(provider, p) { return; }
+        if !self.accepts(provider, p) {
+            return;
+        }
         if method == "session/update" && p["update"]["sessionUpdate"] == "usage_update" {
             self.observe_usage("acp.usage_update", "context_window", &p["update"]);
             return;
         }
-        if method == "session/update" && p["update"]["sessionUpdate"] == "state_update" && p["update"]["state"] == "idle" {
+        if method == "session/update"
+            && p["update"]["sessionUpdate"] == "state_update"
+            && p["update"]["state"] == "idle"
+        {
             self.observe_usage("acp.state_update", "turn_total", &p["update"]["usage"]);
         }
         if provider == AgentProvider::Codex && method == "turn/started" {
@@ -421,13 +465,33 @@ mod tests {
         o.begin("request", "hello");
         o.turn = Some("t".into());
         let frame = json!({"threadId":"s","turnId":"t","tokenUsage":{"total":{"inputTokens":12,"outputTokens":0}}});
-        o.observe(AgentProvider::Codex, "thread/tokenUsage/updated", &frame, str::to_owned);
+        o.observe(
+            AgentProvider::Codex,
+            "thread/tokenUsage/updated",
+            &frame,
+            str::to_owned,
+        );
         let cursor = o.page(0).cursor;
-        o.observe(AgentProvider::Codex, "thread/tokenUsage/updated", &frame, str::to_owned);
+        o.observe(
+            AgentProvider::Codex,
+            "thread/tokenUsage/updated",
+            &frame,
+            str::to_owned,
+        );
         assert_eq!(o.page(0).cursor, cursor);
         let frame = json!({"threadId":"s","turnId":"t","tokenUsage":{"total":{"inputTokens":20,"outputTokens":3}}});
-        o.observe(AgentProvider::Codex, "thread/tokenUsage/updated", &frame, str::to_owned);
-        let events: Vec<_> = o.page(0).events.into_iter().filter(|e| e.kind == "usage").collect();
+        o.observe(
+            AgentProvider::Codex,
+            "thread/tokenUsage/updated",
+            &frame,
+            str::to_owned,
+        );
+        let events: Vec<_> = o
+            .page(0)
+            .events
+            .into_iter()
+            .filter(|e| e.kind == "usage")
+            .collect();
         assert_eq!(events.len(), 1);
         let usage = events[0].usage.as_ref().unwrap();
         assert_eq!(usage.input_tokens, Some(20));
@@ -438,9 +502,19 @@ mod tests {
         o.finish();
         o.observe(AgentProvider::Codex, "thread/tokenUsage/updated", &json!({"threadId":"s","turnId":"t","tokenUsage":{"total":{"inputTokens":25,"outputTokens":4}}}), str::to_owned);
         let cursor = o.page(0).cursor;
-        let last = o.page(0).events.into_iter().find(|e| e.kind == "usage").unwrap();
+        let last = o
+            .page(0)
+            .events
+            .into_iter()
+            .find(|e| e.kind == "usage")
+            .unwrap();
         assert_eq!(last.usage.unwrap().input_tokens, Some(25));
-        o.observe(AgentProvider::Codex, "thread/tokenUsage/updated", &json!({"threadId":"other","turnId":"t","tokenUsage":{"total":{"inputTokens":999}}}), str::to_owned);
+        o.observe(
+            AgentProvider::Codex,
+            "thread/tokenUsage/updated",
+            &json!({"threadId":"other","turnId":"t","tokenUsage":{"total":{"inputTokens":999}}}),
+            str::to_owned,
+        );
         assert_eq!(o.page(0).cursor, cursor);
     }
     #[test]
@@ -449,15 +523,28 @@ mod tests {
         o.bind("s", false);
         o.begin("request", "hello");
         o.observe(AgentProvider::Kimi, "session/update", &json!({"sessionId":"s","update":{"sessionUpdate":"usage_update","used":53,"size":200}}), str::to_owned);
-        o.observe_usage("acp.prompt_response", "turn_total", &json!({"inputTokens":14,"outputTokens":0,"cachedReadTokens":5}));
-        let events: Vec<_> = o.page(0).events.into_iter().filter(|e| e.kind == "usage").collect();
+        o.observe_usage(
+            "acp.prompt_response",
+            "turn_total",
+            &json!({"inputTokens":14,"outputTokens":0,"cachedReadTokens":5}),
+        );
+        let events: Vec<_> = o
+            .page(0)
+            .events
+            .into_iter()
+            .filter(|e| e.kind == "usage")
+            .collect();
         assert_eq!(events.len(), 2);
         assert_eq!(events[0].usage.as_ref().unwrap().context_used, Some(53));
         assert_eq!(events[0].usage.as_ref().unwrap().input_tokens, None);
         assert_eq!(events[1].usage.as_ref().unwrap().output_tokens, Some(0));
         let cursor = o.page(0).cursor;
         o.replaying = true;
-        o.observe_usage("acp.prompt_response", "turn_total", &json!({"inputTokens":14,"outputTokens":0}));
+        o.observe_usage(
+            "acp.prompt_response",
+            "turn_total",
+            &json!({"inputTokens":14,"outputTokens":0}),
+        );
         assert_eq!(o.page(0).cursor, cursor);
     }
     #[test]

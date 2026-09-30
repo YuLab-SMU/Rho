@@ -38,7 +38,6 @@ pub struct McpSessionObservation {
     pub overview_served_at_ms: Option<u64>,
 }
 
-
 /// A stale browser must not silently act on a newly selected project.
 #[derive(Debug, Deserialize, TS)]
 #[serde(deny_unknown_fields)]

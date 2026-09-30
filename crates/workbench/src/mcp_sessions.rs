@@ -26,20 +26,22 @@ impl HttpMcpSessions {
             .entries
             .lock()
             .map_err(|_| "MCP session registry is unavailable")?;
-        if let Some(id) = &session {
-            if id.len() > 256
+        if let Some(id) = &session
+            && (id.len() > 256
                 || !entries.get(id).is_some_and(|entry| {
-                    entry.project == identity.project && entry.identity == identity.identity
+                    entry.project == identity.project
+                        && entry.identity == identity.identity
                         && entry.test_project == identity.test_project
-                })
-            {
-                return Err("MCP session is unavailable to this connection");
-            }
+                }))
+        {
+            return Err("MCP session is unavailable to this connection");
         }
         let mut expired = Vec::new();
         entries.retain(|id, entry| {
             let keep = entry.project == identity.project;
-            if !keep && !id.starts_with("pending:") { expired.push(id.clone()); }
+            if !keep && !id.starts_with("pending:") {
+                expired.push(id.clone());
+            }
             keep
         });
         let pending = if session.is_none() {
@@ -62,7 +64,9 @@ impl HttpMcpSessions {
     }
 }
 impl SessionAccess {
-    pub fn take_expired(&mut self) -> Vec<String> { std::mem::take(&mut self.expired) }
+    pub fn take_expired(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.expired)
+    }
     pub fn finish(&mut self, session: Option<&str>, deleted: bool) -> Result<(), &'static str> {
         let mut entries = self
             .owner
@@ -73,11 +77,11 @@ impl SessionAccess {
             entries.remove(&key);
             if let Some(id) = session {
                 if id.len() > 256
-                    || entries
-                        .get(id)
-                        .is_some_and(|old| old.identity != self.identity.identity
+                    || entries.get(id).is_some_and(|old| {
+                        old.identity != self.identity.identity
                             || old.project != self.identity.project
-                            || old.test_project != self.identity.test_project)
+                            || old.test_project != self.identity.test_project
+                    })
                 {
                     return Err("MCP session identity conflict");
                 }

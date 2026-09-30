@@ -20,16 +20,31 @@ fn fixture_purpose_does_not_change_normal_instance_or_view_wire_shapes() {
     assert_eq!(instance.purpose, PluginInstancePurpose::Runtime);
     assert_eq!(serde_json::to_value(&instance).unwrap(), original);
     let mut initialize = frame(1);
-    initialize.body = RpcBody::Initialize { instance: instance.clone(), grants: vec![], environment: None, resource_channel: None };
-    assert!(!String::from_utf8(initialize.encode().unwrap()).unwrap().contains("purpose"));
+    initialize.body = RpcBody::Initialize {
+        instance: instance.clone(),
+        grants: vec![],
+        environment: None,
+        resource_channel: None,
+    };
+    assert!(
+        !String::from_utf8(initialize.encode().unwrap())
+            .unwrap()
+            .contains("purpose")
+    );
     instance.purpose = PluginInstancePurpose::FixturePreview;
-    assert_eq!(serde_json::to_value(instance).unwrap()["purpose"], "fixture_preview");
+    assert_eq!(
+        serde_json::to_value(instance).unwrap()["purpose"],
+        "fixture_preview"
+    );
     let original = json!({"view":"view","instance":identity,"project":"project","principal":"principal","contribution":"view","window":"window","configuration":{},"state":{},"state_version":0,"closed":false});
     let mut view: PluginViewRecord = serde_json::from_value(original.clone()).unwrap();
     assert_eq!(view.purpose, PluginInstancePurpose::Runtime);
     assert_eq!(serde_json::to_value(&view).unwrap(), original);
     view.purpose = PluginInstancePurpose::FixturePreview;
-    assert_eq!(serde_json::to_value(view).unwrap()["purpose"], "fixture_preview");
+    assert_eq!(
+        serde_json::to_value(view).unwrap()["purpose"],
+        "fixture_preview"
+    );
 }
 
 #[test]
@@ -48,8 +63,12 @@ fn readiness_extensions_are_optional_bounded_and_do_not_change_manifest_contract
         features.insert("another-owner.feature_v1".into());
     }
     assert_eq!(RpcFrame::decode(&ready.encode().unwrap()).unwrap(), ready);
-    for invalid in [vec!["".to_owned()], vec!["x".repeat(65)], vec!["invalid value".into()],
-        (0..17).map(|i| format!("feature-{i}")).collect()] {
+    for invalid in [
+        vec!["".to_owned()],
+        vec!["x".repeat(65)],
+        vec!["invalid value".into()],
+        (0..17).map(|i| format!("feature-{i}")).collect(),
+    ] {
         if let RpcBody::Ready { features, .. } = &mut ready.body {
             *features = invalid.into_iter().collect();
         }
@@ -236,18 +255,35 @@ fn distinct_revisions_coexist_but_default_routing_is_unique() {
 fn scenario_bounds_include_empty_nodes_and_explicit_optional_selections() {
     let mut value = scenario();
     let instance = value.instances.values_mut().next().unwrap();
-    let capability = CapabilityKey { id:ContributionId::new("example.read").unwrap(),version:1 };
-    instance.optional_capabilities = vec![capability.clone(),capability];
+    let capability = CapabilityKey {
+        id: ContributionId::new("example.read").unwrap(),
+        version: 1,
+    };
+    instance.optional_capabilities = vec![capability.clone(), capability];
     assert!(value.validate().is_err());
-    value.instances.values_mut().next().unwrap().optional_capabilities.pop();
+    value
+        .instances
+        .values_mut()
+        .next()
+        .unwrap()
+        .optional_capabilities
+        .pop();
     value.validate().unwrap();
-    value.layout = ScenarioLayout::Split { id:NodeId::new("root").unwrap(),direction:SplitDirection::Horizontal,
-        weights:vec![1.0;32],children:(0..32).map(|i| ScenarioLayout::Split {
-            id:NodeId::new(format!("group-{i}")).unwrap(),direction:SplitDirection::Vertical,
-            weights:vec![1.0;32],children:vec![ScenarioLayout::Empty;32],
-        }).collect() };
+    value.layout = ScenarioLayout::Split {
+        id: NodeId::new("root").unwrap(),
+        direction: SplitDirection::Horizontal,
+        weights: vec![1.0; 32],
+        children: (0..32)
+            .map(|i| ScenarioLayout::Split {
+                id: NodeId::new(format!("group-{i}")).unwrap(),
+                direction: SplitDirection::Vertical,
+                weights: vec![1.0; 32],
+                children: vec![ScenarioLayout::Empty; 32],
+            })
+            .collect(),
+    };
     assert!(value.validate().is_err());
-    for field in ["project","principal","id"] {
+    for field in ["project", "principal", "id"] {
         let mut input = json!({"scenario":"analysis","expected_head":null,"name":"Analysis","instances":{},"providers":[],"layout":{"kind":"empty"}});
         input[field] = json!("forged");
         assert!(serde_json::from_value::<SaveScenario>(input).is_err());

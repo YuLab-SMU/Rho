@@ -4,9 +4,9 @@ use crate::{PluginError, PluginRuntime, ProviderLease};
 use async_trait::async_trait;
 use rho_contract as host;
 use rho_operation::{
-    CapabilityRegistry, Clock, CommitPlan, ContributionBatch, DomainFactMutation, ExecutionLease,
-    ControlHandler, HandlerError, OperationError, OperationHandler, QueryHandler, RegistrationRevision,
-    SystemClock,
+    CapabilityRegistry, Clock, CommitPlan, ContributionBatch, ControlHandler, DomainFactMutation,
+    ExecutionLease, HandlerError, OperationError, OperationHandler, QueryHandler,
+    RegistrationRevision, SystemClock,
 };
 use rho_plugin_protocol::*;
 use serde_json::{Value, json};
@@ -88,7 +88,11 @@ impl PluginCapabilityBridge {
     ) -> Result<RegistrationRevision, OperationError> {
         self.refresh_including(registry, None)
     }
-    pub fn publish(&self, registry: &CapabilityRegistry, instance: &InstanceRef) -> Result<RegistrationRevision, OperationError> {
+    pub fn publish(
+        &self,
+        registry: &CapabilityRegistry,
+        instance: &InstanceRef,
+    ) -> Result<RegistrationRevision, OperationError> {
         let revision = self.refresh_including(registry, Some(instance))?;
         if let Err(error) = self.shared.runtime.publish_instance(instance) {
             self.refresh(registry)?;
@@ -96,13 +100,22 @@ impl PluginCapabilityBridge {
         }
         Ok(revision)
     }
-    fn refresh_including(&self, registry: &CapabilityRegistry, pending: Option<&InstanceRef>) -> Result<RegistrationRevision, OperationError> {
+    fn refresh_including(
+        &self,
+        registry: &CapabilityRegistry,
+        pending: Option<&InstanceRef>,
+    ) -> Result<RegistrationRevision, OperationError> {
         let mut registration = self.registration.lock().unwrap();
-        let mut batch = ContributionBatch { controls: vec![],
+        let mut batch = ContributionBatch {
+            controls: vec![],
             operations: vec![],
             queries: vec![],
         };
-        for cap in self.shared.runtime.contributions_including(&self.shared.project, pending) {
+        for cap in self
+            .shared
+            .runtime
+            .contributions_including(&self.shared.project, pending)
+        {
             let descriptor = descriptor(&cap, &self.shared.project)?;
             let handler = Arc::new(RoutingHandler {
                 shared: self.shared.clone(),
@@ -163,8 +176,9 @@ impl PluginCapabilityBridge {
                 "Operation has no authoritative terminal result".into(),
             ));
         }
-        let request: PluginRequest = serde_json::from_value(record.operation.normalized_arguments.clone())
-            .map_err(|e| OperationError::Contract(e.to_string()))?;
+        let request: PluginRequest =
+            serde_json::from_value(record.operation.normalized_arguments.clone())
+                .map_err(|e| OperationError::Contract(e.to_string()))?;
         if request.binding.project != self.shared.project
             || admission.owner_context["binding"] != json!(request.binding)
         {
@@ -267,16 +281,19 @@ impl OperationHandler for RoutingHandler {
                 preconditions: request.preconditions.clone(),
             })?;
             let response = prepare
-                .call_scoped(PluginCall {
-                    request: request_id(),
-                    binding: prepare.binding(request.binding.target.clone()),
-                    principal: principal.clone(),
-                    scopes: context.scopes.clone(),
-                    arguments: args,
-                    preconditions: Value::Null,
-                    owner_context: Value::Null,
-                    operation_id: None,
-                }, context.view_scope.clone())
+                .call_scoped(
+                    PluginCall {
+                        request: request_id(),
+                        binding: prepare.binding(request.binding.target.clone()),
+                        principal: principal.clone(),
+                        scopes: context.scopes.clone(),
+                        arguments: args,
+                        preconditions: Value::Null,
+                        owner_context: Value::Null,
+                        operation_id: None,
+                    },
+                    context.view_scope.clone(),
+                )
                 .await
                 .map_err(unavailable)?;
             if let RpcBody::Error { code, message, .. } = response {
@@ -362,12 +379,20 @@ impl ExecutionLease for PluginExecutionLease {
 }
 #[async_trait]
 impl OperationHandler for BoundHandler {
-    async fn prepare_pending_cancellation(&self, operation: &host::Operation) -> Result<bool, OperationError> {
-        self.lease.prepare_pending_cancellation(PendingCancellation {
-            binding: self.request.binding.clone(),
-            operation_id: rho_plugin_protocol::OperationId::new(operation.operation_id.as_str())
+    async fn prepare_pending_cancellation(
+        &self,
+        operation: &host::Operation,
+    ) -> Result<bool, OperationError> {
+        self.lease
+            .prepare_pending_cancellation(PendingCancellation {
+                binding: self.request.binding.clone(),
+                operation_id: rho_plugin_protocol::OperationId::new(
+                    operation.operation_id.as_str(),
+                )
                 .map_err(|error| OperationError::InvalidInput(error.to_string()))?,
-        }).await.map_err(|error| OperationError::Unavailable(error.to_string()))
+            })
+            .await
+            .map_err(|error| OperationError::Unavailable(error.to_string()))
     }
     fn descriptor(&self) -> &host::CapabilityDescriptor {
         &self.descriptor
@@ -456,7 +481,11 @@ impl OperationHandler for BoundHandler {
                 // their own authoritative check and cannot reuse that result.
                 let mut verified = std::collections::BTreeSet::new();
                 for reference in &plan.evidence {
-                    if !verified.insert(serde_json::to_string(reference).expect("resource reference serializes")) { continue; }
+                    if !verified.insert(
+                        serde_json::to_string(reference).expect("resource reference serializes"),
+                    ) {
+                        continue;
+                    }
                     if let Err(error) = self
                         .shared
                         .resources
@@ -542,9 +571,19 @@ impl BoundHandler {
 
 #[async_trait]
 impl ControlHandler for RoutingHandler {
-    fn descriptor(&self) -> &host::CapabilityDescriptor { &self.descriptor }
-    async fn control(&self, context: &host::CallContext, value: Value) -> Result<Value, OperationError> {
-        let request = self.request(&value).map_err(|_| OperationError::InvalidInput("Control binding or arguments are invalid (redacted)".into()))?;
+    fn descriptor(&self) -> &host::CapabilityDescriptor {
+        &self.descriptor
+    }
+    async fn control(
+        &self,
+        context: &host::CallContext,
+        value: Value,
+    ) -> Result<Value, OperationError> {
+        let request = self.request(&value).map_err(|_| {
+            OperationError::InvalidInput(
+                "Control binding or arguments are invalid (redacted)".into(),
+            )
+        })?;
         let lease = self.resolve(context, &request)?;
         let reply = lease.call_scoped(PluginCall {
             request: request_id(), binding: request.binding,
@@ -581,16 +620,19 @@ impl QueryHandler for RoutingHandler {
         let lease = self.resolve(context, &request)?;
         let principal = plugin_principal_id(context.principal());
         let reply = lease
-            .call_scoped(PluginCall {
-                request: request_id(),
-                binding: request.binding.clone(),
-                principal: principal.clone(),
-                scopes: context.scopes.clone(),
-                arguments: request.arguments,
-                preconditions: request.preconditions,
-                owner_context: Value::Null,
-                operation_id: None,
-            }, context.view_scope.clone())
+            .call_scoped(
+                PluginCall {
+                    request: request_id(),
+                    binding: request.binding.clone(),
+                    principal: principal.clone(),
+                    scopes: context.scopes.clone(),
+                    arguments: request.arguments,
+                    preconditions: request.preconditions,
+                    owner_context: Value::Null,
+                    operation_id: None,
+                },
+                context.view_scope.clone(),
+            )
             .await
             .map_err(unavailable)?;
         if let RpcBody::Error { code, message, .. } = reply {
@@ -703,13 +745,24 @@ fn owner_recovery(data: Value) -> Value {
     json!({"kind":"plugin_owner_recovery","data":data})
 }
 
-fn settlement(record: &host::OperationRecord, binding: ProviderBinding) -> Result<OperationSettlement, OperationError> {
+fn settlement(
+    record: &host::OperationRecord,
+    binding: ProviderBinding,
+) -> Result<OperationSettlement, OperationError> {
     let outcome = match record.status {
         host::OperationStatus::Succeeded => PluginOutcome::Succeeded,
         host::OperationStatus::Failed => PluginOutcome::Failed,
         host::OperationStatus::Uncertain => PluginOutcome::Uncertain,
         host::OperationStatus::Cancelled => PluginOutcome::Cancelled,
-        _ => return Err(OperationError::LifecycleConflict("Operation has no authoritative terminal result".into())),
+        _ => {
+            return Err(OperationError::LifecycleConflict(
+                "Operation has no authoritative terminal result".into(),
+            ));
+        }
     };
-    Ok(OperationSettlement { operation_id: record.operation.operation_id.clone(), binding, outcome })
+    Ok(OperationSettlement {
+        operation_id: record.operation.operation_id.clone(),
+        binding,
+        outcome,
+    })
 }

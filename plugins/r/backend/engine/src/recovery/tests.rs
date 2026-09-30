@@ -508,9 +508,19 @@ fn capture_material_preview_is_bounded_pure_and_distinguishes_native_identity() 
     let large = lease.capture_material().unwrap();
     assert_eq!(large.staging_bytes, Some(MAX_RECOVERY_BYTES + 1));
     assert!(!large.capture_metadata_available);
-    assert!(lease.discard_capture_payloads(&partial.fingerprint).is_err());
+    assert!(
+        lease
+            .discard_capture_payloads(&partial.fingerprint)
+            .is_err()
+    );
     assert_eq!(file.metadata().unwrap().len(), MAX_RECOVERY_BYTES + 1);
-    assert!(lease.discard_capture_payloads(&large.fingerprint).unwrap().staging_bytes.is_none());
+    assert!(
+        lease
+            .discard_capture_payloads(&large.fingerprint)
+            .unwrap()
+            .staging_bytes
+            .is_none()
+    );
 }
 
 #[test]
@@ -522,13 +532,26 @@ fn incomplete_capture_disposal_preserves_metadata_and_refuses_changed_previews()
     let before = lease.capture_material().unwrap();
     assert!(!before.capture_metadata_available);
     fs::write(lease.directory.join("payload.staging"), b"changed graph").unwrap();
-    assert!(lease.discard_capture_payloads(&before.fingerprint).unwrap_err().contains("preview"));
+    assert!(
+        lease
+            .discard_capture_payloads(&before.fingerprint)
+            .unwrap_err()
+            .contains("preview")
+    );
     let current = lease.capture_material().unwrap();
-    let after = lease.discard_capture_payloads(&current.fingerprint).unwrap();
+    let after = lease
+        .discard_capture_payloads(&current.fingerprint)
+        .unwrap();
     assert!(after.payload_bytes.is_none() && after.staging_bytes.is_none());
-    assert_eq!(fs::read(lease.directory.join("capture.json")).unwrap(), b"incomplete metadata");
+    assert_eq!(
+        fs::read(lease.directory.join("capture.json")).unwrap(),
+        b"incomplete metadata"
+    );
     assert!(lease.directory.join("lease").exists());
-    assert_eq!(lease.discard_capture_payloads(&after.fingerprint).unwrap(), after);
+    assert_eq!(
+        lease.discard_capture_payloads(&after.fingerprint).unwrap(),
+        after
+    );
 }
 
 #[test]
@@ -538,7 +561,9 @@ fn disposal_of_an_unpublished_original_cannot_remove_an_adopted_graph() {
     let adopted = archive.adopt(&id("adopted"), &original).unwrap();
     let before = original.capture_material().unwrap();
     assert!(before.capture_metadata_available);
-    original.discard_capture_payloads(&before.fingerprint).unwrap();
+    original
+        .discard_capture_payloads(&before.fingerprint)
+        .unwrap();
     assert!(original.capture().is_ok());
     assert!(original.verify().is_err());
     assert!(adopted.verify().is_ok());

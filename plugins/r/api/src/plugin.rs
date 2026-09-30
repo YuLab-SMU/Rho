@@ -89,6 +89,7 @@ pub struct RExecutionNotStarted {
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant)] // Preserve the public serialized result DTO's Rust shape.
 pub enum RExecutionOutput {
     Native(RExecutionResult),
     NotStarted(RExecutionNotStarted),

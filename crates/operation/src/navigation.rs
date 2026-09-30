@@ -1,4 +1,4 @@
-use crate::{RegistrySnapshot, OperationError};
+use crate::{OperationError, RegistrySnapshot};
 use rho_contract::*;
 use serde_json::{Value, json};
 

@@ -84,7 +84,10 @@ impl Drop for ProjectLease {
         // one briefly inherited by a concurrently starting child) must not extend
         // ownership until its close. Accepted tasks retain this lease through Arc.
         if let Err(error) = self._file.unlock() {
-            eprintln!("project ownership unlock failed for {}: {error}", self.root.display());
+            eprintln!(
+                "project ownership unlock failed for {}: {error}",
+                self.root.display()
+            );
         }
     }
 }
@@ -101,11 +104,17 @@ mod tests {
         let accepted_work = lease.clone();
         let inherited = lease._file.try_clone().unwrap();
         drop(lease);
-        assert!(matches!(ProjectLease::acquire(temporary.path()), Err(OperationError::ProjectBusy(_))));
+        assert!(matches!(
+            ProjectLease::acquire(temporary.path()),
+            Err(OperationError::ProjectBusy(_))
+        ));
         drop(accepted_work);
         let replacement = ProjectLease::acquire(temporary.path()).unwrap();
         drop(inherited);
-        assert!(matches!(ProjectLease::acquire(temporary.path()), Err(OperationError::ProjectBusy(_))));
+        assert!(matches!(
+            ProjectLease::acquire(temporary.path()),
+            Err(OperationError::ProjectBusy(_))
+        ));
         drop(replacement);
         assert!(ProjectLease::acquire(temporary.path()).is_ok());
     }

@@ -242,7 +242,15 @@ impl Metadata {
         if call.binding.capability.id.as_str() == "agent.handoff.target" {
             return crate::handoffs::target(self, call, host).await;
         }
-        if call.binding.capability.id.as_str().starts_with("agent.context.") { return crate::contexts::query(self, call); }
+        if call
+            .binding
+            .capability
+            .id
+            .as_str()
+            .starts_with("agent.context.")
+        {
+            return crate::contexts::query(self, call);
+        }
         self.read(call)
     }
     pub fn read(&self, call: &PluginCall) -> Result<Value, Failure> {

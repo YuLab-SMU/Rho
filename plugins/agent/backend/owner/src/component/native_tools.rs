@@ -59,8 +59,9 @@ pub(super) fn authorize(
     if !mutation {
         let permitted = match b.capability.id.as_str() {
             "r.session" => request.arguments == serde_json::json!({}),
-            "r.list_objects" | "r.observe_object" | "r.read_object" =>
-                request.arguments["expected_session"].as_str() == r.target.as_deref(),
+            "r.list_objects" | "r.observe_object" | "r.read_object" => {
+                request.arguments["expected_session"].as_str() == r.target.as_deref()
+            }
             _ => false,
         };
         if b.capability.version != 1 || !permitted {

@@ -1,6 +1,6 @@
+use crate::OperationId;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use crate::OperationId;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(deny_unknown_fields)]
@@ -30,20 +30,34 @@ fn capture_seconds() -> f64 {
 impl CheckpointCaptureArguments {
     /// Validate byte/time and selection bounds before native capture.
     pub fn validate(&self) -> Result<(), String> {
-        if self.expected_session.is_empty() || self.expected_session.len() > 160
+        if self.expected_session.is_empty()
+            || self.expected_session.len() > 160
             || self.expected_session.contains('\0')
             || !(1024..=16 * 1024 * 1024 * 1024).contains(&self.max_bytes)
-            || !self.max_seconds.is_finite() || self.max_seconds <= 0.0 || self.max_seconds > 300.0
+            || !self.max_seconds.is_finite()
+            || self.max_seconds <= 0.0
+            || self.max_seconds > 300.0
         {
             return Err("Checkpoint capture requires an exact session, 1 KiB–16 GiB and a positive time bound of at most 300 seconds".into());
         }
-        for names in [self.include_names.as_deref().unwrap_or(&[]), self.exclude_names.as_slice()] {
-            if names.len() > 10000 || names.iter().any(|name| name.is_empty() || name.len() > 4096 || name.contains('\0')) {
+        for names in [
+            self.include_names.as_deref().unwrap_or(&[]),
+            self.exclude_names.as_slice(),
+        ] {
+            if names.len() > 10000
+                || names
+                    .iter()
+                    .any(|name| name.is_empty() || name.len() > 4096 || name.contains('\0'))
+            {
                 return Err("Checkpoint names exceed their byte or count bounds".into());
             }
         }
         for patterns in [&self.include_patterns, &self.exclude_patterns] {
-            if patterns.len() > 32 || patterns.iter().any(|pattern| pattern.is_empty() || pattern.len() > 1024 || pattern.contains('\0')) {
+            if patterns.len() > 32
+                || patterns.iter().any(|pattern| {
+                    pattern.is_empty() || pattern.len() > 1024 || pattern.contains('\0')
+                })
+            {
                 return Err("Checkpoint patterns exceed their byte or count bounds".into());
             }
         }
@@ -175,6 +189,7 @@ pub struct CheckpointReconcileArguments {
 }
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant)] // Preserve the public serialized report DTO's Rust shape.
 pub enum CheckpointReconcileReport {
     Adopted(CheckpointManifest),
     Incomplete {

@@ -16,11 +16,17 @@ pub(crate) struct StoredActivation {
 impl PluginRepository {
     /// All recorded lifecycle states matter, including unavailable and released
     /// owners whose scientific recovery references are interpreted elsewhere.
-    pub fn instance_project_coverage(&self, project: &ProjectId, principal: &PrincipalId) -> Result<ProjectReadCoverage, PluginError> {
+    pub fn instance_project_coverage(
+        &self,
+        project: &ProjectId,
+        principal: &PrincipalId,
+    ) -> Result<ProjectReadCoverage, PluginError> {
         let hidden: bool = self.connection.query_row(
             "SELECT EXISTS(SELECT 1 FROM plugin_instances WHERE json_extract(document,'$.project')=?1 AND json_extract(document,'$.principal') IS NOT ?2)",
             params![project.as_str(),principal.as_str()], |row|row.get(0))?;
-        Ok(ProjectReadCoverage { all_visible: !hidden })
+        Ok(ProjectReadCoverage {
+            all_visible: !hidden,
+        })
     }
     /// Generic lifecycle metadata, not a second scientific execution database.
     /// Register and retain in the same transaction before starting native code.
@@ -61,8 +67,13 @@ impl PluginRepository {
                 instance.identity.revision.as_str()
             ],
         )?;
-        transaction.execute("INSERT INTO plugin_instance_activations VALUES(?,?)",
-            params![instance.identity.instance.as_str(), serde_json::to_string(activation)?])?;
+        transaction.execute(
+            "INSERT INTO plugin_instance_activations VALUES(?,?)",
+            params![
+                instance.identity.instance.as_str(),
+                serde_json::to_string(activation)?
+            ],
+        )?;
         transaction.commit()?;
         Ok(())
     }
@@ -90,11 +101,17 @@ impl PluginRepository {
             old.state != InstanceState::Released || instance.state == InstanceState::Released,
             "released instance cannot be resurrected",
         )?;
-        ensure(old.state != InstanceState::Suspended || instance.state == InstanceState::Released
-            || (instance.state == InstanceState::Suspended && instance.suspension == old.suspension),
-            "suspended instance requires its original resume precondition")?;
-        ensure((instance.state == InstanceState::Suspended) == instance.suspension.is_some(),
-            "only confirmed suspension may retain a resume token")?;
+        ensure(
+            old.state != InstanceState::Suspended
+                || instance.state == InstanceState::Released
+                || (instance.state == InstanceState::Suspended
+                    && instance.suspension == old.suspension),
+            "suspended instance requires its original resume precondition",
+        )?;
+        ensure(
+            (instance.state == InstanceState::Suspended) == instance.suspension.is_some(),
+            "only confirmed suspension may retain a resume token",
+        )?;
         transaction.execute(
             "UPDATE plugin_instances SET document=? WHERE id=?",
             params![
@@ -115,32 +132,64 @@ impl PluginRepository {
         Ok(())
     }
 
-    pub(crate) fn suspended_activation(&self, identity: &InstanceRef, project: &ProjectId,
-        principal: &PrincipalId, suspension: &RequestId) -> Result<(PluginInstance, StoredActivation), PluginError> {
+    pub(crate) fn suspended_activation(
+        &self,
+        identity: &InstanceRef,
+        project: &ProjectId,
+        principal: &PrincipalId,
+        suspension: &RequestId,
+    ) -> Result<(PluginInstance, StoredActivation), PluginError> {
         let record = self.recorded_instance(identity, project, principal)?;
-        ensure(record.purpose == PluginInstancePurpose::Runtime && record.state == InstanceState::Suspended
-            && record.suspension.as_ref() == Some(suspension), "instance suspension changed or cleanup is unconfirmed")?;
-        let document: String = self.connection.query_row("SELECT document FROM plugin_instance_activations WHERE id=?",
-            [identity.instance.as_str()], |row| row.get(0))?;
+        ensure(
+            record.purpose == PluginInstancePurpose::Runtime
+                && record.state == InstanceState::Suspended
+                && record.suspension.as_ref() == Some(suspension),
+            "instance suspension changed or cleanup is unconfirmed",
+        )?;
+        let document: String = self.connection.query_row(
+            "SELECT document FROM plugin_instance_activations WHERE id=?",
+            [identity.instance.as_str()],
+            |row| row.get(0),
+        )?;
         Ok((record, serde_json::from_str(&document)?))
     }
 
     /// Consume exactly one confirmed suspension before any native process starts.
     /// No ordinary lifecycle write is allowed to perform this transition.
-    pub(crate) fn begin_instance_resume(&mut self, record: &PluginInstance, suspension: &RequestId) -> Result<(), PluginError> {
-        ensure(record.state == InstanceState::Preparing && record.suspension.is_none(), "resume must prepare the original instance")?;
-        let transaction = self.connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
-        let old: String = transaction.query_row("SELECT document FROM plugin_instances WHERE id=?",
-            [record.identity.instance.as_str()], |row| row.get(0))?;
+    pub(crate) fn begin_instance_resume(
+        &mut self,
+        record: &PluginInstance,
+        suspension: &RequestId,
+    ) -> Result<(), PluginError> {
+        ensure(
+            record.state == InstanceState::Preparing && record.suspension.is_none(),
+            "resume must prepare the original instance",
+        )?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+        let old: String = transaction.query_row(
+            "SELECT document FROM plugin_instances WHERE id=?",
+            [record.identity.instance.as_str()],
+            |row| row.get(0),
+        )?;
         let mut expected: PluginInstance = serde_json::from_str(&old)?;
-        ensure(expected.state == InstanceState::Suspended && expected.suspension.as_ref() == Some(suspension),
-            "instance suspension changed before resume")?;
+        ensure(
+            expected.state == InstanceState::Suspended
+                && expected.suspension.as_ref() == Some(suspension),
+            "instance suspension changed before resume",
+        )?;
         expected.state = InstanceState::Preparing;
         expected.suspension = None;
         expected.diagnostic = None;
         ensure(expected == *record, "resume changed the original instance")?;
-        transaction.execute("UPDATE plugin_instances SET document=? WHERE id=?",
-            params![serde_json::to_string(record)?, record.identity.instance.as_str()])?;
+        transaction.execute(
+            "UPDATE plugin_instances SET document=? WHERE id=?",
+            params![
+                serde_json::to_string(record)?,
+                record.identity.instance.as_str()
+            ],
+        )?;
         transaction.commit()?;
         Ok(())
     }
@@ -155,18 +204,48 @@ impl PluginRepository {
         self.recorded_instances_scoped(after, limit, None)
     }
 
-    pub fn recorded_instance(&self, identity: &InstanceRef, project: &ProjectId, principal: &PrincipalId) -> Result<PluginInstance, PluginError> {
-        let value: Option<String> = self.connection.query_row("SELECT document FROM plugin_instances WHERE id=?", [identity.instance.as_str()], |r| r.get(0)).optional()?;
-        let record: PluginInstance = serde_json::from_str(&value.ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?)?;
-        ensure(record.identity == *identity && &record.project == project && &record.principal == principal, "instance is unavailable in this scope")?;
+    pub fn recorded_instance(
+        &self,
+        identity: &InstanceRef,
+        project: &ProjectId,
+        principal: &PrincipalId,
+    ) -> Result<PluginInstance, PluginError> {
+        let value: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT document FROM plugin_instances WHERE id=?",
+                [identity.instance.as_str()],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let record: PluginInstance = serde_json::from_str(
+            &value.ok_or_else(|| PluginError::Missing(identity.instance.to_string()))?,
+        )?;
+        ensure(
+            record.identity == *identity
+                && &record.project == project
+                && &record.principal == principal,
+            "instance is unavailable in this scope",
+        )?;
         Ok(record)
     }
 
-    pub fn recorded_instances_scoped(&self, after: Option<&PluginInstanceId>, limit: usize, scope: Option<(&ProjectId, &PrincipalId)>) -> Result<PluginInstancePage, PluginError> {
+    pub fn recorded_instances_scoped(
+        &self,
+        after: Option<&PluginInstanceId>,
+        limit: usize,
+        scope: Option<(&ProjectId, &PrincipalId)>,
+    ) -> Result<PluginInstancePage, PluginError> {
         self.recorded_instances_filtered(after, limit, scope, true)
     }
 
-    pub(crate) fn recorded_instances_filtered(&self, after: Option<&PluginInstanceId>, limit: usize, scope: Option<(&ProjectId, &PrincipalId)>, include_previews: bool) -> Result<PluginInstancePage, PluginError> {
+    pub(crate) fn recorded_instances_filtered(
+        &self,
+        after: Option<&PluginInstanceId>,
+        limit: usize,
+        scope: Option<(&ProjectId, &PrincipalId)>,
+        include_previews: bool,
+    ) -> Result<PluginInstancePage, PluginError> {
         ensure(
             (1..=100).contains(&limit),
             "instance page size must be 1–100",
@@ -218,25 +297,67 @@ mod coverage_tests {
         let repository = PluginRepository::open(&directory.path().join("packages")).unwrap();
         let project = ProjectId::new("project").unwrap();
         let principal = PrincipalId::new("principal").unwrap();
-        assert!(repository.instance_project_coverage(&project,&principal).unwrap().all_visible);
-        for (id,owner_project,owner,state) in [
-            ("another-project","another-project","foreign","active"),
-            ("own-active","project","principal","active"),
-            ("own-failed","project","principal","failed"),
-            ("own-released","project","principal","released"),
+        assert!(
+            repository
+                .instance_project_coverage(&project, &principal)
+                .unwrap()
+                .all_visible
+        );
+        for (id, owner_project, owner, state) in [
+            ("another-project", "another-project", "foreign", "active"),
+            ("own-active", "project", "principal", "active"),
+            ("own-failed", "project", "principal", "failed"),
+            ("own-released", "project", "principal", "released"),
         ] {
-            repository.connection.execute("INSERT INTO plugin_instances VALUES(?,?)",params![id,json!({"project":owner_project,"principal":owner,"state":state}).to_string()]).unwrap();
+            repository
+                .connection
+                .execute(
+                    "INSERT INTO plugin_instances VALUES(?,?)",
+                    params![
+                        id,
+                        json!({"project":owner_project,"principal":owner,"state":state})
+                            .to_string()
+                    ],
+                )
+                .unwrap();
         }
-        assert!(repository.instance_project_coverage(&project,&principal).unwrap().all_visible);
-        for state in ["preparing","active","draining","failed","released"] {
+        assert!(
+            repository
+                .instance_project_coverage(&project, &principal)
+                .unwrap()
+                .all_visible
+        );
+        for state in ["preparing", "active", "draining", "failed", "released"] {
             repository.connection.execute("INSERT INTO plugin_instances VALUES(?,?)",params!["foreign",json!({"project":"project","principal":"foreign-principal","state":state,"configuration":{"private":"hidden"}}).to_string()]).unwrap();
-            let before:u64=repository.connection.query_row("SELECT total_changes()",[],|row|row.get(0)).unwrap();
-            let coverage=repository.instance_project_coverage(&project,&principal).unwrap();
-            assert_eq!(serde_json::to_value(coverage).unwrap(),json!({"all_visible":false}));
-            let after:u64=repository.connection.query_row("SELECT total_changes()",[],|row|row.get(0)).unwrap();
-            assert_eq!(before,after,"Coverage must not initialize or recover instances");
-            repository.connection.execute("DELETE FROM plugin_instances WHERE id='foreign'",[]).unwrap();
+            let before: u64 = repository
+                .connection
+                .query_row("SELECT total_changes()", [], |row| row.get(0))
+                .unwrap();
+            let coverage = repository
+                .instance_project_coverage(&project, &principal)
+                .unwrap();
+            assert_eq!(
+                serde_json::to_value(coverage).unwrap(),
+                json!({"all_visible":false})
+            );
+            let after: u64 = repository
+                .connection
+                .query_row("SELECT total_changes()", [], |row| row.get(0))
+                .unwrap();
+            assert_eq!(
+                before, after,
+                "Coverage must not initialize or recover instances"
+            );
+            repository
+                .connection
+                .execute("DELETE FROM plugin_instances WHERE id='foreign'", [])
+                .unwrap();
         }
-        assert!(repository.instance_project_coverage(&project,&principal).unwrap().all_visible);
+        assert!(
+            repository
+                .instance_project_coverage(&project, &principal)
+                .unwrap()
+                .all_visible
+        );
     }
 }

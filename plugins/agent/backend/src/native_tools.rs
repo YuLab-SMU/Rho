@@ -4,7 +4,10 @@ use crate::metadata::{Failure, now};
 use rho_agent_api::*;
 use rho_agent_native::mcp::*;
 use rho_agent_owner::*;
-use rho_plugin_sdk::{HostCallClient, protocol::{OperationId, PluginDelegatedOperation}};
+use rho_plugin_sdk::{
+    HostCallClient,
+    protocol::{OperationId, PluginDelegatedOperation},
+};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
@@ -59,16 +62,15 @@ impl NativeTools {
         at: u64,
     ) -> Result<AgentTaskAdmission, Failure> {
         let mut turns = self.turns.lock().map_err(|_| unavailable())?;
-        if let AgentTaskCommand::Send { control, .. } = &request.command {
-            if turns
+        if let AgentTaskCommand::Send { control, .. } = &request.command
+            && turns
                 .get(&control.task_id)
                 .is_some_and(|t| t.send != request.request_id)
-            {
-                return Err(Failure {
-                    code: "busy",
-                    message: "The previous Send still retains native work".into(),
-                });
-            }
+        {
+            return Err(Failure {
+                code: "busy",
+                message: "The previous Send still retains native work".into(),
+            });
         }
         let admission = owner.admit_native(scope, request, origin.clone(), at)?;
         if !admission.repeated && matches!(request.command, AgentTaskCommand::Send { .. }) {
@@ -315,8 +317,13 @@ async fn resolve(
         let value = result?;
         let value = match record.kind {
             AgentNativeToolKind::Query => {
-                if !matches!(value["status"].as_str(), Some("ready" | "unavailable" | "busy"))
-                    || !matches!(value["completeness"].as_str(), Some("complete" | "partial" | "cached" | "unavailable")) {
+                if !matches!(
+                    value["status"].as_str(),
+                    Some("ready" | "unavailable" | "busy")
+                ) || !matches!(
+                    value["completeness"].as_str(),
+                    Some("complete" | "partial" | "cached" | "unavailable")
+                ) {
                     return Err("Native tool returned an invalid observation envelope".to_owned());
                 }
                 record.failed = value["status"] != "ready" || value["completeness"] != "complete";
@@ -324,37 +331,68 @@ async fn resolve(
             }
             AgentNativeToolKind::Operation => {
                 let (operation, result) = match &record.native_request {
-                    AgentNativeToolRequest::Provider { request } => match crate::native_result::operation_result(
-                        &turn.scope.project, &turn.origin.binding.provider.instance, &turn.origin.operation, request, &value) {
-                        Ok(result) => result,
-                        Err(error) if error == crate::native_result::NORMALIZED => {
-                            let id = original_operation(turn, &record).await?;
-                            crate::native_result::correlated_operation_result(&turn.scope.project,
-                                &turn.origin.binding.provider.instance, &turn.origin.operation, request, &id, &value)?
+                    AgentNativeToolRequest::Provider { request } => {
+                        match crate::native_result::operation_result(
+                            &turn.scope.project,
+                            &turn.origin.binding.provider.instance,
+                            &turn.origin.operation,
+                            request,
+                            &value,
+                        ) {
+                            Ok(result) => result,
+                            Err(error) if error == crate::native_result::NORMALIZED => {
+                                let id = original_operation(turn, &record).await?;
+                                crate::native_result::correlated_operation_result(
+                                    &turn.scope.project,
+                                    &turn.origin.binding.provider.instance,
+                                    &turn.origin.operation,
+                                    request,
+                                    &id,
+                                    &value,
+                                )?
+                            }
+                            Err(error) => return Err(error),
                         }
-                        Err(error) => return Err(error),
-                    },
+                    }
                     AgentNativeToolRequest::Host { capability, .. } => {
                         // The Host may normalize input. Its original reverse-request
                         // mapping supplies identity independently of the offered result.
                         let id = original_operation(turn, &record).await?;
-                        crate::native_host_result::operation_result(&turn.scope.project,
-                            &turn.origin.binding.provider.instance, &turn.origin.operation, capability, &id, &value)?
+                        crate::native_host_result::operation_result(
+                            &turn.scope.project,
+                            &turn.origin.binding.provider.instance,
+                            &turn.origin.operation,
+                            capability,
+                            &id,
+                            &value,
+                        )?
                     }
                 };
                 record.operation = Some(operation);
-                if !matches!(result["status"].as_str(), Some("succeeded" | "failed" | "cancelled")) {
-                    return Err("Original native operation has no confirmed terminal outcome".into());
+                if !matches!(
+                    result["status"].as_str(),
+                    Some("succeeded" | "failed" | "cancelled")
+                ) {
+                    return Err(
+                        "Original native operation has no confirmed terminal outcome".into(),
+                    );
                 }
                 record.failed = result["status"] != "succeeded";
                 result
             }
         };
-        if serde_json::to_vec(&Some(&value)).map_err(|_| "Invalid native tool result")?.len() > MAX_NATIVE_TOOL_RESULT_BYTES {
-            return Err("Native result exceeds its observation budget; inspect the original record".into());
+        if serde_json::to_vec(&Some(&value))
+            .map_err(|_| "Invalid native tool result")?
+            .len()
+            > MAX_NATIVE_TOOL_RESULT_BYTES
+        {
+            return Err(
+                "Native result exceeds its observation budget; inspect the original record".into(),
+            );
         }
         Ok(value)
-    }.await;
+    }
+    .await;
     record.updated_at_ms = now().max(record.created_at_ms);
     match result {
         Ok(value) => {
@@ -381,14 +419,23 @@ async fn resolve(
     }
     reply(&record)
 }
-async fn original_operation(turn: &Turn, record: &AgentNativeToolReceipt) -> Result<OperationId, String> {
-    let observed = crate::native_selection::query(&turn.host, &turn.origin.request,
+async fn original_operation(
+    turn: &Turn,
+    record: &AgentNativeToolReceipt,
+) -> Result<OperationId, String> {
+    let observed = crate::native_selection::query(
+        &turn.host,
+        &turn.origin.request,
         crate::manifest::key("plugins.delegated_operation"),
-        json!({"parent_operation":turn.origin.operation,"request":record.request}))
-        .await.map_err(|error| error.message)?;
+        json!({"parent_operation":turn.origin.operation,"request":record.request}),
+    )
+    .await
+    .map_err(|error| error.message)?;
     let found: PluginDelegatedOperation = serde_json::from_value(observed)
         .map_err(|_| "Invalid original operation correlation".to_owned())?;
-    found.operation_id.ok_or_else(|| "Original operation is unconfirmed; no work was replayed".to_owned())
+    found
+        .operation_id
+        .ok_or_else(|| "Original operation is unconfirmed; no work was replayed".to_owned())
 }
 
 pub(crate) fn catalog() -> Vec<NativeMcpTool> {

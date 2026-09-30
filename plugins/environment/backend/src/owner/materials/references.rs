@@ -175,14 +175,13 @@ impl Owner {
                     return Err("Instance reference inventory changed scope or cursor".into());
                 }
             }
-            if let Some(next) = &page.next {
-                if page
+            if let Some(next) = &page.next
+                && page
                     .instances
                     .last()
                     .is_none_or(|last| last.instance.identity.instance != *next)
-                {
-                    return Err("Instance reference inventory did not advance".into());
-                }
+            {
+                return Err("Instance reference inventory did not advance".into());
             }
             result.extend(page.instances);
             after = page.next;
@@ -258,7 +257,8 @@ impl Owner {
                     continue;
                 }
                 if checkpoints::supports(&capability) {
-                    self.checkpoint_references(call, references, readers, &id, &capability, status).await?;
+                    self.checkpoint_references(call, references, readers, &id, &capability, status)
+                        .await?;
                     continue;
                 }
                 if !matches!(status, "succeeded" | "failed" | "cancelled") {
@@ -372,7 +372,9 @@ impl Owner {
             let instance = &observed.instance;
             // The Host never starts or publishes a native provider for fixture
             // previews. Their package capabilities are not live R references.
-            if instance.purpose == PluginInstancePurpose::FixturePreview { continue; }
+            if instance.purpose == PluginInstancePurpose::FixturePreview {
+                continue;
+            }
             let inspected: PluginInspection = serde_json::from_value(
                 self.reference_query(
                     call,
@@ -415,8 +417,11 @@ impl Owner {
                     );
                 }
             }
-            if capabilities.iter().any(|c| c.capability.id.as_str() == "r.checkpoint"
-                && c.capability.version == 1 && c.kind == CapabilityKind::Query) {
+            if capabilities.iter().any(|c| {
+                c.capability.id.as_str() == "r.checkpoint"
+                    && c.capability.version == 1
+                    && c.kind == CapabilityKind::Query
+            }) {
                 readers.push(instance.identity.clone());
             }
             let binding = |name: &str, target: Option<String>| ProviderBinding {
@@ -574,7 +579,11 @@ mod tests {
             identity.instance = PluginInstanceId::new("r-instance").unwrap();
             let instance = PluginInstanceObservation {
                 instance: PluginInstance {
-                    purpose: if scenario == "fixture_preview" { PluginInstancePurpose::FixturePreview } else { PluginInstancePurpose::Runtime },
+                    purpose: if scenario == "fixture_preview" {
+                        PluginInstancePurpose::FixturePreview
+                    } else {
+                        PluginInstancePurpose::Runtime
+                    },
                     identity: identity.clone(),
                     project: query.binding.project.clone(),
                     principal: query.principal.clone(),
@@ -649,8 +658,14 @@ mod tests {
                 while let Some(request) = requests.recv().await {
                     let id = request.capability.id.as_str();
                     if scenario == "fixture_preview" {
-                        assert_ne!(id, "plugins.inspect", "preview packages are not native R references");
-                        assert!(!id.starts_with("r."), "preview must never be queried as an R provider");
+                        assert_ne!(
+                            id, "plugins.inspect",
+                            "preview packages are not native R references"
+                        );
+                        assert!(
+                            !id.starts_with("r."),
+                            "preview must never be queried as an R provider"
+                        );
                     }
                     if scenario == "grant" && id == "operation.project_coverage" {
                         let _ = request

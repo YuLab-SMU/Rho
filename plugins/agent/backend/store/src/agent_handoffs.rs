@@ -111,7 +111,7 @@ fn target(
                 task.task.title,
                 draft.content,
                 draft.version,
-                ApplicationWindowRef::from(task.attachment.controller),
+                task.attachment.controller,
                 Some(task.attachment.generation),
                 reason,
             )
@@ -474,7 +474,7 @@ impl AgentHandoffRepository for AgentStore {
                     .checked_add(1)
                     .ok_or(ApplicationError::Conflict)?;
                 task.task.updated_at_ms = write.receipt.created_at_ms;
-                task.attachment.controller = request.window.clone().into();
+                task.attachment.controller = request.window.clone();
                 let draft = AgentTaskDraft {
                     version: write.receipt.target_draft_version,
                     content: write.draft.clone(),

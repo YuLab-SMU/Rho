@@ -38,27 +38,52 @@ fn bounded_state(value: &Value) -> Result<(), OperationError> {
 }
 fn retained_view_arguments(record: &PluginViewRecord) -> OpenPluginView {
     OpenPluginView {
-        instance: record.instance.clone(), contribution: record.contribution.clone(),
-        window: record.window.clone(), configuration: record.configuration.clone(),
-        state: record.state.clone(), resource: record.resource.clone(),
+        instance: record.instance.clone(),
+        contribution: record.contribution.clone(),
+        window: record.window.clone(),
+        configuration: record.configuration.clone(),
+        state: record.state.clone(),
+        resource: record.resource.clone(),
     }
 }
 /// Prepare private transport material before publishing a connection. Nothing
 /// here is included in the public record or the Operation result.
-fn live_view(context: &host::CallContext, record: &PluginViewRecord,
-    contribution: ViewContribution, grants: Vec<CapabilityRequirement>,
-    fixtures: Vec<PluginPreviewQuery>) -> Result<LiveView, OperationError> {
+fn live_view(
+    context: &host::CallContext,
+    record: &PluginViewRecord,
+    contribution: ViewContribution,
+    grants: Vec<CapabilityRequirement>,
+    fixtures: Vec<PluginPreviewQuery>,
+) -> Result<LiveView, OperationError> {
     let mut delegated = context.clone();
     delegated.principal = Some(context.principal().clone());
-    delegated.caller = host::CallerIdentity { kind: host::CallerKind::Plugin, id: record.view.to_string() };
-    delegated.scopes = grants.iter().flat_map(|g| g.scopes.iter().cloned()).collect();
+    delegated.caller = host::CallerIdentity {
+        kind: host::CallerKind::Plugin,
+        id: record.view.to_string(),
+    };
+    delegated.scopes = grants
+        .iter()
+        .flat_map(|g| g.scopes.iter().cloned())
+        .collect();
     let connection = PluginViewConnection {
-        view: record.clone(), connection: ConnectionId::new(format!("view-{}", uuid::Uuid::new_v4().simple())).map_err(error)?,
-        next_sequence: 1, asset_token: token(), call_token: token(), entrypoint: contribution.entrypoint, grants,
+        view: record.clone(),
+        connection: ConnectionId::new(format!("view-{}", uuid::Uuid::new_v4().simple()))
+            .map_err(error)?,
+        next_sequence: 1,
+        asset_token: token(),
+        call_token: token(),
+        entrypoint: contribution.entrypoint,
+        grants,
     };
     delegated.connection_id = connection.connection.to_string();
-    Ok(LiveView { connection, context: delegated, sequence: 0,
-        renderers: BTreeSet::new(), closing: None, fixtures })
+    Ok(LiveView {
+        connection,
+        context: delegated,
+        sequence: 0,
+        renderers: BTreeSet::new(),
+        closing: None,
+        fixtures,
+    })
 }
 impl PluginService {
     /// Native hosting precondition. Closing a project must not strand an open
@@ -75,8 +100,9 @@ impl PluginService {
             .map(|live| (live.context.clone(), live.connection.view.view.clone()))
             .collect::<Vec<_>>();
         for (context, id) in records {
-            let result = self.view_record(&context, &id).and_then(|record|
-                self.close_view_at_version(&context, &id, record.state_version, false));
+            let result = self.view_record(&context, &id).and_then(|record| {
+                self.close_view_at_version(&context, &id, record.state_version, false)
+            });
             if let Err(error) = result {
                 eprintln!("plugin view shutdown: {error}");
             }
@@ -85,38 +111,58 @@ impl PluginService {
     pub(crate) fn detach_live_views(&self) {
         // Preview fixtures are disposable. Runtime view identities and their
         // acknowledged state/layout stay retained; private transport tokens do not.
-        let previews = self.views.lock().unwrap().values()
+        let previews = self
+            .views
+            .lock()
+            .unwrap()
+            .values()
             .filter(|live| live.connection.view.purpose == PluginInstancePurpose::FixturePreview)
-            .map(|live| (live.context.clone(), live.connection.view.view.clone())).collect::<Vec<_>>();
+            .map(|live| (live.context.clone(), live.connection.view.view.clone()))
+            .collect::<Vec<_>>();
         for (context, id) in previews {
-            if let Err(error) = self.view_record(&context, &id).and_then(|record|
-                self.close_view_at_version(&context, &id, record.state_version, false)) {
+            if let Err(error) = self.view_record(&context, &id).and_then(|record| {
+                self.close_view_at_version(&context, &id, record.state_version, false)
+            }) {
                 eprintln!("plugin preview shutdown: {error}");
             }
         }
         self.views.lock().unwrap().clear();
     }
 
-    pub(crate) fn prepare_view_reconnect(&self, context: &host::CallContext,
-        args: &ReconnectPluginView) -> Result<PluginViewRecord, OperationError> {
+    pub(crate) fn prepare_view_reconnect(
+        &self,
+        context: &host::CallContext,
+        args: &ReconnectPluginView,
+    ) -> Result<PluginViewRecord, OperationError> {
         let record = self.view_record(context, &args.view)?;
         self.check_window_context(context, &record.window)?;
         if record.closed || record.state_version != args.expected_version {
-            return Err(OperationError::ContentChanged("view state changed or closed".into()));
+            return Err(OperationError::ContentChanged(
+                "view state changed or closed".into(),
+            ));
         }
-        if record.purpose != PluginInstancePurpose::Runtime { return Err(invalid("fixture preview cannot be recovered")); }
+        if record.purpose != PluginInstancePurpose::Runtime {
+            return Err(invalid("fixture preview cannot be recovered"));
+        }
         self.prepare_view(context, &retained_view_arguments(&record))?;
         Ok(record)
     }
 
-    pub(crate) fn reconnect_view(&self, context: &host::CallContext,
-        args: &ReconnectPluginView) -> Result<PluginViewRecord, OperationError> {
+    pub(crate) fn reconnect_view(
+        &self,
+        context: &host::CallContext,
+        args: &ReconnectPluginView,
+    ) -> Result<PluginViewRecord, OperationError> {
         let record = self.prepare_view_reconnect(context, args)?;
         let contribution = self.prepare_view(context, &retained_view_arguments(&record))?;
         let grants = self.runtime.view_grants(&record.instance).map_err(error)?;
         let mut views = self.views.lock().unwrap();
-        if views.contains_key(&record.view) { return Ok(record); }
-        if views.len() >= MAX_OPEN_VIEWS { return Err(invalid("open view quota reached")); }
+        if views.contains_key(&record.view) {
+            return Ok(record);
+        }
+        if views.len() >= MAX_OPEN_VIEWS {
+            return Err(invalid("open view quota reached"));
+        }
         let live = live_view(context, &record, contribution, grants, vec![])?;
         views.insert(record.view.clone(), live);
         Ok(record)
@@ -148,8 +194,13 @@ impl PluginService {
             }
             // Metadata qualification is bounded. Reading bytes still requires a
             // separately granted resources port and verifies those bytes there.
-            self.resources.qualify_reference(&self.project,
-                &plugin_principal_id(context.principal()), resource).map_err(error)?;
+            self.resources
+                .qualify_reference(
+                    &self.project,
+                    &plugin_principal_id(context.principal()),
+                    resource,
+                )
+                .map_err(error)?;
         }
         bounded_state(&args.state)?;
         if serde_json::to_vec(args).map_err(invalid)?.len() > MAX_CONTROL_BYTES / 2 {
@@ -236,7 +287,10 @@ impl PluginService {
     ) -> Result<(PluginViewRecord, Option<PluginWindowLayout>), OperationError> {
         let contribution = self.prepare_view(context, &args)?;
         let grants = self.runtime.view_grants(&args.instance).map_err(error)?;
-        let purpose = self.observe_instance(context, &args.instance, false)?.instance.purpose;
+        let purpose = self
+            .observe_instance(context, &args.instance, false)?
+            .instance
+            .purpose;
         let fixtures = self.runtime.view_fixtures(&args.instance).map_err(error)?;
         let mut views = self.views.lock().unwrap();
         if views.len() >= MAX_OPEN_VIEWS {
@@ -341,8 +395,14 @@ impl PluginService {
             ));
         }
         let mut views = self.views.lock().unwrap();
-        if views.get(&args.view).is_some_and(|live| live.closing.as_ref().is_some_and(|close| close.sealed(live.renderers.len()))) {
-            return Err(OperationError::ContentChanged("view state is sealed for closure".into()));
+        if views.get(&args.view).is_some_and(|live| {
+            live.closing
+                .as_ref()
+                .is_some_and(|close| close.sealed(live.renderers.len()))
+        }) {
+            return Err(OperationError::ContentChanged(
+                "view state is sealed for closure".into(),
+            ));
         }
         let mut repo = self.repository.lock().unwrap();
         let manifest = repo
@@ -391,9 +451,13 @@ impl PluginService {
         remove_from_window: bool,
     ) -> Result<PluginViewRecord, OperationError> {
         let mut record = self.view_record(context, id)?;
-        if record.closed { return Ok(record); }
+        if record.closed {
+            return Ok(record);
+        }
         if record.state_version != expected_version {
-            return Err(OperationError::ContentChanged("view state changed before closure".into()));
+            return Err(OperationError::ContentChanged(
+                "view state changed before closure".into(),
+            ));
         }
         let mut views = self.views.lock().unwrap();
         let mut repo = self.repository.lock().unwrap();
@@ -421,12 +485,23 @@ impl PluginService {
             )
             .map_err(error)?;
         if remove_from_window {
-            let current = crate::window_layout::observed(&transaction, &record.project, &record.principal, &record.window)
-                .map_err(crate::window_layout::layout_error)?;
+            let current = crate::window_layout::observed(
+                &transaction,
+                &record.project,
+                &record.principal,
+                &record.window,
+            )
+            .map_err(crate::window_layout::layout_error)?;
             if let Some(args) = crate::window_layout::remove_view(current, &record.view)
-                .map_err(crate::window_layout::layout_error)? {
-                crate::window_layout::store_layout(&transaction, &record.project, &record.principal, args)
-                    .map_err(crate::window_layout::layout_error)?;
+                .map_err(crate::window_layout::layout_error)?
+            {
+                crate::window_layout::store_layout(
+                    &transaction,
+                    &record.project,
+                    &record.principal,
+                    args,
+                )
+                .map_err(crate::window_layout::layout_error)?;
             }
         }
         transaction.commit().map_err(error)?;
@@ -444,8 +519,11 @@ impl PluginService {
         let Some(scope) = &context.view_scope else {
             return Ok(PluginViewCaller { view: None });
         };
-        let unavailable = || OperationError::Unavailable(
-            "The original calling view is no longer available for new actions".into());
+        let unavailable = || {
+            OperationError::Unavailable(
+                "The original calling view is no longer available for new actions".into(),
+            )
+        };
         let origin = scope.origin.as_ref().ok_or_else(unavailable)?;
         if scope.window != origin.window || scope.draft_source.is_some() {
             return Err(unavailable());
@@ -457,14 +535,18 @@ impl PluginService {
             || record.window != origin.window
             || record.project != self.project
             || record.principal != plugin_principal_id(context.principal())
-            || record.closed || live.closing.is_some()
-            || !self.runtime.observe().iter().any(|observed|
+            || record.closed
+            || live.closing.is_some()
+            || !self.runtime.observe().iter().any(|observed| {
                 observed.instance.identity == record.instance
-                    && observed.instance.state == InstanceState::Active)
+                    && observed.instance.state == InstanceState::Active
+            })
         {
             return Err(unavailable());
         }
-        Ok(PluginViewCaller { view: Some(origin.clone()) })
+        Ok(PluginViewCaller {
+            view: Some(origin.clone()),
+        })
     }
     /// Observe one known, caller-visible view without exposing its credentials,
     /// content or browser registrations. An unknown/foreign view is not absence.
@@ -482,10 +564,10 @@ impl PluginService {
         } else if let Some(live) = views.get(id) {
             if live.closing.is_some() {
                 PluginViewPresenceState::Closing
-            } else if self.runtime.observe().iter().any(|observed|
+            } else if self.runtime.observe().iter().any(|observed| {
                 observed.instance.identity == record.instance
-                    && observed.instance.state == InstanceState::Active)
-            {
+                    && observed.instance.state == InstanceState::Active
+            }) {
                 PluginViewPresenceState::Attached
             } else {
                 PluginViewPresenceState::Detached
@@ -494,7 +576,10 @@ impl PluginService {
             PluginViewPresenceState::Detached
         };
         Ok(PluginViewPresence {
-            view: record.view, window: record.window, instance: record.instance, state,
+            view: record.view,
+            window: record.window,
+            instance: record.instance,
+            state,
         })
     }
     /// Read existing connection material; never mount, restart or recover a view.
@@ -508,7 +593,9 @@ impl PluginService {
         if context.caller.kind == host::CallerKind::Plugin {
             return Err(OperationError::AccessDenied {
                 capability: "views.connection@1".into(),
-                missing: vec!["private view connections are retained by the containing Host shell".into()],
+                missing: vec![
+                    "private view connections are retained by the containing Host shell".into(),
+                ],
             });
         }
         self.view_record(context, id)?;
@@ -526,6 +613,8 @@ impl PluginService {
             })
     }
     /// Token authority is narrowed again by the caller in the containing shell.
+    // Keep each identity and authority input explicit at this validation boundary.
+    #[allow(clippy::too_many_arguments)]
     pub async fn view_context(
         &self,
         parent: &host::CallContext,
@@ -542,7 +631,15 @@ impl PluginService {
         tokio::time::timeout(std::time::Duration::from_secs(10), async {
             loop {
                 match self.try_view_context(
-                    parent, connection, token, window, view, sequence, capability, provider, selecting_test,
+                    parent,
+                    connection,
+                    token,
+                    window,
+                    view,
+                    sequence,
+                    capability,
+                    provider,
+                    selecting_test,
                 ) {
                     Ok(None) => {
                         changed.changed().await.map_err(invalid)?;
@@ -558,6 +655,8 @@ impl PluginService {
         .await
         .map_err(|_| invalid("preceding view message did not arrive; reconnect this view"))?
     }
+    // Keep each identity and authority input explicit at this validation boundary.
+    #[allow(clippy::too_many_arguments)]
     fn try_view_context(
         &self,
         parent: &host::CallContext,
@@ -599,13 +698,20 @@ impl PluginService {
         if selecting_test {
             // Target selection needs its own frozen declaration. Do not merge
             // these management scopes into the actual capability's grant.
-            let declared = live.connection.grants.iter().find(|grant|
-                grant.capability.id.as_str() == "plugins.test_project" && grant.capability.version == 1);
-            if !active || live.connection.view.purpose == PluginInstancePurpose::FixturePreview
-                || ![PLUGINS_READ_SCOPE, PLUGINS_RUN_SCOPE].iter().all(|scope|
-                    parent.scopes.contains(*scope) && declared.is_some_and(|grant| grant.scopes.contains(*scope)))
+            let declared = live.connection.grants.iter().find(|grant| {
+                grant.capability.id.as_str() == "plugins.test_project"
+                    && grant.capability.version == 1
+            });
+            if !active
+                || live.connection.view.purpose == PluginInstancePurpose::FixturePreview
+                || ![PLUGINS_READ_SCOPE, PLUGINS_RUN_SCOPE].iter().all(|scope| {
+                    parent.scopes.contains(*scope)
+                        && declared.is_some_and(|grant| grant.scopes.contains(*scope))
+                })
             {
-                return Err(invalid("test project selection requires an active view's declared plugins.test_project grant with plugins.read and plugins.run"));
+                return Err(invalid(
+                    "test project selection requires an active view's declared plugins.test_project grant with plugins.read and plugins.run",
+                ));
             }
         }
         let mut scope = host::ViewCallScope {
@@ -623,13 +729,18 @@ impl PluginService {
         // Both the original opener and the current authenticated parent may
         // restrict this call; neither a new view nor a reverse call widens them.
         for inherited in [context.view_scope.as_ref(), parent.view_scope.as_ref()]
-            .into_iter().flatten()
+            .into_iter()
+            .flatten()
         {
             if inherited.window != scope.window {
                 return Err(invalid("call is restricted to its original window"));
             }
             if let Some(source) = &inherited.draft_source {
-                if scope.draft_source.as_ref().is_some_and(|current| current != source) {
+                if scope
+                    .draft_source
+                    .as_ref()
+                    .is_some_and(|current| current != source)
+                {
                     return Err(invalid("call is restricted to its original draft source"));
                 }
                 scope.draft_source = Some(source.clone());
@@ -642,7 +753,10 @@ impl PluginService {
             }
             if live.connection.view.purpose == PluginInstancePurpose::FixturePreview {
                 if !parent.scopes.contains(PLUGINS_RUN_SCOPE) {
-                    return Err(OperationError::AccessDenied { capability: "fixture_preview".into(), missing: vec![PLUGINS_RUN_SCOPE.into()] });
+                    return Err(OperationError::AccessDenied {
+                        capability: "fixture_preview".into(),
+                        missing: vec![PLUGINS_RUN_SCOPE.into()],
+                    });
                 }
                 // This channel carries fixture data only. No declared capability
                 // becomes an actual Host grant, even if the parent has authority.
@@ -662,11 +776,13 @@ impl PluginService {
                 // composition; each reverse call still checks its own grant.
                 // Foreign providers and disposable projects get only this
                 // capability's scopes, never the view's other grants.
-                let own_backend = !selecting_test && provider.is_some_and(|binding|
-                    binding.project == live.connection.view.project
-                        && binding.provider == live.connection.view.instance
-                        && binding.capability == grant.capability
-                        && self.runtime.owns_active_capability(binding));
+                let own_backend = !selecting_test
+                    && provider.is_some_and(|binding| {
+                        binding.project == live.connection.view.project
+                            && binding.provider == live.connection.view.instance
+                            && binding.capability == grant.capability
+                            && self.runtime.owns_active_capability(binding)
+                    });
                 if !own_backend {
                     context.scopes = grant.scopes.clone();
                 }

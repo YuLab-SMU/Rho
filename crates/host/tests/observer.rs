@@ -23,7 +23,8 @@ async fn query(observer: &rho_host::QueryObserver, id: &str, args: Value) -> Val
     result.data.unwrap()
 }
 fn record(root: &Path, id: &str) -> Operation {
-    Operation { admission: None,
+    Operation {
+        admission: None,
         operation_id: OperationId::new(id).unwrap(),
         client_request_id: id.into(),
         caller: NextHost::local_context().caller,
@@ -60,11 +61,31 @@ async fn fresh_project_observation_creates_no_journal_store_or_project_lease() {
             .iter()
             .all(|d| d.kind == CapabilityKind::Query)
     );
-    assert!(observer.capabilities().iter().all(|d| d.capability.id.starts_with("host.")));
-    for id in ["project.read_text", "output.read_text", "workspace.snapshot", "plugins.list"] {
-        assert!(observer.query_snapshot(&NextHost::local_context(), QueryRequest {
-            capability: CapabilityRef::new(id, 1).unwrap(), arguments: json!({})
-        }).await.is_err(), "{id}");
+    assert!(
+        observer
+            .capabilities()
+            .iter()
+            .all(|d| d.capability.id.starts_with("host."))
+    );
+    for id in [
+        "project.read_text",
+        "output.read_text",
+        "workspace.snapshot",
+        "plugins.list",
+    ] {
+        assert!(
+            observer
+                .query_snapshot(
+                    &NextHost::local_context(),
+                    QueryRequest {
+                        capability: CapabilityRef::new(id, 1).unwrap(),
+                        arguments: json!({})
+                    }
+                )
+                .await
+                .is_err(),
+            "{id}"
+        );
     }
     let overview = query(&observer, "host.overview", json!({})).await;
     assert_eq!(overview["modules"].as_array().unwrap().len(), 1);
@@ -94,7 +115,9 @@ async fn observer_coexists_with_active_project_owner_without_taking_its_lease() 
     fs::create_dir(&root).unwrap();
     fs::write(root.join("analysis.R"), "native work remains owned\n").unwrap();
     let database = dir.path().join("state/next.sqlite");
-    let host = NextHost::open_plugin_workspace(&database, &root).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&database, &root)
+        .await
+        .unwrap();
     let before = fs::read(&database).unwrap();
     let lock_before = fs::read(root.join(".rho/next-host.lock")).unwrap();
     let observer = NextHost::open_query_observer(&database, Some(&root)).unwrap();
@@ -143,11 +166,23 @@ async fn orphan_accepted_and_running_records_are_observed_without_recovery_or_da
         .mark_running(&running.operation_id, 2)
         .await
         .unwrap();
-    journal.stage_commit(&running.operation_id, &rho_operation::CommitPlan::succeeded(json!({"answer":42})), 3).await.unwrap();
+    journal
+        .stage_commit(
+            &running.operation_id,
+            &rho_operation::CommitPlan::succeeded(json!({"answer":42})),
+            3,
+        )
+        .await
+        .unwrap();
     drop(journal);
     let before = fs::read(&database).unwrap();
     let observer = NextHost::open_query_observer(&database, Some(&root)).unwrap();
-    assert!(!observer.capabilities().iter().any(|d| d.capability.id == "operation.reconcile_commit"));
+    assert!(
+        !observer
+            .capabilities()
+            .iter()
+            .any(|d| d.capability.id == "operation.reconcile_commit")
+    );
     for (original, status) in [
         (&accepted, OperationStatus::Accepted),
         (&running, OperationStatus::Running),
@@ -171,8 +206,20 @@ async fn orphan_accepted_and_running_records_are_observed_without_recovery_or_da
         );
         assert_eq!(observed.operation.principal(), original.principal());
         assert_eq!(observed.status, status);
-        let commit = query(&observer, "operation.commit_status", json!({"operation_id":original.operation_id})).await;
-        assert_eq!(commit["phase"], if status == OperationStatus::Running { "durable" } else { "awaiting_result" });
+        let commit = query(
+            &observer,
+            "operation.commit_status",
+            json!({"operation_id":original.operation_id}),
+        )
+        .await;
+        assert_eq!(
+            commit["phase"],
+            if status == OperationStatus::Running {
+                "durable"
+            } else {
+                "awaiting_result"
+            }
+        );
     }
     query(&observer, "host.overview", json!({})).await;
     drop(observer);
@@ -211,16 +258,36 @@ async fn retired_scientific_store_paths_are_never_opened_or_advertised() {
     drop(journal);
     // Deliberately invalid native store paths: journal observation must not inspect them.
     for name in ["runtime", "environment"] {
-        fs::write(database.parent().unwrap().join(name), "untouched scientific material").unwrap();
+        fs::write(
+            database.parent().unwrap().join(name),
+            "untouched scientific material",
+        )
+        .unwrap();
     }
     let before = fs::read(&database).unwrap();
     let observer = NextHost::open_query_observer(&database, Some(&root)).unwrap();
-    assert!(observer.capabilities().iter().all(|d|
-        d.capability.id.starts_with("host.") || d.capability.id.starts_with("operation.")));
-    assert_eq!(query(&observer, "operation.get", json!({"operation_id":operation.operation_id})).await["record"]["operation"]["operation_id"], "original");
+    assert!(
+        observer
+            .capabilities()
+            .iter()
+            .all(|d| d.capability.id.starts_with("host.")
+                || d.capability.id.starts_with("operation."))
+    );
+    assert_eq!(
+        query(
+            &observer,
+            "operation.get",
+            json!({"operation_id":operation.operation_id})
+        )
+        .await["record"]["operation"]["operation_id"],
+        "original"
+    );
     assert_eq!(fs::read(&database).unwrap(), before);
     for name in ["runtime", "environment"] {
-        assert_eq!(fs::read_to_string(database.parent().unwrap().join(name)).unwrap(), "untouched scientific material");
+        assert_eq!(
+            fs::read_to_string(database.parent().unwrap().join(name)).unwrap(),
+            "untouched scientific material"
+        );
     }
 }
 
@@ -229,21 +296,33 @@ async fn observer_preserves_project_and_principal_visibility_without_recovery() 
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("project");
     let other = dir.path().join("other");
-    fs::create_dir(&root).unwrap(); fs::create_dir(&other).unwrap();
+    fs::create_dir(&root).unwrap();
+    fs::create_dir(&other).unwrap();
     let database = dir.path().join("state/next.sqlite");
     let journal = SqliteOperationJournal::open(&database).unwrap();
     let operation = record(&root, "private-original");
-    journal.admit(&operation).await.unwrap(); drop(journal);
+    journal.admit(&operation).await.unwrap();
+    drop(journal);
     let before = fs::read(&database).unwrap();
     let observer = NextHost::open_query_observer(&database, Some(&root)).unwrap();
     let other_project = NextHost::open_query_observer(&database, Some(&other)).unwrap();
-    let request = QueryRequest { capability: CapabilityRef::new("operation.get", 1).unwrap(),
-        arguments: json!({"operation_id":operation.operation_id}) };
-    let mut denied = NextHost::local_context(); denied.caller.id = "another-user".into();
-    for (source, context) in [(&observer, denied), (&other_project, NextHost::local_context())] {
-        let result = source.query_snapshot(&context, request.clone()).await.unwrap();
+    let request = QueryRequest {
+        capability: CapabilityRef::new("operation.get", 1).unwrap(),
+        arguments: json!({"operation_id":operation.operation_id}),
+    };
+    let mut denied = NextHost::local_context();
+    denied.caller.id = "another-user".into();
+    for (source, context) in [
+        (&observer, denied),
+        (&other_project, NextHost::local_context()),
+    ] {
+        let result = source
+            .query_snapshot(&context, request.clone())
+            .await
+            .unwrap();
         assert!(result.data.unwrap()["record"].is_null());
     }
     assert_eq!(fs::read(&database).unwrap(), before);
-    assert!(!root.join(".rho").exists()); assert!(!other.join(".rho").exists());
+    assert!(!root.join(".rho").exists());
+    assert!(!other.join(".rho").exists());
 }

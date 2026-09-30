@@ -601,7 +601,7 @@ fn native_admission_cannot_be_replaced_or_launder_changed_receipts() {
                 expected_revision: Some(&sent.task.revision),
                 task: &sent.task,
                 draft: None,
-                receipts: &std::slice::from_ref(&completed),
+                receipts: std::slice::from_ref(&completed),
                 events: &[],
             },
         )

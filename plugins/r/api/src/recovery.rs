@@ -152,6 +152,7 @@ pub struct RCaptureDiscarded {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant)] // Preserve the public serialized result DTO's Rust shape.
 pub enum RCaptureDiscardOutput {
     Discarded(RCaptureDiscarded),
     NotStarted(crate::RExecutionNotStarted),
@@ -232,6 +233,7 @@ pub struct RCheckpointControlResolution {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant)] // Preserve the public serialized result DTO's Rust shape.
 pub enum RCheckpointControlResolutionOutput {
     Resolved(RCheckpointControlResolution),
     NotStarted(crate::RExecutionNotStarted),
@@ -302,6 +304,7 @@ pub struct RCheckpointPage {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant)] // Preserve the public serialized result DTO's Rust shape.
 pub enum RCheckpointCaptureOutput {
     Captured(RCheckpointResult),
     NotStarted(crate::RExecutionNotStarted),
@@ -309,6 +312,7 @@ pub enum RCheckpointCaptureOutput {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant)] // Preserve the public serialized result DTO's Rust shape.
 pub enum RCheckpointRestoreOutput {
     Restored(RCheckpointRestored),
     NotStarted(crate::RExecutionNotStarted),

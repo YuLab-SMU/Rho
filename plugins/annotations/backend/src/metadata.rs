@@ -84,10 +84,10 @@ impl Metadata {
             }
         }
         let path = Path::new(&environment.data_root).join("annotations-v1.sqlite");
-        if let Ok(meta) = std::fs::symlink_metadata(&path) {
-            if !meta.is_file() || meta.file_type().is_symlink() {
-                return Err("Annotation storage is not a private regular file".into());
-            }
+        if let Ok(meta) = std::fs::symlink_metadata(&path)
+            && (!meta.is_file() || meta.file_type().is_symlink())
+        {
+            return Err("Annotation storage is not a private regular file".into());
         }
         let owner = AnnotationOwner::new(Arc::new(AnnotationStore::open(&path)?));
         Ok(Self {
@@ -125,11 +125,13 @@ impl Metadata {
                 "Annotation call differs from its admitted identity, contract or native preconditions",
             ));
         }
-        if !call.scopes.contains(if operation || call.binding.capability.id.as_str() == "annotations.capture.upload" {
-            "application.control"
-        } else {
-            "application.read"
-        }) || !call.scopes.contains("plugins.read")
+        if !call.scopes.contains(
+            if operation || call.binding.capability.id.as_str() == "annotations.capture.upload" {
+                "application.control"
+            } else {
+                "application.read"
+            },
+        ) || !call.scopes.contains("plugins.read")
         {
             return Err(Failure {
                 code: "access_denied",

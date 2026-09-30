@@ -345,11 +345,24 @@ async fn plots_preview_pair_checks_originals_and_never_starts_r() {
         );
         assert_eq!(preview.data["artifacts"][0]["operation"], "original");
         let identity = preview.data["annotation_source"].clone();
-        assert!(identity["source_id"].as_str().unwrap().starts_with("plots:sha256:"));
+        assert!(
+            identity["source_id"]
+                .as_str()
+                .unwrap()
+                .starts_with("plots:sha256:")
+        );
         if let Some(original) = &image_identity {
-            assert_eq!(&identity, original, "Metadata and images refer to the same ordered original plots");
-        } else { image_identity = Some(identity); }
-        assert_eq!(preview.data["artifacts"][0]["resource"], json!(sources[0].reference));
+            assert_eq!(
+                &identity, original,
+                "Metadata and images refer to the same ordered original plots"
+            );
+        } else {
+            image_identity = Some(identity);
+        }
+        assert_eq!(
+            preview.data["artifacts"][0]["resource"],
+            json!(sources[0].reference)
+        );
         assert_eq!(preview.item.reference, reference);
         assert!(preview.text.contains("Producing run: original"));
         assert!(preview.text.contains("failed"));

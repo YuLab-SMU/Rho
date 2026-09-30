@@ -3,9 +3,9 @@
 use super::*;
 use serde::Serialize;
 use std::collections::BTreeMap;
-mod viewer;
 mod objects;
 mod packages;
+mod viewer;
 pub(super) use packages::Catalog as PackageCatalog;
 
 const HELP: &str = "help";
@@ -14,7 +14,10 @@ const HELP_PREVIEW: &str = "r.context.help.preview";
 const MAX_OBSERVED_TOPICS: usize = 100;
 
 pub fn is_query(id: &str) -> bool {
-    matches!(id, HELP_SEARCH | HELP_PREVIEW) || viewer::is_query(id) || objects::is_query(id) || packages::is_query(id)
+    matches!(id, HELP_SEARCH | HELP_PREVIEW)
+        || viewer::is_query(id)
+        || objects::is_query(id)
+        || packages::is_query(id)
 }
 pub(super) struct Grants {
     get: bool,
@@ -45,9 +48,14 @@ fn check(ok: bool, message: &str) -> Result<(), String> {
 // and temporary handles. This is not a digest of an entire native object/package.
 fn summary_identity(kind: &str, lineage: Value, content: Value) -> Result<Value, String> {
     let digest = |value: &Value| -> Result<String, String> {
-        Ok(format!("sha256:{:x}", Sha256::digest(serde_json::to_vec(value).map_err(|e|e.to_string())?)))
+        Ok(format!(
+            "sha256:{:x}",
+            Sha256::digest(serde_json::to_vec(value).map_err(|e| e.to_string())?)
+        ))
     };
-    Ok(json!({"source_id":format!("{kind}:{}",digest(&lineage)?),"source_version":digest(&content)?}))
+    Ok(
+        json!({"source_id":format!("{kind}:{}",digest(&lineage)?),"source_version":digest(&content)?}),
+    )
 }
 fn same_files(a: &[PackageFileIdentity], b: &[PackageFileIdentity]) -> bool {
     a.len() == b.len()

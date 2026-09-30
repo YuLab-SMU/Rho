@@ -171,8 +171,10 @@ where
                     },
                     _ => Some(error("unsupported", "Unexpected remote protocol message")),
                 };
-                if let Some(reply) = reply {
-                    if let Err(error) = writer.send(frame.request, reply).await { break Err(error.to_string()); }
+                if let Some(reply) = reply
+                    && let Err(error) = writer.send(frame.request, reply).await
+                {
+                    break Err(error.to_string());
                 }
             }
         }

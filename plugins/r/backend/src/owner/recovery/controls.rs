@@ -122,7 +122,7 @@ impl ControlHistory {
             self.unresolved.insert(operation.clone());
         }
         self.records
-            .insert(operation.clone(), (operation.clone(), status.clone()));
+            .insert(operation.clone(), (operation.clone(), status));
         self.groups.insert(
             operation,
             Group {
@@ -207,7 +207,7 @@ impl ControlHistory {
         Ok(RCheckpointControlObservation {
             operation_id: operation.clone(),
             reference: reference.clone(),
-            status: status.clone(),
+            status: *status,
             source_operation_id: source.clone(),
             latest_attempt: group.latest.clone(),
             resolution: group.resolved.clone(),

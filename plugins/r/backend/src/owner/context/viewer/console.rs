@@ -319,9 +319,18 @@ impl Owner {
         }
         // Both inclusions refer to the same immutable run. Include code and
         // terminal outcome as well as the retained transcript's digest.
-        let source_version = format!("sha256:{:x}", Sha256::digest(serde_json::to_vec(
-            &json!([code, status, record["record"]["error"], source.events.digest])
-        ).map_err(|e| e.to_string())?));
+        let source_version = format!(
+            "sha256:{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&json!([
+                    code,
+                    status,
+                    record["record"]["error"],
+                    source.events.digest
+                ]))
+                .map_err(|e| e.to_string())?
+            )
+        );
         let (text, truncated) = bounded_text(&text, request.max_bytes as usize);
         let preview = ContextPreview {
             item: source.item(&self.instance, &request.reference.window, &code, &status)?,

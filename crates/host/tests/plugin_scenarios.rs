@@ -193,7 +193,9 @@ async fn an_external_plugin_uses_scenario_ports_without_a_management_privilege()
         .unwrap()
         .import(&archive)
         .unwrap();
-    let host = NextHost::open_plugin_workspace(&database, &project).await.unwrap();
+    let host = NextHost::open_plugin_workspace(&database, &project)
+        .await
+        .unwrap();
     let context = NextHost::local_context();
     let invoke = |id: &str, capability: &str, arguments| Invocation {
         client_request_id: id.into(),
