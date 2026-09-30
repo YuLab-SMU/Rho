@@ -82,8 +82,16 @@ pub fn manifest() -> PluginManifest {
         requires: vec![
             requirement("views.caller", &["plugins.read"]),
             requirement("plugins.inspect", &["plugins.read"]),
+            requirement("annotations.read", &["application.read", "plugins.read"]),
+            requirement("annotations.write", &["application.control", "plugins.read"]),
         ],
         optional_requires: vec![
+            requirement("plugins.instances", &["plugins.read"]),
+            requirement("plugins.resolve", &["plugins.read"]),
+            requirement("workspace.paths", &["project.read"]),
+            requirement("files.read_text", &["project.read"]),
+            requirement("operation.get", &["operation.read"]),
+            requirement("operation.list_recent", &["operation.read"]),
             requirement("resources.read", &["resources.read"]),
             requirement("editor.context.preview", &["documents.read"]),
             requirement("files.context.preview", &["project.read"]),
@@ -143,7 +151,14 @@ pub fn manifest() -> PluginManifest {
                 descriptor
             },
         ],
-        views: vec![],
+        views: vec![ViewContribution {
+            id: ContributionId::new("annotations").unwrap(),
+            title: "Annotations".into(),
+            entrypoint: PackagePath::new("dist/src/index.html").unwrap(),
+            state_schema: json!({"type":"object","additionalProperties":true}),
+            configuration_schema: schema_for!(Empty).to_value(),
+            resource_kinds: Default::default(),
+        }],
         contexts: vec![ContextContribution {
             id: ContributionId::new("annotations").unwrap(),
             title: "Saved annotations".into(),

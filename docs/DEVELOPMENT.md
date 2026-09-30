@@ -388,6 +388,12 @@ without compilation. Reserve `--independent` for an owner/store source audit.
 `node scripts/build-annotation-plugin.mjs /new/path` defaults to the workspace cache;
 only an explicit `--independent` rebuilds standalone source. Native tests, package
 assembly, real-provider/Host acceptance and UI review are separate outcomes.
+For the ordinary Files text annotation view, pass a newly built
+`RHO_ANNOTATION_PLUGIN_PACKAGE` and retained `RHO_FILES_PLUGIN_ARCHIVE` to
+`npm run test:browser --prefix ui -- annotation-ui.spec.ts`. It runs one real
+Files/Annotations Host flow with exact quote freezing, lost-write recovery, CAS
+conflict and tombstone checks. Inspect its normal, wide and narrow screenshots;
+the view currently has no component-level launch entry or image drawing surface.
 `node scripts/test-annotation-plugin.mjs --files` uses retained Annotation,
 Editor and Files packages and the frozen Host for Files quote freezing, native
 identity/content-version separation and same-instance restart without source replay.
@@ -463,7 +469,7 @@ follow-up without image replay and retained context after Host restart. Add
 `--browser` to select the explicit image inclusion in the ordinary picker, inspect
 its thumbnail at 1440/960/390/220 px and preserve both selections across reload.
 The ACP and HTTP model peers are fixtures; these checks do not validate browser
-screenshot/upload, real R image provenance or an annotation editor.
+screenshot/upload, real R image provenance or the new Files text annotation editor.
 
 Add `--scientific` with a current retained `RHO_R_PLUGIN_PACKAGE`, `RHO_ARK` and
 `RHO_R_HOME` to test actual installed Help, saved HTML, Console transcript and
@@ -473,7 +479,7 @@ refuses forged resources, preserves the original outputs after a newer run,
 and reads/replays notes after graceful Host restart while R remains suspended.
 Object/package checks separate observation identity from summary content versions.
 With `--agent`, all six notes reach the real Agent/Rig path through a local model peer.
-This is owner/RPC integration; it does not claim annotation-editor interaction.
+This is owner/RPC integration; it does not claim non-Files annotation-editor interaction.
 
 The generic plugin-only Host uses `cargo test -p rho-host --test plugin_workspace
 --locked` for canonical project identity, native lease exclusion, empty-catalog

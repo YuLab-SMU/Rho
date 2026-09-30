@@ -9,7 +9,7 @@ export function prepareAnnotationSource(destination) {
   const parent=fs.realpathSync(path.dirname(path.resolve(destination))),output=path.join(parent,path.basename(destination));
   assert.ok(output!==root&&!output.startsWith(root+path.sep),'Use a separate package directory');
   fs.mkdirSync(output);
-  for(const [from,to] of [['plugins/annotations','.'],['crates/plugin-protocol','public/native/plugin-protocol'],['crates/plugin-sdk','public/native/plugin-sdk']])
+  for(const [from,to] of [['plugins/annotations','.'],['crates/plugin-protocol','public/native/plugin-protocol'],['crates/plugin-sdk','public/native/plugin-sdk'],['sdk/plugin-ui','public/plugin-ui'],['sdk/plugin-protocol','public/plugin-protocol']])
     fs.cpSync(path.join(root,from),path.join(output,to),{recursive:true,filter:source=>!/[\\/](?:target|dist|node_modules)(?:[\\/]|$)/.test(source)});
   fs.copyFileSync(path.join(root,'LICENSE'),path.join(output,'LICENSE'));
   fs.copyFileSync(path.join(root,'Cargo.lock'),path.join(output,'Cargo.lock'));
@@ -18,7 +18,7 @@ export function prepareAnnotationSource(destination) {
   fs.writeFileSync(cargoFile,original.replace('../../../crates/plugin-sdk','../public/native/plugin-sdk'));
   fs.writeFileSync(path.join(output,'Cargo.toml'),'[workspace]\nresolver = "3"\nmembers = ["api", "backend", "backend/owner", "backend/store", "public/native/plugin-protocol", "public/native/plugin-sdk"]\n');
   const installed=name=>fs.realpathSync(execFileSync('rustup',['which',name],{encoding:'utf8'}).trim());
-  const env={...process.env,RHO_PLUGIN_CARGO:installed('cargo'),RUSTC:installed('rustc'),RUSTDOC:installed('rustdoc'),CARGO_TARGET_DIR:path.join(root,'target')};
+  const env={...process.env,RHO_PLUGIN_CARGO:installed('cargo'),RUSTC:installed('rustc'),RUSTDOC:installed('rustdoc'),RHO_PLUGIN_TSC:path.join(root,'ui/node_modules/typescript/bin/tsc'),CARGO_TARGET_DIR:path.join(root,'target')};
   const metadata=JSON.parse(execFileSync(env.RHO_PLUGIN_CARGO,['metadata','--offline','--format-version','1'],{cwd:output,env,encoding:'utf8',maxBuffer:16*1024*1024}));
   const packages=metadata.packages.filter(p=>!p.source);
   assert.deepEqual(packages.map(p=>p.name).sort(),['rho-annotation-api','rho-annotation-backend','rho-annotation-owner','rho-annotation-store','rho-plugin-protocol','rho-plugin-sdk']);

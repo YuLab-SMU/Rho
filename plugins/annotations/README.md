@@ -14,11 +14,23 @@ Send context survives Host restart while the provider remains suspended. Native 
 read/create/update, version-conflict refusal and original child Operations also pass;
 both Sends replay after restart without reactivating the note provider or external peer.
 Capture import/read RPC accepts bounded immutable PNG/JPEG resources, decodes and
-verifies their bytes, and retains images separately from note context. Annotation UI
-remains incomplete; AN01–AN06 await user review. Real R-owned Help and saved HTML
+verifies their bytes, and retains images separately from note context. The ordinary
+Annotations view now selects a real Files provider and project file, freezes a selected
+quote or whole-item evidence, creates and edits versioned notes, and shows saved notes.
+It retains the draft and original request identity before each write; a lost response
+is recovered by inspecting the original Operation, without replay. Stale edits preserve
+the draft and point to a refreshed revision. This is the first approved AN01–AN06
+interaction slice; component entries, non-Files source selection, captured-view drawing,
+filters and keyboard flow remain open. Real R-owned Help and saved HTML
 now have owner/RPC annotation acceptance through Agent Send and same-instance
 restart; this does not establish annotation-editor interaction.
 See the repository's current Status for executed checks and retained timeouts.
+
+The view's Files catalog, read and source-preview grants are selected at annotation
+activation. Its own read/write grants are required for the view; its source owner still
+validates each freeze. The browser flow in `ui/e2e/annotation-ui.spec.ts` uses the
+real Host, Files and Annotations packages, checks lost acknowledgement, revision
+conflict and tombstone behavior, then inspects normal, wide and narrow layouts.
 
 ## Ownership and admission
 

@@ -1896,9 +1896,9 @@ text and reported as fully understood. These designs specify Rho's delivery of
 evidence, not independent acceptance of a third-party Agent's interpretation.
 
 All six boards were inspected for spacing, readable text, contrast,
-alignment and clipping. AN06's shortcut keys and filter names are proposals: the keys avoid the Editor
-and Console bindings but were not exercised in a browser, and the user has not
-approved them. The selected-text actions avoid covering the quotation;
+alignment and clipping. AN06's shortcut keys and filter names are within the approved
+interaction, but have not yet been exercised in a browser. The keys avoid the Editor
+and Console bindings. The selected-text actions avoid covering the quotation;
 the compact capture has an explicit full-size entry. The drawings and example
 notes are design fixtures, not persisted product annotations or runtime evidence.
 

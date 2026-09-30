@@ -259,7 +259,9 @@ fn public_manifest_declares_only_supported_contracts() {
     manifest.validate().unwrap();
     assert_eq!(manifest.capabilities.len(), 6);
     assert_eq!(manifest.contexts.len(), 1);
-    assert!(manifest.views.is_empty());
+    assert_eq!(manifest.views.len(), 1);
+    assert_eq!(manifest.views[0].id.as_str(), "annotations");
+    assert_eq!(manifest.views[0].entrypoint.as_str(), "dist/src/index.html");
     assert!(
         manifest
             .capabilities
@@ -270,7 +272,7 @@ fn public_manifest_declares_only_supported_contracts() {
         manifest
             .requires
             .iter()
-            .all(|g| ["views.caller", "plugins.inspect"].contains(&g.capability.id.as_str()))
+            .all(|g| ["views.caller", "plugins.inspect", "annotations.read", "annotations.write"].contains(&g.capability.id.as_str()))
     );
 }
 #[tokio::test]

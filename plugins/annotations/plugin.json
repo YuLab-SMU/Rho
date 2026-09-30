@@ -40,9 +40,83 @@
       "scopes": [
         "plugins.read"
       ]
+    },
+    {
+      "capability": {
+        "id": "annotations.read",
+        "version": 1
+      },
+      "scopes": [
+        "application.read",
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "annotations.write",
+        "version": 1
+      },
+      "scopes": [
+        "application.control",
+        "plugins.read"
+      ]
     }
   ],
   "optional_requires": [
+    {
+      "capability": {
+        "id": "plugins.instances",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.resolve",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "workspace.paths",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "files.read_text",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.get",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.list_recent",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
     {
       "capability": {
         "id": "resources.read",
@@ -131,7 +205,24 @@
       ]
     }
   ],
-  "views": [],
+  "views": [
+    {
+      "id": "annotations",
+      "title": "Annotations",
+      "entrypoint": "dist/src/index.html",
+      "state_schema": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "configuration_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "title": "Empty",
+        "type": "object"
+      },
+      "resource_kinds": []
+    }
+  ],
   "capabilities": [
     {
       "capability": {

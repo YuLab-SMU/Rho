@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Annotations</title><link rel="stylesheet" href="./style.css"></head>
+<body><main>
+  <header><div><p class="eyebrow">PROJECT EVIDENCE</p><h1>Annotations</h1><p class="intro">Notes stay attached to the exact source version you captured.</p></div><button id="refresh" type="button">Refresh notes</button></header>
+  <p id="notice" role="status" hidden></p>
+  <section class="workspace" aria-label="Annotation workspace">
+    <div class="column">
+      <section class="card"><h2>Capture source text</h2><div class="form-row"><label for="provider">Files provider</label><select id="provider"><option value="">Choose Files…</option></select></div><div class="form-row"><label for="path">Project file</label><input id="path" type="text" spellcheck="false" placeholder="analysis.R"><button id="open-file" type="button">Read file</button></div><p class="hint">Reading observes the original file. Capturing a selection freezes its exact evidence before you write a note.</p><label for="source-text">Selected source</label><textarea id="source-text" readonly spellcheck="false" aria-describedby="source-status"></textarea><p id="source-status" class="meta">No file selected.</p><div class="actions"><button id="capture-selection" type="button" disabled>Capture selected text</button><button id="capture-whole" type="button" disabled>Capture whole item</button></div></section>
+      <section class="card"><div class="heading"><h2>Saved notes</h2><span id="note-count" class="meta"></span></div><div id="notes" class="notes"></div><button id="more" type="button" hidden>More notes</button></section>
+    </div>
+    <div class="column"><section class="card editor"><h2 id="editor-title">New note</h2><p id="evidence-status" class="meta">Capture source text to begin.</p><div id="frozen-text" class="quote" hidden></div><label for="note">Note</label><textarea id="note" placeholder="Explain what matters in this source…"></textarea><div class="actions"><button id="save" type="button" disabled>Save note</button><button id="delete" class="quiet" type="button" hidden>Delete note</button><button id="new" class="quiet" type="button">New note</button></div><div id="pending" class="pending" hidden><p id="pending-text"></p><button id="recover" type="button">Inspect original operation</button></div><p id="conflict" class="conflict" hidden></p></section></div>
+  </section>
+</main><script type="module" src="./main.js"></script></body></html>
