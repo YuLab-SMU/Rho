@@ -66,6 +66,29 @@ pub enum ReadRequest {
 #[serde(deny_unknown_fields)]
 pub struct Empty {}
 
+/// A component contributes a reference, never scientific or Agent authority.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AnnotationViewConfiguration {
+    #[serde(default)]
+    pub source_request: Option<AnnotationSourceRequest>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AnnotationSourceRequest {
+    pub request_id: String,
+    pub source: AnnotationComponentSource,
+    pub return_view: ViewInstanceId,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AnnotationComponentSource {
+    pub reference: ContextReference,
+    pub title: String,
+    pub inclusion: Value,
+    pub preview: CapabilityKey,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum TextAnchor {

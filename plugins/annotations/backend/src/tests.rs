@@ -368,7 +368,7 @@ async fn exact_freeze_note_context_and_reopen_preserve_original_receipts() {
 }
 #[tokio::test]
 async fn malformed_source_and_changed_caller_cannot_write_evidence() {
-    for variant in ["lineage", "reference", "partial", "quote", "caller"] {
+    for variant in ["lineage", "reference", "partial", "quote", "caller", "foreign_image", "unsupported_image", "oversized_image", "too_many_images"] {
         let mut f = Fixture::new().await;
         let mut preview = source();
         let mut request = freeze("invalid-source");
@@ -377,6 +377,16 @@ async fn malformed_source_and_changed_caller_cannot_write_evidence() {
             "reference" => preview["item"]["reference"]["selector"]["version"] = json!(8),
             "partial" => preview["truncated"] = json!(true),
             "quote" => request["command"]["anchor"]["end"] = json!(2),
+            "foreign_image" | "unsupported_image" | "oversized_image" | "too_many_images" => {
+                let mut image = json!({"owner":reference()["provider"],"resource":"source-image","digest":format!("sha256:{}","f".repeat(64)),"media_type":"image/png","bytes":123});
+                match variant {
+                    "foreign_image" => image["owner"]["instance"] = json!("foreign-owner"),
+                    "unsupported_image" => image["media_type"] = json!("image/svg+xml"),
+                    "oversized_image" => image["bytes"] = json!(8 * 1024 * 1024 + 1),
+                    _ => (),
+                }
+                preview["resources"] = if variant == "too_many_images" {json!([image.clone(),image.clone(),image])} else {json!([image])};
+            }
             _ => {}
         }
         let mut replies = vec![
@@ -411,6 +421,18 @@ async fn malformed_source_and_changed_caller_cannot_write_evidence() {
         assert!(receipt["receipt"].is_null());
         f.stop().await;
     }
+}
+#[tokio::test]
+async fn source_images_are_retained_as_exact_references_without_claiming_a_capture() {
+    let mut f = Fixture::new().await;
+    let image = json!({"owner":reference()["provider"],"resource":"source-image","digest":format!("sha256:{}","f".repeat(64)),"media_type":"image/png","bytes":123});
+    let mut preview = source();
+    preview["resources"] = json!([image.clone()]);
+    let frozen = succeeded(f.perform(call("image-source-freeze","annotations.write",freeze("image-source-original")),vec![("views.caller",origin()),("plugins.inspect",inspection()),("editor.context.preview",preview),("views.caller",origin())],true).await);
+    let evidence = observed(f.perform(call("image-source-read","annotations.read",json!({"kind":"evidence","evidence_id":frozen["outcome"]["evidence_id"]})),vec![("views.caller",origin())],false).await);
+    assert_eq!(evidence["evidence"]["fragment"]["resources"],json!([image]));
+    assert_eq!(evidence["evidence"]["anchor"]["kind"],"text_quote");
+    f.stop().await;
 }
 #[tokio::test]
 async fn caller_scope_window_and_identity_are_not_taken_from_arguments() {

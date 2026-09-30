@@ -41,7 +41,7 @@ try {
     const close = useSyncExternalStore(closing.subscribe, closing.getSnapshot);
     const receipt = action.receipt;
     return <ObjectsViewContext.Provider value={{ objects: connection.objects, session: state.session,
-      agent: { blocked: close.preparing, recovering: !!connection.savedAgent?.pending, ask: (name,path=[])=>{selectedSource={name,path:structuredClone(path)};sender.open();} },
+      agent: { blocked: close.preparing, recovering: !!connection.savedAgent?.pending, ask: (name,path=[])=>{selectedSource={name,path:structuredClone(path)};sender.open();}, annotate:(name,path=[])=>{selectedSource={name,path:structuredClone(path)};sender.annotate();} },
       navigation: { blocked: close.preparing || action.working || !!action.pending, openObject: (name, path) => ignore(actions.openObject(name, path)) },
       execution: { blocked: close.preparing || action.working || !!action.pending, run: (code, mode) => actions.run(code, mode).catch(() => undefined) }, clipboard: client }}>
       <main className="objects-root">

@@ -4,7 +4,7 @@ import type { PackageEntry } from "../public/r-protocol/index.js";
 export interface PackagesViewServices {
   packages: Packages;
   session: { project: string | null; runtime: { state: string } | null };
-  agent?: {blocked:boolean;recovering:boolean;ask(copy:PackageEntry):void};
+  agent?: {blocked:boolean;recovering:boolean;ask(copy:PackageEntry):void;annotate?(copy:PackageEntry):void};
   navigation: { blocked: boolean; canOpenDocumentation: boolean; openDocumentation(copy: PackageEntry): void; openLink(url: string): void };
 }
 export const PackagesViewContext = createContext<PackagesViewServices | null>(null);

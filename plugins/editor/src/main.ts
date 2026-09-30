@@ -4,7 +4,7 @@ import { history, defaultKeymap, historyKeymap, indentWithTab } from '@codemirro
 import { bracketMatching, indentOnInput, foldGutter, indentUnit } from '@codemirror/language';
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
-import { connectPluginView } from '../public/plugin-ui/index.js';
+import { connectPluginView, componentAnnotationDialog } from '../public/plugin-ui/index.js';
 import { EditorAgent } from './agent.js';
 import { EditorController } from './controller.js';
 import { isR, rSupport } from './r-language.js';
@@ -18,6 +18,7 @@ let editor: EditorView | null = null, stopped = false, preparing = false, compos
 let timer: ReturnType<typeof setTimeout> | undefined, observing: ReturnType<typeof setTimeout> | undefined, pendingFlush: Promise<void> | null = null;
 let controller: EditorController;
 let agent: EditorAgent;
+let annotations:ReturnType<typeof componentAnnotationDialog>;
 let closeInstalled = false;
 const language = new Compartment();
 const preferences = new Compartment();
@@ -243,7 +244,7 @@ async function ensureClose() {
   const close = await client.installCloseHandler({ flush: async () => {
     preparing = true; clearTimeout(timer); clearTimeout(observing);
     if (editor && controller.document) controller.document.setScroll(editor.scrollDOM.scrollTop, editor.scrollDOM.scrollLeft);
-    if (agent.busy) throw Error('Wait for the current Agent view request before closing.');
+    if (agent.busy||annotations?.busy) throw Error('Wait for the current source view request before closing.');
     await controller.pause();
   }, resume: () => { preparing = false; controller.resume(); poll(); } });
   close.subscribe(() => { const state = close.getSnapshot(); if (state.error) show('error', state.error); });
@@ -251,6 +252,15 @@ async function ensureClose() {
   poll();
 }
 function wireActions() {
+  annotations=componentAnnotationDialog({client,saved:agent.data.annotation,
+    persist:async state=>{agent.data.annotation=structuredClone(state);await controller.drafts.saveAgent(agent.data);},
+    guard:()=>{if(preparing||composing||stopped||controller.busy||agent.busy)throw Error('Wait for the current Editor synchronization.');},
+    modes:[{value:'selection',label:'Selected text (when present)'},{value:'document',label:'Whole document'}],
+    capture:async kind=>{await flush();const draft=controller.drafts.snapshot.draft;if(!draft||controller.drafts.unresolved)throw Error('Synchronize the original document before annotating.');
+      const metadata=draft.metadata as {name?:string;selection?:{anchor:number;head:number}};const selected=metadata.selection&&metadata.selection.anchor!==metadata.selection.head;
+      return {reference:{provider:client.view.instance,contribution:'documents',window:client.view.window,selector:{draft:draft.draft,version:draft.version,digest:draft.content.digest}},title:`${selected?'Selection from':'Document'} ${metadata.name??'Untitled.R'}`.slice(0,160),inclusion:{kind:kind==='selection'&&selected?'selection':'document'},preview:{id:'editor.context.preview',version:1}};}});
+  const annotate=document.createElement('button');annotate.type='button';annotate.textContent='Annotate';annotate.onclick=()=>annotations.open();get('ask-agent').before(annotate);
+  window.addEventListener('pagehide',()=>annotations.dispose(),{once:true});
   const prepareAgent = async () => {
     controller.error = '';
     await flush();

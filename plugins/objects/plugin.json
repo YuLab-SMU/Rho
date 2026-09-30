@@ -242,6 +242,35 @@
                   "object",
                   "null"
                 ]
+              },
+              "annotation": {
+                "type": "object",
+                "required": [
+                  "source",
+                  "pending",
+                  "opened"
+                ],
+                "properties": {
+                  "source": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "pending": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "opened": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
               }
             },
             "additionalProperties": false
@@ -349,6 +378,35 @@
                   "object",
                   "null"
                 ]
+              },
+              "annotation": {
+                "type": "object",
+                "required": [
+                  "source",
+                  "pending",
+                  "opened"
+                ],
+                "properties": {
+                  "source": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "pending": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "opened": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
               }
             },
             "additionalProperties": false

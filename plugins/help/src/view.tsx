@@ -4,7 +4,7 @@ import { helpLink, staticHelpHtml } from "./content.js";
 
 /** The existing Help reading layout, with explicit observed-copy topic selection.
  * Documentation is static; rendering and following a topic cannot execute R. */
-export function HelpView({ help, copyText, openExternal, askAgent }: { help: Help; askAgent?():void; copyText(text: string): Promise<void>; openExternal(url: string): Promise<void> }) {
+export function HelpView({ help, copyText, openExternal, askAgent, annotate }: { help: Help; askAgent?():void; annotate?():void; copyText(text: string): Promise<void>; openExternal(url: string): Promise<void> }) {
   const state = useSyncExternalStore(help.subscribe, help.getSnapshot);
   const { copy, index, page, topic, raw, notice, loading, requiresNewObservation, indexVisible: topics } = state;
   const [linkNotice, setLinkNotice] = useState(""), [linkUrl, setLinkUrl] = useState("");
@@ -27,6 +27,7 @@ export function HelpView({ help, copyText, openExternal, askAgent }: { help: Hel
       <div className="help-identity" title={`${copy.package} ${copy.version}\n${copy.libraryPath}`}>
         <span className="help-package">{copy.package}</span>{topic && <><span className="help-separator">::</span><span className="help-topic">{topic}</span></>}
       </div>
+      {annotate && <button onClick={annotate} disabled={!page?.found || loading || requiresNewObservation}>Annotate</button>}
       {askAgent && <button onClick={askAgent} disabled={!page?.found || loading || requiresNewObservation}>Ask about…</button>}
       <span className="help-version">{copy.version}</span>
       <button onClick={() => help.setIndexVisible(!topics)} aria-expanded={topics}>Topics</button>

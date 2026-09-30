@@ -1,10 +1,10 @@
 /** Public component-input sender. Source owners supply exact references; only view opening mutates. */
 import type { ContextReference, ContextPreview, InstanceRef, PluginInspection, PluginInstanceObservation, PluginInstanceObservations, PluginWindowLayout, PluginViewRecord, OpenedPluginWindowView } from '../plugin-protocol/index.js';
-import { ViewRequestError, readResource, isResourceReference } from '../plugin-ui/index.js';
+import { ViewRequestError, readResource, isResourceReference, type AnnotationNavigationState } from '../plugin-ui/index.js';
 import { type Client, type Intent, type RecordReply, json, same, verifyOriginal, inspectOriginal } from './operations.js';
 export interface ComponentSource { reference: ContextReference; title: string; inclusion: unknown; preview: {id:string;version:number}; }
 export interface AgentInput extends ComponentSource { request: string; source_view: string; instance: InstanceRef | null; }
-export interface AgentState { input: AgentInput | null; pending: Intent | null; opened: PluginViewRecord | null; }
+export interface AgentState { input: AgentInput | null; pending: Intent | null; opened: PluginViewRecord | null; annotation?:AnnotationNavigationState; }
 const empty = (): AgentState => ({input:null,pending:null,opened:null});
 async function read<T>(client: Client, id: string, args: unknown): Promise<T> {
   const reply=await client.query<{status:string;completeness?:string;data?:T}>({id,version:1},json(args));
@@ -72,7 +72,7 @@ export class ComponentAgent {
     if(this.data.pending)throw Error('Inspect the original Agent view request before preparing another input.');
     if(source.reference.window!==this.client.view.window||!source.title||source.title.length>160)throw Error('Select an exact source from this window.');
     const input:AgentInput={...structuredClone(source),request:crypto.randomUUID(),source_view:this.client.view.view,instance:null};
-    await this.checkSource(input);this.data={input,pending:null,opened:null};await this.save();await this.listPage(false);
+    await this.checkSource(input);this.data={...this.data,input,pending:null,opened:null};await this.save();await this.listPage(false);
   });}
   private configuration(input:AgentInput){return {component_request:{request_id:input.request,title:`Ask about ${input.title}`.slice(0,160),
     sources:[{source:'plugin',label:input.title,reference:input.reference,inclusion:JSON.stringify(input.inclusion)}]}};}

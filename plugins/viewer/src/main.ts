@@ -21,6 +21,7 @@ const sender=componentInputDialog({client,saved:initial.agent,persist:async valu
   modes:[{value:'text',label:'Saved HTML source'},{value:'metadata',label:'Output details'}],
   capture:kind=>{if(!current)throw Error('Select a saved output first.');return viewerContext(source,client.view.window,current,kind);}});
 find('ask-agent').onclick=()=>sender.open();
+const annotate=document.createElement('button');annotate.type='button';annotate.textContent='Annotate';annotate.disabled=true;annotate.onclick=()=>sender.annotate();find('ask-agent').before(annotate);
 function notice(text: string, error = false) { message.textContent = text; message.className = error ? "notice error" : "notice"; message.hidden = !text; }
 function releaseSurface() {
   controller?.abort(); controller = null; surface.replaceChildren();
@@ -45,7 +46,7 @@ async function saveState() {
 async function select(output: SavedOutput, save = false, force = false) {
   if (!force && current && key(current) === key(output)) { if (save) { renderHistory(); await saveState(); } return; }
   const selectedGeneration = ++generation; releaseSurface(); current = output;
-  find<HTMLButtonElement>("ask-agent").disabled=false;
+  find<HTMLButtonElement>("ask-agent").disabled=false;annotate.disabled=false;
   state.selected = { operation_id: output.operation, resource_id: output.reference.resource };
   find("identity").textContent = `Output ${output.sequence} · Run ${output.operation.slice(0, 8)}`;
   find("status").textContent = `Saved HTML · ${output.status === "succeeded" ? "Completed run" : `${output.status} run`}`;

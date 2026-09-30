@@ -4,7 +4,8 @@ Updated: 2026-09-30. This is the single current summary of behavior, evidence,
 open work and the next milestone. Git and run artifacts retain history; see
 [Development](DEVELOPMENT.md#status-discipline) for update and evidence rules.
 Evidence filenames below are relative to `target/plugin-refactor/` unless stated.
-This planning update records existing evidence; it adds no runtime acceptance.
+The latest annotation milestone adds ordinary-view/browser and real-R owner evidence;
+remaining approved interactions and delivery acceptance stay open.
 
 ## Current focus: approved annotation interface
 
@@ -14,8 +15,10 @@ All sixteen ordinary packages exist. Fixed scientific/Agent composition, private
 frontend/HTTP flows, Application/Skill handlers, retired owner/adapter packages
 and legacy shared-port DTOs are removed. CLI, HTTP and MCP use the generic Host.
 The declared scientific-operation slice now passes through a real Files provider.
-The next user flow is the approved annotation interface; an affected-package
-refresh and remaining acceptance follow its settled source.
+The annotation view now has cross-component entry, versioned notes, image marks
+and explicit Agent draft inclusion. Remaining approved interaction details come
+next; final affected-package delivery and environment-dependent acceptance follow
+settled source.
 
 Committed baseline `5a5ecc4d` adds Studio data-source/custom-component forms to
 the executable visual runtime: synchronized references, shared Undo, invalid draft
@@ -46,7 +49,7 @@ recorded artifacts; “current” labels there do not certify this newer worktre
 | Order | User flow / ownership | Completion condition | Dependency and scope |
 | --- | --- | --- | --- |
 | 1 — verified | **Declared view → real Files update → explicit patch → original-operation recovery.** Public UI SDK and the consumer own observation/intent; Files and Operation own effects/truth. | Captured provider/arguments remain fixed; observation updates and stops on disposal; one explicit write; lost acknowledgement, reload and replacement view recover the original record with exactly one native effect. Affected Editor/Studio consumers still pass. | Real Files/browser flow, public SDK, Editor/Studio models, visual Studio/browser and client checks pass on settled source (`visual-science-results.json`). Snapshot polling only; no Host push channel. |
-| 2 — active | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Implement the reviewed AN01–AN06 scope as a complete flow, including conflict/source-change handling and normal/wide/constrained views. | Files text capture, note creation/edit/delete, stale-revision refusal, draft retention and lost-acknowledgement recovery now pass in an ordinary view (`annotation-ui-current`); normal/wide/narrow screenshots were inspected. Agent picker and native owner flows remain separately verified. Component entry, non-Files UI sources, captured-image drawing, filters and keyboard flow still need implementation. AN01–AN06 review completion confirmed by the user on 2026-09-30. |
+| 2 — active | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Implement the reviewed AN01–AN06 scope as a complete flow, including conflict/source-change handling and normal/wide/constrained views. | Files component entry → notes → exact revisions in an existing Agent draft passes in the browser, including lost open/create acknowledgements without replay, CAS, deletion confirmation, marks/Undo and retained image coordinates after resize/reload (`annotation-components-browser`). Source entries exist for Editor and seven scientific views; real native owners and Agent context pass separately (`annotation-components-native.json`). Remaining scope: component counts/near-selection entry, version-scoped current/history lists, precise structured anchors, captured interactive Viewer and Agent-item sources; broader per-component browser and keyboard/IME acceptance. AN01–AN06 review is complete. |
 | 3 — after 1–2 | **Updated runtime reaches the development bundle.** Existing package builders/delivery path. | Identify the changed source/runtime dependency closure; refresh affected packages once; validate exact revisions/hashes and run the affected imported-view flow. Retain unchanged archives/core and applicable installer evidence. | SDK changes can affect more than Studio: compare consumers and package contents. Repeat relocation/empty-start acceptance only if its inputs change. No installation/signing/publication. |
 | 4 — environment-dependent | **Actual system IME in ordinary views.** UI acceptance. | Real candidate window, composition/commit/Enter, focus changes and draft retention observed in the target app/browser. | Needs a stable foreground/input-method session. Synthetic composition passes are separate. Remains required for the full usability claim. |
 | 5 — model-dependent | **Real Agent/provider quality on the ordinary-plugin path.** Agent acceptance. | Map the planned 33 scenarios to current public paths; establish a representative real-provider smoke result before expanding the matrix; record remaining cases individually. | Fixed-Host harnesses were removed. Model access/configuration and current runners are prerequisites. Deterministic integration is already verified; historical 27-case evidence is not a current pass. |
@@ -124,7 +127,7 @@ Evidence: `agent-process-results.json`, `agent-environment-results.json`,
 no remote cluster, cross-machine network-loss, remote package resolution, renv
 restoration or real-model quality is claimed.
 
-### Annotations: owner and context ready; capture/editor UI open
+### Annotations: component entry, captured marks and Agent draft slice
 
 Ordinary Annotations owns native text/image records, revisions, source references,
 CAS, tombstones/history and Agent context. Editor, Files and all six R context
@@ -139,9 +142,33 @@ at most 2 MiB each under a project budget; Rho requires its model image diagnost
 Retry/restart preserves original images and does not resend pixels or model work.
 Evidence: `image-context-results.json`, `annotation-summary-results.json`,
 `annotation-files-results.json`, `annotation-files-host.json`.
-The ordinary Annotations view now handles Files text capture and versioned note editing;
-browser image capture, component entries and the remaining AN01–AN06 controls are still open
-([Design 20](RHO-DESIGN.md#20-component-annotations-for-people-and-agents--approved-interaction)).
+The ordinary view adds generic owner discovery, quoted/whole-item capture, imported
+PNG/JPEG drawing (Pen/Rectangle/Arrow/Text), numbered marks, local mark Undo,
+labels/filters, saved-revision history, original-source checks and explicit
+continuation. Unsaved replacement and irreversible deletion use in-view dialogs.
+Eight source views expose Annotate through a shared public SDK sender; the source
+view/tab identity and navigation intent are saved before opening. Source content,
+scientific state and Agent authority are unchanged by note capture/navigation.
+
+Actual Files browser acceptance covers lost open/create acknowledgements, reload,
+original Operation inspection with one invocation, stale note CAS, deletion and
+historical reads, normalized rectangle marks and Undo, Back preserving source
+view state, and two exact note revisions appended to an existing controlled Rho
+Agent draft while retaining its Chinese text. The PNG is a deterministic public
+resource fixture. Native acceptance separately uses real R Help/Viewer/Console/
+Plots/Objects/Packages, Native/Rho Agent protocol fixtures and a graceful same-
+instance Host restart. Evidence: `annotation-components-browser`,
+`annotation-components-native.json`; neither establishes real-provider quality.
+Source UI builds and focused SDK/Editor/Files/Plots/Objects/Packages/Viewer/Console/
+Agent view checks passed, as did annotation/Files backend and client checks.
+
+The reviewed AN01–AN06 flow remains partial: component counts and nearby selection
+entry, current/history scoping to one source lineage, additional structured/Agent
+item anchors, interactive Viewer capture and all-source browser/keyboard/OS IME
+acceptance are open. Current live-source status is labeled unknown unless the
+owner can establish it; an exact historical preview is not a current-version claim.
+Affected source packages are retained for milestone reuse; the development bundle
+has not been refreshed for this change. No user Host was restarted or installed.
 
 ### Studio and public visual runtime
 

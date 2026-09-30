@@ -51,16 +51,16 @@ try {
     const state = useSyncExternalStore(connection.subscribe, connection.getSnapshot), action = useSyncExternalStore(actions.subscribe, actions.getSnapshot);
     const close = useSyncExternalStore(closing.subscribe, closing.getSnapshot), [open, setOpen] = useState(false);
     const [askError,setAskError]=useState(''),[asking,setAsking]=useState(false);
-    const ask=async(path:string)=>{if(capturing||closingSource)return;if(connection.savedAgent?.pending){sender.open();return;}capturing=true;setAsking(true);setAskError('');try {
+    const ask=async(path:string,annotation=false)=>{if(capturing||closingSource)return;if(annotation&&connection.savedAgent?.annotation?.pending){sender.annotate();return;}if(!annotation&&connection.savedAgent?.pending){sender.open();return;}capturing=true;setAsking(true);setAskError('');try {
       const page=(await connection.read<TextPage>('files.read_text',{path,start_line:1,limit_lines:1})).data;
       if(!page?.file||page.skipped)throw Error(page?.skipped?.detail??'This file is not available as text.');
-      selectedSource=structuredClone(page.file);sender.open();
+      selectedSource=structuredClone(page.file);if(annotation)sender.annotate();else sender.open();
     }catch(error){setAskError(String(error));}finally{capturing=false;setAsking(false);}};
     const blocked = asking || close.preparing || action.working || !!action.pending || !state.connected;
     return <main className="files-root" inert={close.preparing || undefined}>
       {connection.savedAgent?.pending && <button disabled={close.preparing} onClick={()=>sender.open()}>Recover Agent request</button>}
       {askError && <p role="alert">{askError}</p>}
-      <FilesPanel files={connection.files} navigation={{ blocked, ask:path=>ignore(ask(path)), canOpen: !!configuration.editor,
+      <FilesPanel files={connection.files} navigation={{ blocked, ask:path=>ignore(ask(path)), annotate:path=>ignore(ask(path,true)), canOpen: !!configuration.editor,
         openDocument: path => ignore(actions.openDocument(path)), createDocument: () => ignore(actions.openDocument(null)),
         openFile: () => setOpen(true), refresh: () => ignore(connection.refresh(true)),
       }} />

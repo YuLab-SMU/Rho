@@ -246,7 +246,7 @@ get("records").onclick = () => {
       input_label: run.source, status: run.status, cancellation_requested: run.cancellationRequested, diagnostics: run.record.diagnostics,
       error: run.record.error, recovery: run.record.recovery, output: run.record.output }, null, 2)), button("Copy to Console", () => copyToInput(run.code)));
     const ask=button("Ask about…",()=>{selectedAgentRun=structuredClone(run);dialog.close();sender.open();});
-    ask.disabled=!state.agent?.pending&&(!terminal(run.status)||!run.retained);details.append(ask);
+    ask.disabled=!state.agent?.pending&&(!terminal(run.status)||!run.retained);const annotate=button("Annotate",()=>{selectedAgentRun=structuredClone(run);dialog.close();sender.annotate();});annotate.disabled=!terminal(run.status)||!run.retained;details.append(annotate,ask);
     content.append(details);
   }
 };

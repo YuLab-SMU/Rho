@@ -34,7 +34,7 @@ try{
  const ignore=(promise:Promise<unknown>)=>{void promise.catch(()=>undefined);};
  function App(){
   const download=useSyncExternalStore(exporting.subscribe,exporting.getSnapshot),state=useSyncExternalStore(connection.subscribe,connection.getSnapshot),action=useSyncExternalStore(actions.subscribe,actions.getSnapshot),close=useSyncExternalStore(closing.subscribe,closing.getSnapshot);
-  return <PlotViewContext.Provider value={{connection,cache,agent:{ask:plots=>{asking=structuredClone(plots??connection.selectedForAgent);sender.open();}},navigation:{blocked:close.preparing||action.working||!!action.pending||download.busy,
+  return <PlotViewContext.Provider value={{connection,cache,agent:{annotate:plots=>{asking=structuredClone(plots??connection.selectedForAgent);sender.annotate();},ask:plots=>{asking=structuredClone(plots??connection.selectedForAgent);sender.open();}},navigation:{blocked:close.preparing||action.working||!!action.pending||download.busy,
    openComparison:reference=>ignore(actions.openComparison(reference)),exportAvailable:client.initialization.features?.includes('resource_download_v1')===true,exportStatus:download,exportOriginal:reference=>ignore(exporting.original(reference))}}}>
    <main className="plots-root"><PlotPanel/>
     {(download.busy||download.error||download.notice||state.notice||state.saveError||close.error||action.error||action.pending||action.receipt)&&<aside className="plots-status" aria-label="Plots status">

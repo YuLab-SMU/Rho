@@ -1,9 +1,9 @@
 /** Editor-owned capture and ordinary Agent view launch. No task or model calls. */
 import type { ContextReference, ContextPreview, DocumentDraft, InstanceRef, PluginInspection, PluginInstanceObservation, PluginInstanceObservations, PluginWindowLayout, PluginViewRecord, OpenedPluginWindowView } from '../public/plugin-protocol/index.js';
-import { ViewRequestError } from '../public/plugin-ui/index.js';
+import { ViewRequestError, type AnnotationNavigationState } from '../public/plugin-ui/index.js';
 import { type Client, type Intent, type RecordReply, json, same, verifyOriginal, inspectOriginal } from './operations.js';
 export interface AgentInput { request: string; reference: ContextReference; title: string; kind: 'document' | 'selection'; instance: InstanceRef | null; }
-export interface AgentState { input: AgentInput | null; pending: Intent | null; opened: PluginViewRecord | null; }
+export interface AgentState { input: AgentInput | null; pending: Intent | null; opened: PluginViewRecord | null; annotation?:AnnotationNavigationState; }
 const empty = (): AgentState => ({input:null,pending:null,opened:null});
 async function read<T>(client: Client, id: string, args: unknown): Promise<T> {
   const reply=await client.query<{status:string;completeness?:string;data?:T}>({id,version:1},json(args));
@@ -65,7 +65,7 @@ export class EditorAgent {
     const kind=selection&&selection.anchor!==selection.head?'selection':'document';
     const input:AgentInput={request:crypto.randomUUID(),reference:{provider:structuredClone(this.client.view.instance),contribution:'documents',window:this.client.view.window,
       selector:{draft:draft.draft,version:draft.version,digest:draft.content.digest}},title:`${kind==='selection'?'Selection from':'Document'} ${metadata?.name??'Untitled.R'}`.slice(0,160),kind,instance:null};
-    await this.checkSource(input);this.data={input,pending:null,opened:null};await this.save();await this.listPage(false);
+    await this.checkSource(input);this.data={...this.data,input,pending:null,opened:null};await this.save();await this.listPage(false);
   });}
   private configuration(input:AgentInput){return {component_request:{request_id:input.request,title:`Ask about ${input.title}`.slice(0,160),
     sources:[{source:'plugin',label:input.title,reference:input.reference,inclusion:JSON.stringify({kind:input.kind})}]}};}

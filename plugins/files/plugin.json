@@ -188,6 +188,35 @@
           "agent": {
             "additionalProperties": false,
             "properties": {
+              "annotation": {
+                "additionalProperties": false,
+                "properties": {
+                  "opened": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "pending": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "source": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "source",
+                  "pending",
+                  "opened"
+                ],
+                "type": "object"
+              },
               "input": {
                 "type": [
                   "object",

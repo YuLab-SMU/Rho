@@ -163,10 +163,16 @@ pub async fn freeze(
     if preview.item.reference != reference
         || preview.truncated
         || preview.text.len() > 16384
-        || !preview.resources.is_empty()
+        || preview.resources.len() > 2
+        || preview.resources.iter().any(|resource| {
+            resource.owner != reference.provider
+                || !matches!(resource.media_type.as_str(), "image/png" | "image/jpeg")
+                || resource.bytes == 0
+                || resource.bytes > MAX_ANNOTATION_CAPTURE_BYTES as u64
+        })
     {
         return Err(Failure::invalid(
-            "Freeze requires a complete bounded text inclusion from the exact source",
+            "Freeze requires complete bounded text and at most two exact PNG/JPEG source images",
         ));
     }
     let identity: AnnotationContextIdentity =
@@ -219,7 +225,7 @@ pub async fn freeze(
             source_version: identity.source_version,
             title: preview.item.title.clone(),
         },
-        fragment: json!({"text":fragment,"data":preview.data,"description":preview.item.description,"captured":true}),
+        fragment: json!({"text":fragment,"data":preview.data,"description":preview.item.description,"resources":preview.resources,"captured":true}),
         normalized_selection: Some(AnnotationSelection {
             label: preview.item.title,
             ..selection.clone()

@@ -160,7 +160,7 @@ pub fn manifest() -> PluginManifest {
             id: ContributionId::new("files").unwrap(),
             title: "Files".into(),
             entrypoint: PackagePath::new("dist/ui/index.html").unwrap(),
-            state_schema: json!({"type":"object","properties":{"files":{"type":"object"},"actions":{"type":["object","null"]},"agent":{"type":"object","required":["input","pending","opened"],"properties":{"input":{"type":["object","null"]},"pending":{"type":["object","null"]},"opened":{"type":["object","null"]}},"additionalProperties":false}},"additionalProperties":false}),
+            state_schema: json!({"type":"object","properties":{"files":{"type":"object"},"actions":{"type":["object","null"]},"agent":{"type":"object","required":["input","pending","opened"],"properties":{"input":{"type":["object","null"]},"pending":{"type":["object","null"]},"opened":{"type":["object","null"]},"annotation":{"type":"object","required":["source","pending","opened"],"properties":{"source":{"type":["object","null"]},"pending":{"type":["object","null"]},"opened":{"type":["object","null"]}},"additionalProperties":false}},"additionalProperties":false}},"additionalProperties":false}),
             configuration_schema: schema_for!(FilesViewConfiguration).to_value(),
             resource_kinds: Default::default(),
         }],

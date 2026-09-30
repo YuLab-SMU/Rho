@@ -416,7 +416,7 @@ export function ObjectInspector({
     ) ?? [];
   const readPage = p?.kind === chosen ? p : undefined;
   const ask = agent && <div className="object-agent-action"><button disabled={agent.blocked || !agent.recovering && (isStale || !o.observationFor(name))}
-    onClick={() => agent.ask(name,path)}>Ask about…</button></div>;
+    onClick={() => agent.ask(name,path)}>Ask about…</button>{agent.annotate && <button disabled={agent.blocked || isStale || !o.observationFor(name)} onClick={()=>agent.annotate?.(name,path)}>Annotate</button>}</div>;
   if (vector && m)
     return (
       <div

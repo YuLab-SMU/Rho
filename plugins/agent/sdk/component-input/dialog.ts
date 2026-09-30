@@ -1,6 +1,7 @@
 /** Small shared sender UI; it neither activates Agent nor chooses/creates a task. */
 import {ComponentAgent, type AgentState, type ComponentSource} from './input.js';
 import type {Client} from './operations.js';
+import {componentAnnotationDialog} from '../plugin-ui/index.js';
 export interface SenderOptions {
   client:Client; saved?:AgentState; persist(state:AgentState):Promise<void>; guard():void;
   capture(kind:string):ComponentSource; modes:{value:string;label:string}[];
@@ -17,6 +18,9 @@ export function componentInputDialog(options:SenderOptions){
   let shown:Blob[]|null=null;let imageUrls:string[]=[];
   function clearImages(){for(const url of imageUrls)URL.revokeObjectURL(url);imageUrls=[];get('images').replaceChildren();}
   const agent=new ComponentAgent(options.client,options.saved,options.persist,()=>{if(disposed)throw Error('The source view is closed.');options.guard();},render);
+  const annotations=componentAnnotationDialog({client:options.client,saved:options.saved?.annotation,
+    persist:async value=>{agent.data.annotation=structuredClone(value);await options.persist(structuredClone(agent.data));},
+    guard:()=>{if(disposed||agent.busy||preparing)throw Error('Wait for the current source request.');options.guard();},capture:options.capture,modes:options.modes});
   function render(){
     const {input,pending,opened}=agent.data,busy=agent.busy||preparing;
     if(shown!==agent.images){clearImages();shown=agent.images;for(const [index,blob] of shown.entries()){
@@ -43,5 +47,5 @@ export function componentInputDialog(options:SenderOptions){
   get('inspect').onclick=()=>act(()=>agent.inspect());get('retry').onclick=()=>act(()=>agent.retry());get('open').onclick=()=>act(()=>agent.open());
   instance.onchange=()=>{const target=agent.candidates.find(item=>item.instance.identity.instance===instance.value)?.instance.identity??null;act(()=>agent.select(target));};
   dialog.addEventListener('cancel',event=>{if(agent.busy||preparing)event.preventDefault();});render();
-  return {open(){options.guard();dialog.showModal();if(!agent.data.pending)act(prepare);},get busy(){return agent.busy||preparing;},dispose(){disposed=true;clearImages();dialog.remove();style.remove();}};
+  return {open(){options.guard();dialog.showModal();if(!agent.data.pending)act(prepare);},annotate(){annotations.open();},get busy(){return agent.busy||preparing||annotations.busy;},dispose(){disposed=true;annotations.dispose();clearImages();dialog.remove();style.remove();}};
 }
