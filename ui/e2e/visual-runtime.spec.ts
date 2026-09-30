@@ -64,7 +64,7 @@ test('standalone visual components preserve drafts, read identities and explicit
  await page.getByRole('button',{name:'Send',exact:true}).click();await page.getByRole('button',{name:'New item',exact:true}).click();await page.getByRole('button',{name:'First row',exact:true}).click();
  const actions=await page.evaluate(()=>(window as any).calls);
  expect(actions.map((c:any)=>c.action.kind)).toEqual(['set_state','open_view','open_view']);expect(actions[0].context.value).toEqual({note:'Draft 中文 Ω'});expect(actions[1].context.value).toEqual({index:0,item:'New item'});
- expect(new Set(actions.map((c:any)=>c.context.requestId)).size).toBe(3);
+ expect(new Set(actions.map((c:any)=>c.context.requestId)).size).toBe(3);for(const action of actions)expect(action.context.requestId).toMatch(/^[A-Za-z0-9._-]{1,128}$/);
  await page.evaluate(()=>{(window as any).hold=true;});await page.getByRole('button',{name:'Execute',exact:true}).click();await page.getByRole('button',{name:'Execute',exact:true}).click();
  expect(await page.evaluate(()=>(window as any).calls.length)).toBe(4);
  await page.evaluate(()=>{const w=window as any;w.fail=true;w.release();});await expect(page.getByRole('alert')).toContainText('Original acknowledgement unknown');

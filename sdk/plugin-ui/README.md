@@ -313,7 +313,26 @@ Host journal request IDs are scoped to the originating view. Use
 `invoke`; a reopened view may inspect the old request but must not replay it under
 a new caller identity.
 
+`inspectOriginalOperation(client, savedIntent)` finds the single original record
+through `operation.list_recent` when the acknowledgement was lost, or uses the
+saved operation ID when one is known. `verifyOriginalOperation` checks the
+original view, scoped request ID, capability, normalized arguments, preconditions
+and status before a consumer trusts the record. Persist the intent before
+dispatch, including the complete native target that admission will record. For
+Files, observe `workspace.paths` and use its `project_root` as the binding target;
+an unspecified target may be filled by Files preflight and will fail exact
+original-argument comparison. Consumers own their intent, UI and decision to
+recover; these helpers never invoke or replay an operation.
+
 ### Visual declarations
+
+`createPollingVisualSubscription(client, {intervalMs})` is an optional adapter for
+declarations with `subscribe: true` when a provider exposes snapshot queries but
+no event stream. It captures the source's capability and arguments, bounds the
+adapter to eight concurrent reads, and stops delivering results after disposal.
+The first read comes from the renderer; later reads occur at the configured
+interval. The adapter does not make a query into a native push subscription or
+persist scientific actions.
 
 `parseVisualDocument(text)` validates the public `VisualDocument` format without
 DOM access or Host calls. `createVisualNode` and `visualNodeKinds` cover the ten

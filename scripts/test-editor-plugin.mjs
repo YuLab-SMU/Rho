@@ -178,7 +178,7 @@ try {
     await assert.rejects(bad.owner.save(body),/scope|receipt/);assert.equal(bad.owner.unresolved,true);
   }
   const forged=make(),admit=forged.client.invoke;forged.client.invoke=async(...args)=>{const record=await admit(...args);record.operation.caller.id='another';return record;};
-  await assert.rejects(forged.owner.save(body),/original document request/);assert.equal(forged.owner.unresolved,true);
+  await assert.rejects(forged.owner.save(body),/original plugin request/);assert.equal(forged.owner.unresolved,true);
   const stopped=make();let finish;stopped.state.settlementGate=new Promise(done=>finish=done);const inFlight=stopped.owner.save(body);
   while(!stopped.state.records.length)await new Promise(done=>setImmediate(done));stopped.owner.stop();finish();await assert.rejects(inFlight,/closed/);assert.equal(stopped.state.calls.length,1);
   assert.throws(()=>new DraftSync({...normal.client,view:{...normal.client.view,window:'other',state:normal.owner.snapshot}}),/scope/);

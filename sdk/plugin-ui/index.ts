@@ -20,6 +20,9 @@ export {
 export type { VisualDocument, VisualNode, VisualNodeKind, VisualCondition, VisualAction, CustomComponent } from '../plugin-protocol/index.js';
 export { mountVisualDocument } from './visual-runtime.js';
 export type { VisualRuntimeOptions, VisualEventContext, VisualCustomInstance, VisualCustomRegistration } from './visual-runtime.js';
+export { createPollingVisualSubscription } from './visual-observations.js';
+export { inspectOriginalOperation, verifyOriginalOperation, isTerminalOperation, canonicalOperationValue, sameOperationValue } from './operations.js';
+export type { OperationIntent, OriginalOperationRecord } from './operations.js';
 export const UI_PROTOCOL_VERSION = 1;
 export const MAX_UI_MESSAGE_BYTES = 1024 * 1024;
 export const MAX_UI_PENDING = 128;
@@ -68,14 +71,7 @@ export function boundedJson(value: unknown): boolean {
   try { return new TextEncoder().encode(JSON.stringify(value)).length <= MAX_UI_MESSAGE_BYTES; }
   catch { return false; }
 }
-/** Host journals scope an explicit invocation request to its originating view.
- * Use this id for original-operation comparisons and bounded request lookup;
- * invoke() itself always receives the unchanged, unscoped request id. */
-export async function operationRequestId(view: string, request: string): Promise<string> {
-  const bytes = new TextEncoder().encode(`${view}:${request}`);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return `sha256:${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("")}`;
-}
+export { operationRequestId } from './operation-identity.js';
 /** One MessagePort belongs to one document lifetime. Disposing it never cancels
  * accepted Operations. Reopen the saved view through the containing shell. */
 export class PluginViewClient {

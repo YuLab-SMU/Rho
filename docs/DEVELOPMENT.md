@@ -1284,6 +1284,16 @@ explicit event dispatch; the actual Host flow covers public catalog queries and
 view state, not scientific writes. Run these cases for visual-runtime changes;
 there is no native build requirement when the retained binary already matches core.
 
+For the real declared scientific flow, set `RHO_FILES_PLUGIN_ARCHIVE` to the
+absolute path of an already accepted Files archive and run
+`npm run test:browser --prefix ui -- visual-science.spec.ts`. The fixture reuses
+that native package and the current core. It captures `workspace.paths` before
+constructing its Files binding, so the original request and preflight admission
+name the same native target. It checks live snapshots, one explicit patch, lost
+acknowledgement, reload, cross-view original-operation inspection and stopped
+polling without a second native effect. It tests snapshot polling, not a Host
+event stream, R execution or Host restart.
+
 `node scripts/test-plugin-ui.mjs` builds the public UI SDK outside the checkout and
 checks frozen captures, verified staging/read transfers, malformed content,
 acknowledgement identity, interruptions and view cooperation. The Host draft target

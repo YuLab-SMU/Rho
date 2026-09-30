@@ -6,16 +6,16 @@ open work and the next milestone. Git and run artifacts retain history; see
 Evidence filenames below are relative to `target/plugin-refactor/` unless stated.
 This planning update records existing evidence; it adds no runtime acceptance.
 
-## Current focus: finish declarative scientific integration
+## Current focus: approved annotation interface
 
 The unified-plugin plan was authorized on 2026-09-23; PS01–PS07 are approved
 ([Design 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved)).
 All sixteen ordinary packages exist. Fixed scientific/Agent composition, private
 frontend/HTTP flows, Application/Skill handlers, retired owner/adapter packages
 and legacy shared-port DTOs are removed. CLI, HTTP and MCP use the generic Host.
-The remaining critical path is a real declared operation with original-request
-recovery, then the approved annotation UI, an affected-package refresh and the
-outstanding acceptance items.
+The declared scientific-operation slice now passes through a real Files provider.
+The next user flow is the approved annotation interface; an affected-package
+refresh and remaining acceptance follow its settled source.
 
 Committed baseline `5a5ecc4d` adds Studio data-source/custom-component forms to
 the executable visual runtime: synchronized references, shared Undo, invalid draft
@@ -24,14 +24,16 @@ recovery and conflict protection. Studio model checks and two browser flows pass
 run. Evidence: `definition-editor-results.json`, `visual-runtime-results.json`.
 The accepted development bundle predates this runtime work.
 
-The worktree contains unfinished shared SDK polling/original-operation helpers,
-Editor/Studio consumers and a real Files browser fixture. These are **in progress**.
-The latest recorded `visual-science.spec.ts` run reaches the changed file content
-but fails during original-operation verification with “The result does not match
-the original plugin request.” Evidence: `visual-science-native.log` and its trace.
-Inspect captured intent versus the authoritative admitted/normalized record before
-changing verification; the mismatch's cause is not established by this review.
-Polling uses bounded snapshot queries, not server-pushed native subscriptions.
+The public SDK now offers bounded snapshot polling and strict original-operation
+inspection. A separate ordinary UI package observes actual Files text, performs
+one explicit patch, and recovers the original Operation after a simulated lost
+acknowledgement, reload and replacement view. The original provider, target,
+arguments and native file effect remain fixed; polling stops on disposal. Files
+preflight fills an omitted target with the project root, so the fixture now
+captures `workspace.paths` and records that exact target before dispatch. The
+earlier strict-verification failure remains in `visual-science-native.log`;
+the settled real Files flow passes in 11.7s (`visual-science-results.json`).
+This is snapshot polling, not a server-pushed native subscription.
 
 ### Remaining work order
 
@@ -43,8 +45,8 @@ recorded artifacts; “current” labels there do not certify this newer worktre
 
 | Order | User flow / ownership | Completion condition | Dependency and scope |
 | --- | --- | --- | --- |
-| 1 — active | **Declared view → real Files update → explicit patch → original-operation recovery.** Public UI SDK and the consumer own observation/intent; Files and Operation own effects/truth. | Captured provider/arguments remain fixed; observation updates and stops on disposal; one explicit write; lost acknowledgement, reload and replacement view recover the original record with exactly one native effect. Affected Editor/Studio consumers still pass. | Continue the existing fixture and retained Files/core artifacts. Resolve the recorded verification mismatch first; register the settled flow in the existing governance map. No new Host push channel is required for this polling milestone. |
-| 2 — ready for implementation | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Implement the reviewed AN01–AN06 scope as a complete flow, including conflict/source-change handling and normal/wide/constrained views. | AN01–AN06 review completion confirmed by the user on 2026-09-30; no further design approval is needed within that scope. Start after the current recovery slice, reusing existing text/image owners, source contracts and Agent inclusion. |
+| 1 — verified | **Declared view → real Files update → explicit patch → original-operation recovery.** Public UI SDK and the consumer own observation/intent; Files and Operation own effects/truth. | Captured provider/arguments remain fixed; observation updates and stops on disposal; one explicit write; lost acknowledgement, reload and replacement view recover the original record with exactly one native effect. Affected Editor/Studio consumers still pass. | Real Files/browser flow, public SDK, Editor/Studio models, visual Studio/browser and client checks pass on settled source (`visual-science-results.json`). Snapshot polling only; no Host push channel. |
+| 2 — active | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Implement the reviewed AN01–AN06 scope as a complete flow, including conflict/source-change handling and normal/wide/constrained views. | AN01–AN06 review completion confirmed by the user on 2026-09-30. Reuse existing text/image owners, source contracts and Agent inclusion; no further design approval is needed within that scope. |
 | 3 — after 1–2 | **Updated runtime reaches the development bundle.** Existing package builders/delivery path. | Identify the changed source/runtime dependency closure; refresh affected packages once; validate exact revisions/hashes and run the affected imported-view flow. Retain unchanged archives/core and applicable installer evidence. | SDK changes can affect more than Studio: compare consumers and package contents. Repeat relocation/empty-start acceptance only if its inputs change. No installation/signing/publication. |
 | 4 — environment-dependent | **Actual system IME in ordinary views.** UI acceptance. | Real candidate window, composition/commit/Enter, focus changes and draft retention observed in the target app/browser. | Needs a stable foreground/input-method session. Synthetic composition passes are separate. Remains required for the full usability claim. |
 | 5 — model-dependent | **Real Agent/provider quality on the ordinary-plugin path.** Agent acceptance. | Map the planned 33 scenarios to current public paths; establish a representative real-provider smoke result before expanding the matrix; record remaining cases individually. | Fixed-Host harnesses were removed. Model access/configuration and current runners are prerequisites. Deterministic integration is already verified; historical 27-case evidence is not a current pass. |
@@ -155,8 +157,10 @@ programmatic click/requestSubmit cannot dispatch declared writes. Studio edits
 reach actual built preview/applied views and retain old revisions. Data-source and
 custom-component forms share source/Undo, synchronize renames, refuse referenced
 removal/stale forms, retain invalid drafts and preserve custom source bytes.
-Evidence: `visual-runtime-results.json`, `definition-editor-results.json`.
-Scientific polling/write/recovery acceptance remains open as described above.
+Evidence: `visual-runtime-results.json`, `definition-editor-results.json`,
+`visual-science-results.json`. The real Files flow uses the public polling adapter
+and a consumer-owned durable action intent; it does not add a Host subscription
+or infer general-purpose automatic recovery for arbitrary declared actions.
 
 Studio self-development passes branch/edit/checkpoint/build/preview/save/reload/
 close/apply/restore. Fixture drafts use bounded intrinsic state without a real

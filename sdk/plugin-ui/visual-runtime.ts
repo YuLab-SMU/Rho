@@ -102,7 +102,7 @@ export function mountVisualDocument(container: HTMLElement, input: VisualDocumen
         if (action.kind === 'refresh') await refresh(action.source);
         else {
           if (!options.action) throw Error(`No action adapter for ${action.kind}.`);
-          await options.action(structuredClone(action), { node: id, event, value: structuredClone(value), values: structuredClone(captured), requestId: `${gesture}:${index}` });
+          await options.action(structuredClone(action), { node: id, event, value: structuredClone(value), values: structuredClone(captured), requestId: `${gesture}-${index}` });
         }
       }
     } catch (e) { error(e, `Action ${id}.${event}`); }

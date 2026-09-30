@@ -110,7 +110,7 @@ try {
  studio.document.edit('views/panel.json',studio.document.current.text+'\n');const originalText=studio.document.current.text;
  fault='reject';await assert.rejects(studio.checkpoint(),/head changed/);assert.equal(studio.pending,null);assert.equal(studio.document.current.text,originalText);assert.equal(studio.document.data.revision,revision);
  fault=null;await studio.createBranch('conflict-fork');assert.equal(studio.document.current.text,originalText);assert.equal(studio.document.dirty,true);assert.equal(studio.branch.name,'conflict-fork');
- fault='mismatch';await assert.rejects(studio.checkpoint(),/original source request/);assert.ok(studio.pending);assert.equal(studio.document.data.revision,revision);fault=null;
+ fault='mismatch';await assert.rejects(studio.checkpoint(),/original plugin request/);assert.ok(studio.pending);assert.equal(studio.document.data.revision,revision);fault=null;
  // UTF-8 may split between source pages; decode only after verifying the full byte capture.
  const large='a'.repeat(65535)+'中文 Ω';catalogs[revision].content['src/large.ts']=large;catalogs[revision].files['src/large.ts']=metadata(large);
  assert.equal(await sourceText(client,revision,'src/large.ts',metadata(large)),large);

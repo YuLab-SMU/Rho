@@ -59,7 +59,7 @@ export async function testDevelopment(module, operationRequestId, ViewRequestErr
   fault='final-save';await assert.rejects(dev.releasePreview(),/save unconfirmed/);assert.ok(dev.data.pending);assert.ok(dev.data.preview,'unconfirmed final draft keeps the exact lifecycle target for recovery');
   fault=null;await dev.recover();assert.equal(dev.data.pending,null);assert.equal(dev.data.preview,null);
   fault='reject';await assert.rejects(dev.build(revision),/native refusal/);assert.equal(dev.data.pending,null);fault=null;
-  fault='mismatch';await assert.rejects(dev.build(revision),/original source request/);assert.ok(dev.data.pending);fault=null;await dev.recover();
+  fault='mismatch';await assert.rejects(dev.build(revision),/original plugin request/);assert.ok(dev.data.pending);fault=null;await dev.recover();
   fault='lost';await assert.rejects(dev.build(revision),/acknowledgement lost/);fault=null;
   const uncertain=records.at(-1);uncertain.status='uncertain';uncertain.outcome='uncertain';uncertain.output.artifact=null;uncertain.output.process.termination='uncertain';
   await assert.rejects(dev.recover(),/uncertain/);assert.ok(dev.data.pending);assert.equal(dev.data.build.status,'uncertain');

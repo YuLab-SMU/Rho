@@ -76,7 +76,7 @@ export async function testBackendTest(module, operationRequestId, ViewRequestErr
   fault='reject';await assert.rejects(testing.create(revision,artifact),/native refusal/);assert.equal(testing.data.pending,null);assert.equal(testing.data.project.project.id,'test-1');
   fault='failed-create';await assert.rejects(testing.create(revision,artifact),/activation failed/);assert.equal(testing.data.project.project.state,'failed');assert.equal(testing.data.project.project.id,'test-2');assert.equal(testing.data.pending,null);
   fault=null;await testing.stop();
-  fault='mismatch';await assert.rejects(testing.create(revision,artifact),/original source request/);assert.ok(testing.data.pending);fault=null;await testing.recover();assert.equal(testing.data.project.project.id,'test-3');
+  fault='mismatch';await assert.rejects(testing.create(revision,artifact),/original plugin request/);assert.ok(testing.data.pending);fault=null;await testing.recover();assert.equal(testing.data.project.project.id,'test-3');
   fault='lost';await assert.rejects(testing.stop(),/acknowledgement lost/);fault=null;
   const uncertain=records.at(-1);uncertain.status=uncertain.outcome='uncertain';uncertain.output=null;
   await assert.rejects(testing.recover(),/uncertain/);assert.ok(testing.data.pending);await assert.rejects(testing.create(revision,artifact),/original backend-test/);

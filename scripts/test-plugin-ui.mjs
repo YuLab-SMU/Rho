@@ -1,3 +1,4 @@
+import {checkObservationsAndOperations} from './fixtures/plugin-observations.mjs';
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -31,6 +32,7 @@ try {
     d=>{d.components.chart.source='../outside.ts';},
   ]){const invalid=structuredClone(visual);mutate(invalid);assert.throws(()=>sdk.parseVisualDocument(JSON.stringify(invalid)));}
   console.log('Public visual declarations: all ten node kinds, opaque custom sources, bindings/conditions and invalid graph/event/path refusal passed without a renderer or Host.');
+  await checkObservationsAndOperations(sdk);
   await checkDraftTransfers(sdk);
   await checkArchiveTransfers(sdk);
   await checkViewClose(sdk);
