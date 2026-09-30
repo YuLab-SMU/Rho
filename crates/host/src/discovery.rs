@@ -72,73 +72,17 @@ impl DiscoveryOwner {
             required_scopes: descriptor.required_scopes,
         })
     }
-    fn modules(
-        &self,
-        descriptors: &[CapabilityDescriptor],
-        context: &CallContext,
-    ) -> Vec<ModuleAvailability> {
-        [
-            ("session", "workspace.read", "No connected R runtime"),
-            (
-                "runtime",
-                "workspace.read",
-                "No runtime manager is composed",
-            ),
-            (
-                "operations",
-                "operation.read",
-                "No project operation journal",
-            ),
-            ("console", "workspace.read", "No connected R runtime"),
-            ("objects", "workspace.read", "No connected R runtime"),
-            ("packages", "workspace.read", "No connected R runtime"),
-            ("files", "project.read", "No project selected"),
-            ("documents", "application.read", "No active Studio window"),
-            ("outputs", "workspace.read", "No project output store"),
-            ("plots", "workspace.read", "No project output store"),
-            ("layout", "application.read", "No active Studio window"),
-            ("application", "application.read", "No active Studio window"),
-            (
-                "environment",
-                "environment.read",
-                "Environment tools are not configured",
-            ),
-            (
-                "processes",
-                "process.run_local",
-                "No local project process target",
-            ),
-            ("remote", "remote.execute", "SSH target is not configured"),
-            ("slurm", "slurm.read", "Slurm target is not configured"),
-            ("skills", "skill.read", "Skill sources are not configured"),
-        ]
-        .into_iter()
-        .filter(|(module, scope, _)| {
-            context.scopes.contains(*scope)
-                || descriptors
-                    .iter()
-                    .any(|descriptor| belongs_to(&descriptor.capability.id, module))
-        })
-        .map(|(module, _, reason)| {
-            let available = descriptors
-                .iter()
-                .any(|d| belongs_to(&d.capability.id, module));
-            ModuleAvailability {
+    fn modules(&self, descriptors: &[CapabilityDescriptor]) -> Vec<ModuleAvailability> {
+        descriptors.iter().map(|d| d.domain.as_str()).collect::<BTreeSet<_>>()
+            .into_iter().map(|module| ModuleAvailability {
                 module: module.into(),
-                available,
-                reasons: if available {
-                    vec![]
-                } else {
-                    vec![reason.into()]
-                },
+                available: true,
+                reasons: vec![],
                 catalog: NextRead::query(
-                    "host.catalog",
-                    format!("Discover {module} capabilities"),
+                    "host.catalog", format!("Discover {module} capabilities"),
                     json!({"module":module,"limit":20}),
                 ),
-            }
-        })
-        .collect()
+            }).collect()
     }
     fn catalog(
         &self,
@@ -149,7 +93,7 @@ impl DiscoveryOwner {
         visible.retain(|d| {
             args.module
                 .as_ref()
-                .is_none_or(|module| belongs_to(&d.capability.id, module))
+                .is_none_or(|module| d.domain == *module)
         });
         if let Some(keyword) = &args.keyword {
             let keyword = keyword.to_lowercase();
@@ -239,7 +183,7 @@ impl DiscoveryOwner {
             }
             (None, Some(module)) => {
                 let available = self
-                    .modules(&visible, context)
+                    .modules(&visible)
                     .into_iter()
                     .find(|m| m.module == module)
                     .ok_or_else(|| OperationError::NotFound("module is not visible".into()))?;
@@ -247,7 +191,7 @@ impl DiscoveryOwner {
                     module: Box::new(available),
                     capabilities: visible
                         .iter()
-                        .filter(|d| belongs_to(&d.capability.id, &module))
+                        .filter(|d| d.domain == module)
                         .map(summary)
                         .collect(),
                 })
@@ -304,7 +248,7 @@ impl DiscoveryOwner {
             };
             observations.push(OverviewObservation::Operations(observed(snapshot)?));
         }
-        let modules = self.modules(&visible, context);
+        let modules = self.modules(&visible);
         let targets = self.targets.iter().filter(|target|
             target.kind == "project" && (context.scopes.contains("plugins.read")
                 || context.scopes.contains("operation.read"))).cloned().collect();
@@ -342,54 +286,11 @@ fn truncate(text: &mut String, bound: usize) -> bool {
     text.truncate(end);
     true
 }
-pub(crate) fn module_for(id: &str) -> &str {
-    match id {
-        "workspace.runtime_status" | "workspace.snapshot" => "session",
-        "workspace.packages" | "workspace.package_index" | "workspace.help" | "workspace.read_help" => "packages",
-        "workspace.inspect_object"
-        | "workspace.list_objects"
-        | "workspace.observe_object"
-        | "workspace.read_object" => "objects",
-        "workspace.list_outputs"
-        | "workspace.read_output"
-        | "workspace.output_events"
-        | "output.read_text"
-        | "output.manifest" => "outputs",
-        "output.view" => "plots",
-        "application.read_document" => "documents",
-        "process.run_remote" => "remote",
-        _ => match id.split('.').next().unwrap_or("") {
-            "host" => "host",
-            "workspace" => "console",
-            "project" => "files",
-            "operation" => "operations",
-            "process" => "processes",
-            "skill" => "skills",
-            module => module,
-        },
-    }
-}
-fn belongs_to(id: &str, module: &str) -> bool {
-    module_for(id) == module
-        || match module {
-            "layout" => matches!(
-                id,
-                "application.control" | "application.context" | "application.windows"
-            ),
-            "documents" => matches!(
-                id,
-                "application.control" | "application.context" | "application.windows"
-            ),
-            "plots" => matches!(id, "workspace.list_outputs" | "application.control"),
-            "skills" => matches!(id, "host.resolve_context" | "application.bind_method"),
-            _ => false,
-        }
-}
 fn summary(descriptor: &CapabilityDescriptor) -> CapabilitySummary {
     CapabilitySummary {
         capability: descriptor.capability.clone(),
         kind: descriptor.kind,
-        module: module_for(&descriptor.capability.id).into(),
+        module: descriptor.domain.clone(),
         summary: descriptor.documentation.summary.clone(),
         describe: NextRead::query(
             "host.describe",
@@ -568,4 +469,52 @@ impl QueryHandler for DiscoveryHandler {
 }
 fn invalid(e: impl std::fmt::Display) -> OperationError {
     OperationError::InvalidInput(e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn discovery_uses_visible_registered_domains_without_a_fixed_module_list() {
+        let owner = DiscoveryOwner::new(None, vec![]);
+        let mut registry = CapabilityRegistry::new();
+        for (id, domain, scope) in [
+            ("arbitrary.observe", "custom-domain", "custom.read"),
+            ("another.observe", "custom-domain", "custom.read"),
+            ("hidden.observe", "private-domain", "private.read"),
+        ] {
+            let mut handler = DiscoveryHandler::new(owner.clone(), "host.overview");
+            handler.descriptor.capability = CapabilityRef::new(id, 1).unwrap();
+            handler.descriptor.domain = domain.into();
+            handler.descriptor.required_scopes = [scope.into()].into();
+            registry.register_query(Arc::new(handler)).unwrap();
+        }
+        let registry = Arc::new(registry);
+        owner.bind(&registry);
+        let mut context = crate::NextHost::local_context();
+        context.scopes = ["custom.read".into()].into();
+        let modules = owner.modules(&owner.visible(&context).unwrap());
+        assert_eq!(modules.len(), 1);
+        assert_eq!(modules[0].module, "custom-domain");
+        let catalog = owner.catalog(&context, HostCatalogArguments {
+            module: Some("custom-domain".into()), keyword: None, cursor: None, limit: 1,
+        }).unwrap();
+        assert_eq!(catalog.entries.len(), 1);
+        assert_eq!(catalog.entries[0].module, "custom-domain");
+        let cursor = catalog.next_cursor.unwrap();
+        let description = owner.describe(&context, HostDescribeArguments {
+            capability: None, module: Some("custom-domain".into()),
+        }).unwrap();
+        let HostDescription::Module { capabilities, .. } = description else { panic!("module expected") };
+        assert_eq!(capabilities.len(), 2);
+        assert!(owner.describe(&context, HostDescribeArguments {
+            capability: None, module: Some("private-domain".into()),
+        }).is_err());
+        context.scopes.clear();
+        assert!(owner.modules(&owner.visible(&context).unwrap()).is_empty());
+        assert!(matches!(owner.catalog(&context, HostCatalogArguments {
+            module: Some("custom-domain".into()), keyword: None, cursor: Some(cursor), limit: 1,
+        }), Err(OperationError::ObservationExpired(_))));
+    }
 }

@@ -1,6 +1,6 @@
 //! Bounded, in-memory transport observations. These never grant authority or
 //! retain scientific results. Each Workbench SelectedHost owns a fresh registry.
-use rho_contract::{McpSessionObservation, McpWindowContextObservation};
+use rho_contract::McpSessionObservation;
 use serde_json::Value;
 use std::{
     collections::VecDeque,
@@ -12,7 +12,6 @@ use std::{
 };
 
 const MAX_SESSIONS: usize = 64;
-const MAX_WINDOWS: usize = 16;
 
 #[derive(Default)]
 pub struct McpConnections(Mutex<State>);
@@ -91,8 +90,6 @@ impl ConnectionObservation {
             last_request_at_ms: at,
             closed_at_ms: None,
             overview_served_at_ms: None,
-            window_contexts: Vec::new(),
-            window_contexts_truncated: false,
         });
     }
 
@@ -106,30 +103,6 @@ impl ConnectionObservation {
         }
         if capability == "host.overview" {
             self.update(|session| session.overview_served_at_ms = Some(now()));
-        } else if capability == "application.context" {
-            let data = &reply["data"];
-            if data["source"] != "live_bridge" || data["window"]["online"] != true {
-                return;
-            }
-            let Ok(window) = serde_json::from_value(data["window"]["window"].clone()) else {
-                return;
-            };
-            self.update(|session| {
-                if let Some(index) = session
-                    .window_contexts
-                    .iter()
-                    .position(|r| r.window == window)
-                {
-                    session.window_contexts.remove(index);
-                } else if session.window_contexts.len() == MAX_WINDOWS {
-                    session.window_contexts.remove(0);
-                    session.window_contexts_truncated = true;
-                }
-                session.window_contexts.push(McpWindowContextObservation {
-                    window,
-                    served_at_ms: now(),
-                });
-            });
         }
     }
 
@@ -209,30 +182,6 @@ mod tests {
         assert_eq!(snapshot.active_sessions, 0);
         assert!(snapshot.sessions[0].closed_at_ms.is_some());
         assert!(snapshot.sessions[0].overview_served_at_ms.is_some());
-    }
-
-    #[test]
-    fn only_live_contexts_count_and_window_incarnations_stay_distinct() {
-        let registry = Arc::new(McpConnections::default());
-        let observer = registry.observe();
-        observer.initialized(None, None);
-        let mut reply = json!({"status":"ready","data":{"source":"synced_history","window":{"online":false,"window":{"window_id":"a","incarnation":"old"}}}});
-        observer.served("application.context", &reply);
-        assert!(registry.snapshot().sessions[0].window_contexts.is_empty());
-        reply["data"]["source"] = json!("live_bridge");
-        reply["data"]["window"]["online"] = json!(true);
-        observer.served("application.context", &reply);
-        reply["data"]["window"]["window"]["incarnation"] = json!("new");
-        observer.served("application.context", &reply);
-        observer.served("application.context", &reply);
-        assert_eq!(registry.snapshot().sessions[0].window_contexts.len(), 2);
-        for i in 0..20 {
-            reply["data"]["window"]["window"]["incarnation"] = json!(format!("incarnation-{i}"));
-            observer.served("application.context", &reply);
-        }
-        let snapshot = registry.snapshot();
-        assert_eq!(snapshot.sessions[0].window_contexts.len(), MAX_WINDOWS);
-        assert!(snapshot.sessions[0].window_contexts_truncated);
     }
 
     #[test]

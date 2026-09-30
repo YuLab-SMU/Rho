@@ -307,7 +307,7 @@ async fn dispatch(
         return failure(StatusCode::BAD_REQUEST, "invalid transport request id");
     }
     let quota = match &request.frame.request {
-        HostRequest::Invoke(_) | HostRequest::ApplicationExecute(_) => Some(&state.calls),
+        HostRequest::Invoke(_) => Some(&state.calls),
         HostRequest::QuerySnapshot(_) => Some(&state.observations),
         _ => None,
     };

@@ -198,19 +198,7 @@ pub struct Observed<T> {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(tag = "module", content = "observation", rename_all = "snake_case")]
 pub enum OverviewObservation {
-    Session(Observed<crate::RuntimeStatus>),
-    Console(Observed<ConsoleOverview>),
     Operations(Observed<crate::RecentOperations>),
-    Application(Observed<crate::ApplicationWindows>),
-    Environment(Observed<crate::EnvironmentObservation>),
-}
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
-pub struct ConsoleOverview {
-    pub session_id: String,
-    pub current_operation: Option<crate::OperationId>,
-    pub queued_count: u32,
-    pub pause: Option<crate::QueuePause>,
-    pub input: Option<crate::InputRequest>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]

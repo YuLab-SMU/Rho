@@ -67,17 +67,9 @@ async fn fresh_project_observation_creates_no_journal_store_or_project_lease() {
         }).await.is_err(), "{id}");
     }
     let overview = query(&observer, "host.overview", json!({})).await;
-    for module in ["operations", "objects", "console", "application", "skills"] {
-        assert_eq!(
-            overview["modules"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .find(|m| m["module"] == module)
-                .unwrap()["available"],
-            false
-        );
-    }
+    assert_eq!(overview["modules"].as_array().unwrap().len(), 1);
+    assert_eq!(overview["modules"][0]["module"], "host");
+    assert_eq!(overview["modules"][0]["available"], true);
     assert!(!database.exists());
     assert!(!database.parent().unwrap().exists());
     assert!(!root.join(".rho").exists());

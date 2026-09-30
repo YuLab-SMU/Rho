@@ -136,11 +136,6 @@ impl NextHost {
             HostRequest::QuerySnapshot(query) => {
                 serde_json::to_value(self.query_snapshot(context, query).await?)
             }
-            HostRequest::RespondInput(_) | HostRequest::ApplicationControl(_)
-            | HostRequest::ApplicationBridge(_) | HostRequest::ApplicationExecute(_)
-            | HostRequest::BindMethod(_) => return Err(OperationError::Unavailable(
-                "Fixed scientific/Application requests are removed; use an ordinary plugin capability".into()
-            )),
             HostRequest::Subscribe {
                 after_sequence,
                 limit,

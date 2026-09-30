@@ -328,13 +328,13 @@ try {
   assert.equal(initializedConnection.sessions.length, 1);
   assert.equal(initializedConnection.sessions[0].client_reported_name, "workbench-fixture");
   assert.equal(initializedConnection.sessions[0].overview_served_at_ms, null);
-  assert.deepEqual(initializedConnection.sessions[0].window_contexts, []);
+  assert.ok(!("window_contexts" in initializedConnection.sessions[0]));
   assert.ok(!JSON.stringify(initializedConnection).includes(sessionId), "Private MCP transport ID is not exposed");
   await call("rho.host.overview.v1", {});
   const servedConnection = await api("/api/agent-connection");
   assert.equal(servedConnection.project_root, selectedRoot);
   assert.ok(servedConnection.sessions[0].overview_served_at_ms);
-  assert.deepEqual(servedConnection.sessions[0].window_contexts, []);
+  assert.ok(!("window_contexts" in servedConnection.sessions[0]));
   assert.ok(!JSON.stringify(servedConnection).includes(token));
   assert.deepEqual(await history(), applicationBaseline, "Connection observations must not create scientific operations");
   const checkpoint = {client_request_id: "agent-http", arguments: {

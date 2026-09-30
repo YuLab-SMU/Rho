@@ -200,15 +200,6 @@ export class HostClient {
       params: { operation_id, only_if_pending },
     });
   }
-  respondInput(
-    project: string,
-    params: import("./generated/RespondInput").RespondInput,
-  ) {
-    return this.port<{ submitted: boolean }>(project, {
-      method: "respond_input",
-      params,
-    });
-  }
   subscribe(project: string, after_sequence: number) {
     return this.port<OutboxRecord[]>(project, {
       method: "subscribe",

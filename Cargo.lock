@@ -5965,12 +5965,7 @@ dependencies = [
 name = "rho-contract"
 version = "0.1.0"
 dependencies = [
- "rho-environment-api",
- "rho-files-api",
  "rho-plugin-protocol",
- "rho-process-api",
- "rho-r-api",
- "rho-remote-api",
  "schemars 1.2.1",
  "serde",
  "serde_json",

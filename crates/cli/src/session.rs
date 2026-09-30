@@ -16,7 +16,6 @@ fn pool(request: &HostRequest) -> usize {
     match request {
         HostRequest::Control(_)
         | HostRequest::RequestCancellation { .. }
-        | HostRequest::RespondInput(_)
         | HostRequest::ReconcileCommit(_) => 2,
         HostRequest::QuerySnapshot(_)
         | HostRequest::GetOperation { .. }

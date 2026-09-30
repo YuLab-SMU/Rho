@@ -1,8 +1,5 @@
 #![forbid(unsafe_code)]
 
-pub mod checkpoints;
-pub use checkpoints::*;
-
 mod query;
 pub use query::*;
 mod commit_recovery;
@@ -11,8 +8,6 @@ mod host;
 pub use host::*;
 mod workbench;
 pub use workbench::*;
-mod scientific;
-pub use scientific::*;
 mod observations;
 pub use observations::*;
 mod studio;
@@ -21,24 +16,6 @@ mod discovery;
 pub use discovery::*;
 mod capability_docs;
 pub use capability_docs::builtin_documentation;
-pub mod text;
-pub use text::*;
-pub mod objects;
-pub use objects::*;
-pub mod package_index;
-pub use package_index::*;
-mod package_help;
-pub use package_help::*;
-pub mod application;
-pub use application::*;
-pub mod media;
-pub use media::*;
-pub mod skills;
-pub use skills::*;
-pub mod environment;
-pub use environment::*;
-pub mod execution;
-pub use execution::*;
 pub mod recovery;
 pub use recovery::*;
 pub mod record_query;
@@ -47,10 +24,6 @@ pub mod operation_evidence;
 pub use operation_evidence::*;
 pub mod port_controls;
 pub use port_controls::*;
-pub mod instances;
-pub use instances::*;
-mod recovery_protection;
-pub use recovery_protection::*;
 
 use std::collections::BTreeSet;
 
@@ -578,5 +551,5 @@ mod tests {
     }
 }
 
-mod console;
-pub use console::*;
+mod invocation;
+pub use invocation::*;

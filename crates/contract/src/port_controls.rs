@@ -31,13 +31,6 @@ pub struct OperationEventsPage {
     pub limit_reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, ts_rs::TS)]
-#[serde(deny_unknown_fields)]
-pub struct RespondInputResult {
-    /// Transport submission of this answer, not completion of the running analysis.
-    pub submitted: bool,
-}
-
 /// Project one field while retaining all local references from its registered
 /// contract. Compatibility ports must not invent a second output schema map.
 pub fn project_payload_schema(schema: &Value, field: &str) -> Result<Value, String> {

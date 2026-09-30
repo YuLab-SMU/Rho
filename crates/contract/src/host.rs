@@ -1,4 +1,4 @@
-use crate::{InvokeRequest, OperationId, QueryRequest, RespondInput};
+use crate::{InvokeRequest, OperationId, QueryRequest};
 use serde::{Deserialize, Serialize};
 pub use rho_plugin_protocol::TestProjectId;
 
@@ -39,12 +39,7 @@ pub enum HostRequest {
         only_if_pending: Option<bool>,
     },
     ReconcileCommit(crate::ReconcileOperationCommit),
-    RespondInput(RespondInput),
     QuerySnapshot(QueryRequest),
-    ApplicationControl(crate::ApplicationCommandRequest),
-    ApplicationBridge(crate::ApplicationBridgeRequest),
-    ApplicationExecute(crate::ApplicationExecuteRequest),
-    BindMethod(crate::BindMethodRequest),
     Subscribe {
         after_sequence: u64,
         limit: usize,
@@ -77,4 +72,25 @@ pub struct SessionReply {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub diagnostic: Option<crate::Diagnostic>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn removed_fixed_methods_cannot_enter_the_shared_port() {
+        for method in ["respond_input", "application_control", "application_bridge", "application_execute", "bind_method"] {
+            let error = serde_json::from_value::<HostRequest>(serde_json::json!({
+                "method": method, "params": {}
+            })).unwrap_err();
+            assert!(error.to_string().contains("unknown variant"), "{method}: {error}");
+        }
+        let request = serde_json::from_value::<HostRequest>(serde_json::json!({
+            "method": "control", "params": {
+                "capability": {"id":"custom.respond_input", "version":1}, "arguments":{}
+            }
+        })).unwrap();
+        assert!(matches!(request, HostRequest::Control(_)));
+    }
 }

@@ -1,4 +1,3 @@
-pub use rho_r_api::observations::*;
 pub use rho_plugin_protocol::{ProjectReadCoverage, ProjectReadCoverageArguments};
 use crate::{CapabilityRef, OperationId, OperationStatus};
 use schemars::JsonSchema;
@@ -43,5 +42,3 @@ pub struct OperationEventsCheckpointArguments {}
 pub struct OperationEventsCheckpoint {
     pub sequence: u64,
 }
-
-pub use rho_files_api::directory::*;

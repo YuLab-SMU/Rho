@@ -70,8 +70,12 @@ scientific owner. All CLI, session, MCP and Workbench writer entries use this
 path; `--plugins-only` is an explicit spelling of the default. Workbench opens the generic window, skips saved/discovered R settings and
 does not fall back to scientific composition if opening fails. Packages remain
 inactive until explicitly selected. This path is the foundation for disposable
-backend-test projects. Legacy scientific contract dependencies remain pending cleanup. Fixed owner/adapter
-crates and their runtime composition are removed.
+backend-test projects. Fixed owner/adapter crates, runtime composition and shared-port
+scientific/Application DTOs are removed. `rho-contract` depends only on the generic
+public plugin protocol among local crates; scientific types belong to their plugins.
+Discovery groups permission-visible registered capabilities by their declared domain,
+without a fixed scientific module list. Operation navigation links original records
+and retained recovery evidence; it does not interpret plugin scientific payloads.
 
 Explicit backend development tests use `plugins.test_create/test_stop` and bounded
 `plugins.test_project/test_projects` observations. Host owns each fresh canonical
@@ -1432,34 +1436,28 @@ flowchart TD
     Edges[CLI / session / browser / MCP] --> Host
     Host --> Operations[Operation Gateway]
     Host --> Queries[Query Gateway]
-    Host --> Application[Application owner]
-    Operations --> Owners[Scientific owners]
-    Queries --> Reads[Bounded owner observations]
-    Owners <--> Native[Native adapters]
+    Host --> Controls[Registered controls]
+    Operations --> Owners[Ordinary plugin owners]
+    Queries --> Reads[Bounded registered observations]
     Owners --> Commit[CommitPlan / journal transaction]
-    Application <--> Studio[Resident Studio bridge / module commands]
-    Application --> Store[ApplicationStore CAS]
-    Studio --> Capture[Host validates captured execution association]
-    Capture --> Operations
+    Host --> Plugins[Packages / instances / views / scenarios]
+    Edges --> Store[Scoped application state CAS]
 ```
 
-The five shared scientific ports are `invoke`, `getOperation`, `requestCancellation`,
-`querySnapshot` and cursor-based `subscribe`. A sibling `respond_input` control
-replies only to an identified pending stdin request; it neither creates an
-Operation nor acquires the ordinary execution lane. JSON session names use snake_case.
-The browser's `/api/host` forwards them. Shared application control, bridge,
-captured-execution and method-binding requests reach the Application owner through
-Host dispatch. Browser-only bridge credentials do not become Agent authority.
-HTTP hosting endpoints still manage project/R selection; they do not create
-another scientific operation flow. CLI/session and official MCP use the same
-composition root.
+The shared ports are `invoke`, `getOperation`, `requestCancellation`,
+`querySnapshot` and cursor-based `subscribe`, plus registered generic `control`
+and commit reconciliation. JSON session names use snake_case. The browser's
+`/api/host`, CLI/session and official MCP forward to the same composition root.
+Scientific stdin and document execution belong to ordinary plugin capabilities.
+Fixed `respond_input`, Application bridge/control/execute and method-binding
+request variants are removed. HTTP hosting manages project selection and generic
+state; it does not select R or create another scientific operation flow.
 
 Workbench connection diagnostics are ephemeral transport observations owned by
 the selected Host's MCP edge registry. They retain up to 64 recent protocol
-sessions and 16 live window-context references per session, with explicit
-truncation. The active-session count includes open sessions omitted from bounded
+sessions, with explicit truncation. The active-session count includes open sessions omitted from bounded
 detail. Client names are bounded self-reported labels, never authority. Successful
-overview/context responses record only their times and native window references;
+overview responses record only their times;
 they do not prove delivery, Agent comprehension or scientific correctness.
 The authenticated hosting read does not start R, create an Operation, retain
 credentials/conversations/results or recover work. Replacing the selected Host
@@ -1471,8 +1469,8 @@ without claiming cancellation of accepted scientific work.
 `host.overview`, `host.catalog` and `host.describe` use the shared registry.
 Overview composes bounded owner observations; their individual sources, times and
 completeness remain visible. It is not an atomic scientific snapshot. Catalog
-filters caller scopes before pagination and reports module availability from known
-Host/native configuration. Discovery does not start R, enumerate every binding,
+filters caller scopes before pagination and derives module entries from the domains
+of visible registered descriptors. An absent provider has no fabricated module entry. Discovery does not start R, enumerate every binding,
 load packages or recover incomplete work.
 
 Each `CapabilityDescriptor` owns its purpose, native preconditions, effects,
@@ -1480,8 +1478,8 @@ idempotency, cancellation/retry rules, examples and related reads. Its input sch
 and concrete domain output/recovery schemas feed gateway validation, MCP tool
 schemas and generated TypeScript DTOs. Query payload schemas describe `data`;
 operation payload schemas describe `output`, with shared helpers constructing
-transport envelopes. Dynamic R values and uninterpreted host Skill metadata are
-explicitly open; known records retain typed structures. Registry checks validate
+transport envelopes. Plugin payload schemas remain owned by their contributions; the core retains
+generic operation, identity and evidence structures. Registry checks validate
 schema references, examples and registered relationships.
 
 `next_reads` contains only bounded reads, details, records or original evidence,

@@ -1,4 +1,4 @@
-use crate::{ApplicationWindowRef, CapabilityDescriptor, SessionFrame};
+use crate::{CapabilityDescriptor, SessionFrame};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -36,16 +36,8 @@ pub struct McpSessionObservation {
     /// Successful bounded response prepared for this client, not a delivery or
     /// model-consumption acknowledgement and not scientific verification.
     pub overview_served_at_ms: Option<u64>,
-    /// At most 16 distinct window incarnations; only live-bridge context replies.
-    pub window_contexts: Vec<McpWindowContextObservation>,
-    pub window_contexts_truncated: bool,
 }
 
-#[derive(Debug, Clone, Serialize, TS)]
-pub struct McpWindowContextObservation {
-    pub window: ApplicationWindowRef,
-    pub served_at_ms: u64,
-}
 
 /// A stale browser must not silently act on a newly selected project.
 #[derive(Debug, Deserialize, TS)]
