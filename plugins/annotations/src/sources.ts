@@ -1,6 +1,13 @@
 import type {CapabilityKey,ContextItem,ContextPreview,ContextReference,InstanceRef,PluginInspection,PluginInstanceObservations,JsonValue} from '../public/plugin-protocol/index.js';
-import {sameOperationValue,type PluginViewClient} from '../public/plugin-ui/index.js';
+import {sameOperationValue,canonicalOperationValue,type PluginViewClient} from '../public/plugin-ui/index.js';
 export type Source = {reference:ContextReference;preview:CapabilityKey;inclusion:unknown;text:string;title:string;version:string;lineage:string;resources:ContextPreview['resources']};
+/** The annotation owner's namespace, used only to select its existing list query. */
+export async function annotationSourceId(source:Pick<Source,'reference'|'lineage'>):Promise<string>{
+  if(!source.lineage)throw Error('The source owner has not supplied a lineage.');
+  const bytes=new TextEncoder().encode(canonicalOperationValue([source.reference.provider,source.reference.contribution,source.lineage]));
+  const digest=await crypto.subtle.digest('SHA-256',bytes);
+  return 'contribution:'+Array.from(new Uint8Array(digest),value=>value.toString(16).padStart(2,'0')).join('');
+}
 export type SourceChoice = {provider:InstanceRef;title:string;contribution:string;search:CapabilityKey;preview:CapabilityKey;modes:{title:string;inclusion:unknown}[]};
 export async function observe<T>(client:PluginViewClient,id:string,args:unknown,complete=false):Promise<T>{
   const reply=await client.query<{status:string;completeness?:string;data?:T;notices?:string[]}>({id,version:1},args as JsonValue);
@@ -29,6 +36,8 @@ export async function sourceChoices(client:PluginViewClient):Promise<SourceChoic
         const inclusion=(descriptor?.input_schema as any)?.properties?.inclusion;
         const variants=inclusion?.oneOf??inclusion?.anyOf??(inclusion?.properties?.kind?[inclusion]:[]);
         const modes=variants.flatMap((variant:any)=>{
+          if(variant.const&&typeof variant.const==='object'&&!Array.isArray(variant.const)&&typeof variant.const.kind==='string')
+            return [{title:variant.title??variant.const.kind,inclusion:structuredClone(variant.const)}];
           const kind=variant.properties?.kind?.const;
           // Expose only declared simple inclusions; arbitrary schemas need their owner's UI.
           return typeof kind==='string'&&(variant.required??[]).every((name:string)=>name==='kind')?[{title:variant.title??kind,inclusion:{kind}}]:[];

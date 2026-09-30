@@ -1,7 +1,7 @@
 import {connectPluginView, inspectOriginalOperation, verifyOriginalOperation, isTerminalOperation, sameOperationValue, readResource, ViewRequestError} from '../public/plugin-ui/index.js';
 import type {OperationIntent, OriginalOperationRecord} from '../public/plugin-ui/index.js';
 import type {InstanceRef, JsonValue, ProviderBinding, ContextReference, ResourceReference, PluginInspection, PluginInstanceObservations, PluginWindowLayout, PluginWindowNode, PluginViewRecord} from '../public/plugin-protocol/index.js';
-import {observe as query,previewSource,sourceChoices,type Source,type SourceChoice,type ContextItem} from './sources.js';
+import {observe as query,previewSource,sourceChoices,annotationSourceId,type Source,type SourceChoice,type ContextItem} from './sources.js';
 import {draw,point,shape,type Mark,type Point,type Tool} from './marks.js';
 
 type AnnotationRef = {annotation_id:string;revision:number};
@@ -11,7 +11,7 @@ type Evidence = {source:{title:string;source_id:string;source_version:string};an
 type Row = {revision:Revision;source:Evidence['source'];anchor:Evidence['anchor']};
 type Pending = {kind:'freeze'|'create'|'update'|'delete'|'import'|'agent'|'back';intent:OperationIntent;selectedText?:string;source?:Source;image?:ResourceReference};
 type State = {provider:InstanceRef|null;path:string;source:Source|null;draft:string;evidence:string|null;frozenText:string;frozenTitle:string;frozenVersion:string;selected:AnnotationRef|null;pending:Pending|null;last:{id:string;status:string}|null;
-  labels:string[];marks:Mark[];capture:Capture|null;origin:Source|null;deleted:boolean;continuedFrom:AnnotationRef|null;filter:string;order:string;checked:AnnotationRef[];sourceRequest:string|null;agentOpened:PluginViewRecord|null;baseline:{note:string;labels:string[];marks:Mark[]}|null};
+  labels:string[];marks:Mark[];capture:Capture|null;origin:Source|null;deleted:boolean;continuedFrom:AnnotationRef|null;filter:string;order:string;checked:AnnotationRef[];sourceRequest:string|null;agentOpened:PluginViewRecord|null;baseline:{note:string;labels:string[];marks:Mark[]}|null;scope:{id:string;title:string;version:string}|null};
 type Receipt = {request_id:string;outcome:{kind:string;evidence_id?:string;annotation?:AnnotationRef;capture?:Capture}};
 type SourceRequest = {request_id:string;source:{reference:ContextReference;title:string;inclusion:unknown;preview:{id:string;version:number}};return_view:string};
 const client=await connectPluginView(),key=(id:string)=>({id,version:1}),json=(value:unknown)=>value as JsonValue;
@@ -22,7 +22,7 @@ const configuration=client.view.configuration as {source_request?:SourceRequest}
 document.body.classList.toggle('source-focused',!!configuration.source_request);
 const saved=client.view.state as Partial<State>|null;
 const state:State={provider:saved?.provider??null,path:saved?.path??'',source:saved?.source??null,draft:saved?.draft??'',evidence:saved?.evidence??null,frozenText:saved?.frozenText??'',frozenTitle:saved?.frozenTitle??'',frozenVersion:saved?.frozenVersion??'',selected:saved?.selected??null,pending:saved?.pending??null,last:saved?.last??null,
-  labels:saved?.labels??[],marks:saved?.marks??[],capture:saved?.capture??null,origin:saved?.origin??null,deleted:saved?.deleted??false,continuedFrom:saved?.continuedFrom??null,filter:saved?.filter??'all',order:saved?.order??'newest',checked:saved?.checked??[],sourceRequest:saved?.sourceRequest??null,agentOpened:saved?.agentOpened??null,baseline:saved?.baseline??null};
+  labels:saved?.labels??[],marks:saved?.marks??[],capture:saved?.capture??null,origin:saved?.origin??null,deleted:saved?.deleted??false,continuedFrom:saved?.continuedFrom??null,filter:saved?.filter??'all',order:saved?.order??'newest',checked:saved?.checked??[],sourceRequest:saved?.sourceRequest??null,agentOpened:saved?.agentOpened??null,baseline:saved?.baseline??null,scope:saved?.scope??null};
 // Retained drafts from the shipped Files view have no generic source descriptor.
 if(state.source&&!state.source.preview)state.source={...state.source,preview:key('files.context.preview'),inclusion:{kind:'text'},resources:[],lineage:''};
 if(state.pending?.kind==='freeze'&&!state.pending.source&&state.source)state.pending.source=structuredClone(state.source);
@@ -40,7 +40,8 @@ function filteredRows(){
   if(state.filter==='deleted')return item.revision.deleted;
   if(item.revision.deleted)return false;
   if(state.filter==='question'||state.filter==='change')return item.revision.labels.includes(state.filter==='question'?'Question':'Change request');
-  if(state.filter==='history')return !state.source||item.source.source_version!==state.source.version;
+  if(state.filter==='history')return !!state.scope&&item.source.source_version!==state.scope.version;
+  if(state.filter==='version')return !!state.scope&&item.source.source_version===state.scope.version;
   return true;
  });
  return visible.sort((a,b)=>(a.revision.updated_at_ms-b.revision.updated_at_ms)*(state.order==='oldest'?1:-1));
@@ -64,7 +65,9 @@ function render(){
  find('pending').hidden=!state.pending;find('pending-text').textContent=state.pending?`Original ${state.pending.kind} request is unconfirmed. Inspect it before another write.`:'';
  find<HTMLSelectElement>('note-filter').value=state.filter;find<HTMLSelectElement>('note-order').value=state.order;
  const shown=filteredRows();find('note-count').textContent=`${shown.length} shown`;
- find('filter-status').textContent=state.filter==='history'?(state.source?'Notes from other captured source versions.':'Showing saved versions. Select a current source to compare versions.'):'Versions remain attached to their captured source; current source status is unknown until checked. Order applies to the loaded page.';
+ find('filter-status').textContent=state.scope?`${state.scope.title} · ${state.filter==='history'?'other source versions':state.filter==='version'?'selected source version':'all saved source versions'}. The selected version is an owner observation; current live status is not inferred. Order applies to loaded notes.`:'All project notes. Select a source to compare its versions. Order applies to loaded notes.';
+ const filter=find<HTMLSelectElement>('note-filter');for(const value of ['history','version'])filter.querySelector<HTMLOptionElement>(`option[value=${value}]`)!.disabled=!state.scope;
+ find<HTMLButtonElement>('all-project-notes').hidden=!state.scope;find<HTMLButtonElement>('all-project-notes').disabled=block;
  const list=find('notes');list.replaceChildren();
  if(!shown.length){const empty=document.createElement('p');empty.className='meta';empty.textContent=rows.some(row=>!row.revision.deleted)||state.filter==='deleted'?'No notes match this filter.':'No saved notes in this project.';list.append(empty);}
  for(const item of shown){
@@ -156,7 +159,8 @@ async function selectSource(source:Source){
   if(!state.origin||!state.origin.lineage||source.lineage!==state.origin.lineage||!sameOperationValue(source.reference.provider,state.origin.reference.provider)||source.reference.contribution!==state.origin.reference.contribution)throw Error('Choose the same source lineage to continue this note. Your draft is retained.');
   if(source.version===state.frozenVersion)throw Error('Choose a new source version. The original version still matches this capture.');
  }else if(!await protectDraft())return;
- resetEditor();state.source=source;if(continuation){state.continuedFrom=continuation;state.draft=draft;}await persist();await previewImage();render();notice(continuation?'Capture the new source version. The previous note stays linked; original marks remain on their original image.':'Select text or capture the whole item.');
+ const scope={id:await annotationSourceId(source),title:source.title,version:source.version};
+ resetEditor();state.source=source;state.scope=scope;if(continuation){state.continuedFrom=continuation;state.draft=draft;}await persist();await list();await previewImage();render();notice(continuation?'Capture the new source version. The previous note stays linked; original marks remain on their original image.':'Select text or capture the whole item.');
 }
 async function openFile(){
  if(!state.provider)throw Error('Choose a Files provider.');const chosen=path.value.trim();
@@ -184,7 +188,7 @@ async function componentPreview(){
  if(!item||!mode)throw Error('Choose a source item and inclusion.');await selectSource(await previewSource(client,item.reference,activeChoice.preview,mode.inclusion));
 }
 async function list(append=false){
- const result=await read<{kind:string;items:Row[];next_after:string|null}>(client.view.instance,'annotations.read',{kind:'list',after:append?after:null,limit:30,include_deleted:true});
+ const result=await read<{kind:string;items:Row[];next_after:string|null}>(client.view.instance,'annotations.read',{kind:'list',source_id:state.scope?.id??null,after:append?after:null,limit:30,include_deleted:true});
  if(result.kind!=='list'||!Array.isArray(result.items))throw Error('The annotation list is invalid.');rows=append?[...rows,...result.items]:result.items;after=result.next_after;render();
 }
 async function origin(evidence:Evidence):Promise<Source|null>{
@@ -198,7 +202,8 @@ async function origin(evidence:Evidence):Promise<Source|null>{
 async function openNote(ref:AnnotationRef,force=false){
  if(!force&&!await protectDraft())return;
  const result=await read<{kind:string;revision:Revision;evidence:Evidence}>(client.view.instance,'annotations.read',{kind:'read',annotation:ref});if(result.kind!=='read')throw Error('The saved note is unavailable.');
- resetEditor();state.selected=structuredClone(ref);state.evidence=result.revision.evidence_id;state.draft=result.revision.note;state.labels=result.revision.labels;state.marks=result.revision.marks;state.deleted=result.revision.deleted;state.continuedFrom=result.revision.continued_from;state.source=null;sourceImages=[];
+ if(state.scope?.id!==result.evidence.source.source_id)state.source=null;
+ resetEditor();state.selected=structuredClone(ref);state.evidence=result.revision.evidence_id;state.draft=result.revision.note;state.labels=result.revision.labels;state.marks=result.revision.marks;state.deleted=result.revision.deleted;state.continuedFrom=result.revision.continued_from;sourceImages=[];
  state.baseline={note:state.draft,labels:structuredClone(state.labels),marks:structuredClone(state.marks)};
  state.capture=result.evidence.anchor.kind==='captured_view'?result.evidence.anchor.capture??null:null;state.frozenText=result.evidence.fragment.text??JSON.stringify(result.evidence.fragment);state.frozenTitle=result.evidence.source.title;state.frozenVersion=result.evidence.source.source_version;state.origin=await origin(result.evidence);
  await persist();if(state.capture)await retainedImage();else clearImage();render();
@@ -328,6 +333,7 @@ find('delete').onclick=()=>{if(state.selected)find<HTMLDialogElement>('delete-di
 find('cancel-delete').onclick=()=>find<HTMLDialogElement>('delete-dialog').close();
 find('confirm-delete').onclick=()=>{find<HTMLDialogElement>('delete-dialog').close();void work(async()=>{if(state.selected)await write('delete',{kind:'delete',expected:state.selected});});};
 find('recover').onclick=()=>void work(recover);find('refresh').onclick=()=>void work(async()=>{await list();notice('Saved notes refreshed.');});find('more').onclick=()=>void work(()=>list(true));
+find('all-project-notes').onclick=()=>void work(async()=>{state.scope=null;state.filter='all';await persist();await list();});
 find('new').onclick=()=>void work(async()=>{if(!await protectDraft())return;resetEditor();await persist();clearImage();});
 find('discover-sources').onclick=()=>void work(discover);
 find<HTMLSelectElement>('component-source').onchange=()=>{const value=find<HTMLSelectElement>('component-source').value;activeChoice=value?choices[Number(value)]??null:null;items=[];sourceAfter=null;const modes=find<HTMLSelectElement>('component-inclusion');modes.replaceChildren();activeChoice?.modes.forEach((mode,index)=>modes.add(new Option(mode.title,String(index))));sourceControls();};
@@ -369,6 +375,7 @@ const close=await client.installCloseHandler({async flush(){await flush();},resu
 window.addEventListener('pagehide',()=>{stopped=true;if(saveTimer)clearTimeout(saveTimer);clearImage();client.dispose();},{once:true});
 render();
 await work(async()=>{
+ if(!state.scope&&state.source?.lineage)state.scope={id:await annotationSourceId(state.source),title:state.source.title,version:state.source.version};
  let catalogError:string|null=null;try{await sources();}catch(error){catalogError=errorText(error);}await list();
  const request=configuration.source_request;
  if(request&&state.sourceRequest!==request.request_id&&!state.pending){
