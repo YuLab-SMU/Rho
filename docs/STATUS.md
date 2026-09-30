@@ -6,9 +6,10 @@ open work and the next milestone. Git and run artifacts retain history; see
 Evidence filenames below are relative to `target/plugin-refactor/` unless stated.
 M4's reviewed annotation foundation is verified through ordinary-plugin browser
 and real-R owner flows. The refreshed development bundle is verified; the model
-matrix, OS IME and final scope reconciliation remain open.
+matrix and final scope reconciliation remain open. Real system IME passes in
+the ordinary Annotations view; other controls and operating systems are not covered.
 
-## Current focus: M6 delivery verified; system IME and model matrix next
+## Current focus: M6 delivery and Annotations system IME verified; model matrix next
 
 The unified-plugin plan was authorized on 2026-09-23; PS01–PS07 are approved
 ([Design 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved)).
@@ -21,7 +22,7 @@ counts, versioned notes, image marks and explicit Agent draft inclusion. Eight
 source entries and the Files selected-text and live Viewer image flows pass the
 focused M4 round, including save, draft inclusion, refresh and changed sources.
 The updated bundle and its imported Studio/Files flows now pass. The 33-scenario
-model matrix and system IME remain unverified.
+model matrix remains unverified. Actual macOS Chinese input passes in Annotations.
 
 Committed baseline `5a5ecc4d` adds Studio data-source/custom-component forms to
 the executable visual runtime: synchronized references, shared Undo, invalid draft
@@ -54,7 +55,7 @@ recorded artifacts; “current” labels there do not certify this newer worktre
 | 1 — verified | **Declared view → real Files update → explicit patch → original-operation recovery.** Public UI SDK and the consumer own observation/intent; Files and Operation own effects/truth. | Captured provider/arguments remain fixed; observation updates and stops on disposal; one explicit write; lost acknowledgement, reload and replacement view recover the original record with exactly one native effect. Affected Editor/Studio consumers still pass. | Real Files/browser flow, public SDK, Editor/Studio models, visual Studio/browser and client checks pass on settled source (`visual-science-results.json`). Snapshot polling only; no Host push channel. |
 | 2 — verified | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Reviewed AN01–AN06 interactions, eight-entry smoke, complete Files text/Viewer image flows, keyboard and 600/320px layouts. | Shared counts/near-selection entry, structured Agent-item anchors and current Viewer viewport capture pass. Files and Viewer save → existing Agent draft → refresh/source-change flows pass (`annotation-foundation-files`, `annotation-foundation-viewer`, `annotation-foundation-entries`). Prior lost-acknowledgement, CAS, history and mark/Undo evidence remains valid (`annotation-components-browser`, `annotation-version-browser`). This closes M4's foundation, not delivery, real-model quality or OS IME. |
 | 3 — verified | **Updated runtime reaches the development bundle.** Existing package builders/delivery path. | Exact revisions/hashes, imported definition editor and delivered SDK → real Files patch/recovery pass. | Thirteen affected packages refreshed; Environment/Process/Remote archives reused byte-for-byte. Updated core requires and passes relocation/import/retry/remove/empty-start/restore acceptance (`m6-bundle-refresh.json`, `m6-bundle-acceptance.json`, `m6-delivery-results.json`). No user installation/signing/publication. |
-| 4 — deferred | **Actual system IME in ordinary views.** UI acceptance. | Real candidate window, composition/commit/Enter, focus changes and draft retention observed in the target app/browser. | Needs a stable foreground/input-method session. Synthetic composition passes are separate. Remains required for the full usability claim, outside M4 foundation closure. |
+| 4 — verified for Annotations | **Actual system IME in an ordinary view.** UI acceptance. | Real candidate window, composition/commit/Enter, focus changes and draft retention observed in the target app/browser. | Native macOS/Edge key input produced Chinese via Space; Return committed pinyin during composition and inserted a newline after commit. Focus changes retained text; reload retained the draft; Save produced revision 2. User confirmed the system candidate window. `m6-system-ime.json`, `m6-ime-composition.png`, `m6-ime-saved.png`. Agent/Editor controls and other OS/input methods are not established. |
 | 5 — deferred | **Real Agent/provider quality on the ordinary-plugin path.** Agent acceptance. | Map the planned 33 scenarios to current public paths and record remaining cases individually. | Representative real-provider Send, one R effect and same-instance original-operation recovery pass (`agent-live-provider-results.json`, `agent-live-provider-wire-results.json`). The matrix stopped during fixture setup before any scenario attempt (`agent-live-matrix-results.json`); vision quality remains unrun. The unfinished opt-in harness is retained for later work. Historical 27-case evidence is not a current pass. |
 | 6 — closure | **Final evidence matches the approved scope and exact delivered artifacts.** Full-plan acceptance matrix. | Reconcile existing evidence, run only missing/invalidated checks, and keep every open requirement explicit. | Orders 1–5 have different completion conditions. A verified integration slice or development bundle does not close the full plan. No automatic workspace audit or release. |
 
@@ -178,8 +179,8 @@ and survive refresh/source change. Keyboard paths, 600/320px note layouts and
 `annotation-foundation-files`, `annotation-foundation-viewer`,
 `annotation-foundation-entries` (browser bodies 7.7s, 8.0s and 14.3s; setup
 45.2s, 62.0s and 116.1s respectively). Focused public SDK/Files/Viewer checks,
-client build/check, plugin boundaries and native activation tests pass. OS IME
-remains deferred.
+client build/check, plugin boundaries and native activation tests pass. Actual
+Annotations system IME is separately verified below the work-order boundary.
 Current live-source status is labeled unknown unless the
 owner can establish it; an exact historical preview is not a current-version claim.
 Affected source packages are retained for milestone reuse and included in the
@@ -246,9 +247,10 @@ packages. Evidence: `final-delivery-contents-results.json`.
   Evidence: `development-optimization-results.json`, `annotation-output-results.json`,
   `files-context-results.json`.
 - Current generic-window pointer/docking/focus and normal/wide/narrow captures pass.
-  Older standalone frame pointer-routing failure remains separate. OS-level IME
-  attempts produced Latin input without a candidate window and were interrupted
-  by foreground interference: unverified, neither a defect finding nor a pass.
+  Older standalone frame pointer-routing failure remains separate. Earlier IME
+  attempts were inconclusive. Current native-key input verifies Annotations on
+  macOS/Edge; candidate visibility is user-confirmed, not captured by the app-only
+  screenshot. Other controls and OS/input methods remain outside that evidence.
 - Abrupt browser disposal cannot establish that unacknowledged edits were saved.
   Graceful Host restart evidence does not establish abrupt-crash or R-memory recovery.
 - Unfiltered offline Cargo metadata hits uncached `combine 4.6.8`; host-filtered
