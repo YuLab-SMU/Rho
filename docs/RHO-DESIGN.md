@@ -1725,15 +1725,17 @@ contrast, alignment and clipping; the narrow Help view retains the same example
 parameters by wrapping them. These are editable design fixtures, not execution
 results or evidence that HTML content is supported by the running product.
 
-## 20. Component annotations for people and Agents — proposal
+## 20. Component annotations for people and Agents — approved interaction
 
 The user requested a shared annotation capability on 2026-09-14 so each component
 can carry thoughts about its content: selected text with comments, freehand marks,
 boxed regions and written explanations that an Agent can read. The
 [annotation review page](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/C-0)
-contains six proposed boards pending user review. This extends the Help, Viewer
-and lighter-control proposals in section 19; those proposals remain pending review.
-It does not establish runtime implementation, product acceptance or Host restart.
+contains the six approved boards AN01–AN06. The user confirmed completion of
+the annotation interface review on 2026-09-30; implementation may proceed within
+this reviewed scope without another design approval. The separate Help, Viewer
+and lighter-control proposals in section 19 remain pending review. Design approval
+does not establish runtime implementation, product acceptance or Host restart.
 
 | Board | Review focus |
 | --- | --- |

@@ -69,12 +69,13 @@ version must not overlay old marks. Continuing the idea on a newer version creat
 a new linked annotation while retaining the original. Agent reads identify the
 historical version and its original evidence.
 
-**Design response:** Proposed AN01–AN06 cover text comments, captured Viewer
+**Design response:** Approved AN01–AN06 cover text comments, captured Viewer
 marks, 600 px editing and 320 px Agent inclusion, historical-version/conflict/image
 states and anchors across components. The [Paper review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/C-0)
-and [Design section 20](RHO-DESIGN.md#20-component-annotations-for-people-and-agents--proposal)
-are proposals pending user review. No annotation runtime implementation or
-acceptance is established by this design work.
+and [Design section 20](RHO-DESIGN.md#20-component-annotations-for-people-and-agents--approved-interaction)
+record the reviewed scope; the user confirmed review completion on 2026-09-30.
+Capture/editor/component UI implementation and runtime acceptance remain open;
+the existing annotation owner and Agent context evidence are recorded in Status.
 
 ### F21 — Framed controls overwhelm constrained workspaces
 
