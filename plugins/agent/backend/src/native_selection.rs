@@ -43,6 +43,21 @@ pub(crate) async fn capture(
         }
         return Ok(original.origin.tools);
     }
+    capture_selected(metadata, call, caller, selected, host).await
+}
+
+/// Shared capture for native and built-in model runs. Provider identity, schemas
+/// and scopes always come from the immutable installed manifest.
+pub(crate) async fn capture_selected(
+    metadata: &Metadata,
+    call: &PluginCall,
+    caller: &PluginViewCaller,
+    selected: Vec<AgentNativeToolSelection>,
+    host: &HostCallClient,
+) -> Result<Vec<AgentNativeToolGrant>, Failure> {
+    if selected.len() > MAX_NATIVE_TOOLS {
+        return Err(Failure::invalid("Too many selected workspace tools"));
+    }
     if selected.is_empty() {
         return Ok(vec![]);
     }

@@ -937,3 +937,86 @@ fn native_explain_reads_only_captured_r_and_cannot_acquire_execution_or_change_p
         )
         .unwrap();
 }
+
+#[test]
+fn native_workspace_catalog_pins_file_scope_without_starting_r() {
+    let f = Fixture::new();
+    let mut origin = native_origin();
+    let mut binding = origin.r.take().unwrap();
+    binding.provider.instance = serde_json::from_value(serde_json::json!("files-one")).unwrap();
+    binding.capability =
+        serde_json::from_value(serde_json::json!({"id":"files.apply_patch","version":1})).unwrap();
+    binding.target = None;
+    origin.tools = vec![AgentNativeToolGrant {
+        selection: AgentNativeToolSelection {
+            name: "files_apply_patch".into(),
+            target: AgentNativeToolTarget::Provider {
+                binding: binding.clone(),
+            },
+        },
+        kind: AgentNativeToolKind::Operation,
+        description: "Patch captured files".into(),
+        input_schema: serde_json::json!({"type":"object"}),
+        required_scopes: Default::default(),
+    }];
+    let mut request = f.request();
+    request.grant.session = None;
+    let run = f
+        .owner
+        .start_native(&f.actor, request, origin.clone(), 3)
+        .unwrap()
+        .run
+        .run;
+    f.owner.claim(f.actor.scope(), &run.run_id, 4).unwrap();
+    f.owner
+        .begin_model_call(f.actor.scope(), &run.run_id, 5)
+        .unwrap();
+    let input = PluginRequest {
+        binding: binding.clone(),
+        arguments: serde_json::json!({"patch":"original"}),
+        preconditions: serde_json::json!([{"kind":"file.sha256","subject":"a.R","expected":null}]),
+    };
+    for mode in 0..3 {
+        let mut wrong = input.clone();
+        match mode {
+            0 => wrong.binding.target = Some("another-root".into()),
+            1 => wrong.binding.capability.version = 2,
+            _ => {
+                wrong.binding.provider.instance =
+                    serde_json::from_value(serde_json::json!("another-instance")).unwrap()
+            }
+        }
+        assert!(
+            f.owner
+                .admit_tool(
+                    f.actor.scope(),
+                    &run.run_id,
+                    1,
+                    "wrong",
+                    ComponentToolAction::PluginInvoke(wrong),
+                    6
+                )
+                .is_err()
+        );
+    }
+    assert!(
+        f.owner
+            .admit_tool(
+                f.actor.scope(),
+                &run.run_id,
+                1,
+                "patch",
+                ComponentToolAction::PluginInvoke(input),
+                6
+            )
+            .is_ok()
+    );
+    let mut wrong = origin.clone();
+    wrong.tools.push(origin.tools[0].clone());
+    assert!(wrong.validate().is_err());
+    let AgentNativeToolTarget::Provider { binding } = &mut wrong.tools[0].selection.target else {
+        panic!()
+    };
+    binding.capability.id = serde_json::from_value(serde_json::json!("r.execute")).unwrap();
+    assert!(wrong.validate().is_err());
+}

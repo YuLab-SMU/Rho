@@ -221,7 +221,7 @@ async fn inspect_original(
 async fn native_science_preserves_partial_queries_and_refuses_unverified_or_oversized_results() {
     for variant in [
         "query",
-        "cached",
+        "unknown",
         "invalid-query",
         "wrong-parent",
         "wrong-precondition",
@@ -234,7 +234,7 @@ async fn native_science_preserves_partial_queries_and_refuses_unverified_or_over
         let saved = draft(&mut f, &created, "Observe the original tool").await;
         let mut input = send(&saved);
         let mut catalog = inspection();
-        let is_query = matches!(variant, "query" | "cached" | "invalid-query");
+        let is_query = matches!(variant, "query" | "unknown" | "invalid-query");
         if is_query {
             input["tools"][0]["target"]["binding"]["capability"] =
                 json!({"id":"r.session","version":1});
@@ -260,7 +260,7 @@ async fn native_science_preserves_partial_queries_and_refuses_unverified_or_over
             panic!("{child:?}")
         };
         let mut result = if is_query {
-            json!({"status":"busy","completeness":if variant=="cached" {"cached"} else {"partial"},"data":{"last_known":"preserved"}})
+            json!({"status":if variant=="unknown" {"unavailable"} else {"busy"},"completeness":if variant=="unknown" {"unknown"} else {"partial"},"data":{"last_known":"preserved"}})
         } else {
             scientific_record(&f, &native, arguments)
         };
@@ -286,7 +286,7 @@ async fn native_science_preserves_partial_queries_and_refuses_unverified_or_over
                 json!({"send_request":tool["send_request"],"tool_request":tool["tool_request"]}),
             )
             .await;
-        let partial = matches!(variant, "query" | "cached");
+        let partial = matches!(variant, "query" | "unknown");
         assert_eq!(
             receipt["phase"],
             if partial { "resolved" } else { "uncertain" },

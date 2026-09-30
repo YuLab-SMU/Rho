@@ -4,28 +4,37 @@ Updated: 2026-09-30. This is the single current summary of behavior, evidence,
 open work and the next milestone. Git and run artifacts retain history; see
 [Development](DEVELOPMENT.md#status-discipline) for update and evidence rules.
 Evidence filenames below are relative to `target/plugin-refactor/` unless stated.
-M4's reviewed annotation foundation is verified through ordinary-plugin browser
-and real-R owner flows. The refreshed development bundle and Annotations system
-IME are verified. M6 evidence reconciliation is complete for the requested existing-
-capability assessment; full product acceptance retains the gaps listed below.
 
-## Current focus: M6 assessment complete; document tools and real vision remain open
+## Current focus: usable local Preview 3 and workspace-aware Agent
 
-Local macOS preview provides a native launcher, saved Demo and explicit quit.
-Preview 2 restores reviewed 48/168 px navigation; client build/check, frontend
-boundaries and `cargo build --locked` pass. Plugins manages closed views.
-Objects/Packages directory mounts now discover the selected provider's live R
-session instead of trusting an ended persisted session; exact object detail and
-pending-action identities remain pinned. Connection errors no longer look like
-continuous object loading. Independent package builds (including TypeScript) and
-plugin boundaries pass; no automated tests were run for these preview fixes.
-Versioned view updates recovered 22 objects and Packages without restarting R; packages await application.
-Agent fixes add the `@` picker trigger and bounded continuation through empty source
-pages, discover current project text files/R objects, and resolve the configured
-R session at Send. Rho defaults to read-only R observation and can list/observe/read
-objects under inherited grants; Continue retains its original native session.
-File/document model tools remain open. Agent/Files/R package builds and five-archive
-validation pass; updates await application. Browser/model checks remain unrun.
+Preview 3 contains the native launcher, saved Demo, navigation and bundled Ark;
+R remains the configured local installation. Its fresh `Preview 3` catalog selects
+updated immutable packages, preserving earlier preview catalogs and drafts.
+Objects/Packages discover the selected provider's live session. Context search
+uses real file kinds, browses current project files and live R objects, and retains
+exact source references. Keyboard `@` opens the picker; reopening cannot discard
+the new source search. New Agent tasks default to read-only workspace tools.
+Rho's **Read, edit and run in workspace** adds scoped Files and synchronized Editor
+read/edit/save/captured-run tools. Fresh Send captures provider/window/session;
+Continue keeps original grants. Accepted operations are observed to settlement;
+Partial, unknown and unavailable reads retain their Host status. Editor updates refresh
+resident documents and survive reload; stale edits and changed disk bases are refused.
+The Host permits exact granted Controls from active Operation parents for transient
+draft staging; Query/Control parents still cannot acquire writes.
+
+Focused Agent backend (66), native owner/store (9 each), Editor (5), Files context
+(2), delegated Host (2), draft Host (9) and view delegation (4) checks pass. Agent,
+Editor and Manager client checks/builds, generated manifests, tool grants, public
+boundaries and documentation governance pass. The core builds; current Agent,
+Editor, Files and Manager packages use isolated source closures and workspace
+native builds. Browser `@` for Files/Editor/R, stale-write protection, edit/save/run
+and reload pass. `deepseek-v4.1-flash` completed one captured run; native R readback
+is 57. `target/preview-3/context-flow-final.json` rechecks retained streaming events
+from the successful native flow after a report-only assertion failure; no replay.
+Launcher Demo/Objects/Packages/reload/graceful restart pass in `launcher-5.json`.
+That retained launcher candidate predates the final Agent/Editor/Files updates;
+those exact updated packages are covered by the separate context flow. Final
+assembly records precise runtime hashes. No user Host restart or installation.
 
 The unified-plugin plan was authorized on 2026-09-23; PS01–PS07 are approved
 ([Design 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved)).
@@ -37,19 +46,10 @@ The annotation view has cross-component entry, anchors, counts, versions, image 
 source entries and the Files selected-text and live Viewer image flows pass the
 focused M4 round, including save, draft inclusion, refresh and changed sources.
 The updated bundle and imported Studio/Files flows pass. Of 33 real-model attempts,
-12 pass, 3 Plots cases provide partial metadata evidence and 18 lack document tools.
+12 passed, 3 Plots cases provided partial metadata evidence and 18 lacked document tools at that assessment.
 The image diagnostic fails. Actual macOS Chinese input passes in Annotations.
 
 Studio forms, synchronized references, Undo and recovery (`5a5ecc4d`) passed model/browser and multi-width inspection: `definition-editor-results.json`, `visual-runtime-results.json`.
-
-The public SDK offers bounded polling and original-operation inspection. A UI fixture
-reads Files text, patches once and recovers after lost acknowledgement/reload/view
-replacement with fixed provider, target, arguments and effect; polling stops on disposal. Files
-preflight fills an omitted target with the project root, so the fixture now
-captures `workspace.paths` and records that exact target before dispatch. The
-earlier strict-verification failure remains in `visual-science-native.log`;
-the settled real Files flow passes in 11.7s (`visual-science-results.json`).
-This is snapshot polling, not a server-pushed native subscription.
 
 ### Remaining work order
 
@@ -66,7 +66,7 @@ is not. The older `final-acceptance-matrix.json` remains historical input.
 | 2 — verified | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Reviewed AN01–AN06 interactions, eight-entry smoke, complete Files text/Viewer image flows, keyboard and 600/320px layouts. | Shared counts/near-selection entry, structured Agent-item anchors and current Viewer viewport capture pass. Files and Viewer save → existing Agent draft → refresh/source-change flows pass (`annotation-foundation-files`, `annotation-foundation-viewer`, `annotation-foundation-entries`). Prior lost-acknowledgement, CAS, history and mark/Undo evidence remains valid (`annotation-components-browser`, `annotation-version-browser`). This closes M4's foundation, not delivery, real-model quality or OS IME. |
 | 3 — verified | **Updated runtime reaches the development bundle.** Existing package builders/delivery path. | Exact revisions/hashes, imported definition editor and delivered SDK → real Files patch/recovery pass. | Thirteen affected packages refreshed; Environment/Process/Remote archives reused byte-for-byte. Updated core requires and passes relocation/import/retry/remove/empty-start/restore acceptance (`m6-bundle-refresh.json`, `m6-bundle-acceptance.json`, `m6-delivery-results.json`). No user installation/signing/publication. |
 | 4 — verified for Annotations | **Actual system IME in an ordinary view.** UI acceptance. | Real candidate window, composition/commit/Enter, focus changes and draft retention observed in the target app/browser. | Native macOS/Edge key input produced Chinese via Space; Return committed pinyin during composition and inserted a newline after commit. Focus changes retained text; reload retained the draft; Save produced revision 2. User confirmed the system candidate window. `m6-system-ime.json`, `m6-ime-composition.png`, `m6-ime-saved.png`. Agent/Editor controls and other OS/input methods are not established. |
-| 5 — assessed with gaps | **Real Agent/provider quality on the ordinary-plugin path.** Agent acceptance. | Assess existing capabilities; preserve every unavailable or partial case, as requested. | `deepseek-v4.1-flash`: Objects/Packages/Environment/Workspace, three repetitions each, pass (12). Plots metadata passes but original visual-color intent remains partial (3). Six document-dependent intents lack scoped Editor edit/save/captured-run tools (18 not run). `Qwen3.8-27B` image diagnostic returned HTTP 200 without visible text; image interpretation/followup remain unrun. Evidence: `m6-live-matrix-results.json`, `m6-live-matrix-reviewed.json`, `m6-live-objects-results.json`. |
+| 5 — assessed with gaps | **Real Agent/provider quality on the ordinary-plugin path.** Agent acceptance. | Assess existing capabilities; preserve every unavailable or partial case, as requested. | `deepseek-v4.1-flash`: Objects/Packages/Environment/Workspace, three repetitions each, pass (12). Plots metadata passes but original visual-color intent remains partial (3). At that assessment, six document-dependent intents lacked scoped Editor tools (18 not run); this historical matrix is not retroactively passed by the new Preview flow. `Qwen3.8-27B` image diagnostic returned HTTP 200 without visible text; image interpretation/followup remain unrun. Evidence: `m6-live-matrix-results.json`, `m6-live-matrix-reviewed.json`, `m6-live-objects-results.json`. |
 | 6 — assessment complete | **Final evidence matches approved scope and exact delivered artifacts.** Full-plan acceptance matrix. | Reconcile evidence and retain all open requirements. | `m6-final-acceptance-matrix.json` verifies bundle bytes/hashes and maps approved scope. Current Host-port checks pass 13/13 (`m6-host-ports.log`); historical scene/version/Python/Studio-self evidence retains original artifact scope. Full product acceptance is false; no global release claim. |
 
 HV01–HV07 lighter Help/Viewer controls, system-browser opening and Help anchors
@@ -81,8 +81,8 @@ work. R01–R03 also remain proposals; annotation approval does not extend to th
 Manager's **Scenarios → New R workspace** selects installed exact artifacts and
 existing Ark/R paths, activates providers, saves a checkpoint and prepares views.
 Window switching and R startup are separate explicit actions. The expanded recipe
-includes sixteen instances and eleven initial views; Agent tools start unchecked,
-and Remote/Environment remain unconfigured until selected.
+includes sixteen instances and eleven initial views; new Agent tasks offer read-only
+workspace context. Remote/Environment remain unconfigured until selected.
 
 The full delivered scene passes Files → Unicode Editor Save/Run → Console,
 Objects and Plots with real R. Lost activation acknowledgement, scene switching,

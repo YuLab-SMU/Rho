@@ -61,6 +61,23 @@ export class DraftSync {
       const content = this.state.draft === null ? null : await readDraft(this.client, this.state.draft, { signal: this.transfers.signal }); this.live(); return content;
     });
   }
+  /** Adopt an owner-confirmed external edit only while the caller's resident
+   * text is still the synchronized version. Typing during the read wins locally. */
+  refresh(accept: (bytes: Uint8Array<ArrayBuffer>, previous: DocumentDraft, next: DocumentDraft) => boolean): Promise<boolean> {
+    return this.serial(async () => {
+      const previous = this.state.draft;
+      if (!previous || this.state.pending) return false;
+      const observed = await this.client.query<{ status: string; completeness?: string; data?: unknown }>({ id: 'documents.inspect', version: 1 },
+        { window: previous.window, draft: previous.draft }); this.live();
+      if (observed.status !== 'ready' || observed.completeness && observed.completeness !== 'complete') return false;
+      this.checkDraft(observed.data); const next = observed.data;
+      if (same(previous, next)) return false;
+      if (next.draft !== previous.draft || next.version <= previous.version) throw Error('The document owner returned an inconsistent version.');
+      const bytes = await readDraft(this.client, next, { signal: this.transfers.signal }); this.live();
+      if (!accept(bytes, structuredClone(previous), structuredClone(next))) return false;
+      this.state.draft = structuredClone(next); await this.persist(); return true;
+    });
+  }
   save(input: Uint8Array, metadata: JsonValue = null): Promise<DocumentDraft> {
     // Freeze before entering the queue; edits made while another save settles
     // cannot modify this request. A pending original is never silently replaced.

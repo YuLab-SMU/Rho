@@ -12,20 +12,26 @@ const digest = bytes => 'sha256:' + createHash('sha256').update(bytes).digest('h
 const run = (command, args, options = {}) => execFileSync(command, args, {cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], ...options});
 const options = {};
 for (let i = 2; i < process.argv.length; i += 2) {
-  assert.ok(['--bundle', '--out', '--ark', '--r-home'].includes(process.argv[i]) && process.argv[i + 1] && !options[process.argv[i]],
-    'Usage: build-preview-app.mjs --bundle DIR --out NEW_APP --ark FILE --r-home DIR');
+  assert.ok(['--bundle', '--out', '--ark', '--r-home', '--ark-notices'].includes(process.argv[i]) && process.argv[i + 1] && !options[process.argv[i]],
+    'Usage: build-preview-app.mjs --bundle DIR --out NEW_APP --ark FILE --r-home DIR --ark-notices DIR');
   options[process.argv[i]] = process.argv[i + 1];
 }
-assert.equal(Object.keys(options).length, 4);
+assert.equal(Object.keys(options).length, 5);
 const bundle = fs.realpathSync(options['--bundle']), output = path.resolve(options['--out']);
 assert.ok(output.endsWith('.app') && !fs.existsSync(output), 'Choose a new .app destination');
-const runtime = {ark: fs.realpathSync(options['--ark']), r_home: fs.realpathSync(options['--r-home'])};
-fs.accessSync(runtime.ark, fs.constants.X_OK);
+const sourceRuntime = {ark: fs.realpathSync(options['--ark']), r_home: fs.realpathSync(options['--r-home'])};
+const runtime = {ark: 'runtime/ark', r_home: sourceRuntime.r_home};
+fs.accessSync(sourceRuntime.ark, fs.constants.X_OK);
+arm64Executable(sourceRuntime.ark);
 run(path.join(runtime.r_home, 'bin/Rscript'), ['--vanilla', '-e', 'stopifnot(requireNamespace("jsonlite",quietly=TRUE),requireNamespace("rlang",quietly=TRUE))']);
 const verified = verifyBundle({directory: bundle});
 const commit = run('git', ['rev-parse', 'HEAD']).trim(), dirty = !!run('git', ['status', '--porcelain']).trim();
 const resources = path.join(output, 'Contents/Resources'), executable = path.join(output, 'Contents/MacOS/Rho');
 fs.mkdirSync(resources, {recursive: true}); fs.mkdirSync(path.dirname(executable));
+fs.mkdirSync(path.join(resources, 'runtime'));
+fs.copyFileSync(sourceRuntime.ark, path.join(resources, runtime.ark));
+fs.chmodSync(path.join(resources, runtime.ark), 0o755);
+for (const name of ['LICENSE', 'NOTICE']) fs.copyFileSync(path.join(options['--ark-notices'], name), path.join(resources, 'runtime', name));
 fs.cpSync(bundle, path.join(resources, 'bundle'), {recursive: true, filter: source => source === bundle || fs.statSync(source).isFile()});
 for (const name of ['service.mjs', 'workspace.mjs']) fs.copyFileSync(path.join(root, 'scripts/preview', name), path.join(resources, name));
 const node = fs.realpathSync(process.execPath);
@@ -79,13 +85,13 @@ for (const key of ['manager', 'files']) {
   fs.mkdirSync(path.join(resources, key), {recursive: true});
   fs.writeFileSync(path.join(resources, key, 'package.json'), '{"type":"module"}\n');
 }
-fs.writeFileSync(path.join(resources, 'preview-profile.json'), JSON.stringify({format: 1, runtime, source_commit: commit}, null, 2) + '\n');
+fs.writeFileSync(path.join(resources, 'preview-profile.json'), JSON.stringify({format: 1, runtime, state_directory: 'Preview 3', source_commit: commit}, null, 2) + '\n');
 fs.writeFileSync(path.join(output, 'Contents/Info.plist'), `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleExecutable</key><string>Rho</string><key>CFBundleIdentifier</key><string>org.rho.local-preview</string>
 <key>CFBundleName</key><string>Rho Preview</string><key>CFBundleDisplayName</key><string>Rho Preview</string>
-<key>CFBundleVersion</key><string>2</string><key>CFBundleShortVersionString</key><string>0.1.0-preview.2</string>
+<key>CFBundleVersion</key><string>3</string><key>CFBundleShortVersionString</key><string>0.1.0-preview.3</string>
 <key>CFBundlePackageType</key><string>APPL</string><key>NSHighResolutionCapable</key><true/>
 <key>CFBundleIconFile</key><string>Rho.icns</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string></dict></plist>\n`);

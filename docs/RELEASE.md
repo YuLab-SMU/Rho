@@ -41,27 +41,30 @@ and publication are separate outcomes. Do not install or publish automatically.
 For a double-click preview of the retained sixteen-plugin bundle:
 
 ```sh
-node scripts/build-preview-app.mjs --bundle /absolute/bundle --out '/absolute/new/Rho Preview.app' --ark /absolute/ark --r-home /absolute/R.framework/Resources
+node scripts/build-preview-app.mjs --bundle /absolute/bundle --out '/absolute/new/Rho Preview.app' --ark /absolute/ark --r-home /absolute/R.framework/Resources --ark-notices /absolute/ark-notices
 ```
 
 The assembler validates the bundle, compiles a small AppKit launcher with the
-system Swift compiler, includes Node, and records exact payload hashes in
+system Swift compiler, includes Node, Ark and Ark’s LICENSE/NOTICE, and records exact payload hashes in
 `Contents/Resources/preview-manifest.json`. It applies and verifies a local ad hoc
 signature. A sibling `.receipt.json` records all final signed file hashes, modes,
 sizes and the SHA-256 of the ordered JSON file list. There is no DMG, Developer ID
-signature, notarization, installation or publication. The selected R and Ark stay external; this build is configured for
-the specified local machine. It can be moved as a complete app, while the selected
-runtime paths must remain available. The assembly commit does not establish the
+signature, notarization, installation or publication. R stays external; this build is configured for the specified local machine.
+Ark is referenced relative to the app resources, so moving the complete app keeps
+that runtime available. The selected R home must remain available. The assembly commit does not establish the
 retained core's source provenance.
 
-The launcher owns a separate `~/Library/Application Support/Rho/Preview` catalog
+The launcher owns a separate `~/Library/Application Support/Rho/Preview 3` catalog
 and Demo project. Its first launch imports the bundled exact revisions once,
 calls the delivered Manager's scientific-workspace recipe through the public
 plugin SDK, and opens `run_demo.R` through the Files owner. Manager's compiled
 modules are copied from its artifact; Files owner modules are compiled with the
 assembly checkout's TypeScript from the exact archived source, with those source
 hashes/compiler version recorded. The core, archives and browser UI are retained.
-It does not install R packages, start R or enable Agent tools automatically.
+It does not install R packages or start R. New Agent tasks offer read-only context;
+scientific writes and execution require the user’s selected mode. Preview 3 uses a
+fresh saved scenario so its included fixes are active on first launch; earlier
+preview tasks and drafts remain in the earlier app’s catalog.
 
 Saved request identities survive interrupted preparation. Routine launches resume
 original suspended instances and reconnect the saved window without replacing
@@ -70,6 +73,22 @@ offers workspace/project/log access and graceful quit. Read the
 [preview operator guide](OPERATIONS.md#local-macos-preview) for daily use.
 App assembly and signature verification alone do not establish complete product
 acceptance; actual evidence and remaining gaps belong in Status.
+
+Preview acceptance uses retained packages and disposable catalogs, with no implicit
+builds or changes to the user's preview. Run the launcher flow against the assembled
+app; the context flow also accepts an explicitly selected local model settings
+directory through `--live-agent-data` to exercise a real configured model. Credentials
+are removed from that disposable Agent after the run and never enter the report.
+
+```sh
+node scripts/test-preview-launcher.mjs '/absolute/Rho Preview.app' /absolute/launcher-results.json
+node scripts/test-preview-agent-context.mjs --set /absolute/plugin-set --rho /absolute/rho --ark /absolute/ark --r-home /absolute/R.framework/Resources --report /absolute/context-results.json
+```
+
+The context flow covers keyboard `@`, discovery and capture of a previously unopened
+file, proactive Files/Editor/R reads, exact Editor edit/save/run, stale-reference
+refusal and browser reload. The launcher flow covers first composition, explicit R
+startup, Demo execution, populated Objects, reload and graceful saved-workspace restart.
 
 ## Ordinary plugin delivery sets
 

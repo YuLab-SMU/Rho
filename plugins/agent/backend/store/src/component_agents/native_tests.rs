@@ -180,6 +180,7 @@ fn native_continuation_retains_exact_provider_and_converts_confirmed_mutations_t
         ..first.run.request.clone()
     };
     let next_origin = ComponentNativeRunOrigin {
+        tools: vec![],
         operation: OperationId::new("continued-operation").unwrap(),
         request: RequestId::new("continued-parent").unwrap(),
         ..origin()
@@ -636,6 +637,7 @@ fn native_parent_cannot_be_replaced_or_removed_by_later_transaction() {
     for replacement in [
         None,
         Some(ComponentNativeRunOrigin {
+            tools: vec![],
             operation: OperationId::new("replacement-operation").unwrap(),
             ..origin()
         }),
@@ -718,6 +720,7 @@ fn native_send_consumes_only_its_matching_draft_and_replay_preserves_next_input(
             ..original.run.request
         };
         let origin = ComponentNativeRunOrigin {
+            tools: vec![],
             operation: OperationId::new("draft-operation").unwrap(),
             request: RequestId::new("draft-request").unwrap(),
             ..origin()
@@ -901,6 +904,7 @@ fn native_context_admission_consumes_matching_draft_and_retains_original_payload
         }],
     };
     let captured_origin = ComponentNativeRunOrigin {
+        tools: vec![],
         operation: OperationId::new("context-operation").unwrap(),
         request: RequestId::new("context-parent").unwrap(),
         ..origin()

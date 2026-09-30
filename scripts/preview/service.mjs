@@ -8,13 +8,13 @@ import {PreviewHost, prepareWorkspace, saveJson} from './workspace.mjs';
 import {installBundle} from './bundle/rho-bundle.mjs';
 
 const resources = path.dirname(fileURLToPath(import.meta.url));
-const requestedState = path.resolve(process.env.RHO_PREVIEW_STATE || path.join(os.homedir(), 'Library/Application Support/Rho/Preview'));
+const profile = JSON.parse(fs.readFileSync(path.join(resources, 'preview-profile.json')));
+const requestedState = path.resolve(process.env.RHO_PREVIEW_STATE || path.join(os.homedir(), 'Library/Application Support/Rho', profile.state_directory || 'Preview'));
 fs.mkdirSync(requestedState, {recursive: true, mode: 0o700});
 // macOS can resolve an existing parent with a different case or through a link.
 // The Host authorizes the canonical root, so use that same identity everywhere.
 const state = fs.realpathSync.native(requestedState);
 const liveFile = path.join(state, 'live.json'), lock = path.join(state, 'launcher.lock');
-const profile = JSON.parse(fs.readFileSync(path.join(resources, 'preview-profile.json')));
 const project = path.join(state, 'Demo'), database = path.join(state, 'rho.sqlite');
 const emit = value => process.stdout.write(JSON.stringify(value) + '\n');
 const status = message => emit({type: 'status', message});
@@ -59,7 +59,9 @@ async function start() {
   try {
     const runtimeFile = path.join(state, 'runtime.json');
     if (!fs.existsSync(runtimeFile)) saveJson(runtimeFile, profile.runtime);
-    const runtime = JSON.parse(fs.readFileSync(runtimeFile));
+    const configured = JSON.parse(fs.readFileSync(runtimeFile));
+    // Keep bundled paths relative so moving the app does not invalidate its profile.
+    const runtime = {...configured, ark: path.isAbsolute(configured.ark) ? configured.ark : path.resolve(resources, configured.ark)};
     for (const file of [runtime.ark, path.join(runtime.r_home, 'bin/R')]) fs.accessSync(file, fs.constants.X_OK);
     if (!child && !host) {
       status('Checking your local R environment…');

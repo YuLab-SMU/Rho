@@ -47,7 +47,7 @@ export async function checkScientificWorkspace({ Manager, scientificWorkspace, s
         if (cap.id === 'scenarios.prepare') {
           assert.equal(args.expected_layout_version, 7);
           assert.equal(Object.keys(args.instances).length, selectedKeys.length + 1);
-          assert.equal(Object.keys(args.views).length, 1 + Object.values(selected).filter(c => c.inspection.manifest.views.length).length);
+          assert.equal(Object.keys(args.views).length, 1 + Object.entries(selected).filter(([key,c]) => key !== 'annotations' && c.inspection.manifest.views.length).length);
           assert.equal(args.views.manager, managerView.view);
           return { status: 'ready', data: {} };
         }
@@ -140,14 +140,14 @@ export async function checkScientificWorkspace({ Manager, scientificWorkspace, s
   assert.deepEqual(full.records.filter(r => r.operation.capability.id === 'plugins.activate').map(r => r.operation.normalized_arguments.alias), Object.keys(complete), 'restored JSON key order cannot activate consumers before their providers');
   const agent = fullViews.find(v => v.id === 'agent');
   assert.ok(fullViews.some(v => v.id === 'studio'));
-  assert.equal(agent.configuration.tools.length, 14);
+  assert.equal(agent.configuration.tools.length, 18);
   for (const tool of agent.configuration.tools) {
     const instance = fullManager.state.workspace.instances[tool.target.binding.provider.plugin.slice(8)];
     assert.deepEqual(tool.target.binding.provider, instance);
     assert.equal(tool.target.binding.project, 'project');
     assert.ok(fullScene.instances.agent.optional_capabilities.some(cap => JSON.stringify(cap) === JSON.stringify(tool.target.binding.capability)));
   }
-  assert.deepEqual(agent.state, {}, 'offered tools are not selected automatically');
+  assert.deepEqual(agent.state, {}, 'Agent applies its defaults when the new view opens');
   assert.ok(fullScene.instances.annotations.optional_capabilities.some(cap => cap.id === 'files.context.preview'));
   assert.ok(fullScene.instances.agent.optional_capabilities.some(cap => cap.id === 'plugins.checkpoint'), 'Studio assistance has its declared management contracts');
   await fullManager.prepareWorkspace();

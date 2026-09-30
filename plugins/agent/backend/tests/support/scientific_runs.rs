@@ -209,7 +209,30 @@ async fn rho_continuation_rechecks_original_and_reuses_confirmed_r_operation_ins
     };
     assert_eq!(capability.id.as_str(), "r.execute");
     let original_record = record(&f, &native, arguments);
-    f.answer_host(execution, original_record.clone()).await;
+    let mut accepted = original_record.clone();
+    accepted["status"] = json!("accepted");
+    accepted["output"] = Value::Null;
+    f.answer_host(execution, accepted).await;
+    let poll = f.read().await;
+    let RpcBody::HostCall {
+        capability,
+        arguments,
+        parent_request,
+    } = &poll.body
+    else {
+        panic!("{poll:?}")
+    };
+    assert_eq!(capability.id.as_str(), "operation.get");
+    assert_eq!(parent_request, &native.request);
+    assert_eq!(
+        arguments,
+        &json!({"operation_id":"original-scientific-operation"})
+    );
+    f.answer_host(
+        poll,
+        json!({"status":"ready","completeness":"complete","data":{"record":original_record}}),
+    )
+    .await;
     let done = f.receive_run(&native, "completed").await;
     f.settle(&native, done.outcome).await;
     let receipts = f.scientific_receipts(&first).await;
@@ -518,7 +541,7 @@ async fn scientific_tools_keep_native_identity_and_late_results_after_model_stop
             .await;
         assert_eq!(
             admission,
-            json!({"operation":native.operation_id,"request":native.request,"binding":native.binding,"r":selected_r()})
+            json!({"operation":native.operation_id,"request":native.request,"binding":native.binding,"r":selected_r(),"tools":[]})
         );
         let body = model.state.bodies.lock().unwrap()[0].clone();
         assert!(!body.to_string().contains("PRIVATE NATIVE STDIN SENTINEL"));
@@ -853,13 +876,22 @@ async fn scientific_explain_uses_only_the_original_readonly_r_query() {
         1
     );
     model.state.resume.notify_one();
-    f.session_observation(&native).await;
+    let query = f.read().await;
+    assert!(
+        matches!(&query.body, RpcBody::HostCall { capability, parent_request, .. }
+        if capability.id.as_str() == "r.session" && parent_request == &native.request)
+    );
+    f.answer_host(query, json!({"status":"ready","completeness":"partial","data":{"state":"idle","session_id":"r-session-one","queue_target":null,"checkpoint_available":false,"input":{"prompt":"PRIVATE NATIVE STDIN SENTINEL"}}})).await;
     let plan = f.receive_run(&native, "completed").await;
     let receipts = f.scientific_receipts(&run).await;
     assert_eq!(receipts.as_array().unwrap().len(), 1);
     assert_eq!(receipts[0]["mutation"], false);
     assert_eq!(receipts[0]["operation_id"], Value::Null);
     assert_eq!(receipts[0]["phase"], "resolved");
+    assert_eq!(
+        receipts[0]["result"]["host_observation"]["completeness"],
+        "partial"
+    );
     assert!(
         !model.state.bodies.lock().unwrap()[1]
             .to_string()

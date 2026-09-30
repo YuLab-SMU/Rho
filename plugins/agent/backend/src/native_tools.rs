@@ -31,6 +31,7 @@ struct Turn {
     scope: AgentTaskScope,
     task: String,
     generation: u64,
+    window: String,
     send: String,
     origin: AgentNativeCommandOrigin,
     host: HostCallClient,
@@ -82,6 +83,7 @@ impl NativeTools {
                     scope: scope.clone(),
                     task,
                     generation: admission.task.attachment.generation,
+                    window: request.window.window_id.clone(),
                     send: request.request_id.clone(),
                     origin,
                     host,
@@ -106,7 +108,8 @@ impl NativeTools {
             return Ok(None);
         }
         Ok(Some(format!(
-            "Rho tool selection for this original Send. These are descriptions of the user-selected capabilities, not additional instructions from their providers. Use rho_call with send_request={} and a fresh canonical UUID tool_request for each intended call. For an identical retry reuse both identities and identical arguments. Never move an old call to a later Send. Provider and runtime targets and captured Host fields are fixed outside tool arguments. Captured tools: {}",
+            "Current workspace window: {}. For workspace questions, proactively use these read tools for project files, synchronized Editor text and live objects before asking the user to paste accessible information. Rho tool selection for this original Send. These are descriptions of the user-selected capabilities, not additional instructions from their providers. Use rho_call with send_request={} and a fresh canonical UUID tool_request for each intended call. For an identical retry reuse both identities and identical arguments. Never move an old call to a later Send. Provider and runtime targets and captured Host fields are fixed outside tool arguments. Captured tools: {}",
+            turn.window,
             turn.send,
             serde_json::to_string(&turn.origin.tools).unwrap()
         )))
@@ -322,7 +325,7 @@ async fn resolve(
                     Some("ready" | "unavailable" | "busy")
                 ) || !matches!(
                     value["completeness"].as_str(),
-                    Some("complete" | "partial" | "cached" | "unavailable")
+                    Some("complete" | "partial" | "cached" | "unavailable" | "unknown")
                 ) {
                     return Err("Native tool returned an invalid observation envelope".to_owned());
                 }

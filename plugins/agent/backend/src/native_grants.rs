@@ -10,6 +10,29 @@ type RequirementGroup = (ScopeGroup, CapabilityGroup);
 pub(crate) fn scientific_requirements() -> Vec<CapabilityRequirement> {
     let groups: &[RequirementGroup] = &[
         (
+            &["documents.read", "documents.write", "operation.read"],
+            &[("editor.edit", 1)],
+        ),
+        (
+            &[
+                "documents.read",
+                "documents.write",
+                "operation.read",
+                "project.read",
+                "project.write",
+            ],
+            &[("editor.save", 1)],
+        ),
+        (
+            &[
+                "documents.read",
+                "documents.write",
+                "operation.read",
+                "workspace.run_r",
+            ],
+            &[("editor.run", 1)],
+        ),
+        (
             &["application.read", "plugins.read"],
             &[
                 ("annotations.read", 1),

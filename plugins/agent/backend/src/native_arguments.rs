@@ -52,7 +52,7 @@ pub struct DiscoverNative {
 pub struct AgentViewConfiguration {
     /// Offered exact tools, selected explicitly in the composer before Send.
     #[serde(default)]
-    #[schemars(length(max = 16))]
+    #[schemars(length(max = 24))]
     pub tools: Vec<AgentNativeToolSelection>,
     /// A reviewed Studio request remains input text until the user adds it to a
     /// controlled task draft. Opening the view never creates or sends a task.
@@ -92,7 +92,7 @@ pub struct NativeAction {
     /// Only Send accepts explicit tool selections. Descriptors and scopes are
     /// captured from exact plugin manifests or native Host contracts by the backend.
     #[serde(default)]
-    #[schemars(length(max = 16))]
+    #[schemars(length(max = 24))]
     pub tools: Vec<AgentNativeToolSelection>,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]

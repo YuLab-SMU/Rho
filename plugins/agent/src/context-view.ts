@@ -143,7 +143,12 @@ export function mountContext(client: Client, model: NativeAgentModel, save: (tas
     } catch (error) { get('context-error').textContent = error instanceof Error ? error.message : String(error); get('context-error').hidden = false; }
   };
   get('context-close').onclick = () => dialog.close();
-  dialog.addEventListener('close', () => { epoch++; busy = false; clearPreview(); });
+  dialog.addEventListener('close', () => {
+    // A queued close event from the previous picker must not cancel a newly
+    // opened picker and leave its sources blank.
+    if (dialog.open) return;
+    epoch++; busy = false; clearPreview();
+  });
   return {
     openPicker,
     inspectSelection(selection: AgentContextSelection) { open(selection); },
