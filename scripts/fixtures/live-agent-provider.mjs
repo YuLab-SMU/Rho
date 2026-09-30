@@ -38,6 +38,24 @@ export async function liveAgentProvider({agent,r,project,scientificCase,image,ma
     connection:{protocol:'anthropic',base_url:peer?.url??process.env.RHO_LIVE_PROVIDER_URL,model:process.env.RHO_LIVE_PROVIDER_MODEL,
       credential},
   })).output;
+  if(matrix&&process.env.RHO_LIVE_MATRIX_CASES){
+    // A targeted repair retains prior smoke evidence instead of paying for
+    // another connection diagnostic and scientific-effect model loop.
+    const session=scientificCase.report.session;
+    const rBinding={...await query('plugins.resolve',{instance:r,capability:{id:'r.execute',version:2}}),target:session};
+    await liveAgentMatrix({r,session,rBinding,scientificCase,settings,query,port,pluginQuery,agentQuery,agentInvoke,answerFor,peer,report,save});
+    const retained=[];
+    for(const attempt of report.matrix.attempts.filter(item=>item.run))retained.push({run:await agentQuery('agent.model.run.get',{run_id:attempt.run}),tools:await agentQuery('agent.model.run.tools',{run_id:attempt.run})});
+    const calls=peer?.calls.length;
+    report.status='targeted_assessment_recorded';save();
+    return {async close(){try{await removeCredential();}finally{if(peer)await peer.close();}},async afterRestart(){
+      const state=await query('plugins.instance',{instance:agent});assert.equal(state.instance.state,'suspended');
+      assert.deepEqual((await invoke('plugins.resume',{instance:agent,suspension:state.instance.suspension})).output.instance.identity,agent);
+      for(const item of retained){assert.deepEqual(await agentQuery('agent.model.run.get',{run_id:item.run.run_id}),item.run);assert.deepEqual(await agentQuery('agent.model.run.tools',{run_id:item.run.run_id}),item.tools);}
+      if(peer)assert.equal(peer.calls.length,calls);
+      report.targeted_restart_verified=true;save();
+    }};
+  }
   const diagnostic=(await agentInvoke('agent.model.test',{request_id:'live-provider-connection',model_settings_version:settings.version,kind:'connection'})).output;
   report.connection=diagnostic;save();
   if(diagnostic.state!=='passed'){

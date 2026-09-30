@@ -426,7 +426,26 @@ credentials; only its reference enters Operations. It deletes the temporary
 instance key at completion/failure. `RHO_ANNOTATION_EVIDENCE` selects the report.
 It records the real diagnostic, one explicit R effect, discarded acknowledgement
 inspection and same-instance restart. This representative smoke is separate from
-the planned 33-scenario quality matrix; it does not certify all model/task profiles.
+the 33-scenario quality matrix; it does not certify all model/task profiles.
+
+`--live-matrix` records eleven intents with three repetitions each. Use
+`RHO_LIVE_MATRIX_CASES=objects` (comma-separated IDs) to rerun affected cases;
+this skips repeated provider smoke and verifies retained records after restart.
+Missing document tools are recorded individually as `not_run`; metadata-only
+Plots checks are `partial` for the original image-recognition intent. A completed
+assessment does not imply all scenarios ran or passed. Set `RHO_LIVE_VISION_MODEL`
+for the independent real-image gate; failed diagnostics keep downstream image
+interpretation unrun. Required/optional grants are checked before expensive setup;
+reports record snapshot and individual activation times.
+
+When completed runs failed only a harness assertion, preserve the original report
+and use `RHO_TEST_BINARY=<original-host> node scripts/review-live-agent-matrix.mjs
+<original-report> <distinct-review-report>` to inspect their original public
+records in the retained disposable project. It resumes only the exact Agent,
+without model requests or R startup. Never use this to override a product failure.
+`node scripts/audit-m6-evidence.mjs <prior-matrix> <distinct-output>` reconciles
+the retained M6 reports, verifies delivered bytes/hashes and maps approved scope;
+it does not execute missing acceptance or promote historical evidence to a new pass.
 
 Annotation ownership checks reuse the workspace: `cargo test -p rho-annotation-store
 --test annotations --locked` covers immutable evidence, revisions, idempotency,

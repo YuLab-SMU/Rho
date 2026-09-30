@@ -45,6 +45,22 @@ const packages = Object.fromEntries(['annotation', 'editor', 'files', ...(withAg
   assert.ok(!directory.startsWith(root + path.sep), 'Use an assembled external package');
   return [name, directory];
 }));
+// Resolve requested grants before creating/snapshotting an expensive Host. Required
+// dependencies are admitted automatically; requesting one as optional is invalid.
+const capabilityKey = value => `${value.id}@${value.version}`;
+const key = id => ({id, version: 1});
+const requestedGrants = name => name === 'annotation' ? [key('editor.context.preview'), ...(withFiles ? [key('files.context.preview')] : []), ...(withManualIme ? ['plugins.instances','plugins.resolve','workspace.paths','files.read_text','files.context.search','editor.context.search','operation.get','operation.list_recent'].map(key) : []), ...(withScientific ? ['r.context.help.preview','r.context.viewer.preview','r.context.console.preview','r.context.plots.preview','r.context.objects.preview','r.context.packages.preview'].map(key) : []), ...(withCaptures ? [key('resources.read')] : [])] : name === 'agent'
+        ? [...['plugins.instances', 'plugins.inspect', 'annotations.read', 'annotations.write', 'annotations.context.search', 'annotations.context.preview', 'operation.get', 'plugins.delegated_operation', ...(withCaptures ? ['resources.read'] : []), ...(withLive ? ['r.session','r.context.objects.preview','r.context.packages.preview','r.context.plots.preview'] : [])].map(key), ...(withLive ? [{id:'r.execute',version:2}] : [])] : name === 'r' ? ['operation.get','operation.list_recent','resources.read'].map(key) : [];
+const optionalGrants = Object.fromEntries(Object.entries(packages).map(([name, directory]) => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'plugin.json')));
+  const required = new Set((manifest.requires ?? []).map(item => capabilityKey(item.capability)));
+  const optional = new Set((manifest.optional_requires ?? []).map(item => capabilityKey(item.capability)));
+  const requested = requestedGrants(name);
+  for (const capability of requested) assert.ok(required.has(capabilityKey(capability)) || optional.has(capabilityKey(capability)),
+    `${name} does not declare requested capability ${capabilityKey(capability)}`);
+  return [name, requested.filter(capability => !required.has(capabilityKey(capability)))];
+}));
+
 if (withAgent) verifyAgentBuild(packages.agent);
 if (withScientific) verifyRBuild(packages.r);
 // Refuse stale Rust source in either owner and in the annotation package's public SDK.
@@ -97,7 +113,6 @@ const result = {host_sha256: hostHash, packages, directory, stages: [], complete
   })), started_at: new Date().toISOString()};
 const evidence = process.env.RHO_ANNOTATION_EVIDENCE ?? path.join(directory, 'result.json');
 let host, exited, url, editor, notes, agent, agentCase, nativeCase, captureSource, captureCase, imageCase, r, scientificCase, scientificAgentCase, files, filesCase, liveCase;
-const key = id => ({id, version: 1});
 const save = () => {
   const text=JSON.stringify(result,null,2)+'\n';
   const credential=withLive&&process.env[process.env.RHO_LIVE_PROVIDER_KEY_ENV];
@@ -185,17 +200,23 @@ async function selected() {
   return {reference, identity: preview.data.annotation_source};
 }
 try {
+  result.timings={activation_seconds:{}};save();
+  const snapshotsStarted=Date.now();
   const snapshots = {};
   for (const [name, source] of Object.entries(packages)) {
     snapshots[name] = JSON.parse(execFileSync(binary, ['--database', database, 'plugins', 'snapshot', source, '--target', 'aarch64-apple-darwin'], {encoding: 'utf8', timeout: 60000})).result;
   }
   result.snapshots = snapshots;
+  result.timings.snapshots_seconds=(Date.now()-snapshotsStarted)/1000;save();
+  console.log(JSON.stringify({snapshots_seconds:result.timings.snapshots_seconds}));
   await start();
   for (const name of ['files', 'editor', ...(withScientific ? ['r'] : []), 'annotation', ...(withAgent ? ['agent'] : []), ...(withCaptures ? ['capture'] : [])]) {
+    const activationStarted=Date.now();
     const snapshot = snapshots[name];
     const active = (await invoke('plugins.activate', {revision: snapshot.revision, artifact: snapshot.artifacts[0], target: 'aarch64-apple-darwin', alias: name, configuration: name === 'agent' ? {kimi_home:nativeHome} : name === 'r' ? {ark:fs.realpathSync(process.env.RHO_ARK),r_home:fs.realpathSync(process.env.RHO_R_HOME),execution_timeout_seconds:120} : {},
-      optional_capabilities: name === 'annotation' ? [key('editor.context.preview'), ...(withFiles ? [key('files.context.preview')] : []), ...(withManualIme ? ['plugins.instances','plugins.resolve','workspace.paths','files.read_text','files.context.search','editor.context.search','operation.get','operation.list_recent'].map(key) : []), ...(withScientific ? ['r.context.help.preview','r.context.viewer.preview','r.context.console.preview','r.context.plots.preview','r.context.objects.preview','r.context.packages.preview'].map(key) : []), ...(withCaptures ? [key('resources.read')] : [])] : name === 'agent'
-        ? [...['plugins.instances', 'plugins.inspect', 'annotations.read', 'annotations.write', 'annotations.context.search', 'annotations.context.preview', 'operation.get', 'plugins.delegated_operation', ...(withCaptures ? ['resources.read'] : []), ...(withLive ? ['r.session','r.context.objects.preview','r.context.packages.preview','r.context.plots.preview'] : [])].map(key), ...(withLive ? [{id:'r.execute',version:2}] : [])] : name === 'r' ? ['operation.get','operation.list_recent','resources.read'].map(key) : []})).output.instance.identity;
+      optional_capabilities: optionalGrants[name] ?? []})).output.instance.identity;
+    result.timings.activation_seconds[name]=(Date.now()-activationStarted)/1000;save();
+    console.log(JSON.stringify({activated:name,seconds:result.timings.activation_seconds[name]}));
     if (name === 'editor') editor = active;
     if (name === 'files') files = active;
     if (name === 'annotation') notes = active;
@@ -254,7 +275,7 @@ try {
     result.live_provider = {status:'running',protocol:'anthropic',model:process.env.RHO_LIVE_PROVIDER_MODEL,cases:[]}; save();
     liveCase = await liveAgentProvider({agent,r,notes,project,window,scientificCase,image:captureCase?.image,matrix:flags.includes('--live-matrix'),port,query,invoke,binding,pluginQuery,
       report:result.live_provider,save});
-    result.stages.push('real Anthropic provider → ordinary Agent → one native R effect → original-operation inspection without replay'); save();
+    result.stages.push(process.env.RHO_LIVE_MATRIX_CASES?'selected real-provider matrix cases; prior smoke not repeated':'real Anthropic provider → ordinary Agent → one native R effect → original-operation inspection without replay'); save();
   }
   if (withAgent && !withLive) {
     agentCase = await annotationAgent({agent, notes, context, notePreview, port, query, invoke, binding, pluginQuery});
@@ -308,7 +329,7 @@ try {
   }
   if (liveCase) {
     await liveCase.afterRestart();
-    result.stages.push('real-provider original Send and child records survive same-instance Host restart without another model loop'); save();
+    result.stages.push('real-provider records survive same-instance Host restart without another model loop'); save();
   }
   const resumed = (await invoke('plugins.resume', {instance: notes, suspension: suspended.instance.suspension})).output.instance;
   assert.deepEqual(resumed.identity, notes);

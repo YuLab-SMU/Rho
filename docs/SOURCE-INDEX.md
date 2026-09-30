@@ -118,6 +118,7 @@ Sources:
 - `crates/workbench/src/plugin_test_project_tests.rs`
 - `plugins/**`
 - `scripts/agent-view-renderer.mjs`
+- `scripts/audit-m6-evidence.mjs`
 - `scripts/build-agent-plugin.mjs`
 - `scripts/build-annotation-plugin.mjs`
 - `scripts/build-console-plugin.mjs`
@@ -177,6 +178,7 @@ Sources:
 - `scripts/plugin-set.mjs`
 - `scripts/prepare-annotation-foundation.mjs`
 - `scripts/refresh-development-bundle.mjs`
+- `scripts/review-live-agent-matrix.mjs`
 - `scripts/rho-bundle.mjs`
 - `scripts/studio-agent-renderer.mjs`
 - `scripts/test-agent-core-tools.mjs`

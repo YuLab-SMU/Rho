@@ -5,11 +5,11 @@ open work and the next milestone. Git and run artifacts retain history; see
 [Development](DEVELOPMENT.md#status-discipline) for update and evidence rules.
 Evidence filenames below are relative to `target/plugin-refactor/` unless stated.
 M4's reviewed annotation foundation is verified through ordinary-plugin browser
-and real-R owner flows. The refreshed development bundle is verified; the model
-matrix and final scope reconciliation remain open. Real system IME passes in
-the ordinary Annotations view; other controls and operating systems are not covered.
+and real-R owner flows. The refreshed development bundle and Annotations system
+IME are verified. M6 evidence reconciliation is complete for the requested existing-
+capability assessment; full product acceptance retains the gaps listed below.
 
-## Current focus: M6 delivery and Annotations system IME verified; model matrix next
+## Current focus: M6 assessment complete; document tools and real vision remain open
 
 The unified-plugin plan was authorized on 2026-09-23; PS01–PS07 are approved
 ([Design 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved)).
@@ -21,8 +21,9 @@ The annotation view has cross-component entry, source-specific anchors, note
 counts, versioned notes, image marks and explicit Agent draft inclusion. Eight
 source entries and the Files selected-text and live Viewer image flows pass the
 focused M4 round, including save, draft inclusion, refresh and changed sources.
-The updated bundle and its imported Studio/Files flows now pass. The 33-scenario
-model matrix remains unverified. Actual macOS Chinese input passes in Annotations.
+The updated bundle and imported Studio/Files flows pass. Of 33 real-model attempts,
+12 pass, 3 Plots cases provide partial metadata evidence and 18 lack document tools.
+The image diagnostic fails. Actual macOS Chinese input passes in Annotations.
 
 Committed baseline `5a5ecc4d` adds Studio data-source/custom-component forms to
 the executable visual runtime: synchronized references, shared Undo, invalid draft
@@ -46,9 +47,10 @@ This is snapshot polling, not a server-pushed native subscription.
 
 Completed flow baselines: M1 default scientific composition; M2 ordinary Agent;
 M3 graceful same-instance Host recovery; M5 Studio Agent checkpoint/build/preview/apply.
-M4's annotation foundation is verified. M6 final composition remains incomplete.
-The audit in `final-acceptance-matrix.json` is partial and applies only to its
-recorded artifacts; “current” labels there do not certify this newer worktree.
+M4's annotation foundation is verified. `m6-final-acceptance-matrix.json` reconciles
+approved PS01–PS07/AN01–AN06 scope and exact delivered artifacts, retaining historical
+evidence with its original limits. Assessment is complete; full product acceptance
+is not. The older `final-acceptance-matrix.json` remains historical input.
 
 | Order | User flow / ownership | Completion condition | Dependency and scope |
 | --- | --- | --- | --- |
@@ -56,8 +58,8 @@ recorded artifacts; “current” labels there do not certify this newer worktre
 | 2 — verified | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Reviewed AN01–AN06 interactions, eight-entry smoke, complete Files text/Viewer image flows, keyboard and 600/320px layouts. | Shared counts/near-selection entry, structured Agent-item anchors and current Viewer viewport capture pass. Files and Viewer save → existing Agent draft → refresh/source-change flows pass (`annotation-foundation-files`, `annotation-foundation-viewer`, `annotation-foundation-entries`). Prior lost-acknowledgement, CAS, history and mark/Undo evidence remains valid (`annotation-components-browser`, `annotation-version-browser`). This closes M4's foundation, not delivery, real-model quality or OS IME. |
 | 3 — verified | **Updated runtime reaches the development bundle.** Existing package builders/delivery path. | Exact revisions/hashes, imported definition editor and delivered SDK → real Files patch/recovery pass. | Thirteen affected packages refreshed; Environment/Process/Remote archives reused byte-for-byte. Updated core requires and passes relocation/import/retry/remove/empty-start/restore acceptance (`m6-bundle-refresh.json`, `m6-bundle-acceptance.json`, `m6-delivery-results.json`). No user installation/signing/publication. |
 | 4 — verified for Annotations | **Actual system IME in an ordinary view.** UI acceptance. | Real candidate window, composition/commit/Enter, focus changes and draft retention observed in the target app/browser. | Native macOS/Edge key input produced Chinese via Space; Return committed pinyin during composition and inserted a newline after commit. Focus changes retained text; reload retained the draft; Save produced revision 2. User confirmed the system candidate window. `m6-system-ime.json`, `m6-ime-composition.png`, `m6-ime-saved.png`. Agent/Editor controls and other OS/input methods are not established. |
-| 5 — deferred | **Real Agent/provider quality on the ordinary-plugin path.** Agent acceptance. | Map the planned 33 scenarios to current public paths and record remaining cases individually. | Representative real-provider Send, one R effect and same-instance original-operation recovery pass (`agent-live-provider-results.json`, `agent-live-provider-wire-results.json`). The matrix stopped during fixture setup before any scenario attempt (`agent-live-matrix-results.json`); vision quality remains unrun. The unfinished opt-in harness is retained for later work. Historical 27-case evidence is not a current pass. |
-| 6 — closure | **Final evidence matches the approved scope and exact delivered artifacts.** Full-plan acceptance matrix. | Reconcile existing evidence, run only missing/invalidated checks, and keep every open requirement explicit. | Orders 1–5 have different completion conditions. A verified integration slice or development bundle does not close the full plan. No automatic workspace audit or release. |
+| 5 — assessed with gaps | **Real Agent/provider quality on the ordinary-plugin path.** Agent acceptance. | Assess existing capabilities; preserve every unavailable or partial case, as requested. | `deepseek-v4.1-flash`: Objects/Packages/Environment/Workspace, three repetitions each, pass (12). Plots metadata passes but original visual-color intent remains partial (3). Six document-dependent intents lack scoped Editor edit/save/captured-run tools (18 not run). `Qwen3.8-27B` image diagnostic returned HTTP 200 without visible text; image interpretation/followup remain unrun. Evidence: `m6-live-matrix-results.json`, `m6-live-matrix-reviewed.json`, `m6-live-objects-results.json`. |
+| 6 — assessment complete | **Final evidence matches approved scope and exact delivered artifacts.** Full-plan acceptance matrix. | Reconcile evidence and retain all open requirements. | `m6-final-acceptance-matrix.json` verifies bundle bytes/hashes and maps approved scope. Current Host-port checks pass 13/13 (`m6-host-ports.log`); historical scene/version/Python/Studio-self evidence retains original artifact scope. Full product acceptance is false; no global release claim. |
 
 HV01–HV07 lighter Help/Viewer controls, system-browser opening and Help anchors
 remain proposed ([Design 19](RHO-DESIGN.md#19-r-help-interactive-viewer-and-lighter-controls--proposal)).
@@ -222,7 +224,7 @@ Normal drain suspends exact instances after acknowledged cleanup; resume and vie
 reconnect are explicit separate actions. New SQLite state uses generic scoped,
 versioned storage and neither imports nor deletes abandoned scientific records.
 
-Current fault/boundary acceptance covers 50 Host/runtime/package cases including
+Retained fault/boundary acceptance covers 50 Host/runtime/package cases including
 forgery, path containment, backend failure, unconfirmed cancellation and lost
 settlement. External public-SDK UI and a stateful Python fixture execute through
 the unchanged core; Python sessions, isolation, one execution on retry and original
@@ -255,9 +257,11 @@ packages. Evidence: `final-delivery-contents-results.json`.
   Graceful Host restart evidence does not establish abrupt-crash or R-memory recovery.
 - Unfiltered offline Cargo metadata hits uncached `combine 4.6.8`; host-filtered
   metadata passes. Two different R installations require opt-in `RHO_ALT_*`.
-- The 33-case real-model matrix has not run; historical 27-case and earlier Agent
-  interface evidence apply only to their original source. Earlier full workspace
-  totals and retired tests are not current ordinary-plugin acceptance.
+- The 33-case assessment has 12 passes, 3 partial Plots cases and 18 unavailable
+  document cases. The separate real image diagnostic failed. Historical 27-case
+  evidence, full-workspace totals and retired tests do not establish current passes.
+  Six completed model runs were verified from original public records without
+  model/R replay; only the three Objects cases needed a targeted rerun.
 
 ## Development bundle and restart boundary
 
