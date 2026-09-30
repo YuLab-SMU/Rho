@@ -94,6 +94,24 @@ record the changed source paths, old/new identities and reused artifact digests.
 
 ## Portable local development bundle
 
+The current visual-runtime/annotation milestone refresh is reproducible with
+`scripts/refresh-development-bundle.mjs --previous OLD_BUNDLE --rho CURRENT_CORE
+--out NEW_BUNDLE --evidence REPORT_JSON`. It serially assembles the thirteen
+affected packages, guards the unchanged native dependency closure, and copies
+Environment/Process/Remote archives byte-for-byte. It records build times and
+old/new revision, artifact, size and digest identities, validates all archives,
+and preserves failed staging directories. Build the current core first; this
+runner never installs into a user catalog or silently rebuilds the core.
+
+For imported runtime acceptance, `visual-studio.spec.ts` accepts
+`RHO_STUDIO_PLUGIN_ARCHIVE`; it and `visual-science.spec.ts` accept
+`RHO_TEST_BINARY`. Set `RHO_FILES_PLUGIN_ARCHIVE` for the Files provider,
+`RHO_ANNOTATION_PLUGIN_ARCHIVE` for its declared saved contract, and
+`RHO_VISUAL_SDK_ARCHIVE` to the delivered Studio archive so both examples use its
+actual compiled SDK bytes. These flows cover the definition editor, built/applied
+views and real Files original-operation recovery. Archive validation alone does
+not establish these behaviors.
+
 To reuse a retained macOS arm64 core and a settled default plugin set, assemble a
 new directory without running Cargo, frontend builds or independent plugin builds:
 

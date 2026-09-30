@@ -1,11 +1,25 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {compilePublicUiSdk} from './plugin-ui.mjs';
 /** A package built outside the checkout using only the public SDK. The build
  * consumes the declaration, so changing its checkpoint changes the actual UI. */
 export function buildVisualPlugin(directory) {
-  const sdk=compilePublicUiSdk(path.join(directory,'public-sdk'));
+  let sdk;
+  if(process.env.RHO_VISUAL_SDK_ARCHIVE){
+    const archive=JSON.parse(fs.readFileSync(process.env.RHO_VISUAL_SDK_ARCHIVE));
+    const prefix='dist/public/plugin-ui/',output=path.join(directory,'delivered-sdk');fs.mkdirSync(output,{recursive:true});
+    assert.equal(archive.revision.manifest.id,'org.rho.studio');assert.equal(archive.artifacts.length,1);
+    for(const [name,entry] of Object.entries(archive.artifacts[0].files).filter(([name])=>name.startsWith(prefix))){
+      const file=name.slice(prefix.length);assert.match(file,/^[a-z0-9-]+\.js$/);
+      const bytes=Buffer.from(archive.blobs[entry.digest],'base64');assert.equal(bytes.length,entry.bytes);
+      assert.equal('sha256:'+createHash('sha256').update(bytes).digest('hex'),entry.digest);
+      fs.writeFileSync(path.join(output,file),bytes,{flag:'wx'});
+    }
+    sdk=path.join(output,'index.js');assert.ok(fs.existsSync(sdk),'Delivered Studio must include the compiled public SDK');
+  }else sdk=compilePublicUiSdk(path.join(directory,'public-sdk'));
   const project=path.join(directory,'declarative-plugin');fs.mkdirSync(path.join(project,'src'),{recursive:true});fs.mkdirSync(path.join(project,'views'));
   fs.cpSync(path.dirname(sdk),path.join(project,'src/sdk'),{recursive:true});
   const node=kind=>({kind,children:[],properties:{},style_tokens:{},bindings:{},visible_when:null,events:{},component:null});

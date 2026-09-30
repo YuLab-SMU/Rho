@@ -6,16 +6,21 @@ import {join,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
 import {buildVisualSciencePlugin} from '../../scripts/fixtures/visual-science-plugin.mjs';
 let directory:string,project:string,url:URL,host:ReturnType<typeof spawn>,view:any,instance:any,files:any,completed=false,core:string;
-const binary=resolve('../target/debug/rho'),windowId='visual-science-window';
+const binary=resolve(process.env.RHO_TEST_BINARY??'../target/debug/rho'),windowId='visual-science-window';
 const hash=(value:Buffer|string)=>createHash('sha256').update(value).digest('hex');
 async function port(method:string,params:any){const response=await fetch(new URL('/api/host',url),{method:'POST',headers:{Authorization:`Bearer ${url.hash.slice(7)}`,'Content-Type':'application/json','X-Rho-Studio-Window':windowId},body:JSON.stringify({project_root:project,frame:{id:crypto.randomUUID(),request:{method,params}}})}).then(r=>r.json());if(!response.ok)throw Error(response.error);return response.result;}
 async function query(id:string,args:any){return(await port('query_snapshot',{capability:{id,version:1},arguments:args})).data;}
 async function invoke(id:string,args:any){const result=await port('invoke',{capability:{id,version:1},arguments:args,client_request_id:crypto.randomUUID(),preconditions:[]});expect(result.status,result.error).toBe('succeeded');return result.output;}
 test.beforeAll(async()=>{
  const archive=process.env.RHO_FILES_PLUGIN_ARCHIVE;if(!archive)throw Error('Set RHO_FILES_PLUGIN_ARCHIVE to an accepted Files archive; this test does not rebuild native plugins.');
+ const manifest=JSON.parse(await readFile(resolve(archive),'utf8')).revision.manifest;
+ const annotations=process.env.RHO_ANNOTATION_PLUGIN_ARCHIVE;
+ if(manifest.requires.some((requirement:any)=>requirement.capability.id==='annotations.read')&&!annotations)
+  throw Error('Current Files requires its saved Annotations contract. Set RHO_ANNOTATION_PLUGIN_ARCHIVE before starting the fixture.');
  directory=await mkdtemp(join(tmpdir(),'rho-visual-science-'));project=join(directory,'project');await mkdir(project);project=await realpath(project);core=hash(await readFile(binary));
  await writeFile(join(project,'analysis.R'),'x <- 1\n');execFileSync('git',['init','-q',project]);
  const database=join(directory,'state.sqlite'),retained=JSON.parse(execFileSync(binary,['--database',database,'plugins','import',resolve(archive)],{encoding:'utf8'})).result;
+ if(annotations)execFileSync(binary,['--database',database,'plugins','import',resolve(annotations)],{encoding:'utf8'});
  host=spawn(binary,['--database',database,'--project',project,'workbench'],{stdio:['ignore','pipe','pipe']});
  url=new URL(await new Promise<string>((done,reject)=>{let out='',errors='';const timer=setTimeout(()=>reject(Error(`Host startup timed out: ${errors}`)),30000);host.stderr!.on('data',b=>errors+=b);host.stdout!.on('data',b=>{out+=b;const found=out.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/);if(found){clearTimeout(timer);done(found[0]);}});host.once('exit',code=>{clearTimeout(timer);reject(Error(`Host exited ${code}: ${errors}`));});}));
  const inspected=await query('plugins.inspect',{revision:retained.revision});expect(inspected.summary.plugin).toBe('org.rho.files');

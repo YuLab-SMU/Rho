@@ -176,6 +176,7 @@ Sources:
 - `scripts/plugin-protocol.mjs`
 - `scripts/plugin-set.mjs`
 - `scripts/prepare-annotation-foundation.mjs`
+- `scripts/refresh-development-bundle.mjs`
 - `scripts/rho-bundle.mjs`
 - `scripts/studio-agent-renderer.mjs`
 - `scripts/test-agent-core-tools.mjs`
@@ -440,7 +441,7 @@ Checks:
 - `plugins.help-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","help-plugin.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/agent/sdk/component-input/**`, `plugins/help/**`, `rust-toolchain.toml`, `scripts/build-help-plugin.mjs`, `sdk/**`, `ui/e2e/help-plugin.spec.ts`.
 - `plugins.local-bundle` (L2): `["node","scripts/test-rho-bundle.mjs"]`
-  Applies to: `scripts/build-rho-bundle.mjs`, `scripts/plugin-set.mjs`, `scripts/rho-bundle.mjs`, `scripts/test-rho-bundle.mjs`.
+  Applies to: `scripts/build-rho-bundle.mjs`, `scripts/plugin-set.mjs`, `scripts/refresh-development-bundle.mjs`, `scripts/rho-bundle.mjs`, `scripts/test-rho-bundle.mjs`.
 - `plugins.manager-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","manager-plugin.spec.ts","manager-archive.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/manager/**`, `rust-toolchain.toml`, `scripts/build-manager-plugin.mjs`, `sdk/**`, `ui/e2e/manager-archive.spec.ts`, `ui/e2e/manager-plugin.spec.ts`.
 - `plugins.manager-model` (L1): `["node","scripts/test-manager-plugin.mjs"]`

@@ -5,10 +5,10 @@ open work and the next milestone. Git and run artifacts retain history; see
 [Development](DEVELOPMENT.md#status-discipline) for update and evidence rules.
 Evidence filenames below are relative to `target/plugin-refactor/` unless stated.
 M4's reviewed annotation foundation is verified through ordinary-plugin browser
-and real-R owner flows. Delivery, the model matrix and OS IME acceptance remain
-separate later iterations.
+and real-R owner flows. The refreshed development bundle is verified; the model
+matrix, OS IME and final scope reconciliation remain open.
 
-## Current focus: M4 annotation foundation verified
+## Current focus: M6 delivery verified; system IME and model matrix next
 
 The unified-plugin plan was authorized on 2026-09-23; PS01–PS07 are approved
 ([Design 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved)).
@@ -20,15 +20,15 @@ The annotation view has cross-component entry, source-specific anchors, note
 counts, versioned notes, image marks and explicit Agent draft inclusion. Eight
 source entries and the Files selected-text and live Viewer image flows pass the
 focused M4 round, including save, draft inclusion, refresh and changed sources.
-The next delivery bundle, the 33-scenario model matrix and system IME have not
-been accepted in this round.
+The updated bundle and its imported Studio/Files flows now pass. The 33-scenario
+model matrix and system IME remain unverified.
 
 Committed baseline `5a5ecc4d` adds Studio data-source/custom-component forms to
 the executable visual runtime: synchronized references, shared Undo, invalid draft
 recovery and conflict protection. Studio model checks and two browser flows passed
 (38.2s for the browser run); settled normal/wide/390/220px captures were inspected in a separate 17.1s
 run. Evidence: `definition-editor-results.json`, `visual-runtime-results.json`.
-The accepted development bundle predates this runtime work.
+The current development bundle includes this runtime work.
 
 The public SDK now offers bounded snapshot polling and strict original-operation
 inspection. A separate ordinary UI package observes actual Files text, performs
@@ -53,7 +53,7 @@ recorded artifacts; “current” labels there do not certify this newer worktre
 | --- | --- | --- | --- |
 | 1 — verified | **Declared view → real Files update → explicit patch → original-operation recovery.** Public UI SDK and the consumer own observation/intent; Files and Operation own effects/truth. | Captured provider/arguments remain fixed; observation updates and stops on disposal; one explicit write; lost acknowledgement, reload and replacement view recover the original record with exactly one native effect. Affected Editor/Studio consumers still pass. | Real Files/browser flow, public SDK, Editor/Studio models, visual Studio/browser and client checks pass on settled source (`visual-science-results.json`). Snapshot polling only; no Host push channel. |
 | 2 — verified | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Reviewed AN01–AN06 interactions, eight-entry smoke, complete Files text/Viewer image flows, keyboard and 600/320px layouts. | Shared counts/near-selection entry, structured Agent-item anchors and current Viewer viewport capture pass. Files and Viewer save → existing Agent draft → refresh/source-change flows pass (`annotation-foundation-files`, `annotation-foundation-viewer`, `annotation-foundation-entries`). Prior lost-acknowledgement, CAS, history and mark/Undo evidence remains valid (`annotation-components-browser`, `annotation-version-browser`). This closes M4's foundation, not delivery, real-model quality or OS IME. |
-| 3 — deferred | **Updated runtime reaches the development bundle.** Existing package builders/delivery path. | Identify the changed source/runtime dependency closure; refresh affected packages once; validate exact revisions/hashes and run the affected imported-view flow. Retain unchanged archives/core and applicable installer evidence. | SDK changes can affect more than Studio: compare consumers and package contents. Repeat relocation/empty-start acceptance only if its inputs change. No installation/signing/publication. |
+| 3 — verified | **Updated runtime reaches the development bundle.** Existing package builders/delivery path. | Exact revisions/hashes, imported definition editor and delivered SDK → real Files patch/recovery pass. | Thirteen affected packages refreshed; Environment/Process/Remote archives reused byte-for-byte. Updated core requires and passes relocation/import/retry/remove/empty-start/restore acceptance (`m6-bundle-refresh.json`, `m6-bundle-acceptance.json`, `m6-delivery-results.json`). No user installation/signing/publication. |
 | 4 — deferred | **Actual system IME in ordinary views.** UI acceptance. | Real candidate window, composition/commit/Enter, focus changes and draft retention observed in the target app/browser. | Needs a stable foreground/input-method session. Synthetic composition passes are separate. Remains required for the full usability claim, outside M4 foundation closure. |
 | 5 — deferred | **Real Agent/provider quality on the ordinary-plugin path.** Agent acceptance. | Map the planned 33 scenarios to current public paths and record remaining cases individually. | Representative real-provider Send, one R effect and same-instance original-operation recovery pass (`agent-live-provider-results.json`, `agent-live-provider-wire-results.json`). The matrix stopped during fixture setup before any scenario attempt (`agent-live-matrix-results.json`); vision quality remains unrun. The unfinished opt-in harness is retained for later work. Historical 27-case evidence is not a current pass. |
 | 6 — closure | **Final evidence matches the approved scope and exact delivered artifacts.** Full-plan acceptance matrix. | Reconcile existing evidence, run only missing/invalidated checks, and keep every open requirement explicit. | Orders 1–5 have different completion conditions. A verified integration slice or development bundle does not close the full plan. No automatic workspace audit or release. |
@@ -182,8 +182,8 @@ client build/check, plugin boundaries and native activation tests pass. OS IME
 remains deferred.
 Current live-source status is labeled unknown unless the
 owner can establish it; an exact historical preview is not a current-version claim.
-Affected source packages are retained for milestone reuse; the development bundle
-has not been refreshed for this change. No user Host was restarted or installed.
+Affected source packages are retained for milestone reuse and included in the
+refreshed development bundle. No user Host was restarted or installed.
 
 ### Studio and public visual runtime
 
@@ -260,16 +260,17 @@ packages. Evidence: `final-delivery-contents-results.json`.
 ## Development bundle and restart boundary
 
 The last verified portable bundle is
-`target/plugin-refactor/local-bundle-studio-self-macos-arm64-20260930`
-(388,800,483 bytes): cleaned core, repaired Console/Studio and sixteen archives.
-Its Studio artifact matches self-development acceptance; fifteen other archives
-and the core were reused. Complete bundle validation and disposable Studio import
-passed in 30.66s; the unchanged installer/core reuse the prior 266.83s
-relocation/corruption/path/import/retry/remove/empty-start/restore matrix.
-Evidence: `studio-self-bundle-results.json`, `final-bundle-results.json`,
-`final-source-refresh-results.json`. Manifests retain exact hashes/sizes;
-core build evidence is at `de0fb4f1`. This bundle does not include the newer public
-visual runtime/definition-editor work or the unfinished scientific integration.
+`target/plugin-refactor/local-bundle-m6-macos-arm64-20260930`
+(391,727,116 bytes): current core, thirteen refreshed packages and three unchanged
+Environment/Process/Remote archives. A serial core build took 20.50s; package
+builds/exports/assembly took 84.713s. Imported Studio definition editing, build,
+preview/apply and recovery pass; real Files patch/recovery uses the compiled SDK
+extracted from the delivered Studio archive. Normal/220px captures were inspected.
+The updated core also passes relocation/corruption/path/import/retry/remove/empty-
+start/restore acceptance. Evidence: `m6-bundle-refresh.json`,
+`m6-bundle-acceptance.json`, `m6-delivery-results.json`; manifests retain exact
+revisions, hashes and sizes. Core source is `09633b76`; subsequent changes concern
+delivery harnesses/documentation. The assembly records a dirty checkout explicitly.
 
 Initial installation scope remains macOS 26.5.2 (25F84), Apple Silicon arm64.
 Native R is a separate per-machine acquisition. Existing binaries have ad hoc
