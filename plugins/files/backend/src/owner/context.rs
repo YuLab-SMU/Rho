@@ -79,7 +79,7 @@ impl Owner {
             let mut skipped_files = 0;
             let mut identity_budget = 8 * 1024 * 1024_u64;
             for entry in discovered.entries {
-                if entry.kind != "file" {
+                if entry.kind != "regular" {
                     continue;
                 }
                 if entry.byte_size > identity_budget {
