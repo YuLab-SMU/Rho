@@ -22,12 +22,15 @@ commands to complete instead of polling them with sleep loops.
 ### Milestone cadence
 
 Organize work as end-to-end user flows (the milestone table in
-[Status](STATUS.md#work-order-reset-2026-09-28)). Within a milestone:
+[Status](STATUS.md#remaining-work-order)). Within a milestone:
 
 - **Build the thinnest complete flow first**, including its real view, before
   deepening any one layer. Missing infrastructure should surface from the flow, not
   from a later integration pass.
-- **Iterate with L0/L1 only.** Independent package builds, frozen-Host harnesses,
+  When a public boundary is still unknown, use one small integration probe to
+  resolve it before expanding the implementation. Keep that probe's evidence
+  provisional; it does not replace acceptance on settled source.
+- **Use L0/L1 for routine iteration.** Independent package builds, frozen-Host harnesses,
   source-parity inventories, real-R fixtures and browser flows (plugin L2) run
   **once per milestone** on settled source, and again only when a later change
   touches the same boundary. Do not run them per commit.
@@ -41,12 +44,60 @@ Organize work as end-to-end user flows (the milestone table in
   while iframe actions use `/api/plugin-view` and `message.body`. A transport loss
   retires the frame; reload/reconnect before inspecting its saved original request.
   A correlated error reply keeps the frame connected. Test those outcomes distinctly.
+  For declared operations, also check capability scopes, legal request IDs and
+  the authoritative admitted/normalized request shape before the browser run.
+  Compare recovery with that exact original mapping; never relax identity checks
+  merely to make a fixture pass.
 - **Use tracked harnesses.** Acceptance runners belong in `scripts/` and in the
   governance map, not as one-off files under `target/`. Extend an existing runner
   (for example `scripts/test-agent-plugin.mjs`) instead of copying it per feature.
 - **Delete as you go.** When a milestone's flow passes, remove the fixed-composition
   path it replaces in the same milestone, or record the exact deletion condition
   in the Status table.
+
+### Planning and evidence reuse
+
+Use one active integration milestone. Work waiting for a design decision, native
+input environment or model access stays in a separate dependency queue and blocks
+only the flow that needs it. Preparing that queue does not require a second coding
+lane or concurrent Cargo jobs. Do not expand the current milestone to absorb it.
+
+Before implementation, put a short work order in the issue/branch: the observable
+user flow, real owner/public port, missing boundary, retained inputs, closest
+iteration check and completion condition. Record a proposed interaction's review
+dependency explicitly. The current work order belongs in Status; detailed steps
+and failure transcripts do not.
+
+Choose rebuilds and checks from what changed:
+
+| Changed input | Minimum action before acceptance |
+| --- | --- |
+| Documentation only | Documentation map, links and diff checks; no native build or product acceptance |
+| Fixture only | Check its contract/readiness assumptions; rerun the affected stage with the same valid artifacts |
+| Plugin UI or shared SDK runtime | Check affected consumers; assemble packages whose runtime bytes change; reuse unchanged native backends/core with valid evidence |
+| Package source only | Validate/export the new source revision; prove retained runtime bytes are unchanged; do not label this a new runtime build |
+| Native backend | One serial workspace build, retain its package/receipt, then reuse it for dependent flows |
+| Core or wire contract | Generate affected bindings first; rebuild the core and changed consumers, then run the affected cross-boundary flow |
+
+An old pass applies to its recorded source/artifact identity and prerequisites,
+not every later checkout. Identify reused evidence and the changed dependency
+closure in the milestone report. Invalid receipts fail preflight; they do not
+trigger an automatic rebuild. Independent-source packaging and full distribution
+checks retain their own milestone gates.
+
+Make assertions at the real effect: original caller/provider/session/request,
+one native effect, retained output and recovery without another dispatch. A
+synthetic peer or a successful receipt read cannot establish native execution,
+an originally successful operation, OS IME behavior or real-model quality.
+Use value comparison for JSON objects while preserving array/event order and
+identity; wait for parent and child painting before pointer/screenshot checks.
+
+For each acceptance run, record compile/assembly, executable startup and test-body
+time separately when available, plus rebuild count and reused artifact identity.
+Use those measurements to choose the next optimization; do not infer an OS cause
+from a timeout. A harness correction reruns its stage, a product correction adds
+the closest regression and affected acceptance, and an environment stall follows
+[timeout diagnostics](#timeouts-and-reporting). Preserve each result separately.
 
 The impact tool defaults to `--phase iteration` (L0/L1). It filters checks by
 their source scopes, so an Agent edit does not list unrelated plugin suites.
@@ -288,6 +339,11 @@ for actual Host acceptance. `npm run typecheck --prefix ui` covers product code.
 when current behavior, open problems or restart guidance change — not per commit.
 Record the current evidence file for a milestone, not every versioned attempt;
 failed attempts, compile errors and harness corrections stay in logs and Git.
+Keep the opening summary and remaining work order readable without consulting
+the evidence files. Group accepted behavior by user flow, give each open item an
+unblocking condition, and link evidence rather than packing run histories into
+single long lines to meet the line budget. Keep measured history in Git/run
+artifacts and reusable development rules here; do not create another status ledger.
 Commits that only record a verification result are folded into the change they
 verify.
 
