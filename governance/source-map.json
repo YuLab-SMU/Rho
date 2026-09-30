@@ -401,6 +401,8 @@
         "scripts/plugin-set.mjs",
         "scripts/test-plugin-set.mjs",
         "scripts/build-rho-bundle.mjs",
+        "scripts/build-preview-app.mjs",
+        "scripts/preview/**",
         "scripts/refresh-development-bundle.mjs",
         "scripts/rho-bundle.mjs",
         "scripts/test-rho-bundle.mjs",

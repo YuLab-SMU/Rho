@@ -130,6 +130,7 @@ Sources:
 - `scripts/build-objects-plugin.mjs`
 - `scripts/build-packages-plugin.mjs`
 - `scripts/build-plots-plugin.mjs`
+- `scripts/build-preview-app.mjs`
 - `scripts/build-process-plugin.mjs`
 - `scripts/build-r-plugin.mjs`
 - `scripts/build-remote-plugin.mjs`
@@ -177,6 +178,7 @@ Sources:
 - `scripts/plugin-protocol.mjs`
 - `scripts/plugin-set.mjs`
 - `scripts/prepare-annotation-foundation.mjs`
+- `scripts/preview/**`
 - `scripts/refresh-development-bundle.mjs`
 - `scripts/review-live-agent-matrix.mjs`
 - `scripts/rho-bundle.mjs`

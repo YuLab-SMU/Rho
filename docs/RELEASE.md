@@ -36,6 +36,41 @@ For a requested distribution, report the exact source commit, artifact paths, si
 hashes, signatures actually present and checks that ran. Build, signing, installation
 and publication are separate outcomes. Do not install or publish automatically.
 
+## Native local preview app
+
+For a double-click preview of the retained sixteen-plugin bundle:
+
+```sh
+node scripts/build-preview-app.mjs --bundle /absolute/bundle --out '/absolute/new/Rho Preview.app' --ark /absolute/ark --r-home /absolute/R.framework/Resources
+```
+
+The assembler validates the bundle, compiles a small AppKit launcher with the
+system Swift compiler, includes Node, and records exact payload hashes in
+`Contents/Resources/preview-manifest.json`. It applies and verifies a local ad hoc
+signature. A sibling `.receipt.json` records all final signed file hashes, modes,
+sizes and the SHA-256 of the ordered JSON file list. There is no DMG, Developer ID
+signature, notarization, installation or publication. The selected R and Ark stay external; this build is configured for
+the specified local machine. It can be moved as a complete app, while the selected
+runtime paths must remain available. The assembly commit does not establish the
+retained core's source provenance.
+
+The launcher owns a separate `~/Library/Application Support/Rho/Preview` catalog
+and Demo project. Its first launch imports the bundled exact revisions once,
+calls the delivered Manager's scientific-workspace recipe through the public
+plugin SDK, and opens `run_demo.R` through the Files owner. Manager's compiled
+modules are copied from its artifact; Files owner modules are compiled with the
+assembly checkout's TypeScript from the exact archived source, with those source
+hashes/compiler version recorded. The core, archives and browser UI are retained.
+It does not install R packages, start R or enable Agent tools automatically.
+
+Saved request identities survive interrupted preparation. Routine launches resume
+original suspended instances and reconnect the saved window without replacing
+missing plugins, recreating the scenario or replaying R code. The native window
+offers workspace/project/log access and graceful quit. Read the
+[preview operator guide](OPERATIONS.md#local-macos-preview) for daily use.
+App assembly and signature verification alone do not establish complete product
+acceptance; actual evidence and remaining gaps belong in Status.
+
 ## Ordinary plugin delivery sets
 
 `scripts/plugin-set.mjs` assembles **already built** source/artifact directories

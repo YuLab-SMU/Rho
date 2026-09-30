@@ -1,5 +1,29 @@
 # Running and using Rho
 
+## Local macOS preview
+
+Open **Rho Preview.app** in Finder. Its native launch window prepares the included
+tools in a dedicated catalog on first use, then opens a scientific Demo workspace
+in the default browser. The editor opens `run_demo.R`; use **Start R** in Console,
+then **Save and Run** in the editor. Files, Objects, Plots, Packages and the other
+ordinary views share the prepared scenario. No terminal setup or plugin selection
+is needed. R starts only when requested; Agent tools remain unchecked.
+
+Reopening the app returns to its saved window. **Open Workspace**, **Show Project**
+and **Show Logs** are in the native launch window; **Quit Rho** ends the local Host.
+Save files before quitting. Saved files and synchronized view state remain, but
+R memory ends with the Host. Closing the browser alone leaves Rho running.
+The preview keeps its Demo, catalog, private connection and logs under
+`~/Library/Application Support/Rho/Preview`; it does not read the earlier ad hoc
+`Rho Preview` catalog. Keep the private connection files private.
+
+This local build records this Mac's existing R home and Ark executable. They must
+remain available at the selected paths. Setup checks `jsonlite` and `rlang` without
+installing R packages. **Retry** retains original setup requests after a failure.
+Later launches resume original suspended instances and reconnect saved views;
+they do not reimport removed packages or replay R code. Assembly details and
+provenance are in [Build and release](RELEASE.md#native-local-preview-app).
+
 ## Start Studio
 
 From the repository, build the binary with the pinned Rust toolchain:
