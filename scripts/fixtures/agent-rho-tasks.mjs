@@ -200,10 +200,10 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
   await check('configured workspace reads are default, writes require Run, and Send pins the live R session',async()=>{
     const read=rTool(null,{id:'r.session',version:1}),run=rTool(null),file=cap=>({name:cap.replaceAll('.','_'),target:{type:'provider',binding:{...read.target.binding,provider:{...read.target.binding.provider,plugin:'org.rho.files',instance:'files'},capability:{id:cap,version:1}}}});
     read.name='observe';run.name='edit-run';
-    const files=[file('files.read_text'),file('files.apply_patch')],f=fixture([read,run,...files]),{model,id}=await task(f);
+    const files=[file('files.read_text'),file('files.apply_patch'),file('annotations.read'),file('annotations.write'),file('editor.run.inspect'),file('annotations.document.freeze')],f=fixture([read,run,...files]),{model,id}=await task(f);
     let session='live-r-one';f.overrides.set('r.session',async()=>({session_id:session}));
     await draft(model,id);await model.send(id);
-    assert.equal(f.calls.at(-1).args.arguments.r.target,'live-r-one');assert.deepEqual(f.calls.at(-1).args.arguments.tools,[files[0]]);
+    assert.equal(f.calls.at(-1).args.arguments.r.target,'live-r-one');assert.deepEqual(f.calls.at(-1).args.arguments.tools,[files[0],files[2],files[4]]);
     f.finish('run-0');await model.refresh();await model.selectTool(run);await draft(model,id,'Edit with R stopped');session=null;await model.send(id);
     assert.equal(f.calls.at(-1).args.arguments.r,null);assert.equal(f.calls.at(-1).args.arguments.mode,'run');assert.deepEqual(f.calls.at(-1).args.arguments.tools,files);
     f.finish('run-1');await model.refresh();await model.selectTool(null);await draft(model,id);await model.send(id);

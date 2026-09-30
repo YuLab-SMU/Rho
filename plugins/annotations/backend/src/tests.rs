@@ -48,7 +48,13 @@ fn inspection() -> Value {
     let r = reference();
     let mut manifest = json!(manifest::manifest());
     manifest["id"] = r["provider"]["plugin"].clone();
-    let mut preview = manifest["capabilities"][3].clone();
+    let mut preview = manifest["capabilities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|cap| cap["capability"]["id"] == "annotations.context.preview")
+        .unwrap()
+        .clone();
     preview["capability"]["id"] = json!("editor.context.preview");
     preview["required_scopes"] = json!(["documents.read"]);
     preview["input_schema"] = json!({});
@@ -257,7 +263,7 @@ fn capture_replies() -> Vec<(&'static str, Value)> {
 fn public_manifest_declares_only_supported_contracts() {
     let manifest = manifest::manifest();
     manifest.validate().unwrap();
-    assert_eq!(manifest.capabilities.len(), 7);
+    assert_eq!(manifest.capabilities.len(), 8);
     assert_eq!(manifest.contexts.len(), 1);
     assert_eq!(manifest.views.len(), 1);
     assert_eq!(manifest.views[0].id.as_str(), "annotations");
@@ -774,4 +780,49 @@ async fn capture_import_refuses_wrong_bytes_changed_caller_and_missing_original_
         assert_eq!(data["receipt"], Value::Null);
         f.stop().await;
     }
+}
+
+#[tokio::test]
+async fn document_freeze_has_separate_read_scope_and_cannot_change_notes_or_capture_other_sources()
+{
+    let mut f = Fixture::new().await;
+    let command = freeze("document-original");
+    let mut input = command["command"].clone();
+    input.as_object_mut().unwrap().remove("kind");
+    input["request_id"] = json!("document-original");
+    let frozen = succeeded(
+        f.perform(
+            call(
+                "document-freeze",
+                "annotations.document.freeze",
+                input.clone(),
+            ),
+            capture_replies(),
+            true,
+        )
+        .await,
+    );
+    assert!(frozen["outcome"]["evidence_id"].is_string());
+    for variant in ["missing-scope", "wrong-source", "write-command"] {
+        let mut input = input.clone();
+        input["request_id"] = json!(variant);
+        if variant == "wrong-source" {
+            input["reference"]["contribution"] = json!("files");
+        }
+        if variant == "write-command" {
+            input = json!({"request_id":variant,"command":{"kind":"create","evidence_id":"x","note":"not authorized"}});
+        }
+        let mut request = call(variant, "annotations.document.freeze", input);
+        if variant == "missing-scope" {
+            request.scopes.remove("documents.read");
+        }
+        let RpcBody::CommitPlan(plan) = f
+            .perform(request, vec![("views.caller", origin())], true)
+            .await
+        else {
+            panic!()
+        };
+        assert_eq!(plan.outcome, PluginOutcome::Failed, "{variant}");
+    }
+    f.stop().await;
 }

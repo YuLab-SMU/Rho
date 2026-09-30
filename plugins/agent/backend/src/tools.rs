@@ -416,6 +416,10 @@ impl AgentModelPort for RunPort {
                     .component_run(&self.metadata.scope, &self.run)?
                     .ok_or(ComponentTaskError::NotFound)?;
                 let window = &stored.run.request.window.window_id;
+                if binding.capability.id.as_str() == "annotations.document.freeze"
+                {
+                    crate::annotation_tools::document_source(&arguments["reference"], self.origin.tools.iter().map(|t| &t.selection), &self.origin.binding.project, window).map_err(|error| invalid(&error))?;
+                }
                 if binding.capability.id.as_str() == "editor.context.search" {
                     let object = arguments
                         .as_object_mut()

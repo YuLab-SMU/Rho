@@ -140,7 +140,8 @@ export async function checkScientificWorkspace({ Manager, scientificWorkspace, s
   assert.deepEqual(full.records.filter(r => r.operation.capability.id === 'plugins.activate').map(r => r.operation.normalized_arguments.alias), Object.keys(complete), 'restored JSON key order cannot activate consumers before their providers');
   const agent = fullViews.find(v => v.id === 'agent');
   assert.ok(fullViews.some(v => v.id === 'studio'));
-  assert.equal(agent.configuration.tools.length, 18);
+  assert.equal(agent.configuration.tools.length, 20);
+  for (const id of ['editor.run.inspect', 'annotations.document.freeze']) assert.ok(agent.configuration.tools.some(tool=>tool.target.binding.capability.id===id));
   for (const tool of agent.configuration.tools) {
     const instance = fullManager.state.workspace.instances[tool.target.binding.provider.plugin.slice(8)];
     assert.deepEqual(tool.target.binding.provider, instance);

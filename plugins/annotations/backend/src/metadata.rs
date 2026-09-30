@@ -171,7 +171,10 @@ impl Metadata {
             }
             _ => (),
         }
-        if call.binding.capability.id.as_str() != "annotations.write" {
+        if !matches!(
+            call.binding.capability.id.as_str(),
+            "annotations.write" | "annotations.document.freeze"
+        ) {
             return match call.binding.capability.id.as_str() {
                 "annotations.read" => self.read(decode(&call.arguments)?),
                 "annotations.context.search" => {
@@ -183,7 +186,28 @@ impl Metadata {
                 _ => Err(Failure::invalid("Unknown annotation query")),
             };
         }
-        let arguments: WriteRequest = decode(&call.arguments)?;
+        let arguments: WriteRequest = if call.binding.capability.id.as_str()
+            == "annotations.document.freeze"
+        {
+            let input: FreezeDocumentRequest = decode(&call.arguments)?;
+            if !call.scopes.contains("documents.read")
+                || input.reference.contribution.as_str() != "documents"
+            {
+                return Err(Failure::invalid(
+                    "Document freeze requires its original document-read scope and document contribution",
+                ));
+            }
+            WriteRequest {
+                request_id: input.request_id,
+                command: WriteCommand::Freeze {
+                    reference: input.reference,
+                    inclusion: input.inclusion,
+                    anchor: input.anchor,
+                },
+            }
+        } else {
+            decode(&call.arguments)?
+        };
         let actor = self.actor(&caller);
         let command = match arguments.command {
             WriteCommand::Freeze {

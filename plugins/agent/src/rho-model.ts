@@ -39,7 +39,7 @@ export class RhoModel {
       (tool.target.binding.capability.id === 'r.execute' && tool.target.binding.capability.version === 2 ||
        tool.target.binding.capability.id === 'r.session' && tool.target.binding.capability.version === 1)));
     this.workspaceTools = structuredClone(configured.filter(tool => tool.target.type === 'provider' &&
-      tool.target.binding.project === client.view.project && /^(files|editor|environment)\./.test(tool.target.binding.capability.id)));
+      tool.target.binding.project === client.view.project && /^(files|editor|environment|annotations)\./.test(tool.target.binding.capability.id)));
     this.state = owner.state.rho ??= { selected: null, drafts: {}, pending: [] };
     // Observe the configured workspace by default. A saved explicit opt-out is
     // retained, and execution remains a separate choice in the existing menu.
@@ -235,7 +235,7 @@ export class RhoModel {
       let { r, mode } = continueRun ? selected : await this.resolveSession(selected);
       let tools = selected.r ? structuredClone(this.workspaceTools.filter(tool => {
         if (tool.target.type !== 'provider') return false;
-        return mode === 'run' || /^(files\.(list_directory|read_text|search_text|search_files)|editor\.(context\.(search|preview)|read)|environment\.status)$/.test(tool.target.binding.capability.id);
+        return mode === 'run' || /^(files\.(list_directory|read_text|search_text|search_files)|editor\.(context\.(search|preview)|read|run\.inspect)|environment\.status|annotations\.(read|context\.(search|preview)|capture\.read))$/.test(tool.target.binding.capability.id);
       })) : [];
       if (continueRun) {
         const previous = await this.read<ComponentAgentRun>('agent.model.run.get', { run_id: continueRun });

@@ -11,7 +11,9 @@ pub fn key(id: &str) -> CapabilityKey {
 }
 pub fn is_operation(id: &str) -> Option<bool> {
     match id {
-        "annotations.write" | "annotations.capture.import" => Some(true),
+        "annotations.write" | "annotations.document.freeze" | "annotations.capture.import" => {
+            Some(true)
+        }
         "annotations.capture.upload"
         | "annotations.read"
         | "annotations.context.search"
@@ -48,9 +50,12 @@ fn capability(
     if id == "annotations.capture.import" {
         scopes.insert("resources.read".into());
     }
+    if id == "annotations.document.freeze" {
+        scopes.insert("documents.read".into());
+    }
     CapabilityContribution {
         capability: key(id), kind: if control { CapabilityKind::Control } else if operation { CapabilityKind::Operation } else { CapabilityKind::Query }, title: id.into(),
-        description: if operation { "Freeze a complete owner-contributed source or append an annotation revision with an original request receipt and CAS. Quotes use offsets within the selected preview inclusion. Source image references remain references; a captured-view anchor must refer to a separately imported, validated capture. Does not modify scientific content, start a runtime, or send to an Agent." } else { "Read principal/project-scoped annotation records and frozen evidence without observing a live source or starting a runtime. Exact historical note revisions stay readable; current source status remains unknown." }.into(),
+        description: if id == "annotations.document.freeze" { "Freeze one complete synchronized document at its exact source version under document-read authority. Returns an evidence identity for a subsequent explicit note creation. Does not append a note, modify scientific content, start R or send to an Agent." } else if operation { "Freeze a complete owner-contributed source or append an annotation revision with an original request receipt and CAS. Quotes use offsets within the selected preview inclusion. Source image references remain references; a captured-view anchor must refer to a separately imported, validated capture. Does not modify scientific content, start a runtime, or send to an Agent." } else { "Read principal/project-scoped annotation records and frozen evidence without observing a live source or starting a runtime. Exact historical note revisions stay readable; current source status remains unknown." }.into(),
         input_schema, output_schema, examples: vec![example], recovery_schema: json!(true),
         required_scopes: scopes,
         effects: if operation || control { ["annotations.metadata".into()].into() } else { Default::default() },
@@ -180,6 +185,12 @@ pub fn manifest() -> PluginManifest {
             ),
         ],
         capabilities: vec![
+            capability(
+                "annotations.document.freeze",
+                schema_for!(FreezeDocumentRequest).to_value(),
+                schema_for!(AnnotationCommandReceipt).to_value(),
+                json!({"request_id":"freeze-document","reference":{"provider":{"plugin":"org.rho.editor","instance":"editor-example","revision":format!("sha256:{}","a".repeat(64)),"artifact":format!("sha256:{}","b".repeat(64))},"contribution":"documents","window":"window-example","selector":{"draft":"draft-example","version":1,"digest":format!("sha256:{}","c".repeat(64))}},"inclusion":{"kind":"document"},"anchor":{"kind":"whole_item"}}),
+            ),
             capability(
                 "annotations.capture.upload",
                 schema_for!(CaptureUpload).to_value(),

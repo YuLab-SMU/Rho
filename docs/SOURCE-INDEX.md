@@ -140,6 +140,7 @@ Sources:
 - `scripts/build-viewer-plugin.mjs`
 - `scripts/check-plugin-boundaries.mjs`
 - `scripts/fixtures/agent-annotation-tools.cjs`
+- `scripts/fixtures/agent-document-workflow.mjs`
 - `scripts/fixtures/agent-environment-tools.cjs`
 - `scripts/fixtures/agent-process-tools.cjs`
 - `scripts/fixtures/agent-remote-tools.cjs`
@@ -154,6 +155,7 @@ Sources:
 - `scripts/fixtures/annotation-scientific.mjs`
 - `scripts/fixtures/editor-code.mjs`
 - `scripts/fixtures/editor-controller.mjs`
+- `scripts/fixtures/editor-external-run.mjs`
 - `scripts/fixtures/editor-format.mjs`
 - `scripts/fixtures/editor-save-run.mjs`
 - `scripts/fixtures/editor-sessions.mjs`
@@ -472,7 +474,7 @@ Checks:
 - `plugins.plots-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plots-plugin.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `plugins/plots/**`, `rust-toolchain.toml`, `scripts/build-plots-plugin.mjs`, `sdk/**`, `ui/e2e/plots-plugin.spec.ts`.
 - `plugins.preview-agent-context` (L2): `["node","scripts/test-preview-agent-context.mjs"]`
-  Applies to: `crates/plugins/**`, `plugins/agent/**`, `plugins/editor/**`, `plugins/files/**`, `plugins/r/**`, `scripts/test-preview-agent-context.mjs`.
+  Applies to: `crates/plugins/**`, `plugins/agent/**`, `plugins/editor/**`, `plugins/files/**`, `plugins/r/**`, `scripts/fixtures/agent-document-workflow.mjs`, `scripts/test-preview-agent-context.mjs`.
 - `plugins.preview-browser` (L2): `["npm","run","test:browser","--prefix","ui","--","plugin-preview.spec.ts"]`
   Applies to: `Cargo.lock`, `Cargo.toml`, `crates/cli/**`, `crates/host/**`, `crates/plugin-protocol/**`, `crates/plugin-sdk/**`, `crates/plugins/**`, `crates/workbench/**`, `rust-toolchain.toml`, `sdk/**`, `ui/e2e/plugin-preview.spec.ts`, `ui/src/**`.
 - `plugins.preview-host` (L2): `["cargo","test","-p","rho-host","--test","plugin_preview","--locked"]`

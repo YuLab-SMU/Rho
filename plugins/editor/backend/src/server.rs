@@ -84,7 +84,7 @@ where
                                 "editor.save"=>call.scopes.contains("project.write") && call.scopes.contains("project.read"),
                                 "editor.run"=>call.scopes.contains("workspace.run_r"),_=>false,
                             }
-                        }else{matches!(id,"editor.context.search"|"editor.context.preview")};
+                        }else{matches!(id,"editor.context.search"|"editor.context.preview") || id=="editor.run.inspect" && call.scopes.contains("operation.read")};
                         if !allowed{Some(error("Unsupported Editor capability or missing original scope"))}
                         else if active.len()>=16 || mutation && operations.len()>=32{Some(error("Editor capacity reached; inspect original requests"))}
                         else{
@@ -97,7 +97,10 @@ where
                             let original = request.clone();
                             jobs.spawn(async move {
                                 let reply=if mutation{RpcBody::CommitPlan(crate::actions::invoke(host,instance,call).await)}else{
-                                    match context(&host,&instance,&call).await{Ok((data,completeness))=>RpcBody::QueryResult{data,completeness,source:None},Err(e)=>error(e)}
+                                    let observed=if call.binding.capability.id.as_str()=="editor.run.inspect" {
+                                        crate::actions::inspect(&host,&instance,&call).await.map(|data|(data,ObservationCompleteness::Complete))
+                                    }else{context(&host,&instance,&call).await};
+                                    match observed{Ok((data,completeness))=>RpcBody::QueryResult{data,completeness,source:None},Err(e)=>error(e)}
                                 };(original,operation,reply)
                             });None
                         }

@@ -100,11 +100,11 @@ function workspaceTools(setup: ScientificWorkspace, project: string) {
     ['r', 'r.session', 1], ['r', 'r.execute', 2], ['r', 'r.list_objects', 1],
     ['files', 'files.list_directory', 1], ['files', 'files.read_text', 1], ['files', 'files.search_text', 1],
     ['files', 'files.prepare_patch', 1], ['files', 'files.apply_patch', 1],
-    ['editor', 'editor.context.search', 1], ['editor', 'editor.context.preview', 1],
+    ['editor', 'editor.context.search', 1], ['editor', 'editor.context.preview', 1], ['editor', 'editor.run.inspect', 1],
     ['editor', 'editor.edit', 1], ['editor', 'editor.save', 1], ['editor', 'editor.run', 1],
     ['process', 'process.prepare_local', 2], ['process', 'process.run_local', 2],
     ['remote', 'remote.status', 1], ['environment', 'environment.status', 1],
-    ['annotations', 'annotations.read', 1], ['annotations', 'annotations.write', 1],
+    ['annotations', 'annotations.read', 1], ['annotations', 'annotations.write', 1], ['annotations', 'annotations.document.freeze', 1],
   ];
   return offers.filter(([instance, id, version]) => setup.instances[instance] &&
     setup.providers.some(p => p.instance === instance && p.capability.id === id && p.capability.version === version) &&

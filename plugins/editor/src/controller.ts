@@ -9,10 +9,11 @@ import { EditorCodeActions, validProvider, type CodeAction } from './r-actions.j
 import { readFormattedCode } from './r-format.js';
 import { observeSession } from './sessions.js';
 import { type EditorPreferences, defaultPreferences, editorPreferences } from './preferences.js';
+import { type ExternalRun, type ExternalRunObservation, validateExternalRun, inspectExternalRun } from './external-run.js';
 interface FileSave { intent: Intent; path: string; raw: string; before: string | null; baseHash: string | null; digest: string; }
 interface DiskComparison { path: string; raw: string; digest: string; }
 interface FileRun { path: string; raw: string; digest: string; save: FileSave | null; phase: 'saving' | 'ready' | 'submitting'; }
-interface Payload { schema: 1; files: InstanceRef; runtime: InstanceRef | null; preferences: EditorPreferences; document: DocumentBody; save: FileSave | null; disk: DiskComparison | null; code: CodeAction | null; fileRun: FileRun | null; }
+interface Payload { schema: 1; files: InstanceRef; runtime: InstanceRef | null; preferences: EditorPreferences; document: DocumentBody; save: FileSave | null; disk: DiskComparison | null; code: CodeAction | null; fileRun: FileRun | null; externalRun?: ExternalRun; }
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 /** Coordinates a single ordinary Editor view. Native file actions and generic
  * draft saves keep separate requests, outcomes and capture identities. */
@@ -27,6 +28,8 @@ export class EditorController {
   disk: DiskComparison | null = null;
   code: CodeAction | null = null;
   fileRun: FileRun | null = null;
+  externalRun: ExternalRun | null = null;
+  externalResult: ExternalRunObservation | null = null;
   error = '';
   synchronizationError = '';
   private paused = false;
@@ -36,6 +39,7 @@ export class EditorController {
   // Closing, reopening or a failed continuation never recreates that authority.
   private automaticFileRun = false;
   private initial: FileObservation | null;
+  private acknowledgedCapture: { draft: string; version: number; payload: Payload } | null = null;
   constructor(private readonly client: Client, configuration: { source: InstanceRef; file: FileObservation | null; runtime?: InstanceRef | null; session_selection?: boolean; preferences?: EditorPreferences }, private changed: () => void = () => {}) {
     this.files = new EditorFiles(client, configuration?.source);
     if (!configuration || !Object.hasOwn(configuration, 'file')) throw new Error('The Editor configuration needs an explicit file capture or null.');
@@ -60,7 +64,7 @@ export class EditorController {
   }
   private payload(): Payload {
     if (!this.document) throw new Error('No acknowledged Editor document is available.');
-    return { schema: 1, files: this.files.source, runtime: this.runtime.source, preferences: this.preferences, document: this.document.snapshot, save: this.pending && structuredClone(this.pending), disk: this.disk && structuredClone(this.disk), code: this.code && structuredClone(this.code), fileRun: this.fileRun && structuredClone(this.fileRun) };
+    return { schema: 1, files: this.files.source, runtime: this.runtime.source, preferences: this.preferences, document: this.document.snapshot, save: this.pending && structuredClone(this.pending), disk: this.disk && structuredClone(this.disk), code: this.code && structuredClone(this.code), fileRun: this.fileRun && structuredClone(this.fileRun), ...(this.externalRun ? { externalRun: structuredClone(this.externalRun) } : {}) };
   }
   async open() {
     this.live();
@@ -78,6 +82,7 @@ export class EditorController {
       const document = new EditorDocument(value.document);
       if (value.save !== null) await this.checkSave(value.save, false);
       if (value.code !== null) this.runtime.validate(value.code);
+      if (value.externalRun !== undefined) validateExternalRun(this.client, value.externalRun);
       await this.checkFileRun(value.fileRun, value.code, value.save);
       if (value.disk !== null && (!value.disk || value.disk.path !== document.path || typeof value.disk.raw !== 'string' ||
         bytes(value.disk.raw).length > MAX_EDIT_BYTES || value.disk.raw.includes('\0') || await sha256(value.disk.raw) !== value.disk.digest))
@@ -86,8 +91,12 @@ export class EditorController {
       this.disk = structuredClone(value.disk);
       this.code = structuredClone(value.code);
       this.fileRun = structuredClone(value.fileRun);
+      this.externalRun = value.externalRun ? structuredClone(value.externalRun) : null;
+      this.externalResult = null;
       this.runtime.select(value.runtime);
       this.settings = settings;
+      const acknowledged = this.drafts.snapshot.draft!;
+      this.acknowledgedCapture = { draft: acknowledged.draft, version: acknowledged.version, payload: structuredClone(value) };
     } else {
       if (this.drafts.unresolved) throw new Error('The first draft save remains unconfirmed. Inspect its original Operation before opening another document.');
       if (this.initial) {
@@ -124,14 +133,25 @@ export class EditorController {
   async refreshDocument(): Promise<boolean> {
     if (this.busy || this.stopped || this.paused || !this.document || this.drafts.unresolved || this.pending || this.fileRun && !terminal(this.code?.status ?? 'accepted')) return false;
     return this.drafts.refresh((bytes, previous, next) => {
-      if (this.busy || this.stopped || this.paused || !this.document || this.pending || this.fileRun && !terminal(this.code?.status ?? 'accepted') ||
-        this.document.snapshot.version !== (previous.metadata as { document_version?: string })?.document_version) return false;
+      if (this.busy || this.stopped || this.paused || !this.document || this.pending || this.fileRun && !terminal(this.code?.status ?? 'accepted')) return false;
       const payload = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as Payload;
       const current = this.payload();
-      if (!same({ ...payload, document: current.document, disk: current.disk }, current) || payload.disk !== null ||
+      if (payload.externalRun !== undefined) validateExternalRun(this.client, payload.externalRun);
+      const acknowledged = this.acknowledgedCapture;
+      const receiptOnly = acknowledged?.draft === previous.draft && acknowledged.version === previous.version &&
+        same({ ...payload, externalRun: null }, { ...acknowledged.payload, externalRun: null });
+      // A run receipt changes the draft version, not the captured document.
+      // Merge only that link when the user has typed since synchronization.
+      // Concurrent remote text edits still require explicit conflict handling.
+      if (!receiptOnly && this.document.snapshot.version !== (previous.metadata as { document_version?: string })?.document_version) return false;
+      if (!same({ ...payload, document: current.document, disk: current.disk, externalRun: current.externalRun }, { ...current, externalRun: current.externalRun }) || payload.disk !== null ||
         payload.document.version !== (next.metadata as { document_version?: string })?.document_version)
         throw Error('The external document update differs from this Editor. Local text is retained.');
-      this.document.adopt(payload.document); this.disk = null; this.synchronizationError = ''; this.notify(); return true;
+      if (!receiptOnly) { this.document.adopt(payload.document); this.disk = null; }
+      if (!same(payload.externalRun ?? null, this.externalRun)) this.externalResult = null;
+      this.externalRun = payload.externalRun ? structuredClone(payload.externalRun) : null;
+      this.acknowledgedCapture = { draft: next.draft, version: next.version, payload: structuredClone(payload) };
+      this.synchronizationError = ''; this.notify(); return true;
     });
   }
   flush(): Promise<void> {
@@ -139,7 +159,10 @@ export class EditorController {
     const metadata = { encoding: 'org.rho.editor.document.v1', path: payload.document.path,
       name: payload.document.path?.split('/').at(-1) ?? 'Untitled.R', document_version: payload.document.version,
       selection: { anchor: payload.document.anchor, head: payload.document.head }, read_only: payload.document.readonly !== null };
-    return this.drafts.save(capture, metadata).then(() => { this.synchronizationError = ''; })
+    return this.drafts.save(capture, metadata).then(draft => {
+      this.acknowledgedCapture = { draft: draft.draft, version: draft.version, payload: structuredClone(payload) };
+      this.synchronizationError = '';
+    })
       .catch(error => { this.synchronizationError = message(error); throw error; }).finally(() => this.notify());
   }
   async inspectDraft() {
@@ -289,6 +312,12 @@ export class EditorController {
     await this.flush();
   }); }
   private async clearCompletedCode() {
+    if (this.externalRun) {
+      const result = await inspectExternalRun(this.client, this.externalRun); this.editable();
+      this.externalResult = result;
+      if (result.parent.status !== 'succeeded') throw Error('Inspect and dismiss the original Agent run before starting another.');
+      this.externalRun = null; this.externalResult = null;
+    }
     if (!this.code) return;
     if (this.fileRun && this.fileRun.phase !== 'submitting') throw new Error('Finish or dismiss the retained saved run before starting another.');
     const previous = await inspectOriginal(this.client, this.code.intent); this.editable();
@@ -413,6 +442,18 @@ export class EditorController {
     const record = await inspectOriginal(this.client, this.code.intent); this.editable();
     if (!['succeeded', 'failed', 'cancelled'].includes(record.status)) throw new Error('The original code action has no confirmed terminal result.');
     this.code = null; this.fileRun = null; this.automaticFileRun = false; await this.flush();
+  }); }
+  inspectExternalRun(): Promise<ExternalRunObservation> { return this.act(async () => {
+    if (!this.externalRun) throw Error('No original Agent run is retained.');
+    const capture = this.externalRun, result = await inspectExternalRun(this.client, capture); this.live();
+    if (!same(capture, this.externalRun)) throw Error('The retained Agent run changed during observation.');
+    this.externalResult = result; return result;
+  }); }
+  dismissExternalRun(): Promise<void> { return this.act(async () => {
+    if (!this.externalRun) throw Error('No original Agent run is retained.');
+    const result = await inspectExternalRun(this.client, this.externalRun); this.editable(); this.externalResult = result;
+    if (!['succeeded', 'failed', 'cancelled'].includes(result.parent.status)) throw Error('The original Agent run has no confirmed terminal result. Inspect it without replay.');
+    this.externalRun = null; this.externalResult = null; await this.flush();
   }); }
   async pause() { this.paused = true; this.automaticFileRun = false; await this.task?.catch(() => undefined); await this.flush(); }
   resume() { this.paused = false; this.notify(); }

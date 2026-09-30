@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 export const liveMatrixCases=[
   ...['objects','packages','plots','environment','workspace'].map(id=>({id,profile:id,available:true,mode:id==='workspace'?'run':'explain'})),
   ...[['documents','documents'],['project','project'],['repair-document','documents'],['repair-plot','documents'],['generic-new-task','project'],['objects-script','objects']]
-    .map(([id,profile])=>({id,profile,available:false,reason:'The current ordinary Rho model port exposes r_session/r_execute; scoped Editor edit/save/captured-run tools have not been connected.'})),
+    .map(([id,profile])=>({id,profile,available:false,reason:'This historical R-only fixture does not select Editor tools. Current scoped document-workflow coverage is in test-preview-agent-context.mjs --document-workflow true; these historical real-model cases remain unassessed.'})),
 ];
 
 export function installedCopyVersion(preview){

@@ -130,6 +130,34 @@
     },
     {
       "capability": {
+        "id": "annotations.capture.upload",
+        "version": 1
+      },
+      "scopes": [
+        "application.control",
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "agent.context.search",
+        "version": 1
+      },
+      "scopes": [
+        "application.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "agent.context.preview",
+        "version": 1
+      },
+      "scopes": [
+        "application.read"
+      ]
+    },
+    {
+      "capability": {
         "id": "annotations.capture.import",
         "version": 1
       },
@@ -359,34 +387,6 @@
         "resources.read",
         "workspace.read"
       ]
-    },
-    {
-      "capability": {
-        "id": "annotations.capture.upload",
-        "version": 1
-      },
-      "scopes": [
-        "application.control",
-        "plugins.read"
-      ]
-    },
-    {
-      "capability": {
-        "id": "agent.context.search",
-        "version": 1
-      },
-      "scopes": [
-        "application.read"
-      ]
-    },
-    {
-      "capability": {
-        "id": "agent.context.preview",
-        "version": 1
-      },
-      "scopes": [
-        "application.read"
-      ]
     }
   ],
   "views": [
@@ -400,19 +400,60 @@
       },
       "configuration_schema": {
         "$defs": {
+          "AnnotationCaptureRef": {
+            "additionalProperties": false,
+            "properties": {
+              "byte_size": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "capture_id": {
+                "type": "string"
+              },
+              "height": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "original_media": {
+                "description": "True only when these are the owner's original static media bytes.",
+                "type": "boolean"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "width": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "capture_id",
+              "sha256",
+              "width",
+              "height",
+              "mime_type",
+              "byte_size",
+              "original_media"
+            ],
+            "type": "object"
+          },
+          "AnnotationCharacterUnit": {
+            "enum": [
+              "utf8",
+              "utf16",
+              "unicode_scalar"
+            ],
+            "type": "string"
+          },
           "AnnotationComponentSource": {
             "additionalProperties": false,
             "properties": {
-              "inclusion": true,
-              "preview": {
-                "$ref": "#/$defs/CapabilityKey"
-              },
-              "reference": {
-                "$ref": "#/$defs/ContextReference"
-              },
-              "title": {
-                "type": "string"
-              },
               "anchor": {
                 "anyOf": [
                   {
@@ -423,6 +464,16 @@
                   }
                 ],
                 "default": null
+              },
+              "inclusion": true,
+              "preview": {
+                "$ref": "#/$defs/CapabilityKey"
+              },
+              "reference": {
+                "$ref": "#/$defs/ContextReference"
+              },
+              "title": {
+                "type": "string"
               }
             },
             "required": [
@@ -522,39 +573,42 @@
           "TextAnchor": {
             "oneOf": [
               {
-                "type": "object",
+                "additionalProperties": false,
                 "properties": {
                   "kind": {
-                    "type": "string",
-                    "const": "whole_item"
+                    "const": "whole_item",
+                    "type": "string"
                   }
                 },
                 "required": [
                   "kind"
                 ],
-                "additionalProperties": false
+                "type": "object"
               },
               {
-                "type": "object",
                 "additionalProperties": false,
                 "properties": {
-                  "path": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "row": {
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
-                    "format": "uint64",
-                    "minimum": 0
-                  },
                   "column": {
                     "type": [
                       "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "structured",
+                    "type": "string"
+                  },
+                  "path": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "row": {
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
                       "null"
                     ]
                   },
@@ -563,57 +617,53 @@
                       "string",
                       "null"
                     ]
-                  },
-                  "kind": {
-                    "type": "string",
-                    "const": "structured"
                   }
                 },
                 "required": [
                   "kind",
                   "path"
-                ]
+                ],
+                "type": "object"
               },
               {
-                "type": "object",
                 "additionalProperties": false,
                 "properties": {
                   "capture": {
                     "$ref": "#/$defs/AnnotationCaptureRef"
                   },
                   "kind": {
-                    "type": "string",
-                    "const": "captured_view"
+                    "const": "captured_view",
+                    "type": "string"
                   }
                 },
                 "required": [
                   "kind",
                   "capture"
-                ]
+                ],
+                "type": "object"
               },
               {
-                "type": "object",
                 "additionalProperties": false,
                 "properties": {
+                  "end": {
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "const": "text_quote",
+                    "type": "string"
+                  },
                   "quote": {
                     "type": "string"
                   },
                   "start": {
-                    "type": "integer",
                     "format": "uint64",
-                    "minimum": 0
-                  },
-                  "end": {
-                    "type": "integer",
-                    "format": "uint64",
-                    "minimum": 0
+                    "minimum": 0,
+                    "type": "integer"
                   },
                   "unit": {
                     "$ref": "#/$defs/AnnotationCharacterUnit"
-                  },
-                  "kind": {
-                    "type": "string",
-                    "const": "text_quote"
                   }
                 },
                 "required": [
@@ -622,59 +672,9 @@
                   "start",
                   "end",
                   "unit"
-                ]
+                ],
+                "type": "object"
               }
-            ]
-          },
-          "AnnotationCaptureRef": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "capture_id": {
-                "type": "string"
-              },
-              "sha256": {
-                "type": "string"
-              },
-              "width": {
-                "type": "integer",
-                "format": "uint32",
-                "minimum": 0
-              },
-              "height": {
-                "type": "integer",
-                "format": "uint32",
-                "minimum": 0
-              },
-              "mime_type": {
-                "type": "string"
-              },
-              "byte_size": {
-                "type": "integer",
-                "format": "uint64",
-                "minimum": 0
-              },
-              "original_media": {
-                "type": "boolean",
-                "description": "True only when these are the owner's original static media bytes."
-              }
-            },
-            "required": [
-              "capture_id",
-              "sha256",
-              "width",
-              "height",
-              "mime_type",
-              "byte_size",
-              "original_media"
-            ]
-          },
-          "AnnotationCharacterUnit": {
-            "type": "string",
-            "enum": [
-              "utf8",
-              "utf16",
-              "unicode_scalar"
             ]
           }
         },
@@ -701,6 +701,680 @@
     }
   ],
   "capabilities": [
+    {
+      "capability": {
+        "id": "annotations.document.freeze",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "annotations.document.freeze",
+      "description": "Freeze one complete synchronized document at its exact source version under document-read authority. Returns an evidence identity for a subsequent explicit note creation. Does not append a note, modify scientific content, start R or send to an Agent.",
+      "input_schema": {
+        "$defs": {
+          "AnnotationCaptureRef": {
+            "additionalProperties": false,
+            "properties": {
+              "byte_size": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "capture_id": {
+                "type": "string"
+              },
+              "height": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "original_media": {
+                "description": "True only when these are the owner's original static media bytes.",
+                "type": "boolean"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "width": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "capture_id",
+              "sha256",
+              "width",
+              "height",
+              "mime_type",
+              "byte_size",
+              "original_media"
+            ],
+            "type": "object"
+          },
+          "AnnotationCharacterUnit": {
+            "enum": [
+              "utf8",
+              "utf16",
+              "unicode_scalar"
+            ],
+            "type": "string"
+          },
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          },
+          "TextAnchor": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "whole_item",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "column": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "structured",
+                    "type": "string"
+                  },
+                  "path": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "row": {
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "topic": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "capture": {
+                    "$ref": "#/$defs/AnnotationCaptureRef"
+                  },
+                  "kind": {
+                    "const": "captured_view",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "capture"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "end": {
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "const": "text_quote",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "type": "string"
+                  },
+                  "start": {
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "unit": {
+                    "$ref": "#/$defs/AnnotationCharacterUnit"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "quote",
+                  "start",
+                  "end",
+                  "unit"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "A separately scoped source read for new document-linked research notes.\nGeneric note CRUD does not acquire document-read authority.",
+        "properties": {
+          "anchor": {
+            "$ref": "#/$defs/TextAnchor"
+          },
+          "inclusion": true,
+          "reference": {
+            "$ref": "#/$defs/ContextReference"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "reference",
+          "inclusion",
+          "anchor"
+        ],
+        "title": "FreezeDocumentRequest",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "anchor": {
+            "kind": "whole_item"
+          },
+          "inclusion": {
+            "kind": "document"
+          },
+          "reference": {
+            "contribution": "documents",
+            "provider": {
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "instance": "editor-example",
+              "plugin": "org.rho.editor",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "selector": {
+              "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "draft": "draft-example",
+              "version": 1
+            },
+            "window": "window-example"
+          },
+          "request_id": "freeze-document"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AnnotationCaptureRef": {
+            "additionalProperties": false,
+            "properties": {
+              "byte_size": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "capture_id": {
+                "type": "string"
+              },
+              "height": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "original_media": {
+                "description": "True only when these are the owner's original static media bytes.",
+                "type": "boolean"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "width": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "capture_id",
+              "sha256",
+              "width",
+              "height",
+              "mime_type",
+              "byte_size",
+              "original_media"
+            ],
+            "type": "object"
+          },
+          "AnnotationCommandOutcome": {
+            "oneOf": [
+              {
+                "properties": {
+                  "evidence_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "evidence",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "evidence_id"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "capture": {
+                    "$ref": "#/$defs/AnnotationCaptureRef"
+                  },
+                  "kind": {
+                    "const": "capture",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "capture"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "annotation": {
+                    "$ref": "#/$defs/AnnotationRevisionRef"
+                  },
+                  "kind": {
+                    "const": "annotation",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "annotation"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "AnnotationRevisionRef": {
+            "additionalProperties": false,
+            "properties": {
+              "annotation_id": {
+                "type": "string"
+              },
+              "revision": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "annotation_id",
+              "revision"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "created_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outcome": {
+            "$ref": "#/$defs/AnnotationCommandOutcome"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "outcome",
+          "created_at_ms"
+        ],
+        "title": "AnnotationCommandReceipt",
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "application.control",
+        "documents.read",
+        "plugins.read"
+      ],
+      "effects": [
+        "annotations.metadata"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "annotations.capture.upload",
+        "version": 1
+      },
+      "kind": "control",
+      "title": "annotations.capture.upload",
+      "description": "Read principal/project-scoped annotation records and frozen evidence without observing a live source or starting a runtime. Exact historical note revisions stay readable; current source status remains unknown.",
+      "input_schema": {
+        "$defs": {
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "description": "Browser pixels are ephemeral input, never Operation arguments or scientific media.",
+        "properties": {
+          "base64": {
+            "maxLength": 786432,
+            "minLength": 1,
+            "type": "string"
+          },
+          "inclusion": true,
+          "reference": {
+            "$ref": "#/$defs/ContextReference"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "reference",
+          "inclusion",
+          "base64"
+        ],
+        "title": "CaptureUpload",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "base64": "cG5n",
+          "inclusion": {
+            "kind": "note_and_evidence"
+          },
+          "reference": {
+            "contribution": "annotations",
+            "provider": {
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "instance": "annotations-example",
+              "plugin": "org.rho.annotations",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "selector": {
+              "annotation_id": "annotation-example",
+              "revision": 1
+            },
+            "window": "window-example"
+          },
+          "request_id": "capture-view"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "AnnotationCaptureRef": {
+            "additionalProperties": false,
+            "properties": {
+              "byte_size": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "capture_id": {
+                "type": "string"
+              },
+              "height": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "mime_type": {
+                "type": "string"
+              },
+              "original_media": {
+                "description": "True only when these are the owner's original static media bytes.",
+                "type": "boolean"
+              },
+              "sha256": {
+                "type": "string"
+              },
+              "width": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "capture_id",
+              "sha256",
+              "width",
+              "height",
+              "mime_type",
+              "byte_size",
+              "original_media"
+            ],
+            "type": "object"
+          },
+          "AnnotationCommandOutcome": {
+            "oneOf": [
+              {
+                "properties": {
+                  "evidence_id": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "evidence",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "evidence_id"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "capture": {
+                    "$ref": "#/$defs/AnnotationCaptureRef"
+                  },
+                  "kind": {
+                    "const": "capture",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "capture"
+                ],
+                "type": "object"
+              },
+              {
+                "properties": {
+                  "annotation": {
+                    "$ref": "#/$defs/AnnotationRevisionRef"
+                  },
+                  "kind": {
+                    "const": "annotation",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "annotation"
+                ],
+                "type": "object"
+              }
+            ]
+          },
+          "AnnotationRevisionRef": {
+            "additionalProperties": false,
+            "properties": {
+              "annotation_id": {
+                "type": "string"
+              },
+              "revision": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "annotation_id",
+              "revision"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "created_at_ms": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outcome": {
+            "$ref": "#/$defs/AnnotationCommandOutcome"
+          },
+          "request_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "outcome",
+          "created_at_ms"
+        ],
+        "title": "AnnotationCommandReceipt",
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "application.control",
+        "plugins.read"
+      ],
+      "effects": [
+        "annotations.metadata"
+      ],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
     {
       "capability": {
         "id": "annotations.write",
@@ -969,6 +1643,46 @@
               {
                 "additionalProperties": false,
                 "properties": {
+                  "column": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "structured",
+                    "type": "string"
+                  },
+                  "path": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "row": {
+                    "format": "uint64",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "topic": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
                   "capture": {
                     "$ref": "#/$defs/AnnotationCaptureRef"
                   },
@@ -1015,46 +1729,6 @@
                   "unit"
                 ],
                 "type": "object"
-              },
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "path": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "row": {
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
-                    "format": "uint64",
-                    "minimum": 0
-                  },
-                  "column": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "topic": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "kind": {
-                    "type": "string",
-                    "const": "structured"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "path"
-                ]
               }
             ]
           },
@@ -3142,263 +3816,6 @@
         "plugins.read"
       ],
       "effects": [],
-      "cancellation": "unsupported",
-      "preflight": null
-    },
-    {
-      "capability": {
-        "id": "annotations.capture.upload",
-        "version": 1
-      },
-      "kind": "control",
-      "title": "annotations.capture.upload",
-      "description": "Read principal/project-scoped annotation records and frozen evidence without observing a live source or starting a runtime. Exact historical note revisions stay readable; current source status remains unknown.",
-      "input_schema": {
-        "$defs": {
-          "ContextReference": {
-            "additionalProperties": false,
-            "properties": {
-              "contribution": {
-                "type": "string"
-              },
-              "provider": {
-                "$ref": "#/$defs/InstanceRef"
-              },
-              "selector": {
-                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
-              },
-              "window": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "provider",
-              "contribution",
-              "window",
-              "selector"
-            ],
-            "type": "object"
-          },
-          "InstanceRef": {
-            "additionalProperties": false,
-            "properties": {
-              "artifact": {
-                "type": "string"
-              },
-              "instance": {
-                "type": "string"
-              },
-              "plugin": {
-                "type": "string"
-              },
-              "revision": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "instance",
-              "plugin",
-              "revision",
-              "artifact"
-            ],
-            "type": "object"
-          }
-        },
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "additionalProperties": false,
-        "properties": {
-          "request_id": {
-            "type": "string"
-          },
-          "reference": {
-            "$ref": "#/$defs/ContextReference"
-          },
-          "inclusion": true,
-          "base64": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 786432
-          }
-        },
-        "required": [
-          "request_id",
-          "reference",
-          "inclusion",
-          "base64"
-        ],
-        "title": "CaptureUpload",
-        "type": "object",
-        "description": "Browser pixels are ephemeral input, never Operation arguments or scientific media."
-      },
-      "examples": [
-        {
-          "request_id": "capture-view",
-          "reference": {
-            "provider": {
-              "plugin": "org.rho.annotations",
-              "instance": "annotations-example",
-              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-            },
-            "contribution": "annotations",
-            "window": "window-example",
-            "selector": {
-              "annotation_id": "annotation-example",
-              "revision": 1
-            }
-          },
-          "inclusion": {
-            "kind": "note_and_evidence"
-          },
-          "base64": "cG5n"
-        }
-      ],
-      "output_schema": {
-        "$defs": {
-          "AnnotationCaptureRef": {
-            "additionalProperties": false,
-            "properties": {
-              "byte_size": {
-                "format": "uint64",
-                "minimum": 0,
-                "type": "integer"
-              },
-              "capture_id": {
-                "type": "string"
-              },
-              "height": {
-                "format": "uint32",
-                "minimum": 0,
-                "type": "integer"
-              },
-              "mime_type": {
-                "type": "string"
-              },
-              "original_media": {
-                "description": "True only when these are the owner's original static media bytes.",
-                "type": "boolean"
-              },
-              "sha256": {
-                "type": "string"
-              },
-              "width": {
-                "format": "uint32",
-                "minimum": 0,
-                "type": "integer"
-              }
-            },
-            "required": [
-              "capture_id",
-              "sha256",
-              "width",
-              "height",
-              "mime_type",
-              "byte_size",
-              "original_media"
-            ],
-            "type": "object"
-          },
-          "AnnotationCommandOutcome": {
-            "oneOf": [
-              {
-                "properties": {
-                  "evidence_id": {
-                    "type": "string"
-                  },
-                  "kind": {
-                    "const": "evidence",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "evidence_id"
-                ],
-                "type": "object"
-              },
-              {
-                "properties": {
-                  "capture": {
-                    "$ref": "#/$defs/AnnotationCaptureRef"
-                  },
-                  "kind": {
-                    "const": "capture",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "capture"
-                ],
-                "type": "object"
-              },
-              {
-                "properties": {
-                  "annotation": {
-                    "$ref": "#/$defs/AnnotationRevisionRef"
-                  },
-                  "kind": {
-                    "const": "annotation",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "annotation"
-                ],
-                "type": "object"
-              }
-            ]
-          },
-          "AnnotationRevisionRef": {
-            "additionalProperties": false,
-            "properties": {
-              "annotation_id": {
-                "type": "string"
-              },
-              "revision": {
-                "format": "uint64",
-                "minimum": 0,
-                "type": "integer"
-              }
-            },
-            "required": [
-              "annotation_id",
-              "revision"
-            ],
-            "type": "object"
-          }
-        },
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "created_at_ms": {
-            "format": "uint64",
-            "minimum": 0,
-            "type": "integer"
-          },
-          "outcome": {
-            "$ref": "#/$defs/AnnotationCommandOutcome"
-          },
-          "request_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "request_id",
-          "outcome",
-          "created_at_ms"
-        ],
-        "title": "AnnotationCommandReceipt",
-        "type": "object"
-      },
-      "recovery_schema": true,
-      "required_scopes": [
-        "application.control",
-        "plugins.read"
-      ],
-      "effects": [
-        "annotations.metadata"
-      ],
       "cancellation": "unsupported",
       "preflight": null
     }

@@ -5,7 +5,7 @@ use rho_plugin_sdk::{HostCallClient, protocol::*};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 #[derive(Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -31,7 +31,11 @@ struct Selector {
     version: u32,
     digest: ContentDigest,
 }
-static NEXT: AtomicU64 = AtomicU64::new(1);
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InspectRun {
+    pub operation: OperationId,
+}
 fn key(id: &str, version: u32) -> CapabilityKey {
     CapabilityKey {
         id: ContributionId::new(id).unwrap(),
@@ -41,6 +45,13 @@ fn key(id: &str, version: u32) -> CapabilityKey {
 fn hash(bytes: &[u8]) -> String {
     format!("sha256:{:x}", Sha256::digest(bytes))
 }
+fn run_request(operation: &str) -> RequestId {
+    RequestId::new(format!(
+        "editor-run-{:x}",
+        Sha256::digest(operation.as_bytes())
+    ))
+    .unwrap()
+}
 fn require(ok: bool, reason: &str) -> Result<(), String> {
     if ok { Ok(()) } else { Err(reason.into()) }
 }
@@ -49,20 +60,34 @@ struct Calls<'a> {
     call: &'a PluginCall,
     effects: Vec<Value>,
     uncertain: bool,
+    sequence: AtomicU32,
 }
 impl Calls<'_> {
-    async fn call(&self, id: &str, version: u32, args: Value) -> Result<Value, String> {
-        let request = RequestId::new(format!(
-            "editor-action-{}",
-            NEXT.fetch_add(1, Ordering::Relaxed)
+    fn request(&self) -> RequestId {
+        let sequence = self.sequence.fetch_add(1, Ordering::Relaxed) + 1;
+        RequestId::new(format!(
+            "editor-{:x}-{}",
+            Sha256::digest(self.call.request.as_str()),
+            sequence
         ))
-        .unwrap();
+        .unwrap()
+    }
+    async fn exchange(
+        &self,
+        request: RequestId,
+        id: &str,
+        version: u32,
+        args: Value,
+    ) -> Result<Value, String> {
         self.host
             .begin(request, self.call.request.clone(), key(id, version), args)
             .map_err(|e| e.to_string())?
             .receive()
             .await
             .map_err(|e| e.to_string())
+    }
+    async fn call(&self, id: &str, version: u32, args: Value) -> Result<Value, String> {
+        self.exchange(self.request(), id, version, args).await
     }
     async fn read(&self, id: &str, args: Value) -> Result<Value, String> {
         let result = self.call(id, 1, args).await?;
@@ -77,8 +102,22 @@ impl Calls<'_> {
     }
     async fn operation(&mut self, id: &str, version: u32, args: Value) -> Result<Value, String> {
         // If transport ends after dispatch, retain uncertainty; never resend.
+        // The native run identity survives even if this backend exits before
+        // returning its CommitPlan. Other calls retain their exact step IDs.
+        let request = if id == "r.execute" {
+            run_request(
+                self.call
+                    .operation_id
+                    .as_deref()
+                    .ok_or("Missing Editor operation")?,
+            )
+        } else {
+            self.request()
+        };
+        let effect = self.effects.len();
+        self.effects.push(json!({"request":request,"operation":null,"capability":key(id,version),"status":"unconfirmed"}));
         self.uncertain = true;
-        let mut record = self.call(id, version, args).await?;
+        let mut record = self.exchange(request, id, version, args.clone()).await?;
         let operation = record["operation"]["operation_id"]
             .as_str()
             .ok_or("Missing original child operation")?
@@ -91,9 +130,13 @@ impl Calls<'_> {
                 && record["operation"]["capability"] == json!(key(id, version)),
             "Child operation differs from the Editor request",
         )?;
-        self.effects
-            .push(json!({"operation":operation,"capability":key(id,version)}));
+        require(
+            record["operation"]["normalized_arguments"] == args,
+            "Child operation arguments differ from the captured request",
+        )?;
+        self.effects[effect]["operation"] = json!(operation);
         for _ in 0..2400 {
+            self.effects[effect]["status"] = record["status"].clone();
             match record["status"].as_str() {
                 Some("succeeded") => {
                     self.uncertain = false;
@@ -213,6 +256,23 @@ async fn capture(
                 )),
         "The Editor retains an unfinished save or execution; inspect it before another action",
     )?;
+    if let Some(run) = payload.get("externalRun").filter(|value| !value.is_null()) {
+        let observed = inspect_run(
+            calls,
+            instance,
+            run["operation"]
+                .as_str()
+                .ok_or("Invalid retained Editor run")?,
+        )
+        .await?;
+        require(
+            matches!(
+                observed["parent"]["status"].as_str(),
+                Some("succeeded" | "failed" | "cancelled")
+            ),
+            "The original Agent Editor run is unfinished or uncertain; inspect it without replay",
+        )?;
+    }
     Ok((draft, payload))
 }
 fn path_valid(path: &str) -> bool {
@@ -307,6 +367,87 @@ async fn publish(
         json!({"reference":{"provider":calls.call.binding.provider,"contribution":"documents","window":draft.window,"selector":{"draft":draft.draft,"version":draft.version,"digest":draft.content.digest}},"path":doc["path"],"document_version":doc["version"],"draft":draft}),
     )
 }
+
+/// Observe the retained parent and original delegated execution, including an
+/// admission whose acknowledgement was lost. This query never dispatches work.
+async fn inspect_run(
+    calls: &Calls<'_>,
+    instance: &PluginInstance,
+    operation: &str,
+) -> Result<Value, String> {
+    let parent = calls
+        .read("operation.get", json!({"operation_id":operation}))
+        .await?["record"]
+        .clone();
+    require(
+        parent["operation"]["operation_id"] == operation
+            && parent["operation"]["capability"] == json!(key("editor.run", 1))
+            && parent["operation"]["normalized_arguments"]["binding"]["provider"]
+                == json!(instance.identity)
+            && parent["operation"]["normalized_arguments"]["binding"]["project"]
+                == json!(instance.project),
+        "The original run belongs to another Editor provider or project",
+    )?;
+    let effects = parent["recovery"]["data"]["operations"]
+        .as_array()
+        .or_else(|| parent["output"]["operations"].as_array());
+    let mut execution = Value::Null;
+    let effect = effects.and_then(|effects| {
+        effects
+            .iter()
+            .find(|effect| effect["capability"] == json!(key("r.execute", 2)))
+    });
+    {
+        let child = if let Some(id) = effect.and_then(|effect| effect["operation"].as_str()) {
+            Some(id.to_owned())
+        } else {
+            // No final plan is required: the semantic original request is fixed
+            // before dispatch, so a boundary failure cannot erase its lookup.
+            let request = run_request(operation);
+            calls
+                .read(
+                    "plugins.delegated_operation",
+                    json!({"parent_operation":operation,"request":request}),
+                )
+                .await?["operation_id"]
+                .as_str()
+                .map(str::to_owned)
+        };
+        if let Some(id) = child {
+            execution = calls
+                .read("operation.get", json!({"operation_id":id}))
+                .await?["record"]
+                .clone();
+            require(
+                execution["operation"]["operation_id"] == id
+                    && execution["operation"]["causation_id"] == operation
+                    && execution["operation"]["caller"]["id"]
+                        == instance.identity.instance.as_str()
+                    && execution["operation"]["capability"] == json!(key("r.execute", 2)),
+                "Execution differs from the original delegated Editor run",
+            )?;
+        }
+    }
+    Ok(json!({"parent":parent,"execution":execution}))
+}
+
+pub async fn inspect(
+    host: &HostCallClient,
+    instance: &PluginInstance,
+    call: &PluginCall,
+) -> Result<Value, String> {
+    let input: InspectRun =
+        serde_json::from_value(call.arguments.clone()).map_err(|e| e.to_string())?;
+    let calls = Calls {
+        host,
+        call,
+        effects: vec![],
+        uncertain: false,
+        sequence: AtomicU32::new(0),
+    };
+    inspect_run(&calls, instance, input.operation.as_str()).await
+}
+
 async fn execute(calls: &mut Calls<'_>, instance: &PluginInstance) -> Result<Value, String> {
     let input: Input =
         serde_json::from_value(calls.call.arguments.clone()).map_err(|e| e.to_string())?;
@@ -441,9 +582,33 @@ async fn execute(calls: &mut Calls<'_>, instance: &PluginInstance) -> Result<Val
                 capability: key("r.execute", 2),
                 target: Some(session.clone()),
             };
-            let result=calls.operation("r.execute",2,json!({"binding":binding,"arguments":{"expected_session":session,"run":{"code":code,"output_mode":"console"}},"preconditions":null})).await?;
+            let mut label = payload["document"]["path"]
+                .as_str()
+                .and_then(|p| p.rsplit('/').next())
+                .unwrap_or("Untitled.R")
+                .to_owned();
+            if label.len() > 508 {
+                let mut end = 508;
+                while !label.is_char_boundary(end) {
+                    end -= 1;
+                }
+                label.truncate(end);
+                label.push('…');
+            }
+            // This source is an exact synchronized draft identity, not an
+            // invented open view. R retains it on Console/Plots/output records.
+            let source =
+                json!({"view_id":format!("draft:{}",draft.draft),"label":label,"kind":"document"});
+            let capture = json!({"operation":calls.call.operation_id,"reference":input.reference,
+                "document_version":payload["document"]["version"],"code_digest":hash(code.as_bytes()),
+                "runtime":binding.provider,"session":session,"source":source});
+            payload["externalRun"] = capture.clone();
+            // Durable linkage precedes native admission. Closing/reloading a
+            // view only observes this original parent, never starts another run.
+            let saved = publish(calls, draft, payload).await?;
+            let result=calls.operation("r.execute",2,json!({"binding":binding,"arguments":{"expected_session":session,"run":{"code":code,"source":source,"output_mode":"console"}},"preconditions":null})).await?;
             Ok(
-                json!({"reference":input.reference,"document_version":payload["document"]["version"],"code_digest":hash(code.as_bytes()),"result":result}),
+                json!({"reference":saved["reference"],"capture":capture,"document_version":capture["document_version"],"code_digest":capture["code_digest"],"result":result}),
             )
         }
         _ => Err("Unknown Editor action".into()),
@@ -459,6 +624,7 @@ pub async fn invoke(
         call: &call,
         effects: vec![],
         uncertain: false,
+        sequence: AtomicU32::new(0),
     };
     let result = execute(&mut calls, &instance).await;
     let (outcome, output, error) = match result {
@@ -467,7 +633,7 @@ pub async fn invoke(
             (PluginOutcome::Succeeded, Some(output), None)
         }
         Err(error) => (
-            if calls.uncertain || !calls.effects.is_empty() {
+            if calls.uncertain {
                 PluginOutcome::Uncertain
             } else {
                 PluginOutcome::Failed

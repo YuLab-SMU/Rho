@@ -6,6 +6,7 @@ pub mod manifest;
 mod metadata;
 pub mod server;
 
+mod annotation_tools;
 mod contexts;
 mod diagnostics;
 mod handoffs;

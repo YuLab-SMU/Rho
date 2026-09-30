@@ -52,7 +52,8 @@ function render() {
   const selectedSession = sessionChoices.find(item => same(item.provider, controller.runtime.source));
   get('choose-session').textContent = selectedSession ? `Run in ${selectedSession.label}` : controller.runtime.source ? 'Choose Session' : 'Select R Session';
   get('choose-session').title = controller.runtime.source?.instance ?? 'No R session is selected';
-  const code = controller.code, canStart = !code || code.status === 'succeeded' && (code.kind !== 'format' || code.applied);
+  const code = controller.code, canStart = (!code || code.status === 'succeeded' && (code.kind !== 'format' || code.applied)) &&
+    (!controller.externalRun || controller.externalResult?.parent.status === 'succeeded');
   for (const id of ['run-selection', 'run-document', 'save-run', 'format']) get<HTMLButtonElement>(id).disabled = !controller.runtime.source || !doc || !isR(doc.path) || readonly || busy || composing ||
     !!controller.pending || !!controller.disk || controller.drafts.unresolved || !canStart;
   get('code-recovery').hidden = !code;
@@ -67,6 +68,13 @@ function render() {
   get('continue-saved-run').hidden = !controller.awaitingSavedRun || code?.intent.view !== client.view.view;
   get<HTMLButtonElement>('continue-saved-run').disabled = busy || controller.drafts.unresolved || !controller.canContinueSavedRun;
   get<HTMLButtonElement>('dismiss-code').disabled = busy || (controller.awaitingSavedRun ? !!controller.pending : !['succeeded', 'failed', 'cancelled'].includes(code?.status ?? ''));
+  const external = controller.externalRun, result = controller.externalResult;
+  get('external-run').hidden = !external;
+  get('external-status').textContent = !external ? '' : `Agent document run · ${result?.parent.status ?? 'not yet inspected'}${result?.execution ? ` · R ${result.execution.status}` : ''}`;
+  get('external-operation').textContent = external ? `${external.operation}${result?.execution ? ` → ${result.execution.operation.operation_id}` : ''}` : '';
+  get('external-code').textContent = result?.code ?? 'Captured contents will appear after the original native execution is observed.';
+  get<HTMLButtonElement>('inspect-external').disabled = busy;
+  get<HTMLButtonElement>('dismiss-external').disabled = busy || !['succeeded', 'failed', 'cancelled'].includes(result?.parent.status ?? '');
   get('compare-format').hidden = !code?.formatted || code.applied;
   get<HTMLButtonElement>('compare-format').disabled = busy || !!controller.disk;
   get<HTMLButtonElement>('apply-format').disabled = busy || controller.drafts.unresolved || !!controller.disk;
@@ -310,6 +318,8 @@ function wireActions() {
   get('retry-code').onclick = () => action(() => controller.retryCode());
   get('continue-saved-run').onclick = () => action(() => controller.continueSavedRun());
   get('dismiss-code').onclick = () => action(() => controller.dismissCode());
+  get('inspect-external').onclick = () => action(() => controller.inspectExternalRun());
+  get('dismiss-external').onclick = () => action(() => controller.dismissExternalRun());
   get('compare-format').onclick = compareFormat; get('refresh-format').onclick = compareFormat;
   get('close-format').onclick = () => get<HTMLDialogElement>('format-dialog').close();
   get('apply-format').onclick = () => { const version = comparedVersion; action(async () => {
@@ -358,6 +368,8 @@ function poll() {
       if (!preparing && !controller.busy && !controller.drafts.unresolved) await controller.advanceSavedRun().catch(() => undefined);
       if (!preparing && !controller.busy && !controller.drafts.unresolved && controller.code?.intent.operation && !terminal(controller.code.status ?? 'accepted'))
         await controller.inspectCode().catch(() => undefined);
+      if (!preparing && !controller.busy && controller.externalRun && (!controller.externalResult || !terminal(controller.externalResult.parent.status)))
+        await controller.inspectExternalRun().catch(() => undefined);
     })();
     void inspect.finally(() => { render(); poll(); });
   }, 1500);

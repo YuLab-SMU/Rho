@@ -33,6 +33,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             json!({"reference":example,"inclusion":{"kind":"document"},"max_bytes":16384})
         )
     ]);
+    manifest["capabilities"].as_array_mut().unwrap().push(json!({
+        "capability":{"id":"editor.run.inspect","version":1},"kind":"query","title":"Inspect original Editor run",
+        "description":"Read the original Editor run and its native execution, including lost child acknowledgements. Does not execute, retry, start R or promote uncertain work to success.",
+        "input_schema":schemars::schema_for!(rho_editor_backend::actions::InspectRun).to_value(),"output_schema":true,"recovery_schema":true,
+        "examples":[{"operation":"operation-example"}],"required_scopes":["documents.read","operation.read"],"effects":[],"cancellation":"unsupported"
+    }));
+    let required = manifest["requires"].as_array_mut().unwrap();
+    if !required
+        .iter()
+        .any(|r| r["capability"]["id"] == "plugins.delegated_operation")
+    {
+        required.push(json!({"capability":{"id":"plugins.delegated_operation","version":1},"scopes":["operation.read"]}));
+    }
+    for requirement in &mut *required {
+        if requirement["capability"]["id"] == "plugins.delegated_operation" {
+            requirement["scopes"] = json!(["operation.read"]);
+        }
+    }
     for (id, description, scopes) in [
         (
             "editor.edit",
@@ -64,6 +82,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         manifest["capabilities"].as_array_mut().unwrap().push(json!({"capability":{"id":id,"version":1},"kind":"operation","title":id,"description":description,
             "input_schema":schemars::schema_for!(rho_editor_backend::actions::Input).to_value(),"output_schema":true,"recovery_schema":true,
             "examples":[{"reference":example}],"required_scopes":scopes,"effects":[],"cancellation":"unsupported"}));
+    }
+    let required = manifest["requires"].as_array_mut().unwrap();
+    if !required
+        .iter()
+        .any(|r| r["capability"]["id"] == "editor.run.inspect")
+    {
+        required.push(json!({"capability":{"id":"editor.run.inspect","version":1},"scopes":["documents.read","operation.read"]}));
     }
     manifest["contexts"] = json!([{"id":"documents","title":"Editor documents","search":{"id":"editor.context.search","version":1},"preview":{"id":"editor.context.preview","version":1}}]);
     manifest["backend"] = json!({"executable":"dist/rho-editor-backend","arguments":[]});

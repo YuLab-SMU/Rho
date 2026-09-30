@@ -1,11 +1,21 @@
 # Rho: current state and focus
 
-Updated: 2026-09-30. This is the single current summary of behavior, evidence,
+Updated: 2026-10-01. This is the single current summary of behavior, evidence,
 open work and the next milestone. Git and run artifacts retain history; see
 [Development](DEVELOPMENT.md#status-discipline) for update and evidence rules.
 Evidence filenames below are relative to `target/plugin-refactor/` unless stated.
 
 ## Current focus: usable local Preview 3 and workspace-aware Agent
+
+Current source links Agent Editor runs to original Operations, captured code and
+native results. Read-only inspection survives lost acknowledgements/plans, while
+receipt-only updates preserve concurrent typing. New document-linked notes use a separately scoped freeze tool, fenced to the
+original selected Editor/window in Native and Rho.
+Focused owner/client tests pass. Isolated Host and headless Chrome acceptance pass for
+Editor freeze, Agent annotation use, source/CAS refusal, draft retention, picker overflow
+at 1440/960/390/220px, reload and same-instance restart without replay. Model/native
+peers were synthetic; no release claim. Local real-R acceptance is unrun: no Ark or
+`RHO_ARK`; R 4.5.2 is installed. Earlier Linux AF_UNIX denial remains historical.
 
 Preview 3 contains the native launcher, saved Demo, navigation and bundled Ark;
 R remains the configured local installation. Its fresh `Preview 3` catalog selects
@@ -22,7 +32,7 @@ resident documents and survive reload; stale edits and changed disk bases are re
 The Host permits exact granted Controls from active Operation parents for transient
 draft staging; Query/Control parents still cannot acquire writes.
 
-Focused Agent backend (66), native owner/store (9 each), Editor (5), Files context
+Prior Preview 3 Agent backend (66), native owner/store (9 each), Editor (5), Files context
 (2), delegated Host (2), draft Host (9) and view delegation (4) checks pass. Agent,
 Editor and Manager client checks/builds, generated manifests, tool grants, public
 boundaries and documentation governance pass. The core builds; current Agent,
@@ -42,12 +52,8 @@ All sixteen ordinary packages exist. Fixed scientific/Agent composition, private
 frontend/HTTP flows, Application/Skill handlers, retired owner/adapter packages
 and legacy shared-port DTOs are removed. CLI, HTTP and MCP use the generic Host.
 The declared scientific-operation slice now passes through a real Files provider.
-The annotation view has cross-component entry, anchors, counts, versions, image marks and Agent draft inclusion. Eight
-source entries and the Files selected-text and live Viewer image flows pass the
-focused M4 round, including save, draft inclusion, refresh and changed sources.
-The updated bundle and imported Studio/Files flows pass. Of 33 real-model attempts,
-12 passed, 3 Plots cases provided partial metadata evidence and 18 lacked document tools at that assessment.
-The image diagnostic fails. Actual macOS Chinese input passes in Annotations.
+The annotation foundation covers eight source entries, versioned notes and Agent
+inclusion; scoped evidence and the remaining real-model/IME limits are below.
 
 Studio forms, synchronized references, Undo and recovery (`5a5ecc4d`) passed model/browser and multi-width inspection: `definition-editor-results.json`, `visual-runtime-results.json`.
 
@@ -248,14 +254,8 @@ packages. Evidence: `final-delivery-contents-results.json`.
 
 ## Known limits and environment dependencies
 
-- Native compilation/loading can stall before test execution. Historical runs
-  include long cache enumeration and startup timeouts for byte-identical binaries;
-  an exceptional same-inode hardlink-directory recovery helped temporarily. The OS
-  cause remains unproven. Preserve the macro-cache symlink/backups; inspect the
-  existing process/log and distinguish build, startup and test body. Do not clear
-  caches, duplicate Cargo work or restart user Hosts to mask a stall.
-  Evidence: `development-optimization-results.json`, `annotation-output-results.json`,
-  `files-context-results.json`, `../preview-agent-fix/cache-recovery.json`.
+- Historical native compilation/loading stalls have an unproven OS cause. Preserve caches, recovery links and existing process evidence; do not clear caches, duplicate Cargo work or restart user Hosts to mask them.
+  Evidence: `development-optimization-results.json`, `annotation-output-results.json`, `files-context-results.json`, `../preview-agent-fix/cache-recovery.json`.
 - Current generic-window pointer/docking/focus and normal/wide/narrow captures pass.
   Older standalone frame pointer-routing failure remains separate. Earlier IME
   attempts were inconclusive. Current native-key input verifies Annotations on

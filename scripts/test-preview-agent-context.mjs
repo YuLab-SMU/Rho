@@ -7,6 +7,8 @@ import path from 'node:path';
 import {spawn,execFileSync} from 'node:child_process';
 import {randomUUID,createHash} from 'node:crypto';
 import {createServer} from 'node:http';
+import {createServer as createResourceSocket} from 'node:net';
+import {documentWorkflow} from './fixtures/agent-document-workflow.mjs';
 import {PreviewHost} from './preview/workspace.mjs';
 import {installPluginSet} from './plugin-set.mjs';
 import {chromium} from '../ui/node_modules/playwright/index.mjs';
@@ -34,18 +36,28 @@ print(json.dumps({'events':[json.loads(r[0]) for r in c.execute('select value fr
   previous.checks.push({name:'real model end-to-end',passed:true,model:previous.live_model});previous.status='passed';previous.completed=true;
   fs.writeFileSync(options['--report'],JSON.stringify(previous,null,2)+'\n');console.log(JSON.stringify({report:options['--report'],status:previous.status,recheck:previous.recheck_scope}));process.exit(0);
 }
+assert.ok(!(options['--document-workflow']==='true'&&options['--live-agent-data']),'Run deterministic document/restart acceptance separately from real-provider assessment');
 for(const name of ['--set','--rho','--ark','--r-home','--report'])assert.ok(options[name],`Supply ${name}; no builds are implicit`);
 const directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-preview-agent-context-'))),project=path.join(directory,'project'),database=path.join(directory,'rho.sqlite');
 fs.mkdirSync(project);execFileSync('git',['init','-q',project]);
 fs.writeFileSync(path.join(project,'notes.txt'),'Preview context sentinel: lilac-orbit-527\n');
 fs.writeFileSync(path.join(project,'analysis.R'),'preview_answer <- 2L\n');
+fs.copyFileSync(new URL('../examples/rho-demo/data/raw/gapminder.csv',import.meta.url),path.join(project,'gapminder.csv'));
 const hash=bytes=>'sha256:'+createHash('sha256').update(bytes).digest('hex'),key=(id,version=1)=>({id,version});
-const report={directory,source_commit:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),status:'running',stages:[],model:'deterministic tool peer',checks:[],completed:false};
+const report={directory,source_commit:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),source_dirty:!!execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim(),status:'running',stages:[],model:'deterministic tool peer',checks:[],completed:false};
 const save=()=>fs.writeFileSync(options['--report'],JSON.stringify(report,null,2)+'\n');save();
 let host,browser,peer,api,exited;
 const deadline=(promise,ms,label)=>Promise.race([promise,new Promise((_,reject)=>{const t=setTimeout(()=>reject(Error(label+' timed out')),ms);t.unref();})]);
 let calls=[];
 try{
+  // Fail before import/build/browser work when the executor cannot support the
+  // existing native resource transport. This is never a skipped passing stage.
+  if(process.platform!=='win32'){
+    const probe=createResourceSocket();
+    try{await new Promise((resolve,reject)=>{probe.once('error',reject);probe.listen(path.join(directory,'resource-probe.sock'),resolve);});}
+    catch(error){report.status='blocked';report.blocker='Native plugin resource channel requires AF_UNIX sockets: '+error.message;throw error;}
+    finally{if(probe.listening)await new Promise(resolve=>probe.close(resolve));}
+  }
   // The full archive set was verified by assembly. Import only this flow's
   // consumers and annotation contract dependency; failed harness stages need no unrelated reinstall.
   const selectedSet=path.join(directory,'flow-packages');fs.mkdirSync(selectedSet);
@@ -54,11 +66,14 @@ try{
   for(const entry of subset.packages)fs.copyFileSync(path.join(options['--set'],entry.file),path.join(selectedSet,entry.file));
   fs.writeFileSync(path.join(selectedSet,'plugin-set.json'),JSON.stringify(subset));
   installPluginSet({rho:options['--rho'],directory:selectedSet,database});
+  const startHost=async()=>{
   host=spawn(options['--rho'],['--database',database,'--project',project,'--plugins-only','workbench'],{stdio:['ignore','pipe','pipe']});
   exited=new Promise(resolve=>host.once('exit',(code,signal)=>resolve({code,signal})));
   let log='',errors='';host.stderr.on('data',bytes=>{errors+=bytes;fs.writeFileSync(path.join(directory,'host.log'),errors.replace(/token=[a-z0-9]+/g,'token=<redacted>'));});
   const address=await deadline(new Promise((resolve,reject)=>{host.on('error',reject);host.stdout.on('data',bytes=>{log+=bytes;const match=log.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/);if(match)resolve(match[0]);});exited.then(value=>reject(Error('Host exited '+JSON.stringify(value))));}),60000,'Host startup');
   api=new PreviewHost(address,project,path.join(directory,'workspace.json'));
+  };
+  await startHost();
   const query=(id,args)=>api.query(id,args);
   const invoke=async(id,args,version=1,expected='succeeded',request=randomUUID())=>{
     let record=await api.port('invoke',{capability:key(id,version),arguments:args,preconditions:[],client_request_id:request});
@@ -69,7 +84,7 @@ try{
     assert.equal(record.status,expected,`${id}: ${record.error}`);return record;
   };
   const index=JSON.parse(fs.readFileSync(path.join(options['--set'],'plugin-set.json'))),instances={};
-  for(const name of ['files','r','editor','agent','objects']){
+  for(const name of ['files','r','editor','agent','objects','annotations']){
     const pkg=index.packages.find(p=>p.plugin==='org.rho.'+name),inspected=await query('plugins.inspect',{revision:pkg.revision});
     const optional=(inspected.manifest.optional_requires ?? []).map(g=>g.capability).filter(cap=>!cap.id.startsWith('process.')&&!cap.id.startsWith('remote.')&&!cap.id.startsWith('environment.')&&!cap.id.startsWith('slurm.'));
     const config=name==='r'?{ark:fs.realpathSync(options['--ark']),r_home:fs.realpathSync(options['--r-home']),execution_timeout_seconds:120}:{};
@@ -88,11 +103,11 @@ try{
   const editor=await open('editor',{source:instances.files,file,runtime:instances.r});
   const projectId=editor.project;
   const selected=(name,id,version=1)=>({name:id.replaceAll('.','_'),target:{type:'provider',binding:{provider:instances[name],project:projectId,capability:key(id,version),target:null}}});
-  const tools=[selected('r','r.session'),selected('r','r.execute',2),...['files.list_directory','files.read_text','files.search_text','files.prepare_patch','files.apply_patch'].map(id=>selected('files',id)),...['editor.context.search','editor.context.preview','editor.edit','editor.save','editor.run'].map(id=>selected('editor',id))];
+  const tools=[selected('r','r.session'),selected('r','r.execute',2),...['files.list_directory','files.read_text','files.search_text','files.prepare_patch','files.apply_patch'].map(id=>selected('files',id)),...['editor.context.search','editor.context.preview','editor.edit','editor.save','editor.run','editor.run.inspect'].map(id=>selected('editor',id)),...['annotations.read','annotations.write','annotations.document.freeze'].map(id=>selected('annotations',id))];
   const agent=await open('agent',{tools});report.agent_view=agent.view;save();
   await open('objects',{source:instances.r,object_group:null});
   // One browser connection per saved view; no duplicate renderers/sequence races.
-  browser=await chromium.launch({channel:'chrome',headless:true});
+  browser=await chromium.launch({...(options['--browser-path']?{executablePath:options['--browser-path']}:{channel:'chrome'}),headless:true});
   const page=await browser.newPage({viewport:{width:1440,height:1000}});await page.goto(api.browserUrl());
   // Generic core uses title/data attributes across revisions; select the unique editor content frame.
   const getFrame=async(label)=>{for(let n=0;n<200;n++){for(const frame of page.frames())if(await frame.getByLabel(label,{exact:true}).count())return frame;await new Promise(r=>setTimeout(r,50));}throw Error('Missing '+label);};
@@ -116,14 +131,15 @@ try{
   const objects=await pq('r','r.list_objects',{expected_session:session,limit:20});assert.equal(objects.status,'ready');assert.match(JSON.stringify(objects),/preview_answer/);
   report.stages.push('Editor edit → resident update → stale edit refusal → save → captured real R run');save();
   // Local streaming peer exercises actual model tool dispatch; no native effects are mocked.
-  let turn=0;
+  let turn=0,plan=null;
+  const setPlan=(steps,answer)=>plan={steps,answer,sent:0};
   peer=createServer(async(request,response)=>{
     try{
       let bytes='';for await(const part of request)bytes+=part;const body=JSON.parse(bytes);calls.push(body);
       const available=body.tools.map(t=>t.function.name);assert.ok(available.includes('files_read_text'));assert.ok(available.includes('editor_context_search'));assert.ok(available.includes('r_list_objects'));
       const actions=[['files_read_text',{path:'notes.txt',start_line:1,limit_lines:10}],['editor_context_search',{text:'analysis.R',after:null,limit:20}],['r_list_objects',{limit:20}]];
-      const action=actions[turn++];
-      const delta=action?{tool_calls:[{index:0,id:'call-'+turn,type:'function',function:{name:action[0],arguments:JSON.stringify(action[1])}}]}:{content:'Read lilac-orbit-527, the synchronized analysis.R and the live preview_answer object.'};
+      const action=plan?plan.steps[plan.sent++]?.(body):actions[turn++];
+      const delta=action?{tool_calls:[{index:0,id:'call-'+(plan?plan.sent:turn),type:'function',function:{name:action[0],arguments:JSON.stringify(action[1])}}]}:{content:plan?.answer??'Read lilac-orbit-527, the synchronized analysis.R and the live preview_answer object.'};
       const chunk=(delta,finish_reason)=>`data: ${JSON.stringify({id:'preview-context',object:'chat.completion.chunk',created:1,model:'fixture',choices:[{index:0,delta,finish_reason}]})}\n\n`;
       response.writeHead(200,{'content-type':'text/event-stream'});response.end(chunk(delta,null)+chunk({},action?'tool_calls':'stop')+'data: [DONE]\n\n');
     }catch(error){report.peer_error=error.message;save();response.writeHead(500);response.end('Model fixture assertion failed');}
@@ -167,6 +183,43 @@ try{
   await page.screenshot({path:path.join(directory,'workspace-context.png')});
   await page.getByRole('tab',{name:'Editor',exact:true}).click();await page.reload();const reopened=await getFrame('Code Editor');assert.match(await reopened.getByLabel('Code Editor',{exact:true}).innerText(),/42L/);
   report.stages.push('Browser reload retains edited document and saved file');report.checks.push({name:'deterministic end-to-end',passed:true,model_calls:turn});
+  if(options['--document-workflow']==='true') {
+    await documentWorkflow({project,page,getFrame,pq,api,setPlan,report,save,directory});
+    // An actual backend disconnect after native admission, not a fabricated
+    // CommitPlan, must preserve the native child without another dispatch.
+    const found=await pq('editor','editor.context.search',{window:api.window,text:'new-analysis.R',after:null,limit:20});
+    const crashCode='workflow_crash <- 99L\nwriteLines("started", "crash.started")\nwhile (!file.exists("crash.release")) Sys.sleep(0.05)\ncat("one\\n", file="crash.effects", append=TRUE)\n';
+    const captured=(await pi('editor','editor.edit',{reference:found.items[0].reference,code:crashCode})).output.reference;
+    const running=pi('editor','editor.run',{reference:captured,runtime:instances.r,expected_session:session},1,'uncertain');
+    const until=Date.now()+30000;
+    while(!fs.existsSync(path.join(project,'crash.started'))){assert.ok(Date.now()<until,'Captured native run did not start');await new Promise(resolve=>setTimeout(resolve,50));}
+    const instance=await query('plugins.instance',{instance:instances.editor});assert.ok(Number.isInteger(instance.process_id));
+    process.kill(instance.process_id,'SIGKILL');fs.writeFileSync(path.join(project,'crash.release'),'release');
+    const interrupted=await running;report.interrupted_run=interrupted;save();
+    assert.equal(interrupted.recovery.kind,'plugin_boundary_failure');assert.equal(interrupted.recovery.candidate,null);
+    const done=Date.now()+30000;let native;
+    while(Date.now()<done){
+      const history=await query('operation.list_recent',{limit:25,before_cursor:null});
+      for(const summary of history.operations.filter(op=>op.capability.id==='r.execute')){
+        const record=await api.port('get_operation',{operation_id:summary.operation_id});
+        if(record.operation.causation_id===interrupted.operation.operation_id)native=record;
+      }
+      if(native?.status==='succeeded')break;await new Promise(resolve=>setTimeout(resolve,50));
+    }
+    assert.equal(native?.status,'succeeded');assert.equal(fs.readFileSync(path.join(project,'crash.effects'),'utf8'),'one\n');
+    await browser.close();browser=null;
+    host.kill('SIGINT');assert.equal((await deadline(exited,60000,'Original Host shutdown')).code,0);
+    await startHost();
+    const retained=await query('plugins.instance',{instance:instances.editor});assert.equal(retained.instance.state,'suspended');
+    await invoke('plugins.resume',{instance:instances.editor,suspension:retained.instance.suspension});
+    const recovered=await pq('editor','editor.run.inspect',{operation:interrupted.operation.operation_id});
+    assert.equal(recovered.parent.status,'uncertain');assert.equal(recovered.execution.operation.operation_id,native.operation.operation_id);
+    assert.equal(recovered.execution.status,'succeeded');assert.equal(recovered.execution.operation.normalized_arguments.arguments.run.code,crashCode);
+    assert.equal((await query('plugins.instance',{instance:instances.r})).instance.state,'suspended','Inspect cannot resume the old native R session');
+    assert.equal(fs.readFileSync(path.join(project,'crash.effects'),'utf8'),'one\n');
+    report.disconnect_recovery={parent:recovered.parent.status,execution:native.operation.operation_id,native:recovered.execution.status,one_effect:true,r_resumed:false};
+    report.stages.push('Actual Editor process disconnect → native completion → Host restart → original child inspection with one effect and no R restart');save();
+  }
   if(options['--live-agent-data']){
     // Read the explicitly selected existing connection locally. Key bytes only
     // enter this disposable instance's Control port, never an Operation/report.
@@ -214,5 +267,5 @@ print(json.dumps([json.loads(r[0]) for r in c.execute('select value from compone
     }finally{const current=await pq('agent','agent.model.settings',{});await api.port('control',{capability:key('agent.model.key.remove'),arguments:{binding:await binding('agent','agent.model.key.remove'),arguments:{key_id:liveCredential.key_id,settings_version:current.version}}});}
   }
   report.completed=true;report.status='passed';save();console.log(JSON.stringify({status:report.status,report:options['--report'],directory,stages:report.stages}));
-}catch(error){report.status='failed';report.error=error.stack;for(const context of browser?.contexts()??[])for(const page of context.pages())await page.screenshot({path:path.join(directory,'failure.png')}).catch(()=>{});save();throw error;}
-finally{if(browser)await browser.close();if(peer)await new Promise(resolve=>peer.close(resolve));if(host&&host.exitCode===null){host.kill('SIGINT');const ended=await deadline(exited,60000,'Owned Host shutdown');report.shutdown=ended;save();assert.equal(ended.code,0);}}
+}catch(error){if(report.status!=='blocked')report.status='failed';report.error=error.stack;for(const context of browser?.contexts()??[])for(const page of context.pages())await page.screenshot({path:path.join(directory,'failure.png')}).catch(()=>{});save();throw error;}
+finally{if(fs.existsSync(path.join(project,'crash.started')))fs.writeFileSync(path.join(project,'crash.release'),'release during cleanup');if(browser)await browser.close();if(peer)await new Promise(resolve=>peer.close(resolve));if(host&&host.exitCode===null){host.kill('SIGINT');const ended=await deadline(exited,60000,'Owned Host shutdown');report.shutdown=ended;save();assert.equal(ended.code,0);}}

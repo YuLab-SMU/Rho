@@ -39,7 +39,7 @@ export async function annotationAgentBrowser({url, window, agent, query, invoke,
     const screenshots = [];
     for (const width of [1440, 960, 390, 220]) {
       await page.setViewportSize({width, height: 900});
-      await expect.poll(() => frame.locator('body').evaluate((_node, width) => innerWidth >= width - 2 && innerWidth <= width, width)).toBe(true);
+      await expect.poll(() => page.evaluate(() => innerWidth)).toBe(width);
       await expect.poll(() => picker.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(false);
       const file = path.join(output, `annotation-picker-${width}.png`);
       await picker.screenshot({path: file}); screenshots.push(file);

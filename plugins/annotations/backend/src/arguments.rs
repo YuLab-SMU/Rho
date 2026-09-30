@@ -10,6 +10,16 @@ pub struct WriteRequest {
     pub request_id: String,
     pub command: WriteCommand,
 }
+/// A separately scoped source read for new document-linked research notes.
+/// Generic note CRUD does not acquire document-read authority.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FreezeDocumentRequest {
+    pub request_id: String,
+    pub reference: ContextReference,
+    pub inclusion: Value,
+    pub anchor: TextAnchor,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 #[allow(clippy::large_enum_variant)] // Keep this public tagged request DTO's Rust shape stable.

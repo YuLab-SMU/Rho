@@ -206,6 +206,25 @@
         "application.read",
         "plugins.read"
       ]
+    },
+    {
+      "capability": {
+        "id": "plugins.delegated_operation",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "editor.run.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "documents.read",
+        "operation.read"
+      ]
     }
   ],
   "optional_requires": [
@@ -843,6 +862,43 @@
       "recovery_schema": true,
       "required_scopes": [
         "documents.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "editor.run.inspect",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "Inspect original Editor run",
+      "description": "Read the original Editor run and its native execution, including lost child acknowledgements. Does not execute, retry, start R or promote uncertain work to success.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation"
+        ],
+        "title": "InspectRun",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "operation": "operation-example"
+        }
+      ],
+      "output_schema": true,
+      "recovery_schema": true,
+      "required_scopes": [
+        "documents.read",
+        "operation.read"
       ],
       "effects": [],
       "cancellation": "unsupported",

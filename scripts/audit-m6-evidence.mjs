@@ -63,7 +63,7 @@ report.approved_scope={
 };
 report.excluded_proposals=['HV01–HV07','R01–R03'];
 report.open_requirements=[
-  '18 document-dependent real-model scenarios lack scoped Editor edit/save/captured-run tools; they remain not_run.',
+  'The historical 18 document-dependent real-model attempts predate scoped Editor tools and remain not_run in that evidence; newer tools do not retroactively pass them.',
   'Original three Plots visual-color scenarios remain unverified; metadata-only behavior is partial evidence.',
   'Qwen3.8-27B failed the real image diagnostic; annotated-image quality and text-only followup remain unrun.',
   'Actual system IME evidence is limited to Annotations in macOS Edge; other controls/OS are not covered.',

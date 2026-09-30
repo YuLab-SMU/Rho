@@ -238,6 +238,16 @@ impl NativeMcpPort for Connection {
             native_host_tool_arguments(fixed_arguments, &input.arguments, &input.preconditions)
                 .map_err(|e| Failure::from(e).message)?;
         }
+        if let AgentNativeToolTarget::Provider { binding } = &grant.selection.target
+            && binding.capability.id.as_str() == "annotations.document.freeze"
+        {
+            crate::annotation_tools::document_source(
+                &input.arguments["reference"],
+                turn.origin.tools.iter().map(|t| &t.selection),
+                &turn.origin.binding.project,
+                &turn.window,
+            )?;
+        }
         let validator = jsonschema::validator_for(&grant.input_schema)
             .map_err(|_| "Invalid captured native tool schema")?;
         if !validator.is_valid(&input.arguments) {
