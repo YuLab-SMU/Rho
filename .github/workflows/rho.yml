@@ -61,7 +61,6 @@ jobs:
           node scripts/check-architecture.mjs
           node scripts/governance.mjs check
           node scripts/test-governance.mjs
-          node scripts/test-agent-interface.mjs --self-test
           python3 scripts/test-pack-agent-evidence.py
       - name: Check frontend ownership and behavior
         run: |

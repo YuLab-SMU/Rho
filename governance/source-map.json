@@ -82,7 +82,6 @@
     "system.mcp": {"command":["node","scripts/test-mcp.mjs"],"tier":"L2","sources":["scripts/test-mcp.mjs","crates/**","r/**","scripts/fixtures/**"]},
     "system.mcp-real-r": {"command":["node","scripts/test-mcp.mjs","--real-r"],"tier":"L2","sources":["scripts/test-mcp.mjs","crates/**","r/**","scripts/fixtures/**"]},
     "system.workbench": {"command":["node","scripts/test-workbench.mjs"],"tier":"L2","sources":["scripts/test-workbench.mjs","crates/**","r/**","scripts/fixtures/**"]},
-    "system.workbench-real-r": {"command":["node","scripts/test-workbench.mjs","--real-r"],"tier":"L2","sources":["scripts/test-workbench.mjs","crates/**","r/**","scripts/fixtures/**"]},
     "docs.index": {"command":["node","scripts/governance.mjs","check"],"tier":"L0","sources":["docs/**","governance/**","AGENTS.md","README.md","scripts/governance.mjs"]},
     "docs.tool": {"command":["node","scripts/test-governance.mjs"],"tier":"L0","sources":["scripts/governance.mjs","scripts/test-governance.mjs","governance/**"]},
     "studio.types": {"command":["npm","run","typecheck","--prefix","ui"],"tier":"L1","sources":["ui/**","crates/contract/**","sdk/**"]},
@@ -92,7 +91,6 @@
     "studio.boundaries": {"command":["node","scripts/check-frontend-boundaries.mjs"],"tier":"L0","sources":["ui/**","crates/contract/**","sdk/**","scripts/check-frontend-boundaries.mjs"]},
     "studio.boundary-tests": {"command":["node","scripts/test-frontend-boundaries.mjs"],"tier":"L0","sources":["ui/**","crates/contract/**","sdk/**","scripts/test-frontend-boundaries.mjs"]},
     "studio.browser": {"command":["npm","run","test:browser","--prefix","ui"],"tier":"L2","sources":["ui/**","crates/contract/**","sdk/**"]},
-    "system.agent-harness": {"command":["node","scripts/test-agent-interface.mjs","--self-test"],"tier":"L1","sources":["scripts/test-agent-interface.mjs","scripts/agent-interface/**"]},
     "system.output-media": {"command":["node","scripts/test-output-media.mjs"],"tier":"L2","sources":["scripts/test-output-media.mjs","crates/**","r/**","scripts/fixtures/**"]},
     "system.evidence-pack": {"command":["python3","scripts/test-pack-agent-evidence.py"],"tier":"L1","sources":["scripts/test-pack-agent-evidence.py","scripts/pack-agent-evidence.py"]},
     "system.architecture-tests": {"command":["node","scripts/test-architecture.mjs"],"tier":"L0","sources":["scripts/test-architecture.mjs","scripts/check-architecture.mjs"]},
@@ -225,7 +223,6 @@
         "scripts/vendor-jet.mjs",
         ".gitattributes",
         "docs/ARCHITECTURE.md",
-        "scripts/agent-interface/**",
         ".agents/skills/**",
         "scripts/pack-agent-evidence.py",
         "scripts/test-pack-agent-evidence.py"
@@ -245,10 +242,8 @@
         "system.mcp",
         "system.mcp-real-r",
         "system.workbench",
-        "system.workbench-real-r",
         "system.vendor",
         "system.vendor-tests",
-        "system.agent-harness",
         "system.output-media",
         "system.evidence-pack",
         "system.architecture-tests"
@@ -313,7 +308,6 @@
         "studio.browser",
         "system.client",
         "system.workbench",
-        "system.workbench-real-r",
         "system.mcp",
         "system.mcp-real-r"
       ]

@@ -139,9 +139,9 @@ empty across reload. `ui/tests/plugin-launcher.test.ts` covers original-request
 retention and receipt recovery. The default startup selector only opens standalone
 UI contributions; richer configuration, native activation and scenarios belong to
 ordinary plugins. Fixed browser fixtures and private scientific HTTP endpoints
-are retired. The remaining fixed Host reference scripts still use the temporary
-`--fixed-workspace` profile and bounded shared ports; those adapters and the flag
-are part of the remaining M6 deletion, not a fallback for missing plugins.
+are retired. Workbench serves only the generic plugin profile; `--fixed-workspace`
+is removed. `test-workbench.mjs` tests generic HTTP/MCP/connected CLI and empty
+scenario checkpoints. Scientific behavior uses the ordinary-plugin suites.
 
 For frontend-only startup/scientific-window iteration, build the client and set
 `RHO_WORKBENCH_DEV_ASSETS` to the absolute `crates/workbench/assets` directory.
@@ -296,10 +296,10 @@ checks cover transport, framing, layout, startup, closing and recovery.
 
 Private Agent/annotation/HTML HTTP routes and Workbench-owned service construction
 have also been removed, as have R discovery/settings and the large resident
-application-bridge HTTP endpoint. The fixed Rust composition, shared-port legacy
-Application requests and `--fixed-workspace` remain for the next removal stage;
-the flag no longer selects a fixed browser UI.
-It must not be treated as a fallback when feature packages are absent. Historical
+application-bridge HTTP endpoint. Workbench startup no longer accepts a fixed
+Host profile or calls default-R continuation; its CLI escape flag is removed.
+Other CLI runtime profiles and shared-port legacy Application code remain for the
+next removal stage. Missing plugins cannot select a fixed Workbench fallback. Historical
 fixed-renderer test totals do not count as current plugin acceptance.
 
 ## Testing SOP
@@ -1503,12 +1503,12 @@ Native/transport verification:
 | `test-real-r.mjs` | Installed Ark and R with jsonlite, rlang, lintr and styler; real R, progressive object/package queries, non-forcing inspections, cancellation and code tools |
 | `test-r-checkpoints.mjs` | Installed R with jsonlite; builds the private native checkpoint component for that R, then exercises the classifier and a capture/cold-restore round trip in disposable `--vanilla` processes. `--print-library` prints the component path for `RHO_CHECKPOINT_HELPER` |
 | `npm run test:browser --prefix ui` | Current `cargo build --locked` binary. Ordinary-plugin cases use explicit package/runtime selections; `scientific-workspace.spec.ts` requires either `RHO_SCIENTIFIC_PACKAGES` or `RHO_SCIENTIFIC_PLUGIN_SET`, plus `RHO_ARK` and `RHO_R_HOME`. Fixed-renderer browser specs have been retired with that implementation. Run the affected cases, not every fixture during iteration. |
-| `test-workbench.mjs`, `test-mcp.mjs` | Remaining fixed-Host reference transports; add `--real-r` for explicit Ark/R and Environment observations. `test-workbench.mjs` accepts `RHO_TEST_BINARY=/absolute/current/rho` to reuse the current binary without invoking Cargo. Ordinary-plugin acceptance is separate. |
+| `test-workbench.mjs` | Generic HTTP/MCP/connected CLI, empty-scene checkpoint idempotency, state CAS, request bounds and project fencing; accepts `RHO_TEST_BINARY=/absolute/current/rho` to skip all builds. Scientific cancellation/disconnect checks belong to the ordinary Process/R/Agent suites. |
+| `test-mcp.mjs` | Remaining fixed stdio Host reference; `--real-r` explicitly selects Ark/R. This CLI composition still awaits removal; it is not ordinary-plugin acceptance. |
 | `test-environment.mjs` | R/Ark with pak, renv, ps and jsonlite; installs small local fixtures into temporary libraries, checks user-library preservation and recovery |
 | `test-process-recovery.mjs` | R-free native process crash/reconciliation |
 | `test-remote-protocol.mjs` | Local SSH/Slurm transcript fixtures; does not validate a remote cluster |
 | `test-remote-live.mjs` | Opt-in real jobs on an explicitly selected host/scratch directory; see Operations |
-| `test-agent-interface.mjs` | Optional client-driven observations of Rho interfaces using an explicitly selected Codex installation; deterministic self-tests cover the harness without calling a model |
 | `test-deepseek-inbox.mjs` | Checks the installed, lock-matched native Inbox replay/clear implementation with a disposable journal; no provider calls or session scan |
 
 Interactive Rho integration checks need a disposable analysis project outside the Rho
@@ -1715,49 +1715,13 @@ and a model reported by that installation. Preserve configuration and failed
 attempts. A native end-of-turn alone does not prove an answer, image interpretation
 or token usage being reported.
 
-[`test-agent-interface.mjs`](../scripts/test-agent-interface.mjs) and
-[`scripts/agent-interface/`](../scripts/agent-interface/) are development tests,
-not a product Agent harness. They run isolated Codex sessions via `codex exec --json`
-and temporary MCP configuration. Scientific fixtures and answers are outside the
-Agent working directory; scientific reads/actions must use Rho. Only the native
-Skill-equivalence case grants access to its explicitly listed method resources.
-The runner does not install prerequisites or restart existing user Hosts.
-
-Inspect available categories and validate the deterministic harness separately:
-
-```sh
-node scripts/test-agent-interface.mjs --list
-node scripts/test-agent-interface.mjs --self-test
-```
-
-For an explicitly requested client-driven experiment, first commit a clean tree
-and build matching DTOs/assets/binaries, then run:
-
-```sh
-node scripts/test-agent-interface.mjs --final \
-  --binary /absolute/path/to/Rho/target/debug/rho \
-  --ark /absolute/path/to/ark --r-home /absolute/path/to/R/home \
-  --codex /absolute/path/to/pinned/codex
-```
-
-`--final` names this optional runner profile, not Rho's product completion gate.
-It runs ten core categories repeated three times, native/Rho Skill
-resource equivalence and two adaptation cases: 34 runs. Model/reasoning, Codex
-version and binary digests are fixed by the runner and recorded with the source
-tree. Each task has an 80-call, 1 MiB UTF-8 text and ten-minute budget; native image
-bytes and actual token usage are counted separately. Read-only investigation cases
-cannot use `run_r` to bypass query interfaces. Programming/analysis cases can use
-the scientific execution capabilities their task permits.
-
-`--filter` and `--runs` are debugging options; their results do not establish the
-full optional experiment. Preserve every attempt, JSONL/tool/resource trajectory, original
-operation record, assertion, screenshot and artifact hash. Missing prerequisites,
-exceeded budgets, identity mixing, repeated execution, silent overwrites or false
-completeness must remain visible in the record. Investigate whether a finding belongs
-to Rho or the third-party Agent. Fix Rho-owned defects with focused deterministic
-regressions; a new real-provider experiment needs its own explicit scope. When running one, do not encode an answer or mandatory tool sequence into the task
-prompt. Evidence defaults to `target/agent-interface/acceptance/`; summaries and
-outstanding verification belong in [Status](STATUS.md).
+The old Codex runner depended on the removed fixed Workbench profile and private
+Application/scientific contracts. It and its parser-only CI check are retired.
+Historical result artifacts remain evidence of their original commit only. Current
+scientific/Agent flows use ordinary package fixtures documented above; none of those
+fixtures establishes new third-party model quality. New external-client experiments
+must use ordinary plugin capabilities and preserve their actual tool/operation
+records, with explicit model scope and no prescribed answer or forced tool sequence.
 
 ## Review quality
 

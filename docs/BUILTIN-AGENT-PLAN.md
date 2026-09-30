@@ -429,7 +429,8 @@ fixtures 验证。Kimi 图片回答等第三方表现不阻塞 Rho 完成；已�
 产品默认恢复策略保持不变。图像产物验收检查首行颜色及原始操作／输出引用，与助手的来源引用
 要求一致，同时继续检查操作集合、修改次数、产物身份和没有读取源码泄露颜色。
 
-实施期间使用现有命令，Cargo 与类型生成串行：
+以下为按变更范围选取的检查入口，不是每轮顺序执行的清单；以 Development 的分层测试规则为准。
+Cargo 与类型生成串行，工作区全量检查仅用于明确要求的审计：
 
 ```sh
 node scripts/governance.mjs impact --changed-auto
@@ -447,7 +448,7 @@ npm run test:boundaries --prefix ui
 cargo build --locked
 npm run test:browser --prefix ui
 node scripts/test-real-r.mjs
-node scripts/test-workbench.mjs --real-r
+node scripts/test-workbench.mjs
 node scripts/test-mcp.mjs --real-r
 RHO_PLUGIN_SET_PACKAGE=/absolute/path/to/retained/plugin-set node scripts/test-agent-process.mjs
 cargo fmt --all --check

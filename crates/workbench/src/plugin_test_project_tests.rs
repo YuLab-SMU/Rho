@@ -21,7 +21,7 @@ struct Test {
 impl Test {
     async fn new() -> Self {
         let (directory, state, _) =
-            tests::fixture_with_runtime(rho_host::RuntimeConfiguration::Plugins).await;
+            tests::fixture().await;
         let source = directory.path().join("external");
         fixture::package(&source, "1", false);
         let mut manifest: Value =

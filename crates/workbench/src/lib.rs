@@ -294,9 +294,6 @@ async fn select_project_root(state: &AppState, root: PathBuf) -> Response {
     hosting.profile = profile;
     match reserved.open_deferred().await {
         Ok(host) => {
-            // Opening the project makes files and drafts available; attaching its
-            // default R session is a separate lifecycle action.
-            let _ = host.continue_default_instance().await;
             hosting.selected = Some(SelectedHost::new(Arc::new(host), root));
             Json(hosting.info()).into_response()
         }
@@ -523,22 +520,25 @@ fn router(state: AppState, shutdown: CancellationToken) -> Router {
 /// Local-only workbench. A URL fragment hands the bearer to the browser without
 /// placing it in an HTTP request URL, Referer, static file or application log.
 pub async fn serve(
-    profile: HostProfile,
+    database: PathBuf,
     project: Option<&Path>,
     port: u16,
     url_file: Option<&Path>,
 ) -> Result<(), String> {
-    serve_with_assets(profile, project, port, url_file, None).await
+    serve_with_assets(database, project, port, url_file, None).await
 }
 
 pub async fn serve_with_assets(
-    profile: HostProfile,
+    database: PathBuf,
     project: Option<&Path>,
     port: u16,
     url_file: Option<&Path>,
     dev_assets: Option<&Path>,
 ) -> Result<(), String> {
-    let plugins_only = matches!(profile.runtime, rho_host::RuntimeConfiguration::Plugins);
+    let profile = HostProfile {
+        database, runtime: rho_host::RuntimeConfiguration::Plugins,
+        remote: None, host_skills: None,
+    };
     let application = Arc::new(rho_host::ApplicationStore::open(
         &profile.database.with_extension("studio.sqlite"),
     )?);
@@ -548,9 +548,6 @@ pub async fn serve_with_assets(
     let selected = if let Some(project) = project {
         let root = project_root(&project.to_string_lossy())?;
         let host = profile.open_deferred(&root).await?;
-        // Opening the project makes files and drafts available; attaching its
-        // default R session is a separate lifecycle action.
-        let _ = host.continue_default_instance().await;
         Some(SelectedHost {
             host: Arc::new(host),
             root,
@@ -576,7 +573,7 @@ pub async fn serve_with_assets(
         uuid::Uuid::new_v4().simple(),
         uuid::Uuid::new_v4().simple()
     );
-    let url = format!("{origin}/{}#token={token}", if plugins_only { "?plugin-window" } else { "" });
+    let url = format!("{origin}/?plugin-window#token={token}");
     let state = AppState {
         hosting: hosting.clone(),
         authority,
@@ -631,12 +628,6 @@ mod tests {
     use tower::ServiceExt;
 
     pub(super) async fn fixture() -> (tempfile::TempDir, AppState, Router) {
-        fixture_with_runtime(RuntimeConfiguration::Project).await
-    }
-
-    pub(super) async fn fixture_with_runtime(
-        runtime: RuntimeConfiguration,
-    ) -> (tempfile::TempDir, AppState, Router) {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path().join("project");
         std::fs::create_dir(&root).unwrap();
@@ -644,7 +635,7 @@ mod tests {
         let profile = HostProfile {
             host_skills: None,
             database: temp.path().join("next.sqlite"),
-            runtime,
+            runtime: RuntimeConfiguration::Plugins,
             remote: None,
         };
         let host = Arc::new(profile.open(&root).await.unwrap());
@@ -697,7 +688,7 @@ mod tests {
 
     #[tokio::test]
     async fn plugin_workspace_uses_generic_ports_and_never_applies_saved_r_configuration() {
-        let (temp, state, app) = fixture_with_runtime(RuntimeConfiguration::Plugins).await;
+        let (temp, state, app) = fixture().await;
         let saved = state.application.read("user", "runtime").unwrap();
         state
             .application
@@ -741,7 +732,7 @@ mod tests {
 
     #[tokio::test]
     async fn plugin_workspace_can_wait_for_an_explicit_project_selection() {
-        let (temp, state, app) = fixture_with_runtime(RuntimeConfiguration::Plugins).await;
+        let (temp, state, app) = fixture().await;
         let selected = state.hosting.write().await.selected.take().unwrap();
         selected.host.drain().await;
         drop(selected);
@@ -776,7 +767,7 @@ mod tests {
 
     #[tokio::test]
     async fn retired_scientific_http_routes_have_no_builtin_fallback() {
-        let (_temp, state, app) = fixture_with_runtime(RuntimeConfiguration::Plugins).await;
+        let (_temp, state, app) = fixture().await;
         let host = state.hosting.read().await.selected.as_ref().unwrap().host.clone();
         let before = host.outbox(&NextHost::local_context(), 0, 100).await.unwrap();
         for path in [
@@ -880,7 +871,7 @@ mod tests {
         let query = frame(
             &state,
             "query_snapshot",
-            json!({"capability":{"id":"project.snapshot","version":1},"arguments":{}}),
+            json!({"capability":{"id":"plugins.list","version":1},"arguments":{"after":null,"limit":10}}),
         )
         .await;
         let snapshot = json_body(request(&app, "/api/host", Some(query.clone())).await).await;
@@ -896,11 +887,10 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
     #[tokio::test]
     async fn invocation_uses_host_idempotency_and_bounded_json() {
         let (_temp, state, app) = fixture().await;
-        let input = frame(&state, "invoke", json!({"client_request_id":"http-test", "capability":{"id":"process.run_local","version":1},"arguments":{"program":"/usr/bin/printf","args":["42"]},"preconditions":[]})).await;
+        let input = frame(&state, "invoke", json!({"client_request_id":"http-test", "capability":{"id":"scenarios.checkpoint","version":1},"arguments":{"scenario":"http-fixture","expected_head":null,"name":"HTTP fixture","instances":{},"providers":[],"layout":{"kind":"empty"}},"preconditions":[]})).await;
         let first = json_body(request(&app, "/api/host", Some(input.clone())).await).await;
         assert_eq!(first["ok"], true, "{first}");
         assert_eq!(first["result"]["status"], "succeeded");
@@ -955,7 +945,7 @@ mod tests {
         let (temp, state, app) = fixture().await;
         let other = temp.path().join("other");
         std::fs::create_dir(&other).unwrap();
-        let other_host = NextHost::open_project(temp.path().join("other.sqlite"), &other)
+        let other_host = NextHost::open_plugin_workspace(temp.path().join("other.sqlite"), &other)
             .await
             .unwrap();
         let current = {

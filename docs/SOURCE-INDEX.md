@@ -628,8 +628,6 @@ Checks:
   Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-mcp.mjs`.
 - `system.workbench` (L2): `["node","scripts/test-workbench.mjs"]`
   Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-workbench.mjs`.
-- `system.workbench-real-r` (L2): `["node","scripts/test-workbench.mjs","--real-r"]`
-  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-workbench.mjs`.
 
 ## `system`
 
@@ -651,7 +649,6 @@ Sources:
 - `patches/jet/**`
 - `r/**`
 - `rust-toolchain.toml`
-- `scripts/agent-interface/**`
 - `scripts/check-architecture.mjs`
 - `scripts/client.mjs`
 - `scripts/fixtures/**`
@@ -669,8 +666,6 @@ Checks:
   Applies to: `AGENTS.md`, `README.md`, `docs/**`, `governance/**`, `scripts/governance.mjs`.
 - `docs.tool` (L0): `["node","scripts/test-governance.mjs"]`
   Applies to: `governance/**`, `scripts/governance.mjs`, `scripts/test-governance.mjs`.
-- `system.agent-harness` (L1): `["node","scripts/test-agent-interface.mjs","--self-test"]`
-  Applies to: `scripts/agent-interface/**`, `scripts/test-agent-interface.mjs`.
 - `system.architecture` (L0): `["node","scripts/check-architecture.mjs"]`
   Applies to: `Cargo.toml`, `crates/**`, `plugins/**`, `r/**`, `scripts/check-architecture.mjs`, `ui/src/**`.
 - `system.architecture-tests` (L0): `["node","scripts/test-architecture.mjs"]`
@@ -704,6 +699,4 @@ Checks:
 - `system.vendor-tests` (L0): `["node","scripts/test-vendor-jet.mjs"]`
   Applies to: `patches/jet/**`, `scripts/test-vendor-jet.mjs`, `scripts/vendor-jet.mjs`, `vendor/**`.
 - `system.workbench` (L2): `["node","scripts/test-workbench.mjs"]`
-  Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-workbench.mjs`.
-- `system.workbench-real-r` (L2): `["node","scripts/test-workbench.mjs","--real-r"]`
   Applies to: `crates/**`, `r/**`, `scripts/fixtures/**`, `scripts/test-workbench.mjs`.

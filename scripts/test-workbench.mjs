@@ -1,16 +1,15 @@
-// Real local HTTP server and rmcp transport. Optional actual Ark/R. No remote service.
+// Real generic Workbench HTTP/MCP and connected CLI; no scientific provider required.
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { createHash } from "node:crypto";
 import fs from "node:fs";
-import net from "node:net";
 import { request as httpRequest } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+assert.deepEqual(process.argv.slice(2), [], "No fixed runtime options; use ordinary-plugin suites for scientific acceptance");
 function run(program, args) {
   const result = spawnSync(program, args, {
     cwd: root,
@@ -41,21 +40,6 @@ const other = path.join(dir, "other");
 fs.mkdirSync(other);
 const urlFile = path.join(dir, "launch-url");
 const args = ["--database", path.join(dir, "state/next.sqlite")];
-const realR = process.argv.includes("--real-r");
-if (realR) {
-  const rHome =
-    process.env.RHO_R_HOME ||
-    run("Rscript", ["--vanilla", "-e", "cat(R.home())"]).trim();
-  const ark =
-    process.env.RHO_ARK ||
-    path.resolve(
-      root,
-      "target/debug",
-      process.platform === "win32" ? "ark.exe" : "ark",
-    );
-  assert.ok(fs.existsSync(ark), "real workbench acceptance requires Ark");
-  args.push("--ark", ark, "--r-home", rHome);
-}
 async function deadline(promise, ms, message) {
   let timer;
   try {
@@ -70,7 +54,7 @@ async function deadline(promise, ms, message) {
   }
 }
 const watcher = fs.watch(dir);
-const child = spawn(binary, [...args, "--fixed-workspace", "workbench", "--url-file", urlFile], {
+const child = spawn(binary, [...args, "workbench", "--url-file", urlFile], {
   stdio: ["ignore", "pipe", "pipe"],
 });
 let stderr = "";
@@ -78,8 +62,6 @@ child.stderr.on("data", (data) => {
   stderr += data;
 });
 const ended = once(child, "exit");
-const marker = net.createServer();
-const sockets = [];
 let url,
   sessionId,
   sequence = 0;
@@ -193,6 +175,7 @@ try {
   );
   watcher.close();
   assert.equal(url.hostname, "127.0.0.1");
+  assert.ok(url.searchParams.has("plugin-window"));
   if (process.platform !== "win32")
     assert.equal(fs.statSync(urlFile).mode & 0o777, 0o600);
   const token = new URLSearchParams(url.hash.slice(1)).get("token");
@@ -240,6 +223,7 @@ try {
   assert.equal(wrongHost, 403);
   const empty = await api("/api/info");
   assert.equal(empty.project_root, null);
+  assert.equal(empty.runtime, "plugins");
   assert.deepEqual(empty.capabilities, []);
   const noProjectConnection = await api("/api/agent-connection");
   assert.equal(noProjectConnection.project_root, null);
@@ -253,8 +237,8 @@ try {
   const history = () => host("subscribe", { after_sequence: 0, limit: 1000 });
   const before = await history();
   const snapshot = await host("query_snapshot", {
-    capability: { id: "project.snapshot", version: 1 },
-    arguments: {},
+    capability: { id: "plugins.list", version: 1 },
+    arguments: {after: null, limit: 10},
   });
   assert.equal(snapshot.status, "ready");
   assert.deepEqual(await history(), before);
@@ -263,65 +247,28 @@ try {
   assert.equal(connected.ok, true);
   assert.equal(connected.observation.data.project_root, selectedRoot);
   const connectedRecord = JSON.parse(run(binary, ["--connect-url-file", urlFile,
-    "invoke", "--client-request-id", "connected-cli-once", "--capability", "process.run_local",
-    "--arguments", JSON.stringify({ program: process.execPath, args: ["-e", "process.stdout.write('connected')"] })])).operation;
+    "invoke", "--client-request-id", "connected-cli-once", "--capability", "scenarios.checkpoint",
+    "--arguments", JSON.stringify({scenario: "connected-cli", expected_head: null, name: "Connected CLI", instances: {}, providers: [], layout: {kind: "empty"}})])).operation;
   assert.equal(connectedRecord.status, "succeeded");
   const connectedHistory = await history();
   assert.ok(connectedHistory.some(event => event.operation_id === connectedRecord.operation.operation_id));
   assert.deepEqual(await host("get_operation", { operation_id: connectedRecord.operation.operation_id }), connectedRecord);
   const applicationBaseline = await history();
-  const bridgeHeaders = { ...headers, "X-Rho-Studio-Window": "http-document-fixture" };
-  const bridgeFrame = (method, params) => ({
-    project_root: selectedRoot,
-    frame: { id: String(++sequence), request: { method, params } },
-  });
-  const bridge = async (params) => {
-    const response = await fetch(new URL("/api/host", url), {
-      method: "POST", headers: bridgeHeaders,
-      body: JSON.stringify(bridgeFrame("application_bridge", params)),
-    });
-    const reply = await response.json();
-    assert.equal(response.status, 200, JSON.stringify(reply));
-    assert.equal(reply.ok, true, JSON.stringify(reply));
-    return reply.result;
-  };
-  const registration = await bridge({ kind: "register", window_id: "http-document-fixture", incarnation: "first", label: "HTTP large draft fixture", previous_session: null });
-  assert.equal(registration.kind, "registered");
-  const draftText = "界\n".repeat(8192); // Bounded reference fixture through the shared Host port.
-  const draftHash = "sha256:" + createHash("sha256").update(draftText).digest("hex");
-  const largeSync = { kind: "sync", session: registration.data.session, sync_id: "large-draft", changes: {
-    context: null, removed_documents: [], documents: [{ expected_version: null, expected_selection_version: null, document: {
-      document_id: "large-document", version: "v1", path: "large.R", text: draftText,
-      base_text: draftText, base_hash: draftHash,
-      selection: { anchor: 0, head: 1, version: "s1" }, readonly_reason: null,
-    } }],
-  } };
-  assert.ok(Buffer.byteLength(JSON.stringify(largeSync)) < 272 * 1024);
-  assert.equal((await bridge(largeSync)).kind, "synced");
-  const draftPage = await host("query_snapshot", { capability: { id: "application.read_document", version: 1 }, arguments: {
-    window: registration.data.session.window,
-    document: { document_id: "large-document", document_version: "v1", selection_version: "s1" },
-    expected_sha256: draftHash, offset_utf8: 0, limit_bytes: 16384,
-  } });
-  assert.equal(draftPage.data.content_sha256, draftHash);
-  assert.ok(draftPage.data.next_offset_utf8 > 0);
-  const controlFrame = { method: "application_control", params: {
-    window: registration.data.session.window, request_id: "connected-application-command",
-    action: { kind: "open_view", view_type: "console", view_id: null,
-      expected_context_version: registration.data.context.version },
-  } };
-  const control = JSON.parse(run(binary, ["--connect-url-file", urlFile, "request", "--json", JSON.stringify(controlFrame)])).result;
-  assert.equal(control.state, "pending", "CLI admission is not proof of Studio application");
-  assert.equal(control.completed_at_ms, null);
-  assert.equal(control.actor.kind, "human");
-  assert.deepEqual(JSON.parse(run(binary, ["--connect-url-file", urlFile, "request", "--json", JSON.stringify(controlFrame)])).result, control);
-  const oversizedBody = JSON.stringify(bridgeFrame("application_bridge", { ...largeSync, padding: "x".repeat(300 * 1024) }));
+  const draftText = "界\n".repeat(8192);
+  const initial = await api("/api/state/read", {project_root: selectedRoot, key: "transport-fixture"});
+  const stateWrite = {project_root: selectedRoot, state: {...initial, value: {draft: draftText}}};
+  const savedState = await api("/api/state/write", stateWrite);
+  assert.equal(savedState.value.draft, draftText);
+  assert.deepEqual(await api("/api/state/read", {project_root: selectedRoot, key: initial.key}), savedState);
+  assert.equal(await fetch(new URL("/api/state/write", url), {method: "POST", headers, body: JSON.stringify(stateWrite)}).then(reply => reply.status), 409);
+  const oversizedBody = JSON.stringify({project_root: selectedRoot, frame: {id: "oversized",
+    request: {method: "query_snapshot", params: {capability: {id: "plugins.list", version: 1}, arguments: {padding: "x".repeat(300 * 1024)}}}}});
   // The bound can reject Content-Length before reading bytes. Waiting for Continue
   // avoids racing a still-writing fetch body against the server closing the socket;
   // this still requires an actual 413, never an accepted connection-reset fallback.
   const oversizedStatus = await new Promise((resolve, reject) => {
     const request = httpRequest(new URL("/api/host", url), {
-      method: "POST", headers: { ...bridgeHeaders, "Content-Length": Buffer.byteLength(oversizedBody), Expect: "100-continue" },
+      method: "POST", headers: { ...headers, "Content-Length": Buffer.byteLength(oversizedBody), Expect: "100-continue" },
     }, response => {
       response.resume(); response.once("end", () => { resolve(response.statusCode); request.destroy(); });
     });
@@ -333,10 +280,10 @@ try {
   assert.equal(oversizedStatus, 413);
   for (const endpoint of ["/api/application/bridge", "/api/r", "/api/r/probe"]) {
     assert.equal(await fetch(new URL(endpoint, url), {
-      method: "POST", headers: bridgeHeaders, body: "{}",
+      method: "POST", headers, body: "{}",
     }).then(response => response.status), 404);
   }
-  assert.deepEqual(await history(), applicationBaseline, "Application draft synchronization must not write scientific history");
+  assert.deepEqual(await history(), applicationBaseline, "Generic state persistence must not write operation history");
   const beforeMcp = await api("/api/agent-connection");
   assert.equal(beforeMcp.active_sessions, 0, "Studio and connected CLI reads are not MCP connections");
   assert.deepEqual(beforeMcp.sessions, []);
@@ -356,7 +303,11 @@ try {
     cursor = page.nextCursor;
     if (cursor) { assert.ok(!cursors.has(cursor), "MCP catalog cursor must advance"); cursors.add(cursor); }
   } while (cursor);
-  assert.ok(tools.some(tool => tool.name === "rho.project.snapshot.v1"));
+  assert.ok(tools.some(tool => tool.name === "rho.plugins.list.v1"));
+  // workspace.paths is the generic project containment observation, not an R owner.
+  const fixedTools = tools.filter(tool => !["rho.workspace.paths.v1", "rho.events.poll"].includes(tool.name)
+    && !/^rho\.(host|plugins|views|windows|scenarios|documents|resources|operation)\./.test(tool.name));
+  assert.deepEqual(fixedTools.map(tool => tool.name), [], "Empty generic Host must not expose fixed scientific owners");
   assert.equal(
     (
       await fetch(new URL("/api/project", url), {
@@ -380,22 +331,17 @@ try {
   assert.deepEqual(initializedConnection.sessions[0].window_contexts, []);
   assert.ok(!JSON.stringify(initializedConnection).includes(sessionId), "Private MCP transport ID is not exposed");
   await call("rho.host.overview.v1", {});
-  await bridge({ kind: "renew", session: registration.data.session });
-  await call("rho.application.context.v1", { window: registration.data.session.window, limit: 1 });
   const servedConnection = await api("/api/agent-connection");
   assert.equal(servedConnection.project_root, selectedRoot);
   assert.ok(servedConnection.sessions[0].overview_served_at_ms);
-  assert.deepEqual(servedConnection.sessions[0].window_contexts[0].window, registration.data.session.window);
-  assert.ok(servedConnection.sessions[0].window_contexts[0].served_at_ms);
+  assert.deepEqual(servedConnection.sessions[0].window_contexts, []);
   assert.ok(!JSON.stringify(servedConnection).includes(token));
   assert.deepEqual(await history(), applicationBaseline, "Connection observations must not create scientific operations");
-  const fromAgent = await call("rho.process.run_local.v1", {
-    client_request_id: "agent-http",
-    arguments: {
-      program: process.execPath,
-      args: ["-e", "process.stdout.write('42')"],
-    },
-  });
+  const checkpoint = {client_request_id: "agent-http", arguments: {
+    scenario: "mcp-fixture", expected_head: null, name: "MCP fixture", instances: {}, providers: [], layout: {kind: "empty"},
+  }};
+  const fromAgent = await call("rho.scenarios.checkpoint.v1", checkpoint);
+  assert.deepEqual(await call("rho.scenarios.checkpoint.v1", checkpoint), fromAgent);
   assert.equal(fromAgent.status, "succeeded");
   assert.equal(fromAgent.operation.caller.kind, "agent");
   assert.deepEqual(
@@ -404,70 +350,6 @@ try {
     }),
     fromAgent,
   );
-  if (realR) {
-    // A managed Host routes every live R request to an explicit instance.
-    const instance = "main";
-    const input = {
-      client_request_id: "ui-real-r",
-      capability: { id: "workspace.run_r", version: 1 },
-      arguments: { code: "x <- 21; x * 2", workspace_instance_id: instance },
-      preconditions: [],
-    };
-    const record = await host("invoke", input);
-    assert.equal(record.status, "succeeded");
-    assert.equal(record.output.value, 42);
-    assert.deepEqual(await host("invoke", input), record);
-    const queriedBefore = await history();
-    const object = await call("rho.workspace.inspect_object.v1", {
-      workspace_instance_id: instance,
-      name: "x",
-      max_items: 3,
-    });
-    assert.deepEqual(object.data.preview, [21]);
-    assert.deepEqual(await history(), queriedBefore);
-    const observed = await host("query_snapshot", {
-      capability: { id: "environment.observe", version: 1 },
-      arguments: { limit: 10 },
-    });
-    assert.equal(observed.status, "ready");
-    assert.ok(observed.data.r_version);
-  }
-  marker.listen(0, "127.0.0.1");
-  await once(marker, "listening");
-  const started = new Promise((resolve) =>
-    marker.once("connection", (socket) => {
-      sockets.push(socket);
-      socket.on("error", () => {});
-      socket.once("data", (data) => resolve(data.toString().trim()));
-    }),
-  );
-  const running = host("invoke", {
-    client_request_id: "http-cancel",
-    capability: { id: "process.run_local", version: 1 },
-    arguments: {
-      program: process.execPath,
-      args: [
-        "-e",
-        `const s=require('node:net').connect(${marker.address().port},'127.0.0.1',()=>s.write(process.env.RHO_OPERATION_ID+'\\n'));setInterval(()=>{},1000);`,
-      ],
-    },
-    preconditions: [],
-  });
-  const id = await deadline(
-    Promise.race([
-      started,
-      running.then((r) => {
-        throw new Error(`process did not start: ${JSON.stringify(r)}`);
-      }),
-    ]),
-    10_000,
-    "process start not observed",
-  );
-  const cancellation = await call("rho.operation.request_cancellation", {
-    operation_id: id,
-  });
-  assert.equal(cancellation.accepted, true);
-  assert.equal((await running).status, "cancelled");
   const detached = await fetch(new URL("/mcp", url), {
     method: "DELETE",
     headers: {
@@ -488,80 +370,6 @@ try {
   })(), 5000, "MCP connection closure was not observed");
   assert.ok(closedConnection.sessions[0].closed_at_ms);
   assert.ok(closedConnection.sessions[0].overview_served_at_ms, "Closing a connection retains bounded evidence");
-  const effect = path.join(project, "after-http-disconnect.txt");
-  const detachedStarted = new Promise((resolve) =>
-    marker.once("connection", (socket) => {
-      sockets.push(socket);
-      socket.on("error", () => {});
-      socket.once("data", (data) =>
-        resolve({ id: data.toString().trim(), socket }),
-      );
-    }),
-  );
-  const detachedInput = {
-    client_request_id: "http-disconnect",
-    capability: { id: "process.run_local", version: 1 },
-    arguments: {
-      program: process.execPath,
-      args: [
-        "-e",
-        `const s=require('node:net').connect(${marker.address().port},'127.0.0.1',()=>s.write(process.env.RHO_OPERATION_ID+'\\n'));s.once('data',()=>{require('node:fs').writeFileSync(${JSON.stringify(effect)},'once');s.end();});`,
-      ],
-    },
-    preconditions: [],
-  };
-  const abort = new AbortController();
-  const abandoned = fetch(new URL("/api/host", url), {
-    method: "POST",
-    headers,
-    signal: abort.signal,
-    body: JSON.stringify({
-      project_root: selectedRoot,
-      frame: {
-        id: "abandon",
-        request: { method: "invoke", params: detachedInput },
-      },
-    }),
-  });
-  abandoned.catch(() => {});
-  const native = await deadline(
-    Promise.race([
-      detachedStarted,
-      abandoned.then(() => {
-        throw new Error("process ended before start");
-      }),
-    ]),
-    10_000,
-    "detached operation did not start",
-  );
-  abort.abort();
-  await assert.rejects(abandoned, { name: "AbortError" });
-  const whileRunning = await fetch(new URL("/api/project", url), {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ project_root: other }),
-  });
-  assert.equal(
-    whileRunning.status,
-    409,
-    "disconnect must not release a live Host for project switching",
-  );
-  native.socket.write("finish");
-  const saved = await deadline(
-    (async () => {
-      for (let attempt = 0; attempt < 128; attempt++) {
-        const record = await host("get_operation", { operation_id: native.id });
-        if (record?.outcome) return record;
-      }
-      throw new Error("no committed result after native process finished");
-    })(),
-    10_000,
-    "disconnected work did not commit",
-  );
-  assert.equal(saved.status, "succeeded");
-  assert.equal(saved.cancellation_requested, false);
-  assert.equal(fs.readFileSync(effect, "utf8"), "once");
-  assert.deepEqual(await host("invoke", detachedInput), saved);
   const changed = await api("/api/project", { project_root: other });
   assert.equal(changed.project_root, fs.realpathSync(other));
   const replacedConnection = await api("/api/agent-connection");
@@ -589,12 +397,10 @@ try {
     null,
   ]);
   console.log(
-    `Verified local HTTP boundary, Host-scoped MCP connection observations, project selection/switch fence, pure queries, shared UI/MCP principal, cancellation and disconnect commit${realR ? ", plus actual Ark/R and Environment observations" : ""}.`,
+    "Verified generic HTTP/MCP/connected CLI, checkpoint idempotency, state CAS, bounded requests, pure observations and project-switch fencing; no fixed scientific owners.",
   );
 } finally {
   watcher.close();
-  sockets.forEach((s) => s.destroy());
-  marker.close();
   if (child.exitCode === null && child.signalCode === null) {
     child.kill("SIGINT");
     await deadline(ended, 10_000, "test Host did not stop").catch(async () => {

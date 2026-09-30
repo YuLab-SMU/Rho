@@ -89,10 +89,9 @@ For a backend with no view, use **Instances → Restore instance** in the ordina
 Manager. This restores only the selected instance; its dependencies remain as they
 were. If the Manager itself is suspended, restore its saved view first.
 
-The browser always uses the ordinary plugin window. The temporary
-`rho --fixed-workspace ... workbench` profile retains fixed Rust/HTTP adapters for
-remaining backend reference checks; it no longer provides the retired fixed
-browser shell. Its R/remote/Skill startup flags apply only to that backend profile.
+Workbench opens only the ordinary plugin window and generic Host. The former
+`--fixed-workspace` flag is removed; R, remote and Skill startup flags are refused
+by this browser entry. Configure scientific providers through installed plugins.
 Missing or failed plugins never trigger a fixed-interface fallback. Agent, handoff,
 annotation and HTML Viewer use ordinary plugin capabilities/resources; their former
 private HTTP routes and Workbench-owned services have been removed. Agent MCP

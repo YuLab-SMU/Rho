@@ -1771,14 +1771,14 @@ and external Agent. Binding changes cannot rewrite accepted scientific requests.
 `ui/src/app.ts` mounts the generic plugin workspace, or an explicitly requested
 single contributed view. It does not select a scientific client from the Host
 profile. The fixed Studio singleton, built-in panel registry, scientific client
-owners and private Agent/R frontend routes have been removed. The remaining
-fixed Rust composition and HTTP adapters are a separate M6 removal boundary;
-`--fixed-workspace` no longer selects a fixed browser shell. Workbench has no
+owners and private Agent/R frontend routes have been removed. Workbench accepts
+only a database/project configuration and constructs a generic plugin Host. The
+`--fixed-workspace` CLI escape and default-R continuation calls are removed. Workbench has no
 R configuration field, interpreter discovery/probe, saved runtime selection or
 scientific fallback on open failure. Its former R settings and resident
 application-bridge HTTP endpoints are removed; the shared Host port remains bounded
 at 272 KiB. Ordinary contributed documents use the plugin draft/frame contracts.
-Legacy Application requests and the explicit fixed Host profile still await removal.
+Legacy Application code and other CLI fixed runtime profiles still await removal.
 
 The workspace owns window identity, saved generic layout, view connections,
 cooperative closure and explicit suspended-instance recovery. Scientific UI,
@@ -2076,11 +2076,10 @@ adapters; contract does not depend on native runtime or transport libraries.
 [The architecture check](../scripts/check-architecture.mjs) enforces the allowed
 production dependencies. Exact public schemas come from the live capability registry.
 
-The independent Codex runner under `scripts/agent-interface/` is acceptance tooling.
-It creates isolated projects, records actual tool traffic and checks factual and
-behavioral assertions. It is not imported by the Host, an application task scheduler
-or a product Agent harness. Current verification and remaining acceptance work are
-reported only in [Status](STATUS.md).
+The fixed-profile Codex acceptance runner is retired with that Workbench entry.
+Current ordinary-plugin acceptance tools create isolated projects and preserve
+actual tool/Operation evidence; they are not imported by product code. Historical
+third-party model results do not establish current plugin or provider behavior.
 
 ## Execution boundary
 
