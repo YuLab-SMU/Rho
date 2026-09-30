@@ -4,8 +4,9 @@ Updated: 2026-09-30. This is the single current summary of behavior, evidence,
 open work and the next milestone. Git and run artifacts retain history; see
 [Development](DEVELOPMENT.md#status-discipline) for update and evidence rules.
 Evidence filenames below are relative to `target/plugin-refactor/` unless stated.
-The latest annotation milestone adds ordinary-view/browser and real-R owner evidence;
-remaining approved interactions and delivery acceptance stay open.
+The latest annotation milestone adds ordinary-view/browser and real-R owner evidence.
+The current round closes the M4 annotation foundation; delivery, model-matrix and
+OS IME acceptance are deferred to later iterations.
 
 ## Current focus: approved annotation interface
 
@@ -16,9 +17,11 @@ frontend/HTTP flows, Application/Skill handlers, retired owner/adapter packages
 and legacy shared-port DTOs are removed. CLI, HTTP and MCP use the generic Host.
 The declared scientific-operation slice now passes through a real Files provider.
 The annotation view now has cross-component entry, versioned notes, image marks
-and explicit Agent draft inclusion. Remaining approved interaction details come
-next; final affected-package delivery and environment-dependent acceptance follow
-settled source.
+and explicit Agent draft inclusion. Complete the remaining M4 interactions first,
+then run one focused acceptance round: smoke the eight source entries and finish
+Files selected-text and Viewer image flows through save, Agent draft inclusion,
+refresh recovery and source change. Reuse valid browser/native evidence. Package
+refresh, the 33-scenario model matrix and system IME are outside this round.
 
 Committed baseline `5a5ecc4d` adds Studio data-source/custom-component forms to
 the executable visual runtime: synchronized references, shared Undo, invalid draft
@@ -49,10 +52,10 @@ recorded artifacts; “current” labels there do not certify this newer worktre
 | Order | User flow / ownership | Completion condition | Dependency and scope |
 | --- | --- | --- | --- |
 | 1 — verified | **Declared view → real Files update → explicit patch → original-operation recovery.** Public UI SDK and the consumer own observation/intent; Files and Operation own effects/truth. | Captured provider/arguments remain fixed; observation updates and stops on disposal; one explicit write; lost acknowledgement, reload and replacement view recover the original record with exactly one native effect. Affected Editor/Studio consumers still pass. | Real Files/browser flow, public SDK, Editor/Studio models, visual Studio/browser and client checks pass on settled source (`visual-science-results.json`). Snapshot polling only; no Host push channel. |
-| 2 — active | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Implement the reviewed AN01–AN06 scope as a complete flow, including conflict/source-change handling and normal/wide/constrained views. | Files component entry → notes → exact revisions in an existing Agent draft passes in the browser, including lost open/create acknowledgements without replay, CAS, deletion confirmation, marks/Undo and retained image coordinates after resize/reload (`annotation-components-browser`, `annotation-version-browser`). Source entries exist for Editor and seven scientific views; real native owners and Agent context pass separately (`annotation-components-native.json`). Remaining scope: component counts/near-selection entry, precise structured anchors, captured interactive Viewer and Agent-item sources; broader per-component browser and keyboard/IME acceptance. AN01–AN06 review is complete. |
-| 3 — after 1–2 | **Updated runtime reaches the development bundle.** Existing package builders/delivery path. | Identify the changed source/runtime dependency closure; refresh affected packages once; validate exact revisions/hashes and run the affected imported-view flow. Retain unchanged archives/core and applicable installer evidence. | SDK changes can affect more than Studio: compare consumers and package contents. Repeat relocation/empty-start acceptance only if its inputs change. No installation/signing/publication. |
-| 4 — environment-dependent | **Actual system IME in ordinary views.** UI acceptance. | Real candidate window, composition/commit/Enter, focus changes and draft retention observed in the target app/browser. | Needs a stable foreground/input-method session. Synthetic composition passes are separate. Remains required for the full usability claim. |
-| 5 — model-dependent | **Real Agent/provider quality on the ordinary-plugin path.** Agent acceptance. | Map the planned 33 scenarios to current public paths; establish a representative real-provider smoke result before expanding the matrix; record remaining cases individually. | Fixed-Host harnesses were removed. User-supplied Anthropic model configuration is available; a current public-path runner remains required. Deterministic integration is already verified; historical 27-case evidence is not a current pass. |
+| 2 — active | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Close M4 with the reviewed interactions, eight-entry smoke and two complete Files text/Viewer image flows; include keyboard and 600/320px layouts. | Files component entry → notes → exact revisions in an existing Agent draft passes in the browser, including lost open/create acknowledgements without replay, CAS, deletion confirmation, marks/Undo, source-version history and explicit continuation (`annotation-components-browser`, `annotation-version-browser`). Eight source entries and real native owners exist; remaining implementation: counts/near-selection entry, structured anchors including Agent items, interactive Viewer capture. Reuse prior conflict/history/recovery evidence; inspect only missing or changed interactions. AN01–AN06 review is complete. M4 remains partial. |
+| 3 — deferred | **Updated runtime reaches the development bundle.** Existing package builders/delivery path. | Identify the changed source/runtime dependency closure; refresh affected packages once; validate exact revisions/hashes and run the affected imported-view flow. Retain unchanged archives/core and applicable installer evidence. | SDK changes can affect more than Studio: compare consumers and package contents. Repeat relocation/empty-start acceptance only if its inputs change. No installation/signing/publication. |
+| 4 — deferred | **Actual system IME in ordinary views.** UI acceptance. | Real candidate window, composition/commit/Enter, focus changes and draft retention observed in the target app/browser. | Needs a stable foreground/input-method session. Synthetic composition passes are separate. Remains required for the full usability claim, outside M4 foundation closure. |
+| 5 — deferred | **Real Agent/provider quality on the ordinary-plugin path.** Agent acceptance. | Map the planned 33 scenarios to current public paths and record remaining cases individually. | Representative real-provider Send, one R effect and same-instance original-operation recovery pass (`agent-live-provider-results.json`, `agent-live-provider-wire-results.json`). The matrix stopped during fixture setup before any scenario attempt (`agent-live-matrix-results.json`); vision quality remains unrun. The unfinished opt-in harness is retained for later work. Historical 27-case evidence is not a current pass. |
 | 6 — closure | **Final evidence matches the approved scope and exact delivered artifacts.** Full-plan acceptance matrix. | Reconcile existing evidence, run only missing/invalidated checks, and keep every open requirement explicit. | Orders 1–5 have different completion conditions. A verified integration slice or development bundle does not close the full plan. No automatic workspace audit or release. |
 
 HV01–HV07 lighter Help/Viewer controls, system-browser opening and Help anchors
@@ -165,8 +168,9 @@ Source UI builds and focused SDK/Editor/Files/Plots/Objects/Packages/Viewer/Cons
 Agent view checks passed, as did annotation/Files backend and client checks.
 
 The reviewed AN01–AN06 flow remains partial: component counts and nearby selection
-entry, additional structured/Agent item anchors, interactive Viewer capture and all-source browser/keyboard/OS IME
-acceptance are open. Current live-source status is labeled unknown unless the
+entry, structured/Agent item anchors, interactive Viewer capture, eight-entry smoke
+and focused keyboard/600/320px acceptance are open. OS IME remains deferred.
+Current live-source status is labeled unknown unless the
 owner can establish it; an exact historical preview is not a current-version claim.
 Affected source packages are retained for milestone reuse; the development bundle
 has not been refreshed for this change. No user Host was restarted or installed.

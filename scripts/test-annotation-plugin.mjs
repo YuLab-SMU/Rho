@@ -15,15 +15,24 @@ import {annotationAgent} from './fixtures/annotation-agent.mjs';
 import {annotationImageAgent} from './fixtures/annotation-image-agent.mjs';
 import {annotationNativeAgent} from './fixtures/annotation-native-agent.mjs';
 import {buildCaptureSource, annotationCaptures} from './fixtures/annotation-captures.mjs';
+import {liveAgentProvider} from './fixtures/live-agent-provider.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const flags = process.argv.slice(2);
-assert.ok(new Set(flags).size === flags.length && flags.every(arg => ['--agent', '--browser', '--captures', '--scientific', '--files'].includes(arg)), 'Usage: node scripts/test-annotation-plugin.mjs [--agent [--browser]] [--captures] [--scientific] [--files]');
-const withAgent = process.argv.includes('--agent');
+assert.ok(new Set(flags).size === flags.length && flags.every(arg => ['--agent', '--browser', '--captures', '--scientific', '--files', '--live-provider','--live-matrix','--manual-ime'].includes(arg)), 'Usage: node scripts/test-annotation-plugin.mjs [--agent [--browser]] [--captures] [--scientific] [--files] [--live-provider | --live-matrix] [--manual-ime]');
+const withManualIme=flags.includes('--manual-ime');
+const withLive = flags.includes('--live-provider')||flags.includes('--live-matrix');
+const withAgent = process.argv.includes('--agent') || withLive;
 const withBrowser = process.argv.includes('--browser');
 const withCaptures = process.argv.includes('--captures');
-const withFiles = process.argv.includes('--files');
-const withScientific = process.argv.includes('--scientific');
+const withFiles = process.argv.includes('--files')||withManualIme;
+const withScientific = process.argv.includes('--scientific') || withLive;
+if (withLive) {
+  assert.ok(!withBrowser, '--live-provider is public-port acceptance; browser flows are separate');
+  for (const name of ['RHO_LIVE_PROVIDER_URL','RHO_LIVE_PROVIDER_MODEL','RHO_LIVE_PROVIDER_KEY_ENV']) assert.ok(process.env[name], `Set ${name}`);
+  assert.match(process.env.RHO_LIVE_PROVIDER_KEY_ENV, /^[A-Z][A-Z0-9_]{1,100}$/);
+  assert.ok(process.env[process.env.RHO_LIVE_PROVIDER_KEY_ENV], 'The referenced environment credential is unavailable');
+}
 assert.ok(!withScientific || (process.env.RHO_ARK && process.env.RHO_R_HOME), '--scientific requires existing RHO_ARK and RHO_R_HOME');
 assert.ok(!withBrowser || withAgent, '--browser requires --agent');
 const binary = process.env.RHO_TEST_BINARY ?? path.join(root, 'target/debug/rho');
@@ -67,6 +76,7 @@ const project = path.join(directory, 'project'), database = path.join(directory,
 fs.mkdirSync(project);
 execFileSync('git', ['init', '-q', project]);
 const hostEnvironment = {...process.env};
+if (withLive) delete hostEnvironment[process.env.RHO_LIVE_PROVIDER_KEY_ENV];
 const nativeHome = path.join(directory, 'native-home');
 if (withAgent) {
   const nativeBin = path.join(directory, 'native-bin');
@@ -86,10 +96,20 @@ const result = {host_sha256: hostHash, packages, directory, stages: [], complete
     return [name, {sha256: hash(bytes), bytes: bytes.length}];
   })), started_at: new Date().toISOString()};
 const evidence = process.env.RHO_ANNOTATION_EVIDENCE ?? path.join(directory, 'result.json');
-let host, exited, url, editor, notes, agent, agentCase, nativeCase, captureSource, captureCase, imageCase, r, scientificCase, scientificAgentCase, files, filesCase;
+let host, exited, url, editor, notes, agent, agentCase, nativeCase, captureSource, captureCase, imageCase, r, scientificCase, scientificAgentCase, files, filesCase, liveCase;
 const key = id => ({id, version: 1});
-const save = () => fs.writeFileSync(evidence, JSON.stringify(result, null, 2) + '\n');
-const safe = text => String(text).replace(/token=[a-z0-9]+/g, 'token=[redacted]');
+const save = () => {
+  const text=JSON.stringify(result,null,2)+'\n';
+  const credential=withLive&&process.env[process.env.RHO_LIVE_PROVIDER_KEY_ENV];
+  assert.ok(!credential||!text.includes(credential),'Refuse credential material in acceptance evidence');
+  fs.writeFileSync(evidence,text);
+};
+const safe = text => {
+  let value = String(text).replace(/token=[a-z0-9]+/g, 'token=[redacted]');
+  const credential = withLive && process.env[process.env.RHO_LIVE_PROVIDER_KEY_ENV];
+  if (credential) value = value.replaceAll(credential, '[redacted credential]');
+  return value;
+};
 function deadline(promise, label, ms = 30000) {
   let timer;
   return Promise.race([promise, new Promise((_, reject) => {
@@ -119,7 +139,7 @@ async function stop() {
 }
 async function port(method, params) {
   const response = await fetch(new URL('/api/host', url), {
-    method: 'POST', signal: AbortSignal.timeout(30000),
+    method: 'POST', signal: AbortSignal.timeout(withLive && method === 'invoke' ? 180000 : 30000),
     headers: {Authorization: `Bearer ${url.hash.slice(7)}`, 'Content-Type': 'application/json', 'X-Rho-Studio-Window': window},
     body: JSON.stringify({project_root: project, frame: {id: randomUUID(), request: {method, params}}}),
   });
@@ -135,7 +155,7 @@ async function query(id, args) {
 }
 async function invoke(id, args, request = randomUUID(), expected = 'succeeded') {
   let record = await port('invoke', {capability: key(id), arguments: args, preconditions: [], client_request_id: request});
-  const until = Date.now() + 15000;
+  const until = Date.now() + (withLive ? 180000 : 15000);
   while (!['succeeded', 'failed', 'cancelled', 'uncertain'].includes(record.status)) {
     assert.ok(Date.now() < until, `Original ${id} did not settle`);
     record = await port('get_operation', {operation_id: record.operation.operation_id});
@@ -174,8 +194,8 @@ try {
   for (const name of ['files', 'editor', ...(withScientific ? ['r'] : []), 'annotation', ...(withAgent ? ['agent'] : []), ...(withCaptures ? ['capture'] : [])]) {
     const snapshot = snapshots[name];
     const active = (await invoke('plugins.activate', {revision: snapshot.revision, artifact: snapshot.artifacts[0], target: 'aarch64-apple-darwin', alias: name, configuration: name === 'agent' ? {kimi_home:nativeHome} : name === 'r' ? {ark:fs.realpathSync(process.env.RHO_ARK),r_home:fs.realpathSync(process.env.RHO_R_HOME),execution_timeout_seconds:120} : {},
-      optional_capabilities: name === 'annotation' ? [key('editor.context.preview'), ...(withFiles ? [key('files.context.preview')] : []), ...(withScientific ? ['r.context.help.preview','r.context.viewer.preview','r.context.console.preview','r.context.plots.preview','r.context.objects.preview','r.context.packages.preview'].map(key) : []), ...(withCaptures ? [key('resources.read')] : [])] : name === 'agent'
-        ? ['plugins.instances', 'plugins.inspect', 'annotations.read', 'annotations.write', 'annotations.context.search', 'annotations.context.preview', 'operation.get', 'plugins.delegated_operation', ...(withCaptures ? ['resources.read'] : [])].map(key) : name === 'r' ? ['operation.get','operation.list_recent','resources.read'].map(key) : []})).output.instance.identity;
+      optional_capabilities: name === 'annotation' ? [key('editor.context.preview'), ...(withFiles ? [key('files.context.preview')] : []), ...(withManualIme ? ['plugins.instances','plugins.resolve','workspace.paths','files.read_text','files.context.search','editor.context.search','operation.get','operation.list_recent'].map(key) : []), ...(withScientific ? ['r.context.help.preview','r.context.viewer.preview','r.context.console.preview','r.context.plots.preview','r.context.objects.preview','r.context.packages.preview'].map(key) : []), ...(withCaptures ? [key('resources.read')] : [])] : name === 'agent'
+        ? [...['plugins.instances', 'plugins.inspect', 'annotations.read', 'annotations.write', 'annotations.context.search', 'annotations.context.preview', 'operation.get', 'plugins.delegated_operation', ...(withCaptures ? ['resources.read'] : []), ...(withLive ? ['r.session','r.context.objects.preview','r.context.packages.preview','r.context.plots.preview'] : [])].map(key), ...(withLive ? [{id:'r.execute',version:2}] : [])] : name === 'r' ? ['operation.get','operation.list_recent','resources.read'].map(key) : []})).output.instance.identity;
     if (name === 'editor') editor = active;
     if (name === 'files') files = active;
     if (name === 'annotation') notes = active;
@@ -206,6 +226,20 @@ try {
     result.files = filesCase.report;
     result.stages.push('real Files source → frozen quoted evidence; content identity, stale source refusal and retained history'); save();
   }
+  if(withManualIme){
+    const layout=await query('windows.layout',{window});
+    const view=(await invoke('windows.open_view',{expected_layout_version:layout.version,group:null,view:{instance:notes,contribution:'annotations',window,configuration:{},state:{}}})).output.view;
+    const address=new URL(url);address.searchParams.set('window',window);
+    const addressFile=path.join(directory,'workbench.url'),finished=path.join(directory,'ime-finished.json');
+    fs.writeFileSync(addressFile,address.href,{mode:0o600});
+    result.manual_ime={status:'awaiting_system_input',view:view.view,completion_file:finished};save();
+    console.log(JSON.stringify({ime_ready:true,directory,url_file:addressFile,view:view.view}));
+    const until=Date.now()+20*60*1000;
+    while(!fs.existsSync(finished)){assert.ok(Date.now()<until,'OS IME observation deadline exceeded');await new Promise(resolve=>setTimeout(resolve,1000));}
+    const observation=JSON.parse(fs.readFileSync(finished));
+    result.manual_ime={...result.manual_ime,...observation};save();
+    fs.unlinkSync(addressFile);
+  }
   if (withCaptures) {
     captureCase = await annotationCaptures({notes,captureSource,reference:first.reference,pluginQuery,invoke,binding,query});
     result.captures = captureCase.report;
@@ -216,7 +250,13 @@ try {
     result.scientific = scientificCase.report;
     result.stages.push('real R Help, saved HTML, Console, Plots, Objects and Packages → frozen annotation evidence; stable identity and immutable provenance'); save();
   }
-  if (withAgent) {
+  if (withLive) {
+    result.live_provider = {status:'running',protocol:'anthropic',model:process.env.RHO_LIVE_PROVIDER_MODEL,cases:[]}; save();
+    liveCase = await liveAgentProvider({agent,r,notes,project,window,scientificCase,image:captureCase?.image,matrix:flags.includes('--live-matrix'),port,query,invoke,binding,pluginQuery,
+      report:result.live_provider,save});
+    result.stages.push('real Anthropic provider → ordinary Agent → one native R effect → original-operation inspection without replay'); save();
+  }
+  if (withAgent && !withLive) {
     agentCase = await annotationAgent({agent, notes, context, notePreview, port, query, invoke, binding, pluginQuery});
     result.agent = agentCase.report;
     result.stages.push('real Agent Rho Send captures the exact annotation and delivers it through Rig to a local model peer'); save();
@@ -266,6 +306,10 @@ try {
     if (scientificAgentCase) await scientificAgentCase.afterRestart();
     result.stages.push('same Agent instance retains Send context and receipt while its annotation source stays suspended'); save();
   }
+  if (liveCase) {
+    await liveCase.afterRestart();
+    result.stages.push('real-provider original Send and child records survive same-instance Host restart without another model loop'); save();
+  }
   const resumed = (await invoke('plugins.resume', {instance: notes, suspension: suspended.instance.suspension})).output.instance;
   assert.deepEqual(resumed.identity, notes);
   if (nativeCase) await nativeCase.afterSourceResume();
@@ -285,6 +329,10 @@ try {
 } catch (error) {
   result.error = safe(error.stack ?? error); throw error;
 } finally {
+  if (liveCase) {
+    try {await liveCase.close();}
+    catch (error) {result.completed=false;result.credential_cleanup_error=safe(error.message);}
+  }
   try { await stop(); }
   catch (error) {
     result.completed = false; result.cleanup_error = safe(error.message);
@@ -301,4 +349,6 @@ try {
   result.finished_at = new Date().toISOString();
   save(); console.log(JSON.stringify({completed: result.completed, evidence, directory, stages: result.stages}));
   if (!result.completed) process.exitCode = 1;
+  if (result.live_provider?.matrix?.failed) process.exitCode=1;
+  if (result.live_provider?.connection?.state==='failed') process.exitCode=1;
 }

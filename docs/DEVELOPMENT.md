@@ -374,6 +374,18 @@ fixed-renderer test totals do not count as current plugin acceptance.
 
 ## Testing SOP
 
+Real-provider acceptance is opt-in: `node scripts/test-annotation-plugin.mjs
+--live-provider` reuses the frozen core and retained Agent/R/Annotations/Editor/Files
+packages. Supply `RHO_LIVE_PROVIDER_URL`, `RHO_LIVE_PROVIDER_MODEL` and
+`RHO_LIVE_PROVIDER_KEY_ENV` (the name of an existing credential variable), plus
+the normal package/R inputs. The runner uses the Agent's existing ephemeral key
+Control port because native plugins intentionally do not inherit generic Host
+credentials; only its reference enters Operations. It deletes the temporary
+instance key at completion/failure. `RHO_ANNOTATION_EVIDENCE` selects the report.
+It records the real diagnostic, one explicit R effect, discarded acknowledgement
+inspection and same-instance restart. This representative smoke is separate from
+the planned 33-scenario quality matrix; it does not certify all model/task profiles.
+
 Annotation ownership checks reuse the workspace: `cargo test -p rho-annotation-store
 --test annotations --locked` covers immutable evidence, revisions, idempotency,
 separate-connection races, scope isolation and transactional budgets. Fixed
@@ -393,7 +405,8 @@ For the ordinary Files text annotation view, pass a newly built
 `npm run test:browser --prefix ui -- annotation-ui.spec.ts`. It runs one real
 Files/Annotations Host flow with exact quote freezing, lost-write recovery, CAS
 conflict and tombstone checks. Inspect its normal, wide and narrow screenshots;
-the view currently has no component-level launch entry or image drawing surface.
+component entry, source-scoped versions and retained PNG/JPEG marks have separate
+browser assertions in that same file. Synthetic composition is not OS IME evidence.
 `node scripts/test-annotation-plugin.mjs --files` uses retained Annotation,
 Editor and Files packages and the frozen Host for Files quote freezing, native
 identity/content-version separation and same-instance restart without source replay.
