@@ -109,6 +109,16 @@ and reviews do not require edits, builds, status updates, or commits.
   runners tracked in `scripts/`, not as one-off files under `target/`. Incremental
   compilation does not limit `cargo test --workspace` to changed crates; that
   command still executes every workspace test target.
+- Before heavy acceptance, fix the required cases, layouts, prerequisites and
+  completion condition; follow `docs/DEVELOPMENT.md` § Acceptance execution and
+  closure. Make independent flows selectable and able to prepare their own data.
+  Before each rerun, identify the failure, changed inputs, invalidated evidence
+  and smallest affected stage. A targeted pass does not automatically require
+  another full run; shared-boundary changes must still cover affected consumers.
+- Keep closure scope fixed. Non-blocking performance work and new coverage ideas
+  wait for a separate task. Add a check during closure only for a missing required
+  condition or a concrete unresolved risk; explain why existing evidence is
+  insufficient. Once required checks pass, inspect the diff and commit.
 - Iterate in the workspace with incremental builds. Independent packaging proves
   the distribution boundary at a milestone; do not repeat it for each internal
   module or commit. Agent acceptance requires explicit `--build` or `--package`;

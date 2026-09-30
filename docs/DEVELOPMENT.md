@@ -40,6 +40,14 @@ Organize work as end-to-end user flows (the milestone table in
   change, browser fixtures waiting on explicit Ready/paint. A harness failure is
   fixed and rerun for that stage only; it is not a product failure and is not
   recorded in Status.
+  Verify selected Ark/R paths and environment variables, retained package receipts,
+  caller grants/source-read scopes and the capabilities actually loaded by this
+  fixture before starting an expensive temporary Host. Review UI assumptions:
+  open required menus, target controls in their own iframe and inspect visible
+  feedback. Keyboard acceptance must establish focus in the correct frame;
+  direct control actions do not substitute for a required keyboard path. After an
+  explicit busy result, wait for observable readiness before using the supported
+  retry action; do not blindly repeat a potentially committed mutation.
   Fault injection must target the actual edge: launcher calls use `/api/host`,
   while iframe actions use `/api/plugin-view` and `message.body`. A transport loss
   retires the frame; reload/reconnect before inspecting its saved original request.
@@ -54,6 +62,40 @@ Organize work as end-to-end user flows (the milestone table in
 - **Delete as you go.** When a milestone's flow passes, remove the fixed-composition
   path it replaces in the same milestone, or record the exact deletion condition
   in the Status table.
+
+### Acceptance execution and closure
+
+Before the first heavy run, include the required cases, keyboard paths, viewport
+sizes and completion condition in the existing work order. Identify retained
+artifacts, the minimum plugin set per flow and prerequisites that can be checked
+without starting a Host. This is part of the existing plan, not a new checklist
+file or progress ledger.
+
+Independent flows must be selectable and prepare their own inputs; one flow must
+not consume a draft or output created only by another test. Share expensive setup
+only when isolation permits it. Collect independent case failures in one run when
+the fixture remains healthy; stop dependent cases when their prerequisites fail,
+and report them as unrun. Do not add a second full run just to discover failures
+that the first could have collected.
+
+Before a rerun, state briefly in the work notes or update: failure class
+(harness/product/environment), changed inputs, which evidence is invalidated and
+the smallest stage that resolves it. Refresh only changed packages and affected
+consumers; reuse valid packages/core and safe disposable fixtures. A targeted pass
+does not require a full-suite confirmation unless shared inputs changed or a
+specific integration concern remains. If the same setup failure recurs, diagnose
+its existing logs before another launch and identify what has changed to justify
+retrying. Report setup time separately from test-body time; budget startup from
+observed snapshot/activation costs without hiding a stalled test behind a larger
+overall timeout.
+
+During closure, defer optional performance optimizations and new coverage ideas to
+separate work. A new check is justified by a missing agreed requirement or a
+concrete unresolved risk; explain why current evidence does not cover it. Do not
+announce another final sweep or rerun valid flows merely for reassurance. Once
+the required evidence covers settled source, inspect the diff, update current
+documentation where needed and commit. A required failed check remains unresolved;
+defer only work outside the completion condition, and label it explicitly.
 
 ### Planning and evidence reuse
 
