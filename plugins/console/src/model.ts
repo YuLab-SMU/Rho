@@ -87,7 +87,7 @@ export function mergeEvents(run: Run, output: OutputEvents): void {
       throw new Error("R output events are out of order or have a foreign identity.");
     prior = event.sequence;
     const original = retained.get(event.sequence);
-    if (original && JSON.stringify(original) !== JSON.stringify(event)) throw new Error("An observed R event changed its content.");
+    if (original && canonical(original) !== canonical(event)) throw new Error("An observed R event changed its content.");
     if (!original) added = true;
     retained.set(event.sequence, event);
   }

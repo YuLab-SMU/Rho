@@ -1,12 +1,13 @@
 import {expect, type Page, type Route, type TestInfo} from '@playwright/test';
-import {existsSync, readFileSync, writeFileSync} from 'node:fs';
+import {existsSync, readFileSync, readdirSync, writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
 import {join} from 'node:path';
 
 /** One actual R operation outlives scenario presentation and view closure. All
  * mutations use public ports; the gate only controls this disposable R script. */
-export async function scientificContinuity({page, info, query, port, mapping, editorView, project, windowId, nativeSession}: {
+export async function scientificContinuity({page, info, query, port, mapping, editorView, project, directory, windowId, nativeSession}: {
   page: Page; info: TestInfo; query(id: string, args: any): Promise<any>; port(method: string, args: any): Promise<any>;
-  mapping: any; editorView: any; project: string; windowId: string; nativeSession: string;
+  mapping: any; editorView: any; project: string; directory: string; windowId: string; nativeSession: string;
 }) {
   const invoke = async (id: string, arguments_: any) => {
     const record = await port('invoke', {capability: {id, version: 1}, arguments: arguments_, preconditions: [], client_request_id: crypto.randomUUID()});
@@ -41,6 +42,37 @@ export async function scientificContinuity({page, info, query, port, mapping, ed
     await query('scenarios.prepare', request); await invoke('scenarios.apply', request);
     expect((await query('windows.scenario', {window: windowId})).scenario.revision).toBe(revision);
   };
+  // Credentials are deliberately created after the historical checkpoint. A
+  // later restore must not erase them or roll back the Agent owner's settings.
+  const secret = 'disposable-scenario-history-key';
+  const agent = frame(mapping.views.agent);
+  await page.getByRole('tab', {name: 'Agent', exact: true}).click();
+  await agent.getByRole('button', {name: 'Task actions', exact: true}).click();
+  await agent.getByRole('button', {name: 'Settings', exact: true}).click();
+  const settingsDialog = agent.getByRole('dialog', {name: 'Agent settings'});
+  await settingsDialog.getByRole('combobox', {name: 'API format'}).selectOption('openai_completions');
+  await settingsDialog.getByRole('textbox', {name: 'Base URL'}).fill('http://127.0.0.1:9/v1');
+  await settingsDialog.getByRole('textbox', {name: 'Model ID'}).fill('scenario-history-fixture');
+  await settingsDialog.getByRole('textbox', {name: 'API key', exact: true}).fill(secret);
+  await settingsDialog.getByRole('button', {name: 'Save', exact: true}).click();
+  await expect(settingsDialog.locator('#settings-key-status')).toContainText('Saved on this computer');
+  await settingsDialog.getByRole('button', {name: 'Close settings'}).click();
+  const agentQuery = async (id: string, args: any) => query(id, {
+    binding: await query('plugins.resolve', {instance: mapping.instances.agent, capability: {id, version: 1}}), arguments: args,
+  });
+  const settingsBefore = await agentQuery('agent.model.settings', {});
+  const keyBefore = await agentQuery('agent.model.key.status', {settings_version: settingsBefore.version});
+  expect(keyBefore.available).toBe(true); expect(settingsBefore.enabled).toBe(false);
+  // Inspect only this test's owned directory, never user credential locations.
+  const credentialFiles = (root: string): string[] => readdirSync(root, {withFileTypes: true}).flatMap(entry => {
+    const file = join(root, entry.name);
+    return entry.isDirectory() ? credentialFiles(file) : entry.isFile() && entry.name === 'model-credentials-v1.json' ? [file] : [];
+  });
+  const credentials = credentialFiles(directory); expect(credentials).toHaveLength(1);
+  const credentialDigest = () => createHash('sha256').update(readFileSync(credentials[0])).digest('hex');
+  const retainedCredential = credentialDigest();
+  expect(JSON.stringify(working)).not.toContain(secret);
+  await page.locator(`[role="tab"][aria-controls="flexlayout-tab-${editorView.view}"]`).click();
   const original = frame(editorView.view), code = original.getByRole('textbox', {name: 'Code Editor', exact: true});
   const editorDraft = '# unsaved across running scene 中文 Ω\nanswer <- 999L\n';
   await code.click(); await code.press('Meta+a'); await page.keyboard.insertText(editorDraft);
@@ -131,7 +163,41 @@ export async function scientificContinuity({page, info, query, port, mapping, ed
   expect(await executions()).toHaveLength(before.length + 1);
   expect(readFileSync(effect, 'utf8')).toBe('once\n');
   await page.screenshot({path: info.outputPath('science-continuity-restored.png')});
+  // Restore old definitions as a new checkpoint, just as Studio does. Neither
+  // historical checkpoint creation nor application may rewind owner data.
+  const advanced = await invoke('scenarios.checkpoint', {scenario: working.scenario, expected_head: working.id,
+    name: 'Later inspection scene', instances: definitions.instances, providers: definitions.providers, layout: inspection.layout});
+  await apply(advanced.id, {[mapping.views.manager]: mapping.views.manager});
+  const historical = await query('scenarios.get', {revision: working.id});
+  expect(historical).toEqual(working);
+  const restored = await invoke('scenarios.checkpoint', {scenario: historical.scenario, expected_head: advanced.id,
+    name: historical.name, instances: historical.instances, providers: historical.providers, layout: historical.layout});
+  expect(restored.parent).toBe(advanced.id); expect(restored.id).not.toBe(working.id);
+  await apply(restored.id, {...views, [editorView.view]: reopenedEditor.view, [mapping.views.console]: reopenedConsole.view});
+  expect(await query('scenarios.get', {revision: working.id})).toEqual(working);
+  expect(await query('scenarios.get', {revision: advanced.id})).toEqual(advanced);
+  expect((await query('windows.scenario', {window: windowId})).scenario.instances).toEqual(mapping.instances);
+  expect((await query('r.session', {binding, arguments: {}})).session_id).toBe(nativeSession);
+  expect(await originalRecord()).toEqual(record);
+  expect(await executions()).toHaveLength(before.length + 1);
+  expect(readFileSync(effect, 'utf8')).toBe('once\n');
+  expect(readFileSync(join(project, editorView.configuration.file.path), 'utf8')).toBe(diskBefore);
+  expect(await agentQuery('agent.model.settings', {})).toEqual(settingsBefore);
+  expect(await agentQuery('agent.model.key.status', {settings_version: settingsBefore.version})).toEqual(keyBefore);
+  expect(credentialDigest()).toBe(retainedCredential);
+  expect(JSON.stringify([historical, advanced, restored])).not.toContain(secret);
+  await page.getByRole('tab', {name: 'Objects', exact: true}).click();
+  const objects = frame(mapping.views.objects);
+  const value = objects.locator('.object-entry').filter({has: objects.locator('.object-name code').getByText('scene_continuity', {exact: true})});
+  await expect(value.locator('.directory-content:visible, .directory-compact-summary:visible').getByText('73', {exact: true})).toBeVisible();
+  // Scenario switching reattaches the retained iframe. Its DOM can be visible
+  // before the child surface has been composited into the parent screenshot.
+  await objects.locator('body').evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await page.screenshot({path: info.outputPath('science-history-current-memory.png')});
+
   return {operation: operation.operation_id, native_session: nativeSession, working_scene: working.id, inspection_scene: inspection.id,
+    history_restore: {historical: working.id, previous_head: advanced.id, restored: restored.id, same_instances: true, native_value: 73, credential_bytes_unchanged: true, owner_settings_unchanged: true},
     original_editor: editorView.view, reopened_editor: reopenedEditor.view, original_console: mapping.views.console, reopened_console: reopenedConsole.view,
     running_across_switch_and_close: true, editor_and_console_drafts_restored: true, file_unchanged: true, same_session_and_result_after_reload: true, effect_count_after_reload: 1};
 }

@@ -7,12 +7,14 @@ import { tmpdir } from 'node:os';
 import { join, resolve, delimiter } from 'node:path';
 import { verifyAgentBuild, agentBuildMode } from '../../scripts/agent-plugin-artifact.mjs';
 import { buildManagerPlugin } from '../../scripts/build-manager-plugin.mjs';
+import { installPluginSet } from '../../scripts/plugin-set.mjs';
 import { startRhoModelPeer, exerciseRhoInput, inspectRhoAfterRestart } from './fixtures/agent-rho-workspace';
 import { prepareRetainedHandoff, inspectRetainedHandoff } from './fixtures/agent-handoff-workspace';
 import { observeHelp, setAgentViewport, viewerText } from './fixtures/agent-scientific-context';
 
 let directory: string, project: string, url: URL, host: ReturnType<typeof spawn>, agent: any, r: any, view: any, session: string;
 let completed = false, database: string, hostEnvironment: NodeJS.ProcessEnv, managerView: any, editor: any, sourceDraft: any;
+let buildMode: string, deliveredSet: {directory: string; sha256: string} | null = null;
 let modelPeer: Awaited<ReturnType<typeof startRhoModelPeer>>;
 const sourceText = 'context_value <- 42L # 中文 Ω\n';
 const windowId = 'agent-scientific-workspace', binary = resolve('../target/debug/rho');
@@ -84,9 +86,13 @@ async function stopHost(process_: ReturnType<typeof spawn>) {
 
 test.beforeAll(async () => {
   test.setTimeout(180000);
-  expect(process.env.RHO_AGENT_PLUGIN_PACKAGE).toBeTruthy(); expect(process.env.RHO_R_PLUGIN_PACKAGE).toBeTruthy(); expect(process.env.RHO_EDITOR_PLUGIN_PACKAGE).toBeTruthy(); expect(process.env.RHO_FILES_PLUGIN_PACKAGE).toBeTruthy();
+  const delivery = process.env.RHO_PLUGIN_SET_PACKAGE;
+  if (!delivery) {
+    for (const name of ['RHO_AGENT_PLUGIN_PACKAGE', 'RHO_R_PLUGIN_PACKAGE', 'RHO_EDITOR_PLUGIN_PACKAGE', 'RHO_FILES_PLUGIN_PACKAGE']) expect(process.env[name], name).toBeTruthy();
+  }
   expect(process.env.RHO_ARK).toBeTruthy(); expect(process.env.RHO_R_HOME).toBeTruthy();
-  const agentPackage = verifyAgentBuild(process.env.RHO_AGENT_PLUGIN_PACKAGE!);
+  const agentPackage = delivery ? null : verifyAgentBuild(process.env.RHO_AGENT_PLUGIN_PACKAGE!);
+  buildMode = delivery ? 'retained-archives' : agentBuildMode(agentPackage!);
   directory = realpathSync(mkdtempSync(join(tmpdir(), 'rho-agent-window-'))); project = join(directory, 'project'); mkdirSync(project);
   modelPeer = await startRhoModelPeer();
   const nativeBin = join(directory, 'native-bin'); mkdirSync(nativeBin);
@@ -95,8 +101,25 @@ test.beforeAll(async () => {
   copyFileSync(resolve('../crates/host/tests/fixtures/agent-science.cjs'), join(nativeBin, 'kimi')); chmodSync(join(nativeBin, 'kimi'), 0o700);
   database = join(directory, 'state.sqlite');
   const snapshot = (path: string, target = 'aarch64-apple-darwin') => JSON.parse(execFileSync(binary, ['--database', database, 'plugins', 'snapshot', path, '--target', target], { encoding: 'utf8', timeout: 90000, killSignal: 'SIGKILL' })).result;
-  const sources = { agent: snapshot(agentPackage), r: snapshot(realpathSync(process.env.RHO_R_PLUGIN_PACKAGE!)), editor: snapshot(realpathSync(process.env.RHO_EDITOR_PLUGIN_PACKAGE!)), files: snapshot(realpathSync(process.env.RHO_FILES_PLUGIN_PACKAGE!)) };
-  const managerPackage = snapshot(buildManagerPlugin(join(directory, 'manager')), 'ui-web');
+  let sources: Record<string, {revision: string; artifacts: string[]}>, managerPackage: {revision: string; artifacts: string[]};
+  if (delivery) {
+    const selected = realpathSync(delivery), bytes = readFileSync(join(selected, 'plugin-set.json'));
+    const index = JSON.parse(bytes.toString('utf8'));
+    expect(index.profile).toBe('rho-default');
+    expect(installPluginSet({rho: binary, directory: selected, database}).imported).toHaveLength(16);
+    const select = (name: string, target = 'aarch64-apple-darwin') => {
+      const entry = index.packages.find((item: any) => item.plugin === `org.rho.${name}`);
+      const artifact = entry?.artifacts.find((item: any) => item.target === target);
+      expect(artifact, `Delivered ${name} for ${target}`).toBeTruthy();
+      return {revision: entry.revision, artifacts: [artifact.id]};
+    };
+    sources = Object.fromEntries(['agent', 'r', 'editor', 'files'].map(name => [name, select(name)]));
+    managerPackage = select('manager', 'ui-web');
+    deliveredSet = {directory: selected, sha256: hash(bytes)};
+  } else {
+    sources = {agent: snapshot(agentPackage!), r: snapshot(realpathSync(process.env.RHO_R_PLUGIN_PACKAGE!)), editor: snapshot(realpathSync(process.env.RHO_EDITOR_PLUGIN_PACKAGE!)), files: snapshot(realpathSync(process.env.RHO_FILES_PLUGIN_PACKAGE!))};
+    managerPackage = snapshot(buildManagerPlugin(join(directory, 'manager')), 'ui-web');
+  }
   hostEnvironment = { ...process.env, PATH: nativeBin + delimiter + process.env.PATH };
   const started = await startHost(); host = started.process; url = started.address;
   const info = await fetch(new URL('/api/info', url), { headers: { Authorization: `Bearer ${url.hash.slice(7)}` } }).then(response => response.json());
@@ -391,7 +414,7 @@ test('ordinary native and Rho tasks retain Editor input, real R results and expl
   expect(await sessionState()).toMatchObject({ state: 'unstarted', session_id: null });
   expect(await executions()).toHaveLength(1); expect(readFileSync(join(project, 'counter-value.txt'), 'utf8')).toBe('1\n');
   expect((await detail()).summary.task.native_session_id).toBe(nativeSession);
-  writeFileSync(info.outputPath('agent-native-result.json'), JSON.stringify({ status: 'passed', build_mode: agentBuildMode(process.env.RHO_AGENT_PLUGIN_PACKAGE!), original_send: evidence.invocation.send_request,
+  writeFileSync(info.outputPath('agent-native-result.json'), JSON.stringify({ status: 'passed', build_mode: buildMode, delivered_set: deliveredSet, host_sha256: hash(readFileSync(binary)), original_send: evidence.invocation.send_request,
     child: childId, native_session: nativeSession, r_session: session, cached_history_messages: 120,
     host_restart: { instance: agent, task, view: view.view, resume_request: resumeRequest, resume_calls: resumeCalls, reconnect_calls: reconnectCalls, native_resume_without_prompt: true },
     manager_restore: { instance: r, resume_calls: rResumes, native_r_remains_unstarted: true },

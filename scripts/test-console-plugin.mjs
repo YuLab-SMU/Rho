@@ -27,6 +27,12 @@ try {
   mergeEvents(run,page([event(1,'中文\n')]));mergeEvents(run,page([event(1,'中文\n'),event(2,'[1] 22\n')]));
   assert.equal(run.events.map(event=>event.text).join(''),'中文\n[1] 22\n','retained completion does not duplicate live text');
   const retainedEvents=run.events;mergeEvents(run,page([event(1,'中文\n'),event(2,'[1] 22\n')]));assert.equal(run.events,retainedEvents);
+  // Live JSON observations and retained resource JSON may order fields
+  // differently even though they describe the same immutable event.
+  const reordered=value=>Array.isArray(value)?value.map(reordered):value&&typeof value==='object'
+    ?Object.fromEntries(Object.entries(value).reverse().map(([key,item])=>[key,reordered(item)])):value;
+  mergeEvents(run,page(reordered([event(1,'中文\n'),event(2,'[1] 22\n')])));
+  assert.equal(run.events,retainedEvents,'field ordering must not disable a live Console or duplicate its transcript');
   assert.equal(observedText('rolling',[event(1,'old'),event(2,' text')]).text,'old text');
   assert.equal(observedText('rolling',[event(2,' text'),event(3,' window')]).text,' text window','bounded stream retention resets its terminal cache');
   assert.throws(()=>mergeEvents(run,page([event(1,'changed')])));

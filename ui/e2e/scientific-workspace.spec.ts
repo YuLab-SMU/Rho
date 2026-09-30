@@ -188,6 +188,12 @@ test('Manager prepares the ordinary scientific scene; Files opens a runnable Edi
   await page.getByRole('tab', { name: 'Plots', exact: true }).click();
   const plots = frame(mapping.views.plots);
   await expect.poll(async () => plots.locator('img').evaluateAll(images => images.some(image => image.complete && image.naturalWidth > 0))).toBe(true);
+  // Refresh must reconcile retained events with the live transcript without
+  // treating JSON field ordering as a changed scientific result.
+  await consoleView.getByRole('button', {name: 'Refresh', exact: true}).click();
+  await expect(consoleView.locator('#observation-error')).toHaveText('');
+  await expect(consoleView.locator('#status')).toHaveText('Ready · 0 queued');
+  await expect(consoleView.getByRole('button', {name: 'Run', exact: true})).toBeEnabled();
   await page.screenshot({ path: info.outputPath('scientific-plots.png') });
   await page.reload(); await expect(editor.getByRole('textbox', { name: 'Code Editor', exact: true })).toContainText('answer <- 42L');
   expect(await executions()).toHaveLength(1); expect((await session()).session_id).toBe(nativeSession);
@@ -209,7 +215,7 @@ test('Manager prepares the ordinary scientific scene; Files opens a runnable Edi
     expect(await executions()).toHaveLength(1);
     await page.screenshot({path:info.outputPath('default-studio.png')});
   }
-  const continuity = full ? await scientificContinuity({page, info, query, port, mapping, editorView, project, windowId, nativeSession}) : null;
+  const continuity = full ? await scientificContinuity({page, info, query, port, mapping, editorView, project, directory, windowId, nativeSession}) : null;
   if (process.env.RHO_SCIENTIFIC_EVIDENCE) writeFileSync(process.env.RHO_SCIENTIFIC_EVIDENCE, JSON.stringify({completed:true,full_delivery:full,
     set:process.env.RHO_SCIENTIFIC_PLUGIN_SET ?? null,instances:mapping.instances,views:mapping.views,scenario:mapping.revision,
     original_execution:id,native_session:nativeSession,agent_tools_offered_unchecked:full,studio_opened:full,continuity,

@@ -199,7 +199,12 @@ Once the combined package is current, run the existing real-R runner with
 `--browser --package /absolute/retained/package` and explicit `RHO_R_PLUGIN_PACKAGE`,
 `RHO_EDITOR_PLUGIN_PACKAGE`, `RHO_FILES_PLUGIN_PACKAGE`, `RHO_ARK` and `RHO_R_HOME`. This mode never invokes Cargo: `agent-workspace.spec.ts`
 uses the current Host, retained ordinary Agent/R/Editor/Files packages and local
-ACP and streaming-model peers. It checks browser attachment capture, lost import receipts, a real Editor
+ACP and streaming-model peers. Alternatively, run `npm run test:browser --prefix
+ui -- agent-workspace.spec.ts` with `RHO_PLUGIN_SET_PACKAGE=/absolute/set`,
+`RHO_ARK` and `RHO_R_HOME`. This validates and imports the retained sixteen-archive
+set, including Manager, without UI/native builds. Its report records the selected
+index and Host hashes as archive integration evidence, separately from verified
+current-source package builds. It checks browser attachment capture, lost import receipts, a real Editor
 context preview, one original Send, real R work and reload during that work.
 The public document owner is seeded with a synchronized Editor capture; the real
 Editor backend resolves it. The peer verifies the actual source bytes in native
@@ -1647,7 +1652,12 @@ history. Public declarations alone do not establish those native results.
 The combined `scientific-workspace.spec.ts` continuity case holds a real layout-save
 reply while checking that the close button stays in place, then closes/reopens
 Console and Editor while the same R operation remains running. Routine saving
-indicators must not reflow the window or intercept pointer input.
+indicators must not reflow the window or intercept pointer input. The same full
+scene case creates a disposable Agent credential after a historical checkpoint,
+then restores and applies old scenario definitions as a new checkpoint after R
+executes. It checks current R memory/session, output/file effects, original journal,
+Agent settings and credential-file bytes. The credential hash reads only the
+fixture's owned directory; no model request or user credential access is involved. Console also must remain ready after refreshing the completed real-R plot run; JSON object field order must not turn equal live and retained events into a content-change failure.
 The native Console browser case also checks `r.inspection_state`: short runs and
 failed scripts with prior object mutations invalidate cached inspection data,
 while read-only queries preserve the key. The backend's manifest-to-route test
