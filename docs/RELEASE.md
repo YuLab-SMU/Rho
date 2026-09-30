@@ -9,7 +9,10 @@ release scope. Linux, Windows and Intel Mac distribution are outside this previe
 Existing platform-specific source and development helpers do not create a current
 distribution commitment.
 
-The current artifact is the `rho` CLI/local-browser workbench binary:
+The development delivery consists of the `rho` core and sixteen ordinary plugin
+archives, assembled as the portable bundle below. The core alone starts an empty
+workbench; it neither embeds feature packages nor reinstalls removed ones. To build
+the CLI/local-browser core executable:
 
 ```sh
 cargo build --release --locked
@@ -76,6 +79,18 @@ sixteen actual archives: import, remove all, start the empty Host, and explicitl
 restore identical source/capability/permission declarations and artifacts.
 This does not establish signing, complete default scenario integration, final
 fixed-composition removal or a user installation; see Status for actual evidence.
+
+Documentation or test-only source updates need no native rebuild. Materialize the
+accepted archive's source and artifact files into a new owned directory, preserving
+their bytes and executable modes, then replace only the reviewed source files.
+Use ordinary `plugins snapshot`, `export` and `validate` to create the new revision;
+do not edit archive identities or build receipts. Compare every other source entry,
+the manifest, and every runtime file's digest, size and mode against the accepted
+archive before assembling the set. Revision/artifact identities change even when
+all runtime bytes remain identical. Preserve the independent package's dependency
+layout and lockfiles. Runtime, dependency, manifest or build-script changes instead
+require their affected build and acceptance checks. Keep the prior archive and
+record the changed source paths, old/new identities and reused artifact digests.
 
 ## Portable local development bundle
 
