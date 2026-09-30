@@ -20,7 +20,7 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
         else if(cap.id==='agent.model.assets')data={conversation_id:input.conversation_id,assets:assets.get(input.conversation_id)??[]};
         else if(cap.id==='agent.model.conversation')data=conversations.get(input.conversation_id);
         else if(cap.id==='agent.model.run.get')data=runs.get(input.run_id);
-        else if(cap.id==='agent.model.run.admission')data={binding:{provider:instance,project:'project',capability:{id:'agent.model.run',version:1},target:null},r:runs.get(input.run_id).request.r??null};
+        else if(cap.id==='agent.model.run.admission')data={binding:{provider:instance,project:'project',capability:{id:'agent.model.run',version:1},target:null},r:runs.get(input.run_id).request.r??null,tools:runs.get(input.run_id).request.tools??[]};
         else if(cap.id==='agent.model.run.request')data=[...runs.values()].find(r=>r.request.request_id===input.request_id);
         else if(cap.id==='agent.model.history'){
           const rows=[...runs.values()].filter(r=>r.request.conversation_id===input.conversation_id).reverse();
@@ -184,18 +184,30 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
       await model.observe(id);model.edit(id,{...empty(),text:'Newer input'});
       return {binding:{provider:f.client.view.instance,project:'project',capability:{id:'agent.model.run',version:1},target:null},r:null};
     });
-    await assert.rejects(model.send(id,'run-0'),/draft changed while preparing Continue/);
+    await assert.rejects(model.send(id,'run-0'),/draft changed while preparing (?:Continue|this message)/);
     assert.equal(f.calls.length,before);assert.equal(model.draft(id).text,'Newer input');
   });
   const rTool = (session = 'original-session', capability = {id:'r.execute',version:2}) => ({name:session,target:{type:'provider',binding:{provider:{instance:'r',plugin:'org.rho.r',revision:'sha256:'+'c'.repeat(64),artifact:'sha256:'+'d'.repeat(64)},project:'project',capability,target:session}}});
   await check('Rho tool choice is explicit, exclusive, retained and independent of Native tools',async()=>{
     const first=rTool(),second=rTool('other-session'),read=rTool('read-session',{id:'r.session',version:1});
     const f=fixture([first,second,read,{name:'other',target:{type:'host',project:'project',capability:{id:'files.read',version:1},fixed_arguments:{}}}]),{model,native,id}=await task(f);
-    assert.equal(model.tools.length,3);assert.equal(model.state.tool,undefined);
+    assert.equal(model.tools.length,3);assert.deepEqual(model.state.tool,read);
     native.state.tools=[first];await model.selectTool(second);assert.deepEqual(native.state.tools,[first]);
     assert.deepEqual(f.open().model.state.tool,second);await model.selectTool(read);await draft(model,id);await model.send(id);
     assert.deepEqual(f.calls.at(-1).args.arguments.r,read.target.binding);assert.equal(f.calls.at(-1).args.arguments.mode,'explain');
     assert.deepEqual(model.state.tool,read);
+  });
+  await check('configured workspace reads are default, writes require Run, and Send pins the live R session',async()=>{
+    const read=rTool(null,{id:'r.session',version:1}),run=rTool(null),file=cap=>({name:cap.replaceAll('.','_'),target:{type:'provider',binding:{...read.target.binding,provider:{...read.target.binding.provider,plugin:'org.rho.files',instance:'files'},capability:{id:cap,version:1}}}});
+    read.name='observe';run.name='edit-run';
+    const files=[file('files.read_text'),file('files.apply_patch')],f=fixture([read,run,...files]),{model,id}=await task(f);
+    let session='live-r-one';f.overrides.set('r.session',async()=>({session_id:session}));
+    await draft(model,id);await model.send(id);
+    assert.equal(f.calls.at(-1).args.arguments.r.target,'live-r-one');assert.deepEqual(f.calls.at(-1).args.arguments.tools,[files[0]]);
+    f.finish('run-0');await model.refresh();await model.selectTool(run);await draft(model,id,'Edit with R stopped');session=null;await model.send(id);
+    assert.equal(f.calls.at(-1).args.arguments.r,null);assert.equal(f.calls.at(-1).args.arguments.mode,'run');assert.deepEqual(f.calls.at(-1).args.arguments.tools,files);
+    f.finish('run-1');await model.refresh();await model.selectTool(null);await draft(model,id);await model.send(id);
+    assert.deepEqual(f.calls.at(-1).args.arguments.tools,[]);assert.equal(f.calls.at(-1).args.arguments.r,null);
   });
   await check('original Send freezes the selected R session before asynchronous preparation and lost receipt',async()=>{
     const first=rTool(),second=rTool('next-session'),f=fixture([first,second]),{model,id}=await task(f);
@@ -349,7 +361,7 @@ export async function testRhoTasks(RhoModel, NativeAgentModel, operationRequestI
     model.edit(id,{...model.draft(id),context:[{...componentSource,label:'Earlier label',inclusion:'{ "kind": "selection" }'}]});await model.flush(id);
     const picker={retained:async()=>{model.edit(id,{...model.draft(id),text:'Typed while preview was loading'});return readyPicker.retained();}};
     const before=f.calls.length;await addComponentRequest(native,model,picker,input,{kind:'rho',conversation_id:id});
-    assert.equal(model.draft(id).text,'Typed while preview was loading');assert.equal(model.draft(id).context.length,1);assert.equal(model.state.tool,undefined);
+    assert.equal(model.draft(id).text,'Typed while preview was loading');assert.equal(model.draft(id).context.length,1);assert.equal(model.state.tool,null);
     assert.ok(f.calls.slice(before).every(call=>call.cap.id==='agent.model.draft'));
     assert.equal(f.open().native.state.componentRequestApplied.request,input.request_id);
   });

@@ -437,8 +437,8 @@ function renderTools() {
   for (const tool of available) {
     const label = document.createElement('label'), checkbox = document.createElement('input'); checkbox.type = 'checkbox';
     checkbox.checked = selectedTools.some(item => JSON.stringify(item) === JSON.stringify(tool));
-    const suffix = isRho && tool.target.type === 'provider' ? (tool.target.binding.capability.id === 'r.execute' ? ' · Run R' : ' · Observe R') : '';
-    label.append(checkbox, document.createTextNode(tool.name + suffix)); menu.append(label);
+    const title = isRho && tool.target.type === 'provider' ? (tool.target.binding.capability.id === 'r.execute' ? 'Read, edit and run in workspace' : 'Read workspace context') : tool.name;
+    label.append(checkbox, document.createTextNode(title)); menu.append(label);
     checkbox.onchange = () => {
       const checked = checkbox.checked;
       action(async () => {

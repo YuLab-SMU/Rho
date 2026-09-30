@@ -7,7 +7,7 @@ tools in a dedicated catalog on first use, then opens a scientific Demo workspac
 in the default browser. The editor opens `run_demo.R`; use **Start R** in Console,
 then **Save and Run** in the editor. Files, Objects, Plots, Packages and the other
 ordinary views share the prepared scenario. No terminal setup or plugin selection
-is needed. R starts only when requested; Agent tools remain unchecked.
+is needed. R starts only when requested. New Agent tasks offer read-only workspace context by default.
 
 Preview 2 restores the left navigation rail for views already open in the window.
 Expand it for labels, choose a view when a component has several tabs, or click
@@ -21,11 +21,13 @@ and **Show Logs** are in the native launch window; **Quit Rho** ends the local H
 Save files before quitting. Saved files and synchronized view state remain, but
 R memory ends with the Host. Closing the browser alone leaves Rho running.
 The preview keeps its Demo, catalog, private connection and logs under
-`~/Library/Application Support/Rho/Preview`; it does not read the earlier ad hoc
+`~/Library/Application Support/Rho/Preview 3`; it does not read the earlier ad hoc
 `Rho Preview` catalog. Keep the private connection files private.
 
-This local build records this Mac's existing R home and Ark executable. They must
-remain available at the selected paths. Setup checks `jsonlite` and `rlang` without
+Preview 3 includes Ark and its notices; it records this Mac's existing R home,
+which must remain available. Preview 3 opens a fresh Demo workspace in its own
+catalog. Earlier Preview data remains at its original location; open the earlier
+app to continue those original tasks and drafts. Setup checks `jsonlite` and `rlang` without
 installing R packages. **Retry** retains original setup requests after a failure.
 Later launches resume original suspended instances and reconnect saved views;
 they do not reimport removed packages or replay R code. Assembly details and
@@ -106,7 +108,11 @@ can feed Console, Objects and Plots. Missing packages remain missing until an
 explicit import. If preparation loses a reply, inspect its original request before
 continuing; the retained partial instances are not recreated automatically.
 Agent and Plugin Studio appear as ordinary tabs. Agent offers exact tools from
-the selected instances, initially unchecked; choose tools before Send. Selecting
+the selected instances. New tasks offer read-only file, Editor and R context.
+Typing `@` opens source selection. In Rho tasks, **Tools → Read, edit and run in
+workspace** enables scoped file edits and Editor edit/save/run. The default
+**Read workspace context** permits observation only; either mode can be turned
+off. Explicit saved choices remain in effect. Selecting
 these packages neither sends model requests nor runs scientific operations.
 Remote and Environment keep their unconfigured defaults until an explicit target
 or runtime configuration is supplied through normal instance/scenario configuration.

@@ -31,6 +31,27 @@ pub fn validate_component_grant(
     profile: ComponentAgentProfile,
     grant: &ComponentAgentGrant,
 ) -> Result<(), ApplicationError> {
+    validate_grant(profile, grant, false)
+}
+pub(super) fn validate_native_grant(
+    profile: ComponentAgentProfile,
+    grant: &ComponentAgentGrant,
+    origin: &super::ComponentNativeRunOrigin,
+) -> Result<(), ApplicationError> {
+    validate_grant(
+        profile,
+        grant,
+        origin
+            .tools
+            .iter()
+            .any(|tool| tool.kind == AgentNativeToolKind::Operation),
+    )
+}
+fn validate_grant(
+    profile: ComponentAgentProfile,
+    grant: &ComponentAgentGrant,
+    workspace_operations: bool,
+) -> Result<(), ApplicationError> {
     use ComponentAgentMode::*;
     use ComponentAgentProfile::*;
     if grant.permission_policy.is_none()
@@ -48,7 +69,11 @@ pub fn validate_component_grant(
     {
         return Err(invalid("Explain cannot grant writes"));
     }
-    if grant.permission_policy.is_none() && grant.mode == Run && grant.session.is_none() {
+    if grant.permission_policy.is_none()
+        && grant.mode == Run
+        && grant.session.is_none()
+        && !workspace_operations
+    {
         return Err(invalid("Run requires an explicit native R session"));
     }
     if let Some(session) = &grant.session

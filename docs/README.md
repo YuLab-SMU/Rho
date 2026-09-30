@@ -28,9 +28,9 @@ owners. A20 manual handoff has been reviewed and authorized; it appends reviewed
 context to existing task drafts. Rho verifies its own integration and data behavior,
 not the independent performance of third-party Agents.
 The fixed Host Agent services and their test harnesses have been removed. The
-33-scenario real-model assessment records 12 passes, 3 partial Plots cases and
-18 unavailable document cases; the separate image diagnostic failed. The earlier
-27-scenario evidence remains historical. See Status for exact evidence and gaps.
+earlier 33-scenario real-model assessment recorded 12 passes, 3 partial Plots cases
+and 18 unavailable document cases; its image diagnostic failed. Preview 3 adds
+scoped Editor and workspace tools. See Status for current evidence and remaining gaps.
 
 ## Maintenance
 

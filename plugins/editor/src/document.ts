@@ -74,6 +74,16 @@ export class EditorDocument {
     this.update(this.state.update({ changes: { from: 0, to: this.state.doc.length, insert: text },
       selection: { anchor: Math.min(selection.anchor, text.length), head: Math.min(selection.head, text.length) }, userEvent: 'input.format' }));
   }
+  /** An exact owner edit is one undoable transaction. Keep the resident
+   * selection/scroll and file base returned by that original owner operation. */
+  adopt(capture: DocumentBody) {
+    const replacement = new EditorDocument(capture), text = replacement.state.doc.toString();
+    const selection = this.state.selection.main;
+    this.state = this.state.update({ changes: { from: 0, to: this.state.doc.length, insert: text },
+      selection: { anchor: Math.min(selection.anchor, text.length), head: Math.min(selection.head, text.length) }, userEvent: 'input.agent' }).state;
+    this.body = { ...replacement.snapshot, anchor: this.state.selection.main.anchor, head: this.state.selection.main.head,
+      scrollTop: this.body.scrollTop, scrollLeft: this.body.scrollLeft };
+  }
   /** An explicit disk replacement keeps the resident undo history. Its exact
    * BOM/newlines become the new base; undoing text leaves that base unchanged. */
   useDisk(raw: string, digest: string) {

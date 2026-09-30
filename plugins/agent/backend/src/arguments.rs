@@ -253,6 +253,10 @@ pub struct RunModel {
     pub r: Option<rho_plugin_sdk::protocol::ProviderBinding>,
     #[serde(default)]
     pub mode: Option<RunMode>,
+    /// Exact configured workspace tools, captured from installed manifests at Send.
+    #[serde(default)]
+    #[schemars(length(max = 16))]
+    pub tools: Vec<rho_agent_api::AgentNativeToolSelection>,
 }
 #[derive(Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -308,6 +312,7 @@ pub struct ModelTool {
 /// Read-only projection of the original admission; no caller can supply it.
 #[derive(Serialize, JsonSchema)]
 pub struct ModelAdmission {
+    pub tools: Vec<rho_agent_api::AgentNativeToolSelection>,
     pub operation: rho_plugin_sdk::protocol::OperationId,
     pub request: rho_plugin_sdk::protocol::RequestId,
     pub binding: rho_plugin_sdk::protocol::ProviderBinding,

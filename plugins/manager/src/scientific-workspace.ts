@@ -93,13 +93,15 @@ export function scientificScenario(setup: ScientificWorkspace, manager: PluginVi
     ] } };
 }
 
-/** Offers are unchecked in Agent. Each Send still captures the chosen exact
+/** Agent offers read-only context by default. Each Send captures the chosen exact
  * providers; a later scenario change cannot redirect an existing view. */
 function workspaceTools(setup: ScientificWorkspace, project: string) {
   const offers: [string, string, number][] = [
     ['r', 'r.session', 1], ['r', 'r.execute', 2], ['r', 'r.list_objects', 1],
     ['files', 'files.list_directory', 1], ['files', 'files.read_text', 1], ['files', 'files.search_text', 1],
     ['files', 'files.prepare_patch', 1], ['files', 'files.apply_patch', 1],
+    ['editor', 'editor.context.search', 1], ['editor', 'editor.context.preview', 1],
+    ['editor', 'editor.edit', 1], ['editor', 'editor.save', 1], ['editor', 'editor.run', 1],
     ['process', 'process.prepare_local', 2], ['process', 'process.run_local', 2],
     ['remote', 'remote.status', 1], ['environment', 'environment.status', 1],
     ['annotations', 'annotations.read', 1], ['annotations', 'annotations.write', 1],

@@ -104,6 +104,15 @@ try {
   }
   let count = 0;
   async function check(name, work) { try { await work(); count++; } catch (error) { throw Error(name, { cause: error }); } }
+  await check('new views default to read context while a saved opt-out remains empty', async () => {
+    const f=fixture(), base=f.client.view;
+    const offer=id=>({name:id.replaceAll('.','_'),target:{type:'provider',binding:{provider:{...base.instance,instance:'source'},project:'project',capability:{id,version:1},target:null}}});
+    const offered=['files.read_text','editor.context.search','r.session','files.apply_patch','editor.edit'].map(offer);
+    const client={...f.client,get view(){return {...f.client.view,configuration:{tools:offered}};}};
+    const model=new NativeAgentModel(client);assert.deepEqual(model.state.tools,offered.slice(0,3));
+    assert.equal(f.queries.length,0);assert.equal(f.calls.length,0);
+    model.state.tools=[];await model.save();assert.deepEqual(new NativeAgentModel(client).state.tools,[]);
+  });
   const event = (sequence, text = `Message ${sequence}`) => ({ sequence, event_id: `event-${sequence}`, generation: 1, native_session_id: 'native-0', native_turn_id: null, native_item_id: null,
     request_id: null, kind: 'text', role: 'assistant', text, status: 'completed', source: 'observation', observed_at_ms: sequence });
   function eventPage(all, input, generation = 1) {

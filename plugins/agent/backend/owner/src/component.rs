@@ -83,6 +83,8 @@ pub struct StoredComponentRun {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentNativeRunOrigin {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tools: Vec<AgentNativeToolGrant>,
     pub operation: OperationId,
     pub request: RequestId,
     pub binding: ProviderBinding,
@@ -99,6 +101,7 @@ impl ComponentNativeRunOrigin {
         {
             return Err(invalid("Invalid native model run admission"));
         }
+        native_tools::validate_catalog(self)?;
         if let Some(r) = &self.r {
             let supported = matches!(
                 (r.capability.id.as_str(), r.capability.version),
@@ -1020,7 +1023,11 @@ impl ComponentAgentOwner {
                 "Assistant input is empty or exceeds its context budget",
             ));
         }
-        validate_component_grant(conversation.profile, &request.grant)?;
+        if let Some(origin) = &origin {
+            policy::validate_native_grant(conversation.profile, &request.grant, origin)?;
+        } else {
+            validate_component_grant(conversation.profile, &request.grant)?;
+        }
         self.validate_continuation(&actor.scope, &request)?;
         if let Some(origin) = &origin {
             self.validate_native_continuation(&actor.scope, &request, origin)?;

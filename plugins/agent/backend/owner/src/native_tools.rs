@@ -5,7 +5,7 @@ use rho_agent_api::component::{PluginRequest, RequestId};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
-pub const MAX_NATIVE_TOOLS: usize = 16;
+pub const MAX_NATIVE_TOOLS: usize = 24;
 pub const MAX_NATIVE_TOOL_CALLS: usize = 64;
 pub const MAX_NATIVE_TOOL_ARGUMENT_BYTES: usize = 64 * 1024;
 pub const MAX_NATIVE_TOOL_RESULT_BYTES: usize = 96 * 1024;

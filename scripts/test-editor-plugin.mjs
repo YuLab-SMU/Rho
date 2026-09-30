@@ -182,6 +182,13 @@ try {
   const stopped=make();let finish;stopped.state.settlementGate=new Promise(done=>finish=done);const inFlight=stopped.owner.save(body);
   while(!stopped.state.records.length)await new Promise(done=>setImmediate(done));stopped.owner.stop();finish();await assert.rejects(inFlight,/closed/);assert.equal(stopped.state.calls.length,1);
   assert.throws(()=>new DraftSync({...normal.client,view:{...normal.client.view,window:'other',state:normal.owner.snapshot}}),/scope/);
+  const remote=make();await remote.owner.save(new TextEncoder().encode('before'));
+  const other=new DraftSync({...remote.client,view:{...remote.client.view,state:remote.owner.snapshot}});
+  await other.save(new TextEncoder().encode('agent edit'));
+  assert.equal(await remote.owner.refresh(()=>false),false,'Later local typing prevents adoption');
+  assert.equal(remote.owner.snapshot.draft.version,1);
+  let remoteText='';assert.equal(await remote.owner.refresh((bytes,previous,next)=>{assert.equal(previous.version,1);assert.equal(next.version,2);remoteText=new TextDecoder().decode(bytes);return true;}),true);
+  assert.equal(remoteText,'agent edit');assert.equal(remote.owner.snapshot.draft.version,2);assert.equal(remote.state.calls.length,2,'Adoption never replays a save');
   const {EditorController}=await import(pathToFileURL(path.join(temporary,'compiled/src/controller.js')).href);
   const {fixture}=await checkEditorController({EditorController,make,sdk,applyPatch});
   const codeFixture=await checkEditorCode({EditorController,fixture,sdk,history,undo,StateEffect});

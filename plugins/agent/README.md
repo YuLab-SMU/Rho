@@ -90,15 +90,21 @@ the next cursor visible, retaining notices from skipped pages. Updated Files and
 owners discover current project text files and workspace objects, including items
 not previously opened; previews retain their exact file/object identity.
 
-New Rho tool selections default to read-only observation of the configured R
-provider. A saved explicit opt-out is retained. Starter offers need not already
+New Native and Rho tasks default to read-only workspace tools, including project
+files, synchronized Editor documents and the configured R provider. A saved explicit opt-out is retained. Starter offers need not already
 name a native session: each new Send observes and pins the existing session before
 admission, while Continue retains its original capture. No query starts R. With
 the corresponding inherited read grants, Rho can list, observe and page through
-objects directly. Execution remains a separate tool choice; file/document tools
-are not yet connected to Rho's model driver.
+objects directly. Rho's “Read, edit and run in workspace” mode adds the captured
+Files and Editor operations. Editor edits update the synchronized document and
+appear in its resident view when no local typing conflicts; Save uses the exact
+file digest, and Run sends the captured document to the selected R session.
+Every operation retains its original child receipts. A save followed by a draft
+conflict is reported as partial work. Model input cannot replace the selected
+R provider/session or the Editor window. Files and Editor reads work with R stopped;
+starting R remains explicit. Continue reuses the original tool catalog.
 
-Send can explicitly select up to 16 Query/Operation tools. Provider targets retain
+Send can explicitly select up to 24 Query/Operation tools. Provider targets retain
 an exact ordinary-plugin binding and immutable public manifest; Host targets retain
 the project and exact native capability inspected through `host.core_contract`.
 The backend revalidates the live caller before capturing descriptions, schemas,

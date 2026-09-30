@@ -172,7 +172,9 @@ function report(error: unknown) { if (!stopped) { controller.error = message(err
 async function flush() {
   clearTimeout(timer); timer = undefined;
   if (!controller.document || stopped) return;
-  const task = controller.flush(); pendingFlush = task; render();
+  // Owner edits can arrive before the periodic refresh. Observe them before a
+  // selection/scroll autosave so its older disk base cannot race the new draft.
+  const task = (async () => { await controller.refreshDocument(); await controller.flush(); })(); pendingFlush = task; render();
   try { await task; } finally { if (pendingFlush === task) pendingFlush = null; render(); }
 }
 function schedule() { clearTimeout(timer); if (!stopped && !preparing) timer = setTimeout(() => void flush().catch(() => undefined), 350); }
@@ -351,6 +353,7 @@ function poll() {
   observing = setTimeout(() => {
     const inspect = (async () => {
       if (controller.busy || controller.drafts.unresolved) return;
+      if (!composing && !pendingFlush && !timer) await controller.refreshDocument().catch(error => { controller.synchronizationError = message(error); });
       if (controller.pending?.intent.operation) await controller.inspectSave().catch(() => undefined);
       if (!preparing && !controller.busy && !controller.drafts.unresolved) await controller.advanceSavedRun().catch(() => undefined);
       if (!preparing && !controller.busy && !controller.drafts.unresolved && controller.code?.intent.operation && !terminal(controller.code.status ?? 'accepted'))

@@ -438,6 +438,16 @@ impl Services {
                     result.map(|value|json!(value))
                 }).await.map_err(error)?
             }
+            host::CapabilityKind::Control if !call.query_only && call.parent.operation_id.is_some() => {
+                // Transient controls (for example chunk staging) keep their owner,
+                // exact grant and live effectful parent. They do not acquire a
+                // child Operation or permit writes from Query/Control parents.
+                tasks.spawn(async move {
+                    let result = registry.control(&context, host::ControlRequest { capability, arguments: call.arguments }).await;
+                    drop(lifetime);
+                    result
+                }).await.map_err(error)?
+            }
             host::CapabilityKind::Operation if !call.query_only && call.parent.operation_id.is_some() => {
                 let gateway=self.gateway.get().and_then(Weak::upgrade).ok_or_else(||OperationError::Unavailable("Host gateway ended".into()))?;
                 let request_id = crate::delegated::request_identity(&call.provider,
@@ -448,7 +458,7 @@ impl Services {
                     result.map(|value|json!(value))
                 }).await.map_err(error)?
             }
-            _=>Err(OperationError::AccessDenied {capability:capability.display_key(),missing:vec!["an effectful active parent and an Operation grant (controls cannot be delegated as queries)".into()]}),
+            _=>Err(OperationError::AccessDenied {capability:capability.display_key(),missing:vec!["an effectful active parent and an exact effectful grant (queries and controls cannot delegate writes)".into()]}),
         }
     }
 }

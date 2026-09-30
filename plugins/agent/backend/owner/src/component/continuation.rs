@@ -22,7 +22,13 @@ impl ComponentAgentOwner {
                 "Continue cannot replace the original Agent provider",
             ));
         }
+        if origin.tools.iter().any(|tool| !old.tools.contains(tool)) {
+            return Err(invalid(
+                "Continue cannot expand or replace its original workspace tools",
+            ));
+        }
         match (&old.r, &origin.r) {
+            (None, None) => Ok(()),
             (_, None) if request.grant.mode == ComponentAgentMode::Explain => Ok(()),
             (Some(old), Some(next)) if old == next => Ok(()),
             (Some(old), Some(next))

@@ -19,11 +19,13 @@ fn package(path: &Path) -> PluginArchive {
     let file = path.join("plugin.json");
     let mut manifest: Value = serde_json::from_slice(&fs::read(&file).unwrap()).unwrap();
     manifest["requires"] = json!([
-        {"capability":{"id":"fixture.run","version":1},"scopes":["plugins.run","operation.read"]},
-        {"capability":{"id":"plugins.delegated_operation","version":1},"scopes":["operation.read"]}
+        {"capability":{"id":"fixture.run","version":1},"scopes":["plugins.run","operation.read","documents.write"]},
+        {"capability":{"id":"plugins.delegated_operation","version":1},"scopes":["operation.read"]},
+        {"capability":{"id":"documents.stage","version":1},"scopes":["documents.write"]}
     ]);
     // The read's active parent also carries the explicitly requested read scope.
-    manifest["capabilities"][0]["required_scopes"] = json!(["plugins.read", "operation.read"]);
+    manifest["capabilities"][0]["required_scopes"] = json!(["plugins.read", "operation.read", "documents.write"]);
+    manifest["capabilities"][1]["required_scopes"] = json!(["plugins.run", "operation.read", "documents.write"]);
     fs::write(file, serde_json::to_vec(&manifest).unwrap()).unwrap();
     snapshot_directory(path, None, &backend_target()).unwrap()
 }
@@ -304,4 +306,27 @@ async fn original_reverse_request_is_observable_while_pending_after_lost_reply_a
             .is_err()
     );
     foreign.drain().await;
+}
+
+#[tokio::test]
+async fn delegated_staging_requires_a_live_operation_parent_and_remains_transient() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("project"); fs::create_dir(&root).unwrap();
+    let db = temp.path().join("state.sqlite");
+    let archive = package(&temp.path().join("package"));
+    PluginRepository::open(&repository_path(&db)).unwrap().import(&archive).unwrap();
+    let host = NextHost::open_plugin_workspace(&db, &root).await.unwrap();
+    let active = invoke(&host, "origin", "plugins.activate", json!({"revision":archive.revision.id,"artifact":archive.artifacts[0].id,"target":backend_target(),"alias":"origin","configuration":{}})).await;
+    let identity = &active["instance"]["identity"];
+    let stage = json!({"window":"window","draft":"document","upload":"original","digest":rho_plugins::content_digest(b"example"),"base64":"ZXhhbXBsZQ=="});
+    let read = binding(&host,identity,"fixture.read").await;
+    let denied = fixture_query(&host,&read,json!({"action":"stage","stage":stage})).await;
+    assert_eq!(denied["reply"]["type"],"error");
+    let run = binding(&host,identity,"fixture.run").await;
+    let result = invoke(&host,"stage-parent","fixture.run",json!({"binding":run,"arguments":{"action":"stage","stage":stage}})).await;
+    assert_eq!(result["reply"]["type"],"host_result", "{result}");
+    assert_eq!(result["reply"]["data"]["result"]["bytes"],7);
+    let records=query(&host,"operation.list_recent",json!({"limit":100})).await;
+    assert!(!records["operations"].as_array().unwrap().iter().any(|r|r["capability"]["id"]=="documents.stage"));
+    host.drain().await;
 }

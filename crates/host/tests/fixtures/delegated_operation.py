@@ -8,6 +8,7 @@ sequence = 0
 held = {}
 parents = {}
 lookups = {}
+controls = {}
 
 def read():
     size = sys.stdin.buffer.read(4)
@@ -28,8 +29,8 @@ def send(request, kind, data=None):
 def query(request, value):
     send(request, 'query_result', {'data': value, 'completeness': 'complete', 'source': None})
 
-def commit(request):
-    send(request, 'commit_plan', {'outcome': 'succeeded', 'output': {}, 'error': None,
+def commit(request, output=None):
+    send(request, 'commit_plan', {'outcome': 'succeeded', 'output': output or {}, 'error': None,
         'recovery': None, 'facts': [], 'evidence': [], 'cancellation_confirmed': False})
 
 frame = read()
@@ -39,7 +40,12 @@ send(frame['request'], 'ready', {'revision': identity['revision'], 'artifact': i
 while (frame := read()) is not None:
     request, body = frame['request'], frame['body']
     kind, data = body['type'], body.get('data')
-    if kind == 'invoke':
+    if kind in ('invoke', 'query') and data['arguments'].get('action') == 'stage':
+        reverse = 'stage-' + request
+        controls[reverse] = (request, kind)
+        send(reverse, 'host_call', {'parent_request': request,
+            'capability': {'id': 'documents.stage', 'version': 1}, 'arguments': data['arguments']['stage']})
+    elif kind == 'invoke':
         args = data['arguments']
         held[request] = data
         if args['action'] == 'delegate':
@@ -62,6 +68,12 @@ while (frame := read()) is not None:
             held.clear()
             query(request, {})
     elif kind in ('host_result', 'error'):
+        if request in controls:
+            original, parent_kind = controls.pop(request)
+            if parent_kind == 'invoke':
+                commit(original, {'reply': body})
+            else:
+                query(original, {'reply': body})
         if request in lookups:
             query(lookups.pop(request), {'reply': body})
         # Deliberately discard child completion replies; only the native journal

@@ -33,6 +33,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             json!({"reference":example,"inclusion":{"kind":"document"},"max_bytes":16384})
         )
     ]);
+    for (id, description, scopes) in [
+        (
+            "editor.edit",
+            "Replace the exact synchronized Editor draft with complete text (32 KiB maximum), preserving its file base and line endings. CAS rejects concurrent edits. Does not save the file or run code.",
+            vec!["documents.read", "documents.write", "operation.read"],
+        ),
+        (
+            "editor.save",
+            "Save an exact synchronized Editor document through its captured Files provider and file digest. An optional new path must be absent. Returns the updated reference and original child operations; a draft conflict after a file save is partial work, not rollback.",
+            vec![
+                "documents.read",
+                "documents.write",
+                "operation.read",
+                "project.read",
+                "project.write",
+            ],
+        ),
+        (
+            "editor.run",
+            "Run the exact synchronized document through its captured R provider/session. Never accepts replacement code or starts R. Returns the original code digest, document reference and native execution result.",
+            vec![
+                "documents.read",
+                "documents.write",
+                "operation.read",
+                "workspace.run_r",
+            ],
+        ),
+    ] {
+        manifest["capabilities"].as_array_mut().unwrap().push(json!({"capability":{"id":id,"version":1},"kind":"operation","title":id,"description":description,
+            "input_schema":schemars::schema_for!(rho_editor_backend::actions::Input).to_value(),"output_schema":true,"recovery_schema":true,
+            "examples":[{"reference":example}],"required_scopes":scopes,"effects":[],"cancellation":"unsupported"}));
+    }
     manifest["contexts"] = json!([{"id":"documents","title":"Editor documents","search":{"id":"editor.context.search","version":1},"preview":{"id":"editor.context.preview","version":1}}]);
     manifest["backend"] = json!({"executable":"dist/rho-editor-backend","arguments":[]});
     let manifest: PluginManifest = serde_json::from_value(manifest)?;

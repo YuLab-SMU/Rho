@@ -847,6 +847,423 @@
       "effects": [],
       "cancellation": "unsupported",
       "preflight": null
+    },
+    {
+      "capability": {
+        "id": "editor.edit",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "editor.edit",
+      "description": "Replace the exact synchronized Editor draft with complete text (32 KiB maximum), preserving its file base and line endings. CAS rejects concurrent edits. Does not save the file or run code.",
+      "input_schema": {
+        "$defs": {
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "default": null,
+            "description": "New complete text for edit; omitted for save/run.",
+            "maxLength": 32768,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expected_session": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "default": null,
+            "description": "Optional project-relative destination for an untitled document or Save As.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reference": {
+            "$ref": "#/$defs/ContextReference"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Exact R provider/session captured by the Agent adapter, never discovered here."
+          }
+        },
+        "required": [
+          "reference"
+        ],
+        "title": "Input",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "reference": {
+            "contribution": "documents",
+            "provider": {
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "instance": "editor-example",
+              "plugin": "org.rho.editor",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "selector": {
+              "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "draft": "draft-example",
+              "version": 1
+            },
+            "window": "window-example"
+          }
+        }
+      ],
+      "output_schema": true,
+      "recovery_schema": true,
+      "required_scopes": [
+        "documents.read",
+        "documents.write",
+        "operation.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "editor.save",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "editor.save",
+      "description": "Save an exact synchronized Editor document through its captured Files provider and file digest. An optional new path must be absent. Returns the updated reference and original child operations; a draft conflict after a file save is partial work, not rollback.",
+      "input_schema": {
+        "$defs": {
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "default": null,
+            "description": "New complete text for edit; omitted for save/run.",
+            "maxLength": 32768,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expected_session": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "default": null,
+            "description": "Optional project-relative destination for an untitled document or Save As.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reference": {
+            "$ref": "#/$defs/ContextReference"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Exact R provider/session captured by the Agent adapter, never discovered here."
+          }
+        },
+        "required": [
+          "reference"
+        ],
+        "title": "Input",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "reference": {
+            "contribution": "documents",
+            "provider": {
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "instance": "editor-example",
+              "plugin": "org.rho.editor",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "selector": {
+              "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "draft": "draft-example",
+              "version": 1
+            },
+            "window": "window-example"
+          }
+        }
+      ],
+      "output_schema": true,
+      "recovery_schema": true,
+      "required_scopes": [
+        "documents.read",
+        "documents.write",
+        "operation.read",
+        "project.read",
+        "project.write"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "editor.run",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "editor.run",
+      "description": "Run the exact synchronized document through its captured R provider/session. Never accepts replacement code or starts R. Returns the original code digest, document reference and native execution result.",
+      "input_schema": {
+        "$defs": {
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "default": null,
+            "description": "New complete text for edit; omitted for save/run.",
+            "maxLength": 32768,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expected_session": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "default": null,
+            "description": "Optional project-relative destination for an untitled document or Save As.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reference": {
+            "$ref": "#/$defs/ContextReference"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Exact R provider/session captured by the Agent adapter, never discovered here."
+          }
+        },
+        "required": [
+          "reference"
+        ],
+        "title": "Input",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "reference": {
+            "contribution": "documents",
+            "provider": {
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "instance": "editor-example",
+              "plugin": "org.rho.editor",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "selector": {
+              "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "draft": "draft-example",
+              "version": 1
+            },
+            "window": "window-example"
+          }
+        }
+      ],
+      "output_schema": true,
+      "recovery_schema": true,
+      "required_scopes": [
+        "documents.read",
+        "documents.write",
+        "operation.read",
+        "workspace.run_r"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
     }
   ],
   "contexts": [

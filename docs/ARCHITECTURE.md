@@ -823,7 +823,11 @@ bounded to 256 KiB. Input and native error diagnostics are redacted. The owner
 validates the original native request and duplicate-submission state. A lost
 acknowledgement requires observing that request, never automatic replay. Host
 task ownership keeps dispatched controls alive across caller disconnect. Native
-reverse calls from Control parents are limited to reads.
+reverse calls from Control parents are limited to reads. An active Operation
+parent may delegate a Control through its exact declared grant and inherited
+scope (for example transient draft chunk staging). The ordinary Control gateway
+keeps its redaction, quotas and owner checks; this creates no child Operation.
+Query and Control parents cannot use this route to acquire writes.
 
 Registry publication notifications are catalog metadata, never scientific
 preconditions. MCP caches only projections of current scoped descriptors, sends

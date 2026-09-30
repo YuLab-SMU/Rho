@@ -160,6 +160,11 @@ impl Runs {
                     request: origin.request,
                     binding: origin.binding,
                     r: origin.r,
+                    tools: origin
+                        .tools
+                        .into_iter()
+                        .map(|tool| tool.selection)
+                        .collect(),
                 })
             }
             "agent.model.run.tools" => {
@@ -220,6 +225,31 @@ impl Runs {
             .map(Into::into)
             .unwrap_or(ComponentAgentMode::Explain);
         let selected_r = args.r;
+        let previous = metadata
+            .owner
+            .store
+            .component_run_by_request(&metadata.scope, &args.request_id)?;
+        let selected_tools = if let Some(previous) = &previous {
+            let original = previous
+                .native_origin
+                .as_ref()
+                .ok_or_else(|| Failure::invalid("Original native admission is unavailable"))?;
+            if original
+                .tools
+                .iter()
+                .map(|t| &t.selection)
+                .collect::<Vec<_>>()
+                != args.tools.iter().collect::<Vec<_>>()
+            {
+                return Err(Failure::invalid(
+                    "Workspace tools differ from the original Send",
+                ));
+            }
+            original.tools.clone()
+        } else {
+            crate::native_selection::capture_selected(metadata, call, &caller, args.tools, &host)
+                .await?
+        };
         let request = ComponentAgentStart {
             request_id: args.request_id,
             conversation_id: args.conversation_id,
@@ -243,6 +273,7 @@ impl Runs {
         };
         let origin =
             ComponentNativeRunOrigin {
+                tools: selected_tools,
                 operation: OperationId::new(call.operation_id.as_deref().ok_or_else(|| {
                     Failure::invalid("A model task requires its native Operation")
                 })?)

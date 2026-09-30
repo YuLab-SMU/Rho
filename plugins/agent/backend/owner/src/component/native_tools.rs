@@ -18,7 +18,11 @@ pub(super) fn validate_targets(
         return Err(invalid("Unsupported native model task authorization"));
     }
     match (&origin.r, &request.grant.session) {
-        (None, None) if request.grant.mode == ComponentAgentMode::Explain => Ok(()),
+        (None, None)
+            if request.grant.mode == ComponentAgentMode::Explain || !origin.tools.is_empty() =>
+        {
+            Ok(())
+        }
         (Some(binding), Some(session))
             if binding.provider.instance.as_str() == session.workspace_instance_id
                 && binding.target.as_deref() == Some(session.session_id.as_str())
@@ -42,13 +46,44 @@ pub(super) fn authorize(
     let origin = run.native_origin.as_ref().ok_or_else(denied)?;
     origin.validate()?;
     validate_targets(&run.run.request, origin)?;
-    let r = origin.r.as_ref().ok_or_else(denied)?;
+
     let (request, mutation) = match action {
         ComponentToolAction::PluginQuery(request) => (request, false),
         ComponentToolAction::PluginInvoke(request) => (request, true),
         _ => return Err(denied()),
     };
     let b = &request.binding;
+    if let Some(tool) = origin.tools.iter().find(|tool| {
+        matches!(&tool.selection.target,
+        AgentNativeToolTarget::Provider { binding } if binding == b)
+    }) {
+        if mutation != (tool.kind == AgentNativeToolKind::Operation)
+            || mutation && run.run.request.grant.mode != ComponentAgentMode::Run
+        {
+            return Err(denied());
+        }
+        if b.capability.id.as_str().starts_with("editor.") {
+            let window = &run.run.request.window.window_id;
+            let observed = if b.capability.id.as_str() == "editor.context.search" {
+                &request.arguments["window"]
+            } else {
+                &request.arguments["reference"]["window"]
+            };
+            if observed != &serde_json::json!(window) {
+                return Err(denied());
+            }
+            if b.capability.id.as_str() == "editor.run" {
+                let r = origin.r.as_ref().ok_or_else(denied)?;
+                if request.arguments["runtime"] != serde_json::json!(r.provider)
+                    || request.arguments["expected_session"].as_str() != r.target.as_deref()
+                {
+                    return Err(denied());
+                }
+            }
+        }
+        return Ok(());
+    }
+    let r = origin.r.as_ref().ok_or_else(denied)?;
     if b.provider != r.provider
         || b.project != r.project
         || b.target != r.target
@@ -59,8 +94,9 @@ pub(super) fn authorize(
     if !mutation {
         let permitted = match b.capability.id.as_str() {
             "r.session" => request.arguments == serde_json::json!({}),
-            "r.list_objects" | "r.observe_object" | "r.read_object" =>
-                request.arguments["expected_session"].as_str() == r.target.as_deref(),
+            "r.list_objects" | "r.observe_object" | "r.read_object" => {
+                request.arguments["expected_session"].as_str() == r.target.as_deref()
+            }
             _ => false,
         };
         if b.capability.version != 1 || !permitted {
@@ -80,6 +116,47 @@ pub(super) fn authorize(
             || input.run.source.is_some()
         {
             return Err(denied());
+        }
+    }
+    Ok(())
+}
+
+/// This catalog is captured by the adapter; it cannot introduce another project,
+/// the Agent itself, R execution outside the pinned session, or duplicate tools.
+pub(super) fn validate_catalog(origin: &ComponentNativeRunOrigin) -> Result<(), ApplicationError> {
+    let mut names = std::collections::BTreeSet::new();
+    if origin.tools.len() > crate::MAX_NATIVE_TOOLS
+        || serde_json::to_vec(&origin.tools)
+            .map_err(|_| invalid("Invalid workspace tools"))?
+            .len()
+            > 65536
+    {
+        return Err(invalid("Workspace tool catalog exceeds its bound"));
+    }
+    for tool in &origin.tools {
+        let AgentNativeToolTarget::Provider { binding } = &tool.selection.target else {
+            return Err(invalid("Model workspace tools require an exact provider"));
+        };
+        if binding.project != origin.binding.project
+            || binding.provider == origin.binding.provider
+            || binding.capability.id.as_str().starts_with("r.")
+            || !matches!(
+                binding.capability.id.as_str().split('.').next(),
+                Some("files" | "editor" | "environment")
+            )
+            || tool.selection.name.is_empty()
+            || tool.selection.name.len() > 64
+            || !tool
+                .selection
+                .name
+                .bytes()
+                .all(|c| c.is_ascii_alphanumeric() || c == b'_')
+            || tool.selection.name.starts_with("r_")
+            || !names.insert(&tool.selection.name)
+            || !tool.input_schema.is_object()
+            || tool.description.len() > 4096
+        {
+            return Err(invalid("Invalid captured workspace tool"));
         }
     }
     Ok(())

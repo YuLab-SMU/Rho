@@ -67,6 +67,7 @@ export class EditorController {
     if (this.drafts.unresolved) {
       try { await this.drafts.inspect(); } catch (error) { this.synchronizationError = message(error); }
     }
+    if (!this.document && !this.drafts.unresolved) await this.drafts.refresh(() => true);
     const retained = await this.drafts.read(); this.live();
     if (retained !== null) {
       const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(retained)) as Payload;
@@ -120,6 +121,19 @@ export class EditorController {
     if (!current) throw new Error('The original path is no longer a regular file.');
     this.initial = current; await this.open(); this.editable(); await this.flush();
   }); }
+  async refreshDocument(): Promise<boolean> {
+    if (this.busy || this.stopped || this.paused || !this.document || this.drafts.unresolved || this.pending || this.fileRun && !terminal(this.code?.status ?? 'accepted')) return false;
+    return this.drafts.refresh((bytes, previous, next) => {
+      if (this.busy || this.stopped || this.paused || !this.document || this.pending || this.fileRun && !terminal(this.code?.status ?? 'accepted') ||
+        this.document.snapshot.version !== (previous.metadata as { document_version?: string })?.document_version) return false;
+      const payload = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as Payload;
+      const current = this.payload();
+      if (!same({ ...payload, document: current.document, disk: current.disk }, current) || payload.disk !== null ||
+        payload.document.version !== (next.metadata as { document_version?: string })?.document_version)
+        throw Error('The external document update differs from this Editor. Local text is retained.');
+      this.document.adopt(payload.document); this.disk = null; this.synchronizationError = ''; this.notify(); return true;
+    });
+  }
   flush(): Promise<void> {
     this.live(); const payload = this.payload(), capture = bytes(JSON.stringify(payload));
     const metadata = { encoding: 'org.rho.editor.document.v1', path: payload.document.path,

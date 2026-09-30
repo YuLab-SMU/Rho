@@ -36,6 +36,11 @@ export class NativeAgentModel {
     if (Object.keys(saved).length && (saved.schema !== 1 || !saved.drafts || !Array.isArray(saved.pending) || !Array.isArray(saved.tools)))
       throw Error('The saved Agent view has an unsupported state. Its contents were retained.');
     this.state = saved.schema === 1 ? structuredClone(saved as Saved) : { schema: 1, selected: null, archived: false, drafts: {}, pending: [], tools: [], catalogs: {} };
+    if (saved.schema !== 1) {
+      const offered = (client.view.configuration as { tools?: AgentNativeToolSelection[] })?.tools ?? [];
+      this.state.tools = structuredClone(offered.filter(tool => tool.target.type === 'provider' && tool.target.binding.project === client.view.project &&
+        /^(r\.(session|list_objects)|files\.(list_directory|read_text|search_text)|editor\.context\.(search|preview)|environment\.status)$/.test(tool.target.binding.capability.id)));
+    }
     for (const pending of this.state.uploads ?? []) {
       if (pending.view !== client.view.view || !same(pending.instance, client.view.instance))
         throw Error('A retained attachment belongs to another Agent view or instance.');
@@ -178,10 +183,33 @@ export class NativeAgentModel {
   async send(task: string) {
     if (agentBusy(this.details.get(task)?.summary.attachment.state ?? '') || this.state.pending.some(p => p.task === task && p.kind === 'send'))
       throw Error('The original turn is still running or unconfirmed.');
+    const tools = structuredClone(this.state.tools);
     await this.flush(task);
     const draft = this.state.drafts[task];
     if (!draft || draft.dirty || draft.conflict) throw Error('Confirm the saved draft before sending.');
-    await this.command({ kind: 'send', control: this.control(task), draft_version: draft.base }, task);
+    const revision = draft.revision, version = draft.base, control = this.control(task);
+    const captured: AgentNativeToolSelection[] = [];
+    const sessions = new Map<string, string | null>();
+    for (const tool of tools) {
+      if (tool.target.type !== 'provider' || !tool.target.binding.capability.id.startsWith('r.') || tool.target.binding.target) { captured.push(tool); continue; }
+      const binding = tool.target.binding, provider = JSON.stringify(binding.provider);
+      if (!sessions.has(provider)) {
+        const observed = await this.client.query<{ status: string; data?: { session_id?: string | null } }>({ id: 'r.session', version: 1 },
+          json({ binding: { ...binding, capability: { id: 'r.session', version: 1 } }, arguments: {}, preconditions: null }));
+        this.live(); if (observed.status !== 'ready' || !observed.data) throw Error('The configured R workspace is unavailable. Your draft is retained.');
+        sessions.set(provider, observed.data.session_id ?? null);
+      }
+      const session = sessions.get(provider)!;
+      if (!session && binding.capability.id !== 'r.session') {
+        if (binding.capability.id !== 'r.list_objects') throw Error('Start R in Console before using the selected R execution tool. Your draft is retained.');
+        continue;
+      }
+      binding.target = session; captured.push(tool);
+    }
+    const current = this.state.drafts[task];
+    if (!current || current.revision !== revision || current.base !== version || current.dirty || current.conflict || !same(this.control(task), control))
+      throw Error('The draft changed while preparing this message. Your input is retained.');
+    await this.command({ kind: 'send', control, draft_version: version }, task, null, captured);
   }
   async stop(task: string) { return this.command({ kind: 'stop', control: this.control(task) }, task); }
   async resume(task: string) { return this.command({ kind: 'resume', control: this.control(task) }, task); }
@@ -261,9 +289,9 @@ export class NativeAgentModel {
     // in this view. A lost acknowledgement can be re-inspected without upload.
     await this.save(); this.state.uploads = this.uploads.filter(p => p !== pending); await this.save(); this.notify();
   }
-  private async command(command: Command, task: string | null, revision: number | null = null) {
+  private async command(command: Command, task: string | null, revision: number | null = null, tools: AgentNativeToolSelection[] = []) {
     const request = crypto.randomUUID();
-    return this.admit('agent.native.command', { request_id: request, command, tools: command.kind === 'send' ? structuredClone(this.state.tools) : [] }, command.kind, task, revision, request);
+    return this.admit('agent.native.command', { request_id: request, command, tools: command.kind === 'send' ? tools : [] }, command.kind, task, revision, request);
   }
   private async admit(id: string, args: unknown, kind: Pending['kind'], task: string | null, revision: number | null = null, request = crypto.randomUUID()) {
     this.live(); if (this.admission) throw Error('Wait for the current Agent request.');
