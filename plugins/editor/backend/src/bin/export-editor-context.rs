@@ -37,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         "capability":{"id":"editor.run.inspect","version":1},"kind":"query","title":"Inspect original Editor run",
         "description":"Read the original Editor run and its native execution, including lost child acknowledgements. Does not execute, retry, start R or promote uncertain work to success.",
         "input_schema":schemars::schema_for!(rho_editor_backend::actions::InspectRun).to_value(),"output_schema":true,"recovery_schema":true,
-        "examples":[{"operation":"operation-example"}],"required_scopes":["documents.read","operation.read"],"effects":[],"cancellation":"unsupported"
+        "examples":[{"operation":"operation-example","window":"window-example"}],"required_scopes":["documents.read","operation.read"],"effects":[],"cancellation":"unsupported"
     }));
     let required = manifest["requires"].as_array_mut().unwrap();
     if !required

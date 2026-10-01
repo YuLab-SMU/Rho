@@ -163,7 +163,7 @@ async fn inspection_recovers_lost_child_identity_read_only_and_preserves_parent_
         let mut query = original.clone();
         query.operation_id = None;
         query.binding.capability = key("editor.run.inspect", 1);
-        query.arguments = json!({"operation":"editor-parent"});
+        query.arguments = json!({"operation":"editor-parent","window":"window"});
         let (host, mut pump) = host_call_channel(32).unwrap();
         let i = instance();
         let mut task =

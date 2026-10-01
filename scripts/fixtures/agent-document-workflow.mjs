@@ -23,11 +23,13 @@ const evidence=(body,predicate)=>{
   throw Error('The deterministic model peer did not receive the preceding owner evidence');
 };
 const reference=body=>{
+  let captured;
   for(const message of [...body.messages].reverse().filter(m=>m.role==='tool')){
     const values=objects(message.content),updated=values.find(v=>v.output?.reference?.provider?.plugin==='org.rho.editor');
     if(updated)return updated.output.reference;
-    const found=values.find(v=>v.provider?.plugin==='org.rho.editor'&&v.contribution==='documents'&&v.selector?.draft);if(found)return found;
+    captured??=values.find(v=>v.provider?.plugin==='org.rho.editor'&&v.contribution==='documents'&&v.selector?.draft);
   }
+  if(captured)return captured;
   throw Error('No captured Editor reference reached the model');
 };
 const operation=(name,args)=>[name,{arguments:args,preconditions:null}];
@@ -52,7 +54,6 @@ export async function documentWorkflow({project,page,getFrame,pq,api,setPlan,rep
     if(scenario.note)steps.push(
       body=>operation('annotations_document_freeze',{request_id:'workflow-freeze',reference:reference(body),inclusion:{kind:'document'},anchor:{kind:'whole_item'}}),
       body=>operation('annotations_write',{request_id:'workflow-note',command:{kind:'create',evidence_id:evidence(body,v=>typeof v.evidence_id==='string').evidence_id,note:'Gapminder: association is not causation; preserve the fitted specification and inspect residuals before interpreting coefficients. 中文研究记录',labels:['gapminder'],marks:[],continued_from:null}}),
-      body=>['annotations_read',{kind:'read',annotation:evidence(body,v=>v.outcome?.annotation).outcome.annotation}],
     );
     const plan=setPlan(steps,`Confirmed ${scenario.id} native value ${scenario.expected}; captured result and judgment retained.`);
     await page.getByRole('tab',{name:'Agent',exact:true}).click();let ui=await getFrame('Agent message');
@@ -70,7 +71,7 @@ export async function documentWorkflow({project,page,getFrame,pq,api,setPlan,rep
     current.run=run;save();assert.equal(run?.state,'completed',run?.reason??'Document workflow did not finish');assert.equal(plan.sent,steps.length+1);
     const receipts=await pq('agent','agent.model.run.tools',{run_id:run.run_id});current.receipts=receipts;save();
     for(const cap of ['editor.edit','editor.save','editor.run']){const found=receipts.filter(t=>t.capability===cap);assert.equal(found.length,1);assert.equal(found[0].result.status,'succeeded',JSON.stringify(found[0]));}
-    const tool=receipts.find(t=>t.capability==='editor.run');const inspection=await pq('editor','editor.run.inspect',{operation:tool.operation_id});
+    const tool=receipts.find(t=>t.capability==='editor.run');const inspection=await pq('editor','editor.run.inspect',{operation:tool.operation_id,window:api.window});
     assert.equal(inspection.parent.status,'succeeded');assert.equal(inspection.execution.status,'succeeded');assert.equal(inspection.execution.operation.causation_id,tool.operation_id);
     assert.equal(inspection.execution.operation.normalized_arguments.arguments.run.code,code);
     const value=await pq('r','r.observe_object',{expected_session:report.session,name:'workflow_value'});
@@ -79,7 +80,14 @@ export async function documentWorkflow({project,page,getFrame,pq,api,setPlan,rep
     filename=scenario.path??filename;assert.equal(fs.readFileSync(path.join(project,filename),'utf8'),code);
     const effects=fs.readFileSync(path.join(project,'workflow-effects.txt'),'utf8').trim().split('\n');assert.deepEqual(effects,attempts.cases.map(c=>c.id));
     if(scenario.plot){assert.ok(inspection.execution.output.outputs?.some(item=>item.reference?.media_type?.startsWith('image/')),JSON.stringify(inspection.execution.output));current.outputs=inspection.execution.output.outputs;}
-    if(scenario.note){const reads=receipts.filter(t=>t.capability==='annotations.read');assert.equal(reads.length,1);assert.match(JSON.stringify(reads[0].result),/association is not causation/);current.judgment=reads[0].result;}
+    if(scenario.note){
+      const frozen=receipts.find(t=>t.capability==='annotations.document.freeze'),written=receipts.find(t=>t.capability==='annotations.write');
+      assert.equal(frozen?.result.status,'succeeded',JSON.stringify(frozen));assert.equal(written?.result.status,'succeeded',JSON.stringify(written));
+      const evidenceId=frozen.result.output.outcome.evidence_id,annotation=written.result.output.outcome.annotation;
+      const readback=await pq('annotations','annotations.read',{kind:'read',annotation});
+      assert.match(JSON.stringify(readback),/association is not causation/);assert.match(JSON.stringify(readback),new RegExp(evidenceId));
+      current.judgment=readback;save();
+    }
     await page.getByRole('tab',{name:'Editor',exact:true}).click();ui=await getFrame('Code Editor');
     await ui.locator('#external-status').filter({hasText:'succeeded'}).waitFor();
     await page.reload();ui=await getFrame('Code Editor');await ui.locator('#external-status').filter({hasText:'succeeded'}).waitFor();

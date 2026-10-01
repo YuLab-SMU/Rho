@@ -881,17 +881,23 @@
         "properties": {
           "operation": {
             "type": "string"
+          },
+          "window": {
+            "description": "The original Editor document window selected by the caller.",
+            "type": "string"
           }
         },
         "required": [
-          "operation"
+          "operation",
+          "window"
         ],
         "title": "InspectRun",
         "type": "object"
       },
       "examples": [
         {
-          "operation": "operation-example"
+          "operation": "operation-example",
+          "window": "window-example"
         }
       ],
       "output_schema": true,

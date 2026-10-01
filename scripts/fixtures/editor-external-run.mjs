@@ -12,7 +12,7 @@ export async function checkEditorExternalRun({EditorController,DraftSync,make,ed
   let execution=null,reads=0;const query=f.client.query;
   f.client.query=async(cap,args)=>{
     if(cap.id!=='editor.run.inspect')return query(cap,args);
-    reads++;assert.deepEqual(args.arguments,{operation:capture.operation});assert.deepEqual(args.binding.provider,capture.reference.provider);
+    reads++;assert.deepEqual(args.arguments,{operation:capture.operation,window:capture.reference.window});assert.deepEqual(args.binding.provider,capture.reference.provider);
     return {status:'ready',completeness:'complete',data:{parent:clone(parent),execution:clone(execution)}};
   };
   const remote=new DraftSync(f.client);await remote.save(encode({...payload,externalRun:capture}),draft.metadata);

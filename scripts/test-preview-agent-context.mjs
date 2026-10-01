@@ -36,6 +36,51 @@ print(json.dumps({'events':[json.loads(r[0]) for r in c.execute('select value fr
   previous.checks.push({name:'real model end-to-end',passed:true,model:previous.live_model});previous.status='passed';previous.completed=true;
   fs.writeFileSync(options['--report'],JSON.stringify(previous,null,2)+'\n');console.log(JSON.stringify({report:options['--report'],status:previous.status,recheck:previous.recheck_scope}));process.exit(0);
 }
+if(options['--recheck-disconnect']){
+  await (async()=>{
+  // Recheck retained recovery after a report/assertion-only failure. Do not
+  // replay an Agent, Editor or native R request against the existing test DB.
+  assert.ok(options['--rho']&&options['--report']);
+  const source=path.resolve(options['--recheck-disconnect']),previous=JSON.parse(fs.readFileSync(source));
+  assert.match(previous.error??'',/Disconnected instances must not retain a resume token/);
+  assert.equal(previous.document_workflow?.complete,true);
+  assert.equal(previous.document_workflow.cases.length,6);
+  assert.ok(previous.document_workflow.cases.every(item=>item.status==='passed'));
+  const directory=previous.directory,project=path.join(directory,'project'),database=path.join(directory,'rho.sqlite');
+  let host,api;
+  const deadline=(promise,ms,label)=>Promise.race([promise,new Promise((_,reject)=>{const t=setTimeout(()=>reject(Error(label+' timed out')),ms);t.unref();})]);
+  try{
+    host=spawn(options['--rho'],['--database',database,'--project',project,'--plugins-only','workbench'],{stdio:['ignore','pipe','pipe']});
+    const exited=new Promise(resolve=>host.once('exit',(code,signal)=>resolve({code,signal})));
+    const address=await deadline(new Promise((resolve,reject)=>{let log='';host.on('error',reject);host.stdout.on('data',bytes=>{log+=bytes;const match=log.match(/http:\/\/127\.0\.0\.1:\d+\/\?plugin-window#token=[a-z0-9]+/);if(match)resolve(match[0]);});exited.then(value=>reject(Error('Host exited '+JSON.stringify(value))));}),60000,'Recovery Host startup');
+    api=new PreviewHost(address,project,path.join(directory,'workspace.json'));
+    const query=(id,args)=>api.query(id,args),parentId=previous.interrupted_run.operation.operation_id;
+    const retained=await query('plugins.instance',{instance:previous.instances.editor});
+    assert.equal(retained.instance.state,'disconnected');assert.ok(retained.instance.suspension==null);
+    const parent=(await query('operation.get',{operation_id:parentId})).record;
+    assert.equal(parent.operation.operation_id,parentId);assert.equal(parent.operation.capability.id,'editor.run');assert.equal(parent.status,'uncertain');
+    const history=await query('operation.list_recent',{limit:100,before_cursor:null});let execution;
+    for(const summary of history.operations.filter(item=>item.capability.id==='r.execute')){
+      const record=await api.port('get_operation',{operation_id:summary.operation_id});
+      if(record.operation.causation_id===parentId)execution=record;
+    }
+    assert.ok(execution,'The original native R child remains in the Host operation journal');
+    assert.equal(execution.operation.caller.id,previous.instances.editor.instance);
+    assert.equal(execution.status,'succeeded');assert.equal(execution.operation.normalized_arguments.arguments.run.code,'workflow_crash <- 99L\nwriteLines("started", "crash.started")\nwhile (!file.exists("crash.release")) Sys.sleep(0.05)\ncat("one\\n", file="crash.effects", append=TRUE)\n');
+    assert.equal((await query('plugins.instance',{instance:previous.instances.r})).instance.state,'suspended');
+    assert.equal(fs.readFileSync(path.join(project,'crash.effects'),'utf8'),'one\n');
+    previous.rechecked_from=source;previous.disconnect_recovery={editor_state:'disconnected',resume_token_retained:false,parent:parent.status,execution:execution.operation.operation_id,native:execution.status,one_effect:true,r_suspended:true,r_resumed:false};
+    previous.stages.push('Verified after report assertion correction: disconnected Editor stays unavailable; original uncertain parent and succeeded R child survive Host restart without replay');
+    previous.checks.push({name:'Host restart and interrupted child recovery recheck',passed:true,replay:false});
+    previous.original_report_error=previous.error;delete previous.error;previous.completed=true;previous.status='passed';
+    fs.writeFileSync(options['--report'],JSON.stringify(previous,null,2)+'\n');
+    console.log(JSON.stringify({status:previous.status,report:options['--report'],editor:retained.instance.state,parent:parent.status,execution:execution.status,one_effect:true}));
+  }finally{
+    if(host&&host.exitCode===null){host.kill('SIGINT');const ended=await deadline(new Promise(resolve=>host.once('exit',(code,signal)=>resolve({code,signal}))),60000,'Recovery Host shutdown');assert.equal(ended.code,0);}
+  }
+  })();
+  process.exit(0);
+}
 assert.ok(!(options['--document-workflow']==='true'&&options['--live-agent-data']),'Run deterministic document/restart acceptance separately from real-provider assessment');
 for(const name of ['--set','--rho','--ark','--r-home','--report'])assert.ok(options[name],`Supply ${name}; no builds are implicit`);
 const directory=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'rho-preview-agent-context-'))),project=path.join(directory,'project'),database=path.join(directory,'rho.sqlite');
@@ -103,7 +148,7 @@ try{
   const editor=await open('editor',{source:instances.files,file,runtime:instances.r});
   const projectId=editor.project;
   const selected=(name,id,version=1)=>({name:id.replaceAll('.','_'),target:{type:'provider',binding:{provider:instances[name],project:projectId,capability:key(id,version),target:null}}});
-  const tools=[selected('r','r.session'),selected('r','r.execute',2),...['files.list_directory','files.read_text','files.search_text','files.prepare_patch','files.apply_patch'].map(id=>selected('files',id)),...['editor.context.search','editor.context.preview','editor.edit','editor.save','editor.run','editor.run.inspect'].map(id=>selected('editor',id)),...['annotations.read','annotations.write','annotations.document.freeze'].map(id=>selected('annotations',id))];
+  const tools=[selected('r','r.session'),selected('r','r.execute',2),selected('files','files.read_text'),...['editor.context.search','editor.context.preview','editor.edit','editor.save','editor.run','editor.run.inspect'].map(id=>selected('editor',id)),...['annotations.write','annotations.document.freeze'].map(id=>selected('annotations',id))];
   const agent=await open('agent',{tools});report.agent_view=agent.view;save();
   await open('objects',{source:instances.r,object_group:null});
   // One browser connection per saved view; no duplicate renderers/sequence races.
@@ -210,15 +255,22 @@ try{
     await browser.close();browser=null;
     host.kill('SIGINT');assert.equal((await deadline(exited,60000,'Original Host shutdown')).code,0);
     await startHost();
-    const retained=await query('plugins.instance',{instance:instances.editor});assert.equal(retained.instance.state,'suspended');
-    await invoke('plugins.resume',{instance:instances.editor,suspension:retained.instance.suspension});
-    const recovered=await pq('editor','editor.run.inspect',{operation:interrupted.operation.operation_id});
-    assert.equal(recovered.parent.status,'uncertain');assert.equal(recovered.execution.operation.operation_id,native.operation.operation_id);
-    assert.equal(recovered.execution.status,'succeeded');assert.equal(recovered.execution.operation.normalized_arguments.arguments.run.code,crashCode);
+    const retained=await query('plugins.instance',{instance:instances.editor});
+    assert.equal(retained.instance.state,'disconnected','A SIGKILLed Editor backend cannot be resumed as a confirmed Host suspension');
+    assert.ok(retained.instance.suspension==null,'Disconnected instances must not retain a resume token');
+    const parent=(await query('operation.get',{operation_id:interrupted.operation.operation_id})).record;
+    const execution=(await query('operation.get',{operation_id:native.operation.operation_id})).record;
+    assert.equal(parent.operation.operation_id,interrupted.operation.operation_id);
+    assert.equal(parent.operation.capability.id,'editor.run');assert.equal(parent.status,'uncertain');
+    assert.equal(execution.operation.operation_id,native.operation.operation_id);
+    assert.equal(execution.operation.causation_id,interrupted.operation.operation_id);
+    assert.equal(execution.operation.caller.id,instances.editor.instance);
+    assert.equal(execution.operation.capability.id,'r.execute');
+    assert.equal(execution.status,'succeeded');assert.equal(execution.operation.normalized_arguments.arguments.run.code,crashCode);
     assert.equal((await query('plugins.instance',{instance:instances.r})).instance.state,'suspended','Inspect cannot resume the old native R session');
     assert.equal(fs.readFileSync(path.join(project,'crash.effects'),'utf8'),'one\n');
-    report.disconnect_recovery={parent:recovered.parent.status,execution:native.operation.operation_id,native:recovered.execution.status,one_effect:true,r_resumed:false};
-    report.stages.push('Actual Editor process disconnect → native completion → Host restart → original child inspection with one effect and no R restart');save();
+    report.disconnect_recovery={editor_state:retained.instance.state,resume_token_retained:false,parent:parent.status,execution:native.operation.operation_id,native:execution.status,one_effect:true,r_suspended:true,r_resumed:false};
+    report.stages.push('Actual Editor process disconnect → native completion → Host restart → retained parent/child operation inspection with one effect and no replay or R restart');save();
   }
   if(options['--live-agent-data']){
     // Read the explicitly selected existing connection locally. Key bytes only

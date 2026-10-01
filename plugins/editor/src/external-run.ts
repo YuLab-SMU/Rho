@@ -30,7 +30,7 @@ export async function inspectExternalRun(client: Client, capture: ExternalRun): 
   validateExternalRun(client, capture);
   const capability = { id: 'editor.run.inspect', version: 1 };
   const observed = await client.query<{ status: string; completeness?: string; data?: { parent: RecordReply; execution: RecordReply | null } }>(capability,
-    json({ binding: { provider: capture.reference.provider, project: client.view.project, capability, target: null }, arguments: { operation: capture.operation }, preconditions: null }));
+    json({ binding: { provider: capture.reference.provider, project: client.view.project, capability, target: null }, arguments: { operation: capture.operation, window: client.view.window }, preconditions: null }));
   if (observed.status !== 'ready' || observed.completeness && observed.completeness !== 'complete' || !observed.data)
     throw Error('The original Agent run observation is incomplete. Its request is retained.');
   const { parent, execution } = observed.data;

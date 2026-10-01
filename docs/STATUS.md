@@ -7,15 +7,15 @@ Evidence filenames below are relative to `target/plugin-refactor/` unless stated
 
 ## Current focus: usable local Preview 3 and workspace-aware Agent
 
-Current source links Agent Editor runs to original Operations, captured code and
-native results. Read-only inspection survives lost acknowledgements/plans, while
-receipt-only updates preserve concurrent typing. New document-linked notes use a separately scoped freeze tool, fenced to the
-original selected Editor/window in Native and Rho.
-Focused owner/client tests pass. Isolated Host and headless Chrome acceptance pass for
-Editor freeze, Agent annotation use, source/CAS refusal, draft retention, picker overflow
-at 1440/960/390/220px, reload and same-instance restart without replay. Model/native
-peers were synthetic; no release claim. Local real-R acceptance is unrun: no Ark or
-`RHO_ARK`; R 4.5.2 is installed. Earlier Linux AF_UNIX denial remains historical.
+Agent Editor runs link to original Operations, captured code and native results;
+reads are read-only, receipt updates preserve typing, and note freeze is separately
+scoped to the original selected Editor/window in Native and Rho.
+Isolated real-R Host/Chrome acceptance passes six Gapminder workflows
+(1704/142/703984/6/2007/703984) and source-linked Chinese note readback. After
+Editor SIGKILL and Host restart, uncertain parent/succeeded child remain queryable;
+Editor stays disconnected, R suspended, with one effect/no replay. Deterministic
+model peer; no quality claim. Evidence: `target/plugin-refactor/preview-agent-workflow-20261001.json`.
+No user project, Host restart or installation.
 
 Preview 3 contains the native launcher, saved Demo, navigation and bundled Ark;
 R remains the configured local installation. Its fresh `Preview 3` catalog selects

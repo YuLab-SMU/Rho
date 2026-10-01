@@ -1020,3 +1020,75 @@ fn native_workspace_catalog_pins_file_scope_without_starting_r() {
     binding.capability.id = serde_json::from_value(serde_json::json!("r.execute")).unwrap();
     assert!(wrong.validate().is_err());
 }
+
+#[test]
+fn native_workspace_catalog_accepts_exact_annotation_tools() {
+    let mut origin = native_origin();
+    let mut binding = origin.r.take().unwrap();
+    binding.provider.instance =
+        serde_json::from_value(serde_json::json!("annotations-one")).unwrap();
+    binding.provider.plugin =
+        serde_json::from_value(serde_json::json!("org.rho.annotations")).unwrap();
+    binding.capability =
+        serde_json::from_value(serde_json::json!({"id":"annotations.document.freeze","version":1}))
+            .unwrap();
+    binding.target = None;
+    origin.tools = vec![AgentNativeToolGrant {
+        selection: AgentNativeToolSelection {
+            name: "annotations_document_freeze".into(),
+            target: AgentNativeToolTarget::Provider { binding },
+        },
+        kind: AgentNativeToolKind::Operation,
+        description: "Freeze the original Editor document selection".into(),
+        input_schema: serde_json::json!({"type":"object"}),
+        required_scopes: Default::default(),
+    }];
+
+    assert!(origin.validate().is_ok());
+}
+
+#[test]
+fn native_editor_run_inspection_is_bound_to_the_original_window() {
+    let f = Fixture::new();
+    let mut origin = native_origin();
+    let mut binding = origin.r.as_ref().unwrap().clone();
+    binding.provider.instance = serde_json::from_value(serde_json::json!("editor-one")).unwrap();
+    binding.provider.plugin = serde_json::from_value(serde_json::json!("org.rho.editor")).unwrap();
+    binding.capability =
+        serde_json::from_value(serde_json::json!({"id":"editor.run.inspect","version":1})).unwrap();
+    binding.target = None;
+    origin.tools = vec![AgentNativeToolGrant {
+        selection: AgentNativeToolSelection {
+            name: "editor_run_inspect".into(),
+            target: AgentNativeToolTarget::Provider {
+                binding: binding.clone(),
+            },
+        },
+        kind: AgentNativeToolKind::Query,
+        description: "Inspect an original Editor run".into(),
+        input_schema: serde_json::json!({"type":"object"}),
+        required_scopes: Default::default(),
+    }];
+    let admission = f
+        .owner
+        .start_native(&f.actor, f.request(), origin, 3)
+        .unwrap();
+    let run = admission.run.run.run_id;
+    f.owner.claim(f.actor.scope(), &run, 4).unwrap();
+    f.owner.begin_model_call(f.actor.scope(), &run, 5).unwrap();
+    let stored = f
+        .store
+        .component_run(f.actor.scope(), &run)
+        .unwrap()
+        .unwrap();
+    let request = |window: &str| {
+        ComponentToolAction::PluginQuery(PluginRequest {
+            binding: binding.clone(),
+            arguments: serde_json::json!({"operation":"captured-run","window":window}),
+            preconditions: Value::Null,
+        })
+    };
+
+    assert!(native_tools::authorize(&stored, &request("window")).is_ok());
+    assert!(native_tools::authorize(&stored, &request("another-window")).is_err());
+}

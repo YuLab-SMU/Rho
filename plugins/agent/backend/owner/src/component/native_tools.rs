@@ -64,7 +64,10 @@ pub(super) fn authorize(
         }
         if b.capability.id.as_str().starts_with("editor.") {
             let window = &run.run.request.window.window_id;
-            let observed = if b.capability.id.as_str() == "editor.context.search" {
+            let observed = if matches!(
+                b.capability.id.as_str(),
+                "editor.context.search" | "editor.run.inspect"
+            ) {
                 &request.arguments["window"]
             } else {
                 &request.arguments["reference"]["window"]
@@ -142,7 +145,7 @@ pub(super) fn validate_catalog(origin: &ComponentNativeRunOrigin) -> Result<(), 
             || binding.capability.id.as_str().starts_with("r.")
             || !matches!(
                 binding.capability.id.as_str().split('.').next(),
-                Some("files" | "editor" | "environment")
+                Some("files" | "editor" | "environment" | "annotations")
             )
             || tool.selection.name.is_empty()
             || tool.selection.name.len() > 64

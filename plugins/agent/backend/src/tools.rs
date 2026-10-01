@@ -14,7 +14,7 @@ use rho_plugin_sdk::{
     protocol::{CapabilityKey, ContributionId, PluginCall},
 };
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -145,7 +145,7 @@ fn workspace_schema(tool: &AgentNativeToolGrant) -> Value {
     let mut schema = tool.input_schema.clone();
     let hidden: &[&str] = match &tool.selection.target {
         AgentNativeToolTarget::Provider { binding } => match binding.capability.id.as_str() {
-            "editor.context.search" => &["window"],
+            "editor.context.search" | "editor.run.inspect" => &["window"],
             "editor.run" => &["runtime", "expected_session", "code", "path"],
             "editor.edit" => &["runtime", "expected_session", "path"],
             "editor.save" => &["runtime", "expected_session", "code"],
@@ -183,6 +183,237 @@ fn inspected(value: Value, r: &ProviderBinding) -> Result<Value, String> {
     // Keep native completeness, continuation, busy state and diagnostics intact.
     Ok(value)
 }
+
+fn select_fields(value: &Value, fields: &[&str]) -> Value {
+    Value::Object(
+        fields
+            .iter()
+            .filter_map(|field| {
+                value
+                    .get(*field)
+                    .map(|value| ((*field).to_owned(), value.clone()))
+            })
+            .collect(),
+    )
+}
+
+fn bounded_json(value: &Value, limit: usize) -> Value {
+    if serde_json::to_vec(value).is_ok_and(|bytes| bytes.len() <= limit) {
+        value.clone()
+    } else {
+        json!({"truncated":true,"bytes":serde_json::to_vec(value).map_or(0, |bytes| bytes.len())})
+    }
+}
+
+fn bounded_text(value: &Value, limit: usize, output: &mut Map<String, Value>, field: &str) {
+    let Some(text) = value.as_str() else {
+        return;
+    };
+    let mut end = text.len().min(limit);
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    output.insert(field.to_owned(), json!(&text[..end]));
+    if end < text.len() {
+        output.insert(format!("{field}_truncated"), json!(true));
+        output.insert(format!("{field}_bytes"), json!(text.len()));
+    }
+}
+
+fn compact_record_output(record: &Value, parent: bool) -> Value {
+    let Some(source) = record.get("output") else {
+        return Value::Null;
+    };
+    if parent {
+        let capture = source
+            .get("capture")
+            .map(|capture| {
+                select_fields(
+                    capture,
+                    &[
+                        "operation",
+                        "code_digest",
+                        "document_version",
+                        "session",
+                        "source",
+                    ],
+                )
+            })
+            .unwrap_or(Value::Null);
+        let operations = source
+            .get("operations")
+            .and_then(Value::as_array)
+            .map(|operations| {
+                operations
+                    .iter()
+                    .take(8)
+                    .map(|operation| {
+                        json!({"capability":operation["capability"]["id"],"operation":operation["operation"],"status":operation["status"]})
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        return json!({"capture":capture,"operations":operations});
+    }
+
+    let mut output = select_fields(
+        source,
+        &[
+            "operation_id",
+            "output_mode",
+            "session_id",
+            "source",
+            "value_in_report",
+        ],
+    );
+    let Some(fields) = output.as_object_mut() else {
+        return Value::Null;
+    };
+    let value = source.get("value").unwrap_or(&Value::Null);
+    if !value.is_null() {
+        fields.insert("value".into(), bounded_json(value, 4096));
+    }
+    for field in ["stdout", "stderr"] {
+        if let Some(value) = source.get(field) {
+            bounded_text(value, 4096, fields, field);
+        }
+    }
+    if let Some(outputs) = source.get("outputs").and_then(Value::as_array) {
+        fields.insert(
+            "outputs".into(),
+            Value::Array(
+                outputs
+                    .iter()
+                    .take(8)
+                    .map(|item| {
+                        select_fields(item, &["kind", "name", "reference", "media_type", "label"])
+                    })
+                    .collect(),
+            ),
+        );
+        if outputs.len() > 8 {
+            fields.insert("outputs_truncated".into(), json!(true));
+            fields.insert("outputs_count".into(), json!(outputs.len()));
+        }
+    }
+    Value::Object(std::mem::take(fields))
+}
+
+fn compact_run_record(record: &Value, parent: bool) -> Result<Value, String> {
+    let operation = record
+        .get("operation")
+        .ok_or("Original Editor run inspection has no operation")?;
+    let operation_id = operation
+        .get("operation_id")
+        .and_then(Value::as_str)
+        .ok_or("Original Editor run inspection has no operation identity")?;
+    let diagnostics = record
+        .get("diagnostics")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .take(8)
+                .map(|item| {
+                    let mut result = select_fields(item, &["code", "continuation", "next_reads"]);
+                    if let Some(message) = item.get("message") {
+                        let mut message_fields = Map::new();
+                        bounded_text(message, 1024, &mut message_fields, "message");
+                        if let Some(fields) = result.as_object_mut() {
+                            fields.extend(message_fields);
+                        }
+                    }
+                    result
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let mut result = Map::new();
+    result.insert("operation_id".into(), json!(operation_id));
+    if let Some(capability) = operation.get("capability") {
+        result.insert("capability".into(), capability.clone());
+    }
+    if let Some(causation_id) = operation.get("causation_id")
+        && !causation_id.is_null()
+    {
+        result.insert("causation_id".into(), causation_id.clone());
+    }
+    if let Some(status) = record.get("status") {
+        result.insert("status".into(), status.clone());
+        if let Some(outcome) = record.get("outcome")
+            && outcome != status
+        {
+            result.insert("outcome".into(), outcome.clone());
+        }
+    }
+    if let Some(error) = record.get("error")
+        && !error.is_null()
+    {
+        result.insert("error".into(), bounded_json(error, 4096));
+    }
+    if record["cancellation_requested"] == true {
+        result.insert("cancellation_requested".into(), json!(true));
+    }
+    let recovery = select_fields(
+        record.get("recovery").unwrap_or(&Value::Null),
+        &["kind", "candidate", "resolution"],
+    );
+    if recovery
+        .as_object()
+        .is_some_and(|fields| !fields.is_empty())
+    {
+        result.insert("recovery".into(), recovery);
+    }
+    if !diagnostics.is_empty() {
+        result.insert("diagnostics".into(), json!(diagnostics));
+    }
+    let output = compact_record_output(record, parent);
+    if !output.is_null() {
+        result.insert("output".into(), output);
+    }
+    if let Some(next_reads) = record
+        .get("next_reads")
+        .and_then(Value::as_array)
+        .filter(|items| !items.is_empty())
+    {
+        result.insert(
+            "next_reads".into(),
+            json!(next_reads.iter().take(8).cloned().collect::<Vec<_>>()),
+        );
+        if next_reads.len() > 8 {
+            result.insert("next_reads_truncated".into(), json!(true));
+            result.insert("next_reads_count".into(), json!(next_reads.len()));
+        }
+    }
+    Ok(Value::Object(result))
+}
+
+fn compact_editor_run_inspection(value: Value) -> Result<Value, String> {
+    let data = value.get("data").unwrap_or(&Value::Null);
+    let parent = data
+        .get("parent")
+        .filter(|record| !record.is_null())
+        .map(|record| compact_run_record(record, true))
+        .transpose()?
+        .unwrap_or(Value::Null);
+    let execution = data
+        .get("execution")
+        .filter(|record| !record.is_null())
+        .map(|record| compact_run_record(record, false))
+        .transpose()?
+        .unwrap_or(Value::Null);
+    let mut summary = select_fields(&value, &["status", "completeness", "observed_at_ms"]);
+    if let Some(notices) = value
+        .get("notices")
+        .and_then(Value::as_array)
+        .filter(|notices| !notices.is_empty())
+    {
+        summary["notices"] = json!(notices.iter().take(8).cloned().collect::<Vec<_>>());
+    }
+    summary["data"] = json!({"parent":parent,"execution":execution});
+    Ok(summary)
+}
+
 impl RunPort {
     fn can_inspect(&self, id: &str) -> bool {
         self.metadata
@@ -420,7 +651,10 @@ impl AgentModelPort for RunPort {
                 {
                     crate::annotation_tools::document_source(&arguments["reference"], self.origin.tools.iter().map(|t| &t.selection), &self.origin.binding.project, window).map_err(|error| invalid(&error))?;
                 }
-                if binding.capability.id.as_str() == "editor.context.search" {
+                if matches!(
+                    binding.capability.id.as_str(),
+                    "editor.context.search" | "editor.run.inspect"
+                ) {
                     let object = arguments
                         .as_object_mut()
                         .ok_or_else(|| invalid("Expected Editor search arguments"))?;
@@ -773,7 +1007,11 @@ async fn dispatch(
                 value["status"], value["completeness"]
             ));
         }
-        if value["status"] != "ready" || !request.binding.capability.id.as_str().starts_with("r.") {
+        if request.binding.capability == key("editor.run.inspect", 1) {
+            compact_editor_run_inspection(value)?
+        } else if value["status"] != "ready"
+            || !request.binding.capability.id.as_str().starts_with("r.")
+        {
             // Retain the ordinary owner's completeness/source alongside bounded data.
             value
         } else {
@@ -855,6 +1093,75 @@ pub(crate) async fn inspect_original(
         .find(|tool| tool.receipt.receipt_id == args.receipt_id)
         .ok_or(ComponentTaskError::NotFound)?;
     observe_original(metadata, &host, &call.request, &origin, &args.run_id, &tool).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn editor_run_inspection_keeps_uncertainty_and_native_result_without_descriptors() {
+        let descriptor = "x".repeat(20_000);
+        let observed = json!({
+            "status":"ready","completeness":"complete","observed_at_ms":42,
+            "data":{
+                "parent":{
+                    "status":"uncertain","outcome":"uncertain","error":null,"cancellation_requested":false,
+                    "operation":{"operation_id":"editor-run-1","capability":{"id":"editor.run","version":1},
+                        "causation_id":"agent-send-1","admission":{"descriptor":{"documentation":descriptor}}},
+                    "output":{"capture":{"operation":"editor-run-1","code_digest":"sha256:test","session":"ark-1",
+                        "reference":{"selector":{"version":28}}},
+                        "operations":[{"capability":{"id":"r.execute","version":2},"operation":"r-run-1","request":"request-1","status":"succeeded"}]},
+                    "recovery":{"kind":"plugin_boundary_failure","candidate":null},"diagnostics":[],"next_reads":[]
+                },
+                "execution":{
+                    "status":"succeeded","outcome":"succeeded","error":null,"cancellation_requested":false,
+                    "operation":{"operation_id":"r-run-1","capability":{"id":"r.execute","version":2},
+                        "causation_id":"editor-run-1","admission":{"descriptor":{"documentation":descriptor}}},
+                    "output":{"operation_id":"r-run-1","session_id":"ark-1","output_mode":"console",
+                        "source":{"kind":"document","label":"analysis.R"},"stdout":"Gapminder value: 1704","stderr":"",
+                        "report":{"bytes":123,"digest":"sha256:report","resource":"report-1"},
+                        "events":{"bytes":42,"digest":"sha256:events","resource":"events-1"},"value":null},
+                    "recovery":null,"diagnostics":[],"next_reads":[]
+                }
+            }
+        });
+        let compact = compact_editor_run_inspection(observed).unwrap();
+        let encoded = serde_json::to_vec(&compact).unwrap();
+        assert!(encoded.len() < 8 * 1024, "{} bytes", encoded.len());
+        assert_eq!(compact["data"]["parent"]["status"], "uncertain");
+        assert_eq!(
+            compact["data"]["parent"]["recovery"]["kind"],
+            "plugin_boundary_failure"
+        );
+        assert_eq!(
+            compact["data"]["parent"]["output"]["capture"]["code_digest"],
+            "sha256:test"
+        );
+        assert_eq!(compact["data"]["execution"]["status"], "succeeded");
+        assert_eq!(compact["data"]["execution"]["operation_id"], "r-run-1");
+        assert_eq!(
+            compact["data"]["execution"]["output"]["stdout"],
+            "Gapminder value: 1704"
+        );
+        assert!(!String::from_utf8(encoded).unwrap().contains(&descriptor));
+    }
+
+    #[test]
+    fn editor_run_inspection_marks_truncated_native_text() {
+        let output = json!({"stdout":"繁".repeat(2049)});
+        let mut compact = Map::new();
+        bounded_text(&output["stdout"], 4096, &mut compact, "stdout");
+        assert_eq!(compact["stdout_truncated"], true);
+        assert_eq!(compact["stdout_bytes"], 6147);
+        assert!(compact["stdout"].as_str().unwrap().len() <= 4096);
+        assert!(
+            compact["stdout"]
+                .as_str()
+                .unwrap()
+                .is_char_boundary(compact["stdout"].as_str().unwrap().len())
+        );
+    }
 }
 
 async fn observe_original(

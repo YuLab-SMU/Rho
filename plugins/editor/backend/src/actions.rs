@@ -35,6 +35,8 @@ struct Selector {
 #[serde(deny_unknown_fields)]
 pub struct InspectRun {
     pub operation: OperationId,
+    /// The original Editor document window selected by the caller.
+    pub window: WindowId,
 }
 fn key(id: &str, version: u32) -> CapabilityKey {
     CapabilityKey {
@@ -263,6 +265,9 @@ async fn capture(
             run["operation"]
                 .as_str()
                 .ok_or("Invalid retained Editor run")?,
+            run["reference"]["window"]
+                .as_str()
+                .ok_or("Invalid retained Editor run window")?,
         )
         .await?;
         require(
@@ -374,6 +379,7 @@ async fn inspect_run(
     calls: &Calls<'_>,
     instance: &PluginInstance,
     operation: &str,
+    window: &str,
 ) -> Result<Value, String> {
     let parent = calls
         .read("operation.get", json!({"operation_id":operation}))
@@ -385,8 +391,10 @@ async fn inspect_run(
             && parent["operation"]["normalized_arguments"]["binding"]["provider"]
                 == json!(instance.identity)
             && parent["operation"]["normalized_arguments"]["binding"]["project"]
-                == json!(instance.project),
-        "The original run belongs to another Editor provider or project",
+                == json!(instance.project)
+            && parent["operation"]["normalized_arguments"]["arguments"]["reference"]["window"]
+                == window,
+        "The original run belongs to another Editor provider, project or window",
     )?;
     let effects = parent["recovery"]["data"]["operations"]
         .as_array()
@@ -445,7 +453,13 @@ pub async fn inspect(
         uncertain: false,
         sequence: AtomicU32::new(0),
     };
-    inspect_run(&calls, instance, input.operation.as_str()).await
+    inspect_run(
+        &calls,
+        instance,
+        input.operation.as_str(),
+        input.window.as_str(),
+    )
+    .await
 }
 
 async fn execute(calls: &mut Calls<'_>, instance: &PluginInstance) -> Result<Value, String> {
