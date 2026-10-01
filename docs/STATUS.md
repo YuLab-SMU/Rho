@@ -15,7 +15,7 @@ Isolated real-R Host/Chrome acceptance passes six Gapminder workflows
 Editor SIGKILL and Host restart, uncertain parent/succeeded child remain queryable;
 Editor stays disconnected, R suspended, with one effect/no replay. Deterministic
 model peer; no quality claim. Evidence: `target/plugin-refactor/preview-agent-workflow-20261001.json`.
-No user project, Host restart or installation.
+No user project or running user Host was touched; no installation.
 
 Preview 3 contains the native launcher, saved Demo, navigation and bundled Ark;
 R remains the configured local installation. Its fresh `Preview 3` catalog selects
