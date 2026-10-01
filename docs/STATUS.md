@@ -11,10 +11,10 @@ Agent Editor runs link to original Operations, captured code and native results;
 reads are read-only, receipt updates preserve typing, and note freeze is separately
 scoped to the original selected Editor/window in Native and Rho.
 Isolated real-R Host/Chrome acceptance passes six Gapminder workflows
-(1704/142/703984/6/2007/703984) and source-linked Chinese note readback. After
+(1704/142/703984/6/2007/703984); Agent reads back the source-linked Chinese note. After
 Editor SIGKILL and Host restart, uncertain parent/succeeded child remain queryable;
 Editor stays disconnected, R suspended, with one effect/no replay. Deterministic
-model peer; no quality claim. Evidence: `target/plugin-refactor/preview-agent-workflow-20261001.json`.
+model peer; no quality claim. Evidence: `target/plugin-refactor/agent-r-workflow-20261001.json`.
 No user project or running user Host was touched; no installation.
 
 Preview 3 contains the native launcher, saved Demo, navigation and bundled Ark;

@@ -46,6 +46,17 @@ if(options['--recheck-disconnect']){
   assert.equal(previous.document_workflow?.complete,true);
   assert.equal(previous.document_workflow.cases.length,6);
   assert.ok(previous.document_workflow.cases.every(item=>item.status==='passed'));
+  const noteCase=previous.document_workflow.cases.find(item=>item.id==='objects-script');
+  assert.ok(noteCase);
+  const frozen=noteCase.receipts.find(item=>item.capability==='annotations.document.freeze');
+  const written=noteCase.receipts.find(item=>item.capability==='annotations.write');
+  const agentRead=noteCase.receipts.find(item=>item.capability==='annotations.read');
+  assert.equal(frozen?.result.status,'succeeded');assert.equal(written?.result.status,'succeeded');
+  assert.equal(agentRead?.result.status,'ready','Agent itself must read back the saved annotation');
+  assert.match(JSON.stringify(agentRead.result.data),/association is not causation/);
+  assert.match(JSON.stringify(agentRead.result.data),/中文研究记录/);
+  assert.match(JSON.stringify(agentRead.result.data),new RegExp(frozen.result.output.outcome.evidence_id));
+  assert.equal(noteCase.receipts.filter(item=>item.capability==='r.observe_object').at(-1).result.data.metadata.preview[0].number,703984);
   const directory=previous.directory,project=path.join(directory,'project'),database=path.join(directory,'rho.sqlite');
   let host,api;
   const deadline=(promise,ms,label)=>Promise.race([promise,new Promise((_,reject)=>{const t=setTimeout(()=>reject(Error(label+' timed out')),ms);t.unref();})]);
@@ -148,7 +159,7 @@ try{
   const editor=await open('editor',{source:instances.files,file,runtime:instances.r});
   const projectId=editor.project;
   const selected=(name,id,version=1)=>({name:id.replaceAll('.','_'),target:{type:'provider',binding:{provider:instances[name],project:projectId,capability:key(id,version),target:null}}});
-  const tools=[selected('r','r.session'),selected('r','r.execute',2),selected('files','files.read_text'),...['editor.context.search','editor.context.preview','editor.edit','editor.save','editor.run','editor.run.inspect'].map(id=>selected('editor',id)),...['annotations.write','annotations.document.freeze'].map(id=>selected('annotations',id))];
+  const tools=[selected('r','r.session'),selected('r','r.execute',2),selected('files','files.read_text'),...['editor.context.search','editor.context.preview','editor.edit','editor.save','editor.run','editor.run.inspect'].map(id=>selected('editor',id)),...['annotations.read','annotations.write','annotations.document.freeze'].map(id=>selected('annotations',id))];
   const agent=await open('agent',{tools});report.agent_view=agent.view;save();
   await open('objects',{source:instances.r,object_group:null});
   // One browser connection per saved view; no duplicate renderers/sequence races.

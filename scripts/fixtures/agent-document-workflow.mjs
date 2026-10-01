@@ -49,11 +49,11 @@ export async function documentWorkflow({project,page,getFrame,pq,api,setPlan,rep
       body=>operation('editor_run',{reference:reference(body)}),
       body=>['editor_run_inspect',{operation:evidence(body,v=>typeof v.operation_id==='string'&&v.output?.capture).operation_id}],
       ()=>['r_observe_object',{name:'workflow_value'}],
-      body=>['r_read_object',{object_ref:evidence(body,v=>typeof v.object_ref==='string').object_ref,kind:'values',start:1,limit:1,column_limit:1}],
     ];
     if(scenario.note)steps.push(
       body=>operation('annotations_document_freeze',{request_id:'workflow-freeze',reference:reference(body),inclusion:{kind:'document'},anchor:{kind:'whole_item'}}),
       body=>operation('annotations_write',{request_id:'workflow-note',command:{kind:'create',evidence_id:evidence(body,v=>typeof v.evidence_id==='string').evidence_id,note:'Gapminder: association is not causation; preserve the fitted specification and inspect residuals before interpreting coefficients. 中文研究记录',labels:['gapminder'],marks:[],continued_from:null}}),
+      body=>['annotations_read',{kind:'read',annotation:evidence(body,v=>v.outcome?.annotation).outcome.annotation}],
     );
     const plan=setPlan(steps,`Confirmed ${scenario.id} native value ${scenario.expected}; captured result and judgment retained.`);
     await page.getByRole('tab',{name:'Agent',exact:true}).click();let ui=await getFrame('Agent message');
@@ -77,16 +77,25 @@ export async function documentWorkflow({project,page,getFrame,pq,api,setPlan,rep
     const value=await pq('r','r.observe_object',{expected_session:report.session,name:'workflow_value'});
     const native=await pq('r','r.read_object',{expected_session:report.session,object_ref:value.data.object_ref,kind:'values',start:1,limit:1,column_limit:1});
     assert.equal(native.data.values[0].number,scenario.expected);current.native_value=native;current.execution=inspection.execution.operation.operation_id;
+    const observed=receipts.filter(t=>t.capability==='r.observe_object');
+    assert.equal(observed.length,scenario.object?2:1);
+    assert.equal(observed.at(-1).result.status,'ready');
+    assert.equal(observed.at(-1).result.data.metadata.preview[0].number,scenario.expected,'Agent must receive the actual bounded R value');
     filename=scenario.path??filename;assert.equal(fs.readFileSync(path.join(project,filename),'utf8'),code);
     const effects=fs.readFileSync(path.join(project,'workflow-effects.txt'),'utf8').trim().split('\n');assert.deepEqual(effects,attempts.cases.map(c=>c.id));
     if(scenario.plot){assert.ok(inspection.execution.output.outputs?.some(item=>item.reference?.media_type?.startsWith('image/')),JSON.stringify(inspection.execution.output));current.outputs=inspection.execution.output.outputs;}
     if(scenario.note){
       const frozen=receipts.find(t=>t.capability==='annotations.document.freeze'),written=receipts.find(t=>t.capability==='annotations.write');
+      const agentRead=receipts.find(t=>t.capability==='annotations.read');
       assert.equal(frozen?.result.status,'succeeded',JSON.stringify(frozen));assert.equal(written?.result.status,'succeeded',JSON.stringify(written));
+      assert.equal(agentRead?.result.status,'ready',JSON.stringify(agentRead));
       const evidenceId=frozen.result.output.outcome.evidence_id,annotation=written.result.output.outcome.annotation;
-      const readback=await pq('annotations','annotations.read',{kind:'read',annotation});
-      assert.match(JSON.stringify(readback),/association is not causation/);assert.match(JSON.stringify(readback),new RegExp(evidenceId));
-      current.judgment=readback;save();
+      const agentReadback=JSON.stringify(agentRead.result.data);
+      assert.match(agentReadback,/association is not causation/);assert.match(agentReadback,new RegExp(evidenceId));
+      assert.match(agentReadback,/中文研究记录/);
+      const persisted=await pq('annotations','annotations.read',{kind:'read',annotation});
+      assert.match(JSON.stringify(persisted),/association is not causation/);assert.match(JSON.stringify(persisted),new RegExp(evidenceId));
+      current.agent_readback=agentRead.result.data;current.persisted_judgment=persisted;save();
     }
     await page.getByRole('tab',{name:'Editor',exact:true}).click();ui=await getFrame('Code Editor');
     await ui.locator('#external-status').filter({hasText:'succeeded'}).waitFor();
