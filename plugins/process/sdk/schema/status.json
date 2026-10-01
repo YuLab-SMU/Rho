@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProcessStatus",
+  "type": "object",
+  "properties": {
+    "activities": {
+      "description": "Native scheduling only. Committed outcomes belong to operation.get.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ProcessActivity"
+      }
+    },
+    "capacity": {
+      "type": "integer",
+      "format": "uint16",
+      "maximum": 65535,
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "activities",
+    "capacity"
+  ],
+  "$defs": {
+    "ProcessActivity": {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string"
+        },
+        "phase": {
+          "$ref": "#/$defs/ProcessPhase"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "phase"
+      ]
+    },
+    "ProcessPhase": {
+      "type": "string",
+      "enum": [
+        "waiting",
+        "running",
+        "awaiting_settlement"
+      ]
+    }
+  }
+}

@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LocalAgent",
+  "type": "object",
+  "properties": {
+    "capabilities": {
+      "$ref": "#/$defs/AgentNativeCapabilities"
+    },
+    "discovery_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "executable": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AgentModel"
+      }
+    },
+    "provider": {
+      "$ref": "#/$defs/AgentProvider"
+    },
+    "selected_effort": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "selected_model": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "setup_required": {
+      "type": "boolean"
+    },
+    "version": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "provider",
+    "models",
+    "discovery_ms",
+    "setup_required",
+    "capabilities"
+  ],
+  "$defs": {
+    "AgentModel": {
+      "type": "object",
+      "properties": {
+        "default_effort": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "efforts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "efforts"
+      ]
+    },
+    "AgentNativeCapabilities": {
+      "type": "object",
+      "properties": {
+        "current_mode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "embedded_context": {
+          "type": "boolean"
+        },
+        "history": {
+          "type": "string"
+        },
+        "images": {
+          "type": "boolean"
+        },
+        "models": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AgentModel"
+          }
+        },
+        "modes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/AgentPermissionMode"
+          }
+        },
+        "resume": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "resume",
+        "history",
+        "images",
+        "embedded_context",
+        "modes",
+        "models"
+      ]
+    },
+    "AgentPermissionMode": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "AgentProvider": {
+      "type": "string",
+      "enum": [
+        "codex",
+        "kimi",
+        "deepseek"
+      ]
+    }
+  }
+}

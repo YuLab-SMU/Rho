@@ -1,46 +1,77 @@
 [workspace]
 resolver = "3"
 members = [
-  "crates/rho-extension-runtime",
-  "crates/rho-protocol",
-  "crates/rho-store",
-  "crates/rho-kernel",
-  "crates/rho-agent-transport",
-  "crates/rho-core",
-  "crates/rho-cli",
-  "crates/rho-mcp",
-  "crates/rho-server",
-  "crates/rho-updater-verifier",
-  "desktop/src-tauri",
+  "crates/plugin-protocol",
+  "plugins/r/api",
+  "plugins/files/api",
+  "plugins/files/backend/engine",
+  "plugins/files/backend/owner",
+  "plugins/files/backend",
+  "plugins/editor/backend",
+  "plugins/process/api",
+  "plugins/environment/api",
+  "plugins/environment/backend",
+  "plugins/environment/backend/owner",
+  "plugins/remote/api",
+  "plugins/remote/backend",
+  "plugins/remote/backend/owner",
+  "crates/process-engine",
+  "plugins/process/backend/owner",
+  "plugins/process/backend",
+  "plugins/r/backend/engine",
+  "plugins/r/backend",
+  "crates/plugin-sdk",
+  "crates/plugins",
+  "crates/contract",
+  "crates/operation",
+  "crates/adapters/sqlite",
+  "crates/host",
+  "crates/cli",
+  "crates/mcp",
+  "plugins/annotations/api",
+  "plugins/annotations/backend",
+  "plugins/annotations/backend/owner",
+  "plugins/annotations/backend/store",
+  "plugins/agent/api",
+  "plugins/agent/backend",
+  "plugins/agent/backend/client",
+  "plugins/agent/backend/native",
+  "plugins/agent/backend/owner",
+  "plugins/agent/backend/store",
+  "plugins/agent/backend/engine",
+  "crates/workbench",
 ]
-exclude = ["vendor/jet"]
+default-members = ["crates/cli"]
+exclude = ["vendor/jet-core"]
 
 [workspace.package]
-version = "0.4.1-dev.11"
+version = "0.1.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.97"
 license = "AGPL-3.0-only"
 repository = "https://github.com/YuLab-SMU/Rho"
 
 [workspace.dependencies]
-anyhow = "1.0"
-arc-swap = { version = "1.9", default-features = false }
-chrono = { version = "0.4", features = ["serde"] }
+async-trait = "0.1"
 clap = { version = "4.5", features = ["derive"] }
-jet_core = { path = "vendor/jet/crates/core" }
-libc = "0.2"
-rand = "0.9"
-petgraph = { version = "0.8", default-features = false, features = ["std"] }
 rusqlite = { version = "0.37", features = ["bundled"] }
-semver = { version = "1.0", features = ["serde"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+schemars = "1.0"
 sha2 = "0.10"
 tempfile = "3.20"
 thiserror = "2.0"
-tokio = { version = "1.0", features = ["full"] }
-tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
-uuid = { version = "1.18", features = ["v4", "serde"] }
-wasmtime = { version = "=38.0.4", default-features = false, features = ["cranelift", "runtime", "std"] }
-wat = { version = "=1.257.1", default-features = false }
-zeroize = "1.9"
+tokio = { version = "1.0", features = ["macros", "rt", "sync", "time", "process", "signal", "io-util", "io-std", "fs"] }
+tracing = "0.1"
+uuid = { version = "1.18", features = ["v4"] }
+process-wrap = { version = "10.0", features = ["tokio1"] }
+sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
+tokio-util = { version = "0.7", features = ["rt", "codec"] }
+rmcp = { version = "1.8", default-features = false, features = ["server", "transport-async-rw"] }
+futures = "0.3"
+ts-rs = { version = "=12.0.1", features = ["serde-json-impl", "no-serde-warnings"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+jsonschema = { version = "0.52", default-features = false }
+resvg = { version = "0.48.1", default-features = false, features = ["text", "system-fonts", "raster-images"] }
+image = { version = "0.25.8", default-features = false, features = ["png", "jpeg"] }
+base64 = "0.22"

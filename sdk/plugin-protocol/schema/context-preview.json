@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ContextPreview",
+  "type": "object",
+  "properties": {
+    "data": {
+      "description": "Owner-defined bounded presentation data. Large artifacts use resources."
+    },
+    "item": {
+      "$ref": "#/$defs/ContextItem"
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ResourceReference"
+      },
+      "maxItems": 8
+    },
+    "text": {
+      "description": "Plain text, never executable markup. Truncation must end at a UTF-8 boundary.",
+      "type": "string"
+    },
+    "truncated": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "item",
+    "text",
+    "truncated",
+    "data",
+    "resources"
+  ],
+  "$defs": {
+    "ContextItem": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "kind": {
+          "description": "A presentation hint supplied by the owner, not a closed core view enum.",
+          "type": "string"
+        },
+        "reference": {
+          "$ref": "#/$defs/ContextReference"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "title",
+        "description",
+        "kind"
+      ]
+    },
+    "ContextReference": {
+      "type": "object",
+      "properties": {
+        "contribution": {
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "selector": {
+          "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+        },
+        "window": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "provider",
+        "contribution",
+        "window",
+        "selector"
+      ]
+    },
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "ResourceReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "resource": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "resource",
+        "digest",
+        "media_type",
+        "bytes"
+      ]
+    }
+  }
+}

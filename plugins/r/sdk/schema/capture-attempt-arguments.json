@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RCaptureAttemptArguments",
+  "type": "object",
+  "properties": {
+    "source_operation_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "source_operation_id"
+  ]
+}

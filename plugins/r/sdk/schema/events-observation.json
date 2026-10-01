@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "REventsObservation",
+  "type": "object",
+  "properties": {
+    "output": {
+      "$ref": "#/$defs/OutputEvents"
+    },
+    "session_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "output"
+  ],
+  "$defs": {
+    "OutputEvent": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string"
+        },
+        "media": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "byte_size": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "display_id": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "mime_type": {
+              "type": "string"
+            },
+            "operation_id": {
+              "type": "string"
+            },
+            "sequence": {
+              "type": "integer",
+              "format": "uint64",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "operation_id",
+            "sequence",
+            "mime_type",
+            "byte_size",
+            "sha256"
+          ]
+        },
+        "observed_at_ms": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "operation_id",
+        "sequence",
+        "kind",
+        "observed_at_ms"
+      ]
+    },
+    "OutputEvents": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OutputEvent"
+          }
+        },
+        "gap": {
+          "type": "boolean"
+        },
+        "has_more": {
+          "type": "boolean"
+        },
+        "next_sequence": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "notices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "operation_id",
+        "events",
+        "next_sequence",
+        "has_more",
+        "truncated",
+        "gap",
+        "notices"
+      ]
+    }
+  }
+}

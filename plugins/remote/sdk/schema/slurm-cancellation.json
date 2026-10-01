@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SlurmCancellation",
+  "type": "object",
+  "properties": {
+    "after": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SlurmObservation"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "before": {
+      "$ref": "#/$defs/SlurmObservation"
+    },
+    "notice": {
+      "type": "string"
+    },
+    "request_sent": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "request_sent",
+    "before",
+    "notice"
+  ],
+  "$defs": {
+    "SlurmJobRef": {
+      "type": "object",
+      "properties": {
+        "cluster": {
+          "type": "string"
+        },
+        "host_alias": {
+          "type": "string"
+        },
+        "job_id": {
+          "type": "string"
+        },
+        "operation_marker": {
+          "type": "string"
+        },
+        "project_root": {
+          "type": "string"
+        },
+        "stderr_path": {
+          "type": "string"
+        },
+        "stdout_path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "host_alias",
+        "cluster",
+        "job_id",
+        "operation_marker",
+        "project_root",
+        "stdout_path",
+        "stderr_path"
+      ]
+    },
+    "SlurmObservation": {
+      "type": "object",
+      "properties": {
+        "exit_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "job": {
+          "$ref": "#/$defs/SlurmJobRef"
+        },
+        "source": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "job",
+        "state",
+        "source"
+      ]
+    }
+  }
+}

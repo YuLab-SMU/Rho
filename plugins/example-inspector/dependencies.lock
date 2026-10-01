@@ -1,0 +1,4 @@
+format = 1
+runtime = "JavaScript ES2022; browser HTML5"
+build_runtime = "Node.js >= 22"
+dependencies = []

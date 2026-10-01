@@ -1,0 +1,33 @@
+[package]
+name = "rho-agent-backend"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "AGPL-3.0-only"
+repository = "https://github.com/YuLab-SMU/Rho"
+
+[dependencies]
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+async-trait = "0.1"
+jsonschema = { version = "0.52", default-features = false }
+rho-agent-api = { path = "../api" }
+rho-agent-owner = { path = "owner" }
+rho-agent-store = { path = "store" }
+rho-agent-engine = { path = "engine" }
+rho-agent-client = { path = "client" }
+rho-agent-native = { path = "native" }
+sha2 = "0.10"
+tokio-util = { version = "0.7", features = ["rt"] }
+rho-plugin-sdk = { path = "../../../crates/plugin-sdk" }
+schemars = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.0", features = ["macros", "rt", "io-std", "io-util", "sync", "time"] }
+uuid = { version = "1.18", features = ["v4"] }
+
+[dev-dependencies]
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
+tokio = { version = "1.0", features = ["net"] }
+tempfile = "3.20"

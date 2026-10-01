@@ -1,0 +1,34 @@
+---
+title: "Countries at a Glance"
+author: "Rho demo project"
+format: html
+execute:
+  echo: true
+  warning: false
+  message: false
+---
+
+This is the tutorial-style report source. It is intentionally kept next to the
+R scripts so the project shows both an interactive analysis and a reproducible
+document workflow. Rho can display the generated `output/rho_demo_report.html`
+in Viewer; render this file with Quarto when Quarto is installed.
+
+```{r}
+clean <- readRDS("data/processed/gapminder_clean.rds")
+continent_summary <- readRDS("data/processed/continent_summary.rds")
+model_results <- readRDS("data/processed/model_results.rds")
+head(clean)
+continent_summary
+model_results
+```
+
+## Interpretation
+
+The latest-year scatter plot shows the broad positive association between income
+and life expectancy. The model is deliberately simple: its purpose is to make a
+model object and a compact result visible in the workspace, not to claim a
+causal explanation.
+
+## Provenance
+
+The data source and checksum are recorded in `data/raw/source.json`.

@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ComponentAgentStart",
+  "type": "object",
+  "properties": {
+    "assets": {
+      "description": "Immutable user-uploaded attachment references; bytes stay in Application asset storage.",
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "continuation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ComponentContinuation"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "conversation_id": {
+      "type": "string"
+    },
+    "conversation_version": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "grant": {
+      "$ref": "#/$defs/ComponentAgentGrant"
+    },
+    "model_settings_version": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/AgentContextSelection"
+      }
+    },
+    "text": {
+      "type": "string"
+    },
+    "window": {
+      "$ref": "#/$defs/AgentControllerRef"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "conversation_id",
+    "conversation_version",
+    "window",
+    "model_settings_version",
+    "text",
+    "grant",
+    "sources"
+  ],
+  "$defs": {
+    "AgentContextSelection": {
+      "type": "object",
+      "properties": {
+        "inclusion": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "reference": {
+          "description": "Owner-specific reference/observation, validated by the registered source."
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "label",
+        "reference",
+        "inclusion"
+      ]
+    },
+    "AgentControllerRef": {
+      "description": "Correlation identity supplied by the Agent owner after admission. This value\nis not an authorization credential and cannot grant access to a Host window.",
+      "type": "object",
+      "properties": {
+        "incarnation": {
+          "type": "string"
+        },
+        "window_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "window_id",
+        "incarnation"
+      ]
+    },
+    "ComponentAgentGrant": {
+      "type": "object",
+      "properties": {
+        "documents": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ComponentDocumentGrant"
+          }
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ComponentFileGrant"
+          }
+        },
+        "mode": {
+          "$ref": "#/$defs/ComponentAgentMode"
+        },
+        "permission_policy": {
+          "description": "Absent only in already recorded requests using the former work modes.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComponentPermissionPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "session": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComponentAgentSession"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "documents",
+        "files"
+      ]
+    },
+    "ComponentAgentMode": {
+      "type": "string",
+      "enum": [
+        "explain",
+        "edit",
+        "run"
+      ]
+    },
+    "ComponentAgentSession": {
+      "type": "object",
+      "properties": {
+        "session_id": {
+          "type": "string"
+        },
+        "workspace_instance_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "workspace_instance_id",
+        "session_id"
+      ]
+    },
+    "ComponentContinuation": {
+      "type": "object",
+      "properties": {
+        "recovery_digest": {
+          "type": "string"
+        },
+        "run_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "recovery_digest"
+      ]
+    },
+    "ComponentDocumentGrant": {
+      "type": "object",
+      "properties": {
+        "allow_save": {
+          "type": "boolean"
+        },
+        "document": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "document_version": {
+              "type": "string"
+            },
+            "selection_version": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "document_id",
+            "document_version",
+            "selection_version"
+          ]
+        },
+        "path": {
+          "description": "Exact project-relative destination; Save As cannot expand this scope.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "document",
+        "allow_save"
+      ]
+    },
+    "ComponentFileGrant": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ]
+    },
+    "ComponentPermissionPolicy": {
+      "description": "Approval policy is independent of the work selected by the Agent.",
+      "type": "string",
+      "enum": [
+        "ask",
+        "auto_approval",
+        "full_access"
+      ]
+    }
+  }
+}

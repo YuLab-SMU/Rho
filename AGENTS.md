@@ -1,138 +1,200 @@
-# Rho Agent Notes
+# Working on Rho
 
-## Required development governance
+Rho is the operable scientific workspace. Current work concerns product quality
+and scientific capabilities. The root Cargo workspace builds `rho`; source lives
+in `crates/`, `r/`, `ui/` and `scripts/`.
 
-All non-trivial product work must follow
-`docs/project/active-development-governance.md`. That document is the execution
-contract for proposal, specification, implementation, testing, review, version,
-documentation status, commit, and release handoff.
+This is the single repository instruction file, including for `crates/`. Keep
+shared rules here; add a nested AGENTS.md only for genuinely different local rules.
 
-### Hard gates
+## Read for the task
 
-- Inspect the repository, relevant active/proposed documents, and worktree
-  before changing files. Preserve unrelated user changes.
-- Classify the change risk and identify the owning document and acceptance gate
-  before implementation.
-- Do not implement a `proposed-` document. Record explicit authorization and
-  rename the authorized implementation contract to `active-` first.
-- For non-trivial behavior, write or amend a testable proposal/spec before code.
-  Cross-review it against `docs/project/active-document-cross-review.md` and
-  resolve ownership, schema, policy, persistence, and sequencing conflicts.
-- Keep implementation slices small enough to review and roll back. Stop at the
-  work-package checkpoint instead of implementing a whole multi-phase proposal.
-- Keep the checked-in baseline buildable and testable at every integration
-  boundary. Do not merge half-wired schema/backend/frontend states or depend on
-  a later commit to restore required behavior.
-- Write tests in proportion to risk. Every defect fix gets a regression test;
-  every state mutation gets success, rejection/stale, failure, and recovery
-  coverage; every project-owned feature gets two-project isolation coverage.
-- Treat schema migrations, approvals, project switching, execution, file or
-  environment mutation, credentials, public protocol, and release tooling as
-  high-risk. They require negative tests and failure-injection/recovery evidence.
-- Run the narrowest relevant tests while iterating, then the complete affected
-  validation matrix before completion. Never report an unrun check as passing.
-- Review the implementation against the accepted contract after tests pass.
-  Record deviations in the contract; do not silently let code redefine it.
-- Before handoff, decide and record version impact. User-visible application
-  behavior included in a new development candidate requires synchronized
-  application version metadata and `NEWS.md`. Internal R package versions are
-  independent and change when their package contract changes.
-- Update document lifecycle and evidence only after the corresponding fact is
-  true. Implementation presence, automated verification, milestone acceptance,
-  installed-app acceptance, and release readiness are separate states.
-- Commit only the reviewed files in scope. Report tests, manual acceptance,
-  version/document changes, residual risks, worktree state, and release decision
-  separately.
-- Prefer automated enforcement over remembered convention. When a governance
-  rule can be checked deterministically, add it to repository validation or CI
-  in the same workstream or record a bounded follow-up gate.
+When first joining or resuming project work, use `docs/README.md` and the relevant
+parts of `docs/STATUS.md` for orientation. Otherwise read only what the task needs:
+`docs/ARCHITECTURE.md` for ownership or execution boundaries, `docs/RHO-DESIGN.md`
+and `docs/STUDIO-FEEDBACK.md` for Studio interaction changes. Reuse context already
+read when it remains current. Design distinguishes approved interactions from
+proposals; Status records implementation and evidence. Passing functional tests
+does not establish visual quality or close usability feedback.
 
-### Stop conditions
+`docs/STATUS.md` is the single current status summary. Durable constraints belong
+in Architecture; interaction principles in Design; user problems in Feedback.
+Detailed plans stay with the working issue/branch. Git is the history; do not add
+completed-work archives or another progress ledger. `docs/SCENARIO-PLUGINS.md` is
+research, not an implementation commitment.
 
-Stop and amend/review the contract before continuing when:
+Data from abandoned implementations is not a supported input. Do not introduce
+migration, import, archive-reader or compatibility work without a new request.
 
-- implementation requires behavior outside the active spec;
-- two documents claim the same state, persistence, approval, or acceptance
-  semantics;
-- a migration or compatibility rule would guess historical ownership or data;
-- a required test cannot be made deterministic or a failure cannot recover
-  truthfully;
-- the change would broaden credentials, network, filesystem, execution, or
-  approval authority;
-- affected manual acceptance cannot be completed for a release candidate.
+## Architecture rules
 
-## Scientific workflow implementation
+- Scientific owners manage files, the live R Workspace, Environment, executions,
+  jobs, outputs and recovery. Add capabilities to their real owner.
+- Agent behavior belongs to external platforms or the optional built-in component
+  assistant. The built-in assistant reuses Rig through `plugins/agent/backend/engine` and
+  the ordinary Agent plugin’s validated Host ports. Scientific owners, Operation
+  and native adapters do not plan Agent work or call models. The Agent plugin records
+  the user's authorized scope; model output and context cannot expand it or introduce another approval decision.
+- Agent requests are trusted subject to mechanical identity, schema, scope,
+  containment, quota and native-precondition checks. Do not add Rho approvals or
+  re-prompt for Agent-authorized operations. Extension isolation is a separate concern.
+- `rho-operation` owns registration, idempotency and commit discipline. Domain
+  handlers interpret observations and return CommitPlan. Adapters do not own
+  independent result databases or commit scientific truth.
+- `rho-host` is the composition root. CLI, browser and official MCP share its five
+  ports; edges must not contain a second scientific operation flow.
+- Use native identities and owner-specific preconditions instead of a global
+  scientific revision counter. A mutation succeeds only when authoritative state
+  agrees. Cancellation requests, confirmed cancellation and rollback are distinct.
+- Queries are bounded observations; they must not start a runtime or recover work
+  simply to read it. Preserve partial/uncertain outcomes and recovery material.
+- Preserve project containment and caller/principal visibility through every edge.
 
-- Keep scientific environment operations in their own broker-owned lane.
-  Do not reuse `approval_requests` for direct UI `renv` actions. Use a dedicated request table and dedicated dialog surface so direct UI and Agent approvals stay auditable and separable.
+## Studio design and package inspection
 
-- Always bind environment previews to a normalized project root.
-  When calling `rho_environment_evidence()` or `rho_environment_operation()`, pass the explicit normalized project root from the broker/store. Do not rely on `getwd()` silently matching the active project.
+- For substantial Studio layout or component redesign, develop the interaction
+  in Paper before implementation and obtain user review. Reuse approval already
+  given in the conversation; routine fixes within that scope need no new approval.
+- The approved Packages designs are in the Paper file **Rho · 工作台交互草稿**,
+  page **Packages · 查看体验设计评审**. Its link and specifications are in
+  `docs/RHO-DESIGN.md`, section 11. Read Paper JSX/computed styles for exact values;
+  use screenshots to verify the result, not as the only implementation input.
+- Give useful content priority: package purpose and version belong in the list;
+  full paths and provenance belong in inspection details. Check normal, wide and
+  constrained panels with representative real content before claiming completion.
+- Core Packages is read-only. Package installation and environment-management
+  decisions are reserved for a future separate plugin. Viewing must not install,
+  update, remove, load or attach packages, change library paths or test loadability.
+- The active Workspace owns package observations. Grouped counts, index pages and
+  copy details must share an observation and native session; label cached/partial
+  results while busy. Source belongs to each installed copy. Keep recorded source,
+  delivery repository and project links distinct; missing evidence stays unknown.
+  Do not infer installation history from current repos, a homepage or a path name.
 
-- In R, named atomic vectors are not lists.
-  `installed_versions[[missing_name]]` throws `subscript out of bounds` for a named character vector. Check membership first, then index.
+## Working loop
 
-- Size-limit tests by payload shape, not raw item count.
-  The canonical environment snapshot budget test became pathologically slow when it used thousands of rows. Prefer fewer records with longer strings so the byte-budget path is exercised without turning CI into wet cement.
+The following loop applies to tasks that change the repository. Read-only questions
+and reviews do not require edits, builds, status updates, or commits.
 
-- For Windows Rust tests in this repo, prepend the Rtools GNU toolchain path.
-  Use:
-  `$env:PATH="C:\\rtools45\\x86_64-w64-mingw32.static.posix\\bin;$env:PATH"`
-  before `cargo +stable-x86_64-pc-windows-gnu ...`
+1. Inspect `git status` and the relevant source/tests. Preserve unrelated changes.
+2. Run `node scripts/governance.mjs impact --changed-auto` for scoped L0/L1
+   suggestions. Select the closest affected check; this is not a run-all list.
+   Use `--phase milestone` for L2 acceptance or `--phase audit` only when a full
+   audit is explicitly due. Deferred checks are not passes.
+3. Make a coherent change and iterate with the closest useful test. Follow the
+   testing tiers and reporting rules in `docs/DEVELOPMENT.md` § Testing SOP; do not
+   rerun the entire workspace for every small edit.
+4. Run affected checks once behavior settles; inspect the diff and report only
+   commands that ran. Investigate a pre-change baseline when needed to attribute
+   a failure. Reuse passing results that cover the current changes; rerun only
+   when new changes, failures, or unresolved concerns justify it.
+5. Update a current document when it clarifies behavior or changes current focus.
+   Keep proposed, implemented and verified claims distinct.
 
-- Keep browser/mock mode in lockstep with new Tauri commands.
-  If a new desktop command changes Environment panel state, add a mock handler in `desktop/dist/app.js` in the same round. Otherwise UI review in browser mode quickly drifts away from the real contract.
+## Verification and iteration
 
-- Do not trust `msedge --dump-dom` blindly for local preview evidence on Windows.
-  In this repo it can return empty output even when the page rendered and screenshots succeeded. Keep a deterministic preview hook in the page, and treat screenshot readiness checks as the primary fallback when DOM capture goes mute.
+- Cargo invocations share `target/`: never run two Cargo build/test/check commands
+  in parallel. Type generation invokes Cargo too. Wait for completion; do not
+  poll background tests with sleeps.
+- Testing is tiered as documented in `docs/DEVELOPMENT.md` § Testing SOP: use
+  focused crate/test-file checks while iterating and affected-module or
+  cross-boundary checks once behavior settles. The full workspace suite is an
+  optional audit; run it only for an explicit release/user request.
+- Work in milestones organized as end-to-end user flows (Status work-order table).
+  Build the thinnest complete flow, including its view, first. Heavy plugin
+  acceptance (independent package builds, frozen-Host harnesses, source parity,
+  real-R fixtures, browser flows) runs once per milestone on settled source, after
+  the preflight in `docs/DEVELOPMENT.md` § Milestone cadence. Harness failures are
+  fixed and rerun for that stage; they are not status material. Keep acceptance
+  runners tracked in `scripts/`, not as one-off files under `target/`. Incremental
+  compilation does not limit `cargo test --workspace` to changed crates; that
+  command still executes every workspace test target.
+- Before heavy acceptance, fix the required cases, layouts, prerequisites and
+  completion condition; follow `docs/DEVELOPMENT.md` § Acceptance execution and
+  closure. Make independent flows selectable and able to prepare their own data.
+  Before each rerun, identify the failure, changed inputs, invalidated evidence
+  and smallest affected stage. A targeted pass does not automatically require
+  another full run; shared-boundary changes must still cover affected consumers.
+- Keep closure scope fixed. Non-blocking performance work and new coverage ideas
+  wait for a separate task. Add a check during closure only for a missing required
+  condition or a concrete unresolved risk; explain why existing evidence is
+  insufficient. Once required checks pass, inspect the diff and commit.
+- Iterate in the workspace with incremental builds. Independent packaging proves
+  the distribution boundary at a milestone; do not repeat it for each internal
+  module or commit. Agent acceptance requires explicit `--build` or `--package`;
+  reuse the retained package/receipt for subsequent stages. A stale receipt calls
+  for a new milestone build, not an automatic rebuild during iteration.
+- If a build or test waits before doing useful work, distinguish compilation,
+  executable startup and test-body time. Inspect the existing process/log once;
+  do not launch a second build, clear caches, or restart the Host to mask an
+  environment problem. Retain incomplete evidence and continue independent work.
+- A timed-out, ignored, skipped, or unavailable check is not a pass. Report the
+  exact command and status separately, retain evidence, and do not hide a timeout
+  behind a narrower rerun. An incomplete optional workspace audit does not block
+  normal completion when the affected checks have passed.
+- Rust changes: use `cargo test -p <crate> <filter> --locked` while iterating.
+- Contract DTO or generator changes: run `npm run generate --prefix ui` before
+  the client checks. Client changes: run `npm run build --prefix ui`, then
+  `npm run check --prefix ui`; ordinary client edits do not require type generation.
+- UI behavior: use `npm run test --prefix ui` and relevant isolated Chrome tests.
+  Build the current binary before `npm run test:browser --prefix ui`.
+- Real R checks use `node scripts/test-real-r.mjs`; skipped external checks are not
+  passes. Full checks and prerequisites are in `docs/DEVELOPMENT.md`.
+- For a real visual run, build the client and `cargo build --locked`, then open the
+  private workbench URL through an available browser connection. Development assets
+  support browser refresh without restarting R; see `docs/OPERATIONS.md`.
+- A client refresh cannot add a new Host capability. Before replacing a running
+  Host, inspect its current work and session state and respect existing restart
+  authorization. Preserve synchronized drafts/layout/history; R memory does not
+  survive restart. Do not reuse an old PID, port or token without checking it.
+- Navigate private Workbench URLs directly. If using a native address bar, paste
+  the complete URL and verify it before Enter so it cannot become a web search.
+  Never put launch tokens in tracked files or handoff documents.
 
-- For project skill discovery, validate the `.rho/skills` root itself, not just manifest and referenced files.
-  Checking only `manifest.json` and relative entries still leaves a hole if `.rho` or `.rho/skills` is a symlink into content outside the project root.
+## Implementation details worth preserving
 
-## Windows installer packaging
+- Pass the normalized Host/project root to R environment helpers; do not infer it
+  from the process working directory.
+- In R, test name membership before indexing a named atomic vector.
+- The native R adapter uses `vendor/jet-core`. Maintain it through the ordered
+  patches in `patches/jet`; run `node scripts/vendor-jet.mjs check` after edits.
+  Preserve upstream notices and the pinned-source/update workflow in its README.
+- Rust contracts generate TypeScript DTOs through ts-rs. Keep generated bindings
+  and embedded assets current; use the shared Host ports.
+- Studio starts in `ui/src/app.ts`; tokens live in `ui/src/style.css`.
+  `crates/workbench/assets/` is generated. The entry mounts generic plugin windows;
+  scientific views and document models belong to ordinary plugins through the
+  public SDK. Preserve document state across layout changes.
+- Product-authored UI uses English. Preserve Unicode user content and native output.
+- Skills use standard `.agents/skills` sources and explicit host-provided references.
+  Validate each source root and package/resource symlink containment; project links
+  cannot expand the project read scope. Do not scan other products' private catalogs.
+- Windows GNU Rust commands require Rtools45 at the front of PATH.
 
-Trigger phrases: "打包一下安装包", "打包安装包", "build installer", "package the installer"
+## Parallel work and distribution
 
-When the user asks to package the installer, follow this workflow without asking questions:
+Use the primary checkout on `main` for routine work. Temporary worktrees are for
+genuinely independent work; integrate their changes and remove them when finished.
+Register them with `scripts/dev-lanes.mjs`: `start --id NAME --own 'path/**'`,
+`check --id NAME --changed-auto`, and `finish --id NAME`.
+Keep real workbench runs in the primary checkout.
+Before leaving unfinished repository changes to switch to unrelated work, preserve
+those changes in a clearly named WIP commit. Answering a question during ongoing
+work is not a task switch.
 
-### 1. Pre-flight checks
+Distribution requires an explicit task and a verified packaging path. Report exact
+commit, artifacts, sizes, hashes and executed checks. Build, signing, installation
+and publication are separate outcomes; do not install or publish automatically.
+Use `docs/RELEASE.md` for the current operator map.
 
-```powershell
-# Verify JS syntax
-node --check desktop\dist\app.js
+## Session handoff
 
-# Verify Ark runtime is bootstrapped
-Test-Path .rho\runtime\ark-0.1.252\ark.exe
-```
-
-If Ark is missing, run `powershell -ExecutionPolicy Bypass -File scripts\bootstrap-ark-windows.ps1` first.
-Do not run R tests or Rust tests during packaging — the build script handles its own compilation and these tests are for development, not packaging.
-
-### 2. Build
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts\build-windows-installer.ps1
-```
-
-This script:
-- selects the GNU Rust toolchain (`stable-x86_64-pc-windows-gnu`) and Rtools45 linker
-- copies Ark runtime resources into the Tauri resource tree
-- runs `npx -y "@tauri-apps/cli@2.11.4" build` from `desktop\src-tauri`
-- produces the NSIS installer
-
-### 3. Report
-
-After the build succeeds, report the two output files with path, size (MB), and SHA-256:
-
-```powershell
-Get-ChildItem target\release\rho-desktop.exe, target\release\bundle\nsis\Rho_*.exe |
-    Select-Object Name, @{N='SizeMB';E={[math]::Round($_.Length/1MB,2)}}
-Get-FileHash target\release\rho-desktop.exe -Algorithm SHA256
-Get-FileHash target\release\bundle\nsis\Rho_*.exe -Algorithm SHA256
-```
-
-### Notes
-
-- The installer is unsigned. Windows SmartScreen will show a warning.
-- Do NOT auto-install the built package. Just produce it and report the paths.
-- Do NOT push the built artifacts. They are in `.gitignore`.
+When a task changes the repository, commit coherent authorized work and check
+`git status` before ending. Update `docs/STATUS.md` only when current behavior,
+verification conclusions, focus, or unresolved work changes; include relevant
+checks and restart guidance where useful. Do not add a status entry merely to
+record a completed edit or read-only review. Keep transient process details out.
+Update Status at milestone boundaries, not per commit; keep it under about 300
+lines and fold verification-only commits into the change they verify.
+The next session should read that page and inspect the live processes before
+starting another Host for the same project.

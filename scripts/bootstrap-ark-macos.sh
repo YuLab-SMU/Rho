@@ -6,16 +6,16 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 if [[ "$(uname -m)" != "arm64" ]]; then
-  echo "MAC2 supports Apple Silicon only" >&2
+  echo "This Ark bootstrap supports Apple Silicon only" >&2
   exit 1
 fi
 
 RHO_SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RHO_REPOSITORY_ROOT="$(cd "$RHO_SCRIPT_ROOT/.." && pwd)"
 RHO_MANIFEST="$RHO_REPOSITORY_ROOT/runtime/ark.json"
-RHO_RUNTIME_ROOT="${RHO_ARK_RUNTIME_ROOT:-$RHO_REPOSITORY_ROOT/.rho/runtime}"
-RHO_SIDECAR="${RHO_ARK_SIDECAR:-$RHO_REPOSITORY_ROOT/desktop/src-tauri/binaries/ark-aarch64-apple-darwin}"
-RHO_LICENSE_ROOT="${RHO_ARK_LICENSE_ROOT:-$RHO_REPOSITORY_ROOT/desktop/resources/runtime}"
+RHO_RUNTIME_ROOT="${RHO_ARK_RUNTIME_ROOT:-$RHO_REPOSITORY_ROOT/target/runtime}"
+RHO_SIDECAR="${RHO_ARK_SIDECAR:-$RHO_RUNTIME_ROOT/bin/ark}"
+RHO_LICENSE_ROOT="${RHO_ARK_LICENSE_ROOT:-$RHO_RUNTIME_ROOT/notices/ark}"
 
 read_manifest() {
   node -e '

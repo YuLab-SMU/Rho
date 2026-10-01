@@ -1,0 +1,9 @@
+{
+  "name": "@rho/r-protocol",
+  "version": "0.1.0",
+  "description": "Public R plugin data contracts and JSON Schemas",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "types": "index.d.ts",
+  "files": ["index.d.ts", "types", "schema", "README.md"]
+}

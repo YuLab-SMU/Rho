@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReadFileArguments",
+  "type": "object",
+  "properties": {
+    "expected_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "limit_bytes": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 32768,
+      "maximum": 65536,
+      "minimum": 1
+    },
+    "offset": {
+      "type": "integer",
+      "format": "uint64",
+      "default": 0,
+      "minimum": 0
+    },
+    "path": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "path"
+  ]
+}

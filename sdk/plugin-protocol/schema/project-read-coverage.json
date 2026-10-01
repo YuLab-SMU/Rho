@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ProjectReadCoverage",
+  "description": "Current metadata coverage, not a lease or a claim that materials are unused.\nRequires project.references.read in addition to the owner's normal read scope.\nNo foreign identities, counts, configuration or scientific data are disclosed.",
+  "type": "object",
+  "properties": {
+    "all_visible": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "all_visible"
+  ]
+}

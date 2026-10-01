@@ -1,0 +1,2 @@
+Rho public plugin protocol 0.1.0 and public UI SDK 0.1.0: exact sources included under public/ in the assembled package.
+TypeScript 6.0.3: existing build tool, selected explicitly; no runtime dependencies or downloads.

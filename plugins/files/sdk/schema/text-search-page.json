@@ -1,0 +1,291 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SearchTextPage",
+  "type": "object",
+  "properties": {
+    "complete": {
+      "description": "Pagination is exhausted. Skipped content remains unavailable and is not claimed as read.",
+      "type": "boolean"
+    },
+    "consistency": {
+      "type": "string"
+    },
+    "continuation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SearchTextCursor"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "limit_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "matches": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TextMatch"
+      }
+    },
+    "scanned_bytes": {
+      "description": "Bytes examined for literal matches, distinct from full-file identity verification.",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "scanned_entries": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "skipped": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TextSkip"
+      }
+    },
+    "verified_bytes": {
+      "description": "Bytes of successfully loaded files verified on this page, including cached reads.",
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "matches",
+    "skipped",
+    "scanned_entries",
+    "scanned_bytes",
+    "verified_bytes",
+    "complete",
+    "consistency"
+  ],
+  "$defs": {
+    "DirectoryScanFrame": {
+      "type": "object",
+      "properties": {
+        "after_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ]
+    },
+    "ReadTextArguments": {
+      "type": "object",
+      "properties": {
+        "continuation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextCursor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "expected_sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "limit_lines": {
+          "type": "integer",
+          "format": "uint32",
+          "default": 200,
+          "maximum": 200,
+          "minimum": 1
+        },
+        "path": {
+          "type": "string"
+        },
+        "start_line": {
+          "type": "integer",
+          "format": "uint64",
+          "default": 1,
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ]
+    },
+    "SearchTextCursor": {
+      "type": "object",
+      "properties": {
+        "active_file": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TextCursor"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "directories": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DirectoryScanFrame"
+          }
+        },
+        "project": {
+          "type": "string"
+        },
+        "query_sha256": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "query_sha256",
+        "directories"
+      ]
+    },
+    "TextCursor": {
+      "type": "object",
+      "properties": {
+        "byte_offset": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "file": {
+          "$ref": "#/$defs/TextIdentity"
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "project": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "file",
+        "byte_offset",
+        "line"
+      ]
+    },
+    "TextIdentity": {
+      "type": "object",
+      "properties": {
+        "byte_size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "encoding": {
+          "type": "string"
+        },
+        "native_identity": {
+          "description": "Native file identity, including replacement/change metadata; not an authorization token.",
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "native_identity",
+        "byte_size",
+        "encoding"
+      ]
+    },
+    "TextMatch": {
+      "type": "object",
+      "properties": {
+        "byte_end": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "byte_start": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "file": {
+          "$ref": "#/$defs/TextIdentity"
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "read": {
+          "$ref": "#/$defs/ReadTextArguments"
+        },
+        "snippet": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "line",
+        "byte_start",
+        "byte_end",
+        "snippet",
+        "read"
+      ]
+    },
+    "TextSkip": {
+      "type": "object",
+      "properties": {
+        "detail": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "reason": {
+          "$ref": "#/$defs/TextSkipReason"
+        }
+      },
+      "required": [
+        "path",
+        "reason",
+        "detail"
+      ]
+    },
+    "TextSkipReason": {
+      "type": "string",
+      "enum": [
+        "binary",
+        "invalid_encoding",
+        "oversize",
+        "unreadable",
+        "symlink",
+        "unsupported",
+        "invalid_path"
+      ]
+    }
+  }
+}

@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OpenPluginWindowView",
+  "description": "Create an exact view and select it in one window's presentation atomically.",
+  "type": "object",
+  "properties": {
+    "expected_layout_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "group": {
+      "description": "Existing tab group. None creates a group only in an entirely empty window.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "view": {
+      "$ref": "#/$defs/OpenPluginView"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "view",
+    "expected_layout_version"
+  ],
+  "$defs": {
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "OpenPluginView": {
+      "type": "object",
+      "properties": {
+        "configuration": true,
+        "contribution": {
+          "type": "string"
+        },
+        "instance": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "resource": {
+          "description": "Immutable resource context; it confers no resource-read authority.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ResourceReference"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": true,
+        "window": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "contribution",
+        "window",
+        "configuration",
+        "state"
+      ]
+    },
+    "ResourceReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "resource": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "resource",
+        "digest",
+        "media_type",
+        "bytes"
+      ]
+    }
+  }
+}

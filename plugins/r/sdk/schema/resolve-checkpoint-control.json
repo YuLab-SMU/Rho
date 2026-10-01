@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ResolveRCheckpointControl",
+  "description": "Version 2 of pin/delete resolves one terminal version-1 request. Version 1\nreaders reject that control version instead of silently ignoring a new fact.",
+  "type": "object",
+  "properties": {
+    "decision": {
+      "$ref": "#/$defs/RCheckpointControlDecision"
+    },
+    "expected_attempt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "reference": {
+      "$ref": "#/$defs/RCheckpointReference"
+    },
+    "source_operation_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "reference",
+    "source_operation_id",
+    "decision"
+  ],
+  "$defs": {
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "RCheckpointControlDecision": {
+      "type": "string",
+      "enum": [
+        "apply",
+        "discard"
+      ]
+    },
+    "RCheckpointReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/InstanceRef"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "provider",
+        "operation_id",
+        "digest",
+        "bytes"
+      ]
+    }
+  }
+}

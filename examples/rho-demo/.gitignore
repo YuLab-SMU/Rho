@@ -1,0 +1,6 @@
+data/processed/*
+!data/processed/.gitkeep
+output/figures/*
+!output/figures/.gitkeep
+output/rho_demo_report.html
+/.rho/

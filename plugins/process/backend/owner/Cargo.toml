@@ -1,0 +1,17 @@
+[package]
+name = "rho-process-owner"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "AGPL-3.0-only"
+repository = "https://github.com/YuLab-SMU/Rho"
+
+[dependencies]
+rho-process-api = { path = "../../api" }
+rho-process-engine = { path = "../../../../crates/process-engine" }
+rho-plugin-protocol = { path = "../../../../crates/plugin-protocol" }
+tokio = { version = "1.0", features = ["rt", "process", "sync", "time"] }
+sysinfo = { version = "0.39.6", default-features = false, features = ["system"] }
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", default-features = false }

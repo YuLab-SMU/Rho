@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReconnectPluginView",
+  "description": "Reattach the retained view of an already active instance without creating a\nnew document, changing its state or replaying an earlier invocation.",
+  "type": "object",
+  "properties": {
+    "expected_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "view": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "view",
+    "expected_version"
+  ]
+}

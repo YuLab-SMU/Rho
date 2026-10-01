@@ -1,0 +1,313 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApplicationCommandRequest",
+  "type": "object",
+  "properties": {
+    "action": {
+      "$ref": "#/$defs/ApplicationAction"
+    },
+    "execution_target": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ApplicationExecutionTarget"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "window": {
+      "$ref": "#/$defs/AgentControllerRef"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "window",
+    "request_id",
+    "action"
+  ],
+  "$defs": {
+    "AgentControllerRef": {
+      "description": "Correlation identity supplied by the Agent owner after admission. This value\nis not an authorization credential and cannot grant access to a Host window.",
+      "type": "object",
+      "properties": {
+        "incarnation": {
+          "type": "string"
+        },
+        "window_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "window_id",
+        "incarnation"
+      ]
+    },
+    "ApplicationAction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "expected_context_version": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "open_document"
+            },
+            "path": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "path",
+            "expected_context_version"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "expected_context_version": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "create_document"
+            },
+            "path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "text",
+            "expected_context_version"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "document": {
+              "type": "object",
+              "properties": {
+                "document_id": {
+                  "type": "string"
+                },
+                "document_version": {
+                  "type": "string"
+                },
+                "selection_version": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "document_id",
+                "document_version",
+                "selection_version"
+              ]
+            },
+            "edits": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ApplicationTextEdit"
+              }
+            },
+            "kind": {
+              "type": "string",
+              "const": "edit_document"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "document",
+            "edits"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "document": {
+              "type": "object",
+              "properties": {
+                "document_id": {
+                  "type": "string"
+                },
+                "document_version": {
+                  "type": "string"
+                },
+                "selection_version": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "document_id",
+                "document_version",
+                "selection_version"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "const": "save"
+            },
+            "target_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "document"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "document": {
+              "type": "object",
+              "properties": {
+                "document_id": {
+                  "type": "string"
+                },
+                "document_version": {
+                  "type": "string"
+                },
+                "selection_version": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "document_id",
+                "document_version",
+                "selection_version"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "const": "run_selection"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "document"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "document": {
+              "type": "object",
+              "properties": {
+                "document_id": {
+                  "type": "string"
+                },
+                "document_version": {
+                  "type": "string"
+                },
+                "selection_version": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "document_id",
+                "document_version",
+                "selection_version"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "const": "run_file"
+            },
+            "target_path": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "document"
+          ]
+        },
+        {
+          "description": "Unknown native actions can be observed as unsupported, never admitted.",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "unsupported"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    },
+    "ApplicationExecutionTarget": {
+      "type": "object",
+      "properties": {
+        "native_session_id": {
+          "type": "string"
+        },
+        "workspace_instance_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "workspace_instance_id",
+        "native_session_id"
+      ]
+    },
+    "ApplicationTextEdit": {
+      "type": "object",
+      "properties": {
+        "from": {
+          "description": "Zero-based UTF-16 offsets in normalized editor content, excluding BOM.",
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "insert": {
+          "type": "string"
+        },
+        "to": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to",
+        "insert"
+      ]
+    }
+  }
+}

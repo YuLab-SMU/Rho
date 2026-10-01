@@ -1,0 +1,1292 @@
+{
+  "protocol_version": 1,
+  "id": "org.rho.editor",
+  "name": "Editor",
+  "version": "0.1.0",
+  "description": "Captured text documents, verified project files and synchronized drafts",
+  "license": "AGPL-3.0-only",
+  "source": {
+    "files": [
+      "src/main.ts"
+    ],
+    "lockfiles": [
+      "Cargo.lock",
+      "dependencies.lock"
+    ],
+    "build_instructions": "BUILD.md",
+    "build": {
+      "command": [
+        "node",
+        "build.mjs"
+      ]
+    }
+  },
+  "dependencies": {},
+  "requires": [
+    {
+      "capability": {
+        "id": "documents.list",
+        "version": 1
+      },
+      "scopes": [
+        "documents.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "workspace.paths",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "files.snapshot",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "files.read_file",
+        "version": 1
+      },
+      "scopes": [
+        "project.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "files.apply_patch",
+        "version": 1
+      },
+      "scopes": [
+        "project.read",
+        "project.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "documents.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "documents.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "documents.read",
+        "version": 1
+      },
+      "scopes": [
+        "documents.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "documents.stage",
+        "version": 1
+      },
+      "scopes": [
+        "documents.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "documents.save",
+        "version": 1
+      },
+      "scopes": [
+        "documents.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.get",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.list_recent",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instances",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instance",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "windows.layout",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "windows.open_view",
+        "version": 1
+      },
+      "scopes": [
+        "application.control",
+        "application.read",
+        "documents.read",
+        "documents.write",
+        "environment.read",
+        "environment.write",
+        "operation.read",
+        "plugins.read",
+        "plugins.run",
+        "plugins.write",
+        "process.run_local",
+        "project.read",
+        "project.references.read",
+        "project.write",
+        "remote.execute",
+        "resources.read",
+        "skill.read",
+        "slurm.read",
+        "slurm.write",
+        "workspace.read",
+        "workspace.run_r"
+      ]
+    },
+    {
+      "capability": {
+        "id": "editor.context.preview",
+        "version": 1
+      },
+      "scopes": [
+        "documents.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "annotations.read",
+        "version": 1
+      },
+      "scopes": [
+        "application.read",
+        "plugins.read"
+      ]
+    }
+  ],
+  "optional_requires": [
+    {
+      "capability": {
+        "id": "r.session",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.execute",
+        "version": 2
+      },
+      "scopes": [
+        "workspace.run_r"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.format",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.run_r"
+      ]
+    },
+    {
+      "capability": {
+        "id": "resources.read",
+        "version": 1
+      },
+      "scopes": [
+        "resources.read"
+      ]
+    }
+  ],
+  "views": [
+    {
+      "id": "editor",
+      "title": "Editor",
+      "entrypoint": "dist/index.html",
+      "state_schema": {
+        "type": "object"
+      },
+      "configuration_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "byte_size": {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "const": "regular"
+                  },
+                  "mode": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "modified_at_ns": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^sha256:[a-f0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "path",
+                  "kind",
+                  "sha256",
+                  "byte_size"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preferences": {
+            "additionalProperties": false,
+            "default": {
+              "font_size": 14,
+              "indent_width": 4
+            },
+            "properties": {
+              "font_size": {
+                "enum": [
+                  12,
+                  14,
+                  16,
+                  18
+                ],
+                "type": "integer"
+              },
+              "indent_width": {
+                "enum": [
+                  2,
+                  4,
+                  8
+                ],
+                "type": "integer"
+              }
+            },
+            "required": [
+              "font_size",
+              "indent_width"
+            ],
+            "type": "object"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "artifact": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "instance": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "plugin": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "plugin",
+                  "instance",
+                  "revision",
+                  "artifact"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session_selection": {
+            "default": false,
+            "type": "boolean"
+          },
+          "source": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "instance": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "plugin": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "revision": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "plugin",
+              "instance",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "source",
+          "file"
+        ],
+        "type": "object"
+      },
+      "resource_kinds": []
+    }
+  ],
+  "capabilities": [
+    {
+      "capability": {
+        "id": "editor.context.search",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "editor.context.search",
+      "description": "Observe synchronized Editor context at its original source version. Does not read native files, start R, execute code, or recover work.",
+      "input_schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "description": "Opaque owner cursor; continuation does not imply a frozen multi-page read."
+          },
+          "limit": {
+            "format": "uint16",
+            "maximum": 20,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "text": {
+            "description": "Empty text lists available sources. Owners document which fields match.",
+            "type": "string"
+          },
+          "window": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "window",
+          "text",
+          "limit"
+        ],
+        "title": "ContextSearch",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "after": null,
+          "limit": 20,
+          "text": "",
+          "window": "window-example"
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "ContextItem": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "kind": {
+                "description": "A presentation hint supplied by the owner, not a closed core view enum.",
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/ContextReference"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "reference",
+              "title",
+              "description",
+              "kind"
+            ],
+            "type": "object"
+          },
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/ContextItem"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
+          "next": true,
+          "notices": {
+            "description": "Explain partial, cached or unavailable observations without concealing\nthem as empty results. Completeness also belongs in the query envelope.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "type": "array"
+          }
+        },
+        "required": [
+          "items",
+          "notices"
+        ],
+        "title": "ContextPage",
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "documents.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "editor.context.preview",
+        "version": 1
+      },
+      "kind": "query",
+      "title": "editor.context.preview",
+      "description": "Observe synchronized Editor context at its original source version. Does not read native files, start R, execute code, or recover work.",
+      "input_schema": {
+        "$defs": {
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "inclusion": {
+            "oneOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "document"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "title": "Synchronized document",
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "selection"
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "title": "Captured selection",
+                "type": "object"
+              }
+            ]
+          },
+          "max_bytes": {
+            "format": "uint32",
+            "maximum": 65536,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "reference": {
+            "$ref": "#/$defs/ContextReference"
+          }
+        },
+        "required": [
+          "reference",
+          "inclusion",
+          "max_bytes"
+        ],
+        "title": "PreviewContext",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "inclusion": {
+            "kind": "document"
+          },
+          "max_bytes": 16384,
+          "reference": {
+            "contribution": "documents",
+            "provider": {
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "instance": "editor-example",
+              "plugin": "org.rho.editor",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "selector": {
+              "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "draft": "draft-example",
+              "version": 1
+            },
+            "window": "window-example"
+          }
+        }
+      ],
+      "output_schema": {
+        "$defs": {
+          "ContextItem": {
+            "additionalProperties": false,
+            "properties": {
+              "description": {
+                "type": "string"
+              },
+              "kind": {
+                "description": "A presentation hint supplied by the owner, not a closed core view enum.",
+                "type": "string"
+              },
+              "reference": {
+                "$ref": "#/$defs/ContextReference"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "reference",
+              "title",
+              "description",
+              "kind"
+            ],
+            "type": "object"
+          },
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          },
+          "ResourceReference": {
+            "additionalProperties": false,
+            "properties": {
+              "bytes": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "media_type": {
+                "type": "string"
+              },
+              "owner": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "resource": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "owner",
+              "resource",
+              "digest",
+              "media_type",
+              "bytes"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "description": "Owner-defined bounded presentation data. Large artifacts use resources."
+          },
+          "item": {
+            "$ref": "#/$defs/ContextItem"
+          },
+          "resources": {
+            "items": {
+              "$ref": "#/$defs/ResourceReference"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          "text": {
+            "description": "Plain text, never executable markup. Truncation must end at a UTF-8 boundary.",
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "item",
+          "text",
+          "truncated",
+          "data",
+          "resources"
+        ],
+        "title": "ContextPreview",
+        "type": "object"
+      },
+      "recovery_schema": true,
+      "required_scopes": [
+        "documents.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "editor.edit",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "editor.edit",
+      "description": "Replace the exact synchronized Editor draft with complete text (32 KiB maximum), preserving its file base and line endings. CAS rejects concurrent edits. Does not save the file or run code.",
+      "input_schema": {
+        "$defs": {
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "default": null,
+            "description": "New complete text for edit; omitted for save/run.",
+            "maxLength": 32768,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expected_session": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "default": null,
+            "description": "Optional project-relative destination for an untitled document or Save As.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reference": {
+            "$ref": "#/$defs/ContextReference"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Exact R provider/session captured by the Agent adapter, never discovered here."
+          }
+        },
+        "required": [
+          "reference"
+        ],
+        "title": "Input",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "reference": {
+            "contribution": "documents",
+            "provider": {
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "instance": "editor-example",
+              "plugin": "org.rho.editor",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "selector": {
+              "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "draft": "draft-example",
+              "version": 1
+            },
+            "window": "window-example"
+          }
+        }
+      ],
+      "output_schema": true,
+      "recovery_schema": true,
+      "required_scopes": [
+        "documents.read",
+        "documents.write",
+        "operation.read"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "editor.save",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "editor.save",
+      "description": "Save an exact synchronized Editor document through its captured Files provider and file digest. An optional new path must be absent. Returns the updated reference and original child operations; a draft conflict after a file save is partial work, not rollback.",
+      "input_schema": {
+        "$defs": {
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "default": null,
+            "description": "New complete text for edit; omitted for save/run.",
+            "maxLength": 32768,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expected_session": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "default": null,
+            "description": "Optional project-relative destination for an untitled document or Save As.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reference": {
+            "$ref": "#/$defs/ContextReference"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Exact R provider/session captured by the Agent adapter, never discovered here."
+          }
+        },
+        "required": [
+          "reference"
+        ],
+        "title": "Input",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "reference": {
+            "contribution": "documents",
+            "provider": {
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "instance": "editor-example",
+              "plugin": "org.rho.editor",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "selector": {
+              "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "draft": "draft-example",
+              "version": 1
+            },
+            "window": "window-example"
+          }
+        }
+      ],
+      "output_schema": true,
+      "recovery_schema": true,
+      "required_scopes": [
+        "documents.read",
+        "documents.write",
+        "operation.read",
+        "project.read",
+        "project.write"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    },
+    {
+      "capability": {
+        "id": "editor.run",
+        "version": 1
+      },
+      "kind": "operation",
+      "title": "editor.run",
+      "description": "Run the exact synchronized document through its captured R provider/session. Never accepts replacement code or starts R. Returns the original code digest, document reference and native execution result.",
+      "input_schema": {
+        "$defs": {
+          "ContextReference": {
+            "additionalProperties": false,
+            "properties": {
+              "contribution": {
+                "type": "string"
+              },
+              "provider": {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              "selector": {
+                "description": "Owner-defined identity and observed native version/digest. Preview must\nrevalidate these against the original source; never silently refresh them."
+              },
+              "window": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "provider",
+              "contribution",
+              "window",
+              "selector"
+            ],
+            "type": "object"
+          },
+          "InstanceRef": {
+            "additionalProperties": false,
+            "properties": {
+              "artifact": {
+                "type": "string"
+              },
+              "instance": {
+                "type": "string"
+              },
+              "plugin": {
+                "type": "string"
+              },
+              "revision": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "type": "object"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "default": null,
+            "description": "New complete text for edit; omitted for save/run.",
+            "maxLength": 32768,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expected_session": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "default": null,
+            "description": "Optional project-relative destination for an untitled document or Save As.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reference": {
+            "$ref": "#/$defs/ContextReference"
+          },
+          "runtime": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/InstanceRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Exact R provider/session captured by the Agent adapter, never discovered here."
+          }
+        },
+        "required": [
+          "reference"
+        ],
+        "title": "Input",
+        "type": "object"
+      },
+      "examples": [
+        {
+          "reference": {
+            "contribution": "documents",
+            "provider": {
+              "artifact": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "instance": "editor-example",
+              "plugin": "org.rho.editor",
+              "revision": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "selector": {
+              "digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "draft": "draft-example",
+              "version": 1
+            },
+            "window": "window-example"
+          }
+        }
+      ],
+      "output_schema": true,
+      "recovery_schema": true,
+      "required_scopes": [
+        "documents.read",
+        "documents.write",
+        "operation.read",
+        "workspace.run_r"
+      ],
+      "effects": [],
+      "cancellation": "unsupported",
+      "preflight": null
+    }
+  ],
+  "contexts": [
+    {
+      "id": "documents",
+      "title": "Editor documents",
+      "search": {
+        "id": "editor.context.search",
+        "version": 1
+      },
+      "preview": {
+        "id": "editor.context.preview",
+        "version": 1
+      }
+    }
+  ],
+  "backend": {
+    "executable": "dist/rho-editor-backend",
+    "arguments": []
+  },
+  "configuration_schema": {
+    "additionalProperties": false,
+    "type": "object"
+  },
+  "default_configuration": {}
+}

@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SaveDocumentDraft",
+  "type": "object",
+  "properties": {
+    "content": {
+      "$ref": "#/$defs/DraftContent"
+    },
+    "draft": {
+      "type": "string"
+    },
+    "expected_version": {
+      "description": "None creates a new identity; Some updates only that existing version.",
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "minimum": 0
+    },
+    "metadata": true,
+    "source": {
+      "$ref": "#/$defs/DraftSource"
+    },
+    "upload": {
+      "type": "string"
+    },
+    "window": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "window",
+    "draft",
+    "upload",
+    "source",
+    "content",
+    "metadata"
+  ],
+  "$defs": {
+    "DraftChunkReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "digest",
+        "bytes"
+      ]
+    },
+    "DraftContent": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "chunks": {
+          "description": "Canonical 64 KiB chunks, except for the final chunk. Empty content has\nno chunks. Full content and every chunk are verified before publication.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DraftChunkReference"
+          }
+        },
+        "digest": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "digest",
+        "bytes",
+        "chunks"
+      ]
+    },
+    "DraftSource": {
+      "type": "object",
+      "properties": {
+        "contribution": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "contribution"
+      ]
+    }
+  }
+}

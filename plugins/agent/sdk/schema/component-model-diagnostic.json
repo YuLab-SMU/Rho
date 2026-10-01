@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ComponentModelDiagnostic",
+  "type": "object",
+  "properties": {
+    "connection_digest": {
+      "type": "string"
+    },
+    "created_at_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "detail": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "kind": {
+      "$ref": "#/$defs/ComponentModelTestKind"
+    },
+    "model": {
+      "$ref": "#/$defs/ComponentModelConnection"
+    },
+    "model_settings_version": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/ComponentModelTestState"
+    },
+    "updated_at_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "version": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    },
+    "window": {
+      "$ref": "#/$defs/AgentControllerRef"
+    }
+  },
+  "required": [
+    "request_id",
+    "version",
+    "window",
+    "model_settings_version",
+    "connection_digest",
+    "model",
+    "kind",
+    "state",
+    "created_at_ms",
+    "updated_at_ms"
+  ],
+  "$defs": {
+    "AgentControllerRef": {
+      "description": "Correlation identity supplied by the Agent owner after admission. This value\nis not an authorization credential and cannot grant access to a Host window.",
+      "type": "object",
+      "properties": {
+        "incarnation": {
+          "type": "string"
+        },
+        "window_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "window_id",
+        "incarnation"
+      ]
+    },
+    "ComponentCredentialRef": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "environment"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "name"
+          ]
+        },
+        {
+          "description": "Retained references from Hosts that used memory-only credentials.",
+          "type": "object",
+          "properties": {
+            "key_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "session"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "key_id"
+          ]
+        },
+        {
+          "description": "Immutable version in the user-local Rho configuration file.",
+          "type": "object",
+          "properties": {
+            "key_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "local_file"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "key_id"
+          ]
+        }
+      ]
+    },
+    "ComponentModelConnection": {
+      "type": "object",
+      "properties": {
+        "base_url": {
+          "type": "string"
+        },
+        "credential": {
+          "$ref": "#/$defs/ComponentCredentialRef"
+        },
+        "model": {
+          "type": "string"
+        },
+        "protocol": {
+          "$ref": "#/$defs/ComponentModelProtocol"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "protocol",
+        "base_url",
+        "model",
+        "credential"
+      ]
+    },
+    "ComponentModelProtocol": {
+      "type": "string",
+      "enum": [
+        "anthropic",
+        "openai_completions"
+      ]
+    },
+    "ComponentModelTestKind": {
+      "type": "string",
+      "enum": [
+        "connection",
+        "images"
+      ]
+    },
+    "ComponentModelTestState": {
+      "type": "string",
+      "enum": [
+        "queued",
+        "running",
+        "passed",
+        "failed",
+        "interrupted"
+      ]
+    }
+  }
+}

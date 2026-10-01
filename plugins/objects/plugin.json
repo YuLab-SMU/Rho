@@ -1,0 +1,545 @@
+{
+  "protocol_version": 1,
+  "id": "org.rho.objects",
+  "name": "Objects",
+  "version": "0.1.0",
+  "description": "Read-only R object directory, progressive inspectors and explicit object actions.",
+  "license": "AGPL-3.0-only",
+  "source": {
+    "files": [
+      "README.md",
+      "build.mjs",
+      "index.html",
+      "package.json",
+      "src/actions.ts",
+      "src/agent-source.ts",
+      "src/connection.ts",
+      "src/main.tsx",
+      "src/object-fields.ts",
+      "src/object-values.ts",
+      "src/object-vector.ts",
+      "src/objects.ts",
+      "src/resource-ports.ts",
+      "src/shared/model.ts",
+      "src/shared/ports.ts",
+      "src/style.css",
+      "src/styles.d.ts",
+      "src/view-services.tsx",
+      "src/views/object-common.tsx",
+      "src/views/object-field-controls.tsx",
+      "src/views/object-grid.tsx",
+      "src/views/object-panel.css",
+      "src/views/object-panel.tsx",
+      "src/views/object-summary.tsx",
+      "src/views/object-vector-view.tsx",
+      "tests/actions.test.ts",
+      "tests/agent-source.test.ts",
+      "tests/connection.test.ts",
+      "tests/object-copy.test.tsx",
+      "tests/object-demand.test.tsx",
+      "tests/object-fields.test.ts",
+      "tests/object-values.test.ts",
+      "tests/object-vector.test.ts",
+      "tests/objects.test.ts",
+      "tsconfig.json"
+    ],
+    "lockfiles": [
+      "dependencies.lock"
+    ],
+    "build_instructions": "BUILD.md",
+    "build": {
+      "command": [
+        "node",
+        "build.mjs"
+      ]
+    }
+  },
+  "dependencies": {},
+  "requires": [
+    {
+      "capability": {
+        "id": "r.inspection_state",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.list_objects",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.observe_object",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.read_object",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.execute",
+        "version": 2
+      },
+      "scopes": [
+        "workspace.run_r"
+      ]
+    },
+    {
+      "capability": {
+        "id": "windows.layout",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "windows.open_view",
+        "version": 1
+      },
+      "scopes": [
+        "application.control",
+        "application.read",
+        "documents.read",
+        "documents.write",
+        "environment.read",
+        "environment.write",
+        "operation.read",
+        "plugins.read",
+        "plugins.run",
+        "plugins.write",
+        "process.run_local",
+        "project.read",
+        "project.references.read",
+        "project.write",
+        "remote.execute",
+        "resources.read",
+        "skill.read",
+        "slurm.read",
+        "slurm.write",
+        "workspace.read",
+        "workspace.run_r"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.get",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.list_recent",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instances",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instance",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "r.context.objects.preview",
+        "version": 1
+      },
+      "scopes": [
+        "workspace.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "annotations.read",
+        "version": 1
+      },
+      "scopes": [
+        "application.read",
+        "plugins.read"
+      ]
+    }
+  ],
+  "views": [
+    {
+      "id": "objects",
+      "title": "Objects",
+      "entrypoint": "dist/index.html",
+      "state_schema": {
+        "type": "object",
+        "properties": {
+          "nativeSession": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "objects": {
+            "type": "object"
+          },
+          "actions": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "agent": {
+            "type": "object",
+            "required": [
+              "input",
+              "pending",
+              "opened"
+            ],
+            "properties": {
+              "input": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "pending": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "opened": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "annotation": {
+                "type": "object",
+                "required": [
+                  "source",
+                  "pending",
+                  "opened"
+                ],
+                "properties": {
+                  "source": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "pending": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "opened": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "configuration_schema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "object",
+            "properties": {
+              "instance": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              },
+              "plugin": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "artifact": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "additionalProperties": false
+          },
+          "object_group": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9._:/-]+$"
+          }
+        },
+        "required": [
+          "source",
+          "object_group"
+        ],
+        "additionalProperties": false
+      },
+      "resource_kinds": []
+    },
+    {
+      "id": "object",
+      "title": "Object",
+      "entrypoint": "dist/index.html",
+      "state_schema": {
+        "type": "object",
+        "properties": {
+          "nativeSession": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "objects": {
+            "type": "object"
+          },
+          "actions": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "agent": {
+            "type": "object",
+            "required": [
+              "input",
+              "pending",
+              "opened"
+            ],
+            "properties": {
+              "input": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "pending": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "opened": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "annotation": {
+                "type": "object",
+                "required": [
+                  "source",
+                  "pending",
+                  "opened"
+                ],
+                "properties": {
+                  "source": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "pending": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "opened": {
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      },
+      "configuration_schema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "object",
+            "properties": {
+              "instance": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              },
+              "plugin": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+                "pattern": "^[A-Za-z0-9._:/-]+$"
+              },
+              "revision": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "artifact": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "instance",
+              "plugin",
+              "revision",
+              "artifact"
+            ],
+            "additionalProperties": false
+          },
+          "object_group": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9._:/-]+$"
+          },
+          "object": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "path": {
+                "type": "array",
+                "maxItems": 32,
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "index"
+                        },
+                        "index": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "index"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "kind": {
+                          "const": "name"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            },
+            "required": [
+              "name",
+              "path"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "source",
+          "object_group",
+          "object"
+        ],
+        "additionalProperties": false
+      },
+      "resource_kinds": []
+    }
+  ],
+  "capabilities": [],
+  "contexts": [],
+  "backend": null,
+  "configuration_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "default_configuration": {}
+}

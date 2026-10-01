@@ -1,0 +1,30 @@
+[package]
+name = "rho-plugins"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+rho-process-engine = { path = "../process-engine" }
+rho-plugin-protocol = { path = "../plugin-protocol" }
+rho-plugin-sdk = { path = "../plugin-sdk" }
+rho-operation = { path = "../operation" }
+rho-contract = { path = "../contract" }
+schemars.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+base64.workspace = true
+rusqlite.workspace = true
+tempfile.workspace = true
+uuid.workspace = true
+jsonschema.workspace = true
+
+[dev-dependencies]
+rho-sqlite = { path = "../adapters/sqlite", default-features = false }

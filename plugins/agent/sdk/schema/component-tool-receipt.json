@@ -1,0 +1,279 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ComponentToolReceipt",
+  "type": "object",
+  "properties": {
+    "action_digest": {
+      "type": "string"
+    },
+    "application_request_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "arguments_digest": {
+      "type": "string"
+    },
+    "capability": {
+      "type": "string"
+    },
+    "client_request_id": {
+      "type": "string"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ComponentAgentEvidence"
+      }
+    },
+    "model_call": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "mutation": {
+      "type": "boolean"
+    },
+    "operation_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "phase": {
+      "$ref": "#/$defs/ComponentToolPhase"
+    },
+    "receipt_id": {
+      "type": "string"
+    },
+    "result": true,
+    "run_id": {
+      "type": "string"
+    },
+    "tool_call_id": {
+      "type": "string"
+    },
+    "updated_at_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "receipt_id",
+    "run_id",
+    "model_call",
+    "tool_call_id",
+    "capability",
+    "arguments_digest",
+    "action_digest",
+    "client_request_id",
+    "mutation",
+    "phase",
+    "evidence",
+    "updated_at_ms"
+  ],
+  "$defs": {
+    "AgentAsset": {
+      "type": "object",
+      "properties": {
+        "asset_id": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "asset_id",
+        "name",
+        "mime_type",
+        "bytes",
+        "sha256"
+      ]
+    },
+    "ComponentAgentEvidence": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "asset": {
+              "$ref": "#/$defs/AgentAsset"
+            },
+            "conversation_id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "attachment"
+            }
+          },
+          "required": [
+            "kind",
+            "conversation_id",
+            "asset"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "operation"
+            },
+            "operation_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "operation_id"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "media"
+            },
+            "reference": {
+              "type": "object",
+              "properties": {
+                "byte_size": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "display_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "mime_type": {
+                  "type": "string"
+                },
+                "operation_id": {
+                  "type": "string"
+                },
+                "sequence": {
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "sha256": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "operation_id",
+                "sequence",
+                "mime_type",
+                "byte_size",
+                "sha256"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "reference"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "document": {
+              "type": "object",
+              "properties": {
+                "document_id": {
+                  "type": "string"
+                },
+                "document_version": {
+                  "type": "string"
+                },
+                "selection_version": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "document_id",
+                "document_version",
+                "selection_version"
+              ]
+            },
+            "kind": {
+              "type": "string",
+              "const": "document"
+            }
+          },
+          "required": [
+            "kind",
+            "document"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "file"
+            },
+            "path": {
+              "type": "string"
+            },
+            "sha256": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "path",
+            "sha256"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "const": "observation"
+            },
+            "reference": true
+          },
+          "required": [
+            "kind",
+            "capability",
+            "reference"
+          ]
+        }
+      ]
+    },
+    "ComponentToolPhase": {
+      "type": "string",
+      "enum": [
+        "intent",
+        "accepted",
+        "resolved",
+        "uncertain"
+      ]
+    }
+  }
+}

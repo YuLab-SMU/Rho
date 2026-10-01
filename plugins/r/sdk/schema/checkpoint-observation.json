@@ -1,0 +1,184 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RCheckpointObservation",
+  "type": "object",
+  "properties": {
+    "checkpoint": {
+      "$ref": "#/$defs/RCheckpointResult"
+    },
+    "control_head": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "deleted": {
+      "type": "boolean"
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "payload": {
+      "$ref": "#/$defs/RCheckpointPayloadState"
+    },
+    "pinned": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "checkpoint",
+    "pinned",
+    "deleted",
+    "payload",
+    "notices"
+  ],
+  "$defs": {
+    "CheckpointCoverage": {
+      "type": "string",
+      "enum": [
+        "complete_eligible_graph",
+        "partial"
+      ]
+    },
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "RCheckpointPayloadState": {
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": [
+            "missing",
+            "unavailable"
+          ]
+        },
+        {
+          "description": "Length and native identity are present. This is not a fresh digest check.",
+          "type": "string",
+          "const": "present"
+        }
+      ]
+    },
+    "RCheckpointReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/InstanceRef"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "provider",
+        "operation_id",
+        "digest",
+        "bytes"
+      ]
+    },
+    "RCheckpointResult": {
+      "type": "object",
+      "properties": {
+        "coverage": {
+          "$ref": "#/$defs/CheckpointCoverage"
+        },
+        "manifest": {
+          "$ref": "#/$defs/ResourceReference"
+        },
+        "native_session_id": {
+          "type": "string"
+        },
+        "reference": {
+          "$ref": "#/$defs/RCheckpointReference"
+        },
+        "saved_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "skipped_count": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "manifest",
+        "native_session_id",
+        "saved_count",
+        "skipped_count",
+        "coverage"
+      ]
+    },
+    "ResourceReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "resource": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "resource",
+        "digest",
+        "media_type",
+        "bytes"
+      ]
+    }
+  }
+}

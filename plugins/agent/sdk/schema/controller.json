@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgentControllerRef",
+  "description": "Correlation identity supplied by the Agent owner after admission. This value\nis not an authorization credential and cannot grant access to a Host window.",
+  "type": "object",
+  "properties": {
+    "incarnation": {
+      "type": "string"
+    },
+    "window_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "window_id",
+    "incarnation"
+  ]
+}

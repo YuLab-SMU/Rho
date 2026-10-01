@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RemoteRunResult",
+  "type": "object",
+  "properties": {
+    "native_outcome": {
+      "$ref": "#/$defs/RemoteExecutionOutcome"
+    },
+    "operation": {
+      "type": "string"
+    },
+    "remote_exit_code": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "int32"
+    },
+    "report": {
+      "description": "Original JSON RemoteExecutionReport, including bounded transport streams.",
+      "$ref": "#/$defs/ResourceReference"
+    },
+    "target": {
+      "$ref": "#/$defs/RemoteTarget"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "operation",
+    "target",
+    "report",
+    "native_outcome"
+  ],
+  "$defs": {
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "RemoteExecutionOutcome": {
+      "description": "Remote evidence classification; journal outcomes are committed by the caller.",
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "failed",
+        "cancelled",
+        "uncertain"
+      ]
+    },
+    "RemoteTarget": {
+      "type": "object",
+      "properties": {
+        "host_alias": {
+          "type": "string"
+        },
+        "project_root": {
+          "type": "string"
+        },
+        "slurm_cluster": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "host_alias",
+        "project_root"
+      ]
+    },
+    "ResourceReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "resource": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "resource",
+        "digest",
+        "media_type",
+        "bytes"
+      ]
+    }
+  }
+}

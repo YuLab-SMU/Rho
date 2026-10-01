@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Verification",
+  "type": "object",
+  "properties": {
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "library_digest_matches": {
+      "type": "boolean"
+    },
+    "probes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NamespaceProbe"
+      }
+    },
+    "verified": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "verified",
+    "library_digest_matches",
+    "probes",
+    "errors"
+  ],
+  "$defs": {
+    "NamespaceProbe": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "library": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "loadable": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "loadable"
+      ]
+    }
+  }
+}

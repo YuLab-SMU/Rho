@@ -1,0 +1,18 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
+const root=fileURLToPath(new URL('.',import.meta.url));
+const reuse=process.argv.includes('--reuse-native');
+if(process.argv.slice(2).some(arg=>arg!=='--reuse-native')||process.argv.length>3)throw Error('Usage: node build.mjs [--reuse-native]');
+if(!fs.existsSync(path.join(root,'Cargo.toml')))throw Error('Assemble the standalone source package before building.');
+const compiler=process.env.RHO_PLUGIN_TSC;
+if(compiler)execFileSync(process.execPath,[compiler,'--project','tsconfig.json'],{cwd:root,stdio:'inherit'});
+else execFileSync('tsc',['--project','tsconfig.json'],{cwd:root,stdio:'inherit'});
+for(const name of ['index.html','style.css'])fs.copyFileSync(path.join(root,'src',name),path.join(root,'dist/src',name));
+if(!reuse)execFileSync(process.env.RHO_PLUGIN_CARGO??'cargo',['build','-p','rho-annotation-backend','--bins','--locked','--offline'],{cwd:root,stdio:'inherit'});
+const target=process.env.CARGO_TARGET_DIR?path.resolve(root,process.env.CARGO_TARGET_DIR):path.join(root,'target');
+execFileSync(path.join(target,'debug/export-annotations'),[path.join(root,'plugin.json')],{cwd:root,stdio:'inherit'});
+fs.mkdirSync(path.join(root,'dist'),{recursive:true});
+fs.copyFileSync(path.join(target,'debug/rho-annotation-backend'),path.join(root,'dist/rho-annotation-backend'));
+fs.chmodSync(path.join(root,'dist/rho-annotation-backend'),0o755);

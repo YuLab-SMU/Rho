@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginDelegatedOperationArguments",
+  "description": "Observe a backend's original reverse Operation call. Identity is resolved\nfrom the native caller and retained parent admission, never a caller selector.",
+  "type": "object",
+  "properties": {
+    "parent_operation": {
+      "type": "string"
+    },
+    "request": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "parent_operation",
+    "request"
+  ]
+}

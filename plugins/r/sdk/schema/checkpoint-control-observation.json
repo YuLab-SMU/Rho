@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RCheckpointControlObservation",
+  "type": "object",
+  "properties": {
+    "can_apply": {
+      "type": "boolean"
+    },
+    "can_resolve": {
+      "type": "boolean"
+    },
+    "latest_attempt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "operation_id": {
+      "type": "string"
+    },
+    "reference": {
+      "$ref": "#/$defs/RCheckpointReference"
+    },
+    "resolution": {
+      "description": "A new committed resolution; the original outcome is never rewritten.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_operation_id": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/PluginOutcome"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "operation_id",
+    "reference",
+    "status",
+    "source_operation_id",
+    "can_resolve",
+    "can_apply",
+    "notices"
+  ],
+  "$defs": {
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "PluginOutcome": {
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "failed",
+        "uncertain",
+        "cancelled"
+      ]
+    },
+    "RCheckpointReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/InstanceRef"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "provider",
+        "operation_id",
+        "digest",
+        "bytes"
+      ]
+    }
+  }
+}

@@ -1,0 +1,32 @@
+# Reconstructed from the pinned Jet workspace; maintain via patches/jet.
+[package]
+name = "jet_core"
+version = "0.0.2"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/wurli/jet"
+publish = false
+
+[workspace]
+resolver = "2"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+env_logger = "0.11"
+hex = "0.4"
+jupyter-protocol = "2.0"
+jupyter-zmq-client = { version = "1.0", default-features = false, features = ["tokio-runtime", "ring"] }
+libc = "0.2"
+log = "0.4"
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1", features = ["full"] }
+
+[dev-dependencies]
+serial_test = "3"
+tempfile = "3"

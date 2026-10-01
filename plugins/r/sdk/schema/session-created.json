@@ -1,0 +1,250 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RSessionCreated",
+  "type": "object",
+  "properties": {
+    "environment": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RSessionEnvironment"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "installation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RuntimeInstallationIdentity"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "operation_id": {
+      "type": "string"
+    },
+    "process": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RuntimeProcessIdentity"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "project_root": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "operation_id",
+    "session_id",
+    "project_root"
+  ],
+  "$defs": {
+    "CapabilityKey": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "ProviderBinding": {
+      "type": "object",
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/CapabilityKey"
+        },
+        "project": {
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "target": {
+          "description": "Owner-defined native identity, fixed at admission. Not interpreted by core.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "provider",
+        "project"
+      ]
+    },
+    "REnvironmentSelection": {
+      "description": "Exact Environment provider and original successful realization. Selecting it\ndoes not start R; creation performs explicit verification under this binding.",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ProviderBinding"
+        },
+        "realization": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "binding",
+        "realization"
+      ]
+    },
+    "RSessionEnvironment": {
+      "type": "object",
+      "properties": {
+        "library_digest": {
+          "type": "string"
+        },
+        "library_path": {
+          "type": "string"
+        },
+        "report": {
+          "$ref": "#/$defs/ResourceReference"
+        },
+        "selection": {
+          "$ref": "#/$defs/REnvironmentSelection"
+        },
+        "source": {
+          "$ref": "#/$defs/ProviderBinding"
+        },
+        "verification": {
+          "type": "string"
+        },
+        "verification_report": {
+          "$ref": "#/$defs/ResourceReference"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "selection",
+        "source",
+        "report",
+        "verification",
+        "verification_report",
+        "library_path",
+        "library_digest"
+      ]
+    },
+    "ResourceReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "resource": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "resource",
+        "digest",
+        "media_type",
+        "bytes"
+      ]
+    },
+    "RuntimeInstallationIdentity": {
+      "type": "object",
+      "properties": {
+        "platform": {
+          "type": "string"
+        },
+        "r_home": {
+          "type": "string"
+        },
+        "r_version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "r_home",
+        "r_version",
+        "platform"
+      ]
+    },
+    "RuntimeProcessIdentity": {
+      "type": "object",
+      "properties": {
+        "native_session_id": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        },
+        "start_time": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "native_session_id",
+        "pid",
+        "start_time"
+      ]
+    }
+  }
+}

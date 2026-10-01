@@ -1,0 +1,51 @@
+{
+  "protocol_version": 1,
+  "id": "example.inspector",
+  "name": "Independent Inspector",
+  "version": "0.1.0",
+  "description": "A dependency-free inspection view for plugin package conformance tests.",
+  "license": "AGPL-3.0-only",
+  "source": {
+    "files": [
+      "src/index.html",
+      "README.md",
+      "build.mjs"
+    ],
+    "lockfiles": [
+      "dependencies.lock"
+    ],
+    "build_instructions": "BUILD.md",
+    "build": {
+      "command": [
+        "node",
+        "build.mjs"
+      ]
+    }
+  },
+  "dependencies": {},
+  "requires": [],
+  "views": [
+    {
+      "id": "inspector",
+      "title": "Independent Inspector",
+      "entrypoint": "dist/index.html",
+      "state_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "configuration_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "resource_kinds": []
+    }
+  ],
+  "capabilities": [],
+  "contexts": [],
+  "backend": null,
+  "configuration_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "default_configuration": {}
+}

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginDelegatedOperation",
+  "type": "object",
+  "properties": {
+    "operation_id": {
+      "description": "Null means no visible durable record was observed. It does not prove\nthat dispatch did not happen and must never authorize a replay.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

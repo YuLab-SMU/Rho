@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RCheckpointList",
+  "type": "object",
+  "properties": {
+    "before_cursor": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0
+    },
+    "limit": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 20,
+      "maximum": 32,
+      "minimum": 1
+    }
+  },
+  "additionalProperties": false
+}

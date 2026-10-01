@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ListDocumentDrafts",
+  "description": "Enumerate retained, non-discarded drafts in one explicit window. Each page\nis a current observation, not an immutable snapshot across subsequent reads.",
+  "type": "object",
+  "properties": {
+    "after": {
+      "description": "Exclusive identity cursor, independent of the cursor draft's existence.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "limit": {
+      "type": "integer",
+      "format": "uint16",
+      "maximum": 20,
+      "minimum": 1
+    },
+    "source": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DraftSource"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "window": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "window",
+    "limit"
+  ],
+  "$defs": {
+    "DraftSource": {
+      "type": "object",
+      "properties": {
+        "contribution": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "contribution"
+      ]
+    }
+  }
+}

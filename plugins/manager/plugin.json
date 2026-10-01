@@ -1,0 +1,452 @@
+{
+  "protocol_version": 1,
+  "id": "org.rho.manager",
+  "name": "Plugin manager",
+  "version": "0.1.0",
+  "description": "Inspect installed revisions and retained instances; prepare and switch this window\u2019s scenarios.",
+  "license": "AGPL-3.0-only",
+  "source": {
+    "files": [
+      "src/main.ts",
+      "src/model.ts",
+      "src/operations.ts",
+      "src/index.html",
+      "src/style.css",
+      "tsconfig.json",
+      "package.json",
+      "build.mjs",
+      "README.md",
+      "src/archive.ts",
+      "src/export.ts",
+      "src/export-panel.ts",
+      "src/scientific-workspace.ts",
+      "src/workspace-panel.ts"
+    ],
+    "lockfiles": [
+      "dependencies.lock"
+    ],
+    "build_instructions": "BUILD.md",
+    "build": {
+      "command": [
+        "node",
+        "build.mjs"
+      ]
+    }
+  },
+  "dependencies": {},
+  "requires": [
+    {
+      "capability": {
+        "id": "plugins.repository",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.list",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instances",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.instance",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "scenarios.list",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "scenarios.get",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.branch_head",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.compare",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "scenarios.prepare",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read",
+        "application.read",
+        "application.control",
+        "skill.read",
+        "plugins.read",
+        "plugins.write",
+        "plugins.run",
+        "resources.read",
+        "documents.read",
+        "documents.write",
+        "workspace.run_r",
+        "workspace.read",
+        "project.read",
+        "project.write",
+        "environment.read",
+        "environment.write",
+        "process.run_local",
+        "remote.execute",
+        "slurm.read",
+        "slurm.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "scenarios.apply",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read",
+        "application.read",
+        "application.control",
+        "skill.read",
+        "plugins.read",
+        "plugins.write",
+        "plugins.run",
+        "resources.read",
+        "documents.read",
+        "documents.write",
+        "workspace.run_r",
+        "workspace.read",
+        "project.read",
+        "project.write",
+        "environment.read",
+        "environment.write",
+        "process.run_local",
+        "remote.execute",
+        "slurm.read",
+        "slurm.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.activate",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read",
+        "application.read",
+        "application.control",
+        "skill.read",
+        "plugins.read",
+        "plugins.write",
+        "plugins.run",
+        "resources.read",
+        "documents.read",
+        "documents.write",
+        "workspace.run_r",
+        "workspace.read",
+        "project.read",
+        "project.write",
+        "environment.read",
+        "environment.write",
+        "process.run_local",
+        "remote.execute",
+        "slurm.read",
+        "slurm.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.resume",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read",
+        "application.read",
+        "application.control",
+        "skill.read",
+        "plugins.read",
+        "plugins.write",
+        "plugins.run",
+        "resources.read",
+        "documents.read",
+        "documents.write",
+        "workspace.run_r",
+        "workspace.read",
+        "project.read",
+        "project.write",
+        "environment.read",
+        "environment.write",
+        "process.run_local",
+        "remote.execute",
+        "slurm.read",
+        "slurm.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "views.open",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read",
+        "application.read",
+        "application.control",
+        "skill.read",
+        "plugins.read",
+        "plugins.write",
+        "plugins.run",
+        "resources.read",
+        "documents.read",
+        "documents.write",
+        "workspace.run_r",
+        "workspace.read",
+        "project.read",
+        "project.write",
+        "environment.read",
+        "environment.write",
+        "process.run_local",
+        "remote.execute",
+        "slurm.read",
+        "slurm.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "windows.open_view",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read",
+        "project.references.read",
+        "application.read",
+        "application.control",
+        "skill.read",
+        "plugins.read",
+        "plugins.write",
+        "plugins.run",
+        "resources.read",
+        "documents.read",
+        "documents.write",
+        "workspace.run_r",
+        "workspace.read",
+        "project.read",
+        "project.write",
+        "environment.read",
+        "environment.write",
+        "process.run_local",
+        "remote.execute",
+        "slurm.read",
+        "slurm.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "windows.scenario",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "views.inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.release",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.run"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.remove",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.branch",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "scenarios.checkpoint",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.get",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "operation.list_recent",
+        "version": 1
+      },
+      "scopes": [
+        "operation.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_stage",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_progress",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_inspect",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_discard",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_import",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.write"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_export",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    },
+    {
+      "capability": {
+        "id": "plugins.archive_read",
+        "version": 1
+      },
+      "scopes": [
+        "plugins.read"
+      ]
+    }
+  ],
+  "views": [
+    {
+      "id": "manager",
+      "title": "Plugins",
+      "entrypoint": "dist/src/index.html",
+      "state_schema": {
+        "type": "object"
+      },
+      "configuration_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "resource_kinds": []
+    }
+  ],
+  "capabilities": [],
+  "contexts": [],
+  "backend": null,
+  "configuration_schema": {
+    "type": "object",
+    "additionalProperties": false
+  },
+  "default_configuration": {}
+}

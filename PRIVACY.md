@@ -1,107 +1,124 @@
 # Rho Privacy Policy
 
-Last updated: 2026-08-15
+Last updated: 2026-09-14
 
-Rho is a local-first desktop workbench for R. Rho does not include first-party
-analytics, advertising, background telemetry, or automatic crash-report upload.
-It does not require a Rho account and it does not automatically upload a
-project to YuLab-SMU.
+This page describes the current CLI, Studio and MCP entry points.
 
-This policy describes Rho's own behavior. A model Provider, package repository,
-website, or program that you choose to use has its own terms and privacy
-practices.
+## Local data
 
-## Data kept on your computer
+Rho operates on the project directory you select. Its SQLite journal records
+Operations, caller/correlation identities, inputs, outcomes, domain facts and
+events. Inputs can include R code or command arguments. Runtime directories
+can contain stdout/stderr, conditions, output files, package plans, isolated
+libraries and recovery material. The selected database and runtime paths are
+described in the [operator guide](docs/OPERATIONS.md).
 
-Rho works with files in the project directory you select. Project source,
-scientific data, plots, rendered outputs, and other project artifacts remain in
-that project unless you explicitly run code or choose an operation that sends
-them elsewhere.
+A separate local SQLite application store holds Studio drafts, layouts, view
+positions, recent projects, preferences and unconfirmed request identities. Draft
+synchronization does not overwrite project files. The browser uses session storage
+for the current local access token. Closing a page does not cancel accepted work;
+reconnection queries the original request and retry is explicit.
 
-Rho also keeps local application data needed to restore and explain work. This
-can include project roots, window and panel state, open documents, Provider and
-model metadata, capability routes, Agent conversations and events, approvals,
-runs, evidence and output metadata, environment snapshots, and diagnostic logs.
-The exact local records depend on which features you use.
+Native Agent platforms manage their own conversations, authentication, retention
+and independent runtime lifecycle. They are responsible for their answers and image
+interpretation. Rho is responsible for connection identity, protocol delivery and its
+own permission, draft, receipt and recovery records; it retains bounded native status
+and usage observations without presenting unreported values as zero. Rho does not
+independently certify third-party Agent capabilities or answer quality.
+Optional component assistants additionally retain user requests, fixed authorization
+and model configuration references, tool receipts, bounded text events and usage in
+the Application store. The frozen task intent includes an exact excerpt of the
+original request and finite action/target references. Permission decisions retain
+the original action identity. Uploaded UTF-8 text, PNG and JPEG files are stored as
+Application assets with scoped identities and hashes, separately from text history;
+user uploads are not labeled as scientific outputs. Model text remains distinct
+from scientific results. Internal reasoning is not retained, and model-content telemetry is disabled. Ordinary Rho
+follow-ups include a bounded selection of saved prior requests, answers and owner
+references when sent to the configured model; old grants are not carried as new
+authorization, and raw tool-result JSON and binary bytes are not duplicated into
+that conversation summary.
 
-Diagnostic logs and support text can contain filesystem paths, software
-versions, bounded error text, command output, stdout, or stderr. Rho redacts
-recognized credential patterns at its owned boundaries, but no automatic
-redaction can recognize every sensitive value. Review diagnostics before you
-copy or share them.
+Code, arguments, output and diagnostics can contain private data or credentials
+printed by a program. Do not assume general-purpose redaction. Review material
+before sharing it, even when its output size is bounded.
 
-## API keys and credentials
+## Connections and credentials
 
-API keys saved through Model settings are stored in the operating system
-credential store—Apple Keychain on macOS and Windows Credential Manager on
-Windows—not in the project or repository. Rho does not display a stored key
-again.
+The local workbench binds to 127.0.0.1. A per-run bearer token protects its
+scientific API and HTTP MCP endpoint. Keep the private launch URL and any URL
+file private. CLI and stdio MCP use the local operating-system account context.
 
-For an explicit model operation, Rho retrieves the selected key and sends it
-only to the endpoint configured for that Provider. A custom Base URL changes
-who receives the request and therefore changes the trust boundary. Verify the
-scheme, host, organization, and privacy terms before using a custom Base URL.
-Do not place credentials in a Base URL, project file, Issue, or diagnostic.
+Rho accepts an explicitly configured model endpoint. Saving an API key writes the
+raw value to the user's local `rho/model-credentials.json` configuration file, outside
+the selected project. On macOS this is under `~/Library/Application Support`; Windows
+uses `%APPDATA%`; Linux uses `$XDG_CONFIG_HOME` or `~/.config`. Rho uses ordinary file
+permissions and atomic replacement; the JSON file is not encrypted by Rho. Project
+settings, conversations, synchronized drafts and diagnostics retain only the key
+reference and availability, not its value. Keys survive Host/application restarts
+until explicitly removed. Accepted work retains its captured credential if the
+setting is later replaced or removed.
+Replacing settings retains older credential versions because another saved
+configuration can still reference them. Remove key deletes the selected credential;
+Rho does not scan other Application databases to infer which versions are unused.
 
-## When Rho can access the network
+An environment-variable reference remains optional. Existing Session references
+still point to Host memory and become unavailable when that Host ends; Rho does not
+import native CLI authentication to replace them. Component controls require the
+browser credential; MCP-only credentials cannot use them. Remote model endpoints
+require HTTPS, with explicit loopback HTTP allowed for local services. Automatic
+model HTTP redirects and retries are disabled.
 
-After local startup becomes ready, Rho automatically contacts the fixed Rho
-update service once to check for a newer signed release. The check does not add
-project content, Provider settings, or credentials. It does expose ordinary
-HTTPS metadata such as IP address, time, TLS/HTTP headers, and user agent to the
-service and its hosting providers.
+Managed external Agent connections have task-specific callers and private transport
+credentials. Reconnection replaces the transport credential without rewriting the
+caller's existing scientific records. Taking over an idle task changes its controller
+without recreating the native session or its MCP credential. Older tasks that used a shared caller retain
+that namespace, and Rho reports unavailable per-task attribution rather than
+inferring which historic operations belong to them.
 
-For a supported installed build, a newer release is downloaded from its
-published GitHub Release and installed automatically after signature
-verification. Manual **Check for Updates** remains a retry path. That download exposes
-ordinary HTTPS metadata to GitHub Releases and intervening network providers,
-but does not include project content, Provider settings, or credentials.
+Rho does not provide an SSH password wizard or managed-key installation workflow. SSH authentication uses the
+existing connection configuration and its credential mechanism. Rho does not
+copy those credentials into a new project credential store.
 
-Other network-capable operations occur only after a corresponding user action:
+## Network activity
 
-- importing a Provider's model list or testing a Provider connection contacts
-  the selected default or custom endpoint;
-- sending an Agent request contacts the routed model Provider and can include
-  the prompt, selected or attached project context, tool results, and model
-  options needed for that turn;
-- resolving a DOI sends that DOI to the Crossref API;
-- installing, updating, restoring, or otherwise operating on R packages can
-  contact the package repositories shown by the environment workflow after the
-  applicable user request, preview, or approval;
-- R code, Agent-approved tools, shell commands, packages, and external programs
-  can access destinations determined by that code or program; and
-- opening the Rho website, source repository, release page, documentation, or
-  another external link opens the system browser after a user action.
+The current implementation has no Rho-owned analytics, automatic crash upload,
+release update check or automatic installer download. The browser loads embedded
+assets and queries the local Host; it does not load a third-party frontend CDN.
 
-Rho cannot control what user code, third-party R packages, external tools, or a
-configured model Provider transmit. Inspect code, previews, Provider settings,
-and approval details before running them. Provider responses and retention are
-governed by the selected Provider.
+An explicit Rho request sends its prompt, selected sources and uploaded attachments,
+plus needed bounded tool observations, to the selected model service. Uploading a
+file to the local Host alone does not send it to the model. Connection/image Tests
+use labeled synthetic content. Ordinary project browsing, editing and
+disabled/unconfigured assistant discovery do not invoke a model. Provider-side
+processing, billing and retention follow that service's terms; local Stop does not
+prove the remote request was withdrawn. Current implementation stages and verification
+limits are listed in [Status](docs/STATUS.md).
 
-The Rho download/update website does not include Rho-owned analytics or
-advertising scripts. GitHub Pages, GitHub Releases, network operators, and
-other infrastructure providers can still receive normal request metadata.
+Requested package operations, Git/SSH commands, R code and other programs can
+contact external systems. Rho's native execution uses the user's OS permissions;
+it is not a filesystem or network sandbox. Code can start further processes or
+network activity. External Agent platforms, package repositories, connection
+tools and programs have their own data handling and privacy practices.
 
-## Retention and deletion
+## Retention and removal
 
-Project files and outputs remain until you remove them from the project. Local
-Rho records remain until they are removed through an available Rho action or by
-deleting the relevant application data. A Provider removal workflow can delete
-its stored key; you can also manage credentials with the operating system.
+Project files, recorded Operations and runtime outputs remain in their selected
+locations until removed. Environment material cleanup is explicit and protects
+the references and active use it can observe; it is not a general sweep of all
+outputs. See the operator guide for its quarantine, restore and purge behavior.
 
-Deleting a visible history item may preserve bounded audit, provenance, or
-recovery metadata where the interface says so. Uninstalling Rho does not
-necessarily remove project files, R libraries, Rho application data, logs, or
-operating-system credential-store entries. Back up important work and review
-the relevant Rho and operating-system storage before deletion.
+Stop the relevant Host before manually removing its application databases or
+runtime directory. Synchronized drafts live in the application store, so deleting
+that store removes saved drafts and its retained attachments as well. Rho model keys
+are in a separate user configuration file; removing the application database or
+executable does not remove them. Use the key removal control for the selected Rho
+connection. Removing the executable also leaves project files, R libraries, browser
+storage and credentials managed by other tools. Git history and external scheduler
+records have their own lifetimes.
 
-## Security and support
+## Reporting a problem
 
-Report a suspected vulnerability through
-[GitHub private vulnerability reporting](https://github.com/YuLab-SMU/Rho/security/advisories/new).
-Do not put API keys, private project content, personal information, or
-unredacted diagnostics in a public Issue.
-
-Policy changes are reviewed in the public source repository. The version of
-this file included with a Rho source release describes that release's Rho-owned
-behavior.
+Use [GitHub private vulnerability reporting](https://github.com/YuLab-SMU/Rho/security/advisories/new)
+for suspected exposure. Do not place credentials, private project contents or
+unredacted diagnostics in a public Issue. The policy included with a particular
+source release describes that release's Rho-owned behavior.

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginArchiveOperationArguments",
+  "type": "object",
+  "properties": {
+    "operation_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "operation_id"
+  ]
+}

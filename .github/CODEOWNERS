@@ -13,16 +13,7 @@
 /LICENSE @GuangchuangYu @xiayh17
 /LICENSES.md @GuangchuangYu @xiayh17
 
-/scripts/build-windows-installer.ps1 @GuangchuangYu @xiayh17
-/scripts/candidate-release.mjs @GuangchuangYu @xiayh17
-/scripts/generate-update-site.mjs @GuangchuangYu @xiayh17
-/scripts/test-signpath-readiness.mjs @GuangchuangYu @xiayh17
-/scripts/test-signpath-free-trial-smoke.mjs @GuangchuangYu @xiayh17
-/scripts/test-signpath-candidate-workflow.mjs @GuangchuangYu @xiayh17
-/scripts/windows-release-evidence.ps1 @GuangchuangYu @xiayh17
-
-/docs/plans/active-2026-08-11-signpath-application-readiness-spec.md @GuangchuangYu @xiayh17
-/docs/plans/active-2026-08-12-signpath-free-trial-smoke-spec.md @GuangchuangYu @xiayh17
-/docs/plans/active-2026-08-13-dev38-test-signed-prerelease-spec.md @GuangchuangYu @xiayh17
-/docs/plans/implemented-2026-08-13-conditional-prerelease-policy-spec.md @GuangchuangYu @xiayh17
-/docs/release/ @GuangchuangYu @xiayh17
+/scripts/bootstrap-ark-* @GuangchuangYu @xiayh17
+/runtime/ @GuangchuangYu @xiayh17
+/governance/ @GuangchuangYu @xiayh17
+/docs/RELEASE.md @GuangchuangYu @xiayh17

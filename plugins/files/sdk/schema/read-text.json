@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReadTextArguments",
+  "type": "object",
+  "properties": {
+    "continuation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TextCursor"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "expected_sha256": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "limit_lines": {
+      "type": "integer",
+      "format": "uint32",
+      "default": 200,
+      "maximum": 200,
+      "minimum": 1
+    },
+    "path": {
+      "type": "string"
+    },
+    "start_line": {
+      "type": "integer",
+      "format": "uint64",
+      "default": 1,
+      "minimum": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "path"
+  ],
+  "$defs": {
+    "TextCursor": {
+      "type": "object",
+      "properties": {
+        "byte_offset": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "file": {
+          "$ref": "#/$defs/TextIdentity"
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "project": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "file",
+        "byte_offset",
+        "line"
+      ]
+    },
+    "TextIdentity": {
+      "type": "object",
+      "properties": {
+        "byte_size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "encoding": {
+          "type": "string"
+        },
+        "native_identity": {
+          "description": "Native file identity, including replacement/change metadata; not an authorization token.",
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "native_identity",
+        "byte_size",
+        "encoding"
+      ]
+    }
+  }
+}

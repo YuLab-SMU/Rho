@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EnvironmentResult",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "$ref": "#/$defs/EnvironmentReportKind"
+    },
+    "operation": {
+      "type": "string"
+    },
+    "report": {
+      "$ref": "#/$defs/ResourceReference"
+    },
+    "verified": {
+      "description": "None for planning/configuration; false never means successful verification.",
+      "type": [
+        "boolean",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "operation",
+    "kind",
+    "report"
+  ],
+  "$defs": {
+    "EnvironmentReportKind": {
+      "type": "string",
+      "enum": [
+        "plan",
+        "realization",
+        "verification",
+        "reconciliation",
+        "configuration",
+        "material"
+      ]
+    },
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "ResourceReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "resource": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "resource",
+        "digest",
+        "media_type",
+        "bytes"
+      ]
+    }
+  }
+}

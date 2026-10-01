@@ -1,0 +1,23 @@
+[package]
+name = "rho-environment-backend"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "AGPL-3.0-only"
+repository = "https://github.com/YuLab-SMU/Rho"
+
+[dependencies]
+rho-environment-api = { path = "../api" }
+rho-environment-owner = { path = "owner" }
+rho-r-api = { path = "../../r/api" }
+rho-process-api = { path = "../../process/api" }
+rho-plugin-sdk = { path = "../../../crates/plugin-sdk" }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+schemars = "1.0"
+sha2 = "0.10"
+base64 = "0.22"
+tokio = { version = "1.0", features = ["macros", "rt", "io-std", "io-util", "net", "sync", "time"] }
+
+[dev-dependencies]
+tempfile = "3.20"

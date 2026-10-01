@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# LIN1 fixture tests for scripts/bootstrap-ark-linux.sh. Run on Linux x86-64.
-# Negative fixtures need no R; the success fixture additionally needs Rscript
-# (it probes R to write the kernelspec) and is skipped when R is absent.
+# Fixture tests for standalone Ark acquisition. No R installation is needed.
 
 if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" ]]; then
   echo "Ark Linux bootstrap fixture tests require Linux x86-64" >&2
@@ -13,6 +11,7 @@ fi
 RHO_TEST_SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RHO_TEST_BOOTSTRAP_SOURCE="$RHO_TEST_SCRIPT_ROOT/bootstrap-ark-linux.sh"
 RHO_TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/rho-ark-bootstrap-linux.XXXXXX")"
+RHO_TEST_ROOT="$(cd "$RHO_TEST_ROOT" && pwd)"
 trap 'rm -rf -- "$RHO_TEST_ROOT"' EXIT
 
 write_manifest() {
@@ -124,7 +123,6 @@ fi
 
 echo "Ark Linux bootstrap failure fixtures passed"
 
-if command -v Rscript >/dev/null 2>&1; then
   RHO_SUCCESS_DIR="$RHO_TEST_ROOT/success-archive"
   mkdir -p "$RHO_SUCCESS_DIR"
   cp /bin/true "$RHO_SUCCESS_DIR/ark"
@@ -154,20 +152,11 @@ if command -v Rscript >/dev/null 2>&1; then
       exit 1
     fi
   done
-  RHO_KERNEL_SPEC="$RHO_SUCCESS_CASE/runtime/ark-test-linux-x64/kernel.json"
-  if [[ ! -f "$RHO_KERNEL_SPEC" ]]; then
-    echo "success fixture did not write a kernelspec" >&2
+  if [[ -e "$RHO_SUCCESS_CASE/runtime/ark-test-linux-x64/kernel.json" ]]; then
+    echo "bootstrap must not create a competing kernelspec" >&2
     exit 1
   fi
-  if ! grep -q '"--no-init-file"' "$RHO_KERNEL_SPEC"; then
-    echo "success fixture kernelspec is not controlled-startup" >&2
-    exit 1
-  fi
-  if ! grep -q '"R_HOME"' "$RHO_KERNEL_SPEC"; then
-    echo "success fixture kernelspec is missing R_HOME" >&2
-    exit 1
-  fi
+  test -f "$RHO_SUCCESS_CASE/runtime/notices/ark/LICENSE"
+  test -f "$RHO_SUCCESS_CASE/runtime/notices/ark/NOTICE"
+  test ! -e "$RHO_SUCCESS_REPOSITORY/desktop"
   echo "Ark Linux bootstrap success fixture passed"
-else
-  echo "Rscript is not installed; Ark Linux bootstrap success fixture skipped"
-fi

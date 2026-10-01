@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RInspection",
+  "description": "A successful RPC can report a busy or unavailable native observation. No\ncached value is presented as current, and continuation errors keep their code.",
+  "type": "object",
+  "properties": {
+    "completeness": {
+      "$ref": "#/$defs/NativeCompleteness"
+    },
+    "data": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PackageHelpPage"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "diagnostic": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RInspectionDiagnostic"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "observed_at_ms": {
+      "type": "integer",
+      "format": "int64"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/RInspectionStatus"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "status",
+    "source",
+    "observed_at_ms",
+    "completeness",
+    "notices"
+  ],
+  "$defs": {
+    "HelpFormat": {
+      "description": "Rendering format. HTML is produced by the static `tools::Rd2HTML` stage and is\nsuitable for a sanitized document view; text remains the bounded default.",
+      "type": "string",
+      "enum": [
+        "text",
+        "html"
+      ]
+    },
+    "NativeCompleteness": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "partial",
+        "unknown"
+      ]
+    },
+    "PackageFileIdentity": {
+      "type": "object",
+      "properties": {
+        "digest": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "digest"
+      ]
+    },
+    "PackageHelpPage": {
+      "type": "object",
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "format": {
+          "$ref": "#/$defs/HelpFormat",
+          "default": "text"
+        },
+        "found": {
+          "type": "boolean"
+        },
+        "help_files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PackageFileIdentity"
+          }
+        },
+        "library_path": {
+          "type": "string"
+        },
+        "next_offset_utf8": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "observation_id": {
+          "type": "string"
+        },
+        "offset_utf8": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "package": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "total_bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "version": {
+          "description": "Present for HTML: the package version recorded in the observed copy.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "observation_id",
+        "package",
+        "library_path",
+        "topic",
+        "found",
+        "text",
+        "offset_utf8",
+        "total_bytes",
+        "complete",
+        "help_files"
+      ]
+    },
+    "RInspectionDiagnostic": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message"
+      ]
+    },
+    "RInspectionStatus": {
+      "type": "string",
+      "enum": [
+        "ready",
+        "busy",
+        "unavailable"
+      ]
+    }
+  }
+}

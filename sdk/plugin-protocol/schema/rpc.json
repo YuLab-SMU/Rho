@@ -1,0 +1,902 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RpcFrame",
+  "description": "Each direction has its own strictly increasing sequence starting at one.\nConnection identity is host-issued and rotated for every transport incarnation.",
+  "type": "object",
+  "properties": {
+    "body": {
+      "$ref": "#/$defs/RpcBody"
+    },
+    "connection": {
+      "type": "string"
+    },
+    "instance": {
+      "type": "string"
+    },
+    "protocol_version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "request": {
+      "type": "string"
+    },
+    "sequence": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "protocol_version",
+    "connection",
+    "instance",
+    "sequence",
+    "request",
+    "body"
+  ],
+  "$defs": {
+    "BackendEnvironment": {
+      "description": "Host-issued native paths, separate from user configuration. The project is\nnormalized by the Host; data belongs to this exact instance and is retained\nafter release. These paths are not a sandbox or a general Host credential.",
+      "type": "object",
+      "properties": {
+        "data_root": {
+          "type": "string"
+        },
+        "project_root": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "project_root",
+        "data_root"
+      ]
+    },
+    "CapabilityKey": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ]
+    },
+    "CapabilityRequirement": {
+      "type": "object",
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/CapabilityKey"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "scopes"
+      ]
+    },
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "InstanceState": {
+      "type": "string",
+      "enum": [
+        "preparing",
+        "active",
+        "draining",
+        "suspending",
+        "suspended",
+        "released",
+        "failed",
+        "cleanup_failed",
+        "disconnected"
+      ]
+    },
+    "ObservationCompleteness": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "partial",
+        "cached",
+        "unavailable"
+      ]
+    },
+    "OperationSettlement": {
+      "description": "Host-to-owner notification derived only from the original terminal journal\nrecord. This releases native scheduling fences; it is not another operation,\na commit plan, a cancellation request or a caller-supplied control.",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ProviderBinding"
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "outcome": {
+          "$ref": "#/$defs/PluginOutcome"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "operation_id",
+        "binding",
+        "outcome"
+      ]
+    },
+    "PendingCancellation": {
+      "description": "A Host-only fence on an original invocation, never a second operation.\nPreparation prevents native start until the original journal's cancellation\nsignal arrives. Repeating preparation for the same invocation is idempotent.",
+      "type": "object",
+      "properties": {
+        "binding": {
+          "$ref": "#/$defs/ProviderBinding"
+        },
+        "operation_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "binding",
+        "operation_id"
+      ]
+    },
+    "PluginCall": {
+      "type": "object",
+      "properties": {
+        "arguments": true,
+        "binding": {
+          "$ref": "#/$defs/ProviderBinding"
+        },
+        "operation_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "owner_context": {
+          "default": null
+        },
+        "preconditions": true,
+        "principal": {
+          "type": "string"
+        },
+        "request": {
+          "type": "string"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "request",
+        "binding",
+        "principal",
+        "scopes",
+        "arguments",
+        "preconditions"
+      ]
+    },
+    "PluginCommitPlan": {
+      "type": "object",
+      "properties": {
+        "cancellation_confirmed": {
+          "description": "True only after the owner has confirmed execution stopped.",
+          "type": "boolean"
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ResourceReference"
+          }
+        },
+        "facts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ProposedFact"
+          }
+        },
+        "outcome": {
+          "$ref": "#/$defs/PluginOutcome"
+        },
+        "output": true,
+        "recovery": true
+      },
+      "additionalProperties": false,
+      "required": [
+        "outcome",
+        "facts",
+        "evidence",
+        "cancellation_confirmed"
+      ]
+    },
+    "PluginInstance": {
+      "type": "object",
+      "properties": {
+        "alias": {
+          "type": "string"
+        },
+        "configuration": true,
+        "diagnostic": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "identity": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "principal": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "purpose": {
+          "description": "Omitted for normal runtime instances, preserving native initialization.",
+          "$ref": "#/$defs/PluginInstancePurpose"
+        },
+        "state": {
+          "$ref": "#/$defs/InstanceState"
+        },
+        "suspension": {
+          "description": "A confirmed Host shutdown incarnation. Explicit resume consumes this\nexact token; an older request cannot resume a later suspension.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "identity",
+        "project",
+        "principal",
+        "alias",
+        "configuration",
+        "state"
+      ]
+    },
+    "PluginInstancePurpose": {
+      "type": "string",
+      "enum": [
+        "runtime",
+        "fixture_preview"
+      ]
+    },
+    "PluginOutcome": {
+      "type": "string",
+      "enum": [
+        "succeeded",
+        "failed",
+        "uncertain",
+        "cancelled"
+      ]
+    },
+    "ProposedFact": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "schema": {
+          "type": "string"
+        },
+        "value": true
+      },
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "key",
+        "value"
+      ]
+    },
+    "ProviderBinding": {
+      "type": "object",
+      "properties": {
+        "capability": {
+          "$ref": "#/$defs/CapabilityKey"
+        },
+        "project": {
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "target": {
+          "description": "Owner-defined native identity, fixed at admission. Not interpreted by core.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "capability",
+        "provider",
+        "project"
+      ]
+    },
+    "ResourceChannel": {
+      "description": "An ephemeral, instance-only data transport. Never a general Host credential.\nConnect once per transfer; send a BE u32 JSON length, the header, then raw\nupload bytes, and close the write half. Responses use the same header framing.",
+      "type": "object",
+      "properties": {
+        "socket": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "socket",
+        "token"
+      ]
+    },
+    "ResourceReference": {
+      "type": "object",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        },
+        "media_type": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/$defs/InstanceRef"
+        },
+        "resource": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "owner",
+        "resource",
+        "digest",
+        "media_type",
+        "bytes"
+      ]
+    },
+    "RpcBody": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "environment": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/BackendEnvironment"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "grants": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/CapabilityRequirement"
+                  }
+                },
+                "instance": {
+                  "$ref": "#/$defs/PluginInstance"
+                },
+                "resource_channel": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ResourceChannel"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "instance",
+                "grants"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "initialize"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "artifact": {
+                  "type": "string"
+                },
+                "features": {
+                  "description": "Optional protocol extensions. Unknown bounded names are ignored by\nHosts; an extension is used only after exact readiness advertises it.",
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 16,
+                  "uniqueItems": true
+                },
+                "revision": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "revision",
+                "artifact"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "ready"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/PluginCall"
+            },
+            "type": {
+              "type": "string",
+              "const": "query"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "description": "Ephemeral native control; it never carries a new Operation identity.",
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/PluginCall"
+            },
+            "type": {
+              "type": "string",
+              "const": "control"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/PluginCall"
+            },
+            "type": {
+              "type": "string",
+              "const": "invoke"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "completeness": {
+                  "$ref": "#/$defs/ObservationCompleteness"
+                },
+                "data": true,
+                "source": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ResourceReference"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "data",
+                "completeness"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "query_result"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "data": true
+              },
+              "additionalProperties": false,
+              "required": [
+                "data"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "control_result"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/PluginCommitPlan"
+            },
+            "type": {
+              "type": "string",
+              "const": "commit_plan"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "description": "Reverse calls use a delegated, instance-bound grant, never a Host credential.",
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "arguments": true,
+                "capability": {
+                  "$ref": "#/$defs/CapabilityKey"
+                },
+                "parent_request": {
+                  "description": "Active incoming call whose authority this reverse call inherits.",
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "parent_request",
+                "capability",
+                "arguments"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "host_call"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "result": true
+              },
+              "additionalProperties": false,
+              "required": [
+                "result"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "host_result"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "operation_id": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "operation_id"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "cancel"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "confirmed": {
+                  "type": "boolean"
+                },
+                "operation_id": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "operation_id",
+                "confirmed"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "cancel_acknowledged"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/PendingCancellation"
+            },
+            "type": {
+              "type": "string",
+              "const": "prepare_pending_cancellation"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "cancellation": {
+                  "$ref": "#/$defs/PendingCancellation"
+                },
+                "prepared": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "cancellation",
+                "prepared"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "pending_cancellation_prepared"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/OperationSettlement"
+            },
+            "type": {
+              "type": "string",
+              "const": "operation_settled"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "description": "Echo the exact settlement after applying it idempotently. A delayed or\nrepeated settlement must never advance a different native queue item.",
+          "type": "object",
+          "properties": {
+            "data": {
+              "$ref": "#/$defs/OperationSettlement"
+            },
+            "type": {
+              "type": "string",
+              "const": "settlement_acknowledged"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "release"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "released"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "data": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "recovery": true
+              },
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "error"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "data"
+          ]
+        }
+      ]
+    }
+  }
+}

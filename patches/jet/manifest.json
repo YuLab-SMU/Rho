@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/wurli/jet",
+  "revision": "52ae131dd168fe2e104d306cc4bf5bbeae749200",
+  "archive_sha256": "6aba87d548a06a3905341306921c9555bbb7ddc80838b9180e4f1dff8898c663",
+  "workspace_sha256": "22ec691655eca7973272829df21174d3daa138cf9c1cd38a40354a28efa4631d",
+  "upstream_files": {
+    "Cargo.toml": "d6f838b2c8e879255a06db843ba613798fda2162316a95010ee5a76e62924849",
+    "LICENSE": "e10c17cd4eec50dd440f5dc088a9f3c28d2a5132d340894236997409784d2aa7",
+    "src/client.rs": "42bd86a058fdb96bef72088af5c5193428ebf72ecd7bc6d65aebac3a95a0b80a",
+    "src/connection_file.rs": "0e6f5a1fe938c456aec2bafd96d4c50448a685c51746499041f22d55e980f87c",
+    "src/events.rs": "e17f578439c40bce627abc5bd3726e4384eef28676a0b82d6a2523968cf5218f",
+    "src/kernel.rs": "5241c977255527db43f595b671801fd5ac2ddf0fdaafc475b939f68807192552",
+    "src/kernel_spec.rs": "2e88ae32df680cbafc851357cb48ba0a037bcc930039ba127a946f5a114a16d7",
+    "src/lib.rs": "58b19faf99b352fb0d160e3bb02982c0e84b809d9292d09e69dc0a4066caa9a0",
+    "src/logger.rs": "154843b3d5fa07f58e78563cc1a941c75220692edee690b2b211719abb435f43",
+    "src/manager/dir.rs": "b5dca11a158e1f1fee8f3f1305fbb8fa3d6ed1dad2bd9510c9b15ccca47c6bc1",
+    "src/manager/mod.rs": "1ccada3ce9c3ff9e1d5c09c7a4cc1f5fe7042991e758a96adccd5147f028b2a2",
+    "src/manager/naming.rs": "bbf9f68dcdf1a3dc4fab5ddf981de95b1b81261383ea9890134b19b6ceae1c14",
+    "src/manager/session.rs": "2711c110e70ccf9d1c82eb07d817d6e3190be5a5906c0c857fe5409cd0de855f",
+    "src/manager/store.rs": "b7110b218d06970a0432f7b558aabdaf7c5115e4f690cf9c40fc86dd1e3c22cd"
+  },
+  "patches": [
+    {
+      "file": "0001-standalone-manifest.patch",
+      "sha256": "ab3a4f22fe4c9f004950a35e7bb6410ad06cad88e8a09a3d31fad81825e914e0"
+    },
+    {
+      "file": "0002-windows-liveness.patch",
+      "sha256": "18358cb870c6cb9916bbad7d1d29ffaa6be34eb4d6cc24aae57b73696dccfe91"
+    },
+    {
+      "file": "0003-kernel-environment-and-cleanup.patch",
+      "sha256": "7fdebeef0086cb82bacdb90f3660b66392e4a3cbb3bed56c06741260f3179436"
+    },
+    {
+      "file": "0004-shared-client-interrupt.patch",
+      "sha256": "95ec1a4c312db7d2dd30f55b288c369aeb40ed198b0bc0003094830c3d94ca34"
+    },
+    {
+      "file": "0005-hidden-windows-process.patch",
+      "sha256": "f967c5f7d9cfb74914595081501ff8526732fb37dbcc4c857db6b7eee25928d2"
+    },
+    {
+      "file": "0006-stdin-and-watchdog-isolation.patch",
+      "sha256": "f76466a31c7b5b95c65ece6b060c43846703f91f4dcab0efd520d0900ca1eca2"
+    }
+  ],
+  "output_files": {
+    "Cargo.toml": "e4e4d732f86f96afcf939c39748f22a594dafef86c1fed5763321dd22798e15e",
+    "LICENSE": "e10c17cd4eec50dd440f5dc088a9f3c28d2a5132d340894236997409784d2aa7",
+    "src/client.rs": "619c0f2e43b39e2af22f26dec579850834490a9d4a35836bdde064558b603b14",
+    "src/connection_file.rs": "0e6f5a1fe938c456aec2bafd96d4c50448a685c51746499041f22d55e980f87c",
+    "src/events.rs": "e17f578439c40bce627abc5bd3726e4384eef28676a0b82d6a2523968cf5218f",
+    "src/kernel.rs": "367ab33f0a5ced2ec678126dac3fd7b21521f4d73f4daf5783eb35af165fc9e9",
+    "src/kernel_spec.rs": "b6dae2cb82662abdfb8c3f49ab70e0d676a731aad50b97172816399f8f6a8642",
+    "src/lib.rs": "58b19faf99b352fb0d160e3bb02982c0e84b809d9292d09e69dc0a4066caa9a0",
+    "src/logger.rs": "154843b3d5fa07f58e78563cc1a941c75220692edee690b2b211719abb435f43",
+    "src/manager/dir.rs": "b5dca11a158e1f1fee8f3f1305fbb8fa3d6ed1dad2bd9510c9b15ccca47c6bc1",
+    "src/manager/mod.rs": "1ccada3ce9c3ff9e1d5c09c7a4cc1f5fe7042991e758a96adccd5147f028b2a2",
+    "src/manager/naming.rs": "bbf9f68dcdf1a3dc4fab5ddf981de95b1b81261383ea9890134b19b6ceae1c14",
+    "src/manager/session.rs": "2711c110e70ccf9d1c82eb07d817d6e3190be5a5906c0c857fe5409cd0de855f",
+    "src/manager/store.rs": "1832b8bc96001b33a7948eebcb8053103682d650b3283909ef6c2ada4611ff34"
+  }
+}

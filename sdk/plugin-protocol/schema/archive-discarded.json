@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginArchiveDiscarded",
+  "description": "Explicit transient-byte cleanup. Receipts, revisions and artifacts are retained.",
+  "type": "object",
+  "properties": {
+    "discarded": {
+      "type": "boolean"
+    },
+    "reference": {
+      "$ref": "#/$defs/PluginArchiveReference"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "reference",
+    "discarded"
+  ],
+  "$defs": {
+    "PluginArchiveReference": {
+      "type": "object",
+      "properties": {
+        "archive": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "digest": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "archive",
+        "digest",
+        "bytes"
+      ]
+    }
+  }
+}

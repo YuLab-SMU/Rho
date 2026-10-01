@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ListPluginSource",
+  "type": "object",
+  "properties": {
+    "after": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "limit": {
+      "type": "integer",
+      "format": "uint32",
+      "maximum": 100,
+      "minimum": 1
+    },
+    "revision": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "revision",
+    "limit"
+  ]
+}

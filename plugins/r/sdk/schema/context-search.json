@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ContextSearch",
+  "type": "object",
+  "properties": {
+    "after": {
+      "description": "Opaque owner cursor; continuation does not imply a frozen multi-page read."
+    },
+    "limit": {
+      "type": "integer",
+      "format": "uint16",
+      "maximum": 20,
+      "minimum": 1
+    },
+    "text": {
+      "description": "Empty text lists available sources. Owners document which fields match.",
+      "type": "string"
+    },
+    "window": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "window",
+    "text",
+    "limit"
+  ]
+}

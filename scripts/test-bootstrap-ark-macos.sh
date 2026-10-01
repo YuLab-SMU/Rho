@@ -9,6 +9,7 @@ fi
 RHO_TEST_SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RHO_TEST_BOOTSTRAP_SOURCE="$RHO_TEST_SCRIPT_ROOT/bootstrap-ark-macos.sh"
 RHO_TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/rho-ark-bootstrap.XXXXXX")"
+RHO_TEST_ROOT="$(cd "$RHO_TEST_ROOT" && pwd)"
 trap 'rm -rf -- "$RHO_TEST_ROOT"' EXIT
 
 write_manifest() {
@@ -83,3 +84,24 @@ expect_failure \
   "$RHO_TEST_ROOT/bad-arch.zip"
 
 echo "Ark macOS bootstrap failure fixtures passed"
+
+# Native executable fixture: validates staging paths, not Ark/R behavior.
+RHO_SUCCESS_DIR="$RHO_TEST_ROOT/success-archive"
+mkdir -p "$RHO_SUCCESS_DIR"
+printf 'int main(void) { return 0; }\n' | clang -arch arm64 -x c - -o "$RHO_SUCCESS_DIR/ark"
+printf 'license fixture\n' >"$RHO_SUCCESS_DIR/LICENSE"
+printf 'notice fixture\n' >"$RHO_SUCCESS_DIR/NOTICE"
+(cd "$RHO_SUCCESS_DIR" && zip -q "$RHO_TEST_ROOT/success.zip" ark LICENSE NOTICE)
+RHO_SUCCESS_SHA="$(shasum -a 256 "$RHO_TEST_ROOT/success.zip" | awk '{print tolower($1)}')"
+RHO_SUCCESS_REPOSITORY="$RHO_TEST_ROOT/success/repository"
+mkdir -p "$RHO_SUCCESS_REPOSITORY/scripts" "$RHO_SUCCESS_REPOSITORY/runtime"
+cp "$RHO_TEST_BOOTSTRAP_SOURCE" "$RHO_SUCCESS_REPOSITORY/scripts/bootstrap-ark-macos.sh"
+write_manifest "$RHO_SUCCESS_REPOSITORY/runtime/ark.json" "$RHO_SUCCESS_SHA"
+RHO_SUCCESS_OUTPUT="$(RHO_ARK_ARCHIVE="$RHO_TEST_ROOT/success.zip" "$RHO_SUCCESS_REPOSITORY/scripts/bootstrap-ark-macos.sh")"
+test "$RHO_SUCCESS_OUTPUT" = "$RHO_SUCCESS_REPOSITORY/target/runtime/bin/ark"
+test -x "$RHO_SUCCESS_OUTPUT"
+test -f "$RHO_SUCCESS_REPOSITORY/target/runtime/notices/ark/LICENSE"
+test -f "$RHO_SUCCESS_REPOSITORY/target/runtime/notices/ark/NOTICE"
+test ! -e "$RHO_SUCCESS_REPOSITORY/desktop"
+test ! -e "$RHO_SUCCESS_REPOSITORY/target/runtime/ark-test-macos-arm64/kernel.json"
+echo "Ark macOS standalone staging fixture passed"

@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FileSearchResult",
+  "type": "object",
+  "properties": {
+    "continuation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SearchFilesCursor"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DirectoryEntry"
+      }
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "scanned_directories": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "scanned_entries": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "truncated": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "entries",
+    "scanned_entries",
+    "scanned_directories",
+    "truncated",
+    "notices"
+  ],
+  "$defs": {
+    "DirectoryEntry": {
+      "type": "object",
+      "properties": {
+        "byte_size": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "kind": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "name",
+        "kind",
+        "byte_size"
+      ]
+    },
+    "DirectoryScanFrame": {
+      "type": "object",
+      "properties": {
+        "after_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ]
+    },
+    "SearchFilesCursor": {
+      "type": "object",
+      "properties": {
+        "directories": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DirectoryScanFrame"
+          }
+        },
+        "project": {
+          "type": "string"
+        },
+        "show_hidden": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "text",
+        "show_hidden",
+        "directories"
+      ]
+    }
+  }
+}

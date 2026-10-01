@@ -1,0 +1,102 @@
+Subject: Use the existing Windows-compatible liveness probes
+Original-Rho-Commit: dc7226ee1f8619da25c6509021c6a5708711c2d6
+
+--- a/src/kernel.rs
++++ b/src/kernel.rs
+@@ -317,7 +317,7 @@
+                 spec.argv.join(" ")
+             )
+         })?;
+-        let guard = ChildGuard::new(child);
++        let mut guard = ChildGuard::new(child);
+ 
+         let channels = match connect_channels(&info, client_id).await {
+             Ok(c) => c,
+@@ -327,10 +327,11 @@
+                 // the OS a beat to mark the child dead so child_alive
+                 // reports honestly, then enrich.
+                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+-                let alive = match guard.id() {
+-                    Some(pid) => unsafe { libc::kill(pid as libc::pid_t, 0) == 0 },
+-                    None => true,
+-                };
++                let alive = guard
++                    .child
++                    .as_mut()
++                    .and_then(|child| child.try_wait().ok())
++                    .is_none();
+                 return Err(enrich_startup_error(
+                     e,
+                     guard.id(),
+@@ -464,12 +465,12 @@
+     /// for attached kernels (we can't tell from this side; rely on
+     /// socket error to surface the death).
+     pub fn child_alive(&self) -> bool {
+-        let Some(pid) = self.child_pid() else {
++        let Some(_pid) = self.child_pid() else {
+             return true;
+         };
+         #[cfg(unix)]
+         unsafe {
+-            libc::kill(pid as libc::pid_t, 0) == 0
++            libc::kill(_pid as libc::pid_t, 0) == 0
+         }
+         #[cfg(not(unix))]
+         true
+@@ -504,7 +505,7 @@
+     }
+ 
+     fn interrupt_signal(&self) -> Result<()> {
+-        let Some(pid) = self.child_pid().or(self.attached_pid) else {
++        let Some(_pid) = self.child_pid().or(self.attached_pid) else {
+             // Attached without a known pid, or already gone — nothing to signal.
+             return Ok(());
+         };
+@@ -513,7 +514,7 @@
+         #[cfg(unix)]
+         unsafe {
+             // Negate the pgid to address the whole group.
+-            let pgid: libc::pid_t = pid as libc::pid_t;
++            let pgid: libc::pid_t = _pid as libc::pid_t;
+             if libc::kill(-pgid, libc::SIGINT) != 0 {
+                 let err = std::io::Error::last_os_error();
+                 return Err(anyhow!("kill -INT {pgid}: {err}"));
+@@ -719,7 +720,10 @@
+         // Default is already Signal, but make the intent explicit.
+         kernel.interrupt_mode = InterruptMode::Signal;
+ 
+-        kernel.interrupt().await.expect("interrupt should not error");
++        kernel
++            .interrupt()
++            .await
++            .expect("interrupt should not error");
+ 
+         // Wait for the child to die; assert it was killed by SIGINT within
+         // a couple of seconds. `sleep` doesn't install a handler, so SIGINT
+@@ -754,7 +758,10 @@
+     async fn interrupt_signal_without_pid_is_a_noop() {
+         let mut kernel = super::Kernel::synthetic_for_test(None);
+         kernel.interrupt_mode = InterruptMode::Signal;
+-        kernel.interrupt().await.expect("no-pid path must not error");
++        kernel
++            .interrupt()
++            .await
++            .expect("no-pid path must not error");
+     }
+ 
+     #[test]
+--- a/src/manager/store.rs
++++ b/src/manager/store.rs
+@@ -173,10 +173,10 @@
+ /// `true` if the session looks alive. Fast path: `kill(pid, 0)` if the
+ /// pid was recorded. Otherwise a TCP probe to the kernel's shell port.
+ async fn probe_one(data_dir: &Path, meta: &SessionMeta) -> bool {
+-    if let Some(pid) = meta.kernel_pid {
++    if let Some(_pid) = meta.kernel_pid {
+         #[cfg(unix)]
+         // SAFETY: signal 0 is the standard liveness check; never sends a real signal.
+-        return unsafe { libc::kill(pid as libc::pid_t, 0) } == 0;
++        return unsafe { libc::kill(_pid as libc::pid_t, 0) } == 0;
+     }
+     let conn_path = data_dir.join(&meta.session_id).join(&meta.connection_file);
+     let Ok(info) = connection_file::read(&conn_path) else {

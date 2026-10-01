@@ -1,0 +1,58 @@
+Subject: Preserve Rho environment removal and Windows child cleanup
+Original-Rho-Commit: 1ebdc72472f7cfc5d228f3d35b3e1e77de8a784d
+
+--- a/src/kernel.rs
++++ b/src/kernel.rs
+@@ -87,6 +87,19 @@
+             unsafe {
+                 let _ = libc::kill(pid as libc::pid_t, libc::SIGTERM);
+             }
++        }
++        #[cfg(windows)]
++        if let Some(pid) = self.pid {
++            use std::os::windows::process::CommandExt;
++
++            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
++            let _ = std::process::Command::new("taskkill")
++                .args(["/PID", &pid.to_string(), "/T", "/F"])
++                .creation_flags(CREATE_NO_WINDOW)
++                .stdin(Stdio::null())
++                .stdout(Stdio::null())
++                .stderr(Stdio::null())
++                .status();
+         }
+     }
+ }
+@@ -652,6 +665,9 @@
+     for (k, v) in &spec.env {
+         cmd.env(k, v);
+     }
++    for key in &spec.env_remove {
++        cmd.env_remove(key);
++    }
+     Ok(cmd)
+ }
+ 
+@@ -680,6 +696,7 @@
+                 .iter()
+                 .map(|(k, v)| (k.to_string(), v.to_string()))
+                 .collect(),
++            env_remove: Vec::new(),
+             metadata: HashMap::new(),
+             kernel_protocol_version: None,
+         }
+--- a/src/kernel_spec.rs
++++ b/src/kernel_spec.rs
+@@ -46,6 +46,12 @@
+     /// `${VAR}` to reference the parent environment.
+     #[serde(default)]
+     pub env: HashMap<String, String>,
++
++    /// Parent environment variables removed from the kernel process after
++    /// kernelspec `env` entries are applied. This client-side extension is not
++    /// serialized into a standard kernelspec.
++    #[serde(default, skip_serializing)]
++    pub env_remove: Vec<String>,
+ 
+     /// Free-form metadata for client-specific kernel selection.
+     #[serde(default)]

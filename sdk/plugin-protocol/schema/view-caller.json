@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PluginViewCaller",
+  "description": "`None` means the admitted caller was not a view. A captured view that is no\nlonger present fails the observation rather than becoming a non-view caller.",
+  "type": "object",
+  "properties": {
+    "view": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PluginViewOrigin"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "PluginViewOrigin": {
+      "description": "Host-observed calling view identity. This contains no bridge or asset token\nand cannot be presented as a credential for another call.",
+      "type": "object",
+      "properties": {
+        "connection": {
+          "type": "string"
+        },
+        "view": {
+          "type": "string"
+        },
+        "window": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "view",
+        "window",
+        "connection"
+      ]
+    }
+  }
+}

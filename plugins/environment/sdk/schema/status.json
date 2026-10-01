@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EnvironmentStatus",
+  "type": "object",
+  "properties": {
+    "activities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ProcessActivity"
+      }
+    },
+    "capacity": {
+      "type": "integer",
+      "format": "uint16",
+      "maximum": 65535,
+      "minimum": 0
+    },
+    "project_root": {
+      "type": "string"
+    },
+    "rscript": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "storage_root": {
+      "type": "string"
+    },
+    "target_key": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "project_root",
+    "storage_root",
+    "activities",
+    "capacity"
+  ],
+  "$defs": {
+    "ProcessActivity": {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string"
+        },
+        "phase": {
+          "$ref": "#/$defs/ProcessPhase"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "phase"
+      ]
+    },
+    "ProcessPhase": {
+      "type": "string",
+      "enum": [
+        "waiting",
+        "running",
+        "awaiting_settlement"
+      ]
+    }
+  }
+}

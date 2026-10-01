@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RCaptureDiscardOutput",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/RCaptureDiscarded"
+    },
+    {
+      "$ref": "#/$defs/RExecutionNotStarted"
+    }
+  ],
+  "$defs": {
+    "InstanceRef": {
+      "type": "object",
+      "properties": {
+        "artifact": {
+          "type": "string"
+        },
+        "instance": {
+          "type": "string"
+        },
+        "plugin": {
+          "type": "string"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "instance",
+        "plugin",
+        "revision",
+        "artifact"
+      ]
+    },
+    "RCaptureAttemptReference": {
+      "description": "An attempted capture can lack complete payload metadata. Its original Core\noperation and provider establish identity without inventing a payload digest.",
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "project": {
+          "type": "string"
+        },
+        "provider": {
+          "$ref": "#/$defs/InstanceRef"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "project",
+        "provider",
+        "operation_id"
+      ]
+    },
+    "RCaptureDiscarded": {
+      "type": "object",
+      "properties": {
+        "after": {
+          "$ref": "#/$defs/RCaptureMaterial"
+        },
+        "before": {
+          "$ref": "#/$defs/RCaptureMaterial"
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "reference": {
+          "$ref": "#/$defs/RCaptureAttemptReference"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "operation_id",
+        "reference",
+        "before",
+        "after"
+      ]
+    },
+    "RCaptureMaterial": {
+      "type": "object",
+      "properties": {
+        "capture_metadata_available": {
+          "description": "Bounded capture metadata parsed successfully; payload integrity is separate.",
+          "type": "boolean"
+        },
+        "fingerprint": {
+          "description": "Opaque native identity/metadata precondition, not a payload content hash.",
+          "type": "string"
+        },
+        "payload_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        },
+        "staging_bytes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "fingerprint",
+        "capture_metadata_available"
+      ]
+    },
+    "RExecutionNotStarted": {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "started": {
+          "description": "Always false when the owner confirms cancellation before native execution.",
+          "type": "boolean",
+          "const": false
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "operation_id",
+        "started"
+      ]
+    }
+  }
+}

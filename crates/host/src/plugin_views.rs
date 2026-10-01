@@ -1,0 +1,356 @@
+//! Browser transport delegates through the same Host ports as CLI and MCP.
+use crate::*;
+use rho_contract::{CapabilityRef, HostRequest, QueryRequest};
+use rho_plugin_protocol::*;
+use serde_json::{Value, json};
+
+impl NextHost {
+    pub fn plugin_view_asset(
+        &self,
+        connection: &str,
+        token: &str,
+        path: &str,
+    ) -> Result<rho_plugins::PluginViewAsset, OperationError> {
+        self.runtime
+            .plugins
+            .as_ref()
+            .ok_or_else(|| OperationError::Unavailable("plugin views are not composed".into()))?
+            .view_asset(connection, token, path)
+    }
+    pub async fn dispatch_plugin_view(
+        &self,
+        parent: &CallContext,
+        window: &str,
+        token: &str,
+        message: PluginViewMessage,
+    ) -> Result<Value, OperationError> {
+        if message.protocol_version != PLUGIN_PROTOCOL_VERSION
+            || serde_json::to_vec(&message)
+                .map_err(|e| OperationError::InvalidInput(e.to_string()))?
+                .len()
+                > MAX_CONTROL_BYTES
+        {
+            return Err(OperationError::InvalidInput(
+                "invalid view protocol or oversized message".into(),
+            ));
+        }
+        let service =
+            self.runtime.plugins.as_ref().ok_or_else(|| {
+                OperationError::Unavailable("plugin views are not composed".into())
+            })?;
+        let cap = match &message.body {
+            PluginViewRequest::Query { capability, .. }
+            | PluginViewRequest::Control { capability, .. }
+            | PluginViewRequest::Invoke { capability, .. } => Some(CapabilityRef::new(
+                capability.id.as_str(),
+                capability.version.try_into().map_err(|_| {
+                    OperationError::InvalidInput("capability version out of range".into())
+                })?,
+            )?),
+            PluginViewRequest::DownloadResource { .. } => {
+                Some(CapabilityRef::new("resources.read", 1)?)
+            }
+            PluginViewRequest::DownloadArchive { .. } => {
+                Some(CapabilityRef::new("plugins.archive_read", 1)?)
+            }
+            PluginViewRequest::OpenTestWorkspace { .. } => {
+                Some(CapabilityRef::new("plugins.test_project", 1)?)
+            }
+            _ => None,
+        };
+        let provider = match &message.body {
+            PluginViewRequest::Query { arguments, .. }
+            | PluginViewRequest::Control { arguments, .. }
+            | PluginViewRequest::Invoke { arguments, .. } => arguments
+                .get("binding")
+                .and_then(|value| serde_json::from_value::<ProviderBinding>(value.clone()).ok()),
+            _ => None,
+        };
+        let mut context = service
+            .view_context(
+                parent,
+                message.connection.as_str(),
+                token,
+                window,
+                &message.view,
+                message.sequence,
+                cap.as_ref(),
+                provider.as_ref(),
+                message.test_project.is_some()
+                    || matches!(&message.body, PluginViewRequest::OpenTestWorkspace { .. }),
+            )
+            .await?;
+        service.check_view_close_fence(
+            &message.view,
+            &message.body,
+            message.test_project.is_some(),
+        )?;
+        if message.test_project.is_some()
+            && !matches!(
+                &message.body,
+                PluginViewRequest::Query { .. }
+                    | PluginViewRequest::Control { .. }
+                    | PluginViewRequest::Invoke { .. }
+                    | PluginViewRequest::GetOperation { .. }
+                    | PluginViewRequest::Cancel { .. }
+            )
+        {
+            return Err(OperationError::InvalidInput(
+                "intrinsic view requests cannot select a test project".into(),
+            ));
+        }
+        if let Some(response) = service.preview_response(&message.view, &message.body)? {
+            return Ok(response);
+        }
+        // The original live view has separately validated the exact declaration
+        // and current parent scopes for selection. Keep this native lease through
+        // ordinary dispatch; the capability retains only its own frozen scopes.
+        let child = message
+            .test_project
+            .as_ref()
+            .map(|id| self.plugin_test_host(parent, id))
+            .transpose()?;
+        let target = child.as_deref().unwrap_or(self);
+        let cancel = matches!(&message.body, PluginViewRequest::Cancel { .. });
+        let request = match message.body {
+            body @ (PluginViewRequest::RegisterCloseHandler { .. }
+            | PluginViewRequest::ObserveLifecycle { .. }
+            | PluginViewRequest::PrepareClose { .. }
+            | PluginViewRequest::RefuseClose { .. }) => {
+                if !parent.scopes.contains(rho_plugins::PLUGINS_RUN_SCOPE) {
+                    return Err(OperationError::InvalidInput(
+                        "view lifecycle requires the parent's existing view authority".into(),
+                    ));
+                }
+                return Ok(json!(service.cooperate_with_view_close(
+                    &context,
+                    &message.view,
+                    &body
+                )?));
+            }
+            PluginViewRequest::BeginTextCopy
+            | PluginViewRequest::FinishTextCopy { .. }
+            | PluginViewRequest::CancelTextCopy { .. } => {
+                // Intrinsic presentation cooperation, bound to this exact live
+                // view. Only its containing browser can perform the native copy;
+                // this acknowledgement never claims a clipboard side effect.
+                if !parent.scopes.contains(rho_plugins::PLUGINS_RUN_SCOPE) {
+                    return Err(OperationError::InvalidInput(
+                        "text copy requires the parent's existing view authority".into(),
+                    ));
+                }
+                return Ok(json!({"authorized_view":message.view}));
+            }
+            PluginViewRequest::OpenExternalUrl { url } => {
+                if !parent.scopes.contains(rho_plugins::PLUGINS_RUN_SCOPE) {
+                    return Err(OperationError::InvalidInput(
+                        "external navigation requires the parent's existing view authority".into(),
+                    ));
+                }
+                let scheme = url.to_ascii_lowercase();
+                if url.len() > 8192
+                    || url.chars().any(|c| c.is_control() || c.is_whitespace())
+                    || !(scheme.starts_with("https://") || scheme.starts_with("http://"))
+                {
+                    return Err(OperationError::InvalidInput(
+                        "external navigation requires a bounded HTTP(S) URL".into(),
+                    ));
+                }
+                // This is authority for presentation only, not an Operation or
+                // evidence that the browser opened or loaded the destination.
+                // The browser independently parses the URL and checks a current
+                // focused-frame gesture before creating a new browsing context.
+                return Ok(json!({"authorized_view":message.view}));
+            }
+            PluginViewRequest::OpenTestWorkspace { test_project } => {
+                let _child = self.plugin_test_host(parent, &test_project)?;
+                // No view is created and no native work starts. The browser
+                // checks a current gesture before constructing a credentialed
+                // same-Host URL, never accepting one from plugin code.
+                return Ok(
+                    json!({"authorized_view":message.view,"test_project":test_project,"window":window}),
+                );
+            }
+            PluginViewRequest::DownloadResource {
+                reference,
+                filename,
+            } => {
+                if !parent.scopes.contains(rho_plugins::PLUGINS_RUN_SCOPE) {
+                    return Err(OperationError::InvalidInput(
+                        "resource download requires the parent's existing view authority".into(),
+                    ));
+                }
+                if filename.is_empty()
+                    || filename.trim() != filename
+                    || filename.len() > 240
+                    || matches!(filename.as_str(), "." | "..")
+                    || filename
+                        .chars()
+                        .any(|c| c.is_control() || matches!(c, '/' | '\\' | ':'))
+                    || reference.bytes > 16 * 1024 * 1024
+                {
+                    return Err(OperationError::InvalidInput("resource download requires a bounded original and a filename without a directory path".into()));
+                }
+                // The same public read owner verifies project, principal, exact
+                // retained identity and bytes. view_context already required the
+                // view's declared resources.read grant, intersected with parent
+                // scopes. No provider starts and no scientific Operation is made.
+                let observation = self
+                    .query_snapshot(
+                        &context,
+                        QueryRequest {
+                            capability: cap.unwrap(),
+                            arguments: json!(ResourceRead {
+                                reference,
+                                offset: 0,
+                                limit: 1
+                            }),
+                        },
+                    )
+                    .await?;
+                if observation.status != rho_contract::QueryStatus::Ready
+                    || observation.data.is_none()
+                {
+                    return Err(OperationError::Unavailable(
+                        "the original download resource is unavailable".into(),
+                    ));
+                }
+                return Ok(json!({"authorized_view":message.view}));
+            }
+            PluginViewRequest::DownloadArchive {
+                reference,
+                filename,
+            } => {
+                if !parent.scopes.contains(rho_plugins::PLUGINS_RUN_SCOPE) {
+                    return Err(OperationError::InvalidInput(
+                        "archive download requires the parent's existing view authority".into(),
+                    ));
+                }
+                reference
+                    .validate()
+                    .map_err(|error| OperationError::InvalidInput(error.to_string()))?;
+                if filename.is_empty()
+                    || filename.trim() != filename
+                    || filename.len() > 240
+                    || matches!(filename.as_str(), "." | "..")
+                    || filename
+                        .chars()
+                        .any(|c| c.is_control() || matches!(c, '/' | '\\' | ':'))
+                {
+                    return Err(OperationError::InvalidInput(
+                        "archive download requires a filename without a directory path".into(),
+                    ));
+                }
+                // Reuse the scoped archive owner. Package bytes do not acquire a
+                // fabricated runtime owner or bypass this view's declared grant.
+                let observation = self
+                    .query_snapshot(
+                        &context,
+                        QueryRequest {
+                            capability: cap.unwrap(),
+                            arguments: json!(ReadPluginArchive {
+                                reference,
+                                offset: 0,
+                                limit: 1
+                            }),
+                        },
+                    )
+                    .await?;
+                if observation.status != rho_contract::QueryStatus::Ready
+                    || observation.data.is_none()
+                {
+                    return Err(OperationError::Unavailable(
+                        "the original archive is unavailable".into(),
+                    ));
+                }
+                return Ok(json!({"authorized_view":message.view}));
+            }
+            PluginViewRequest::Control { arguments, .. } => {
+                HostRequest::Control(rho_contract::ControlRequest {
+                    capability: cap.unwrap(),
+                    arguments,
+                })
+            }
+            PluginViewRequest::Query { arguments, .. } => {
+                HostRequest::QuerySnapshot(QueryRequest {
+                    capability: cap.unwrap(),
+                    arguments,
+                })
+            }
+            PluginViewRequest::Invoke {
+                request_id,
+                arguments,
+                preconditions,
+                ..
+            } => HostRequest::Invoke(rho_contract::InvokeRequest {
+                invocation: Invocation {
+                    client_request_id: rho_plugins::content_digest(
+                        format!("{}:{}", message.view, request_id).as_bytes(),
+                    )
+                    .to_string(),
+                    capability: cap.unwrap(),
+                    arguments,
+                    preconditions: serde_json::from_value(json!(preconditions))
+                        .map_err(|e| OperationError::InvalidInput(e.to_string()))?,
+                },
+                return_after_acceptance: Some(true),
+            }),
+            PluginViewRequest::GetOperation { operation_id }
+            | PluginViewRequest::Cancel { operation_id } => {
+                let id = rho_contract::OperationId::new(operation_id)?;
+                let record = target
+                    .runtime
+                    .gateway
+                    .owner_record(&context, &id)
+                    .await?
+                    .ok_or_else(|| OperationError::NotFound(id.as_str().into()))?;
+                if record.operation.caller != context.caller {
+                    return Err(OperationError::NotFound(id.as_str().into()));
+                }
+                // Reading the result of this view's own accepted command uses
+                // only the parent's existing read authority. Cancellation keeps
+                // its native rule and does not introduce a read requirement.
+                if !cancel && parent.scopes.contains("operation.read") {
+                    context.scopes.insert("operation.read".into());
+                }
+                if cancel {
+                    HostRequest::RequestCancellation {
+                        operation_id: id,
+                        only_if_pending: Some(false),
+                    }
+                } else {
+                    HostRequest::GetOperation { operation_id: id }
+                }
+            }
+            PluginViewRequest::SetState {
+                expected_version,
+                state,
+            } => {
+                // Intrinsic self-state authority cannot name another view or any
+                // other capability. The original parent still needs plugins.run.
+                context.scopes = parent
+                    .scopes
+                    .intersection(&[rho_plugins::PLUGINS_RUN_SCOPE.to_string()].into())
+                    .cloned()
+                    .collect();
+                HostRequest::Invoke(rho_contract::InvokeRequest {
+                    invocation: Invocation {
+                        client_request_id: rho_plugins::content_digest(
+                            format!("{}:{}", message.view, message.request).as_bytes(),
+                        )
+                        .to_string(),
+                        capability: CapabilityRef::new("views.update", 1)?,
+                        arguments: json!(UpdatePluginView {
+                            view: message.view,
+                            expected_version,
+                            state
+                        }),
+                        preconditions: vec![],
+                    },
+                    return_after_acceptance: Some(false),
+                })
+            }
+        };
+        target.dispatch(&context, request).await
+    }
+}

@@ -1,0 +1,184 @@
+import {checkObservationsAndOperations} from './fixtures/plugin-observations.mjs';
+import {checkComponentAnnotations} from './fixtures/component-annotations.mjs';
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { MessageChannel } from "node:worker_threads";
+import { createHash } from "node:crypto";
+import { compilePublicUiSdk } from "./fixtures/plugin-ui.mjs";
+import { checkViewClose } from "./fixtures/plugin-close.mjs";
+import { checkArchiveTransfers } from "./fixtures/plugin-archives.mjs";
+import { checkDraftTransfers } from "./fixtures/plugin-drafts.mjs";
+const directory=fs.mkdtempSync(path.join(os.tmpdir(),"rho-public-ui-"));
+try {
+  const sdk=await import(pathToFileURL(compilePublicUiSdk(directory)).href);
+  // The component declaration model must work from this outside SDK copy,
+  // without Studio sources, a DOM, a Host connection, or a private registry.
+  const visual={format_version:1,root:'root',nodes:{root:sdk.createVisualNode()},data_sources:{report:{capability:{id:'report.read',version:1},arguments:{},subscribe:true}},components:{chart:{source:'src/chart.ts',export:'Chart',properties_schema:{},input_schema:{},output_schema:{}}}};
+  for(const kind of sdk.visualNodeKinds){const item=sdk.createVisualNode(kind);if(kind==='custom')item.component='chart';visual.nodes[kind]=item;visual.nodes.root.children.push(kind);}
+  visual.nodes.text.bindings={text:{source:'report',path:['title']}};
+  visual.nodes.button.events={click:[{kind:'invoke',capability:{id:'report.export',version:1},arguments:{format:'csv'}}]};
+  const parsed=sdk.parseVisualDocument(JSON.stringify(visual));assert.deepEqual(parsed,visual);
+  assert.equal(sdk.visualBindingValue({report:{title:'中文 Ω'}},parsed.nodes.text.bindings.text),'中文 Ω');
+  const condition={kind:'equals',binding:{source:'report',path:[]},value:{title:'中文',ready:true}};
+  assert.equal(sdk.visualConditionMatches({report:{ready:true,title:'中文'}},condition),true);
+  assert.equal(sdk.visualConditionMatches({}, {kind:'exists',binding:condition.binding}),false);
+  assert.equal(sdk.visualConditionMatches({report:null}, {kind:'exists',binding:condition.binding}),true);
+  for(const mutate of [
+    d=>{d.nodes.button.events={mount:d.nodes.button.events.click};},
+    d=>{d.nodes.text.bindings.text.path=['constructor'];},
+    d=>{d.nodes.root.children.push('root');},
+    d=>{d.components.chart.source='../outside.ts';},
+  ]){const invalid=structuredClone(visual);mutate(invalid);assert.throws(()=>sdk.parseVisualDocument(JSON.stringify(invalid)));}
+  console.log('Public visual declarations: all ten node kinds, opaque custom sources, bindings/conditions and invalid graph/event/path refusal passed without a renderer or Host.');
+  await checkObservationsAndOperations(sdk);
+  await checkComponentAnnotations(sdk);
+  await checkDraftTransfers(sdk);
+  await checkArchiveTransfers(sdk);
+  await checkViewClose(sdk);
+  const scopedRequest = `sha256:${createHash('sha256').update('original-view:request-中文').digest('hex')}`;
+  assert.equal(await sdk.operationRequestId('original-view','request-中文'), scopedRequest);
+  assert.notEqual(await sdk.operationRequestId('reopened-view','request-中文'), scopedRequest);
+  const init={protocol_version:1,connection:"connection",view:{view:"view",state:{text:""},state_version:0}};
+  const channel=new MessageChannel(),client=new sdk.PluginViewClient(channel.port1,init);
+  let response=0;
+  channel.port2.on("message",message=>channel.port2.postMessage({protocol_version:1,connection:"connection",view:"view",sequence:++response,request:message.request,ok:true,result:message.body}));
+  const result=await client.query({id:"fixture.read",version:1},{text:"中文 Ω"});
+  assert.equal(result.arguments.text,"中文 Ω");
+  const control=await client.control({id:"fixture.answer",version:2},{value:"临时答复"});
+  assert.deepEqual(control,{type:"control",capability:{id:"fixture.answer",version:2},arguments:{value:"临时答复"}});
+  let collected=false;
+  await assert.rejects(client.copyText(async()=>{collected=true;return 'text';}),/unavailable/);
+  assert.equal(collected,false,'unsupported containers do not collect scientific data for a copy');
+  await assert.rejects(client.query({id:"fixture.read",version:1},{text:"x".repeat(sdk.MAX_UI_MESSAGE_BYTES)}),/quota/);
+  client.dispose();channel.port2.close();
+  await assert.rejects(client.operation("op"),/closed/);
+  const testChannel=new MessageChannel(),testClient=new sdk.PluginViewClient(testChannel.port1,{...init,features:['test_projects_v1']});
+  let testSequence=0;const testCalls=[];
+  testChannel.port2.on('message',message=>{
+    testCalls.push(message);
+    testChannel.port2.postMessage({protocol_version:1,connection:init.connection,view:init.view.view,sequence:++testSequence,request:message.request,ok:true,
+      result:message.body.type==='open_test_workspace'?{navigation_requested:true}:message.body});
+  });
+  const selected=testClient.testProject('test-original');
+  await selected.query({id:'fixture.read',version:1},{});
+  await selected.control({id:'fixture.answer',version:2},{value:'test'});
+  await selected.invoke({id:'fixture.run',version:1},{value:1},{requestId:'original-request'});
+  await selected.operation('original-operation');await selected.cancel('original-operation');
+  assert.deepEqual(testCalls.map(call=>call.test_project),Array(5).fill('test-original'));
+  assert.deepEqual(testCalls.map(call=>call.body.type),['query','control','invoke','get_operation','cancel']);
+  assert.equal(testCalls[2].body.request_id,'original-request');
+  await testClient.query({id:'plugins.list',version:1},{});assert.equal(testCalls.at(-1).test_project,undefined);
+  for(const body of [{type:'set_state',expected_version:0,state:{}},{type:'register_close_handler',renderer:'renderer'},{type:'open_test_workspace',test_project:'test-original'}])
+    await assert.rejects(testClient.request(body,'test-original'),/ordinary Host port/);
+  for(const id of ['', 'bad..id','/analysis',null])assert.throws(()=>testClient.testProject(id),/identity/);
+  assert.throws(()=>client.testProject('test-original'),/unavailable/);
+  await testClient.openTestWorkspace('test-original');
+  assert.equal(testCalls.at(-1).test_project,undefined);
+  assert.deepEqual(testCalls.at(-1).body,{type:'open_test_workspace',test_project:'test-original'});
+  testClient.dispose();testChannel.port2.close();
+  await assert.rejects(selected.query({id:'fixture.read',version:1},{}),/closed/);
+  const staleChannel=new MessageChannel(),stale=new sdk.PluginViewClient(staleChannel.port1,init);
+  staleChannel.port2.on("message",message=>staleChannel.port2.postMessage({protocol_version:1,connection:"another",view:"view",sequence:1,request:message.request,ok:true,result:null}));
+  await assert.rejects(stale.query({id:"fixture.read",version:1},{}),/identity or sequence/);
+  stale.dispose();staleChannel.port2.close();
+  const errorChannel=new MessageChannel(),errorClient=new sdk.PluginViewClient(errorChannel.port1,init);
+  errorChannel.port2.on("message",message=>errorChannel.port2.postMessage({protocol_version:1,connection:"connection",view:"view",sequence:1,request:message.request,ok:false,error:"Original commit remains pending",diagnostic:{operation_id:"original-op",recovery:{retained:true}}}));
+  await assert.rejects(errorClient.operation("original-op"),error=>error instanceof sdk.ViewRequestError && error.diagnostic.operation_id==="original-op" && error.diagnostic.recovery.retained);
+  errorClient.dispose();errorChannel.port2.close();
+  const copyChannel=new MessageChannel(),copyClient=new sdk.PluginViewClient(copyChannel.port1,{...init,features:['text_copy_v1']});
+  let copySequence=0,confirmCopy=true,authorizeCopy=true;const copies=[];
+  copyChannel.port2.on('message',message=>{
+    copies.push(message.body);
+    const result=message.body.type==='begin_text_copy'?{copy_id:'reserved-copy'}:message.body.type==='finish_text_copy'?{copied:confirmCopy}:{released:true};
+    const ok=authorizeCopy||message.body.type!=='begin_text_copy';
+    copyChannel.port2.postMessage({protocol_version:1,connection:'connection',view:'view',sequence:++copySequence,request:message.request,ok,result,error:ok?undefined:'Use an explicit Copy action'});
+  });
+  await copyClient.copyText(async()=>{assert.equal(copies.at(-1).type,'begin_text_copy');return '中文 Ω';});
+  assert.deepEqual(copies,[{type:'begin_text_copy'},{type:'finish_text_copy',copy_id:'reserved-copy',text:'中文 Ω'}]);
+  copies.length=0;
+  await assert.rejects(copyClient.copyText(async()=>{throw new Error('original reference expired');}),/reference expired/);
+  assert.deepEqual(copies.map(item=>item.type),['begin_text_copy','cancel_text_copy']);
+  copies.length=0;
+  await assert.rejects(copyClient.copyText('x'.repeat(sdk.MAX_UI_MESSAGE_BYTES)),/quota/);
+  assert.deepEqual(copies.map(item=>item.type),['begin_text_copy','cancel_text_copy']);
+  copies.length=0;confirmCopy=false;
+  await assert.rejects(copyClient.copyText('unconfirmed'),/completion is unconfirmed/);
+  assert.deepEqual(copies.map(item=>item.type),['begin_text_copy','finish_text_copy','cancel_text_copy']);
+  copies.length=0;authorizeCopy=false;collected=false;
+  await assert.rejects(copyClient.copyText(async()=>{collected=true;return 'not read';}),/explicit Copy action/);
+  assert.equal(collected,false);
+  assert.deepEqual(copies.map(item=>item.type),['begin_text_copy']);
+  copyClient.dispose();copyChannel.port2.close();
+  await assert.rejects(client.openExternal('https://example.org/'),/unavailable/);
+  const externalChannel=new MessageChannel(),externalClient=new sdk.PluginViewClient(externalChannel.port1,{...init,features:['external_links_v1']});
+  let externalSequence=0,confirmExternal=true;const links=[];
+  externalChannel.port2.on('message',message=>{
+    links.push(message.body);
+    externalChannel.port2.postMessage({protocol_version:1,connection:'connection',view:'view',sequence:++externalSequence,request:message.request,ok:true,result:{navigation_requested:confirmExternal}});
+  });
+  await externalClient.openExternal('HTTPS://example.org/中文?q=1#topic');
+  assert.deepEqual(links,[{type:'open_external_url',url:'https://example.org/%E4%B8%AD%E6%96%87?q=1#topic'}]);
+  for(const url of ['javascript:alert(1)','file:///private','//example.org','https://user:pass@example.org/','https://example.org/\\bad','https://example.org/ bad','https://example.org/'+ 'x'.repeat(8192)])
+    await assert.rejects(externalClient.openExternal(url),/External links/);
+  assert.equal(links.length,1);
+  confirmExternal=false;await assert.rejects(externalClient.openExternal('https://example.org/'),/unconfirmed/);
+  externalClient.dispose();externalChannel.port2.close();
+  const quotaChannel=new MessageChannel(),quota=new sdk.PluginViewClient(quotaChannel.port1,init);
+  const pending=Array.from({length:sdk.MAX_UI_PENDING},()=>quota.operation("op").catch(e=>e));
+  await assert.rejects(quota.operation("op"),/quota/);
+  quota.dispose();quotaChannel.port2.close();await Promise.all(pending);
+  const bytes=new TextEncoder().encode("中文 Ω\n".repeat(50000));
+  const sha=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)),n=>n.toString(16).padStart(2,"0")).join("");
+  const owner={plugin:"example.resources",instance:"source",revision:"sha256:"+"a".repeat(64),artifact:"sha256:"+"b".repeat(64)};
+  const reference={owner,resource:"resource",digest:"sha256:"+sha,bytes:bytes.length,media_type:"text/html"};
+  await assert.rejects(client.downloadResource(reference,'plot.png'),/unavailable/);
+  const downloadChannel=new MessageChannel(),downloadClient=new sdk.PluginViewClient(downloadChannel.port1,{...init,features:['resource_download_v1','archive_download_v1']});
+  let downloadSequence=0,confirmedDownload=true;const downloads=[];
+  downloadChannel.port2.on('message',message=>{
+    downloads.push(message.body);
+    downloadChannel.port2.postMessage({protocol_version:1,connection:'connection',view:'view',sequence:++downloadSequence,request:message.request,ok:true,result:confirmedDownload?{download_requested:true}:{authorized_view:'view'}});
+  });
+  await downloadClient.downloadResource(reference,'原图 α.html');
+  assert.deepEqual(downloads,[{type:'download_resource',reference,filename:'原图 α.html'}]);
+  for(const name of ['', '../original', 'x/y', 'x\\y', 'a:b', 'a\nb','a\u0085b', ' leading', '..', '字'.repeat(81)])
+    await assert.rejects(downloadClient.downloadResource(reference,name),/filename/);
+  for(const bytes of [-1,0.5,17*1024*1024,Number.NaN])
+    await assert.rejects(downloadClient.downloadResource({...reference,bytes},'plot.png'),/limit|size/);
+  assert.equal(downloads.length,1);
+  confirmedDownload=false;await assert.rejects(downloadClient.downloadResource(reference,'original.html'),/unconfirmed/);
+  const archiveReference={archive:'exported-source',digest:reference.digest,bytes:17*1024*1024};
+  await assert.rejects(client.downloadArchive(archiveReference,'source.rho-plugin'),/unavailable/);
+  confirmedDownload=true;await downloadClient.downloadArchive(archiveReference,'源码 Ω.rho-plugin');
+  assert.deepEqual(downloads.at(-1),{type:'download_archive',reference:archiveReference,filename:'源码 Ω.rho-plugin'});
+  const archiveCalls=downloads.length;
+  for(const invalid of [{...archiveReference,owner},{...archiveReference,bytes:0},{...archiveReference,bytes:sdk.MAX_PLUGIN_ARCHIVE_BYTES+1},{...archiveReference,archive:'../outside'}])
+    await assert.rejects(downloadClient.downloadArchive(invalid,'source.rho-plugin'),/limit|identity/);
+  await assert.rejects(downloadClient.downloadArchive(archiveReference,'../source.rho-plugin'),/filename/);
+  assert.equal(downloads.length,archiveCalls);
+  confirmedDownload=false;await assert.rejects(downloadClient.downloadArchive(archiveReference,'source.rho-plugin'),/unconfirmed/);
+  downloadClient.dispose();downloadChannel.port2.close();
+  let resourceReads=0;
+  const reader={query:async(cap,args)=>{
+    assert.equal(cap.id,"resources.read");resourceReads++;
+    const end=Math.min(args.offset+args.limit,bytes.length);
+    return {data:{reference:structuredClone(reference),offset:args.offset,base64:Buffer.from(bytes.slice(args.offset,end)).toString("base64"),next:end===bytes.length?null:end}};
+  }};
+  assert.deepEqual(await sdk.readResource(reader,reference),bytes);assert.ok(resourceReads>1);
+  await assert.rejects(sdk.readResource(reader,reference,{maxBytes:10}),/limit/);
+  for(const corrupt of [
+    part=>({...part,next:1}),part=>({...part,offset:1}),part=>({...part,base64:""}),
+    part=>({...part,reference:{...part.reference,owner:{...owner,instance:"another"}}}),
+    part=>({...part,base64:Buffer.alloc(Buffer.from(part.base64,"base64").length).toString("base64")}),
+  ]) await assert.rejects(sdk.readResource({query:async(cap,args)=>({data:corrupt((await reader.query(cap,args)).data)})},reference),/identity|range|integrity|incomplete/);
+  const controller=new AbortController();let stoppedReads=0;
+  await assert.rejects(sdk.readResource({query:async(cap,args)=>{stoppedReads++;controller.abort();return reader.query(cap,args);}},reference,{signal:controller.signal}),/stopped/);
+  assert.equal(stoppedReads,1);
+  const empty={...reference,bytes:0,digest:"sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"};let authorizedEmpty=false;
+  assert.equal((await sdk.readResource({query:async()=>{authorizedEmpty=true;return {data:{reference:empty,offset:0,base64:"",next:null}};}},empty)).length,0);
+  assert.equal(authorizedEmpty,true);
+  console.log("Public resource reads verify multibyte chunk assembly, immutable identity, exact ranges, final digest, cancellation and empty-resource authority.");
+  console.log("External public UI SDK compiles; Unicode, quotas, stale connections and disposal verified.");
+} finally {fs.rmSync(directory,{recursive:true,force:true});}

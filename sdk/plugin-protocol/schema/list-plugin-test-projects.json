@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ListPluginTestProjects",
+  "type": "object",
+  "properties": {
+    "after": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "limit": {
+      "type": "integer",
+      "format": "uint32",
+      "maximum": 100,
+      "minimum": 1
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "limit"
+  ]
+}
