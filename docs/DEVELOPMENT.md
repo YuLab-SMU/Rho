@@ -5,8 +5,10 @@ source owner. Read Status before resuming and inspect all three Git states with
 `node dev.mjs status`. The defaults are this checkout, ../Rho-core and
 ../Rho-plugins; a gitignored .rho-dev.json can override core and plugins paths.
 
-After the component repositories are published, clone the three repositories as
-siblings. This layout keeps one development entry without Git submodules:
+Clone the three repositories as siblings. This layout keeps one development entry
+without Git submodules. While the application split is awaiting merge, use
+`git clone --branch codex/split-repositories https://github.com/YuLab-SMU/Rho.git`
+for the first command below; after merge, the default main branch contains the split.
 
 ```sh
 git clone https://github.com/YuLab-SMU/Rho.git

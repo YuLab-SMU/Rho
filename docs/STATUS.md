@@ -35,12 +35,13 @@ and each plugin artifact independently. An unrelated plugin-repository commit do
 not force rebuilding unchanged packages. Local overrides are visible in receipts;
 exact assembly requires clean, explicitly selected core/plugin artifacts.
 
-Source publication is prepared for YuLab-SMU/Rho-core, YuLab-SMU/Rho-plugins and
-YuLab-SMU/Rho. The component origin URLs, Cargo repository metadata, online links
-and sibling-clone instructions now use these targets. New repositories and first
-pushes remain pending; the application is intended for a pull request on
-codex/split-repositories. The existing personal fork remains a separate remote.
-The configured xiayh17 account has administrator access to YuLab-SMU/Rho.
+Core and plugins are published as public repositories at
+[YuLab-SMU/Rho-core](https://github.com/YuLab-SMU/Rho-core) and
+[YuLab-SMU/Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins). Their remote main
+heads were verified against local commits 55c6ac1e and 7b88e1cd respectively. The
+application split is submitted on YuLab-SMU/Rho's codex/split-repositories branch
+for review into main. The existing personal fork remains a separate remote.
+This publishes source; no binary release or installer was published.
 
 ## Selected verification
 
@@ -85,9 +86,10 @@ the selected behavior evidence above remains applicable.
 - This establishes local source/build separation and the selected Files/application
   flow, not a fresh sixteen-plugin acceptance, real-R computation/recovery matrix,
   visual redesign acceptance or signed/public distribution.
-- Component source repositories exist locally at sibling paths. Remote creation
-  and pushing remain pending. Automatic acquisition of missing artifacts, installer/signing/notarization and
-  an updated native Preview launcher remain separately scoped work.
+- The component source repositories are published; the application split awaits
+  merge into main. Automatic acquisition of missing artifacts,
+  installer/signing/notarization and an updated native Preview launcher remain
+  separately scoped work.
 - Existing Agent/Rig, window-bound contracts and Studio-specific Agent entry points
   remain in their plugin owners. The external-Agent/headless goals in Next Version
   are not automatically implemented by moving source.

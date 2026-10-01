@@ -2,15 +2,14 @@
 
 ## Source repositories
 
-The source publication targets are YuLab-SMU/Rho-core, YuLab-SMU/Rho-plugins and
-the existing YuLab-SMU/Rho. The new repositories are prepared locally; creation
-and first pushes are pending. Use public visibility to match the existing project.
+The public source repositories are YuLab-SMU/Rho-core, YuLab-SMU/Rho-plugins and
+the existing YuLab-SMU/Rho. Core and plugins are published on main; the application
+split is submitted on codex/split-repositories for review into main.
 
 Publish the committed core and plugins before updating the application, so its
-SDK provenance and rho.lock.json revisions can be resolved remotely. Create the
-two empty repositories without generated README, license or initial commit, then
-push only their main branches. Their independent histories begin at the split;
-the original monorepo history stays in Rho. Do not use mirror or force pushes.
+SDK provenance and rho.lock.json revisions can be resolved remotely. The component
+repositories' independent histories begin at the split; the original monorepo
+history stays in Rho. Push the selected branches without mirror or force pushes.
 
 Submit the application on codex/split-repositories to YuLab-SMU/Rho and open a
 pull request into main. Include the unpublished ancestor commits, repository
@@ -58,8 +57,8 @@ remain separate from the core binary. Preserve these files with their artifacts.
 The assembly can contain a subset of official plugins. Completeness and behavior
 are established only by the flows actually run against that combination. A plugin
 repository commit does not imply every package was rebuilt or accepted. A local
-source lock does not fetch unavailable remote repositories or authenticate a
-publisher; no new remote repositories have been published by this split.
+source lock does not fetch unavailable artifacts or authenticate a publisher;
+source publication does not publish the locally assembled binaries and archives.
 
 Native validation remains Apple Silicon macOS. Other platform sources are not a
 new distribution commitment. Historical native Preview launchers and old bundle

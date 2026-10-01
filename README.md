@@ -9,8 +9,9 @@ shell, examples, development entry and exact component composition.
 | [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins) | Official scientific plugins, domain contracts, native adapters, methods and views |
 | Rho (this repository) | Application shell, examples, component selection and integration |
 
-The component repositories are prepared for publication under YuLab-SMU. Their
-first pushes are pending; each repository has its own source and commit. See the
+The component repositories are published under YuLab-SMU, each with its own source
+and commit. The application split is submitted on `codex/split-repositories` for
+review into `main`. See the
 [development guide](docs/DEVELOPMENT.md) for the sibling checkout layout and
 the [source publication procedure](docs/RELEASE.md#source-repositories).
 
