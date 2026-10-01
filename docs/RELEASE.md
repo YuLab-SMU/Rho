@@ -1,4 +1,29 @@
-# Exact local composition
+# Source publication and local composition
+
+## Source repositories
+
+The source publication targets are YuLab-SMU/Rho-core, YuLab-SMU/Rho-plugins and
+the existing YuLab-SMU/Rho. The new repositories are prepared locally; creation
+and first pushes are pending. Use public visibility to match the existing project.
+
+Publish the committed core and plugins before updating the application, so its
+SDK provenance and rho.lock.json revisions can be resolved remotely. Create the
+two empty repositories without generated README, license or initial commit, then
+push only their main branches. Their independent histories begin at the split;
+the original monorepo history stays in Rho. Do not use mirror or force pushes.
+
+Submit the application on codex/split-repositories to YuLab-SMU/Rho and open a
+pull request into main. Include the unpublished ancestor commits, repository
+ownership changes, selected verification and its limits. The old xiayh17/Rho
+origin is a personal fork; use upstream explicitly for the organization submission.
+Publishing source is separate from merging that pull request or creating a release.
+
+Use an existing GitHub account with the required organization permissions; do not
+store credentials in Git URLs or tracked files. Verify each remote branch head
+against the local commit after its push. An API read or push dry run establishes
+preparation, not repository creation or publication.
+
+## Exact local composition
 
 The repository split currently provides local development assembly, not a signed
 installer or a published release. Core, official plugins and application have

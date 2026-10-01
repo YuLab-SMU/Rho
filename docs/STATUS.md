@@ -33,8 +33,14 @@ The single local entry is dev.mjs: status, build core/app/plugin, explicit SDK s
 lock, verify, run and assemble. rho.lock.json records selected checkout revisions
 and each plugin artifact independently. An unrelated plugin-repository commit does
 not force rebuilding unchanged packages. Local overrides are visible in receipts;
-exact assembly requires clean, explicitly selected core/plugin artifacts. No new
-remote repository was created or pushed.
+exact assembly requires clean, explicitly selected core/plugin artifacts.
+
+Source publication is prepared for YuLab-SMU/Rho-core, YuLab-SMU/Rho-plugins and
+YuLab-SMU/Rho. The component origin URLs, Cargo repository metadata, online links
+and sibling-clone instructions now use these targets. New repositories and first
+pushes remain pending; the application is intended for a pull request on
+codex/split-repositories. The existing personal fork remains a separate remote.
+The configured xiayh17 account has administrator access to YuLab-SMU/Rho.
 
 ## Selected verification
 
@@ -60,18 +66,27 @@ Evidence is retained under target/: composition-test.json and its original repor
 composition-browser.png, core.json, packages.json, app-assets.json, and
 composition-split-locked/composition.json. The latter records exact sizes/hashes and
 source identities; its application source was dirty during assembly and is labeled
-accordingly. Core is 10ccb43a (the same native binary bytes verified above); packages were
-built at plugin source f03bf973. Later Remote test-fixture and SDK-verifier-only
-plugin commits are selected for source development; they do not invalidate the
-unchanged selected package artifacts.
+accordingly. That assembly retains its original core 10ccb43a receipt. Current
+source and the retained core receipt are 55c6ac1e; cargo build --locked completed
+with the same native binary bytes. Packages were built at plugin source f03bf973.
+Later test-fixture, repository metadata and SDK-verifier changes are selected for
+source development; they do not invalidate the unchanged package artifacts.
+
+Remote preparation exposed Finder .DS_Store files in local SDK directories. Core's
+exporter and verifier now exclude ordinary Finder metadata files while still
+rejecting symlinks, unlisted code and changed dependencies. The focused check
+node --test scripts/tests/sdk-snapshot.test.mjs passed. Both consumer snapshots
+were refreshed from committed core source; source closure checks and
+node dev.mjs verify passed. No runtime or UI code changed during this preparation;
+the selected behavior evidence above remains applicable.
 
 ## Limits and next work
 
 - This establishes local source/build separation and the selected Files/application
   flow, not a fresh sixteen-plugin acceptance, real-R computation/recovery matrix,
   visual redesign acceptance or signed/public distribution.
-- Component source repositories exist locally at sibling paths. Remote hosting,
-  automatic acquisition of missing artifacts, installer/signing/notarization and
+- Component source repositories exist locally at sibling paths. Remote creation
+  and pushing remain pending. Automatic acquisition of missing artifacts, installer/signing/notarization and
   an updated native Preview launcher remain separately scoped work.
 - Existing Agent/Rig, window-bound contracts and Studio-specific Agent entry points
   remain in their plugin owners. The external-Agent/headless goals in Next Version

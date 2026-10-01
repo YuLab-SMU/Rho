@@ -5,12 +5,14 @@ shell, examples, development entry and exact component composition.
 
 | Repository | Responsibility |
 | --- | --- |
-| [Rho-core](../Rho-core/README.md) | Generic Host, operation journal, plugin lifecycle, public SDK, CLI/HTTP/MCP |
-| [Rho-plugins](../Rho-plugins/README.md) | Official scientific plugins, domain contracts, native adapters, methods and views |
+| [Rho-core](https://github.com/YuLab-SMU/Rho-core) | Generic Host, operation journal, plugin lifecycle, public SDK, CLI/HTTP/MCP |
+| [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins) | Official scientific plugins, domain contracts, native adapters, methods and views |
 | Rho (this repository) | Application shell, examples, component selection and integration |
 
-The sibling repositories currently exist locally. No new GitHub repository or
-remote publication is implied. Each repository has its own source and commit.
+The component repositories are prepared for publication under YuLab-SMU. Their
+first pushes are pending; each repository has its own source and commit. See the
+[development guide](docs/DEVELOPMENT.md) for the sibling checkout layout and
+the [source publication procedure](docs/RELEASE.md#source-repositories).
 
 ```sh
 node dev.mjs status

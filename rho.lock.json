@@ -1,12 +1,12 @@
 {
   "format": 1,
   "core": {
-    "revision": "10ccb43abb96f3fad5c2b951a300b2c4344cfc91",
-    "sdk_sha256": "331a2538d641db22fe44118412ddc31cba8b1916dbfdfbff82935509b5ea433c"
+    "revision": "55c6ac1e65cb6c3a15945f1bf097aa8aac60dbd1",
+    "sdk_sha256": "8cac7965140729c863b0e3fff7b198fd35a8e8b7c9899df392f261c7de162f8c"
   },
   "plugins": {
-    "revision": "e35bd40248545bfc5d4158f80b38632070778d5b",
-    "sdk_sha256": "469d6ea4477370e6bd056eb9735fb6d17c56982c6ba4a4ecd4a464bfed3c9c76"
+    "revision": "7b88e1cd0dd3b950b34360219f25d28980e26c0c",
+    "sdk_sha256": "607d473a73688004b2d0d26739afdff15e61cc8386d6f1c6d518838f92acb68a"
   },
   "packages": {
     "files": {

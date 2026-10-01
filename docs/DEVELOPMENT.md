@@ -5,6 +5,31 @@ source owner. Read Status before resuming and inspect all three Git states with
 `node dev.mjs status`. The defaults are this checkout, ../Rho-core and
 ../Rho-plugins; a gitignored .rho-dev.json can override core and plugins paths.
 
+After the component repositories are published, clone the three repositories as
+siblings. This layout keeps one development entry without Git submodules:
+
+```sh
+git clone https://github.com/YuLab-SMU/Rho.git
+git clone https://github.com/YuLab-SMU/Rho-core.git
+git clone https://github.com/YuLab-SMU/Rho-plugins.git
+cd Rho
+node --input-type=module <<'JS'
+import fs from 'node:fs';
+import {execFileSync} from 'node:child_process';
+const lock = JSON.parse(fs.readFileSync('rho.lock.json', 'utf8'));
+for (const name of ['core', 'plugins']) {
+  execFileSync('git', ['-C', `../Rho-${name}`, 'checkout', '--detach', lock[name].revision],
+    {stdio: 'inherit'});
+}
+JS
+node dev.mjs status
+```
+
+The explicit checkouts reproduce this application's selected component sources.
+For new component work, create a branch in its repository and update the application
+lock after committing and verifying the change. Git clones contain source and
+dependency snapshots; build receipts and native plugin packages are local outputs.
+
 ## Commands and source ownership
 
 | Work | Command from this repository |

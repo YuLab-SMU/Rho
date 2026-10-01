@@ -27,6 +27,7 @@ export function verifySnapshot(root) {
     assert.ok(!path.isAbsolute(relative) && !relative.split('/').some(p => ['', '.', '..'].includes(p)));
     const location = path.join(root, relative), stat = fs.lstatSync(location);
     assert.ok(!stat.isSymbolicLink(), `SDK directory contains a symlink: ${relative}`);
+    if (path.basename(relative) === '.DS_Store' && stat.isFile()) return;
     if (stat.isDirectory()) for (const name of fs.readdirSync(location)) inventory(`${relative}/${name}`);
     else { assert.ok(stat.isFile()); actual.add(relative); }
   }

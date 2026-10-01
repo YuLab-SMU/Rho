@@ -1,11 +1,11 @@
 {
   "format": 1,
-  "source_revision": "10ccb43abb96f3fad5c2b951a300b2c4344cfc91",
+  "source_revision": "55c6ac1e65cb6c3a15945f1bf097aa8aac60dbd1",
   "source_dirty": false,
   "roots": [
     "sdk"
   ],
-  "sha256": "331a2538d641db22fe44118412ddc31cba8b1916dbfdfbff82935509b5ea433c",
+  "sha256": "8cac7965140729c863b0e3fff7b198fd35a8e8b7c9899df392f261c7de162f8c",
   "files": [
     {
       "path": "CORE-LICENSE",
@@ -2277,8 +2277,8 @@
     },
     {
       "path": "sdk/verify-snapshot.mjs",
-      "bytes": 2535,
-      "sha256": "d5d720b0f6dc29f0bf3cd770d86bc08c76fcdc09187c2958953b95f2170e5c35",
+      "bytes": 2609,
+      "sha256": "2990ce1f6d7e62c27d2badc61a4a9c21d8d06511778843c206ebbe1f9faf1dc6",
       "executable": false
     }
   ]
