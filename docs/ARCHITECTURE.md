@@ -5,6 +5,20 @@ preserve. [Status](STATUS.md) records executed evidence and remaining gaps.
 [Next Version](NEXT-VERSION.md) defines the target design; its headless interfaces,
 external-Agent direction and faster development path are not all current features.
 
+## Repository ownership
+
+The application repository (Rho) owns ui/, examples/, dev.mjs and artifact assembly.
+Rho-core owns crates/, public SDK source and generic CLI/HTTP/MCP transports.
+Rho-plugins owns plugins/, native scientific code, Jet/patches and plugin builders.
+Core and plugins each have a self-contained Cargo workspace. Consumers carry a
+pinned public SDK snapshot; only core maintains its source. Application generation
+uses that snapshot and produces external assets, never embedded core assets.
+
+The HTTP adapter stays with core but accepts application assets and an existing
+application-selected default project. It no longer embeds scientific example files
+or the application shell. The application owns example preparation. Local dev
+coordination does not create another runtime or scientific operation flow.
+
 ## Authority and ownership
 
 ### Authorized unified plugin boundary
@@ -55,7 +69,7 @@ shutdown suspends confirmed instances; reconnect/resume is explicit and does not
 replay scientific work or restore R memory.
 
 See [public protocol](../sdk/plugin-protocol/README.md) and
-[backend SDK](../crates/plugin-sdk/README.md) for exact fields, quotas and messages.
+[backend SDK](../../Rho-core/crates/plugin-sdk/README.md) for exact fields, quotas and messages.
 Other languages can implement this same protocol; a Python fixture demonstrates
 that boundary, not a shipped Python product or a production TypeScript backend.
 
@@ -109,7 +123,7 @@ Editor actions retain the selected document, captured text, expected draft versi
 and disk base. Save-and-run verifies saved bytes before executing that capture;
 later typing remains a newer draft. Delayed receipts cannot overwrite it. A source
 run remains inspectable through its original child Operation after the Editor
-provider disconnects. See [Editor source](../plugins/editor/backend/src/actions.rs).
+provider disconnects. See [Editor source](../../Rho-plugins/plugins/editor/backend/src/actions.rs).
 
 R owns its native session and serial execution queue. Admission precedes enqueue;
 retries do not enqueue again. Reads respect the native lane. Read/control capacity
@@ -210,7 +224,7 @@ Fixture previews start no backend and have no scientific grants. Real backend te
 use disposable projects with independent journals and exact dependency selections.
 Test reads cannot create/recover a child. Stop requires confirmed cleanup; retained
 journals and original-operation links survive. Source editing, preview, test and
-application remain separate outcomes. See [Plugin Studio](../plugins/studio/README.md).
+application remain separate outcomes. See [Plugin Studio](../../Rho-plugins/plugins/studio/README.md).
 
 The next-version development unit is a headless capability and its contracts.
 Frontend delivery remains a separate consumer milestone. Existing window-bound
@@ -218,6 +232,8 @@ flows remain until explicitly replaced; document/view identity checks must not b
 removed merely to make an API appear headless.
 
 ## Source map and trust boundary
+
+Locations below are relative to their owning repository.
 
 | Location | Current implementation |
 | --- | --- |
@@ -231,8 +247,8 @@ removed merely to make an API appear headless.
 | `plugins/annotations`, `plugins/editor` | Evidence/notes and document-linked actions |
 | `crates/cli`, `crates/mcp`, `crates/workbench`, `ui/src` | Edges and generic shell |
 
-The [source/check index](SOURCE-INDEX.md) maps focused verification. Jet is maintained
-through [ordered patches](../patches/jet/README.md); preserve upstream notices.
+Owner READMEs and [Development](DEVELOPMENT.md) identify focused verification. Jet is maintained
+through [ordered patches](../../Rho-plugins/patches/jet/README.md); preserve upstream notices.
 
 Workbench uses loopback, bearer and Host/Origin checks, bounded requests and
 contained assets. Native backends, R and build scripts run as trusted local code

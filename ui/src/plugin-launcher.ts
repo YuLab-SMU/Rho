@@ -1,7 +1,7 @@
 import type { InstanceRef, PluginCatalogPage, PluginInspection, PluginInstanceObservation, PluginWindowLayout, OpenedPluginWindowView } from '../../sdk/plugin-protocol/index.js';
-import type { ApplicationState } from './generated/ApplicationState';
-import type { Invocation } from './generated/Invocation';
-import type { OperationRecord } from './generated/OperationRecord';
+import type { ApplicationState } from '../../sdk/host-client/ApplicationState';
+import type { Invocation } from '../../sdk/host-client/Invocation';
+import type { OperationRecord } from '../../sdk/host-client/OperationRecord';
 import { HostPortError, json, type HostClient } from './host-client';
 
 export interface LaunchChoice { id: string; title: string; description: string; inspection: PluginInspection; artifact: string; contribution: string; }

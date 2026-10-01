@@ -1,5 +1,5 @@
 import type { CapabilityKey, JsonValue, PluginViewConnection, PluginViewMessage, PluginViewRequest, ReleasePluginViewRenderer } from "../../sdk/plugin-protocol/index.js";
-import type { SessionReply } from "./generated/SessionReply";
+import type { SessionReply } from "../../sdk/host-client/SessionReply";
 import { HostClient, json } from "./host-client";
 import { requestExternalNavigation } from "./plugin-external";
 import { PluginDownloads } from "./plugin-download";

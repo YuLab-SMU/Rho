@@ -1,7 +1,0 @@
-Package: rhonextfixture
-Title: Rho Next Environment Acceptance Fixture
-Version: 0.1.0
-Authors@R: person("Rho", "Tests", email = "tests@example.invalid", role = c("aut", "cre"))
-Description: A small dependency-free package used to verify isolated environment realization.
-License: MIT
-Encoding: UTF-8

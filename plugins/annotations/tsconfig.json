@@ -1,1 +1,0 @@
-{"compilerOptions":{"target":"ES2022","module":"NodeNext","moduleResolution":"NodeNext","lib":["ES2022","DOM"],"rootDir":".","outDir":"dist","strict":true,"noEmitOnError":true},"include":["src/*.ts","public/plugin-ui/*.ts","public/plugin-protocol/index.ts"]}

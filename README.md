@@ -1,72 +1,35 @@
 # Rho
 
-Rho is a local scientific workspace for writing R code, running an analysis,
-inspecting objects and figures, and revising the work in one Studio.
+Rho is an operable scientific workspace. This repository owns its application
+shell, examples, development entry and exact component composition.
 
-Project files, a persistent R session, reproducible environments and native
-process/job execution share one Host. People use the browser workbench; external
-Agents use the same scientific capabilities. The Agent platform owns conversation
-and planning, while Rho executes requests and reports observed results.
+| Repository | Responsibility |
+| --- | --- |
+| [Rho-core](../Rho-core/README.md) | Generic Host, operation journal, plugin lifecycle, public SDK, CLI/HTTP/MCP |
+| [Rho-plugins](../Rho-plugins/README.md) | Official scientific plugins, domain contracts, native adapters, methods and views |
+| Rho (this repository) | Application shell, examples, component selection and integration |
 
-## Run Studio
-
-Build with the pinned Rust toolchain, then launch the local workbench:
-
-```sh
-cargo build --locked
-target/debug/rho workbench
-```
-
-Open the private URL printed by the command and select a project directory.
-Choose an installed workspace view, then use **Plugins → Scenarios → New R
-workspace** to compose the scientific tools with existing R and Ark paths.
-Startup uses the ordinary plugin composition. Packages must currently be imported
-explicitly; an empty repository shows recovery instructions. Runtimes and packages
-are not installed automatically. See [Operations](docs/OPERATIONS.md) for setup.
-
-For a guided real project, use **Open Rho Demo** on the welcome page, or launch
-it directly after building:
+The sibling repositories currently exist locally. No new GitHub repository or
+remote publication is implied. Each repository has its own source and commit.
 
 ```sh
-target/debug/rho --demo-project workbench
+node dev.mjs status
+npm ci --ignore-scripts --prefix ui
+node dev.mjs build app
+node dev.mjs build core
+node dev.mjs build plugin files
+node dev.mjs build plugin annotations
+node scripts/test-composition.mjs
 ```
 
-The demo is a materialized Gapminder project. After preparing a scientific scenario,
-run `run_demo.R` in Editor to
-populate real R objects, Plots output, generated files and an HTML report for
-Viewer. It uses base R and does not install packages or send Agent requests.
+The application compiles using the pinned public SDK already in this checkout;
+its build/check commands do not invoke Cargo or read sibling source. Plugins
+likewise build against their own public dependency snapshot. The coordinated
+entry uses sibling checkouts only for explicitly requested component development.
 
-The binary embeds its HTML, CSS, JavaScript and bundled frontend assets; Node is
-not required to run it. The server listens on `127.0.0.1`. Its authenticated `/mcp`
-endpoint shares the live session with Studio; standalone stdio MCP is also available.
-See [Operations](docs/OPERATIONS.md) for explicit paths and other entry points.
+`rho.lock.json` pins component commits and SDK digests. `core-sdk.json` identifies
+the generated public dependency; do not edit sdk/ locally. Build receipts in target/
+identify actual binaries/packages. A source lock alone is not a build result.
 
-## Current work
-
-The local edit/save/run/object/plot loop has been verified on macOS with Chrome.
-The next-version direction is a small generic Host, ordinary scientific plugins,
-external Agents and headless capability development independent of the frontend.
-The existing built-in Agent and window-dependent contracts remain in the code.
-
-Start with [the documentation map](docs/README.md), [Current state](docs/STATUS.md)
-and [Next Version](docs/NEXT-VERSION.md). Approved [UI design](docs/RHO-DESIGN.md)
-and [Studio feedback](docs/STUDIO-FEEDBACK.md) retain the interaction scope.
-Functional verification is separate from product usability acceptance.
-
-## Develop
-
-The root Cargo workspace builds `rho`. Rust lives in `crates/`, native R helpers
-in `r/`, the React/TypeScript client in `ui/`, and verification tools in `scripts/`.
-Read [Architecture](docs/ARCHITECTURE.md) and [Development](docs/DEVELOPMENT.md)
-for ownership, frontend iteration and focused checks.
-
-Native execution uses the local user's OS access. Rho preserves partial and
-uncertain outcomes; a cancellation request does not prove work stopped.
-[Build and release](docs/RELEASE.md) describes the current binary artifact and
-separates building from signing, installation and publication.
-
-## License and reporting
-
-Rho-original work uses [AGPL-3.0-only](LICENSE). Dependencies retain their own
-licenses; see [third-party notices](LICENSES.md). See [Privacy](PRIVACY.md)
-for data handling and [Security](SECURITY.md) for private vulnerability reporting.
+See [documentation](docs/README.md), [current state](docs/STATUS.md),
+[development](docs/DEVELOPMENT.md) and [operation](docs/OPERATIONS.md).

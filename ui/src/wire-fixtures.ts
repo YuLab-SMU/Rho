@@ -1,6 +1,6 @@
-import type { HostRequest } from "./generated/HostRequest";
-import type { SessionReply } from "./generated/SessionReply";
-import type { OperationRecord } from "./generated/OperationRecord";
+import type { HostRequest } from "../../sdk/host-client/HostRequest";
+import type { SessionReply } from "../../sdk/host-client/SessionReply";
+import type { OperationRecord } from "../../sdk/host-client/OperationRecord";
 
 // Wire-level compile checks: JSON numbers, optional skipped fields and tagged
 // requests. These aren't a hand-written second model.

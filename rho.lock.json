@@ -1,0 +1,28 @@
+{
+  "format": 1,
+  "core": {
+    "revision": "10ccb43abb96f3fad5c2b951a300b2c4344cfc91",
+    "sdk_sha256": "331a2538d641db22fe44118412ddc31cba8b1916dbfdfbff82935509b5ea433c"
+  },
+  "plugins": {
+    "revision": "e35bd40248545bfc5d4158f80b38632070778d5b",
+    "sdk_sha256": "469d6ea4477370e6bd056eb9735fb6d17c56982c6ba4a4ecd4a464bfed3c9c76"
+  },
+  "packages": {
+    "files": {
+      "source_revision": "f03bf973e7378928635d827025c419ee57ecb12a",
+      "sha256": "ee9f1b006cdae42a6b2f96fbad37e16a6c27b31bf11a2b2f89be1427f4dde101",
+      "target": "aarch64-apple-darwin"
+    },
+    "r": {
+      "source_revision": "f03bf973e7378928635d827025c419ee57ecb12a",
+      "sha256": "0f71118909996433fb204e16f70ff1e461010dc03fd4e381fbd06797f769ff82",
+      "target": "aarch64-apple-darwin"
+    },
+    "annotations": {
+      "source_revision": "f03bf973e7378928635d827025c419ee57ecb12a",
+      "sha256": "64ef0a64756e6aad7764770bd33587eac4ee436c468d4f2606a555c417970546",
+      "target": "aarch64-apple-darwin"
+    }
+  }
+}

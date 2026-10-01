@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { HostClient, HostPortError } from "../src/host-client";
-import type { Invocation } from "../src/generated/Invocation";
+import type { Invocation } from "../../sdk/host-client/Invocation";
 
 const invocation: Invocation = { client_request_id: "request-1", capability: { id: "workspace.run", version: 1 }, arguments: { code: "x <- 1" }, preconditions: [] };
 const response = (value: unknown, ok = true, status = 200) => ({ ok, status, json: async () => value }) as Response;
