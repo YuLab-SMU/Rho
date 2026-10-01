@@ -44,12 +44,13 @@ See [Operations](docs/OPERATIONS.md) for explicit paths and other entry points.
 ## Current work
 
 The local edit/save/run/object/plot loop has been verified on macOS with Chrome.
-The current focus is professional Studio interaction: component management,
-group docking, English UI, R highlighting, Console flow, inline object inspection
-and plot viewing. These user-reported experience issues remain open.
+The next-version direction is a small generic Host, ordinary scientific plugins,
+external Agents and headless capability development independent of the frontend.
+The existing built-in Agent and window-dependent contracts remain in the code.
 
-Start with [Current state](docs/STATUS.md), the proposed
-[design philosophy](docs/RHO-DESIGN.md), and [Studio feedback](docs/STUDIO-FEEDBACK.md).
+Start with [the documentation map](docs/README.md), [Current state](docs/STATUS.md)
+and [Next Version](docs/NEXT-VERSION.md). Approved [UI design](docs/RHO-DESIGN.md)
+and [Studio feedback](docs/STUDIO-FEEDBACK.md) retain the interaction scope.
 Functional verification is separate from product usability acceptance.
 
 ## Develop

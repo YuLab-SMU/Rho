@@ -11,7 +11,8 @@ shared rules here; add a nested AGENTS.md only for genuinely different local rul
 
 When first joining or resuming project work, use `docs/README.md` and the relevant
 parts of `docs/STATUS.md` for orientation. Otherwise read only what the task needs:
-`docs/ARCHITECTURE.md` for ownership or execution boundaries, `docs/RHO-DESIGN.md`
+`docs/ARCHITECTURE.md` for current ownership or execution boundaries,
+`docs/NEXT-VERSION.md` for the target architecture, and `docs/RHO-DESIGN.md`
 and `docs/STUDIO-FEEDBACK.md` for Studio interaction changes. Reuse context already
 read when it remains current. Design distinguishes approved interactions from
 proposals; Status records implementation and evidence. Passing functional tests
@@ -20,8 +21,8 @@ does not establish visual quality or close usability feedback.
 `docs/STATUS.md` is the single current status summary. Durable constraints belong
 in Architecture; interaction principles in Design; user problems in Feedback.
 Detailed plans stay with the working issue/branch. Git is the history; do not add
-completed-work archives or another progress ledger. `docs/SCENARIO-PLUGINS.md` is
-research, not an implementation commitment.
+completed-work archives or another progress ledger. Superseded Agent plans and
+scenario research remain in Git. Target design does not establish implementation.
 
 Data from abandoned implementations is not a supported input. Do not introduce
 migration, import, archive-reader or compatibility work without a new request.
@@ -30,11 +31,13 @@ migration, import, archive-reader or compatibility work without a new request.
 
 - Scientific owners manage files, the live R Workspace, Environment, executions,
   jobs, outputs and recovery. Add capabilities to their real owner.
-- Agent behavior belongs to external platforms or the optional built-in component
-  assistant. The built-in assistant reuses Rig through `plugins/agent/backend/engine` and
-  the ordinary Agent plugin’s validated Host ports. Scientific owners, Operation
-  and native adapters do not plan Agent work or call models. The Agent plugin records
-  the user's authorized scope; model output and context cannot expand it or introduce another approval decision.
+- The next version uses external Agents through public capabilities; it does not
+  require an internal model engine, chat product or task scheduler. The current
+  ordinary Agent plugin and Rig engine still exist and retain their validated
+  Host boundaries until separately changed. Scientific owners, Operation and
+  native adapters do not plan Agent work or call models. Caller authorization
+  stays explicit; model output and context cannot expand it or introduce another
+  approval decision.
 - Agent requests are trusted subject to mechanical identity, schema, scope,
   containment, quota and native-precondition checks. Do not add Rho approvals or
   re-prompt for Agent-authorized operations. Extension isolation is a separate concern.
@@ -57,13 +60,13 @@ migration, import, archive-reader or compatibility work without a new request.
   given in the conversation; routine fixes within that scope need no new approval.
 - The approved Packages designs are in the Paper file **Rho · 工作台交互草稿**,
   page **Packages · 查看体验设计评审**. Its link and specifications are in
-  `docs/RHO-DESIGN.md`, section 11. Read Paper JSX/computed styles for exact values;
+  `docs/RHO-DESIGN.md`, under Packages. Read Paper JSX/computed styles for exact values;
   use screenshots to verify the result, not as the only implementation input.
 - Give useful content priority: package purpose and version belong in the list;
   full paths and provenance belong in inspection details. Check normal, wide and
   constrained panels with representative real content before claiming completion.
-- Core Packages is read-only. Package installation and environment-management
-  decisions are reserved for a future separate plugin. Viewing must not install,
+- The Packages plugin is read-only. Package installation and environment-management
+  decisions belong to their separate owner. Viewing must not install,
   update, remove, load or attach packages, change library paths or test loadability.
 - The active Workspace owns package observations. Grouped counts, index pages and
   copy details must share an observation and native session; label cached/partial
@@ -100,8 +103,11 @@ and reviews do not require edits, builds, status updates, or commits.
   focused crate/test-file checks while iterating and affected-module or
   cross-boundary checks once behavior settles. The full workspace suite is an
   optional audit; run it only for an explicit release/user request.
-- Work in milestones organized as end-to-end user flows (Status work-order table).
-  Build the thinnest complete flow, including its view, first. Heavy plugin
+- Work in milestones organized as bounded end-to-end flows. Next-version
+  capabilities deliver interfaces, data and behavior without requiring a frontend;
+  API/CLI/MCP and real-owner checks can establish that scope independently.
+  Develop and accept UI separately; shared changes still cover affected consumers.
+  Heavy plugin
   acceptance (independent package builds, frozen-Host harnesses, source parity,
   real-R fixtures, browser flows) runs once per milestone on settled source, after
   the preflight in `docs/DEVELOPMENT.md` § Milestone cadence. Harness failures are

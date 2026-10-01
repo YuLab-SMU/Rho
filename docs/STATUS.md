@@ -1,300 +1,144 @@
 # Rho: current state and focus
 
-Updated: 2026-10-01. This is the single current summary of behavior, evidence,
-open work and the next milestone. Git and run artifacts retain history; see
-[Development](DEVELOPMENT.md#status-discipline) for update and evidence rules.
-Evidence filenames below are relative to `target/plugin-refactor/` unless stated.
+Updated: 2026-10-01. This is the single summary of implemented behavior, retained
+verification, gaps and current focus. Evidence names below are relative to
+`target/plugin-refactor/` unless stated. Git retains earlier work orders.
 
-## Current focus: usable local Preview 3 and workspace-aware Agent
+## Current focus
 
-Agent Editor runs link to original Operations, captured code and native results;
-reads are read-only, receipt updates preserve typing, and note freeze is separately
-scoped to the original selected Editor/window in Native and Rho.
-Isolated real-R Host/Chrome acceptance passes six Gapminder workflows
-(1704/142/703984/6/2007/703984); Agent reads back the source-linked Chinese note. After
-Editor SIGKILL and Host restart, uncertain parent/succeeded child remain queryable;
-Editor stays disconnected, R suspended, with one effect/no replay. Deterministic
-model peer; no quality claim. Evidence: `target/plugin-refactor/agent-r-workflow-20261001.json`.
-No user project or running user Host was touched; no installation.
+Prepare the next version around a small generic Host, ordinary scientific plugins,
+external Agents and independently testable headless capabilities. The direction
+is in [Next Version](NEXT-VERSION.md). This milestone reorganizes documentation;
+it does not replace the existing Agent, introduce a TypeScript backend, change
+runtime behavior or restart a user Host. A bounded implementation flow is still
+to be selected. There is no pending full-product acceptance claim.
 
-Preview 3 contains the native launcher, saved Demo, navigation and bundled Ark;
-R remains the configured local installation. Its fresh `Preview 3` catalog selects
-updated immutable packages, preserving earlier preview catalogs and drafts.
-Objects/Packages discover the selected provider's live session. Context search
-uses real file kinds, browses current project files and live R objects, and retains
-exact source references. Keyboard `@` opens the picker; reopening cannot discard
-the new source search. New Agent tasks default to read-only workspace tools.
-Rho's **Read, edit and run in workspace** adds scoped Files and synchronized Editor
-read/edit/save/captured-run tools. Fresh Send captures provider/window/session;
-Continue keeps original grants. Accepted operations are observed to settlement;
-Partial, unknown and unavailable reads retain their Host status. Editor updates refresh
-resident documents and survive reload; stale edits and changed disk bases are refused.
-The Host permits exact granted Controls from active Operation parents for transient
-draft staging; Query/Control parents still cannot acquire writes.
+Current operation and development procedures remain in [Operations](OPERATIONS.md)
+and [Development](DEVELOPMENT.md). Approved UI decisions and pending proposals
+remain in [Design](RHO-DESIGN.md); they are not prerequisites for every future
+headless capability.
 
-Prior Preview 3 Agent backend (66), native owner/store (9 each), Editor (5), Files context
-(2), delegated Host (2), draft Host (9) and view delegation (4) checks pass. Agent,
-Editor and Manager client checks/builds, generated manifests, tool grants, public
-boundaries and documentation governance pass. The core builds; current Agent,
-Editor, Files and Manager packages use isolated source closures and workspace
-native builds. Browser `@` for Files/Editor/R, stale-write protection, edit/save/run
-and reload pass. `deepseek-v4.1-flash` completed one captured run; native R readback
-is 57. `target/preview-3/context-flow-final.json` rechecks retained streaming events
-from the successful native flow after a report-only assertion failure; no replay.
-Launcher Demo/Objects/Packages/reload/graceful restart pass in `launcher-5.json`.
-That retained launcher candidate predates the final Agent/Editor/Files updates;
-those exact updated packages are covered by the separate context flow. Final
-assembly records precise runtime hashes. No user Host restart or installation.
+## Implemented baseline
 
-The unified-plugin plan was authorized on 2026-09-23; PS01–PS07 are approved
-([Design 21](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved)).
-All sixteen ordinary packages exist. Fixed scientific/Agent composition, private
-frontend/HTTP flows, Application/Skill handlers, retired owner/adapter packages
-and legacy shared-port DTOs are removed. CLI, HTTP and MCP use the generic Host.
-The declared scientific-operation slice now passes through a real Files provider.
-The annotation foundation covers eight source entries, versioned notes and Agent
-inclusion; scoped evidence and the remaining real-model/IME limits are below.
+- Preview 3 has a native launcher, saved Demo, generic navigation and bundled Ark.
+  R is a separately configured local installation. A fresh Preview 3 catalog
+  selects immutable plugin packages without replacing earlier catalogs or drafts.
+- Sixteen ordinary packages provide the scientific workspace, Agent, Annotations
+  and management tools. CLI, HTTP and MCP share the generic Host. Fixed scientific
+  composition, old Application/Skill handlers and retired owner/adapter packages
+  are removed. Some scientific grants and window-dependent contracts remain;
+  see [Architecture](ARCHITECTURE.md).
+- Manager can assemble an R scenario from installed exact artifacts, existing
+  Ark/R paths and explicit provider activation. Its expanded recipe has sixteen
+  instances and eleven initial views. R startup and view switching are separate.
+  Remote and Environment remain unconfigured until selected.
+- Files, synchronized Editor, R Console, Objects, Packages, Help, Plots and Viewer
+  support real local work. Queries do not start R. Observations preserve provider,
+  session, source and incomplete/busy status. Packages is read-only.
+- The ordinary Agent still contains Rig execution, Native/Rho tasks, settings,
+  credentials, attachments, continuation and handoff. New tasks default to
+  read-only tools; **Read, edit and run in workspace** adds scoped Files and Editor
+  operations. Fresh Send captures targets; Continue retains original grants.
+  Context search browses actual files and R objects, and `@` opens its picker.
+- Editor Agent runs retain captured code, original Operations and native results.
+  Receipt refresh preserves typing. Annotation freeze is separately scoped to
+  the original Editor/window; stale edits and changed disk bases are refused.
+- Annotations owns versioned text/image notes, exact source references, CAS,
+  history, marks and inclusion in an existing Agent draft without sending.
+  Eight source entries exist; live-source status stays unknown when unprovable.
+- Studio supports source/declaration/canvas editing, checkpoints, branches,
+  explicit build, fixture preview, disposable backend tests, scenario application
+  and archive import/export. It still has internal Agent-specific entry points.
+- Public views use bounded snapshot polling, not a Host push channel. Imported
+  packages are immutable; shell development assets do not provide plugin HMR.
 
-Studio forms, synchronized references, Undo and recovery (`5a5ecc4d`) passed model/browser and multi-width inspection: `definition-editor-results.json`, `visual-runtime-results.json`.
+## Retained verification
 
-### Remaining work order
+These results apply to their recorded source, packages and environment. They are
+not newly rerun by this documentation change. Deterministic model peers establish
+protocol behavior, not real-provider reasoning quality.
 
-Completed flow baselines: M1 default scientific composition; M2 ordinary Agent;
-M3 graceful same-instance Host recovery; M5 Studio Agent checkpoint/build/preview/apply.
-M4's annotation foundation is verified. `m6-final-acceptance-matrix.json` reconciles
-approved PS01–PS07/AN01–AN06 scope and exact delivered artifacts, retaining historical
-evidence with its original limits. Assessment is complete; full product acceptance
-is not. The older `final-acceptance-matrix.json` remains historical input.
+| Flow | Established result and boundary | Evidence |
+| --- | --- | --- |
+| Latest Agent → Editor → real R | Six isolated Host/Chrome Gapminder workflows pass, with results 1704/142/703984/6/2007/703984. Agent reads a source-linked Chinese note. Editor SIGKILL plus Host restart preserves uncertain parent/succeeded child, disconnected Editor, suspended R and one effect without replay. Deterministic peer. | `agent-r-workflow-20261001.json` |
+| Preview 3 context | File/Editor/R search, stale-write refusal, edit/save/captured-run and reload pass. One real `deepseek-v4.1-flash` run has native R readback 57. Original streaming evidence was rechecked without replay. | `../preview-3/context-flow-final.json` |
+| Preview 3 launcher | Demo, Objects, Packages, reload and graceful restart pass. This candidate predates the later Agent/Editor/Files updates, which have separate context-flow evidence. | `../preview-3/launcher-5.json` |
+| Scientific workspace | Files → Unicode Editor Save/Run → Console/Objects/Plots; lost activation acknowledgement, scenario switching, close/reopen, drafts and reload preserve original identities and one execution. Scenario restoration preserves live R memory and prior Operations. | `default-entry-results.json`, `final-science-agent-results.json`, `final-science-history-fixed-results.json`, `fixed-composition-results.json` |
+| Runtime revisions | Two R revisions coexist during held work; original session, outputs and retries remain bound. Queue, stdin, cancellation and read-only observations pass. Both revisions use the same native executable, not two R installations. | `final-version-studio-results.json` |
+| Agent continuity | Native/Rho input, attachments, captured tools, continuation/handoff and graceful same-instance restart pass. Native Resume uses the original Kimi directory and a deterministic ACP peer. R does not restart on observation. | `final-agent-r.log`, `agent-rho-tools-results.json`, `agent-workspace-current-results.json` |
+| Source context | Editor/Help/Viewer/Objects/Plots/Console/Packages/Files supply exact references; changed sources are refused and original input survives reload. Original images are explicit. Mode/provider coverage differs by source. | `component-senders-results.json`, `editor-agent-input-results.json`, `object-context-results.json`, `plots-links-results.json`, `console-context-results.json`, `packages-context-results.json`, `files-context-results.json` |
+| Process, Environment, Remote | Real Process, local Environment/pak and loopback OpenSSH retain original effects across retries/restart. Failed verification and uncertain exit remain visible. Deterministic peers; no remote-cluster or network-loss claim. | `agent-process-results.json`, `agent-environment-results.json`, `agent-remote-results.json` |
+| Annotation records | Source freeze, CAS, historical versions, lost acknowledgements, marks/Undo and original-operation recovery pass with real native owners and controlled Agent peers. Explicit PNG/JPEG context retains original bytes. | `annotation-components-browser`, `annotation-components-native.json`, `annotation-version-browser`, `image-context-results.json`, `annotation-summary-results.json`, `annotation-files-results.json`, `annotation-files-host.json` |
+| Annotation UI | Approved AN01–AN06 foundation: eight entries, Files quote and Viewer viewport capture, existing Agent draft inclusion, refresh/source change, keyboard and 600/320px layouts. Captured viewport is labeled non-original media. | `annotation-foundation-files`, `annotation-foundation-viewer`, `annotation-foundation-entries` |
+| Actual system IME | Native macOS/Edge input, composition/commit/Enter, focus, draft reload and Save revision 2 pass for Annotations. User confirmed the candidate window; app-only screenshots do not show it. Other controls/OS are not covered. | `m6-system-ime.json`, `m6-ime-composition.png`, `m6-ime-saved.png` |
+| Studio and public SDK | Exact-branch checkpoint/build/preview/apply, self-development, forms/Undo, reference synchronization, bounded queries and real Files write/recovery pass. Current views retain original instances. Generic automatic action recovery is not inferred. | `studio-agent-current-results.json`, `studio-self-results.json`, `visual-runtime-results.json`, `definition-editor-results.json`, `visual-science-results.json` |
+| Generic extension boundary | Fifty package/runtime/fault cases pass. A public-SDK UI and stateful Python fixture work through unchanged core with one execution on retry and original journal results after restart. Python is a fixture, not a shipped product or memory-recovery claim. | `final-boundaries-results.json`, `final-external-runtime-results.json`, `generic-contract-results.json`, `generic-state-results.json` |
+| Independent packages | Sixteen archives pass import/remove/empty-Host/explicit restore. Empty startup does not silently reinstall packages. | `final-delivery-contents-results.json` |
 
-| Order | User flow / ownership | Completion condition | Dependency and scope |
-| --- | --- | --- | --- |
-| 1 — verified | **Declared view → real Files update → explicit patch → original-operation recovery.** Public UI SDK and the consumer own observation/intent; Files and Operation own effects/truth. | Captured provider/arguments remain fixed; observation updates and stops on disposal; one explicit write; lost acknowledgement, reload and replacement view recover the original record with exactly one native effect. Affected Editor/Studio consumers still pass. | Real Files/browser flow, public SDK, Editor/Studio models, visual Studio/browser and client checks pass on settled source (`visual-science-results.json`). Snapshot polling only; no Host push channel. |
-| 2 — verified | **Capture → edit annotation → include in Agent → recover original evidence.** Ordinary Annotations plugin and source owners. | Reviewed AN01–AN06 interactions, eight-entry smoke, complete Files text/Viewer image flows, keyboard and 600/320px layouts. | Shared counts/near-selection entry, structured Agent-item anchors and current Viewer viewport capture pass. Files and Viewer save → existing Agent draft → refresh/source-change flows pass (`annotation-foundation-files`, `annotation-foundation-viewer`, `annotation-foundation-entries`). Prior lost-acknowledgement, CAS, history and mark/Undo evidence remains valid (`annotation-components-browser`, `annotation-version-browser`). This closes M4's foundation, not delivery, real-model quality or OS IME. |
-| 3 — verified | **Updated runtime reaches the development bundle.** Existing package builders/delivery path. | Exact revisions/hashes, imported definition editor and delivered SDK → real Files patch/recovery pass. | Thirteen affected packages refreshed; Environment/Process/Remote archives reused byte-for-byte. Updated core requires and passes relocation/import/retry/remove/empty-start/restore acceptance (`m6-bundle-refresh.json`, `m6-bundle-acceptance.json`, `m6-delivery-results.json`). No user installation/signing/publication. |
-| 4 — verified for Annotations | **Actual system IME in an ordinary view.** UI acceptance. | Real candidate window, composition/commit/Enter, focus changes and draft retention observed in the target app/browser. | Native macOS/Edge key input produced Chinese via Space; Return committed pinyin during composition and inserted a newline after commit. Focus changes retained text; reload retained the draft; Save produced revision 2. User confirmed the system candidate window. `m6-system-ime.json`, `m6-ime-composition.png`, `m6-ime-saved.png`. Agent/Editor controls and other OS/input methods are not established. |
-| 5 — assessed with gaps | **Real Agent/provider quality on the ordinary-plugin path.** Agent acceptance. | Assess existing capabilities; preserve every unavailable or partial case, as requested. | `deepseek-v4.1-flash`: Objects/Packages/Environment/Workspace, three repetitions each, pass (12). Plots metadata passes but original visual-color intent remains partial (3). At that assessment, six document-dependent intents lacked scoped Editor tools (18 not run); this historical matrix is not retroactively passed by the new Preview flow. `Qwen3.8-27B` image diagnostic returned HTTP 200 without visible text; image interpretation/followup remain unrun. Evidence: `m6-live-matrix-results.json`, `m6-live-matrix-reviewed.json`, `m6-live-objects-results.json`. |
-| 6 — assessment complete | **Final evidence matches approved scope and exact delivered artifacts.** Full-plan acceptance matrix. | Reconcile evidence and retain all open requirements. | `m6-final-acceptance-matrix.json` verifies bundle bytes/hashes and maps approved scope. Current Host-port checks pass 13/13 (`m6-host-ports.log`); historical scene/version/Python/Studio-self evidence retains original artifact scope. Full product acceptance is false; no global release claim. |
+The latest Editor workflow also has focused Agent/backend, Host, source-owner and
+client evidence. Full workspace totals and retired test counts are not carried
+forward as current passes. Exact commands and assertions remain with their runs.
 
-HV01–HV07 lighter Help/Viewer controls, system-browser opening and Help anchors
-remain proposed ([Design 19](RHO-DESIGN.md#19-r-help-interactive-viewer-and-lighter-controls--proposal)).
-Their pending review does not block approved AN01–AN06 implementation or runtime
-work. R01–R03 also remain proposals; annotation approval does not extend to them.
+## Open acceptance and product limits
 
-## Verified ordinary-plugin flows
+- `m6-final-acceptance-matrix.json` reconciles PS01–PS07/AN01–AN06 scope and delivered
+  artifacts. Assessment is complete; full product acceptance is **false**.
+  The earlier `final-acceptance-matrix.json` is historical evidence.
+- The historical 33-case real-provider matrix has 12 passes (Objects, Packages,
+  Environment and Workspace, three repetitions each), 3 partial Plots cases
+  (metadata, not requested visual color understanding), and 18 document-dependent
+  cases not run at that time. The later six deterministic Editor workflows do
+  not retroactively pass this provider-quality matrix. Evidence:
+  `m6-live-matrix-results.json`, `m6-live-matrix-reviewed.json`,
+  `m6-live-objects-results.json`.
+- The `Qwen3.8-27B` image diagnostic returned HTTP 200 without visible text. Image
+  interpretation and followup remain unverified. A successful transport is not a
+  successful model response.
+- Graceful restart does not establish general abrupt-crash or R-memory recovery.
+  The latest targeted Editor SIGKILL case proves only its stated boundary.
+  Unacknowledged browser edits are not known to be saved.
+- The local Remote/Environment checks do not establish remote package resolution,
+  cross-machine failure recovery or renv restoration. Different R installations
+  require the opt-in `RHO_ALT_*` checks.
+- Historical native compilation/loading stalls have an unproven OS cause. Inspect
+  existing process/log evidence, preserve caches and avoid duplicate Cargo work
+  or user Host restarts. See `development-optimization-results.json`,
+  `annotation-output-results.json` and `../preview-agent-fix/cache-recovery.json`.
+  Unfiltered offline Cargo metadata encounters uncached `combine 4.6.8`;
+  host-filtered metadata passed.
+- HV01–HV07 Help/Viewer refinements and R01–R03 runtime-navigation designs remain
+  proposals. UI usability remains subject to actual user review; see
+  [Design](RHO-DESIGN.md) and [Feedback](STUDIO-FEEDBACK.md).
 
-### Scientific composition and continuity
+## Last verified development bundle
 
-Manager's **Scenarios → New R workspace** selects installed exact artifacts and
-existing Ark/R paths, activates providers, saves a checkpoint and prepares views.
-Window switching and R startup are separate explicit actions. The expanded recipe
-includes sixteen instances and eleven initial views; new Agent tasks offer read-only
-workspace context. Remote/Environment remain unconfigured until selected.
+The retained portable bundle is
+`target/plugin-refactor/local-bundle-m6-macos-arm64-20260930`, **391,727,116 bytes**.
+Its recorded core source is `09633b76`; assembly explicitly records a dirty source
+checkout. Thirteen packages were refreshed; Environment/Process/Remote archives
+were reused byte-for-byte. This is an artifact-specific result, not a claim that
+the bundle contains every later source change.
 
-The full delivered scene passes Files → Unicode Editor Save/Run → Console,
-Objects and Plots with real R. Lost activation acknowledgement, scene switching,
-view close/reopen, drafts and reload retain the original provider/session and one
-execution. Historical scenario restoration creates a new checkpoint and preserves
-live R memory, scientific files, original Operations and Agent settings/credentials.
-The repaired Console compares JSON values without erasing meaningful event order;
-Ready/input and retained memory are visible in inspected captures.
-Evidence: `default-entry-results.json`, `final-science-agent-results.json`,
-`final-science-history-fixed-results.json`, `fixed-composition-results.json`.
+Relocation, corruption/path checks, import/retry/remove/empty-start/restore and
+Studio editing/build/preview/apply pass. The delivered SDK performs the real Files
+patch/recovery flow. Exact revisions, hashes and sizes are in the retained
+manifests. Evidence: `m6-bundle-refresh.json`, `m6-bundle-acceptance.json`,
+`m6-delivery-results.json`.
 
-Two R revisions coexist while an original native execution is held: the original
-provider/session/output/retry identity and isolated variables survive activation
-of the second revision. Queue/commit recovery, pending input during drain,
-cancellation, read-only Packages/Help/Objects and retained PNG/HTML also pass.
-The native fixture took 29.49s with zero builds. Evidence:
-`final-version-studio-results.json`. Both revisions use the same native executable;
-this is not distinct-implementation or two-installation acceptance.
+Verified bundle target is macOS 26.5.2 (25F84), Apple Silicon arm64. Native R
+is acquired per machine. Existing signatures are ad hoc; Developer ID signing,
+notarization, user installation, publication and a complete licensing audit are
+not established. See [Release](RELEASE.md).
 
-### Agent, source context and recovery
+## Continuation boundary
 
-The ordinary Agent owns transport, Rig execution, credential/metadata storage,
-Native/Rho tasks, bounded history, attachments, settings, Send/Stop, continuation
-and handoff. It uses public grants and the core Operation journal; it does not
-read retired tables or maintain another scientific result database. Captured
-native tools preserve provider, scope, parent and request identity across retries.
+No user Host or R memory was restarted for this documentation work. Before
+starting another Host, inspect the current project/session and follow
+[Operations](OPERATIONS.md). Client refresh cannot add Host capabilities. New
+plugin revisions need explicit snapshot/activation; old instances keep immutable
+assets. Replacing the R-owning backend can end R memory.
 
-Actual Host/browser evidence covers Native/Rho input, 8 MiB native attachments,
-Editor/Help/Viewer context, real R, continuation/handoff, browser reload and graceful
-same-instance/task/view Host restart without replay. Explicit native Resume uses
-the original Kimi directory and a deterministic local ACP peer; resumed R remains
-unstarted until explicitly started. Other providers and abrupt crashes
-are not established by this result. Evidence: `final-agent-r.log`,
-`final-agent-r-browser/agent-workspace-ordinary-n-217bb-ugh-reload-and-Host-restart/agent-native-result.json`,
-`agent-rho-tools-results.json`, `agent-workspace-current-results.json`.
-
-Editor/Help/Viewer/Objects/Plots/Console/Packages/Files **Ask** contributes exact
-source references to editable Agent drafts. Changed sources are refused; later
-output cannot replace original input; reload/restart retains original context.
-Plots supports explicit original images. Packages retains installed-copy/session
-identity and does not load packages. Console retains original code and saved
-transcript; Files retains path/digest/native identity. Source previews were inspected
-at normal and constrained widths. Native/Rho coverage differs by source; do not
-infer every provider/mode combination from one passing flow. Evidence:
-`component-senders-results.json`, `editor-agent-input-results.json`,
-`object-context-results.json`, `plots-links-results.json`, `console-context-results.json`,
-`packages-context-results.json`, `files-context-results.json`, `../preview-agent-fix/cache-recovery.json`.
-
-Native Agent through real Process, local Environment/pak and loopback OpenSSH
-passes original-effect/retry/restart checks with retained packages/core in
-74s/86s/75s respectively. Remote distinguishes exit failure from uncertainty;
-reading a receipt cannot promote the original uncertain Operation to success.
-Environment retains a real failed verification even when Send finishes.
-Evidence: `agent-process-results.json`, `agent-environment-results.json`,
-`agent-remote-results.json`. These use deterministic peers and local fixtures:
-no remote cluster, cross-machine network-loss, remote package resolution, renv
-restoration or real-model quality is claimed.
-
-### Annotations: component entry, captured marks and Agent draft slice
-
-Ordinary Annotations owns native text/image records, revisions, source references,
-CAS, tombstones/history and Agent context. Editor, Files and all six R context
-sources pass freeze → note → Agent → graceful same-instance restart. Objects and
-Packages freeze bounded observed metadata, not whole values/package files;
-Console/Plots retain producing-run/output identity. Suspended sources cannot be
-silently restarted for new captures.
-
-PNG/JPEG import/read validates exact decoded bytes; explicit image context reaches
-Native/Rho Send with marks and picker thumbnails. Context permits two images of
-at most 2 MiB each under a project budget; Rho requires its model image diagnostic.
-Retry/restart preserves original images and does not resend pixels or model work.
-Evidence: `image-context-results.json`, `annotation-summary-results.json`,
-`annotation-files-results.json`, `annotation-files-host.json`.
-The ordinary view adds generic owner discovery, quoted/whole-item capture, imported
-PNG/JPEG drawing (Pen/Rectangle/Arrow/Text), numbered marks, local mark Undo,
-labels/filters, saved-revision history, original-source checks and explicit
-continuation. Unsaved replacement and irreversible deletion use in-view dialogs.
-Eight source views expose Annotate through a shared public SDK sender; the source
-view/tab identity and navigation intent are saved before opening. Source content,
-scientific state and Agent authority are unchanged by note capture/navigation.
-
-Actual Files browser acceptance covers lost open/create acknowledgements, reload,
-original Operation inspection with one invocation, stale note CAS, deletion and
-historical reads, source-lineage/version filters and explicit continuation after a
-real Files content change, normalized rectangle marks and Undo, Back preserving source
-view state, and two exact note revisions appended to an existing controlled Rho
-Agent draft while retaining its Chinese text. The PNG is a deterministic public
-resource fixture. Native acceptance separately uses real R Help/Viewer/Console/
-Plots/Objects/Packages, Native/Rho Agent protocol fixtures and a graceful same-
-instance Host restart. Evidence: `annotation-components-browser`,
-`annotation-components-native.json`, `annotation-version-browser` (two browser
-flows, 23.1s test bodies); these do not establish real-provider quality.
-Source UI builds and focused SDK/Editor/Files/Plots/Objects/Packages/Viewer/Console/
-Agent view checks passed, as did annotation/Files backend and client checks.
-
-The reviewed AN01–AN06 foundation passes focused acceptance. Shared entry counts
-and the near-selection action work on Files text; eight source entries open exact
-previews, including structured Agent task-item evidence. The live Viewer viewport
-captures its changed controls/pixels, retains marks and the original PNG after a
-new R output, and labels the capture as non-original media. Files quote and Viewer
-image each save a revision, join a distinct existing Agent draft without sending,
-and survive refresh/source change. Keyboard paths, 600/320px note layouts and
-320px Agent draft inclusion were checked with screenshots. Evidence:
-`annotation-foundation-files`, `annotation-foundation-viewer`,
-`annotation-foundation-entries` (browser bodies 7.7s, 8.0s and 14.3s; setup
-45.2s, 62.0s and 116.1s respectively). Focused public SDK/Files/Viewer checks,
-client build/check, plugin boundaries and native activation tests pass. Actual
-Annotations system IME is separately verified below the work-order boundary.
-Current live-source status is labeled unknown unless the
-owner can establish it; an exact historical preview is not a current-version claim.
-Affected source packages are retained for milestone reuse and included in the
-refreshed development bundle. No user Host was restarted or installed.
-
-### Studio and public visual runtime
-
-Studio supports source/declaration/canvas editing, checkpoints, comparisons,
-branching, explicit native build, fixture preview, disposable backend test projects,
-scenario application/restore and archive import/export. Exact-branch Agent
-assistance passes checkpoint → explicit build → preview → apply while preserving
-old instances and other branches (`studio-agent-current-results.json`).
-
-The standalone SDK renders all ten declared node kinds, bounded queries, verified
-PNG/JPEG, compiled custom components and explicit event adapters with cleanup.
-Late reads cannot replace newer observations; form drafts/focus survive refresh;
-programmatic click/requestSubmit cannot dispatch declared writes. Studio edits
-reach actual built preview/applied views and retain old revisions. Data-source and
-custom-component forms share source/Undo, synchronize renames, refuse referenced
-removal/stale forms, retain invalid drafts and preserve custom source bytes.
-Evidence: `visual-runtime-results.json`, `definition-editor-results.json`,
-`visual-science-results.json`. The real Files flow uses the public polling adapter
-and a consumer-owned durable action intent; it does not add a Host subscription
-or infer general-purpose automatic recovery for arbitrary declared actions.
-
-Studio self-development passes branch/edit/checkpoint/build/preview/save/reload/
-close/apply/restore. Fixture drafts use bounded intrinsic state without a real
-source-document save. Original views can be explicitly reopened with their drafts;
-a fresh revised Studio restores default state, not an automatic cross-revision
-retained-view map. Evidence: `studio-self-results.json`.
-
-### Generic platform and independent delivery boundary
-
-The Host composes generic plugin, Operation, discovery and test-project ports.
-Queries are bounded observations and never start or resume a runtime. Package
-source/revision/artifact identities, explicit activation/grants, framed RPC,
-scoped resources, window drafts/layouts and original-request recovery are public.
-Normal drain suspends exact instances after acknowledged cleanup; resume and view
-reconnect are explicit separate actions. New SQLite state uses generic scoped,
-versioned storage and neither imports nor deletes abandoned scientific records.
-
-Retained fault/boundary acceptance covers 50 Host/runtime/package cases including
-forgery, path containment, backend failure, unconfirmed cancellation and lost
-settlement. External public-SDK UI and a stateful Python fixture execute through
-the unchanged core; Python sessions, isolation, one execution on retry and original
-journal output after release/restart pass. This is fixture evidence, not a shipped
-Python feature, OS sandbox or memory recovery. Evidence:
-`final-boundaries-results.json`, `final-external-runtime-results.json`,
-`generic-contract-results.json`, `generic-state-results.json`.
-
-All sixteen ordinary archives pass import/remove/empty-Host/explicit restoration;
-archive fields and exact blob content are retained. JSON key-order differences do
-not constitute changed contents. Empty startup does not silently reinstall
-packages. Evidence: `final-delivery-contents-results.json`.
-
-## Known limits and environment dependencies
-
-- Historical native compilation/loading stalls have an unproven OS cause. Preserve caches, recovery links and existing process evidence; do not clear caches, duplicate Cargo work or restart user Hosts to mask them.
-  Evidence: `development-optimization-results.json`, `annotation-output-results.json`, `files-context-results.json`, `../preview-agent-fix/cache-recovery.json`.
-- Current generic-window pointer/docking/focus and normal/wide/narrow captures pass.
-  Older standalone frame pointer-routing failure remains separate. Earlier IME
-  attempts were inconclusive. Current native-key input verifies Annotations on
-  macOS/Edge; candidate visibility is user-confirmed, not captured by the app-only
-  screenshot. Other controls and OS/input methods remain outside that evidence.
-- Abrupt browser disposal cannot establish that unacknowledged edits were saved.
-  Graceful Host restart evidence does not establish abrupt-crash or R-memory recovery.
-- Unfiltered offline Cargo metadata hits uncached `combine 4.6.8`; host-filtered
-  metadata passes. Two different R installations require opt-in `RHO_ALT_*`.
-- The 33-case assessment has 12 passes, 3 partial Plots cases and 18 unavailable
-  document cases. The separate real image diagnostic failed. Historical 27-case
-  evidence, full-workspace totals and retired tests do not establish current passes.
-  Six completed model runs were verified from original public records without
-  model/R replay; only the three Objects cases needed a targeted rerun.
-
-## Development bundle and restart boundary
-
-The last verified portable bundle is
-`target/plugin-refactor/local-bundle-m6-macos-arm64-20260930`
-(391,727,116 bytes): current core, thirteen refreshed packages and three unchanged
-Environment/Process/Remote archives. A serial core build took 20.50s; package
-builds/exports/assembly took 84.713s. Imported Studio definition editing, build,
-preview/apply and recovery pass; real Files patch/recovery uses the compiled SDK
-extracted from the delivered Studio archive. Normal/220px captures were inspected.
-The updated core also passes relocation/corruption/path/import/retry/remove/empty-
-start/restore acceptance. Evidence: `m6-bundle-refresh.json`,
-`m6-bundle-acceptance.json`, `m6-delivery-results.json`; manifests retain exact
-revisions, hashes and sizes. Core source is `09633b76`; subsequent changes concern
-delivery harnesses/documentation. The assembly records a dirty checkout explicitly.
-
-Initial installation scope remains macOS 26.5.2 (25F84), Apple Silicon arm64.
-Native R is a separate per-machine acquisition. Existing binaries have ad hoc
-signatures; no Developer ID signing, notarization, installation, publication or
-complete licensing audit is claimed. See [Release](RELEASE.md).
-
-Existing user Hosts and R memory have not been restarted by this work. A client
-refresh cannot add Host capabilities; new plugin revisions need explicit snapshot/
-activation and old instances retain immutable assets. Inspect live work and respect
-restart authorization before replacing a Host. Read [Operations](OPERATIONS.md)
-before starting another one; acceptance uses disposable projects and explicit R.
-Package-management UI, abandoned-data migration and distribution beyond the
-existing authorized development-bundle path remain outside this work order.
+The next implementation should select a bounded headless flow from
+[Next Version](NEXT-VERSION.md#首批范围与推进顺序), declare its real-owner and recovery
+checks, and independently scope any UI work. No abandoned-data migration, general
+Shell product, new built-in Agent or wider distribution work is implied.

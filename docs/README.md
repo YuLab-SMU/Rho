@@ -1,51 +1,48 @@
 # Rho documentation
 
-Start with the current product and the work being improved. Each page has one job.
+Read this directory to understand the current project or the next version. These
+are separate: a design decision does not establish implementation or acceptance.
 
-| Need | Read |
-| --- | --- |
-| Understand what works and what needs attention | [Current state and focus](STATUS.md) |
-| Judge product and interaction decisions | [Product design philosophy](RHO-DESIGN.md) |
-| Review the user's Studio issues and analysis scenario | [Studio feedback](STUDIO-FEEDBACK.md) |
-| Understand ownership, request flow and recovery | [Architecture](ARCHITECTURE.md) |
-| Change and verify the application | [Development](DEVELOPMENT.md) |
-| Launch Studio, configure R or use CLI/MCP | [Operator guide](OPERATIONS.md) |
-| Prepare a requested build or distribution | [Build and release](RELEASE.md) |
+## Start here
 
-[Scenario plugins](SCENARIO-PLUGINS.md) is exploratory research, separate from
-the subsequently authorized unified-plugin implementation. Its current boundary
-is in [Architecture](ARCHITECTURE.md#authorized-unified-plugin-boundary), approved
-PS01–PS07 interactions in [Design](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved),
-and actual progress in Status. The [page index](INDEX.md) and
-[source/check index](SOURCE-INDEX.md) are generated navigation aids.
+| Need | Read | Scope |
+| --- | --- | --- |
+| Resume current work | [Status](STATUS.md) | Implemented behavior, retained evidence, gaps and current focus |
+| Understand the next version | [下一版本整体设计](NEXT-VERSION.md) | Headless capabilities, external Agents, plugins, UI separation and staged development |
+| Understand current ownership | [Architecture](ARCHITECTURE.md) | Existing mechanisms and constraints that changes must preserve |
+| Change and verify code | [Development](DEVELOPMENT.md) | Focused checks, artifact reuse and acceptance boundaries |
+| Run the current application | [Operations](OPERATIONS.md) | Startup, connection, scientific work and recovery |
+| Work on an interface | [UI design](RHO-DESIGN.md) and [Feedback](STUDIO-FEEDBACK.md) | Approved interactions, Paper sources and remaining user problems |
+| Build or distribute an artifact | [Release](RELEASE.md) | Packaging, provenance and separate installation/publication steps |
 
-The [built-in component Agent plan](BUILTIN-AGENT-PLAN.md) defines the authorized
-Rig integration and bounded extension to the external-Agent-only rule. The P0
-experiment, component context and authorized backend execution are implemented.
-The unified Agent interface, independent permission policy and local key storage
-are implemented in the current source. Scientific work still uses the existing
-owners. A20 manual handoff has been reviewed and authorized; it appends reviewed
-context to existing task drafts. Rho verifies its own integration and data behavior,
-not the independent performance of third-party Agents.
-The fixed Host Agent services and their test harnesses have been removed. The
-earlier 33-scenario real-model assessment recorded 12 passes, 3 partial Plots cases
-and 18 unavailable document cases; its image diagnostic failed. Preview 3 adds
-scoped Editor and workspace tools. See Status for current evidence and remaining gaps.
+Current code includes an ordinary Agent plugin and a Rig execution engine. The
+next-version direction removes the need for an internal Agent product and makes
+capability development independent of a frontend. Those changes are not yet
+implemented merely because they are documented here.
 
-## Maintenance
+## Find implementation details
 
-Code and reproducible results establish current behavior. Product principles
-explain design choices; feedback preserves user experience problems; `STATUS.md`
-summarizes current focus and evidence. Git stores completed work and past decisions.
-Do not copy history into a growing status archive or repeat a capability registry
-that the running Host already provides.
+Use the [generated source and check index](SOURCE-INDEX.md) to locate an affected
+owner or check. The [page index](INDEX.md) is generated too. Public wire contracts
+live in [the plugin protocol](../sdk/plugin-protocol/README.md); component details
+belong with the relevant plugin, SDK, source or test. Live capability discovery
+establishes what a running Host actually offers.
 
-Keep proposed, implemented and verified behavior distinct. Replace stale text and
-broken examples. Document a stable constraint once and link to its owning page.
-A documentation edit does not establish a new runtime test result.
+## Maintain these documents
 
-Register pages in `governance/registry.json`; map source areas and checks in
-`governance/source-map.json`. After changing the map:
+- Status is the only current progress summary. Preserve evidence limits and keep
+  it below 300 lines. Evidence applies to its recorded artifacts and environment.
+- Architecture records durable current boundaries; Next Version records target
+  design and explicitly unresolved engineering questions.
+- Design records interaction decisions; Feedback records user problems. Neither
+  a Paper approval nor a functional test proves current usability.
+- Development and Operations contain current procedures, not repeated histories
+  of every implementation and test. Release owns delivery instructions.
+- Git retains superseded plans, including the former built-in Agent plan and
+  scenario-plugin research. Do not add an archive directory or another ledger.
+
+Register pages in `governance/registry.json`; register sources and checks in
+`governance/source-map.json`. After changing either map:
 
 ```sh
 node scripts/governance.mjs generate

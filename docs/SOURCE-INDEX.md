@@ -62,12 +62,11 @@ Checks:
 
 Documentation:
 
-- [Built-in component Agent implementation proposal](<BUILTIN-AGENT-PLAN.md>) — `BUILTIN-AGENT-PLAN`
 - [Documentation map](<README.md>) — `DOCS`
-- [Rho product design philosophy (proposed foundation)](<RHO-DESIGN.md>) — `RHO-DESIGN`
-- [Scenario plugin design research (no implementation scope)](<SCENARIO-PLUGINS.md>) — `SCENARIO-PLUGINS`
+- [下一版本整体设计](<NEXT-VERSION.md>) — `NEXT-VERSION`
+- [UI design and review boundaries](<RHO-DESIGN.md>) — `RHO-DESIGN`
 - [Rho current state and focus](<STATUS.md>) — `STATUS`
-- [Studio usability feedback and scenario reference](<STUDIO-FEEDBACK.md>) — `STUDIO-FEEDBACK`
+- [Studio usability feedback](<STUDIO-FEEDBACK.md>) — `STUDIO-FEEDBACK`
 
 Sources:
 

@@ -1,562 +1,98 @@
-# Studio usability feedback and scenario reference
+# Studio usability feedback
 
-Captured: 2026-09-07.
+This records user problems and review criteria, not a second progress ledger.
+Current implementation and evidence belong in [Status](STATUS.md); approved
+interactions and pending proposals belong in [Design](RHO-DESIGN.md).
+Functional tests and design approval do not by themselves close usability issues.
 
-This is the user-authorized feedback document for the next Studio refinement
-round. It records user experience requirements and investigation questions;
-it is not an implementation plan, a completion checklist, or another progress
-ledger. Implementation decisions and verified progress remain in
-[STATUS.md](STATUS.md).
+## Origin and scope
 
-## Baseline and evidence
+The initial seven-point review and screenshot were provided on 2026-09-07.
+The original delivered baseline is `d5a970b1559c9bd85567073108d05bca21886de4`, tagged
+`studio-round1-baseline-2026-09-07`. The supplied RStudio tutorial is a workflow
+reference, not a statement of supported Rho features or authorization to reproduce
+all RStudio functionality. Later feedback extends this list.
 
-The implementation baseline is commit
-`d5a970b1559c9bd85567073108d05bca21886de4`, identified by the local Git tag
-`studio-round1-baseline-2026-09-07`. This preserves the delivered Studio code.
+The next version separates headless capability delivery from frontend work and
+uses external Agents. Existing Agent feedback remains useful for maintained UI
+and external integration; it does not authorize a new internal Agent product.
+See [Next Version](NEXT-VERSION.md).
 
-The user considers the overall appearance promising, but has identified substantial
-interaction problems. The previous functional and automated acceptance does not
-establish that Studio is sufficiently polished for sustained professional use.
+## Workspace and scientific interaction
 
-This feedback comes from:
-
-- The user's seven-point review and accompanying screenshot on 2026-09-07. The
-  screenshot shows Files on the left, an editor above Console in the middle,
-  and Workspace objects above a plot on the right. The session contains actual
-  R objects and a PlantGrowth boxplot.
-- The supplied *RStudio Data Analysis Practical Introduction — Tutorial Design*,
-  v0.1, dated 2026-09-07, read from
-  `/Users/xiayh/Downloads/rstudio-tutorial-design.md`.
-
-The screenshot is a visual reference, not evidence of why an interaction fails.
-The tutorial is a workflow reference; its RStudio commands and shortcuts are not
-claims about current Rho functionality. The original observations below preserve the user’s reported problems. The
-implementation and verification response is summarized in STATUS.md; the
-acceptance map below identifies how to recheck each issue. The list remains
-open-ended for further user review.
-
-The proposed cross-product principles for interpreting this feedback are in
-[RHO-DESIGN.md](RHO-DESIGN.md). They do not replace or close the reported issues.
-
-## User feedback
-
-### F22 — Every component needs a way to express thoughts about its content
-
-**User request (2026-09-14):** Every component should support annotations,
-including text selection with comments, freehand drawing, boxed regions and
-written explanations. The user wants to express thoughts about outputs directly,
-and wants Agents to understand the same content and annotations.
-
-**Required experience:** A common, lightweight entry works across components.
-Offer precise text, data or image anchors when the source supports them, and an
-accessible whole-item comment when it does not. Keep marks and comments with
-their original source/version; a changed file, regenerated output or ended
-session must not silently relocate them. Captured interactive views must remain
-distinguishable from live chart state. Include written explanations and source
-evidence for Agent reading, while accurately reporting unavailable image input
-or uncaptured interactive data. Saving or reading a note does not send a message
-or authorize scientific work. Adding notes to Agent preserves the existing draft.
-
-Annotation controls should also follow F21: reveal tools when needed, keep
-ordinary content readable and offer compact editing without persistent changes
-to the user's layout. Keyboard users need whole-item and quote comments without
-drawing; marker numbers, shapes and text must carry meaning without color alone.
-
-**Version clarification:** The user confirmed that annotations belong to a
-specific artifact version. Once that artifact updates, its previous annotations
-are historical. Keep Current version and History separate; viewing the latest
-version must not overlay old marks. Continuing the idea on a newer version creates
-a new linked annotation while retaining the original. Agent reads identify the
-historical version and its original evidence.
-
-**Design response:** Approved AN01–AN06 cover text comments, captured Viewer
-marks, 600 px editing and 320 px Agent inclusion, historical-version/conflict/image
-states and anchors across components. The [Paper review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/C-0)
-and [Design section 20](RHO-DESIGN.md#20-component-annotations-for-people-and-agents--approved-interaction)
-record the reviewed scope; the user confirmed review completion on 2026-09-30.
-Capture/editor/component UI implementation and runtime acceptance remain open;
-the existing annotation owner and Agent context evidence are recorded in Status.
-
-### F21 — Framed controls overwhelm constrained workspaces
-
-**User report (2026-09-14):** The current interface has too many boxes. Large
-screens can tolerate them, but smaller screens become difficult to use. The
-supplied screenshot highlights stacked Files selectors, Objects search/type/field
-controls, the Agent task selector and the large Plots Earlier button area.
-
-**Required experience:** Reduce permanent borders and repeated control rows;
-give scientific content more room without shrinking its text. Retain clear input
-and focus affordances, discoverable secondary actions and visible active filters.
-Smaller windows must preserve the user's docking choices and source/draft state.
-An explicit focus action may temporarily expand a component and restore the layout.
-
-**Design response:** Proposed HV01–HV05 explore continuous panel surfaces and
-compact default/expanded controls. The [Paper review](https://app.paper.design/file/01M1XBMB0B5QB82XMDV0Z6VHET/B-0)
-is pending user review; drawings do not close the usability issue.
-
-### F20 — R help and interactive HTML outputs have no usable view
-
-**User report (2026-09-14):** Running `?library()` starts R's help server but does
-not show the documentation in the workbench. Interactive charts requiring HTML
-likewise lack a usable presentation component.
-
-**Required experience:** Separate Help and interactive Viewer components share
-the underlying HTML/resource presentation capability. People and Agents can
-discover, read and cite the same source content with its actual identity. Help
-retains package-copy/version evidence; Viewer distinguishes saved artifacts from
-content requiring a live service. Unavailable resources and interaction state
-must be stated accurately. Ask appends sources to the unified draft without
-sending. Components remain modular within the existing owner/Host structure.
-
-**Design response:** Proposed HV01–HV04 and HV06–HV07 cover normal/narrow views,
-source preview, package documentation entry/search and failure states.
-[Design section 19](RHO-DESIGN.md#19-r-help-interactive-viewer-and-lighter-controls--proposal)
-records the proposal. No HTML Help/Viewer runtime implementation or acceptance
-is established by this design work.
-
-### F19 — Built-in Agent must use the existing Agent interface
-
-**User report (2026-09-14):** Adding the built-in Agent produced a severe sense of
-fragmentation. The user rejected exposing built-in versus external execution as
-separate front-end areas: adding an option to the original Agent selector should
-be sufficient for the interaction.
-
-**Required experience:** One Agent panel, task list, conversation layout and
-composer. Rho appears beside the other Agents; permission controls and
-model settings use the existing control locations. Component Ask actions bring
-context into that same interface. The user explicitly requested removal of the
-Built-in Assistant Paper page and incorporation of its relevant scenarios into
-Agent · 工作区任务设计评审. [Design section 18](RHO-DESIGN.md#18-rho-in-the-unified-agent-panel--review-revision)
-records this revision. Paper changes do not establish implementation or close
-the reported usability problem.
-
-**Follow-up (2026-09-14):** The user rejected the session-only API key design and
-the replacement of permissions with Explain/Edit/Run. Save the key in local Rho
-configuration by default and reuse it after restart. The composer continues to
-select a permission policy. The Agent, including Rho, decides whether to explain,
-edit or execute according to the request; users should not manually select these
-work categories. This corrects both the Paper revision and its implementation plan.
-
-### F18 — Runtime foundations need an understandable management experience
-
-**User request (2026-09-09):** Investigate the current implementation before
-deciding how to design an interface for the powerful runtime management foundation.
-This asks for investigation and design exploration, not implementation of multiple
-runtimes or package installation.
-
-The investigation distinguishes Host lifecycle, live R sessions, queued executions,
-dependency realizations, remote jobs and native Agent tasks. [Design section 16](RHO-DESIGN.md#16-runtime-management--investigation-and-interaction-proposal)
-maps those capabilities to current owners and records the proposed daily entry,
-run inspection and restart/recovery interactions. The separate Paper Runtime page
-contains R01–R03 for review. Existing Shell work overlaps the entry/status layer;
-the proposal should integrate with it rather than create a second status owner.
-
-### F17 — The bottom status bar is unattractive and the sidebar is missing
-
-**User report (2026-09-09):** The major modules and basic Agent integration are
-largely ready, but the bottom bar looks poor and the sidebar has not been built.
-The supplied screenshot presents Local R/version, idle state, an empty queue,
-memory/CPU, a long project path, draft sync and Environment on one crowded line.
-The screenshot is visual evidence, not a request to execute its displayed content.
-
-The user approved the four Paper Shell boards for first-version implementation.
-They additionally requested checkboxes to keep CPU, memory and disk usage visible:
-forcing all metrics into a disclosure would sacrifice convenience. The accepted
-interaction is in Design section 15. Implementation and executed checks are in
-Status; the user intends to try the first version and refine it from real use.
-
-### F14 — Agent activity and workspace results must form a coherent experience
-
-**Reported experience (2026-09-09):** A simple ggtree request spent long periods
-showing only the user's message or a completed tool. Tool failures and a paused-R
-queue notice were hard to interpret; the Agent appeared unaware of the workspace
-components. A PNG appeared in Files while Plots remained empty, and the Agent task
-ended with an uncertain timeout. The user did not experience a completed analysis.
-
-**Required experience:** User input, connection, native inference, tools, queue
-state and completion need continuous, truthful feedback near the conversation.
-The Agent should use Editor, Console, Objects and Plots through their real owners
-and verify the visible result. Correctable tool errors must reach the Agent with
-their actual cause; acceptance, running and a paused queue must remain distinct.
-An arbitrary client deadline must not hide a native final response. Tests must
-exercise a real analysis and visible result, not only a short greeting.
-
-### F01 — Components cannot be removed
-
-**Reported experience:** The user cannot remove a component.
-
-**Required experience:** Removing an unwanted component from the layout must be
-obvious and reliable, including after docking, grouping, and maximizing.
-
-**Questions for investigation:** Does the problem concern a tab, a whole panel
-group, a component instance, or all instances of a component? Is the control
-missing, difficult to discover, or ineffective? A screenshot containing an X
-icon does not establish that removal works for the user's attempted action.
-
-Distinguish closing a view, collapsing a group, and discarding a document.
-Removing a view must preserve drafts and must not delete a project file or
-implicitly cancel an execution. Reopening the component should be discoverable.
-
-### F02 — Docking relative to several components is unclear
-
-**User question:** How can one component move to the common left, right, or top
-of two or more components?
-
-**Required experience:** Users need to distinguish docking beside one panel,
-beside a group of panels, and at the workspace boundary. Moving a panel to the
-left of Editor and Console together must be possible to understand without
-trial-and-error dragging.
-
-**Questions for investigation:** Which layout levels can be targeted today?
-Does the drop preview identify the whole region that will move or split? Can a
-user deliberately target a parent group instead of the nearest child panel?
-Can they recover from an unintended drop without resetting the entire layout?
-
-Visible drop targets and explicit placement commands are candidates to evaluate,
-not chosen solutions. The requested positions are left, right, and top; broader
-docking behavior should be assessed consistently without inventing new scope.
-
-**Follow-up (2026-09-09):** The user tried to place Agent to the shared right of
-Objects and Plots, but normal dragging placed it beside Plots alone. The floating
-parent-region matrix exposed internal hierarchy, even including the dragged Agent
-in the target name. Its controls were also below FlexLayout's transparent drag
-overlay. Parent placement needs an actual reachable target at the shared boundary,
-with the complete region highlighted and the dragged view excluded from its label.
-An explicit placement command remains useful as a keyboard alternative.
-
-### F03 — The product interface should use English
-
-**User direction:** Use English for professionalism and international use; do not
-use Chinese for product-authored interface text.
-
-This covers navigation, panel names, actions, menus, dialogs, settings, tooltips,
-status messages, empty states, error explanations, and accessibility labels.
-Use consistent scientific-workbench terminology across surfaces. A few translated
-buttons would not satisfy this requirement.
-
-Preserve user-authored filenames, paths, code, comments, data, object names, and
-runtime output in their original language. English UI must not remove Unicode
-support or rewrite diagnostic evidence produced by R or another native tool.
-Additional language packs are not requested by this feedback.
-
-### F04 — R syntax highlighting is weak
-
-**Reported experience:** Editor highlighting is inadequate.
-
-**Required experience:** Real analysis scripts should remain readable as they
-combine comments, literals, function calls, package-qualified calls, operators,
-formulas, indexing, and multiline expressions.
-
-**Questions for investigation:** Separate missing or incorrect language tokens
-from an ineffective color theme. Use representative code containing `pkg::fn`,
-`<-`, `|>`, `%>%`, `$`, `[[ ]]`, model formulas, named arguments, and ggplot layers.
-Inspect readability at the normal font size and in narrow panels.
-
-Changing colors alone should not be assumed to fix parsing problems. Conversely,
-this feedback does not automatically require a new language server, semantic
-analysis engine, or debugger.
-
-### F05 — Console does not feel like a command line
-
-**Reported experience:** R Console lacks a command-line interaction feel.
-
-**Required experience:** Console should support quick exploratory work, with a
-clear prompt, an immediate input position, readable command/output continuity,
-and predictable keyboard behavior. The analysis itself should remain in scripts.
-
-**Questions for investigation:** Assess how execution cards, operation metadata,
-whitespace, and embedded plot previews interrupt the command transcript. Examine
-command history navigation, multiline entry and continuation prompts, error and
-warning display, interruption, clear-screen behavior, scrolling, and the return
-to the prompt after a run. These are investigation areas, not separately reported
-or reproduced bugs.
-
-Execution identity and truthful status remain necessary, but should be presented
-without dominating ordinary Console use. A terminal appearance alone is not an
-adequate fix if typing and keyboard interaction remain awkward.
-
-### F06 — Object inspection should expand in place by default
-
-**Reported experience:** Selecting an object opens and switches to another tab,
-although the user often only wants a quick look.
-
-**Explicit interaction direction:** Default inspection should expand bounded
-details inside the existing objects panel. Opening a dedicated viewer tab should
-require an explicit action such as **Open in New Tab**.
-
-**Questions for investigation:** Determine the disclosure hit area, how expanded
-rows collapse, how selection and scroll position behave, and whether multiple
-objects may be expanded at once. Assess vectors, lists, ordinary data frames,
-and opaque classed objects. A dedicated viewer must not silently replace the
-quick-inspection interaction.
-
-Keep read-only, bounded inspection and the existing protections against evaluating
-active bindings, promises, or user-defined print/format/subset methods. When R is
-busy, label the previous observation rather than presenting it as fresh data.
-
-### F07 — Plot viewing needs substantial refinement
-
-**Reported experience:** The plot panel is rough and the viewing experience is
-poor, with more problems than the user has enumerated.
-
-This is a broad experience issue, not a confirmed list of individual defects.
-Do not reduce it to cosmetic spacing changes or claim a specific cause from the
-screenshot alone.
-
-**Scenario-based investigation should cover:**
-
-- Plot history: identifying the current plot, navigating several outputs, relating
-  a plot to its source execution, and retaining a deliberately selected old plot.
-- Viewing: fit-to-panel versus original size, zoom and panning, aspect ratio,
-  resizing, maximization, large plots, and narrow or short containers.
-- Interaction: discoverable controls, focus behavior, selection feedback, and
-  the relationship between a Console preview and the main plot viewer.
-- Export: what bytes, dimensions, and format the interactive action exports, and
-  how that differs from reproducible, script-controlled `ggsave()` output.
-- Failure states: loading, unavailable originals, decoding failures, unsupported
-  formats, and the absence of any plot.
-
-Continue to identify outputs by their actual operation/output reference. Viewing
-must not rerun R; a missing original must not be replaced with a same-named image.
-SVG remains an image, and HTML/widgets must not acquire page execution privileges.
-
-### F08 — Package inspection without installation decisions
-
-**User direction (2026-09-08):** Inspecting variables and dealing with missing R
-packages are recurring pain points. Studio has an object inspector but needs a
-package view. Package installation depends on runtime management (local R, conda,
-renv and others), OS, configured libraries and R-version choices. Installation is
-excluded here and is intended for a separate future plugin.
-
-**Required experience:** Inspect what the connected R session can see, distinguish
-installed, loaded and attached packages, locate versions and library paths, and
-understand duplicate copies without making installation decisions. Preserve the
-current runtime, library configuration and loaded/attached state while viewing.
-The interaction contract is in [Design section 11](RHO-DESIGN.md#11-read-only-package-inspection).
-
-**Follow-up review (2026-09-08):** The user finds the implemented panel unattractive
-and uninformative, with little practical value, and requests frontend design in
-Paper first. Their screenshot shows full library paths repeated under every row,
-large horizontal separation between package names and versions, and no purpose
-text in the list. Rework information hierarchy and density before treating the
-package component as accepted. Functional regression results do not close this
-usability feedback.
-
-**Source follow-up:** The user likes the Paper direction and asks for a place to
-show package source, including GitHub, CRAN, Bioconductor and Posit Package Manager.
-Source must accommodate other repositories and local/remote archives, and distinguish
-an installed copy's recorded origin from its distribution channel and environment.
-
-**Implementation authorization:** The user approved the revised Paper design,
-including Source, and asked to begin implementation on 2026-09-08. Functional and
-visual evidence belongs in STATUS.md; the earlier rejected screenshot remains the
-problem reference.
-
-
-### F09 — Agent setup should feel like a polished settings surface
-
-**User feedback (2026-09-09):** The user rejected the initial Codex-connection
-Paper design as unattractive and supplied a screenshot of a desktop application's
-Agent settings. The reference has persistent sidebar navigation, a broad white
-surface, gray segmented controls, recognizable Agent rows and an expanded selected
-row with aligned configuration fields and actions.
-
-**Approved design response (2026-09-09):** Replace the instructional modal with a settings
-page, reduce front-page explanatory copy, expand the selected Agent in place and
-put detailed connection evidence on a separate tab. Use neutral gray layers,
-consistent icon/text/action lanes and a single clear primary action. The reference
-does not establish Rho support for its model/provider settings or list of CLIs.
-The user approved the revised Paper design. The approved interaction is in Design
-section 12; implementation and runtime/visual verification belong in STATUS.md.
-
-### F10 — Agent connection must be immediately usable
-
-**User feedback (2026-09-09):** The approved appearance did not resolve the setup
-experience. Connecting Kimi took a long time and required two manual copies.
-The user supplied a working local-CLI reference with native model selection and
-a direct response test, and requested the same practical ease of use.
-
-The supplied transcript records both a provider quota failure and setup friction:
-the Agent searched for configuration instructions, used mismatched server names,
-and fell back to shell requests instead of registered native MCP tools. These are
-distinct problems. The product should discover an already installed CLI, show its
-native model choices, connect it to the current Rho workspace and accept a task
-without asking the user to shuttle configuration or verification prompts. Native
-permission waits and provider errors must be visible rather than looking like an
-indefinite setup spinner. The user subsequently reported that the implementation
-task itself appeared stuck; verification must have bounded waits and a clear end.
-
-The user next requested DeepSeek Harness on 2026-09-09, with a reference showing
-installation of a product-specific connection component through `dsh`. This extends
-the same direct-use interaction to another native Agent runtime. The reference's
-installation text does not authorize modifying that other product's configuration.
-
-### F11 — Agent work must not become a configuration manual
-
-**User feedback (2026-09-09):** The user rejected the first workspace Agent task
-proposal because actions and long explanations were crowded into popup/card
-surfaces. This repeats the instructional-interface problem in F09. They also
-found the Agent boards on the general high-fidelity workspace Paper page instead
-of an independent Agent page. The new page had been created without switching
-the write target; its existence and link did not establish board ownership.
-
-The main surface should support choosing a task, reading messages and acting.
-New task should lead directly to composition; model controls belong with the
-composer. Permission replies need context about the actual tool activity; F12
-further establishes their fixed location near the composer. Recovery
-and ownership need a concise state and a relevant action, with detailed evidence
-available on demand. Backend rules belong in the specification, not explanatory
-cards that users must read before working. Verify actual page membership when
-delivering a Paper link. The revised interaction in Design section 13 received explicit user approval
-on 2026-09-09. Implementation and real-runtime evidence belong in Status;
-screenshot inspection alone does not establish usability.
-
-### F12 — Permission and information controls belong around the composer
-
-**User feedback (2026-09-09):** The user supplied examples of a three-mode permission
-selector, a CLI request with four ordered options including session approval and
-feedback, and composer controls for attachments/workspace/plugin channels. A fixed
-Allow/Decline design does not represent native variation. The user wants a
-predictable area near message input for actions, instead of searching the transcript
-for permission controls. They also want images/files and @ references to particular
-component data, files, plots, tables and plugin-provided information.
-
-The revised proposal separates native mode selection from individual responses,
-anchors pending requests immediately above the composer and supports native option
-lists/feedback without imposing a common mode count. Context selection includes
-source-labeled, previewable and removable items with explicit scope. These are
-interaction requirements; the supplied screenshots are design references, not
-evidence that every runtime supports identical modes, options or input types.
-Native capabilities and scientific-owner identities remain authoritative.
-
-### F13 — Agent input prematurely commits Chinese preedit
-
-**User feedback (2026-09-09):** Agent's message field turns Pinyin into literal text
-before the user can select Chinese characters. The user suspects draft autosave.
-The confirmed browser reproduction starts a second composition while extending
-`ni` to `nihao`, leaving `ninihao`. The textarea's controlled value is restored to
-its old external-store snapshot, then rewritten after a batched notification;
-this happens before an autosave response.
-
-The input method must retain its marked range until confirmation or cancellation.
-Draft saving and polling must not replace preedit text, and the candidate-selection
-Enter must not send a turn. Preserve committed local text as a conflict copy if
-another window takes over during composition. Report browser composition-protocol
-coverage separately from actual OS input-method testing.
-
-**User verification (2026-09-09):** After trying the corrected ime-test page, the
-user confirmed Chinese input works. This is recorded alongside the browser-native
-composition/ACK regression tests, rather than inferred from those tests alone.
-
-### F14 — Object viewing hides basic content and lacks a real table browser
-
-**User feedback and authorization (2026-09-09):** Users should see an object's
-basic content immediately: table size, string length, colors and numbers. Expanded
-and dedicated tables should use a mature frontend grid. The user requested a
-separate Paper page for object exploration, then authorized implementation of
-its six boards. The approved interaction and bounded class support are in
-Design section 14; visual examples alone do not establish scientific correctness.
-
-### F15 — Full-column collapse shrinks the whole workspace vertically
-
-**User report (2026-09-09):** Minimizing Files or Agent while it occupies an entire
-column leaves a short horizontal header and squeezes all neighboring panels
-upward. Such a group should collapse toward the side and release its width.
-The screenshot identifies the group minimize controls, not object disclosure.
-
-Choose the collapse axis from the actual parent split, preserve cross-axis space,
-restore the prior sizing constraints, and retain the result through refresh.
-Startup view reconciliation must not treat restoring membership as an explicit
-request to expand each group. Check both side columns and stacked panels with
-real geometry, undo, drafts and existing R memory intact.
-
-### F16 — Object information priority and vector viewing remain impractical
-
-**User feedback (2026-09-09):** The Objects directory's Type, Size and
-Value/content fields cannot be reordered. The user finds the design attractive,
-but the information order does not adequately reflect real analysis priorities.
-They also find palette inspection impractical: a five-element character vector
-is treated as individually paged text, with repeated character/byte/line details.
-Column management in the dedicated data grid does not cover these directory fields.
-
-The follow-up Paper boards O07–O10 specify content-first summaries, configurable
-field order/visibility/width, complete small-palette overviews and vector-level
-copying. Single-item details are secondary; long vectors use explicit ranges and
-retain missing/non-color positions. The user approved implementation on 2026-09-09.
-These interactions are implemented; executed checks and remaining limitations are
-in Status. Further real-use feedback remains open.
-
-## Workflow reference: a country development analysis
-
-The supplied tutorial follows a complete project using gapminder: import, clean,
-transform, visualize, model, and report. Its central distinction is useful for
-Studio: reusable logic belongs in scripts; Console supports exploration; objects
-and generated files can be reconstructed from those scripts.
-
-Use a fixed local dataset and a prepared dependency environment for repeatable
-interaction review. The tutorial's optional live TidyTuesday exercise is not needed
-to establish this baseline. Do not automatically install tools or packages as
-part of this feedback-capture task.
-
-| Workflow moment | Interaction to examine | Related feedback |
+| ID | Reported need | Concrete review criterion |
 | --- | --- | --- |
-| Open a project with `data/raw`, `data/processed`, `R`, `scripts`, and `output/figures` | Locate files; arrange Files beside Editor and Console together; remove unwanted panels and reopen them | F01, F02, F03 |
-| Write `scripts/01_import_clean.R`, using project-relative paths | Read actual R syntax; save; run a line, selection, or file; keep the input position predictable | F03, F04, F05 |
-| Explore data and create vectors, factors, lists, and a data frame | Make short Console queries; expand an object without changing tabs; explicitly open a viewer when needed | F05, F06 |
-| Transform and summarize data; write processed RDS files | Keep track of changing objects and files while several panels are visible; distinguish old observations from current state | F02, F05, F06 |
-| Produce a scatter/facet plot and a trend plot; assign a ggplot object and print it | Navigate plot history, compare outputs, resize/zoom, return to editing, and contrast interactive export with `ggsave()` | F02, F05, F06, F07 |
-| Move repeated code into `R/utils.R`; create an `lm` object | Work across scripts, use `source()`, read formulas and function calls, and inspect model/function metadata without unwanted tab changes | F04, F05, F06 |
-| Explicitly restart R and replay the scripts | Distinguish retained drafts/layout/history from reset R memory; verify that inputs can recreate objects and generated outputs | F01–F07 |
+| F01 | Components cannot be removed conveniently. | Close and reopen views, recover empty-group space, retain drafts and support layout Undo without executing work. |
+| F02 | Docking relative to a group is unclear. | Place Plots beside Editor and Console together; show the target area, match preview and result, and allow cancellation. |
+| F03 | Product UI should use English. | Labels, menus, errors and hints are English; Chinese paths, content, columns and native output remain intact. |
+| F04 | R syntax highlighting is weak. | Distinguish representative R constructs; retain selection, Undo and plain text through polling/layout/settings. This alone does not scope a debugger or language server. |
+| F05 | Console does not feel like a command line. | Predictable prompt, history, multiline input, stdin, queue failure/resume and return to input; execution metadata must not overwhelm the transcript. |
+| F06 | Quick object inspection unexpectedly changes tabs. | Expand bounded details in place, permit several expanded rows, and require an explicit action to open a dedicated viewer. |
+| F07 | Plot viewing is rough. | Review history, fit/zoom/pan, resizing, comparison, original-byte export and unavailable output in a real workflow. Viewing never reruns R. |
+| F08 | Package lists are unattractive and uninformative. | Show purpose/version first, inspect each installed copy and its recorded source, distinguish loaded/attached state, and keep all viewing read-only. |
+| F14 Objects | Basic object content is hidden and table browsing is inadequate. | Immediately show size, content, strings and colors; use a capable grid for approved bounded classes. O01–O06 were approved. |
+| F15 | Collapsing a full-height column shrinks neighboring panels vertically. | Collapse along the actual parent split; preserve cross-axis space, prior size, drafts, Undo and refresh behavior. |
+| F16 | Object fields and palette browsing do not match analysis priorities. | Configurable directory fields, content-first summaries, complete small palettes, explicit long-vector ranges and vector-level copying. O07–O10 were approved. |
+| F17 | Bottom status and missing navigation feel unfinished. | Give projects/resources a clear navigation home and show compact truthful runtime state. Preserve the distinction between prior fixed-shell approval and today's generic plugin workspace. |
+| F18 | Runtime foundations are hard to manage. | Make session, connection, environment and recovery states understandable without resetting work. R04–R10 are approved; R01–R03 remain proposals. |
+| F20 | R help and interactive outputs lack a usable viewing experience. | Review navigation, anchors, browser opening and lightweight controls. Current Help/Viewer capability does not imply approval of pending HV01–HV07 refinements. |
+| F21 | Frames and controls overwhelm narrow panels. | Prefer content, reveal secondary controls on demand, and keep actions reachable at constrained widths. Exact Help/Viewer treatment remains proposed. |
+| F22 | Every component needs a way to express thoughts about its content. | Shared text/whole-item/image annotation entry, original source/version, marks and explanations, and accurate Agent inclusion. AN01–AN06 foundation is approved and has scoped evidence. |
 
-A meaningful review should follow the same project across these transitions, not
-start each panel test in a freshly idealized state. Record the user's intention,
-exact action, resulting focus/layout/output, and point of friction. Exercise
-mistakes as well: wrong paths, unsaved edits, an R error, an interruption, and a
-plot selected from an earlier run.
+The source document assigned **F14 twice**. The labels “F14 Objects” and
+“F14 Agent” preserve both references without silently renumbering them.
 
-## Tutorial features that need separate scope decisions
+## Agent interaction and context
 
-The tutorial describes RStudio features beyond the delivered Studio baseline.
-Their presence in the tutorial is not authorization to implement them here:
+| ID | Reported need | Concrete review criterion |
+| --- | --- | --- |
+| F09 | Setup resembles an instructional modal. | A coherent settings surface, selected connection expanded in place, aligned fields and one primary action; technical evidence on demand. Revised Paper design was approved. |
+| F10 | Connecting an installed Agent takes too long and requires manual copies. | Discover the available runtime, expose supported choices, connect to this workspace and accept a task. Distinguish provider quotas, permission waits and setup failures; bound verification waits. |
+| F11 | Task work is crowded with configuration cards. | New task leads directly to composition; readable messages and relevant actions lead. Verify that Paper boards belong to the intended page. |
+| F12 | Native permissions and context controls are scattered. | Keep native pending requests near input, preserve native option lists/modes, and offer previewable/removable source references and attachments. Do not impose a second Rho approval or assume every provider supports identical inputs. |
+| F13 | Chinese preedit is committed prematurely. | Polling/draft acknowledgements never replace marked text; candidate-selection Enter does not send. Retain local committed text on takeover conflicts. Separate synthetic composition from actual OS IME evidence. |
+| F14 Agent | Agent activity and scientific results feel disconnected. | Relate a task to exact source content, original operations and outputs; navigating between them preserves the researcher's work. |
+| F19 | The former built-in assistant should not become a second Agent interface. | Preserve a coherent interaction for existing code. The next-version decision supersedes the built-in expansion route: compatible external Agents use the same public capabilities. |
 
-- `.Rproj` creation, file association, and double-click launching;
-- Files operations such as directory creation, moving, and renaming;
-- code sections, folding, outline navigation, and additional execution modes;
-- package installation/management UI, import wizards, and full data browsers;
-- Quarto rendering, report previews, and HTML Viewer behavior;
-- RStudio-specific shortcuts, project options, and session menus.
+For F13, the user confirmed the corrected test page on 2026-09-09; this is distinct
+from the later Annotations-only macOS/Edge IME result in Status. Neither proves all
+current Agent/Editor controls on all operating systems.
 
-The report stage remains a useful end-to-end reference and a place to expose
-capability gaps. It must not become an unannounced Quarto/Viewer implementation
-requirement. Similarly, ordinary data-frame inspection does not prove that a
-tibble, ggplot object, or model has a full structural preview.
+## Annotation review boundary
 
-The next design review should establish the concrete plot and Console problems,
-resolve panel-removal and group-docking behavior, and distinguish experience
-refinement from new scientific capabilities. No library replacement, development
-sequence, or additional capability scope is decided by this document.
+F22 includes selection comments, freehand drawing, rectangles and written
+explanations. Use precise text/data/image anchors when supported and whole-item
+comments otherwise. Changed sources or ended sessions must not silently move a
+note to new content. Captured interactive views remain distinguishable from live
+state and original media. Save/read/navigation do not send Agent work or expand
+scientific authority. Unavailable images and uncaptured data remain explicit.
 
-## Acceptance map for the Calm Precision implementation
+The approved foundation covers eight source entries and bounded text/image
+records. Its scoped browser, native-owner and IME evidence is in Status. Further
+annotation interactions require their own scope; a foundation pass is not proof
+of full-product usability or real-model image understanding.
 
-The accepted interaction details are in [Design section 10](RHO-DESIGN.md#10-studio-interaction-contract).
-This map identifies repeatable checks, rather than declaring all future user
-experience concerns closed. Fresh results and any unverified details belong only
-in [STATUS.md](STATUS.md).
+## Workflow reference
 
-| Feedback | Concrete review |
-| --- | --- |
-| F01 | Close every view, observe empty-group space recovery, reopen from Panels, restore a closed Console draft, undo layout and confirm no execution |
-| F02 | Move Plots to the common left of Editor + Console using Move To; compare preview with final area; check all model directions and cancel a preview |
-| F03 | Inspect menus, settings, errors, labels and keyboard hints in English while retaining Chinese paths, object columns and native output |
-| F04 | Read representative R syntax and function/parameter colors; preserve selection and undo across settings, polling and layout changes; retain plain text mode |
-| F05 | Print multiple expressions, queue a failure followed by retained work, resume explicitly, switch Console drafts, answer readline/menu, refresh and check history/composition boundaries |
-| F06 | Expand raw, clean and summary together without adding tabs; explicitly open a viewer; verify bounded tibbles/special values and safe busy observations |
-| F07 | Produce scatter/facet/trend plots, select history, zoom/pan, pin a comparison, export/check original bytes and inspect older output with R unavailable |
+Use the fixed local fixture in `ui/e2e/fixtures/gapminder/` and a prepared dependency
+environment. Reusable logic belongs in scripts; Console supports exploration.
+Do not install dependencies implicitly as part of an interaction review.
 
-The fixed CSV fixture and analysis script live in `ui/e2e/fixtures/gapminder/`.
-The analysis dependencies are already installed; the scenario does not install
-packages. The fixed `studio.spec.ts` regression was retired with the fixed browser
-client. Current plugin scenarios live in `ui/e2e/scientific-workspace.spec.ts` and
-the individual plugin browser suites; model checks belong to their plugin packages,
-and native ownership/queue/input checks remain in the owner and Host tests.
-Report synthetic composition coverage separately from OS input-method testing.
+1. Open a project; locate files, arrange Editor/Console together, close and reopen views.
+2. Edit and save a project-relative script; execute a line, selection or captured file.
+3. Inspect vectors, lists and tables in place; distinguish busy/cached observations.
+4. Transform data, save processed results and follow changed files and R objects.
+5. Produce several plots; compare an older output and export its original bytes.
+6. Extract reusable functions and inspect a model without unwanted focus changes.
+7. Explicitly restart R and replay scripts; distinguish retained documents/history
+   from reset memory. Restart requires the relevant authorization.
+
+Record intention, action, focus/layout/output and the actual point of friction.
+Include wrong paths, unsaved edits, R errors, interruption and old-output selection.
+Current browser suites are `ui/e2e/scientific-workspace.spec.ts` and plugin suites;
+the fixed `studio.spec.ts` suite was retired with the fixed client.
+
+The tutorial does not independently authorize `.Rproj` associations, package
+management UI, import wizards, code navigation/debugging, Quarto, every RStudio
+shortcut or full previews of arbitrary classes. Existing separately authorized
+features remain governed by their actual contracts and acceptance scope.
