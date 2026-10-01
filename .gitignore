@@ -10,3 +10,4 @@ node_modules/
 *.tsbuildinfo
 .worktrees/
 .reasonix
+.npm-cache/
