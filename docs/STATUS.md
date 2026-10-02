@@ -83,11 +83,12 @@ the selected behavior evidence above remains applicable.
 
 ## Limits and next work
 
-- The next-version plan now starts with a concrete user action and reuse of existing
-  capabilities. The first file action is an external caller changing one line
-  through Files without a browser or built-in Agent. A new Editor backend/document
-  model is not a prerequisite. These are planning decisions, not newly executed
-  file-flow or Agent-removal evidence.
+- Phase one is now scoped to Rho-core: window-free shared context contracts,
+  explicit startup grants instead of hard-coded scientific scopes, and a minimal
+  external call flow using core-owned test plugins. Existing Host/Operation/MCP
+  mechanisms are reused. No Editor model, file-save implementation or removal of
+  the plugin-owned Agent product is included. This is a plan, not implementation
+  or newly executed acceptance evidence.
 - The current breaking upgrade accepts independent repository delivery. A core
   task proves its new contract with a minimal caller; plugin/application migration,
   consumer SDK refresh, lock updates and composition are separate integration work.
