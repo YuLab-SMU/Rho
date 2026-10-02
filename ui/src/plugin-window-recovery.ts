@@ -1,7 +1,7 @@
 import type { PluginViewRecord, PluginViewPresence, PluginInstanceObservation, ResumePlugin, ReconnectPluginView } from '../../sdk/plugin-protocol/index.js';
-import type { ApplicationState } from './generated/ApplicationState';
-import type { Invocation } from './generated/Invocation';
-import type { OperationRecord } from './generated/OperationRecord';
+import type { ApplicationState } from '../../sdk/host-client/ApplicationState';
+import type { Invocation } from '../../sdk/host-client/Invocation';
+import type { OperationRecord } from '../../sdk/host-client/OperationRecord';
 import { HostPortError, json, type HostClient } from './host-client';
 import { Model, readonlyMap } from './shared/model';
 

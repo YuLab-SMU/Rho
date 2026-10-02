@@ -1,211 +1,135 @@
-# Build and release
+# Source publication and local composition
 
-The first user-facing preview targets the user's current environment only:
-**Apple Silicon (arm64), macOS 26.5.2 (25F84)**. This is the local validation
-baseline, not a claim of compatibility with older macOS versions. Installation,
-launch, existing R/Ark discovery, recovery-component preparation and Rho model
-configuration should be completed for that one environment before expanding the
-release scope. Linux, Windows and Intel Mac distribution are outside this preview.
-Existing platform-specific source and development helpers do not create a current
-distribution commitment.
+## Source repositories
 
-The development delivery consists of the `rho` core and sixteen ordinary plugin
-archives, assembled as the portable bundle below. The core alone starts an empty
-workbench; it neither embeds feature packages nor reinstalls removed ones. To build
-the CLI/local-browser core executable:
+The public source repositories are YuLab-SMU/Rho-core, YuLab-SMU/Rho-plugins and
+the existing YuLab-SMU/Rho. Core and plugins are published on main; the application
+split is submitted on codex/split-repositories for review into main.
 
-```sh
-cargo build --release --locked
-```
+Publish the committed core and plugins before updating the application, so its
+SDK provenance and rho.lock.json revisions can be resolved remotely. The component
+repositories' independent histories begin at the split; the original monorepo
+history stays in Rho. Push the selected branches without mirror or force pushes.
 
-The output is `target/release/rho` for macOS arm64, including embedded
-HTML, CSS and JavaScript. R and Ark are external runtimes; the binary does not
-bundle their installations. Build frontend changes first using
-[Development](DEVELOPMENT.md).
+Submit the application on codex/split-repositories to YuLab-SMU/Rho and open a
+pull request into main. Include the unpublished ancestor commits, repository
+ownership changes, selected verification and its limits. The old xiayh17/Rho
+origin is a personal fork; use upstream explicitly for the organization submission.
+Publishing source is separate from merging that pull request or creating a release.
 
-`.github/workflows/rho.yml` defines macOS arm64 native source/transport checks for
-pushes and pull requests. No active workflow starts Linux or Windows jobs.
-`.github/workflows/build-rho.yml` is a manually triggered macOS arm64 binary build
-that uploads an artifact. Both macOS 26 jobs verify the native architecture;
-this does not establish that the runner has the same patch version as the local
-baseline. Neither a workflow definition nor an older successful run proves that
-the current commit passed remote CI.
+Use an existing GitHub account with the required organization permissions; do not
+store credentials in Git URLs or tracked files. Verify each remote branch head
+against the local commit after its push. An API read or push dry run establishes
+preparation, not repository creation or publication.
 
-The current path does not produce a signed/notarized installer or automatic updater.
-For a requested distribution, report the exact source commit, artifact paths, sizes,
-hashes, signatures actually present and checks that ran. Build, signing, installation
-and publication are separate outcomes. Do not install or publish automatically.
+## Exact local composition
 
-## Native local preview app
-
-For a double-click preview of the retained sixteen-plugin bundle:
+The repository split currently provides local development assembly, not a signed
+installer or a published release. Core, official plugins and application have
+independent source commits. Source identity and built artifact identity are separate.
 
 ```sh
-node scripts/build-preview-app.mjs --bundle /absolute/bundle --out '/absolute/new/Rho Preview.app' --ark /absolute/ark --r-home /absolute/R.framework/Resources --ark-notices /absolute/ark-notices
+node dev.mjs lock
+node dev.mjs build core
+node dev.mjs build app
+node dev.mjs build plugin files
+node dev.mjs build plugin annotations
+node dev.mjs build plugin r
+node dev.mjs lock
+node dev.mjs verify
+node dev.mjs assemble /absolute/new/composition annotations files r
 ```
 
-The assembler validates the bundle, compiles a small AppKit launcher with the
-system Swift compiler, includes Node, Ark and Ark’s LICENSE/NOTICE, and records exact payload hashes in
-`Contents/Resources/preview-manifest.json`. It applies and verifies a local ad hoc
-signature. A sibling `.receipt.json` records all final signed file hashes, modes,
-sizes and the SHA-256 of the ordered JSON file list. There is no DMG, Developer ID
-signature, notarization, installation or publication. R stays external; this build is configured for the specified local machine.
-Ark is referenced relative to the app resources, so moving the complete app keeps
-that runtime available. The selected R home must remain available. The assembly commit does not establish the
-retained core's source provenance.
+Locking requires clean committed component sources and explicitly refreshed SDK
+snapshots. Build receipts record exact source identities and artifact digests. Each plugin
+artifact is pinned independently; packages built at different plugin-repository
+commits may coexist without rebuilding unchanged packages.
+Assembly verifies those receipts and the application's asset inputs, refuses
+changed/off-lock component artifacts, and writes a new directory. It never rebuilds,
+activates or installs a component. Choose plugin names explicitly; there is no
+hardcoded historical sixteen-package acceptance gate.
 
-The launcher owns a separate `~/Library/Application Support/Rho/Preview 3` catalog
-and Demo project. Its first launch imports the bundled exact revisions once,
-calls the delivered Manager's scientific-workspace recipe through the public
-plugin SDK, and opens `run_demo.R` through the Files owner. Manager's compiled
-modules are copied from its artifact; Files owner modules are compiled with the
-assembly checkout's TypeScript from the exact archived source, with those source
-hashes/compiler version recorded. The core, archives and browser UI are retained.
-It does not install R packages or start R. New Agent tasks offer read-only context;
-scientific writes and execution require the user’s selected mode. Preview 3 uses a
-fresh saved scenario so its included fixes are active on first launch; earlier
-preview tasks and drafts remain in the earlier app’s catalog.
+composition.json records core and plugin identity, application source identity,
+exact payload hashes, sizes and executable modes. plugin-set.json records source
+revision/artifact identities for each immutable archive. The assembled assets
+remain separate from the core binary. Preserve these files with their artifacts.
 
-Saved request identities survive interrupted preparation. Routine launches resume
-original suspended instances and reconnect the saved window without replacing
-missing plugins, recreating the scenario or replaying R code. The native window
-offers workspace/project/log access and graceful quit. Read the
-[preview operator guide](OPERATIONS.md#local-macos-preview) for daily use.
-App assembly and signature verification alone do not establish complete product
-acceptance; actual evidence and remaining gaps belong in Status.
+The assembly can contain a subset of official plugins. Completeness and behavior
+are established only by the flows actually run against that combination. A plugin
+repository commit does not imply every package was rebuilt or accepted. A local
+source lock does not fetch unavailable artifacts or authenticate a publisher;
+source publication does not publish the locally assembled binaries and archives.
 
-Preview acceptance uses retained packages and disposable catalogs, with no implicit
-builds or changes to the user's preview. Run the launcher flow against the assembled
-app; the context flow also accepts an explicitly selected local model settings
-directory through `--live-agent-data` to exercise a real configured model. Credentials
-are removed from that disposable Agent after the run and never enter the report.
+Native validation remains Apple Silicon macOS. Other platform sources are not a
+new distribution commitment. Historical native Preview launchers and old bundle
+assemblers are retired from this source tree; Git retains them. New signing,
+notarization, installer, licensing audit, installation and publication work requires
+its own requested scope. Do not describe local component builds as those outcomes.
 
-```sh
-node scripts/test-preview-launcher.mjs '/absolute/Rho Preview.app' /absolute/launcher-results.json
-node scripts/test-preview-agent-context.mjs --set /absolute/plugin-set --rho /absolute/rho --ark /absolute/ark --r-home /absolute/R.framework/Resources --report /absolute/context-results.json
-```
+## Future official release boundary
 
-The context flow covers keyboard `@`, discovery and capture of a previously unopened
-file, proactive Files/Editor/R reads, exact Editor edit/save/run, stale-reference
-refusal and browser reload. The launcher flow covers first composition, explicit R
-startup, Demo execution, populated Objects, reload and graceful saved-workspace restart.
+This is an agreed design for the first official signed distribution, not an
+implemented pipeline or a request to create another repository now. The current
+three source repositories remain the daily development structure. Introduce
+Rho-releases with that distribution milestone, once its target platform, installation
+format and required acceptance flow are selected.
 
-## Ordinary plugin delivery sets
+| Owner | Release responsibility |
+| --- | --- |
+| Rho-core | Core implementation, public protocol/SDK and declared compatibility |
+| Rho-plugins | Scientific implementations, independently versioned plugin packages and owner checks |
+| Rho | Application source, product component selection, assembly and integration evidence |
+| Future Rho-releases | Release manifests and workflows, signing/notarization, official assets, checksums and installation/update channels |
 
-`scripts/plugin-set.mjs` assembles **already built** source/artifact directories
-through the existing CLI's snapshot, export and validation commands. It never
-compiles, activates an instance, starts R or changes a scenario. The output holds
-ordinary `.rho-plugin` archives, a bounded `plugin-set.json` index with exact
-revisions/artifacts/byte sizes/SHA-256 hashes, and the standalone Node utility.
-The assembler's CLI hash is recorded; it is not a signature or a claim that the
-CLI was rebuilt from the same checkout as each independent plugin revision.
+The release repository consumes selected source and artifacts. It does not mirror
+production source or replace the application development entry. It provides a stable
+distribution endpoint for official binaries and, when implemented, automatic updates
+and a Homebrew tap. A product release number names one accepted composition; core
+and plugins do not need matching version numbers or synchronized tags.
 
-The input JSON has `name`, `profile` and `packages`. Each package supplies a
-`directory` (relative to the input file or absolute) and `target` (`ui-web` for a
-UI-only package, `aarch64-apple-darwin` for the current native target).
-`profile: "rho-default"` requires exactly Agent, Annotations, Console, Editor,
-Environment, Files, Help, Manager, Objects, Packages, Plots, Process, R, Remote,
-Studio and Viewer. `profile: "custom"` supports selected revisions, including two
-versions of one plugin. These are assembly checks, not runtime privileges.
+### Fixed release composition
 
-```sh
-node scripts/plugin-set.mjs pack --rho /absolute/rho --input /absolute/packages.json --out /absolute/new-set
-node /absolute/new-set/plugin-set.mjs verify --rho /absolute/rho --set /absolute/new-set
-# Installation is an explicit, separate operator action:
-node /absolute/new-set/plugin-set.mjs install --rho /absolute/rho --set /absolute/new-set --database /absolute/catalog/host.sqlite
-```
+Before promotion, freeze a release manifest containing:
 
-Installation pins and validates all archive bytes before the first destination
-import, then uses the normal repository beside the selected database. It does not
-grant capabilities or create running instances. An interrupted import reports
-acknowledged revisions and the attempted revision with an unknown outcome; it
-does not claim transactional rollback or that a lost reply means nothing changed. An
-explicit retry is idempotent. No startup hook invokes this installer, and removed
-plugins stay removed until another explicit import. Treat the source packages and
-utility as trusted local code; checksums do not authenticate their publisher.
+- The product version, application and core commit SHAs, and public SDK identities.
+- Each selected plugin's identity, source revision, artifact digest and size.
+- Target OS/architecture, packaging configuration and the build toolchain/workflow
+  identity needed to trace how the candidate was produced.
+- The candidate artifact inventory and the acceptance results for that exact
+  composition, including any unsupported or unverified scope.
 
-`node scripts/test-plugin-set.mjs` exercises real CLI archive validation,
-preflight failures, coexisting revisions, import/remove/reimport and an empty
-generic Host startup using a disposable repository and retained binary. Set
-`RHO_TEST_BINARY` and `RHO_PLUGIN_SET_EVIDENCE` to select the binary and report.
-Set `RHO_PLUGIN_SET_PACKAGE` to additionally verify an assembled default set's
-sixteen actual archives: import, remove all, start the empty Host, and explicitly
-restore identical source/capability/permission declarations and artifacts.
-This does not establish signing, complete default scenario integration, final
-fixed-composition removal or a user installation; see Status for actual evidence.
+Resolve source references once before building; do not independently follow main
+or a mutable tag during later jobs. rho.lock.json, composition.json and build
+receipts provide starting evidence, but do not yet constitute a signed-release
+manifest. Source commits, built candidates and published releases remain distinct.
 
-Documentation or test-only source updates need no native rebuild. Materialize the
-accepted archive's source and artifact files into a new owned directory, preserving
-their bytes and executable modes, then replace only the reviewed source files.
-Use ordinary `plugins snapshot`, `export` and `validate` to create the new revision;
-do not edit archive identities or build receipts. Compare every other source entry,
-the manifest, and every runtime file's digest, size and mode against the accepted
-archive before assembling the set. Revision/artifact identities change even when
-all runtime bytes remain identical. Preserve the independent package's dependency
-layout and lockfiles. Runtime, dependency, manifest or build-script changes instead
-require their affected build and acceptance checks. Keep the prior archive and
-record the changed source paths, old/new identities and reused artifact digests.
+### Promotion and credentials
 
-## Portable local development bundle
+1. Build and test a candidate without signing keys or publication credentials.
+   Retain its immutable artifacts, digests and applicable acceptance evidence.
+2. An explicitly authorized release stage verifies that candidate and its evidence,
+   then signs, notarizes and packages it using trusted release tooling. This stage
+   must not execute source build scripts with signing credentials or rebuild the
+   application. Record the input candidate and resulting signed/package digests;
+   signing changes bytes, so their identities must remain distinguishable.
+3. Verify the resulting signed distribution on the selected target platform, then
+   publish its assets, checksums and provenance. Advance installation/update
+   channels only after the required release assets are available and verified.
 
-The current visual-runtime/annotation milestone refresh is reproducible with
-`scripts/refresh-development-bundle.mjs --previous OLD_BUNDLE --rho CURRENT_CORE
---out NEW_BUNDLE --evidence REPORT_JSON`. It serially assembles the thirteen
-affected packages, guards the unchanged native dependency closure, and copies
-Environment/Process/Remote archives byte-for-byte. It records build times and
-old/new revision, artifact, size and digest identities, validates all archives,
-and preserves failed staging directories. Build the current core first; this
-runner never installs into a user catalog or silently rebuilds the core.
+Control who can change release workflows, select a candidate and access signing
+or publication credentials. A separate repository is one part of that boundary;
+placing build and signing in the same privileged job would defeat the intended
+separation. Release jobs need only the capabilities required for their stage.
 
-For imported runtime acceptance, `visual-studio.spec.ts` accepts
-`RHO_STUDIO_PLUGIN_ARCHIVE`; it and `visual-science.spec.ts` accept
-`RHO_TEST_BINARY`. Set `RHO_FILES_PLUGIN_ARCHIVE` for the Files provider,
-`RHO_ANNOTATION_PLUGIN_ARCHIVE` for its declared saved contract, and
-`RHO_VISUAL_SDK_ARCHIVE` to the delivered Studio archive so both examples use its
-actual compiled SDK bytes. These flows cover the definition editor, built/applied
-views and real Files original-operation recovery. Archive validation alone does
-not establish these behaviors.
+A source or build change produces a new candidate and needs relevant acceptance
+before promotion. A failed publication retains its receipts and selected artifacts;
+retrying delivery must not silently rebuild or replace that candidate. Software
+release authorization is separate from Rho's scientific caller authorization and
+does not introduce another approval decision for Agent-authorized Operations.
 
-To reuse a retained macOS arm64 core and a settled default plugin set, assemble a
-new directory without running Cargo, frontend builds or independent plugin builds:
-
-```sh
-node scripts/build-rho-bundle.mjs --rho /absolute/retained/rho --set /absolute/plugin-set --out /absolute/new-bundle
-```
-
-The assembler refuses an existing destination and checks the core's architecture
-and system-only dynamic libraries, then validates the sixteen ordinary archives.
-The directory contains the core, archives, standalone import utilities, getting
-started instructions and license summaries. `rho-bundle.json` records every
-payload's size/hash and executable flag. Its assembly checkout is distinct from
-core provenance: the retained core's source commit is explicitly unknown. This is
-an internal development artifact, not a public release provenance/licensing audit;
-`LICENSES.md` is not a complete redistribution notice bundle.
-
-Move the whole directory, then use an existing Node.js 22+ for verification/import:
-
-```sh
-node /absolute/bundle/rho-bundle.mjs verify
-node /absolute/bundle/rho-bundle.mjs install --database /absolute/state/rho.sqlite
-/absolute/bundle/rho --database /absolute/state/rho.sqlite workbench
-```
-
-Verification pins and hashes all payloads, rejects symlinks and escaping names,
-and runs ordinary archive validation using the copied core. Import requires an
-explicit absolute database path; launch must use the same database. Daily launch
-needs no Node or installer. R and Ark remain separately configured existing
-runtimes. Assembly does not sign, notarize, install on the user's system or publish.
-Checksums detect changed files, not trusted publishers; these utilities and native
-plugins are trusted local code.
-
-`RHO_PLUGIN_SET_PACKAGE=/absolute/set node scripts/test-rho-bundle.mjs` exercises
-relocation to a path with spaces/Unicode, preflight failures before destination
-writes, explicit import/retry, complete removal, empty default Host startup and
-explicit restoration. It uses a disposable catalog and retained core, and never
-builds missing inputs. `RHO_TEST_BINARY` selects that core;
-`RHO_BUNDLE_EVIDENCE` selects the results file. The original default scenario's
-browser/scientific checks remain separate evidence.
-
-See [current validation scope](STATUS.md), [artifact trust](../CODE_SIGNING_POLICY.md),
-[license](../LICENSE), [third-party notices](../LICENSES.md) and
-[security reporting](../SECURITY.md).
+The first implementation milestone is one traceable signed delivery on the chosen
+platform: source selection, accepted candidate, signing/notarization evidence,
+final artifact verification and successful publication. Multi-platform delivery,
+automatic updates and Homebrew are subsequent scopes unless explicitly included
+in that milestone. This document establishes their ownership without claiming
+those capabilities are available now.

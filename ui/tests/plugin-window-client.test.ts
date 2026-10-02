@@ -1,9 +1,9 @@
 import { expect, it, vi } from "vitest";
 import { createPluginWindowState } from "../src/plugin-window-client";
 import type { HostClient } from "../src/host-client";
-import type { Invocation } from "../src/generated/Invocation";
-import type { OperationRecord } from "../src/generated/OperationRecord";
-import type { QuerySnapshot } from "../src/generated/QuerySnapshot";
+import type { Invocation } from "../../sdk/host-client/Invocation";
+import type { OperationRecord } from "../../sdk/host-client/OperationRecord";
+import type { QuerySnapshot } from "../../sdk/host-client/QuerySnapshot";
 const saved = { window: "window", project: "project", principal: "principal", version: 0, layout: { kind: "empty" } };
 const layout = { kind: "tabs" as const, id: "group", views: ["view"], selected: "view" };
 function fixture() {

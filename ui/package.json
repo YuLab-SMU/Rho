@@ -4,14 +4,11 @@
   "type": "module",
   "scripts": {
     "build": "node ../scripts/client.mjs build",
-    "generate": "node ../scripts/client.mjs generate",
     "check": "node ../scripts/client.mjs check",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "dev": "vite build --watch --outDir ../target/studio-assets",
+    "dev": "vite build --watch --outDir ../target/app-assets",
     "test": "vitest run",
-    "test:browser": "playwright test",
-    "check:boundaries": "node ../scripts/check-frontend-boundaries.mjs",
-    "test:boundaries": "node ../scripts/test-frontend-boundaries.mjs"
+    "test:browser": "playwright test"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

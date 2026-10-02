@@ -1,17 +1,17 @@
 import type { PluginTestProjectObservation } from "../../sdk/plugin-protocol/index.js";
 import { requestExternalNavigation } from "./plugin-external";
-import type { HostRequest } from "./generated/HostRequest";
-import type { SessionReply } from "./generated/SessionReply";
-import type { WorkbenchInfo } from "./generated/WorkbenchInfo";
-import type { WorkbenchFrame } from "./generated/WorkbenchFrame";
-import type { QuerySnapshot } from "./generated/QuerySnapshot";
-import type { Invocation } from "./generated/Invocation";
-import type { OperationRecord } from "./generated/OperationRecord";
-import type { OutboxRecord } from "./generated/OutboxRecord";
-import type { ApplicationState } from "./generated/ApplicationState";
-import type { JsonValue } from "./generated/serde_json/JsonValue";
+import type { HostRequest } from "../../sdk/host-client/HostRequest";
+import type { SessionReply } from "../../sdk/host-client/SessionReply";
+import type { WorkbenchInfo } from "../../sdk/host-client/WorkbenchInfo";
+import type { WorkbenchFrame } from "../../sdk/host-client/WorkbenchFrame";
+import type { QuerySnapshot } from "../../sdk/host-client/QuerySnapshot";
+import type { Invocation } from "../../sdk/host-client/Invocation";
+import type { OperationRecord } from "../../sdk/host-client/OperationRecord";
+import type { OutboxRecord } from "../../sdk/host-client/OutboxRecord";
+import type { ApplicationState } from "../../sdk/host-client/ApplicationState";
+import type { JsonValue } from "../../sdk/host-client/serde_json/JsonValue";
 
-import type { Diagnostic } from "./generated/Diagnostic";
+import type { Diagnostic } from "../../sdk/host-client/Diagnostic";
 
 interface HostHttpFailure { error?: string; diagnostic?: Diagnostic; diagnostics?: string[] }
 
@@ -142,7 +142,7 @@ export class HostClient {
     return this.request<WorkbenchInfo>("/api/project", { project_root });
   }
   selectDemoProject() {
-    return this.request<WorkbenchInfo>("/api/project/demo", {});
+    return this.request<WorkbenchInfo>("/api/project/default", {});
   }
   readState(project_root: string | null, key: string) {
     return this.request<ApplicationState>("/api/state/read", {

@@ -3,8 +3,8 @@ import { ConfirmedCloseFailure, PluginWindowClosures } from '../src/plugin-windo
 import { createPluginWindowClosures } from '../src/plugin-window-client';
 import { HostPortError } from '../src/host-client';
 import type { PluginViewRecord } from '../../sdk/plugin-protocol/index.js';
-import type { Invocation } from '../src/generated/Invocation';
-import type { OperationRecord } from '../src/generated/OperationRecord';
+import type { Invocation } from '../../sdk/host-client/Invocation';
+import type { OperationRecord } from '../../sdk/host-client/OperationRecord';
 const closed = { view: 'view', window: 'window', closed: true } as PluginViewRecord;
 it.each(['invalid_input', 'outcome_uncertain', 'idempotency_conflict'] as const)(
   'distinguishes an original %s rejection without treating uncertain work as failed', async code => {

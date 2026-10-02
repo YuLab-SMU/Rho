@@ -1,54 +1,22 @@
 # Rho documentation
 
-Start with the current product and the work being improved. Each page has one job.
+Read [Status](STATUS.md) first for current implementation and verification. The
+application checkout coordinates two independent source repositories; it no
+longer contains their production sources or a Cargo workspace.
 
 | Need | Read |
 | --- | --- |
-| Understand what works and what needs attention | [Current state and focus](STATUS.md) |
-| Judge product and interaction decisions | [Product design philosophy](RHO-DESIGN.md) |
-| Review the user's Studio issues and analysis scenario | [Studio feedback](STUDIO-FEEDBACK.md) |
-| Understand ownership, request flow and recovery | [Architecture](ARCHITECTURE.md) |
-| Change and verify the application | [Development](DEVELOPMENT.md) |
-| Launch Studio, configure R or use CLI/MCP | [Operator guide](OPERATIONS.md) |
-| Prepare a requested build or distribution | [Build and release](RELEASE.md) |
+| Current state and remaining limits | [Status](STATUS.md) |
+| Current ownership and invariants | [Architecture](ARCHITECTURE.md) |
+| Target scientific capabilities | [Next Version](NEXT-VERSION.md) |
+| Build or change a component | [Development](DEVELOPMENT.md) |
+| Run a local application | [Operations](OPERATIONS.md) |
+| Source publication, exact assembly and future signed releases | [Release](RELEASE.md) |
+| UI decisions and user problems | [Design](RHO-DESIGN.md), [Feedback](STUDIO-FEEDBACK.md) |
+| Core source and protocol | [Core repository](https://github.com/YuLab-SMU/Rho-core) |
+| Official plugin source and builds | [Plugins repository](https://github.com/YuLab-SMU/Rho-plugins) |
 
-[Scenario plugins](SCENARIO-PLUGINS.md) is exploratory research, separate from
-the subsequently authorized unified-plugin implementation. Its current boundary
-is in [Architecture](ARCHITECTURE.md#authorized-unified-plugin-boundary), approved
-PS01–PS07 interactions in [Design](RHO-DESIGN.md#21-unified-plugins-and-plugin-studio--approved),
-and actual progress in Status. The [page index](INDEX.md) and
-[source/check index](SOURCE-INDEX.md) are generated navigation aids.
-
-The [built-in component Agent plan](BUILTIN-AGENT-PLAN.md) defines the authorized
-Rig integration and bounded extension to the external-Agent-only rule. The P0
-experiment, component context and authorized backend execution are implemented.
-The unified Agent interface, independent permission policy and local key storage
-are implemented in the current source. Scientific work still uses the existing
-owners. A20 manual handoff has been reviewed and authorized; it appends reviewed
-context to existing task drafts. Rho verifies its own integration and data behavior,
-not the independent performance of third-party Agents.
-The fixed Host Agent services and their test harnesses have been removed. The
-earlier 33-scenario real-model assessment recorded 12 passes, 3 partial Plots cases
-and 18 unavailable document cases; its image diagnostic failed. Preview 3 adds
-scoped Editor and workspace tools. See Status for current evidence and remaining gaps.
-
-## Maintenance
-
-Code and reproducible results establish current behavior. Product principles
-explain design choices; feedback preserves user experience problems; `STATUS.md`
-summarizes current focus and evidence. Git stores completed work and past decisions.
-Do not copy history into a growing status archive or repeat a capability registry
-that the running Host already provides.
-
-Keep proposed, implemented and verified behavior distinct. Replace stale text and
-broken examples. Document a stable constraint once and link to its owning page.
-A documentation edit does not establish a new runtime test result.
-
-Register pages in `governance/registry.json`; map source areas and checks in
-`governance/source-map.json`. After changing the map:
-
-```sh
-node scripts/governance.mjs generate
-node scripts/governance.mjs check
-node scripts/test-governance.mjs
-```
+Status is the single current summary. Keep it below 300 lines and distinguish
+source organization, independently built artifacts and actually executed flows.
+Git retains the former monorepo, retired runners and historical evidence claims;
+there is no generated whole-product source/check catalog in the new layout.
