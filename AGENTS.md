@@ -30,17 +30,46 @@ do not add completed-work ledgers or embed current commit/PR/account details her
 - Agent-authorized requests get mechanical identity/schema/scope/containment and
   native-precondition checks, not another Rho approval. Models cannot expand scope.
 - `sdk/` is a pinned exported dependency, verified by `core-sdk.json`. Edit its
-  owner in Rho-core, verify and commit, then use `node dev.mjs sdk sync app` or
-  `node dev.mjs sdk sync plugins` explicitly. Never maintain a fork here, manually
-  alter the inventory to conceal a mismatch, or follow a floating source branch.
-- Existing built-in Agent and Studio interactions remain until separately changed.
-  Repository separation does not authorize abandoned-data migration or a new Agent
-  product. Package viewing remains read-only; installation has a separate owner.
+  owner in Rho-core, verify and commit. Refresh a consumer only when its integration
+  is in scope, using `node dev.mjs sdk sync app` or `node dev.mjs sdk sync plugins`
+  explicitly. Never maintain a fork here, manually alter the inventory to conceal
+  a mismatch, or follow a floating source branch.
+- Built-in Agent removal is an agreed direction, implemented in separately bounded
+  owner tasks. It does not require replacement chat, legacy-data migration or
+  simultaneous repair of application/Studio consumers. Package viewing remains
+  read-only; installation has a separate owner.
+
+## Development decision rule
+
+Start each task with a concrete user action and observable result. Try the existing
+public capability first and inspect the real result; reuse valid evidence already
+available. Fix the smallest demonstrated gap in its owner. In a core-only task,
+use a minimal public-contract caller; do not fabricate a scientific result or make
+plugin/application integration a prerequisite.
+
+Mature general-purpose capabilities default to reuse. Before adding a state model
+or custom subsystem, identify the necessary user behavior that existing files,
+Git, Operations and maintained tools cannot provide. Generality, elegance and
+possible future needs alone do not justify a refactor. Direct file editing does
+not imply an Editor buffer, document identity or parallel content history.
+
+Resource limits must state the resource protected, configurability and behavior
+when exceeded; neither inherited constants nor unlimited capacity are defaults.
+Git history does not replace current-buffer or concurrent-write checks. A tool's
+name does not establish its memory use, atomicity or text fidelity. Keep file
+handling concerns inside Files unless a demonstrated shared gap requires more.
+
+For the current breaking upgrade, deliver one repository's responsibility and new
+contract at a time. Other repositories may remain incompatible. Do not inventory
+or adapt their consumers, add compatibility layers, migrate data, refresh consumer
+SDKs or update the application lock merely to close a single-repository task.
+Cross-repository integration is a separately selected task. Consult older code
+only to answer a concrete requirement question, not to preserve every old behavior.
 
 ## Development and verification
 
-Use this checkout on `main` as the everyday entry: `node dev.mjs status`. Each
-repository owns its source and commits. Application build/check must not require
+Use this checkout on `main` as the application/composition entry:
+`node dev.mjs status`. Each repository owns its source and commits. Application build/check must not require
 sibling source checkouts or Cargo. Routine work needs no worktree; use temporary
 worktrees for independent tasks, then integrate their changes and remove them.
 Keep the three-source-repository development structure; future release ownership
@@ -59,9 +88,9 @@ reuse the retained core binary. Never run Cargo builds/tests concurrently.
 Generated public contracts belong to core; generation and SDK refresh are explicit.
 
 `rho.lock.json` selects component commits, SDK snapshots and individual plugin
-artifacts. Update it with `node dev.mjs lock` after component commits and the
-required SDK refresh/builds. An unrelated plugin-repository commit does not require
-rebuilding unchanged packages. Source selection, artifact identity and acceptance
+artifacts. When integrating a selected composition, update it with `node dev.mjs lock`
+after component commits and the required SDK refresh/builds. An unrelated plugin
+repository commit does not require rebuilding unchanged packages. Source selection, artifact identity and acceptance
 are separate evidence; preserve their receipts. Local overrides must be explicit
 and cannot be represented as an exact published composition.
 

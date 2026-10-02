@@ -1,12 +1,39 @@
 # Developing Rho
 
-Use this repository as the daily entry while changing each component at its real
-source owner. Read Status before resuming and inspect all three Git states with
-`node dev.mjs status`. The defaults are this checkout, ../Rho-core and
-../Rho-plugins; a gitignored .rho-dev.json can override core and plugins paths.
+Change each component at its real source owner. Read Status before resuming and
+inspect Git state in the repository being changed. Use this repository and
+`node dev.mjs status` when application composition is in scope; a component task
+does not require inspecting all three repositories. The defaults are this checkout,
+../Rho-core and ../Rho-plugins; a gitignored .rho-dev.json can override core and plugins paths.
 
-Clone the three repositories as siblings. This layout keeps one development entry
-without Git submodules. While the application split is awaiting merge, use
+## Start with a user action
+
+Write the action and its observable success condition before choosing an API or
+state model: for example, an external caller changes one line in a project file.
+Try the existing public capability and check the actual disk result, reusing valid
+evidence where available. Fix only the demonstrated gap in its owner. An absent
+integration environment is not evidence that a new abstraction is needed.
+
+Reuse mature editors, file tools and Git by default. Custom implementation needs
+a necessary requirement that the existing capability or maintained tools cannot
+meet. Explain why files, Git and the operation journal cannot carry the required
+state before adding another model. UI buffers are a separate need from directly
+editing a disk file. Keep file semantics in Files; verify tool behavior rather
+than assuming its memory use, atomicity or text fidelity from its name. State the
+purpose, configurability and failure behavior of resource limits.
+
+During this breaking upgrade, select one repository and a bounded responsibility.
+Build and test its new public contract with a minimal caller. Other repositories
+may remain incompatible; do not add compatibility, consumer migration, SDK refresh,
+lock updates or application assembly as closure requirements. Core contract tests
+prove core behavior, not real Files/R results. Test the latter when that owner or
+an explicit integration flow is selected. Generality and future possibilities do
+not independently justify more work.
+
+## Optional composition setup
+
+For application integration, clone the three repositories as siblings. This layout
+keeps one development entry without Git submodules. While the application split is awaiting merge, use
 `git clone --branch codex/split-repositories https://github.com/YuLab-SMU/Rho.git`
 for the first command below; after merge, the default main branch contains the split.
 
@@ -28,9 +55,9 @@ node dev.mjs status
 ```
 
 The explicit checkouts reproduce this application's selected component sources.
-For new component work, create a branch in its repository and update the application
-lock after committing and verifying the change. Git clones contain source and
-dependency snapshots; build receipts and native plugin packages are local outputs.
+For new component work, commit and verify in its repository. Update the application
+lock only when selecting that component for integration. Git clones contain source
+and dependency snapshots; build receipts and native plugin packages are local outputs.
 
 ## Commands and source ownership
 
@@ -59,12 +86,14 @@ public SDK and never invoke Cargo. Imported plugin artifacts remain immutable.
 rho.lock.json records development checkout commits, dependency snapshot hashes and
 each selected plugin artifact separately. Plugin artifacts may come from different
 commits of the official-plugin repository; an unrelated plugin/test change does not
-force their rebuild. Build a changed plugin, then explicitly run lock to select it.
+force their rebuild. When integrating a changed plugin, build it and explicitly run
+lock to select it.
 core-sdk.json records the public SDK source revision, inventory, hashes and license.
 Consumer copies in sdk/ (and plugins' public crates/) are generated dependencies,
-not source to edit. After a core change:
+not source to edit. A core-only change finishes with its own checks and commit.
+When a later task explicitly integrates that core change:
 
-1. Verify and commit the core change.
+1. Select the verified, committed core revision.
 2. Run `node dev.mjs sdk sync app` and/or `node dev.mjs sdk sync plugins` explicitly.
 3. Verify and commit affected plugin changes, then build affected component artifacts.
 4. Run `node dev.mjs lock` to select those artifacts, then run the selected integration
@@ -77,6 +106,10 @@ application source identity, including whether that checkout is dirty. It does n
 claim atomic commits across repositories or rollback of scientific effects.
 
 ## Repository separation acceptance
+
+This section describes the completed split's selected boundary checks and the
+available composition flow. It does not require every new component task to repeat
+the split or restore application compatibility.
 
 Choose checks from concrete new responsibilities. Old whole-product counts, one
 root workspace, private file layout and an exact historical package inventory are

@@ -83,6 +83,16 @@ the selected behavior evidence above remains applicable.
 
 ## Limits and next work
 
+- The next-version plan now starts with a concrete user action and reuse of existing
+  capabilities. The first file action is an external caller changing one line
+  through Files without a browser or built-in Agent. A new Editor backend/document
+  model is not a prerequisite. These are planning decisions, not newly executed
+  file-flow or Agent-removal evidence.
+- The current breaking upgrade accepts independent repository delivery. A core
+  task proves its new contract with a minimal caller; plugin/application migration,
+  consumer SDK refresh, lock updates and composition are separate integration work.
+  Other repositories may remain incompatible. No compatibility or legacy-data
+  migration is required merely to close a component task.
 - This establishes local source/build separation and the selected Files/application
   flow, not a fresh sixteen-plugin acceptance, real-R computation/recovery matrix,
   visual redesign acceptance or signed/public distribution.
@@ -103,6 +113,6 @@ the selected behavior evidence above remains applicable.
 - No user Host, installed preview, catalog, R session or project data was restarted,
   migrated or overwritten. Acceptance used disposable catalogs/projects only.
 
-Continue from node dev.mjs status and the relevant owner's README. Select the next
-bounded capability from Next Version independently of this completed source split;
-use its real Owner and public contract to define required evidence.
+Continue from the selected owner's README and Git state. Use node dev.mjs status
+when composition is selected. Follow Next Version's user-action-first plan; prove
+only the selected owner's result and report any unverified integration separately.
