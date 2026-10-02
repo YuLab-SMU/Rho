@@ -1,17 +1,23 @@
 # Working on Rho application assembly
 
-This checkout now owns the application shell, examples, development entry and
-component composition. `../Rho-core` and `../Rho-plugins` are separate local Git
-repositories with their own AGENTS.md. Default locations can be overridden with
-`.rho-dev.json`, RHO_CORE_REPO and RHO_PLUGINS_REPO. There is no root Cargo workspace.
+This checkout owns the application shell, examples, development entry and component
+composition. `../Rho-core` and `../Rho-plugins` are independent source repositories.
+Read the owning repository's AGENTS.md before editing there; this file governs Rho.
+Default locations can be overridden with `.rho-dev.json`, `RHO_CORE_REPO` and
+`RHO_PLUGINS_REPO`. There is no root Cargo workspace.
 
 ## Orientation and ownership
 
-Read docs/README.md and docs/STATUS.md when joining or resuming. Architecture
-records current ownership; NEXT-VERSION records target capabilities; RHO-DESIGN
-and STUDIO-FEEDBACK govern interaction work. Keep proposed, implemented and
-verified claims distinct. Status is the single current summary, under 300 lines.
-Do not add historical ledgers; Git retains the old monorepo and retired tests.
+Read [docs/README.md](docs/README.md) and [Status](docs/STATUS.md) when joining or
+resuming, then only the references needed for the task. Reuse current context.
+[Architecture](docs/ARCHITECTURE.md) records ownership and durable constraints;
+[Next Version](docs/NEXT-VERSION.md) records target capabilities;
+[Design](docs/RHO-DESIGN.md) and [Feedback](docs/STUDIO-FEEDBACK.md) govern interaction
+work. [Development](docs/DEVELOPMENT.md) gives commands and scoped verification;
+[Release](docs/RELEASE.md) distinguishes source publication, local assembly and
+future official distribution. Keep agreed, implemented and verified claims distinct.
+Status is the single current summary, under 300 lines. Git retains history;
+do not add completed-work ledgers or embed current commit/PR/account details here.
 
 - Core owns generic Host identity, authorization, Operation, journal, lifecycle,
   routing, public SDK and CLI/HTTP/MCP adapters. It embeds no application UI or R
@@ -23,43 +29,84 @@ Do not add historical ledgers; Git retains the old monorepo and retired tests.
   outcomes, commit uncertainty and no-replay recovery. No global scientific revision.
 - Agent-authorized requests get mechanical identity/schema/scope/containment and
   native-precondition checks, not another Rho approval. Models cannot expand scope.
-- sdk/ is a pinned exported dependency, verified by core-sdk.json. Edit its owner
-  in Rho-core, commit, then explicitly sync the dependency. Never maintain a fork
-  here or silently follow another repository's main branch.
+- `sdk/` is a pinned exported dependency, verified by `core-sdk.json`. Edit its
+  owner in Rho-core, verify and commit, then use `node dev.mjs sdk sync app` or
+  `node dev.mjs sdk sync plugins` explicitly. Never maintain a fork here, manually
+  alter the inventory to conceal a mismatch, or follow a floating source branch.
 - Existing built-in Agent and Studio interactions remain until separately changed.
   Repository separation does not authorize abandoned-data migration or a new Agent
   product. Package viewing remains read-only; installation has a separate owner.
 
 ## Development and verification
 
-Use this checkout on main as the everyday entry: node dev.mjs status. Each new
-repository owns its independent source and commits. Do not duplicate source or
-introduce a fourth coordination repository. Routine work needs no worktree.
+Use this checkout on `main` as the everyday entry: `node dev.mjs status`. Each
+repository owns its source and commits. Application build/check must not require
+sibling source checkouts or Cargo. Routine work needs no worktree; use temporary
+worktrees for independent tasks, then integrate their changes and remove them.
+Keep the three-source-repository development structure; future release ownership
+is a separate concern described below.
 
 Inspect git status before editing and preserve unrelated work. Select a bounded
 flow and its concrete completion conditions. The old whole-product suite is not
 required: retain useful owner/contract tests, adapt necessary cases and retire
 checks of old directory layout, package counts or private implementation shape.
-Do not implement compatibility solely to satisfy retired tests. A relevant failed,
-missing or timed-out check is not a pass. See docs/DEVELOPMENT.md.
+Do not implement compatibility solely to satisfy retired tests. See Development
+for the selected repository-boundary acceptance flows.
 
-Use node dev.mjs build app, node dev.mjs build core, or node dev.mjs build plugin
-NAME. Build only changed owners. Application checks do not run Cargo; plugin-only
-changes reuse the retained core binary. Never run Cargo builds/tests concurrently.
+Use `node dev.mjs build app`, `node dev.mjs build core`, or
+`node dev.mjs build plugin NAME`. Build only changed owners; plugin-only changes
+reuse the retained core binary. Never run Cargo builds/tests concurrently.
 Generated public contracts belong to core; generation and SDK refresh are explicit.
 
-For app changes run npm run build --prefix ui and npm run check --prefix ui, then
+`rho.lock.json` selects component commits, SDK snapshots and individual plugin
+artifacts. Update it with `node dev.mjs lock` after component commits and the
+required SDK refresh/builds. An unrelated plugin-repository commit does not require
+rebuilding unchanged packages. Source selection, artifact identity and acceptance
+are separate evidence; preserve their receipts. Local overrides must be explicit
+and cannot be represented as an exact published composition.
+
+For app changes run `npm run build --prefix ui` and `npm run check --prefix ui`, then
 selected UI behavior/browser checks. For core/plugin Rust edits use focused
 `cargo test -p <crate> <filter> --locked` in its repository. Source closure, real
 Owner results and cross-component composition are distinct evidence. A component
 build or historical archive does not prove the current complete application.
 
+Reuse passing checks when they cover the current change. Report only executed
+checks; unavailable, skipped and timed-out checks are not passes. Preserve failed
+or incomplete evidence rather than treating a narrower pass as its replacement.
+Documentation-only changes need link/anchor checks and rendered-content inspection,
+not native builds. Render a coherent batch, inspect affected content and downstream
+layout, and reuse valid observations of unchanged content.
+
 Do not add acceptance scope during closure without a concrete missing requirement.
 An unavailable historical full-product test does not block selected boundary
-acceptance. Inspect the diff and commit coherent authorized changes in each
-repository; update the source lock only after component commits. Verify clean
-status in all three repositories before ending. Never push, install, sign or
-publish merely because a local build passed.
+acceptance. Inspect the diff and commit coherent authorized changes in their owning
+repositories. Check repository states before ending; preserve and report unrelated
+changes instead of cleaning them to obtain an empty status. Update Status only when
+behavior, verification conclusions, focus or unresolved work changes, not merely
+to record an edit to instructions or documentation.
+
+## Source publication and future releases
+
+Before pushing, inspect the actual remote URL, branch and authenticated account;
+do not assume `origin` is the organization repository. Use `codex/` for new review
+branches. Publish required component commits before an application change that
+references them, and verify remote heads after pushing. Carry forward existing
+user authorization; do not request it again for the same agreed action. Source
+pushes, PR merges, binary publication and installation are separate outcomes.
+
+Rho owns application assembly. The agreed future `Rho-releases` repository owns
+promotion of accepted compositions, signing/notarization, official artifacts and
+installation/update channels. It is not another source mirror or daily development
+coordinator. Its implementation belongs to the first explicitly requested official
+signed-distribution milestone; the design alone does not authorize creating it.
+
+Official releases must pin immutable source and artifact identities with their
+acceptance evidence. Product and component versions can evolve independently.
+Build/test jobs do not hold signing or publication credentials. A separate release
+stage verifies the chosen candidate without rebuilding it and records unsigned
+and signed artifact digests. Follow Release for the full boundary. Do not introduce
+release approvals into scientific Operations or publish as a side effect of a build.
 
 ## UI and runtime continuity
 
