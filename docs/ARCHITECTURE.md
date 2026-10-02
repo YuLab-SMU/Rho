@@ -19,6 +19,28 @@ application-selected default project. It no longer embeds scientific example fil
 or the application shell. The application owns example preparation. Local dev
 coordination does not create another runtime or scientific operation flow.
 
+### Future release ownership
+
+The agreed distribution boundary keeps these three source repositories. Rho owns
+the product's component selection and application assembly. A future Rho-releases
+repository will own promotion of an accepted combination into an official release,
+signing/notarization, release assets and stable installation/update endpoints.
+This release repository and its workflows are not implemented by the source split.
+
+A release identifies immutable application/core commits, public SDK snapshots,
+each selected plugin artifact and its source, target platform, and acceptance
+evidence. Product release versions are independent of component versions. Branch
+names and movable tags cannot substitute for resolved source and artifact identities.
+The existing source lock and composition receipts are inputs to this record.
+
+Builds and acceptance run without signing or publication credentials. A separate
+release stage verifies and promotes the selected candidate, preserving unsigned
+and signed artifact digests; it does not rebuild source during promotion. Repository
+separation alone does not establish this permission boundary. Release authorization
+governs software distribution and adds no approval step to scientific Operations.
+See [the future release design](RELEASE.md#future-official-release-boundary)
+for ownership, sequencing and the implementation milestone.
+
 ## Authority and ownership
 
 ### Authorized unified plugin boundary

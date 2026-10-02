@@ -11,7 +11,7 @@ longer contains their production sources or a Cargo workspace.
 | Target scientific capabilities | [Next Version](NEXT-VERSION.md) |
 | Build or change a component | [Development](DEVELOPMENT.md) |
 | Run a local application | [Operations](OPERATIONS.md) |
-| Assemble exact artifacts | [Release](RELEASE.md) |
+| Source publication, exact assembly and future signed releases | [Release](RELEASE.md) |
 | UI decisions and user problems | [Design](RHO-DESIGN.md), [Feedback](STUDIO-FEEDBACK.md) |
 | Core source and protocol | [Core repository](https://github.com/YuLab-SMU/Rho-core) |
 | Official plugin source and builds | [Plugins repository](https://github.com/YuLab-SMU/Rho-plugins) |

@@ -90,6 +90,11 @@ the selected behavior evidence above remains applicable.
   merge into main. Automatic acquisition of missing artifacts,
   installer/signing/notarization and an updated native Preview launcher remain
   separately scoped work.
+- The future release boundary is agreed in [Release](RELEASE.md#future-official-release-boundary):
+  Rho keeps application assembly; Rho-releases will promote fixed accepted
+  compositions with separate build and signing/publication credentials. That
+  repository and pipeline remain unimplemented until the first signed-distribution
+  milestone; documenting the design does not publish another release.
 - Existing Agent/Rig, window-bound contracts and Studio-specific Agent entry points
   remain in their plugin owners. The external-Agent/headless goals in Next Version
   are not automatically implemented by moving source.
