@@ -10,6 +10,7 @@ longer contains their production sources or a Cargo workspace.
 | Current ownership and invariants | [Architecture](ARCHITECTURE.md) |
 | Target scientific capabilities | [Next Version](NEXT-VERSION.md) |
 | Planned reduction of Core responsibilities | [Core simplification plan](CORE-SIMPLIFICATION.md) |
+| Shell capabilities to preserve during Core reduction | [Workbench state transfer](WORKBENCH-MIGRATION.md) |
 | Build or change a component | [Development](DEVELOPMENT.md) |
 | Run a local application | [Operations](OPERATIONS.md) |
 | Source publication, exact assembly and future signed releases | [Release](RELEASE.md) |
