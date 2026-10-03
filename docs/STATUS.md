@@ -117,6 +117,10 @@ the selected behavior evidence above remains applicable.
   editing, execution and checking without adding roles, grant configuration or
   approval steps. Existing launcher grants remain current implementation; this
   planning change does not remove them or select a new application composition.
+  Context is acquired for the current question; Core does not infer scientific
+  intent or validity. Its evidence-reading documentation in source distinguishes
+  a capability-contract fault from scientifically invalid material. The focused
+  original-material preservation test passed; no execution protocol was changed.
 - The latest Core source has removed production test-project orchestration,
   source/build workflows, product presentation state and the Core draft model;
   its [current boundaries](../../Rho-core/docs/ARCHITECTURE.md#responsibility-boundary-after-the-breaking-upgrade)
