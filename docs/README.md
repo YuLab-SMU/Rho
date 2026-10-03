@@ -9,6 +9,7 @@ longer contains their production sources or a Cargo workspace.
 | Current state and remaining limits | [Status](STATUS.md) |
 | Current ownership and invariants | [Architecture](ARCHITECTURE.md) |
 | Target scientific capabilities | [Next Version](NEXT-VERSION.md) |
+| Planned reduction of Core responsibilities | [Core simplification plan](CORE-SIMPLIFICATION.md) |
 | Build or change a component | [Development](DEVELOPMENT.md) |
 | Run a local application | [Operations](OPERATIONS.md) |
 | Source publication, exact assembly and future signed releases | [Release](RELEASE.md) |

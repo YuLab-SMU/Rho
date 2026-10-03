@@ -1,6 +1,6 @@
 # Rho: current state and focus
 
-Updated: 2026-10-01. This is the single current summary. Git retains the former
+Updated: 2026-10-02. This is the single current summary. Git retains the former
 monorepo, old acceptance matrix and earlier product evidence; they are not gates
 for the new repository boundaries.
 
@@ -37,11 +37,22 @@ exact assembly requires clean, explicitly selected core/plugin artifacts.
 
 Core and plugins are published as public repositories at
 [YuLab-SMU/Rho-core](https://github.com/YuLab-SMU/Rho-core) and
-[YuLab-SMU/Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins). Their remote main
-heads were verified against local commits 55c6ac1e and 7b88e1cd respectively. The
+[YuLab-SMU/Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins). Their initial remote
+main heads were verified against local commits 55c6ac1e and 7b88e1cd respectively. The
 application split is submitted on YuLab-SMU/Rho's codex/split-repositories branch
 for review into main. The existing personal fork remains a separate remote.
 This publishes source; no binary release or installer was published.
+
+Core has subsequently published windowless context contracts, explicit launcher
+grants and query observations that preserve owner time and notices. Unknown owner
+time stays null; cached data is readable with partial completeness and a cache
+notice. Focused protocol, Operation and CLI/MCP checks passed (42 tests), together
+with an independent core build, SDK example compilation and source-boundary check.
+An external file change and later reads after an uncertain Operation were checked
+with a Core-owned protocol fixture. These prove Core boundaries, not scientific
+results, Editor merging or the current application composition. Consumer SDKs,
+the application lock and retained composition artifacts have not selected these
+new Core contracts.
 
 ## Selected verification
 
@@ -67,8 +78,8 @@ Evidence is retained under target/: composition-test.json and its original repor
 composition-browser.png, core.json, packages.json, app-assets.json, and
 composition-split-locked/composition.json. The latter records exact sizes/hashes and
 source identities; its application source was dirty during assembly and is labeled
-accordingly. That assembly retains its original core 10ccb43a receipt. Current
-source and the retained core receipt are 55c6ac1e; cargo build --locked completed
+accordingly. That assembly retains its original core 10ccb43a receipt. The split's
+core source and retained core receipt are 55c6ac1e; cargo build --locked completed
 with the same native binary bytes. Packages were built at plugin source f03bf973.
 Later test-fixture, repository metadata and SDK-verifier changes are selected for
 source development; they do not invalidate the unchanged package artifacts.
@@ -83,12 +94,12 @@ the selected behavior evidence above remains applicable.
 
 ## Limits and next work
 
-- Phase one is now scoped to Rho-core: window-free shared context contracts,
-  explicit startup grants instead of hard-coded scientific scopes, and a minimal
-  external call flow using core-owned test plugins. Existing Host/Operation/MCP
-  mechanisms are reused. No Editor model, file-save implementation or removal of
-  the plugin-owned Agent product is included. This is a plan, not implementation
-  or newly executed acceptance evidence.
+- The proposed next Core direction is responsibility reduction, described in the
+  [Core simplification plan](CORE-SIMPLIFICATION.md). Start with removing production
+  test-project orchestration, then source/build workflows, product presentation
+  state and the Core draft model in separate bounded tasks. The document is a
+  pending plan; none of those removals or consumer migrations has been implemented.
+  The completed headless and observation contracts provide the current Core baseline.
 - The current breaking upgrade accepts independent repository delivery. A core
   task proves its new contract with a minimal caller; plugin/application migration,
   consumer SDK refresh, lock updates and composition are separate integration work.
