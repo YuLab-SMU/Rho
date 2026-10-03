@@ -111,6 +111,12 @@ the selected behavior evidence above remains applicable.
 
 ## Limits and next work
 
+- The [Core mission and implementation plan](../../Rho-core/docs/MISSION-AND-PLAN.md#权限体系建设后置)
+  defers permission-system design until a concrete sharing, remote-access or
+  isolation requirement is selected. Near-term work prioritizes local reading,
+  editing, execution and checking without adding roles, grant configuration or
+  approval steps. Existing launcher grants remain current implementation; this
+  planning change does not remove them or select a new application composition.
 - The latest Core source has removed production test-project orchestration,
   source/build workflows, product presentation state and the Core draft model;
   its [current boundaries](../../Rho-core/docs/ARCHITECTURE.md#responsibility-boundary-after-the-breaking-upgrade)
