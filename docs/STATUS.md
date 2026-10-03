@@ -1,6 +1,6 @@
 # Rho: current state and focus
 
-Updated: 2026-10-02. This is the single current summary. Git retains the former
+Updated: 2026-10-03. This is the single current summary. Git retains the former
 monorepo, old acceptance matrix and earlier product evidence; they are not gates
 for the new repository boundaries.
 
@@ -54,6 +54,19 @@ results, Editor merging or the current application composition. Consumer SDKs,
 the application lock and retained composition artifacts have not selected these
 new Core contracts.
 
+Files source now separates native disk access from the managed-write settlement
+fence. Once a native patch attempt returns, bounded queries can read current files
+before Host settlement, including subsequent external changes. Current reads do
+not confirm the original outcome or replace its captured result. Managed patches
+and instance release remain fenced until settlement; active native patches exclude
+observations. No observation store, event capture or public SDK change was added.
+The six backend tests and the built executable's public protocol checks passed;
+the regression first failed on the former settlement-wide read fence. The Files
+package was built through the application development entry without rebuilding
+Core. This package has not been selected by the application lock or checked in a
+new application composition. The next Files gap is its mandatory presentation
+dependencies, which still bind basic capabilities to window and annotation ports.
+
 ## Selected verification
 
 | Executed flow | Established result |
@@ -65,7 +78,8 @@ new Core contracts.
 | node dev.mjs build plugin files / r / annotations | Three packages built from the independent plugin checkout; retained core binary unchanged |
 | npm run build --prefix ui; npm run check --prefix ui | External application assets and client types built/checked without Cargo |
 | npm run test --prefix ui | 135 window/client tests passed; dependency CSS source-map warning was non-fatal |
-| Files package tests/protocol.py against its built executable | Native protected paths, settlement/cancellation, duplicate/foreign identity and disconnected-work checks passed |
+| cargo test -p rho-files-backend --lib --locked in Rho-plugins | Six tests passed, including reads and external changes before settlement, stale content, cancellation and original write fences |
+| Files package tests/protocol.py against its built executable | Current reads before settlement, external changes, protected paths, settlement/cancellation, duplicate/foreign identity and disconnected-work checks passed |
 | node scripts/test-composition.mjs | Empty core; real Files patch with declared Annotations provider; path escape refusal; original retry, stale-write refusal, restart readback; external assets, refresh, containment and HTTP auth passed |
 | npm run test:browser --prefix ui -- composition.spec.ts | Isolated Chrome loaded external app assets, selected the app-owned Demo and retained the workspace after refresh |
 | node dev.mjs verify and exact assembly | Retained binary/package digests checked; three selected archives assembled without rebuilding or installing components |
@@ -83,6 +97,9 @@ core source and retained core receipt are 55c6ac1e; cargo build --locked complet
 with the same native binary bytes. Packages were built at plugin source f03bf973.
 Later test-fixture, repository metadata and SDK-verifier changes are selected for
 source development; they do not invalidate the unchanged package artifacts.
+The latest Files build has a separate current receipt in packages.json. The
+historical composition receipts and application lock still retain their original
+package selection.
 
 Remote preparation exposed Finder .DS_Store files in local SDK directories. Core's
 exporter and verifier now exclude ordinary Finder metadata files while still
@@ -94,12 +111,14 @@ the selected behavior evidence above remains applicable.
 
 ## Limits and next work
 
-- The proposed next Core direction is responsibility reduction, described in the
-  [Core simplification plan](CORE-SIMPLIFICATION.md). Start with removing production
-  test-project orchestration, then source/build workflows, product presentation
-  state and the Core draft model in separate bounded tasks. The document is a
-  pending plan; none of those removals or consumer migrations has been implemented.
-  The completed headless and observation contracts provide the current Core baseline.
+- The latest Core source has removed production test-project orchestration,
+  source/build workflows, product presentation state and the Core draft model;
+  its [current boundaries](../../Rho-core/docs/ARCHITECTURE.md#responsibility-boundary-after-the-breaking-upgrade)
+  distinguish those removals from consumer integration. The
+  [Core simplification plan](CORE-SIMPLIFICATION.md) remains the design reference.
+  Receiving plugin/application flows and the selected composition still await
+  migration. The Files observation change above uses its existing pinned public
+  dependency and does not refresh consumers or select the newer Core.
 - The current breaking upgrade accepts independent repository delivery. A core
   task proves its new contract with a minimal caller; plugin/application migration,
   consumer SDK refresh, lock updates and composition are separate integration work.
