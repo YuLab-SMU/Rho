@@ -1,5 +1,9 @@
 # Rho architecture
 
+> Legacy reference: this document describes the retained application and former Core.
+> The new Core contract and selected next work are defined in [Rebuild](REBUILD.md).
+> Historical subsystem and transfer requirements do not mandate rebuilding them.
+
 This page describes current ownership and the invariants that implementation must
 preserve. [Status](STATUS.md) records executed evidence and remaining gaps.
 [Next Version](NEXT-VERSION.md) defines the target design; its headless interfaces,
@@ -91,7 +95,7 @@ shutdown suspends confirmed instances; reconnect/resume is explicit and does not
 replay scientific work or restore R memory.
 
 See [public protocol](../sdk/plugin-protocol/README.md) and
-[backend SDK](../../Rho-core/crates/plugin-sdk/README.md) for exact fields, quotas and messages.
+[backend SDK](https://github.com/YuLab-SMU/Rho-core/blob/codex/legacy-core-before-rebuild/crates/plugin-sdk/README.md) for exact fields, quotas and messages.
 Other languages can implement this same protocol; a Python fixture demonstrates
 that boundary, not a shipped Python product or a production TypeScript backend.
 

@@ -1,5 +1,9 @@
 # 应用外壳工作台状态迁移要求
 
+> Legacy reference: this document describes the retained application and former Core.
+> The new Core contract and selected next work are defined in [Rebuild](REBUILD.md).
+> Historical subsystem and transfer requirements do not mandate rebuilding them.
+
 Rho 应用外壳接收 Core 退出的布局、焦点、窗口恢复及呈现状态保存责任。
 这是待实施要求；当前外壳使用 Core 的 `windows.*` 和视图状态接口，渲染和本地
 待确认状态见 [布局适配](../ui/src/plugin-layout.ts) 与

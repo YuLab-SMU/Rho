@@ -7,10 +7,11 @@ longer contains their production sources or a Cargo workspace.
 | Need | Read |
 | --- | --- |
 | Current state and remaining limits | [Status](STATUS.md) |
+| Real R domain trial and rebuilding on main | [Rebuild](REBUILD.md) |
 | Current ownership and invariants | [Architecture](ARCHITECTURE.md) |
 | Target scientific capabilities | [Next Version](NEXT-VERSION.md) |
-| Planned reduction of Core responsibilities | [Core simplification plan](CORE-SIMPLIFICATION.md) |
-| Shell capabilities to preserve during Core reduction | [Workbench state transfer](WORKBENCH-MIGRATION.md) |
+| Former Core reduction reference | [Core simplification plan](CORE-SIMPLIFICATION.md) |
+| Former shell transfer reference | [Workbench state transfer](WORKBENCH-MIGRATION.md) |
 | Build or change a component | [Development](DEVELOPMENT.md) |
 | Run a local application | [Operations](OPERATIONS.md) |
 | Source publication, exact assembly and future signed releases | [Release](RELEASE.md) |

@@ -1,5 +1,9 @@
 # Rho 下一版本整体设计
 
+> Legacy reference: this document describes the retained application and former Core.
+> The new Core contract and selected next work are defined in [Rebuild](REBUILD.md).
+> Historical subsystem and transfer requirements do not mandate rebuilding them.
+
 本文件汇总 2026-10-01 的设计讨论，作为下一版本的方向依据。
 源码已按核心、官方插件和应用组装拆为本地仓库；能力目标不因源码拆分而自动实现。
 当前实现与验证结论见 [Status](STATUS.md)，当前机制见 [Architecture](ARCHITECTURE.md)。

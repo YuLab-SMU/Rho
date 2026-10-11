@@ -1,5 +1,9 @@
 # Running Rho locally
 
+> Legacy reference: this document describes the retained application and former Core.
+> The new Core contract and selected next work are defined in [Rebuild](REBUILD.md).
+> Historical subsystem and transfer requirements do not mandate rebuilding them.
+
 The existing installed previews and retained historical bundles are separate from
 this new source organization. Do not replace a running Host or assume an old
 binary contains the new capabilities. R memory belongs to its existing session.

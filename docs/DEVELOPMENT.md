@@ -1,5 +1,9 @@
 # Developing Rho
 
+> Legacy reference: this document describes the retained application and former Core.
+> The new Core contract and selected next work are defined in [Rebuild](REBUILD.md).
+> Historical subsystem and transfer requirements do not mandate rebuilding them.
+
 Change each component at its real source owner. Read Status before resuming and
 inspect Git state in the repository being changed. Use this repository and
 `node dev.mjs status` when application composition is in scope; a component task

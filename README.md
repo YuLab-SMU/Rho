@@ -1,12 +1,15 @@
 # Rho
 
-Rho is an operable scientific workspace. This repository owns its application
-shell, examples, development entry and exact component composition.
+Rho owns the scientific application shell, examples and selected component composition.
+The retained implementation uses the former Core. The real R domain trial has completed through the new Core CLI. Subsequent
+selected rebuilding proceeds on `main`; see
+[Rebuild](docs/REBUILD.md) and [Status](docs/STATUS.md). Old source is preserved locally
+on `codex/legacy-app-before-rebuild`; the application rebuild has not started.
 
 | Repository | Responsibility |
 | --- | --- |
-| [Rho-core](https://github.com/YuLab-SMU/Rho-core) | Generic Host, operation journal, plugin lifecycle, public SDK, CLI/HTTP/MCP |
-| [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins) | Official scientific plugins, domain contracts, native adapters, methods and views |
+| [Rho-core](https://github.com/YuLab-SMU/Rho-core) | New managed execution, request identity, continuation, resident host and CLI |
+| [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins) | Real scientific consumers and selected native/domain capabilities; old packages retained |
 | Rho (this repository) | Application shell, examples, component selection and integration |
 
 The component repositories are published under YuLab-SMU, each with its own source
@@ -15,14 +18,13 @@ review into `main`. See the
 [development guide](docs/DEVELOPMENT.md) for the sibling checkout layout and
 the [source publication procedure](docs/RELEASE.md#source-repositories).
 
+The following commands describe the retained application baseline, not integration
+with the rebuilt Core. New Core work uses its own README and CLI directly.
+
 ```sh
 node dev.mjs status
 npm ci --ignore-scripts --prefix ui
 node dev.mjs build app
-node dev.mjs build core
-node dev.mjs build plugin files
-node dev.mjs build plugin annotations
-node scripts/test-composition.mjs
 ```
 
 The application compiles using the pinned public SDK already in this checkout;

@@ -1,5 +1,9 @@
 # Rho Core 职责收缩修复计划
 
+> Legacy reference: this document describes the retained application and former Core.
+> The new Core contract and selected next work are defined in [Rebuild](REBUILD.md).
+> Historical subsystem and transfer requirements do not mandate rebuilding them.
+
 本计划解决 Core 同时承载执行内核、插件平台、工作台状态和插件开发工具造成的职责集中。
 目标是让外部调用方通过 CLI 或 MCP 完成普通插件调用时，只需要通用身份、授权、路由、
 资源和 Operation 机制。默认工作台和插件开发工具按各自需要接入这些机制。
@@ -26,11 +30,11 @@ Core 仓库中的 `crates/plugins` 有约 13,200 行非测试代码，占非测�
 这些数字不含相关协议、集中式 handler、SDK 和测试，不能当作可直接删除的数量。
 Operation 与 SQLite 适配部分合计约 5,400 行，承担原始操作和提交边界。
 
-具体问题是 [PluginService](../../Rho-core/crates/plugins/src/service.rs)
+具体问题是 [PluginService](https://github.com/YuLab-SMU/Rho-core/blob/codex/legacy-core-before-rebuild/crates/plugins/src/service.rs)
 统一组合包、实例、视图、草稿、构建与资源；
-[service_handlers.rs](../../Rho-core/crates/plugins/src/service_handlers.rs)
+[service_handlers.rs](https://github.com/YuLab-SMU/Rho-core/blob/codex/legacy-core-before-rebuild/crates/plugins/src/service_handlers.rs)
 用多组字符串分派维护 45 个能力；普通 Host 还默认注册
-[测试项目管理](../../Rho-core/crates/host/src/plugin_tests.rs)。
+[测试项目管理](https://github.com/YuLab-SMU/Rho-core/blob/48f5fa889bb5d4caab90e2cbfb1061debaa58522/crates/host/src/plugin_tests.rs)。
 这说明源码仓库已拆开，但运行平台的产品职责仍集中在 Core。
 
 ## 目标边界
@@ -49,7 +53,7 @@ Operation 与 SQLite 适配部分合计约 5,400 行，承担原始操作和提�
 | Console 命令输入和呈现内容 | [Console](../../Rho-plugins/plugins/console/MIGRATION.md)，外壳提供状态确认路径 | 原 Operation 与 R Provider 身份 |
 
 接收方的专属文档规定必须保留的用户能力、数据与验收条件，是各自职责的依据；
-Core 的退出边界见 [Core 专属要求](../../Rho-core/docs/RESPONSIBILITY-TRANSFER.md)。
+Core 的退出边界见 [Core 专属要求](https://github.com/YuLab-SMU/Rho-core/blob/codex/legacy-core-before-rebuild/docs/RESPONSIBILITY-TRANSFER.md)。
 当前 Studio 和 Manager 都是纯 UI 插件，尚需后端承接。具体契约与存储在选定 Owner
 流程中实现；不预设新的统一插件。应用保持无 Cargo workspace 的构建边界。
 这些链接按三仓相邻检出解析；单独克隆时按文件路径在各源仓库查找。

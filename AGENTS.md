@@ -1,5 +1,20 @@
 # Working on Rho application assembly
 
+## Active rebuild boundary
+
+Read [Rebuild](docs/REBUILD.md) and [Status](docs/STATUS.md) first. Old controlled
+source is preserved on `codex/legacy-app-before-rebuild`; new selected work stays
+on `main`. This task verifies a real R domain consumer in Rho-plugins and records
+the later rebuild; it does not clear or reimplement the old application. Current
+SDK snapshots, lock and development assembly use the former Core. The new Core
+provides managed execution and a resident CLI, with no new SDK or HTTP/MCP.
+Use that public CLI directly for the selected trial. Choose application/plugin
+capabilities from demonstrated user gaps; old subsystem maps and migration lists
+do not authorize restoring all legacy features or migrating old data.
+
+The assembly rules below govern the retained implementation when that composition
+is selected. They do not establish contracts or acceptance for the rebuilt Core.
+
 This checkout owns the application shell, examples, development entry and component
 composition. `../Rho-core` and `../Rho-plugins` are independent source repositories.
 Read the owning repository's AGENTS.md before editing there; this file governs Rho.
