@@ -13,3 +13,9 @@ node_modules/
 
 /.rho-dev.json
 /ui/dist/
+
+# Preserve ignored local outputs after archiving the former example source.
+/examples/rho-demo/data/processed/
+/examples/rho-demo/output/figures/
+/examples/rho-demo/output/rho_demo_report.html
+/examples/rho-demo/.rho/
