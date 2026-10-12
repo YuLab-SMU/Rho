@@ -1,8 +1,9 @@
 # Rho: current state and focus
 
 Updated: 2026-10-12. This is the single current summary. The current application
-source remains the former implementation; a rebuild has been selected and has
-not started. See [Rebuild](REBUILD.md) for the new boundary and completion rules.
+source remains the former implementation; application rebuilding has not started.
+The separate plugin evaluation slice has been migrated. See [Rebuild](REBUILD.md)
+for the new boundary and completion rules.
 
 ## Current repository state
 
@@ -20,8 +21,8 @@ not started. See [Rebuild](REBUILD.md) for the new boundary and completion rules
   `codex/legacy-app-before-rebuild` and the plugin repository's
   `codex/legacy-plugins-before-rebuild`. Both were checked against the local HEAD
   before this task changed documents. Old source remains on main this round;
-  no application/plugin rewrite, source deletion, data migration or compatibility
-  implementation has begun.
+  no application or scientific-plugin rewrite, retained-source deletion, data
+  migration or compatibility implementation has begun.
 
 ## Selected real domain trial
 
@@ -72,8 +73,11 @@ domain-owned checkers; Core's deterministic contract regressions stay in Core.
 The first reuse flow targets the existing Core CLI Agent cases and one R recipe's
 domain checks, keeping their scored and unscored scopes distinct. Evaluation and
 bounded improvement are separate actions, with development, validation and final
-blind-test material. The plugin, shared entry point and application integration
-are design only: no evaluation source has moved and no improvement run occurred.
+blind-test material. The [evaluation plugin](../../Rho-plugins/plugins/agent-eval/README.md)
+now owns the migrated evaluator, CLI controller, cases and grading regressions.
+Its shared entry invokes explicit public Core binaries and the existing R artifact
+checker. No Core private source or legacy SDK is needed. Candidate improvement,
+blind-test management and application integration remain unimplemented.
 See the [plugin boundary](../../Rho-plugins/docs/REBUILD.md#agent-评估与改进插件).
 
 The application will consume actual Owner facts and selected fixed components.
@@ -122,7 +126,12 @@ The real-R trial on 2026-10-11 supplied the following evidence:
 - No native/application build, Cargo suite, model reevaluation, source push,
   installation or official release was executed in that trial.
 
-The evaluation-plugin design addition on 2026-10-12 passed local link/anchor
-checks and rendered-content inspection. It adds no execution evidence: no
-evaluation implementation, source migration, improvement run or application
-integration was performed.
+The evaluation-plugin migration on 2026-10-12 passed 43 plugin regressions, eight
+real CLI baseline cases, six optional library baseline cases and one real-model
+execute trial. The shared entry checked existing R artifacts (12/12), without
+rerunning analysis. Exported plugin source and a copied binary worked without a
+Core checkout. Regrading the original Agent trials retained 15/16 and all 17
+original summary/trial report digests; the remaining failure is still a failure.
+Details and original incomplete attempts remain in the plugin's
+[migration acceptance](../../Rho-plugins/plugins/agent-eval/ACCEPTANCE.md).
+No application integration, automatic improvement or source push occurred.
