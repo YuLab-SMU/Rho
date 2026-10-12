@@ -1,31 +1,25 @@
-# Contributing To Rho
+# Contributing to Rho
 
-Thank you for helping improve Rho. Please open an issue or pull request that
-describes the problem, the proposed scope, and how the change was verified.
-Keep the change focused and report the commands that actually ran.
+Describe a concrete user problem, a bounded proposed change and its verification
+in an issue or pull request. Start with [Status](docs/STATUS.md),
+[Rebuild](docs/REBUILD.md) and [Development](docs/DEVELOPMENT.md).
+The selected tree is the new application's design skeleton, with no executable
+application yet. Former implementation assets are on the published archive branches.
 
-## Contribution License
+Keep implementation in its source owner: generic execution in Rho-core,
+scientific recipes and reusable evaluation in Rho-plugins, application selection
+and presentation here. Preserve unrelated work. Checks should prove the selected
+behavior; do not restore old structure merely to satisfy historical tests.
+Interaction changes follow [UI principles](docs/RHO-DESIGN.md).
+
+## Contribution license
 
 Unless separately agreed in writing, contributions submitted after Rho's AGPL
-transition are provided under the same `AGPL-3.0-only` terms used for
-Rho-original source. By submitting a contribution, you confirm that you have
-the right to provide it on those terms. This inbound-as-outbound rule does not
-revoke any earlier license grant.
+transition use `AGPL-3.0-only`, the terms for Rho-original source. Contributors
+must have the right to provide their changes on those terms. This rule does not
+revoke earlier grants or transfer copyright without a separate agreement.
 
-Do not copy third-party code, data, media, generated assets, or binaries into
-Rho without recording their origin and license. Preserve upstream copyright,
-license, and notice files. A dependency or imported component must be
-compatible with Rho's distribution obligations and pass the project's focused
-dependency/license review.
-
-Licensing a contribution on these terms does not transfer your copyright
-unless you separately agree to a written assignment.
-
-## Development
-
-Read the short [development guide](docs/DEVELOPMENT.md). Preserve unrelated
-working-tree changes, add the closest useful regression test, and update
-documentation only when it clarifies the current code. Detailed task plans stay with the issue or working branch.
-[Current state](docs/STATUS.md) summarizes product focus and verified behavior;
-run evidence stays with the run. Read the [design philosophy](docs/RHO-DESIGN.md)
-and [Studio feedback](docs/STUDIO-FEEDBACK.md) for interaction changes.
+Record the origin and license of any third-party code, data, media or binaries
+actually introduced. Preserve required notices and review distribution obligations
+for the selected payload. The archive's dependency inventory does not establish
+the dependencies or licenses of a future rebuilt application.

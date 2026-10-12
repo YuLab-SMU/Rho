@@ -1,28 +1,33 @@
 # Rho：真实领域试用后的应用重建
 
 决策日期：2026-10-11。先用公开研究数据检查新 Core 的实际价值，再按有证据的
-用户问题选择少数插件与应用能力。本轮执行真实 R 试用并落地重建规则；应用重构
-尚未开始，当前主分支保留旧源码。
+用户问题选择少数插件与应用能力。真实 R 试用已完成，重建规则已落地；
+2026-10-12 按用户后续要求归档并移除旧应用资产。所选主分支只保留新架构文档与
+仓库政策；应用可执行实现与组件集成尚未开始。
 2026-10-12 补充选择：可复用的 Agent 评估与改进实验归 Rho-plugins 的独立插件能力，
 Core 保留自身契约回归；随后已迁入现有评估器并实测两个消费者，应用接入尚未实现。
 
 ## 备份与开发位置
 
-完整受控旧代码已在本地 `codex/legacy-app-before-rebuild` 分支保存，包含原本尚未
-发布的本地提交。插件旧代码在其仓库的 `codex/legacy-plugins-before-rebuild` 保存。
-已核对两条分支指向本轮改动前的本地 HEAD，后续新工作在各自 `main` 小步交付。
-备份不包含忽略的构建缓存、用户数据或运行状态；本地分支尚未发布。
+完整受控旧代码已发布在组织仓的
+[`codex/legacy-app-before-rebuild`](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-rebuild)，
+包含原本未发布的本地提交。清理前的完整树另保存在
+[`codex/legacy-app-before-main-reset`](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-main-reset)，
+也保留后来更新的历史文档。两条远端分支头与根树均已核对。插件旧代码已在其
+[归档分支](https://github.com/YuLab-SMU/Rho-plugins/tree/codex/legacy-plugins-before-rebuild)发布。
+备份不包含忽略的构建缓存、用户数据或运行状态；这些本地材料保持原样。
 
-本轮不清空主分支，不改应用源码、旧 SDK、锁文件或已安装制品。正式开始某个重建
-切片时再移除该切片的旧实现，保留许可证和必要说明。归档只用于回答具体需求或
-失败，不把旧目录、十六个插件、旧测试数量、旧状态或接口兼容作为新实现的要求。
+后续用户选择替换两仓主分支：插件 main 已完成替换；应用本地 main 移除旧 UI、SDK、
+锁文件、开发脚本、示例及历史子系统文档，保留新应用设计、许可证和治理文件。
+组织应用 main 要求经过受审 PR 合并，合并前远端仍是旧树。归档只用于回答具体
+需求或失败，不把旧目录、插件数量、旧测试、旧状态或接口兼容作为新实现要求。
 
 ## 先用现有 CLI 完成真实 R 分析
 
-已选择 [airway / GSE52778 领域消费者](../../Rho-plugins/examples/real-r-analysis/README.md)：
+已选择 [airway / GSE52778 领域消费者](https://github.com/YuLab-SMU/Rho-plugins/blob/main/examples/real-r-analysis/README.md)：
 四个供体的配对 RNA-seq，观察地塞米松处理的转录响应，并做四次留一供体敏感性
 分析，并用 200 次全基因模型条件模拟观察计数变异。R 实際运行 9 分 23 秒，
-原请求接续、取回核验和科学事实验收通过，详见[领域验收](../../Rho-plugins/examples/real-r-analysis/ACCEPTANCE.md)。
+原请求接续、取回核验和科学事实验收通过，详见[领域验收](https://github.com/YuLab-SMU/Rho-plugins/blob/main/examples/real-r-analysis/ACCEPTANCE.md)。
 真实方法、R 版本、输入、统计拟合与产物归 Rho-plugins 的领域消费者负责。
 外部 Agent 经现有 Core CLI 提交，独立等待客户端中断后用原身份接续，核对单次
 原生执行、真实输出及取回产物；计算时间来自实际拟合。
@@ -50,13 +55,13 @@ Core 入口，也不把外部工具全部包装成插件。
 本轮消费端曾因独立核验器未准备好而收尾失败，已经据此补上入口预检；这是分析
 配方的具体缺口。暂未发现需要新 R 会话平台、全局产物注册表或重建 Files 的缺口。
 
-另已选择 [Agent 评估与改进插件](../../Rho-plugins/docs/REBUILD.md#agent-评估与改进插件)：
+另已选择 [Agent 评估与改进插件](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/REBUILD.md#agent-评估与改进插件)：
 它组织用例、独立试次、证据与候选比较，复用各领域 Owner 的核验器。Core 不承担
 模型循环、评分或自动改进；其自身契约回归仍独立运行。首个复用验收覆盖现有 Core
 CLI Agent 场景和一个 R 配方的领域检查，不把脚本分析通过声称为模型自主研究通过。
 评估与改进分别调用，候选改动有明确范围、预算、开发／验证／最终盲测材料和回退
 证据。应用只在选定接入后呈现原试次、检查、限制与候选差异，不用单一分数掩盖
-执行失败或科学限制。现有评估工具已迁入[评估插件](../../Rho-plugins/plugins/agent-eval/README.md)，
+执行失败或科学限制。现有评估工具已迁入[评估插件](https://github.com/YuLab-SMU/Rho-plugins/blob/main/plugins/agent-eval/README.md)，
 通过公共二进制调用，R 核验仍由原领域 Owner 执行；候选改进和应用接入尚未实现。
 这次迁移不增加新插件框架或变更 UI。
 
@@ -70,14 +75,15 @@ Manager、替代聊天产品及旧内容迁移均按各自真实需求另选。C
 ## 新实现与旧应用的边界
 
 新 Core 目前提供受管运行库、常驻宿主与 CLI，尚无新 SDK、HTTP/MCP 或旧插件包
-契约。应用现有 `sdk/`、`rho.lock.json`、`dev.mjs`、UI 与历史组合仍属于旧基线，
-不能按新 Core 的 `main` 自动构建或代表它。新 Core 的真实试用直接使用其已验证
-CLI 二进制，明确记录摘要；旧组合收据继续保留原含义。
+契约。旧应用 `sdk/`、`rho.lock.json`、`dev.mjs`、UI 与示例已移入归档。
+新应用没有对应替代物或构建入口，不能按新 Core 的 `main` 自动构建或代表它。
+真实试用直接使用已验证 CLI 二进制并记录摘要；旧组合收据保留原含义。
+独立应用实现和所选跨仓集成需要后续真实交付与验收。
 
 Core 保持通用受管保证；插件拥有领域语义、原生条件及产物；应用只拥有组件选择、
 装配和界面，不另建科学执行路径。独立仓库可暂时不兼容，只有选定集成时才维护
 必要公共边界与固定源／产物身份。不刷新旧快照来假装兼容，也不合并归档恢复旧
-子系统。实质 UI 工作仍按现有设计规则审阅；本轮没有 UI 改动。
+子系统。实质新 UI 工作按[交互原则](RHO-DESIGN.md)审阅；本轮归档旧 UI，没有实现替代界面。
 
 ## 验证与发布
 
@@ -85,7 +91,8 @@ Core 保持通用受管保证；插件拥有领域语义、原生条件及产物
 可观察完成条件，做相应 Owner 与边界检查，保留失败、部分结果和未执行范围。
 文档按完整批次检查链接与渲染，修复可见缺陷。代码在拥有者仓库审核和提交。
 
-本轮决定继续不推送，包括此前 Core 的两个本地提交；01–03 的实现已经在 GitHub
-main 核实。后续发布先核对实际 remote、分支和账户，先保存需要的归档，再发布新
-分支并核对远端头。发布源码、合并 PR、二进制发行和安装分别授权，不作为构建
-或领域执行的副作用。官方签名发行仍遵循[Release](RELEASE.md#future-official-release-boundary)。
+2026-10-12 用户已授权三仓源码同步，替代此前本地停止的决定。先核对实际 remote、
+分支和账户，发布并验证完整归档，再提交选定的新树、发布评审分支并核对远端头。
+应用 main 的必需 Code Owner 审阅不能绕过；评审分支发布不代表 main 已替换。
+发布源码、合并 PR、二进制发行和安装有各自结果，不作为构建或领域执行副作用。
+官方签名发行仍遵循[Release](RELEASE.md#future-official-release-boundary)。

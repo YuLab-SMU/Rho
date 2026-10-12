@@ -1,144 +1,84 @@
 # Rho: current state and focus
 
-Updated: 2026-10-12. This is the single current summary. The current application
-source remains the former implementation; application rebuilding has not started.
-The separate plugin evaluation slice has been migrated. See [Rebuild](REBUILD.md)
-for the new boundary and completion rules.
+Updated: 2026-10-12. The selected local `main` tree is the new application's design
+skeleton. The executable application and integration have not been rebuilt.
+The organization-main replacement requires the pending reviewed PR to merge.
 
-## Current repository state
+## Current source boundary
 
-- Rho owns application selection, assembly and presentation. The retained UI,
-  public dependency snapshot, development scripts and composition lock use the
-  former Core; they do not implement the rebuilt Core contract.
-- New Rho-core has a managed execution library, durable request identity and
-  facts, a resident local Host and CLI. It has no new exported SDK, HTTP/MCP
-  server or old plugin lifecycle. Its current evidence and limits are in the
-  [Core progress summary](../../Rho-core/docs/PROGRESS.md).
-- Rho-plugins retains its old packages, domain/native sources and pinned former
-  Core dependency. A new [real R consumer](../../Rho-plugins/examples/real-r-analysis/README.md)
-  uses the new CLI directly, without a plugin protocol or UI prerequisite.
-- Complete controlled old source is preserved locally on
-  `codex/legacy-app-before-rebuild` and the plugin repository's
-  `codex/legacy-plugins-before-rebuild`. Both were checked against the local HEAD
-  before this task changed documents. Old source remains on main this round;
-  no application or scientific-plugin rewrite, retained-source deletion, data
-  migration or compatibility implementation has begun.
+- Rho owns application selection, assembly and presentation. The selected tree has
+  16 controlled files: new architecture/rebuild/development/UI/release documents,
+  repository instructions, license, contribution/privacy/security policies and
+  existing Code Owner governance. There is no UI, SDK snapshot, lock, launcher,
+  build entry or old scientific example in this tree.
+- Both the [original app archive](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-rebuild)
+  and [complete pre-clear snapshot](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-main-reset)
+  are published and verified. All 460 removed entries match the latter's Git
+  content identities and modes; four updated historical documents are included.
+  Ignored evidence, caches, runtime and user data remain local and unchanged.
+- [Rho-core](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/PROGRESS.md) provides
+  managed execution, durable request identity/facts, a resident Host and CLI.
+  It has no new SDK, HTTP/MCP edge or former plugin lifecycle.
+- [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/STATUS.md)
+  main contains the selected evaluation plugin, real R recipe and current policies.
+  Its former controlled implementation is on a published archive branch.
+  Neither component repository is modified by this application source replacement.
 
-## Selected real domain trial
+## Existing component evidence and its limits
 
-The completed consumer uses airway / GSE52778: four paired donor cell lines,
-donor-adjusted DESeq2 dexamethasone response, four leave-one-donor-out fits and
-200 full-gene model-conditional count simulations. Native R ran for 562.6595
-seconds (9 minutes 23 seconds), with no delay added to lengthen the task.
+The [real R consumer](https://github.com/YuLab-SMU/Rho-plugins/blob/main/examples/real-r-analysis/README.md)
+uses airway/GSE52778, four donor pairs, DESeq2, four donor-omission fits and 200
+full-gene conditional simulations. Actual native execution took 9 minutes 23 seconds.
+An interrupted wait resumed observation of the same run/PID with one native entry.
+Original and retrieved artifacts each passed 12/12 independent checks; five saved
+models passed 121/121 native observations. Three altered-copy counterexamples
+were rejected. See [acceptance](https://github.com/YuLab-SMU/Rho-plugins/blob/main/examples/real-r-analysis/ACCEPTANCE.md).
 
-An independent wait client was terminated; lookup and identical submits found
-the original run and R PID. One native entry, Code(0), released holding and
-complete retained text were observed. Original and retrieved artifacts each
-passed 12/12 independent integrity/input/arithmetic checks. Five saved models
-passed 121/121 separate native observation checks; all four scientific plot
-pages were inspected. The consumer's own Host shut down cleanly.
+Original failures remain: an initial Host socket bind failure, then a roughly
+20-second analysis whose driver failed because its checker was not prepared.
+Later checks of unchanged outputs do not erase those failures. Conditional simulation
+quantiles hold donors and fitted parameters fixed; they are not donor-population or
+clinical intervals. The checker does not independently refit DESeq2. Rscript is a
+batch process, not recovered interactive R memory or autonomous scientific discovery.
 
-The main analysis observed 4,068 genes at BH < 0.05. Six declared response
-genes were positive in the main and four donor-omission fits. Bootstrap
-quantiles describe conditional count variation with fixed donors and fitted
-parameters, not donor-population or clinical confidence intervals. The checker
-does not independently refit DESeq2. See the domain owner's
-[fact acceptance](../../Rho-plugins/examples/real-r-analysis/ACCEPTANCE.md).
+The [evaluation plugin](https://github.com/YuLab-SMU/Rho-plugins/blob/main/plugins/agent-eval/ACCEPTANCE.md)
+migration passed 43 regressions, eight real CLI baseline cases, six optional library
+cases and one real-model execute trial. Original model evidence remains 15/16,
+including the residual unauthorized command-combination failure. Exported plugin
+source and a copied public binary worked without private Core source or the old SDK.
+These are prior component checks, reused here without rerunning the model or R analysis.
+They do not establish a new application composition.
 
-Original failures remain: the first Host could not bind its socket; the next
-real analysis took only about 20 seconds and its driver failed because the
-checker was not ready. Later verification of those unchanged files does not
-erase that failure. Preflight now checks the verification entry points. Three
-altered-copy counterexamples were rejected, including a falsified BH value
-whose updated digests passed integrity checks.
+## Selected next work
 
-The trial uses a fresh disposable project and its own Host. It has not replaced
-or restarted a user Host, catalog, installed preview or R session. Rscript is a
-real batch R process; no claim is made about restoring interactive R memory.
-The resulting public-study reanalysis is distinct from new scientific discovery,
-clinical validity or acceptance of the old sixteen-package product.
+Priorities remain R batch-analysis recipes, artifact provenance/integrity/retrieval,
+and reusable bounded evaluation in the plugin owner. Rscript, R packages, RDS,
+manifests and ordinary file tools already support the demonstrated flow. No observed
+gap requires an R-session platform, global artifact registry or Files rebuild.
+Candidate improvement, development/validation/blind-test management and hillclimbing
+remain unimplemented; the Core retains its own deterministic contract regressions.
 
-## Rebuild priorities and boundaries
+The first application candidate is opening an original task, distinguishing
+execution from scientific checking, inspecting/retrieving real tables and plots,
+and continuing observation after disconnect. This is design; no researcher-facing
+UI or integration acceptance has been delivered. New SDK/transport, installation,
+discovery, Editor/Studio/Manager and replacement chat need separately demonstrated
+consumer requirements. See [Rebuild](REBUILD.md) and [Architecture](ARCHITECTURE.md).
 
-Two next domain responsibilities are selected: reusable R batch-analysis
-recipes, and scientific artifact integrity, provenance and retrieval. Rscript,
-RDS, manifests and ordinary file tools already support the demonstrated flow;
-these priorities do not mandate two new packages. No observed gap requires a
-new R-session platform, global artifact registry or Files rebuild. The concrete
-consumer preparation-order failure was corrected in its owner.
+## Verification and publication
 
-A reusable Agent evaluation and improvement plugin is now selected in Rho-plugins.
-It will organize isolated trials, evidence and candidate comparisons, invoking
-domain-owned checkers; Core's deterministic contract regressions stay in Core.
-The first reuse flow targets the existing Core CLI Agent cases and one R recipe's
-domain checks, keeping their scored and unscored scopes distinct. Evaluation and
-bounded improvement are separate actions, with development, validation and final
-blind-test material. The [evaluation plugin](../../Rho-plugins/plugins/agent-eval/README.md)
-now owns the migrated evaluator, CLI controller, cases and grading regressions.
-Its shared entry invokes explicit public Core binaries and the existing R artifact
-checker. No Core private source or legacy SDK is needed. Candidate improvement,
-blind-test management and application integration remain unimplemented.
-See the [plugin boundary](../../Rho-plugins/docs/REBUILD.md#agent-评估与改进插件).
+The source replacement verifies remote archive heads/trees, exact archived identities
+of removed files, retained governance/license files, local document links/anchors
+and rendered changed content. The former runnable UI is deliberately archived;
+there is no new application to build or behavior suite to run. Old composition
+receipts keep their original meaning and remain in ignored local evidence.
 
-The application will consume actual Owner facts and selected fixed components.
-It will not reimplement the scientific operation path. A new protocol edge,
-public SDK, plugin installation, uniform discovery, Editor/Studio/Manager or
-replacement chat is selected only for a real consumer requirement. Substantial
-UI changes still require the agreed design review; this round changes no UI.
+Source synchronization is authorized. The updated application review branch must
+pass the organization's required Code Owner review and approval of the latest push;
+organization main remains the old tree until that PR merges. Selected commit
+identities and the existing upstream merge are preserved. A review-branch push is
+not a main replacement, binary publication, installation or official release.
 
-On 2026-10-12 the user selected synchronization of all three source repositories'
-main branches to the YuLab-SMU organization, including the evaluation migration
-and rebuild documents. This authorization replaces the earlier local-only stop.
-Component sources are published before the application; actual remote heads must
-match the selected commits. Rho main requires a pull request: publish the selected
-application head on a review branch, then preserve it in the merged main history
-and verify the resulting remote merge. Backups, source publication and official
-release remain distinct. CI remains deferred and Mac physical power-loss testing
-remains excluded.
-
-## Historical evidence retained
-
-The previous repository split established independent source ownership, selected
-Files behavior and a retained external-assets application composition. Its exact
-receipts remain under target/, with their original source and artifact identities;
-none has been replaced by a new Core composition. The former status and tests
-remain available in Git and on the archive branch.
-
-The application split was already merged into the organization main through
-PR #110. The local tracking ref had not included that merge; synchronization
-preserves the upstream merge and the existing local commits. The organization
-remote is upstream/main; origin is a personal fork. Publication and backup
-identities are inspected rather than inferred from branch names.
-Old [Architecture](ARCHITECTURE.md), [Core reduction](CORE-SIMPLIFICATION.md) and
-[Workbench transfer](WORKBENCH-MIGRATION.md) documents are legacy references,
-not new Core requirements or proof of new integration. The future signed-release
-boundary in [Release](RELEASE.md#future-official-release-boundary) remains agreed
-and unimplemented; Rho-releases is not created by this task.
-
-## Verification and limits
-
-The real-R trial on 2026-10-11 supplied the following evidence:
-
-- Before edits: all three workspaces were clean; actual remotes and local branches
-  were inspected. GitHub main heads were read for Core, Plugins and Rho.
-- Both local archive heads and controlled root-tree inventories matched their
-  respective pre-edit local source.
-- Real R execution, original-request continuation, independent artifact retrieval
-  checks, native model observation and three negative cases passed within the
-  limits above; original failed attempts remain explicit.
-- Changed document links and rendered pages were checked; retained code, SDK
-  snapshots and composition lock are unchanged.
-- No native/application build, Cargo suite, model reevaluation, source push,
-  installation or official release was executed in that trial.
-
-The evaluation-plugin migration on 2026-10-12 passed 43 plugin regressions, eight
-real CLI baseline cases, six optional library baseline cases and one real-model
-execute trial. The shared entry checked existing R artifacts (12/12), without
-rerunning analysis. Exported plugin source and a copied binary worked without a
-Core checkout. Regrading the original Agent trials retained 15/16 and all 17
-original summary/trial report digests; the remaining failure is still a failure.
-Details and original incomplete attempts remain in the plugin's
-[migration acceptance](../../Rho-plugins/plugins/agent-eval/ACCEPTANCE.md).
-No application integration, automatic improvement or source push occurred during
-the migration trial. The subsequently selected source synchronization reuses
-that acceptance evidence; it does not establish a new component composition.
+CI remains deferred; Mac physical power-loss testing remains excluded. The
+[future signed-distribution boundary](RELEASE.md#future-official-release-boundary)
+is agreed and unimplemented; Rho-releases has not been created.
