@@ -16,7 +16,10 @@ history stays in Rho. Push the selected branches without mirror or force pushes.
 Use the branch and publication action actually selected by the user. For the
 current authorized main synchronization, preserve both the existing upstream
 merge and local commit identities, then advance the organization branch without
-force. New review branches use codex/ and a separately selected pull request flow.
+force. Rho's main branch requires changes through a pull request; publish the
+selected commits on a codex/ review branch and merge that PR into main. Preserve
+the existing commits with a merge commit rather than squash or rebase. Other new
+review branches also use codex/ and the selected pull request flow.
 The old xiayh17/Rho origin is a personal fork; use upstream explicitly for the
 organization repository. Publishing source is separate from an official release.
 

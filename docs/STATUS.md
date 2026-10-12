@@ -90,9 +90,11 @@ On 2026-10-12 the user selected synchronization of all three source repositories
 main branches to the YuLab-SMU organization, including the evaluation migration
 and rebuild documents. This authorization replaces the earlier local-only stop.
 Component sources are published before the application; actual remote heads must
-match the selected local commits. Backups, source publication and official release
-remain distinct. CI remains deferred and Mac physical power-loss testing remains
-excluded.
+match the selected commits. Rho main requires a pull request: publish the selected
+application head on a review branch, then preserve it in the merged main history
+and verify the resulting remote merge. Backups, source publication and official
+release remain distinct. CI remains deferred and Mac physical power-loss testing
+remains excluded.
 
 ## Historical evidence retained
 
