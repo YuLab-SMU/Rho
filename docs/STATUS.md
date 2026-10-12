@@ -1,6 +1,6 @@
 # Rho: current state and focus
 
-Updated: 2026-10-11. This is the single current summary. The current application
+Updated: 2026-10-12. This is the single current summary. The current application
 source remains the former implementation; a rebuild has been selected and has
 not started. See [Rebuild](REBUILD.md) for the new boundary and completion rules.
 
@@ -66,6 +66,16 @@ these priorities do not mandate two new packages. No observed gap requires a
 new R-session platform, global artifact registry or Files rebuild. The concrete
 consumer preparation-order failure was corrected in its owner.
 
+A reusable Agent evaluation and improvement plugin is now selected in Rho-plugins.
+It will organize isolated trials, evidence and candidate comparisons, invoking
+domain-owned checkers; Core's deterministic contract regressions stay in Core.
+The first reuse flow targets the existing Core CLI Agent cases and one R recipe's
+domain checks, keeping their scored and unscored scopes distinct. Evaluation and
+bounded improvement are separate actions, with development, validation and final
+blind-test material. The plugin, shared entry point and application integration
+are design only: no evaluation source has moved and no improvement run occurred.
+See the [plugin boundary](../../Rho-plugins/docs/REBUILD.md#agent-评估与改进插件).
+
 The application will consume actual Owner facts and selected fixed components.
 It will not reimplement the scientific operation path. A new protocol edge,
 public SDK, plugin installation, uniform discovery, Editor/Studio/Manager or
@@ -96,7 +106,9 @@ not new Core requirements or proof of new integration. The future signed-release
 boundary in [Release](RELEASE.md#future-official-release-boundary) remains agreed
 and unimplemented; Rho-releases is not created by this task.
 
-## Verification in this task
+## Verification and limits
+
+The real-R trial on 2026-10-11 supplied the following evidence:
 
 - Before edits: all three workspaces were clean; actual remotes and local branches
   were inspected. GitHub main heads were read for Core, Plugins and Rho.
@@ -108,4 +120,9 @@ and unimplemented; Rho-releases is not created by this task.
 - Changed document links and rendered pages were checked; retained code, SDK
   snapshots and composition lock are unchanged.
 - No native/application build, Cargo suite, model reevaluation, source push,
-  installation or official release was executed in this task.
+  installation or official release was executed in that trial.
+
+The evaluation-plugin design addition on 2026-10-12 passed local link/anchor
+checks and rendered-content inspection. It adds no execution evidence: no
+evaluation implementation, source migration, improvement run or application
+integration was performed.
