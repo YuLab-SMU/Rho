@@ -3,19 +3,22 @@
 ## Source repositories
 
 The public source repositories are YuLab-SMU/Rho-core, YuLab-SMU/Rho-plugins and
-the existing YuLab-SMU/Rho. Core and plugins are published on main; the application
-split is submitted on codex/split-repositories for review into main.
+the existing YuLab-SMU/Rho. Each owns its main branch. The application split was
+merged through PR #110; its former review branch is historical. On 2026-10-12 the
+user explicitly selected synchronization of the subsequent committed work to
+the organization main branches.
 
 Publish the committed core and plugins before updating the application, so its
 SDK provenance and rho.lock.json revisions can be resolved remotely. The component
 repositories' independent histories begin at the split; the original monorepo
 history stays in Rho. Push the selected branches without mirror or force pushes.
 
-Submit the application on codex/split-repositories to YuLab-SMU/Rho and open a
-pull request into main. Include the unpublished ancestor commits, repository
-ownership changes, selected verification and its limits. The old xiayh17/Rho
-origin is a personal fork; use upstream explicitly for the organization submission.
-Publishing source is separate from merging that pull request or creating a release.
+Use the branch and publication action actually selected by the user. For the
+current authorized main synchronization, preserve both the existing upstream
+merge and local commit identities, then advance the organization branch without
+force. New review branches use codex/ and a separately selected pull request flow.
+The old xiayh17/Rho origin is a personal fork; use upstream explicitly for the
+organization repository. Publishing source is separate from an official release.
 
 Use an existing GitHub account with the required organization permissions; do not
 store credentials in Git URLs or tracked files. Verify each remote branch head

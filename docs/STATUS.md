@@ -86,11 +86,13 @@ public SDK, plugin installation, uniform discovery, Editor/Studio/Manager or
 replacement chat is selected only for a real consumer requirement. Substantial
 UI changes still require the agreed design review; this round changes no UI.
 
-Core's 01–03 implementations were read directly on GitHub main at c34e10e.
-Their former “local only” current-state claims have been corrected. The two
-subsequent local Core commits remain unpublished. This task also stays local;
-backups, local commits, source publication, PR merge and release are distinct.
-CI remains deferred and Mac physical power-loss testing remains excluded.
+On 2026-10-12 the user selected synchronization of all three source repositories'
+main branches to the YuLab-SMU organization, including the evaluation migration
+and rebuild documents. This authorization replaces the earlier local-only stop.
+Component sources are published before the application; actual remote heads must
+match the selected local commits. Backups, source publication and official release
+remain distinct. CI remains deferred and Mac physical power-loss testing remains
+excluded.
 
 ## Historical evidence retained
 
@@ -100,10 +102,11 @@ receipts remain under target/, with their original source and artifact identitie
 none has been replaced by a new Core composition. The former status and tests
 remain available in Git and on the archive branch.
 
-The application main checkout contains local unpublished changes preceding this
-task; the split remains a separate remote review state. Its remote tracking
-branch is upstream/main; origin is a personal fork. Current publication and
-backup identities were inspected rather than inferred from branch names.
+The application split was already merged into the organization main through
+PR #110. The local tracking ref had not included that merge; synchronization
+preserves the upstream merge and the existing local commits. The organization
+remote is upstream/main; origin is a personal fork. Publication and backup
+identities are inspected rather than inferred from branch names.
 Old [Architecture](ARCHITECTURE.md), [Core reduction](CORE-SIMPLIFICATION.md) and
 [Workbench transfer](WORKBENCH-MIGRATION.md) documents are legacy references,
 not new Core requirements or proof of new integration. The future signed-release
@@ -134,4 +137,6 @@ Core checkout. Regrading the original Agent trials retained 15/16 and all 17
 original summary/trial report digests; the remaining failure is still a failure.
 Details and original incomplete attempts remain in the plugin's
 [migration acceptance](../../Rho-plugins/plugins/agent-eval/ACCEPTANCE.md).
-No application integration, automatic improvement or source push occurred.
+No application integration, automatic improvement or source push occurred during
+the migration trial. The subsequently selected source synchronization reuses
+that acceptance evidence; it does not establish a new component composition.
