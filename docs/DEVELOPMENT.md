@@ -12,6 +12,11 @@ Each repository owns its source, dependencies, commits and checks. This reposito
 is the later application/composition entry; no root Cargo workspace is needed.
 Read an owner's AGENTS.md before editing there.
 
+Routine Rho changes are made, checked, committed and published directly on `main`.
+Sync the organization branch before editing and use ordinary fast-forward pushes.
+A review branch is used only when the user explicitly selects it. This rule does
+not change the independent component repositories' workflows.
+
 For current executable capabilities use the owners' public instructions:
 [Core CLI](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/HOST-CLI.md),
 [R recipe](https://github.com/YuLab-SMU/Rho-plugins/blob/main/examples/real-r-analysis/README.md)

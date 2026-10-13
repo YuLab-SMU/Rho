@@ -87,11 +87,14 @@ containment; links do not expand project scope.
 ## Source publication and future releases
 
 Inspect the actual remote URL, branch and authenticated account before publishing;
-`origin` may be a personal fork. Use `codex/` for new review branches. Publish
-required components before an application reference and verify remote heads/trees.
-Carry forward the user's existing authorization. Respect required PR and Code Owner
-review; preserve selected commits with a merge commit, without force or bypass.
-Source pushes, merges, binary publication and installation have separate evidence.
+`origin` may be a personal fork. Routine Rho changes are implemented, checked,
+committed and published directly on `main`, without a required PR. Create a review
+branch only when the user explicitly selects that workflow; use `codex/` then.
+Publish required components before an application reference and verify remote
+heads/trees. Carry forward the user's existing authorization. Preserve existing
+commit and merge history; use ordinary fast-forward pushes, without force or
+deleting main. Source publication, binary delivery and installation have separate
+evidence. This workflow change applies to Rho, not its independent component owners.
 
 The future `Rho-releases` repository owns promotion of accepted compositions,
 signing/notarization, official assets and installation/update channels. Create it

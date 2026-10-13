@@ -22,6 +22,7 @@ The former UI, SDK snapshot, development scripts, lock and examples are removed
 from the selected tree. Ignored local evidence, caches and user state remain local.
 
 Read [documentation](docs/README.md), [development](docs/DEVELOPMENT.md) and
-[source publication](docs/RELEASE.md). Organization `main` requires a reviewed PR;
-the selected replacement is pending that merge. Source publication, an accepted
-application composition and an official signed release are separate outcomes.
+[source publication](docs/RELEASE.md). The source replacement is merged into
+organization `main`. Routine Rho changes now proceed directly on `main`, through
+checked commits and ordinary pushes. Source publication, an accepted application
+composition and an official signed release are separate outcomes.

@@ -1,8 +1,9 @@
 # Rho: current state and focus
 
-Updated: 2026-10-12. The selected local `main` tree is the new application's design
-skeleton. The executable application and integration have not been rebuilt.
-The organization-main replacement requires the pending reviewed PR to merge.
+Updated: 2026-10-13. Local and organization `main` contain the new application's
+design skeleton after the verified merge of PR #111. The executable application
+and integration have not been rebuilt. Routine Rho changes now proceed directly
+on `main`.
 
 ## Current source boundary
 
@@ -73,11 +74,16 @@ and rendered changed content. The former runnable UI is deliberately archived;
 there is no new application to build or behavior suite to run. Old composition
 receipts keep their original meaning and remain in ignored local evidence.
 
-Source synchronization is authorized. The updated application review branch must
-pass the organization's required Code Owner review and approval of the latest push;
-organization main remains the old tree until that PR merges. Selected commit
-identities and the existing upstream merge are preserved. A review-branch push is
-not a main replacement, binary publication, installation or official release.
+The source-replacement PR is merged; the organization merge commit retains the
+selected source commits and the existing upstream history. Its tree matches the
+verified 16-file replacement, and local main has fast-forwarded to that merge.
+
+The user selected direct main work for Rho on 2026-10-13. The main ruleset no longer
+requires a PR; active protection against force pushes and deletion remains, with
+no bypass actors added. Routine Rho changes are checked, committed and published
+directly on main; review branches need an explicitly selected workflow. Component
+repository rules are unchanged. Source publication does not establish binary
+delivery, installation, application integration or an official release.
 
 CI remains deferred; Mac physical power-loss testing remains excluded. The
 [future signed-distribution boundary](RELEASE.md#future-official-release-boundary)

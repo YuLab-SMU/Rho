@@ -19,11 +19,13 @@ and [complete pre-clear tree](https://github.com/YuLab-SMU/Rho/tree/codex/legacy
 are published, including the latter's updated historical documents. Ignored local
 runtime, evidence and user data remain outside source publication.
 
-Carry forward the user's existing source-publication authorization. Rho organization
-`main` requires a PR, Code Owner review and approval of the latest push. Publish the
-selected work on a `codex/` review branch and preserve its commit identities with a
-merge commit. Do not force, bypass review, squash or rebase the selected history.
-Verify the resulting remote head and tree; a pushed review branch is not a merged main.
+Carry forward the user's existing source-publication authorization. Since
+2026-10-13, routine Rho changes are implemented, checked, committed and published
+directly on organization `main`. Its rules allow direct pushes while retaining
+protection against force pushes and branch deletion. Sync main before work, preserve
+existing commit/merge history, and verify the remote head and tree after an ordinary
+fast-forward push. Create a `codex/` review branch only when the user explicitly
+selects a PR workflow. This change does not alter the component repositories' rules.
 
 Publish required components before an application change references their fixed
 identities. Source selection, artifact identity and acceptance are distinct evidence.
