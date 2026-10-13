@@ -1,108 +1,92 @@
-# Working on the rebuilt Rho application
+# Working on Rho
 
-Read [Rebuild](docs/REBUILD.md), [Status](docs/STATUS.md) and the
-[documentation index](docs/README.md) first. `main` is the selected new application
-source line. The former controlled application is preserved on the published
-`codex/legacy-app-before-rebuild` branch; the complete pre-clear snapshot is on
-`codex/legacy-app-before-main-reset`. The new application is not implemented.
-There is no current UI, SDK snapshot, composition lock or build entry.
+Read [Status](docs/STATUS.md), [Architecture](docs/ARCHITECTURE.md),
+[Roadmap](docs/ROADMAP.md) and the [documentation index](docs/README.md) first.
+Rho currently contains application design and repository policies. Executable
+application implementation and integrated acceptance are pending.
 
-## Ownership and development decisions
+## Source ownership
 
-This repository owns application selection, assembly and presentation.
-`../Rho-core` and `../Rho-plugins` are independent source owners. Read their
-AGENTS.md before editing them. Core currently exposes managed execution and a
-resident CLI; it has no new SDK or HTTP/MCP edge. Use demonstrated public
-capabilities instead of restoring the former protocol or copying private source.
-Plugins own actual functional components, with optional CLI, Skills, MCP and UI
-entries. They retain native conditions, resources, artifacts and domain checks.
-Follow the selected [Architecture](docs/ARCHITECTURE.md) and
-[technology direction](docs/TECHSTACK.md); these are design, not implemented APIs.
-Reusable Agent evaluations belong in Rho-plugins; Core retains its own contract
-regressions. Rho presents those owners' facts and does not create another
-scientific execution path or a model loop in Core.
+Rho owns application selection, assembly, windows, layout and shared interaction.
+`../Rho-core` owns managed execution and its resident Host/public CLI.
+`../Rho-plugins` owns actual functional components and optional CLI, Skills, MCP
+and UI entries. Read each owner's AGENTS.md before editing there. Keep the three
+independent repositories and use documented public capabilities at selected
+versions. Component semantics and results stay with their source owner.
 
-Start with a concrete user action and observable result. Try the existing public
-capability and inspect its actual result; reuse valid evidence. Fix the smallest
-demonstrated gap in its owner. Mature R tools, ordinary files and Git default to
-reuse. New state models, transports, package frameworks and compatibility layers
-need an observed consumer requirement. Historical subsystem maps, package counts,
-old tests and data do not mandate reimplementation or migration.
+Follow [Technology stack](docs/TECHSTACK.md). The first application flow jointly
+exercises Agent interaction, code/table/plot context and movable views across
+windows. Deliver bounded owner changes toward the [acceptance](docs/ROADMAP.md#first-integrated-flow).
+Application composition records immutable source/artifact identities, explicit
+local overrides and acceptance of the chosen combination.
 
-Deliver one owner's selected boundary at a time. Other repositories may remain
-incompatible. Cross-repository assembly is a separately selected task; do not
-refresh consumer dependencies or invent a lock to close a single-owner change.
-When assembly is implemented, record immutable source and artifact identities,
-explicit local overrides and acceptance of the actual chosen combination.
+## Behavioral boundaries
 
-Preserve original requests, caller/project visibility, native identity, partial
-results, unknown outcomes and no-replay recovery. Query is bounded observation;
-reading must not start or recover a runtime. An Agent's existing authorization
-needs mechanical boundary checks, not another Rho approval. Models and retrieved
-content cannot expand scope. Do not add a global scientific revision.
+Preserve original managed requests, caller/project visibility, native identity,
+partial results and unknown outcomes. Reconnect observes the same request;
+missing acknowledgement must not cause automatic execution under a new identity.
+Reads are bounded observations and must not start or recover a runtime.
 
-Resource limits must name the protected resource, configuration and exceeded-limit
-behavior. Git history does not replace unsaved-buffer or concurrent-write checks.
-Direct file edits do not require an Editor identity or another content history.
+Existing authorization receives mechanical scope, resource and native-condition
+checks. Models and retrieved content cannot expand it. Rho does not add another
+approval to already authorized Agent work. Execution completion, artifact
+integrity, domain checks and model judgments remain separate facts.
+
+Each document has one logical unsaved-buffer owner across views. Preserve undo
+and detect concurrent writes before saving. Direct file edits use their actual
+write conditions. Each resource has its own version/provenance; do not introduce
+a global scientific revision. Closing a view releases observation and rendering;
+task cancellation, confirmed stop and Host shutdown remain separate operations.
+
+Name the protected resource, configurable limit and exceeded-limit behavior for
+resource budgets. Preserve obtained output and uncertainty when limits are reached.
+Use mature native tools, ordinary files and Git where they satisfy the selected
+consumer. Extend public boundaries for a concrete requirement.
 
 ## Work and verification
 
-Inspect Git status before editing and preserve unrelated work. Routine owner work
-stays on `main`; use temporary worktrees only for independent tasks and clean up
-ones you create. Keep the three source repositories and no root Cargo workspace.
-Archive branches are references for specific questions, not implementation inputs.
-Do not clean ignored artifacts, runtime state or user data as part of source removal.
+Inspect Git status before editing and preserve unrelated work and local user data.
+Routine Rho work stays on `main`. Use temporary worktrees for independent tasks
+when needed and clean up those you create. Select an observable flow and explicit
+completion conditions, then implement and check its actual owner.
 
-Select a bounded flow and explicit completion conditions. Retain useful owner and
-contract tests; retire checks that only enforce old directory layout or private
-implementation shape. Run checks appropriate to the changed owner. Never run
-Cargo builds/tests concurrently. Do not invoke deleted application commands or
-claim an application build before an implementation exists.
+Run checks appropriate to the change. Never run Cargo builds/tests concurrently.
+Introduce application build/check commands with the executable implementation;
+only executed checks count as passes. A component check proves its recorded
+scope, while application acceptance checks the actual composition.
 
-Documentation changes need link/anchor checks and rendered-content inspection.
-Render a coherent batch, inspect all changed pages, fix visible defects and recheck
-affected pagination. Reuse unchanged observations and passing checks when valid.
-Only executed checks are passes; retain failures, incomplete evidence and science
-limits. A component check does not prove an application composition.
+Documentation needs link/anchor checks and a rendered coherent batch. Inspect all
+changed pages, fix visible defects and recheck affected pagination. Reuse valid
+observations of unchanged content. Keep failures, incomplete evidence and domain
+limits. [Status](docs/STATUS.md) is the single current summary, under 300 lines;
+update it when behavior, verification, focus or unresolved work changes.
 
-Inspect the diff, commit coherent authorized changes in the owning repository,
-and check repository states before ending. [Status](docs/STATUS.md) is the single
-current summary under 300 lines. Update it only when behavior, verification,
-focus or unresolved work changes; Git keeps history. Do not add work ledgers or
-current commit/PR/account details to this instruction file.
+Read [Product design](docs/DESIGN.md) before UI work. Product-authored UI is English
+and preserves Unicode user content. Substantial layout/component design uses Paper
+and user review, reusing approval within its scope. Verify real behavior and
+representative widths, including applicable native input and accessibility.
 
-## UI and runtime continuity
+Use disposable projects and owned Hosts for execution checks. Inspect existing
+work before starting another Host on the same project. Do not restart a user Host
+or R session without authorization. Preserve acknowledged content and original
+task identity. Keep credentials and private URLs out of source and diagnostics.
+Validate resource containment; links do not expand project scope.
 
-Product-authored UI uses English and preserves Unicode user content. Substantial
-layout or component redesign uses Paper and user review; reuse existing approval
-within its scope. Read [UI principles](docs/RHO-DESIGN.md) before selected UI work.
-Archive references do not select a replacement chat, Studio or all former panels.
-Verify real behavior and representative widths after an actual UI is implemented.
+## Delivery
 
-Use disposable projects and owned Hosts for verification. Inspect existing work
-before starting another Host on the same project. Do not restart a user Host or
-R session without existing authorization. Preserve acknowledged content and
-original task identity; missing acknowledgements are not saved data. Keep private
-URLs, tokens and credentials out of Git, documents and shell search queries.
-Skills and native tooling live with their real source owner. Validate resource
-containment; links do not expand project scope.
+Review the diff, commit coherent authorized changes in their owner and check all
+touched repositories before ending. Rho source publication uses checked commits
+and ordinary fast-forward pushes directly on `main`. Inspect the actual remote,
+branch and authenticated account; `origin` may be a fork. Use a review branch only
+when the user selects that workflow, with the `codex/` prefix.
 
-## Source publication and future releases
+Publish required components before application references and verify remote heads
+and trees. Preserve commit and merge history. Independent component owners retain
+their workflows. Source, accepted composition, binary delivery and installation
+have separate evidence; follow [Release](docs/RELEASE.md).
 
-Inspect the actual remote URL, branch and authenticated account before publishing;
-`origin` may be a personal fork. Routine Rho changes are implemented, checked,
-committed and published directly on `main`, without a required PR. Create a review
-branch only when the user explicitly selects that workflow; use `codex/` then.
-Publish required components before an application reference and verify remote
-heads/trees. Carry forward the user's existing authorization. Preserve existing
-commit and merge history; use ordinary fast-forward pushes, without force or
-deleting main. Source publication, binary delivery and installation have separate
-evidence. This workflow change applies to Rho, not its independent component owners.
-
-The future `Rho-releases` repository owns promotion of accepted compositions,
-signing/notarization, official assets and installation/update channels. Create it
-only for an explicitly selected official signed-distribution milestone. Build/test
-jobs have no signing or publication credentials; the release stage verifies the
-chosen candidate without rebuilding and records unsigned and signed digests.
-Follow [Release](docs/RELEASE.md). Do not introduce release approvals into scientific
-requests or publish as a build side effect.
+Official distribution belongs to the future Rho-releases owner at an explicitly
+selected signed-release milestone. Build/test jobs have no signing/publication
+credentials. Promotion verifies the accepted candidate without rebuilding and
+records unsigned/signed identities. Scientific actions do not acquire release
+approval requirements.

@@ -1,64 +1,68 @@
-# Developing the rebuilt application
+# Developing Rho
 
-Start with [Status](STATUS.md), [Rebuild](REBUILD.md) and
-[Architecture](ARCHITECTURE.md) and [Technology stack](TECHSTACK.md).
-The selected `main` tree contains application
-design and policies. There is no runnable new UI, launcher, SDK snapshot,
-composition lock or application build command yet.
+Start with [Status](STATUS.md), [Architecture](ARCHITECTURE.md),
+[Roadmap](ROADMAP.md) and [Technology stack](TECHSTACK.md). Application
+implementation is pending; executable build/check commands will be introduced
+with the implementation that they verify.
 
-## Source owners
+## Work in the source owner
 
-The three adjacent checkouts can remain `Rho`, `Rho-core` and `Rho-plugins`.
-Each repository owns its source, dependencies, commits and checks. This repository
-is the later application/composition entry; no root Cargo workspace is needed.
-Read an owner's AGENTS.md before editing there.
+The adjacent `Rho`, `Rho-core` and `Rho-plugins` checkouts have independent source,
+dependencies, commits and checks. Read the applicable AGENTS.md before editing.
+Rho owns the application container; components own their actual functionality;
+Core owns its declared execution contract.
 
-Routine Rho changes are made, checked, committed and published directly on `main`.
-Sync the organization branch before editing and use ordinary fast-forward pushes.
-A review branch is used only when the user explicitly selects it. This rule does
-not change the independent component repositories' workflows.
+Inspect Git status and preserve unrelated work. Start with a concrete user action,
+try the available public capability and identify the smallest gap in its owner.
+Reuse mature tools and valid evidence. Additional state, transport or compatibility
+mechanisms need a consumer requirement and explicit acceptance conditions.
 
-For current executable capabilities use the owners' public instructions:
-[Core CLI](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/HOST-CLI.md),
-[R recipe](https://github.com/YuLab-SMU/Rho-plugins/blob/main/examples/real-r-analysis/README.md)
-and [evaluation plugin](https://github.com/YuLab-SMU/Rho-plugins/blob/main/plugins/agent-eval/README.md).
-These consumers are independently verified. They do not constitute an application
-build or require recreating a former SDK or plugin protocol.
+Routine Rho changes proceed on `main` through reviewed diffs, checked commits and
+ordinary fast-forward pushes. A review branch is used when the user selects it.
+Component repositories retain their own workflows.
 
-## Select and verify one flow
+## Deliver toward the integrated flow
 
-1. Describe a concrete user action, actual gap, responsible owner and observable
-   completion conditions. Try the existing public capability and reuse valid evidence.
-   The first selected application slice jointly exercises Agent interaction,
-   code/table/plot context and movable views/multiple windows; it is documented
-   in [joint acceptance](TECHSTACK.md#joint-acceptance-flow), not implemented yet.
-2. Implement the smallest selected owner change. Existing tools default to reuse;
-   do not invent shared state or adapt all old consumers to close one task.
-3. Run checks for the behavior changed. Report failures, incomplete scope and science
-   limits. Core/plugin owner checks and actual application composition are separate.
-4. Inspect the diff, commit in its owner and check all touched repository states.
-   Preserve unrelated files and ignored runtime/evidence material.
+The first product delivery combines natural-language action, linked script/table/
+plot resources and freely movable views across windows. Its
+[completion criteria](ROADMAP.md#first-integrated-flow) guide bounded changes in
+each owner while the final acceptance exercises the actual application combination.
 
-Documentation changes need local link/anchor checks, a coherent rendered batch and
-inspection of all affected content. No native build is required for this source
-replacement: the old runnable application is intentionally archived and the new
-one is not implemented. Do not restore code merely to run retired layout tests.
-Actual future UI changes need build/check commands introduced with that implementation,
-representative-width behavior checks and the [interaction review](RHO-DESIGN.md).
-Never run Cargo builds/tests concurrently. Verification uses disposable projects
-and owned Hosts, preserving user sessions and original task identities.
+1. Define the action, inputs, visible result, failure behavior and responsible owner.
+2. Select supported public capabilities at explicit versions. Reuse applicable
+   native tools, files and existing checks.
+3. Implement the selected owner boundary and run checks that exercise its behavior.
+4. Review the diff, retain failures and incomplete evidence, then commit coherent
+   authorized changes and inspect all touched repository states.
 
-## Archives and later integration
+Generic Core contract regressions stay in Core. Component/domain checks and
+reusable Agent evaluations stay in Rho-plugins. Application interaction and
+composition checks belong here. Never run Cargo builds/tests concurrently.
 
-The [old baseline](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-rebuild)
-and [pre-clear tree](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-main-reset)
-retain all controlled assets. Ignored local caches, outputs and user data are not
-published or removed. Consult archives only for concrete requirements or failures.
-Their commands and historical acceptance are tied to those versions.
+## Documentation and UI verification
 
-When selected, application integration must pin actual source and artifact identities,
-use the declared public boundary, expose local overrides and verify the real chosen
-combination. A lock, copied SDK or wrapper around an old launcher cannot establish
-new integration. Do not create these mechanisms before a demonstrated need.
-Publish authorized source through [Release](RELEASE.md); official distribution
-remains a separate future milestone.
+Document changes require local link/anchor checks and rendering after a coherent
+batch. Inspect every changed page for missing content/glyphs, clipping, overlap
+and broken tables. Recheck affected pagination after fixes; reuse valid unchanged
+observations. Only executed checks count as passes.
+
+Substantial UI work follows [Product design](DESIGN.md) and user review. Test real
+behavior with actual resources at normal, wide and constrained sizes. Verify
+applicable native IME, focus, keyboard access, clipboard, undo and external writes;
+synthetic key events alone do not prove native input behavior.
+
+Use disposable projects and owned Hosts for execution checks. Inspect existing
+work before starting another Host on the same project. Preserve user sessions,
+original request identity, partial output and unknown outcomes. Resource budgets
+name the protected resource, configuration and exceeded-limit behavior.
+
+## Composition and delivery
+
+Record immutable source/artifact identities, dependency versions, public boundaries,
+explicit local overrides and acceptance of the chosen application composition.
+Component checks alone do not prove application integration. Publish required
+components before application references and verify remote heads and trees.
+
+Follow [Release](RELEASE.md) for source publication and distribution. Keep the
+[Status](STATUS.md) summary focused on current implementation, evidence and next
+work, under 300 lines. Credentials and private diagnostics stay out of source.

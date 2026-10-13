@@ -1,23 +1,23 @@
 # Rho documentation
 
-The selected tree describes the new application. Its implementation and integration
-are pending; current component trials do not establish a running application.
+Rho's documentation defines the application container, its functional components
+and the user flow they deliver together. [Status](STATUS.md) is the current
+implementation and verification summary.
 
 | Document | Purpose |
 | --- | --- |
-| [Status](STATUS.md) | Current implementation, verified evidence, limits and next focus |
-| [Rebuild](REBUILD.md) | Selected user flows and evidence-led rebuilding decisions |
-| [Architecture](ARCHITECTURE.md) | Functional components, shared interaction and three source boundaries |
-| [Technology stack](TECHSTACK.md) | Selected container/component direction, tradeoffs and joint acceptance flow |
-| [Development](DEVELOPMENT.md) | Current owner workflow and scoped verification |
-| [UI principles](RHO-DESIGN.md) | Presentation and interaction review rules |
-| [Release](RELEASE.md) | Source publication and future signed-distribution design |
+| [Architecture](ARCHITECTURE.md) | Source ownership, component interaction, state and lifecycle boundaries |
+| [Technology stack](TECHSTACK.md) | Selected libraries, integration choices and adoption conditions |
+| [Product design](DESIGN.md) | Workspace behavior, Agent interfaces and usability acceptance |
+| [Roadmap](ROADMAP.md) | First integrated flow, completion criteria and subsequent milestones |
+| [Development](DEVELOPMENT.md) | Owner workflow, checks and composition evidence |
+| [Status](STATUS.md) | Implemented capabilities, pending work and verification limits |
+| [Release](RELEASE.md) | Source publication and official distribution |
 
-The [former application baseline](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-rebuild)
-and [complete pre-clear snapshot](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-main-reset)
-are published references. Their UI, SDK, lock, build commands and subsystem maps
-are historical, not requirements for the rebuilt application.
+Repository policies cover [contributions](../CONTRIBUTING.md),
+[privacy](../PRIVACY.md), [security](../SECURITY.md) and
+[artifact trust](../CODE_SIGNING_POLICY.md).
 
-Current component documentation belongs to
-[Rho-core](https://github.com/YuLab-SMU/Rho-core) and
+Execution documentation belongs to [Rho-core](https://github.com/YuLab-SMU/Rho-core).
+Functional component documentation belongs to
 [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins).

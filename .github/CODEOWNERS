@@ -1,19 +1,10 @@
-# Default ownership keeps every repository change reviewable by a current Rho
-# administrator. Sensitive release and policy paths are repeated explicitly so
-# their ownership remains visible when this file evolves.
+# Repository maintainers
 * @GuangchuangYu @xiayh17
 
+# Governance and policy ownership
 /.github/CODEOWNERS @GuangchuangYu @xiayh17
-/.github/workflows/ @GuangchuangYu @xiayh17
-/.signpath/policies/ @GuangchuangYu @xiayh17
-
 /CODE_SIGNING_POLICY.md @GuangchuangYu @xiayh17
 /PRIVACY.md @GuangchuangYu @xiayh17
 /SECURITY.md @GuangchuangYu @xiayh17
 /LICENSE @GuangchuangYu @xiayh17
-/LICENSES.md @GuangchuangYu @xiayh17
-
-/scripts/bootstrap-ark-* @GuangchuangYu @xiayh17
-/runtime/ @GuangchuangYu @xiayh17
-/governance/ @GuangchuangYu @xiayh17
 /docs/RELEASE.md @GuangchuangYu @xiayh17

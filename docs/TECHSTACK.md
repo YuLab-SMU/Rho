@@ -1,171 +1,124 @@
-# Rho technology direction and joint acceptance
+# Rho technology stack
 
-Selected: 2026-10-13, after the user clarified the three owners and requested that
-the workbench, freely composed components/multiple windows and Agent interfaces
-evolve together. This records the direction for implementation. No dependencies
-are installed or pinned here, and no running application composition is accepted.
-[Status](STATUS.md) records actual evidence; [Architecture](ARCHITECTURE.md)
-defines ownership and shared interaction semantics.
+This is the implementation direction for the [integrated flow](ROADMAP.md#first-integrated-flow).
+[Architecture](ARCHITECTURE.md) defines ownership; [Status](STATUS.md) records
+implementation. Exact versions and immutable source/artifact identities are
+selected and verified when the application composition is built.
 
-## Selected main combination
+## Main combination
 
-| Position | Direction | Responsibility and limit |
+| Layer | Choice | Responsibility |
 | --- | --- | --- |
-| Desktop container | Electron | Rho owns windows, desktop interaction and a narrow native bridge |
-| UI and build | React, TypeScript, Vite | Rho assembles the workbench; actual feature components remain plugin-owned |
-| Layout | Dockview core | Rho owns docking, tabs, floating/popout adaptation and layout persistence |
-| Editing component | CodeMirror 6 | Plugin owns document buffers, local versions, undo and file-write conditions |
-| Data component | AG Grid Community | Plugin provides real rows, stable entity IDs, filtering and selection |
-| Graphics component | ECharts and original scientific artifacts | Plugin supplies data/specification and selection mapping; native plots retain provenance |
-| Agent-generated interface | json-render with a typed component/action catalog | Agent proposes validated compositions bound to existing resources/actions |
-| Independent HTML component | MCP Apps, when selected | Rho implements an isolated View host and permits only scoped bridge operations |
-| Functional implementation | Maintained R/Python/Rust/TypeScript libraries or CLIs | Actual owner retains native semantics, conditions and result checking |
-| Managed execution adapter | Existing public Core CLI and independently held resident Host | Rho connects supported capabilities; no private socket protocol or new Core model loop |
+| Desktop container | Electron | Windows, native desktop interaction and a narrow application bridge |
+| UI and build | React, TypeScript, Vite | Application assembly and trusted component presentation |
+| Workspace layout | Dockview core | Docking, tabs, floating/popout adaptation and layout persistence |
+| Editing component | CodeMirror 6 | Document buffers, local versions, undo and write conditions |
+| Data component | AG Grid Community | Real rows, filtering and stable entity selection |
+| Graphics component | ECharts plus original scientific artifacts | Interactive data/specification and selection mapping, with preserved provenance |
+| Agent-composed interface | json-render typed catalog | Registered components, typed properties and scoped action/resource references |
+| Managed execution | Public Core CLI and independently held resident Host | Documented execution capabilities and bounded observation |
 
-These are implementation choices for the first flow, not required dependencies
-of every plugin. Record exact versions, immutable source/artifact identities,
-third-party origin/licenses and actual acceptance when a composition is built.
+These are choices for this composition. Functional components can use maintained
+R/Python/Rust/TypeScript libraries, native CLIs and ordinary files, and expose the
+entries their consumers need. Libraries are not mandatory dependencies of every
+component.
 
-## Desktop choice
+## Desktop and workspace
 
-Electron provides a Chromium baseline shipped with the app and a mature web UI
-environment. This is the preferred tradeoff for rich editors, charts, generated
-interfaces and multiple windows. Tauri 2 is a valid alternative if a measured
-resource/distribution budget justifies its different system-WebView compatibility
-matrix. Rust Core alone does not decide the container; both can use its public
-capabilities. This is an engineering judgment, not a Rho performance benchmark.
-Sources: [Electron process model](https://www.electronjs.org/docs/latest/tutorial/process-model)
-and [Tauri WebView versions](https://v2.tauri.app/reference/webview-versions/).
+Electron supplies a Chromium baseline with the application, fitting rich editors,
+charts, generated interfaces and multiple windows. Its selection is an engineering
+judgment for this flow; performance and native-input acceptance require the actual
+application. A measured resource/distribution requirement can justify evaluating
+Tauri's system-WebView approach. Sources:
+[Electron process model](https://www.electronjs.org/docs/latest/tutorial/process-model),
+[Tauri WebView versions](https://v2.tauri.app/reference/webview-versions/).
 
-Keep the renderer sandboxed, with context isolation and no Node integration.
-Expose narrow named operations, validate the sender and route them through the
-actual operation boundary. Prefer React/DOM views for deeply integrated trusted
-components. Independently supplied HTML needs an isolated origin and controlled
-bridge. Electron WebContentsView is an option for an appropriate independent view,
-but its native positioning/focus/overlay lifecycle is not free docking support;
-do not allocate one for every small panel. UI isolation does not sandbox the OS
-authority of native R/Python/other executables.
-Sources: [Electron security](https://www.electronjs.org/docs/latest/tutorial/security)
-and [web embeds](https://www.electronjs.org/docs/latest/tutorial/web-embeds).
+Use sandboxed renderers, context isolation and no Node integration. The native
+bridge exposes narrow named operations and validates the sender, resource scope
+and conditions at invocation. Trusted React views use normal application layout;
+independent HTML uses isolated origins and a controlled bridge. WebContentsView
+is an option where its native positioning, focus and overlay behavior fits the
+actual view. Sources:
+[Electron security](https://www.electronjs.org/docs/latest/tutorial/security),
+[web embeds](https://www.electronjs.org/docs/latest/tutorial/web-embeds).
 
-Do not embed the sole Core Host in a UI process whose shutdown ends held tasks.
-Continued operation requires an independently held resident Host and explicit
-application/Host exit behavior. A panel close releases observation, not execution.
-Missing acknowledgements and reconnect use the original request identity. Reading
-historical artifacts or unavailable tasks must not silently start or recover a
-runtime. Sources: [public Core CLI](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/HOST-CLI.md)
-and [Architecture](ARCHITECTURE.md#state-and-lifecycle-ownership).
+Dockview supplies docking, tabs, floating/popout and layout serialization.
+Rho adapts popout to real desktop-window ownership and close events. Layout state
+stores arrangement; editing buffers, scientific resources and execution facts
+retain their owners. Dockview core is MIT; some keyboard docking/navigation,
+layout-history and other features are Enterprise. The chosen experience must name
+its edition and licensing and provide accessible command-based layout controls.
+Source: [Dockview licensing/features](https://dockview.dev/docs/overview/licence/).
 
-## Workbench components
-
-Dockview core supplies docking, tabs, floating/popout and layout serialization.
-Its layout JSON does not save editing buffers, scientific resources or task facts.
-Browser popout must be adapted to actual desktop-window ownership and close events.
-Dockview core is MIT; some keyboard docking/navigation, layout-history and other features
-are Enterprise. Provide equivalent command-menu access or evaluate licensing for
-the selected experience; do not rely only on dragging.
-Source: [Dockview licensing and features](https://dockview.dev/docs/overview/licence/).
+## Functional views
 
 CodeMirror 6 is the default for scripts, configuration, prose and embedded editing.
-Its state/view separation fits a plugin-owned logical document with several views.
-Monaco is the alternative when the selected first flow needs a fuller IDE/diff/
-multi-file language-service experience. Monaco does not run VS Code extensions
-directly, and syntax highlighting alone is not R/Python semantic intelligence.
-Sources: [CodeMirror API](https://codemirror.net/docs/ref/)
-and [Monaco README](https://github.com/microsoft/monaco-editor/blob/main/README.md).
+Its state/view model fits a shared logical document with multiple views. The
+editing component owns buffer synchronization, undo and write-conflict behavior.
+Monaco can serve a selected fuller IDE/diff/language-service need; it does not run
+VS Code extensions directly. Language intelligence needs its actual provider and
+acceptance. Sources: [CodeMirror API](https://codemirror.net/docs/ref/),
+[Monaco README](https://github.com/microsoft/monaco-editor/blob/main/README.md).
 
-AG Grid Community and ECharts are the initial table/graphic combination. Use real
-owner-provided data and stable domain IDs to synchronize selections. Do not copy
-Enterprise pivot, range-selection or integrated-chart assumptions into Community.
-If a real consumer needs richer pivot/aggregation or streaming multi-view analysis,
-evaluate Perspective for that role rather than duplicate two analysis engines.
-Retain original R outputs and checks alongside interactive presentation.
-Sources: [AG Grid editions](https://www.ag-grid.com/react-data-grid/community-vs-enterprise/),
-[ECharts events/actions](https://echarts.apache.org/handbook/en/concepts/event/)
-and [Perspective table/view ownership](https://perspective-dev.github.io/react/index.html).
+AG Grid Community and ECharts provide the initial data/graphics combination.
+Components supply actual data, stable domain IDs and explicit selection mapping.
+Enterprise pivot, range-selection and integrated-chart features require their
+own license/selection. Perspective can be evaluated for a demonstrated richer
+pivot/aggregation or streaming-view requirement. Retain native scientific outputs
+and checks alongside interactive presentation. Sources:
+[AG Grid editions](https://www.ag-grid.com/react-data-grid/community-vs-enterprise/),
+[ECharts events/actions](https://echarts.apache.org/handbook/en/concepts/event/),
+[Perspective ownership](https://perspective-dev.github.io/react/index.html).
 
-xterm.js is optional for an actual interactive terminal backed by a PTY service;
-it is not an executor. Ordinary managed output uses a bounded log view first.
-Source: [xterm.js](https://github.com/xtermjs/xterm.js).
+An interactive terminal can use xterm.js backed by a PTY service when needed.
+Managed text output initially uses a bounded log view. JupyterLab is a component/
+service architecture reference and a reuse option for selected notebook, kernel
+or ipywidgets compatibility. Sources: [xterm.js](https://github.com/xtermjs/xterm.js),
+[JupyterLab patterns](https://jupyterlab.readthedocs.io/en/stable/developer/patterns.html).
 
-JupyterLab/Lumino is a useful component/service architecture precedent. Consider
-whole-platform reuse when notebook, kernel, ipywidgets or Jupyter file-service
-compatibility is selected; docking alone does not require adopting that platform.
-Prebuilt dynamic loading is not a permission/fault-isolation mechanism.
-Source: [JupyterLab extension patterns](https://jupyterlab.readthedocs.io/en/stable/developer/patterns.html).
+## Agent interfaces
 
-## Agent interfaces and external interoperability
-
-Start with trusted React components and a small registered catalog. json-render
-can describe available components, typed properties and actions, and map them to
-actual React implementations. An Agent can compose parameter forms, linked result
-views and comparison workspaces from that vocabulary. Scope/resource freshness
-and native conditions are checked at invocation, not inferred from schema validity.
-Models do not supply privileged JavaScript. Generated content does not substitute
-for owner-provided scientific values or execution facts.
+json-render supplies the typed catalog for registered components, properties and
+actions mapped to actual React implementations. Agents describe parameter forms,
+linked results and comparison workspaces using that vocabulary. Invocation checks
+existing authorization, resource freshness and native conditions in addition to
+schema validity. Model output does not supply privileged JavaScript or replace
+owner-provided values and execution facts.
 Source: [json-render catalog](https://json-render.dev/docs/catalog).
 
-MCP Apps is the optional boundary for independently supplied interactive HTML.
-Implement the sandboxed View, allowed message/tool bridge, origin/CSP checks and
-teardown. Its SDK is not a complete supported workbench host. Text or structured
-results remain usable when a View is unavailable. The Apps UI protocol and base
-MCP protocol have separate versions; select an interoperable, verified pair.
-Sources: [MCP Apps specification](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx)
-and [SDK/host boundary](https://apps.extensions.modelcontextprotocol.io/api/).
+Independent interactive HTML can use MCP Apps when a consumer needs that boundary.
+Rho will implement the isolated View host, allowed messages/tool bridge, origin/CSP
+checks and teardown. Structured/text results remain inspectable when the View is
+unavailable. Select and verify interoperable Apps/base-MCP protocol versions;
+the SDK alone is not a complete workbench host. Sources:
+[MCP Apps specification](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx),
+[SDK and host API](https://apps.extensions.modelcontextprotocol.io/api/).
 
-| Optional boundary | Purpose and adoption condition |
+| Optional interface | Consumer need |
 | --- | --- |
-| MCP | Component tools/resources for a selected external Agent/client; same capability implementation |
-| AG-UI | Streaming Agent/frontend interaction when the chosen backend needs a standard adapter; not Core's task journal |
-| A2UI | Declarative interface interoperability across clients when needed; the internal catalog remains component-owned |
-| Agent Plugins | Portable Skills/MCP packaging for selected consumers; Rho execution/UI contributions belong in an appropriate reverse-domain extension namespace |
+| MCP | External tool/resource clients for the same functional capability |
+| AG-UI | Agent/frontend event streaming for the selected Agent backend |
+| A2UI | Declarative interface interchange across clients |
+| Agent Plugins | Portable Skills/MCP packaging, with namespaced Rho-specific contributions where needed |
 
-None is a required entry for every functional component or a reason to add a
-second execution/state owner. The first flow does not require a universal loader,
-marketplace, Rust dynamic ABI, Module Federation or new WASM scientific runtime.
-Sources: [AG-UI](https://docs.ag-ui.com/introduction), [A2UI](https://a2ui.org/)
-and [Agent Plugins specification](https://agent-plugins.org/specification).
+Each adapter retains the actual state owner and invocation conditions. Protocol
+selection follows the concrete consumer rather than becoming a requirement for
+every component. Sources: [AG-UI](https://docs.ag-ui.com/introduction),
+[A2UI](https://a2ui.org/), [Agent Plugins](https://agent-plugins.org/specification).
 
-## Joint acceptance flow
+## Execution and acceptance
 
-Use a disposable project and an owned Host. Reuse the verified real-R consumer
-and outputs where valid; do not refit science merely to check unchanged documents
-or presentation. Implement one selected boundary at a time while retaining this
-end-to-end acceptance target; do not claim intermediate component checks prove it.
+Use the documented [public Core CLI](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/HOST-CLI.md)
+at the selected version. Its resident Host has a lifetime independent of observing
+windows. Reconnect retains the original request identity; reads are bounded and
+do not start or recover a runtime. Native tools retain the Host's OS authority;
+UI isolation does not establish native containment.
 
-1. An authorized natural-language request selects a real component action and
-   opens a typed parameter interface. UI/tool/CLI entries use the same capability;
-   a managed submission carries the original request identity.
-2. Script, real result table and interactive plot share resource provenance and
-   stable selected entities. Sorting/filtering, missing values and numerical
-   representation do not silently change scientific identity or interpretation.
-3. Native Chinese IME editing, undo, clipboard and focus work while views are
-   docked, switched and moved to another window. Unsaved buffers remain with one
-   document owner; external changes produce an explicit write conflict.
-4. Close or crash an observer window, then observe the original task from another
-   view. Verify no additional native dispatch, and retain partial/unknown results.
-   Host shutdown and native-session recovery are separate tested claims.
-5. Display execution completion, artifact integrity and domain checks separately,
-   with their scope/freshness. An Agent explanation is visibly distinct from the
-   source owner's result. Component upgrade/missing View retains inspection of
-   the original run, component version and available outputs.
-6. The Agent composes a new comparison/explanation view from registered components
-   bound to the same resources/selections. Malformed, stale or out-of-scope requests
-   are rejected mechanically without adding another approval for existing scope.
-7. Keyboard access and layout commands work; assistive text/table alternatives
-   exist for graphics. Missing components or blocked popout retain drafts/results
-   and provide a recoverable view state without executing again.
+The [roadmap](ROADMAP.md) defines acceptance of the workbench, component composition
+and Agent interaction together. Measure actual cold start, interaction latency,
+memory and protected view/data/message resources. Record configuration and behavior
+when limits are exceeded, preserving obtained output and original task identity.
 
-Measure cold start, interaction latency and steady/peak memory with representative
-data and platform builds. Name each protected resource, configured limit and
-exceeded-limit behavior: view/message counts and retained bytes, paged data size,
-drawing work or component concurrency. Send references and bounded pages rather
-than whole scientific objects across windows. Exhaustion affects the owned view/
-component resource, preserves obtained output and does not silently stop a user
-Host or replay a task. No performance, native-input or isolation pass is claimed
-until observed on the actual composition.
-
-After this flow, add a second functional domain to test reuse of the small boundary.
-Add independent publishing/interoperability only for an actual selected component
-requirement. Official signing/distribution remains the separate
-[release milestone](RELEASE.md#future-official-release-boundary).
+The accepted application combination records versions, immutable identities,
+licenses, local overrides and observed integration results. Official distribution
+uses the separate [release boundary](RELEASE.md#official-distribution).

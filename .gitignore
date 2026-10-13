@@ -1,21 +1,16 @@
-target/
-/work/
+# Generated dependencies and build output
 node_modules/
-/.rho/
-/.Rproj.user/
+dist/
+target/
+*.tsbuildinfo
+__pycache__/
+
+# Local work, runtime state and diagnostics
+/work/
+.worktrees/
+.rho/
+.Rproj.user/
 .Rhistory
 .RData
-.DS_Store
 *.log
-*.tsbuildinfo
-.worktrees/
-.reasonix
-
-/.rho-dev.json
-/ui/dist/
-
-# Preserve ignored local outputs after archiving the former example source.
-/examples/rho-demo/data/processed/
-/examples/rho-demo/output/figures/
-/examples/rho-demo/output/rho_demo_report.html
-/examples/rho-demo/.rho/
+.DS_Store

@@ -1,36 +1,38 @@
 # Rho
 
-Rho is the application container for a component-based intelligent workbench. It
-owns component selection, assembly and presentation.
-The selected `main` tree contains the new application design and repository policies.
-The rebuilt application has no UI, launcher or build entry yet.
+Rho is an application container for an intelligent, composable workspace. People
+and Agents use the same functional components to act on real resources, inspect
+results and arrange the tools they need.
 
-| Repository | Current responsibility |
+The experience brings natural-language interaction, code/data/graphics and freely
+arranged views across windows into one workflow. An Agent can compose interfaces
+from registered components while the user continues editing and inspecting the
+same resources.
+
+## Architecture
+
+| Repository | Responsibility |
 | --- | --- |
-| [Rho-core](https://github.com/YuLab-SMU/Rho-core) | Generic managed execution, original request identity, retained facts, resident Host and CLI |
-| [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins) | Actual functional components, with optional CLI, Skills, MCP and UI entries; currently verified R and evaluation consumers |
-| Rho (this repository) | Application container, composition, shared interaction and presentation |
+| [Rho-core](https://github.com/YuLab-SMU/Rho-core) | Intelligent-system foundation: managed execution, request identity, retained execution facts and resident Host |
+| [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins) | Functional components: Agents, editors, files, tables, plots, scientific methods, evaluation and other capabilities |
+| Rho | Component selection and assembly, desktop windows, workspace layout, shared interaction and presentation |
 
-The selected design combines the scientific workbench, freely arranged component
-views/multiple windows and Agent-driven dynamic interfaces in one user flow.
-The implementation direction is Electron, React/TypeScript, Vite and Dockview,
-with functional UI owned by plugins. This is a documented selection, not an
-accepted running composition. Read [Architecture](docs/ARCHITECTURE.md) and
-[Technology stack](docs/TECHSTACK.md).
+Components may expose CLI, Skills, MCP and UI entries as their consumers require.
+They retain their implementation, conditions and results across headless and
+application use. Rho connects those components to the Core's public capabilities.
 
-The new Core CLI has already supported a real R analysis and reusable evaluations.
-Those results belong to their component owners; they do not establish a working
-new application. See [current state](docs/STATUS.md) and [Rebuild](docs/REBUILD.md).
+## Technology direction
 
-The complete former application is published on
-[`codex/legacy-app-before-rebuild`](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-rebuild).
-The complete pre-clear tree, including subsequent design updates, is also on
-[`codex/legacy-app-before-main-reset`](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-main-reset).
-The former UI, SDK snapshot, development scripts, lock and examples are removed
-from the selected tree. Ignored local evidence, caches and user state remain local.
+The desktop direction is Electron, React, TypeScript, Vite and Dockview. Initial
+functional views use CodeMirror 6, AG Grid Community and ECharts. Agent-composed
+interfaces use a typed json-render catalog; independent HTML views can use an
+isolated MCP Apps host when needed.
 
-Read [documentation](docs/README.md), [development](docs/DEVELOPMENT.md) and
-[source publication](docs/RELEASE.md). The source replacement is merged into
-organization `main`. Routine Rho changes now proceed directly on `main`, through
-checked commits and ordinary pushes. Source publication, an accepted application
-composition and an official signed release are separate outcomes.
+The repository currently contains design and development policies. Application
+implementation and integrated acceptance are pending. Component capabilities and
+verification belong to their respective source owners; see [Status](docs/STATUS.md).
+
+Start with [Architecture](docs/ARCHITECTURE.md), [Technology stack](docs/TECHSTACK.md)
+and [Roadmap](docs/ROADMAP.md). The [documentation index](docs/README.md) covers
+product design, development and distribution. Contributions follow
+[Contributing](CONTRIBUTING.md); source is licensed under [AGPL-3.0](LICENSE).
