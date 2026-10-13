@@ -1,38 +1,27 @@
 # Rho
 
-Rho is an operable scientific workspace. This repository owns its application
-shell, examples, development entry and exact component composition.
+Rho owns the scientific application's component selection, assembly and presentation.
+The selected `main` tree contains the new application design and repository policies.
+The rebuilt application has no UI, launcher or build entry yet.
 
-| Repository | Responsibility |
+| Repository | Current responsibility |
 | --- | --- |
-| [Rho-core](https://github.com/YuLab-SMU/Rho-core) | Generic Host, operation journal, plugin lifecycle, public SDK, CLI/HTTP/MCP |
-| [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins) | Official scientific plugins, domain contracts, native adapters, methods and views |
-| Rho (this repository) | Application shell, examples, component selection and integration |
+| [Rho-core](https://github.com/YuLab-SMU/Rho-core) | Generic managed execution, original request identity, retained facts, resident Host and CLI |
+| [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins) | Scientific recipes and artifact checks; the reusable Agent evaluation plugin |
+| Rho (this repository) | Application design; later selection, assembly and presentation of verified components |
 
-The component repositories are published under YuLab-SMU, each with its own source
-and commit. The application split is submitted on `codex/split-repositories` for
-review into `main`. See the
-[development guide](docs/DEVELOPMENT.md) for the sibling checkout layout and
-the [source publication procedure](docs/RELEASE.md#source-repositories).
+The new Core CLI has already supported a real R analysis and reusable evaluations.
+Those results belong to their component owners; they do not establish a working
+new application. See [current state](docs/STATUS.md) and [Rebuild](docs/REBUILD.md).
 
-```sh
-node dev.mjs status
-npm ci --ignore-scripts --prefix ui
-node dev.mjs build app
-node dev.mjs build core
-node dev.mjs build plugin files
-node dev.mjs build plugin annotations
-node scripts/test-composition.mjs
-```
+The complete former application is published on
+[`codex/legacy-app-before-rebuild`](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-rebuild).
+The complete pre-clear tree, including subsequent design updates, is also on
+[`codex/legacy-app-before-main-reset`](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-main-reset).
+The former UI, SDK snapshot, development scripts, lock and examples are removed
+from the selected tree. Ignored local evidence, caches and user state remain local.
 
-The application compiles using the pinned public SDK already in this checkout;
-its build/check commands do not invoke Cargo or read sibling source. Plugins
-likewise build against their own public dependency snapshot. The coordinated
-entry uses sibling checkouts only for explicitly requested component development.
-
-`rho.lock.json` pins component commits and SDK digests. `core-sdk.json` identifies
-the generated public dependency; do not edit sdk/ locally. Build receipts in target/
-identify actual binaries/packages. A source lock alone is not a build result.
-
-See [documentation](docs/README.md), [current state](docs/STATUS.md),
-[development](docs/DEVELOPMENT.md) and [operation](docs/OPERATIONS.md).
+Read [documentation](docs/README.md), [development](docs/DEVELOPMENT.md) and
+[source publication](docs/RELEASE.md). Organization `main` requires a reviewed PR;
+the selected replacement is pending that merge. Source publication, an accepted
+application composition and an official signed release are separate outcomes.

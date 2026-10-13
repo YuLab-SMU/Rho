@@ -1,135 +1,94 @@
-# Source publication and local composition
+# Source publication and future distribution
 
 ## Source repositories
 
-The public source repositories are YuLab-SMU/Rho-core, YuLab-SMU/Rho-plugins and
-the existing YuLab-SMU/Rho. Core and plugins are published on main; the application
-split is submitted on codex/split-repositories for review into main.
+The source owners are [Rho-core](https://github.com/YuLab-SMU/Rho-core),
+[Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins) and
+[Rho](https://github.com/YuLab-SMU/Rho). Each owns its implementation and commits.
+Rho owns application selection, assembly and presentation. Its new implementation
+is pending; this source replacement supplies design and policies, not a built product.
 
-Publish the committed core and plugins before updating the application, so its
-SDK provenance and rho.lock.json revisions can be resolved remotely. The component
-repositories' independent histories begin at the split; the original monorepo
-history stays in Rho. Push the selected branches without mirror or force pushes.
+Before publishing, inspect the actual remote URL, branch, selected commit and
+account permissions. In the current local checkout `origin` is a personal fork
+and `upstream` is the organization repository. Use the actual selected destination;
+never infer it from a remote name. Keep credentials out of URLs and tracked files.
 
-Submit the application on codex/split-repositories to YuLab-SMU/Rho and open a
-pull request into main. Include the unpublished ancestor commits, repository
-ownership changes, selected verification and its limits. The old xiayh17/Rho
-origin is a personal fork; use upstream explicitly for the organization submission.
-Publishing source is separate from merging that pull request or creating a release.
+Publish and verify complete required archives before removing old controlled assets.
+The [old application baseline](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-rebuild)
+and [complete pre-clear tree](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-main-reset)
+are published, including the latter's updated historical documents. Ignored local
+runtime, evidence and user data remain outside source publication.
 
-Use an existing GitHub account with the required organization permissions; do not
-store credentials in Git URLs or tracked files. Verify each remote branch head
-against the local commit after its push. An API read or push dry run establishes
-preparation, not repository creation or publication.
+Carry forward the user's existing source-publication authorization. Rho organization
+`main` requires a PR, Code Owner review and approval of the latest push. Publish the
+selected work on a `codex/` review branch and preserve its commit identities with a
+merge commit. Do not force, bypass review, squash or rebase the selected history.
+Verify the resulting remote head and tree; a pushed review branch is not a merged main.
 
-## Exact local composition
-
-The repository split currently provides local development assembly, not a signed
-installer or a published release. Core, official plugins and application have
-independent source commits. Source identity and built artifact identity are separate.
-
-```sh
-node dev.mjs lock
-node dev.mjs build core
-node dev.mjs build app
-node dev.mjs build plugin files
-node dev.mjs build plugin annotations
-node dev.mjs build plugin r
-node dev.mjs lock
-node dev.mjs verify
-node dev.mjs assemble /absolute/new/composition annotations files r
-```
-
-Locking requires clean committed component sources and explicitly refreshed SDK
-snapshots. Build receipts record exact source identities and artifact digests. Each plugin
-artifact is pinned independently; packages built at different plugin-repository
-commits may coexist without rebuilding unchanged packages.
-Assembly verifies those receipts and the application's asset inputs, refuses
-changed/off-lock component artifacts, and writes a new directory. It never rebuilds,
-activates or installs a component. Choose plugin names explicitly; there is no
-hardcoded historical sixteen-package acceptance gate.
-
-composition.json records core and plugin identity, application source identity,
-exact payload hashes, sizes and executable modes. plugin-set.json records source
-revision/artifact identities for each immutable archive. The assembled assets
-remain separate from the core binary. Preserve these files with their artifacts.
-
-The assembly can contain a subset of official plugins. Completeness and behavior
-are established only by the flows actually run against that combination. A plugin
-repository commit does not imply every package was rebuilt or accepted. A local
-source lock does not fetch unavailable artifacts or authenticate a publisher;
-source publication does not publish the locally assembled binaries and archives.
-
-Native validation remains Apple Silicon macOS. Other platform sources are not a
-new distribution commitment. Historical native Preview launchers and old bundle
-assemblers are retired from this source tree; Git retains them. New signing,
-notarization, installer, licensing audit, installation and publication work requires
-its own requested scope. Do not describe local component builds as those outcomes.
+Publish required components before an application change references their fixed
+identities. Source selection, artifact identity and acceptance are distinct evidence.
+The old SDK snapshots, `rho.lock.json`, development scripts and assembly commands
+are archived. There is no replacement lock or assembly tooling yet; historical
+composition receipts do not establish integration with the new Core.
+Source publication does not publish binaries, install components or create a release.
 
 ## Future official release boundary
 
-This is an agreed design for the first official signed distribution, not an
-implemented pipeline or a request to create another repository now. The current
-three source repositories remain the daily development structure. Introduce
-Rho-releases with that distribution milestone, once its target platform, installation
-format and required acceptance flow are selected.
+This remains agreed design, not an implemented pipeline or a request to create
+another repository. Keep the three-source-repository daily development structure.
+Introduce Rho-releases only at the first explicitly selected official signed
+release milestone, with target platform, installation format and acceptance chosen.
 
 | Owner | Release responsibility |
 | --- | --- |
-| Rho-core | Core implementation, public protocol/SDK and declared compatibility |
-| Rho-plugins | Scientific implementations, independently versioned plugin packages and owner checks |
-| Rho | Application source, product component selection, assembly and integration evidence |
-| Future Rho-releases | Release manifests and workflows, signing/notarization, official assets, checksums and installation/update channels |
+| Rho-core | Generic execution, supported public capabilities and declared compatibility |
+| Rho-plugins | Domain implementations, selected independently versioned artifacts and owner checks |
+| Rho | Application source, component selection, assembly and real integration evidence |
+| Future Rho-releases | Promotion manifests/workflows, signing/notarization, official assets, checksums and installation/update channels |
 
-The release repository consumes selected source and artifacts. It does not mirror
-production source or replace the application development entry. It provides a stable
-distribution endpoint for official binaries and, when implemented, automatic updates
-and a Homebrew tap. A product release number names one accepted composition; core
-and plugins do not need matching version numbers or synchronized tags.
+The release repository consumes selected source and artifacts. It is not another
+source mirror or daily development coordinator. Product versions identify accepted
+compositions; component versions and tags need not match. Automatic updates and
+Homebrew remain later scopes unless explicitly selected.
 
 ### Fixed release composition
 
-Before promotion, freeze a release manifest containing:
+Freeze a manifest before promotion, containing:
 
-- The product version, application and core commit SHAs, and public SDK identities.
+- Product version, application/Core source commits and any selected public dependency identities.
 - Each selected plugin's identity, source revision, artifact digest and size.
-- Target OS/architecture, packaging configuration and the build toolchain/workflow
-  identity needed to trace how the candidate was produced.
-- The candidate artifact inventory and the acceptance results for that exact
-  composition, including any unsupported or unverified scope.
+- Target OS/architecture, packaging configuration and build toolchain/workflow identity.
+- Immutable candidate artifact inventory and acceptance evidence for that exact
+  combination, including unsupported, failed and unverified scope.
 
-Resolve source references once before building; do not independently follow main
-or a mutable tag during later jobs. rho.lock.json, composition.json and build
-receipts provide starting evidence, but do not yet constitute a signed-release
-manifest. Source commits, built candidates and published releases remain distinct.
+Resolve source references once before building. Later jobs must not follow floating
+main or mutable tags. Source commits, built candidates and published releases have
+separate identities. Any future source lock and build receipts provide evidence;
+they do not themselves form a signed release or prove scientific acceptance.
 
 ### Promotion and credentials
 
 1. Build and test a candidate without signing keys or publication credentials.
-   Retain its immutable artifacts, digests and applicable acceptance evidence.
-2. An explicitly authorized release stage verifies that candidate and its evidence,
-   then signs, notarizes and packages it using trusted release tooling. This stage
-   must not execute source build scripts with signing credentials or rebuild the
-   application. Record the input candidate and resulting signed/package digests;
-   signing changes bytes, so their identities must remain distinguishable.
-3. Verify the resulting signed distribution on the selected target platform, then
-   publish its assets, checksums and provenance. Advance installation/update
-   channels only after the required release assets are available and verified.
+   Retain immutable artifacts, digests and applicable acceptance evidence.
+2. An explicitly authorized release stage verifies that candidate and evidence,
+   then signs, notarizes and packages it with trusted release tooling. It must not
+   rebuild the application or execute source build scripts with signing credentials.
+   Record the input candidate and resulting signed/package digests separately.
+3. Verify the signed distribution on the selected target platform, then publish
+   assets, checksums and provenance. Advance installation/update channels only
+   after required assets are available and verified.
 
-Control who can change release workflows, select a candidate and access signing
-or publication credentials. A separate repository is one part of that boundary;
-placing build and signing in the same privileged job would defeat the intended
-separation. Release jobs need only the capabilities required for their stage.
+Control who can change release workflows, select candidates and access credentials.
+Separate repositories alone do not establish this boundary; combining builds and
+signing in one privileged job would undermine it. Each stage gets only its needed
+capabilities. Signing changes bytes, so unsigned and signed identities stay distinct.
 
-A source or build change produces a new candidate and needs relevant acceptance
-before promotion. A failed publication retains its receipts and selected artifacts;
-retrying delivery must not silently rebuild or replace that candidate. Software
-release authorization is separate from Rho's scientific caller authorization and
-does not introduce another approval decision for Agent-authorized Operations.
+A source/build change creates a new candidate and needs relevant acceptance before
+promotion. Failed publication retains selected artifacts and receipts; a delivery
+retry must not silently rebuild or replace them. Release authorization does not
+introduce another approval decision for scientific Agent requests.
 
-The first implementation milestone is one traceable signed delivery on the chosen
-platform: source selection, accepted candidate, signing/notarization evidence,
-final artifact verification and successful publication. Multi-platform delivery,
-automatic updates and Homebrew are subsequent scopes unless explicitly included
-in that milestone. This document establishes their ownership without claiming
-those capabilities are available now.
+The first implementation milestone is one traceable signed delivery on its selected
+platform: fixed sources, accepted candidate, signing/notarization evidence, final
+artifact verification and successful publication. Multi-platform delivery, automatic
+updates and Homebrew are separate later scopes unless included explicitly.

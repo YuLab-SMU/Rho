@@ -1,108 +1,84 @@
 # Rho: current state and focus
 
-Updated: 2026-10-01. This is the single current summary. Git retains the former
-monorepo, old acceptance matrix and earlier product evidence; they are not gates
-for the new repository boundaries.
+Updated: 2026-10-12. The selected local `main` tree is the new application's design
+skeleton. The executable application and integration have not been rebuilt.
+The organization-main replacement requires the pending reviewed PR to merge.
 
-## Implemented repository separation
+## Current source boundary
 
-| Local repository | Ownership |
-| --- | --- |
-| Rho-core | Generic Host, journal, public protocol/SDK, CLI/HTTP/MCP and their core tests |
-| Rho-plugins | All sixteen official plugin sources, domain contracts, views, native adapters, Jet/patches and scientific skills |
-| Rho (this checkout) | Application shell, examples, development entry, selected artifact composition and integration checks |
+- Rho owns application selection, assembly and presentation. The selected tree has
+  16 controlled files: new architecture/rebuild/development/UI/release documents,
+  repository instructions, license, contribution/privacy/security policies and
+  existing Code Owner governance. There is no UI, SDK snapshot, lock, launcher,
+  build entry or old scientific example in this tree.
+- Both the [original app archive](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-rebuild)
+  and [complete pre-clear snapshot](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-main-reset)
+  are published and verified. All 460 removed entries match the latter's Git
+  content identities and modes; four updated historical documents are included.
+  Ignored evidence, caches, runtime and user data remain local and unchanged.
+- [Rho-core](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/PROGRESS.md) provides
+  managed execution, durable request identity/facts, a resident Host and CLI.
+  It has no new SDK, HTTP/MCP edge or former plugin lifecycle.
+- [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/STATUS.md)
+  main contains the selected evaluation plugin, real R recipe and current policies.
+  Its former controlled implementation is on a published archive branch.
+  Neither component repository is modified by this application source replacement.
 
-Core and plugins have independent Cargo workspaces and locks. The application has
-no Cargo workspace. The old root-directory/inventory checks, whole-product CI,
-monolithic browser scenarios and native-preview assemblers were retired. Useful
-core tests, plugin Owner/native tests and application window tests remain with
-their owners. This is not a claim that every retained test was rerun.
+## Existing component evidence and its limits
 
-Core no longer embeds application HTML/JS/CSS or R examples. Its HTTP adapter
-serves explicitly selected bounded assets and an existing application-configured
-default project; the application prepares the example. CLI now selects --assets
-and --default-project. The old --demo-project / --dev-assets startup contract is
-not preserved. Historical binaries and user installations were not replaced.
+The [real R consumer](https://github.com/YuLab-SMU/Rho-plugins/blob/main/examples/real-r-analysis/README.md)
+uses airway/GSE52778, four donor pairs, DESeq2, four donor-omission fits and 200
+full-gene conditional simulations. Actual native execution took 9 minutes 23 seconds.
+An interrupted wait resumed observation of the same run/PID with one native entry.
+Original and retrieved artifacts each passed 12/12 independent checks; five saved
+models passed 121/121 native observations. Three altered-copy counterexamples
+were rejected. See [acceptance](https://github.com/YuLab-SMU/Rho-plugins/blob/main/examples/real-r-analysis/ACCEPTANCE.md).
 
-Public SDK source is maintained only in core. Consumers contain exported dependency
-snapshots with exact source revision, license, file inventory and digests. Application
-build/check uses these files without Cargo. Plugin build tools use their own Node
-installation and source workspace, without reading core/application source.
+Original failures remain: an initial Host socket bind failure, then a roughly
+20-second analysis whose driver failed because its checker was not prepared.
+Later checks of unchanged outputs do not erase those failures. Conditional simulation
+quantiles hold donors and fitted parameters fixed; they are not donor-population or
+clinical intervals. The checker does not independently refit DESeq2. Rscript is a
+batch process, not recovered interactive R memory or autonomous scientific discovery.
 
-The single local entry is dev.mjs: status, build core/app/plugin, explicit SDK sync,
-lock, verify, run and assemble. rho.lock.json records selected checkout revisions
-and each plugin artifact independently. An unrelated plugin-repository commit does
-not force rebuilding unchanged packages. Local overrides are visible in receipts;
-exact assembly requires clean, explicitly selected core/plugin artifacts.
+The [evaluation plugin](https://github.com/YuLab-SMU/Rho-plugins/blob/main/plugins/agent-eval/ACCEPTANCE.md)
+migration passed 43 regressions, eight real CLI baseline cases, six optional library
+cases and one real-model execute trial. Original model evidence remains 15/16,
+including the residual unauthorized command-combination failure. Exported plugin
+source and a copied public binary worked without private Core source or the old SDK.
+These are prior component checks, reused here without rerunning the model or R analysis.
+They do not establish a new application composition.
 
-Core and plugins are published as public repositories at
-[YuLab-SMU/Rho-core](https://github.com/YuLab-SMU/Rho-core) and
-[YuLab-SMU/Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins). Their remote main
-heads were verified against local commits 55c6ac1e and 7b88e1cd respectively. The
-application split is submitted on YuLab-SMU/Rho's codex/split-repositories branch
-for review into main. The existing personal fork remains a separate remote.
-This publishes source; no binary release or installer was published.
+## Selected next work
 
-## Selected verification
+Priorities remain R batch-analysis recipes, artifact provenance/integrity/retrieval,
+and reusable bounded evaluation in the plugin owner. Rscript, R packages, RDS,
+manifests and ordinary file tools already support the demonstrated flow. No observed
+gap requires an R-session platform, global artifact registry or Files rebuild.
+Candidate improvement, development/validation/blind-test management and hillclimbing
+remain unimplemented; the Core retains its own deterministic contract regressions.
 
-| Executed flow | Established result |
-| --- | --- |
-| Core source closure and cargo build --locked in Rho-core | Independent generic core executable; no application or domain-plugin source dependency |
-| cargo test -p rho-workbench --lib --locked in Rho-core | 13 HTTP/Host behavior tests passed, including auth, project selection, queries and asset containment |
-| node scripts/check.mjs in Rho-plugins | Contained source graph with only declared public core dependencies; SDK file digests verified |
-| node scripts/vendor-jet.mjs check in Rho-plugins | Pinned native source, notices and ordered patch replay verified |
-| node dev.mjs build plugin files / r / annotations | Three packages built from the independent plugin checkout; retained core binary unchanged |
-| npm run build --prefix ui; npm run check --prefix ui | External application assets and client types built/checked without Cargo |
-| npm run test --prefix ui | 135 window/client tests passed; dependency CSS source-map warning was non-fatal |
-| Files package tests/protocol.py against its built executable | Native protected paths, settlement/cancellation, duplicate/foreign identity and disconnected-work checks passed |
-| node scripts/test-composition.mjs | Empty core; real Files patch with declared Annotations provider; path escape refusal; original retry, stale-write refusal, restart readback; external assets, refresh, containment and HTTP auth passed |
-| npm run test:browser --prefix ui -- composition.spec.ts | Isolated Chrome loaded external app assets, selected the app-owned Demo and retained the workspace after refresh |
-| node dev.mjs verify and exact assembly | Retained binary/package digests checked; three selected archives assembled without rebuilding or installing components |
+The first application candidate is opening an original task, distinguishing
+execution from scientific checking, inspecting/retrieving real tables and plots,
+and continuing observation after disconnect. This is design; no researcher-facing
+UI or integration acceptance has been delivered. New SDK/transport, installation,
+discovery, Editor/Studio/Manager and replacement chat need separately demonstrated
+consumer requirements. See [Rebuild](REBUILD.md) and [Architecture](ARCHITECTURE.md).
 
-Files currently declares annotations.read as a required capability. The composition
-flow uses a real Annotations provider rather than a fixture pretending the dependency
-exists. R was built but no real-R session was started for this split.
+## Verification and publication
 
-Evidence is retained under target/: composition-test.json and its original report,
-composition-browser.png, core.json, packages.json, app-assets.json, and
-composition-split-locked/composition.json. The latter records exact sizes/hashes and
-source identities; its application source was dirty during assembly and is labeled
-accordingly. That assembly retains its original core 10ccb43a receipt. Current
-source and the retained core receipt are 55c6ac1e; cargo build --locked completed
-with the same native binary bytes. Packages were built at plugin source f03bf973.
-Later test-fixture, repository metadata and SDK-verifier changes are selected for
-source development; they do not invalidate the unchanged package artifacts.
+The source replacement verifies remote archive heads/trees, exact archived identities
+of removed files, retained governance/license files, local document links/anchors
+and rendered changed content. The former runnable UI is deliberately archived;
+there is no new application to build or behavior suite to run. Old composition
+receipts keep their original meaning and remain in ignored local evidence.
 
-Remote preparation exposed Finder .DS_Store files in local SDK directories. Core's
-exporter and verifier now exclude ordinary Finder metadata files while still
-rejecting symlinks, unlisted code and changed dependencies. The focused check
-node --test scripts/tests/sdk-snapshot.test.mjs passed. Both consumer snapshots
-were refreshed from committed core source; source closure checks and
-node dev.mjs verify passed. No runtime or UI code changed during this preparation;
-the selected behavior evidence above remains applicable.
+Source synchronization is authorized. The updated application review branch must
+pass the organization's required Code Owner review and approval of the latest push;
+organization main remains the old tree until that PR merges. Selected commit
+identities and the existing upstream merge are preserved. A review-branch push is
+not a main replacement, binary publication, installation or official release.
 
-## Limits and next work
-
-- This establishes local source/build separation and the selected Files/application
-  flow, not a fresh sixteen-plugin acceptance, real-R computation/recovery matrix,
-  visual redesign acceptance or signed/public distribution.
-- The component source repositories are published; the application split awaits
-  merge into main. Automatic acquisition of missing artifacts,
-  installer/signing/notarization and an updated native Preview launcher remain
-  separately scoped work.
-- The future release boundary is agreed in [Release](RELEASE.md#future-official-release-boundary):
-  Rho keeps application assembly; Rho-releases will promote fixed accepted
-  compositions with separate build and signing/publication credentials. That
-  repository and pipeline remain unimplemented until the first signed-distribution
-  milestone; documenting the design does not publish another release.
-- Existing Agent/Rig, window-bound contracts and Studio-specific Agent entry points
-  remain in their plugin owners. The external-Agent/headless goals in Next Version
-  are not automatically implemented by moving source.
-- Plugin archives remain immutable. Refreshing shell assets does not update plugins
-  or add Host capabilities. Replacing an R-owning backend can lose native R memory.
-- No user Host, installed preview, catalog, R session or project data was restarted,
-  migrated or overwritten. Acceptance used disposable catalogs/projects only.
-
-Continue from node dev.mjs status and the relevant owner's README. Select the next
-bounded capability from Next Version independently of this completed source split;
-use its real Owner and public contract to define required evidence.
+CI remains deferred; Mac physical power-loss testing remains excluded. The
+[future signed-distribution boundary](RELEASE.md#future-official-release-boundary)
+is agreed and unimplemented; Rho-releases has not been created.

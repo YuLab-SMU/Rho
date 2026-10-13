@@ -1,22 +1,22 @@
 # Rho documentation
 
-Read [Status](STATUS.md) first for current implementation and verification. The
-application checkout coordinates two independent source repositories; it no
-longer contains their production sources or a Cargo workspace.
+The selected tree describes the new application. Its implementation and integration
+are pending; current component trials do not establish a running application.
 
-| Need | Read |
+| Document | Purpose |
 | --- | --- |
-| Current state and remaining limits | [Status](STATUS.md) |
-| Current ownership and invariants | [Architecture](ARCHITECTURE.md) |
-| Target scientific capabilities | [Next Version](NEXT-VERSION.md) |
-| Build or change a component | [Development](DEVELOPMENT.md) |
-| Run a local application | [Operations](OPERATIONS.md) |
-| Source publication, exact assembly and future signed releases | [Release](RELEASE.md) |
-| UI decisions and user problems | [Design](RHO-DESIGN.md), [Feedback](STUDIO-FEEDBACK.md) |
-| Core source and protocol | [Core repository](https://github.com/YuLab-SMU/Rho-core) |
-| Official plugin source and builds | [Plugins repository](https://github.com/YuLab-SMU/Rho-plugins) |
+| [Status](STATUS.md) | Current implementation, verified evidence, limits and next focus |
+| [Rebuild](REBUILD.md) | Selected user flows and evidence-led rebuilding decisions |
+| [Architecture](ARCHITECTURE.md) | Three source owners and application boundaries |
+| [Development](DEVELOPMENT.md) | Current owner workflow and scoped verification |
+| [UI principles](RHO-DESIGN.md) | Presentation and interaction review rules |
+| [Release](RELEASE.md) | Source publication and future signed-distribution design |
 
-Status is the single current summary. Keep it below 300 lines and distinguish
-source organization, independently built artifacts and actually executed flows.
-Git retains the former monorepo, retired runners and historical evidence claims;
-there is no generated whole-product source/check catalog in the new layout.
+The [former application baseline](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-rebuild)
+and [complete pre-clear snapshot](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-main-reset)
+are published references. Their UI, SDK, lock, build commands and subsystem maps
+are historical, not requirements for the rebuilt application.
+
+Current component documentation belongs to
+[Rho-core](https://github.com/YuLab-SMU/Rho-core) and
+[Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins).

@@ -1,30 +1,16 @@
-# Security Policy
+# Security policy
 
-## Reporting a vulnerability
+Use [GitHub private vulnerability reporting](https://github.com/YuLab-SMU/Rho/security/advisories/new)
+for suspected vulnerabilities in Rho source, its selected composition or release
+chain. Avoid public reports containing unpatched exploit details, credentials,
+private projects or unredacted diagnostics.
 
-Please use
-[GitHub private vulnerability reporting](https://github.com/YuLab-SMU/Rho/security/advisories/new)
-for a suspected vulnerability in Rho, its release workflow, or its distributed
-artifacts.
+Provide the affected source/version and platform, impact, reproduction steps and
+minimal evidence. Maintainers coordinate validation and disclosure through the
+private advisory; no fixed response deadline is promised.
 
-Do not open a public Issue for an unpatched vulnerability. Do not include API
-keys, signing tokens, certificate material, personal information, private
-project content, or unredacted diagnostics in public Issues, pull requests, or
-discussion threads.
-
-Include the affected Rho version and platform, a concise impact description,
-reproduction steps, and the least sensitive evidence needed to investigate.
-Maintainers will use the private advisory to coordinate validation, mitigation,
-credit, and disclosure. No fixed response or remediation deadline is promised,
-but reports will be handled in good faith.
-
-For signing and release-chain behavior, see the
-[Code signing policy](CODE_SIGNING_POLICY.md). For local data and network
-behavior, see the [Privacy policy](PRIVACY.md).
-
-## Supported versions
-
-Rho is under active development. Security fixes are made against the current
-development line unless a release notice explicitly identifies another
-supported version. Historical development artifacts may be retained as
-immutable evidence and should not be assumed to receive fixes.
+The current selected application is a design skeleton. It does not supply a new
+executable application or signed distribution. Historical artifacts and source
+remain available as evidence and are not automatically supported by this rebuild.
+Component issues belong to their source owner. See [Status](docs/STATUS.md),
+[artifact trust](CODE_SIGNING_POLICY.md) and [Privacy](PRIVACY.md).

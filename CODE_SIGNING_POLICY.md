@@ -1,21 +1,20 @@
-# Rho build and artifact trust
+# Rho artifact trust
 
-The current production artifact is the `rho` CLI/local-workbench binary.
-The manual build workflow compiles and uploads that binary. It does not perform
-code signing, Apple notarization, installer construction, updater signing or
-automatic publication. See [Build and release](docs/RELEASE.md).
+The selected new application has no build entry, installer or signed artifact.
+Removing the former implementation does not revoke or replace historical artifacts;
+their original source and trust evidence remain in Git and the published archives.
+A branch, build receipt or publisher acknowledgement does not prove signing.
 
-For an explicitly requested distribution, verify the exact source commit,
-artifact bytes, hashes and any signatures actually present. Build, signing,
-installation and publication remain separate actions. A workflow definition or
-an earlier successful build is not evidence that the current artifact is signed.
+For a selected distribution, verify the exact source composition, artifact bytes,
+digests and signatures actually present. Source publication, building, signing,
+installation and official publication are separate outcomes. Preserve origin and
+license notices for the payload actually distributed.
 
-Third-party runtimes and libraries retain their own licenses and publisher
-identities. Preserve the notices required for any payload actually distributed;
-see [third-party notices](LICENSES.md). Project acknowledgements include [SignPath.io](https://about.signpath.io) and
-[SignPath Foundation](https://signpath.org); these acknowledgements do not establish
-that a particular artifact is signed.
+The agreed future signing boundary is in
+[Release](docs/RELEASE.md#future-official-release-boundary): build and test without
+signing/publication credentials, verify the immutable accepted candidate, and
+sign/package in a separate authorized stage without rebuilding it. Record both
+unsigned and signed artifact identities. That pipeline remains unimplemented.
 
-Report suspected artifact or signing-material compromise through the
-[security reporting process](SECURITY.md). No signing secret belongs in project
-files, logs or public reports.
+Report suspected artifact compromise through [Security](SECURITY.md).
+No signing secret belongs in source, public logs or diagnostics.

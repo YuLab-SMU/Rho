@@ -1,123 +1,55 @@
-# Developing Rho
+# Developing the rebuilt application
 
-Use this repository as the daily entry while changing each component at its real
-source owner. Read Status before resuming and inspect all three Git states with
-`node dev.mjs status`. The defaults are this checkout, ../Rho-core and
-../Rho-plugins; a gitignored .rho-dev.json can override core and plugins paths.
+Start with [Status](STATUS.md), [Rebuild](REBUILD.md) and
+[Architecture](ARCHITECTURE.md). The selected `main` tree contains application
+design and policies. There is no runnable new UI, launcher, SDK snapshot,
+composition lock or application build command yet.
 
-Clone the three repositories as siblings. This layout keeps one development entry
-without Git submodules. While the application split is awaiting merge, use
-`git clone --branch codex/split-repositories https://github.com/YuLab-SMU/Rho.git`
-for the first command below; after merge, the default main branch contains the split.
+## Source owners
 
-```sh
-git clone https://github.com/YuLab-SMU/Rho.git
-git clone https://github.com/YuLab-SMU/Rho-core.git
-git clone https://github.com/YuLab-SMU/Rho-plugins.git
-cd Rho
-node --input-type=module <<'JS'
-import fs from 'node:fs';
-import {execFileSync} from 'node:child_process';
-const lock = JSON.parse(fs.readFileSync('rho.lock.json', 'utf8'));
-for (const name of ['core', 'plugins']) {
-  execFileSync('git', ['-C', `../Rho-${name}`, 'checkout', '--detach', lock[name].revision],
-    {stdio: 'inherit'});
-}
-JS
-node dev.mjs status
-```
+The three adjacent checkouts can remain `Rho`, `Rho-core` and `Rho-plugins`.
+Each repository owns its source, dependencies, commits and checks. This repository
+is the later application/composition entry; no root Cargo workspace is needed.
+Read an owner's AGENTS.md before editing there.
 
-The explicit checkouts reproduce this application's selected component sources.
-For new component work, create a branch in its repository and update the application
-lock after committing and verifying the change. Git clones contain source and
-dependency snapshots; build receipts and native plugin packages are local outputs.
+For current executable capabilities use the owners' public instructions:
+[Core CLI](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/HOST-CLI.md),
+[R recipe](https://github.com/YuLab-SMU/Rho-plugins/blob/main/examples/real-r-analysis/README.md)
+and [evaluation plugin](https://github.com/YuLab-SMU/Rho-plugins/blob/main/plugins/agent-eval/README.md).
+These consumers are independently verified. They do not constitute an application
+build or require recreating a former SDK or plugin protocol.
 
-## Commands and source ownership
+## Select and verify one flow
 
-| Work | Command from this repository |
-| --- | --- |
-| Inspect checkouts and retained artifacts | `node dev.mjs status` |
-| Build application assets | `node dev.mjs build app` |
-| Build and retain core executable | `node dev.mjs build core` |
-| Build one plugin package | `node dev.mjs build plugin files` |
-| Verify retained component bytes | `node dev.mjs verify` |
-| Start an explicit development application | `node dev.mjs run /absolute/project` |
-| Assemble selected artifacts without rebuilding | `node dev.mjs assemble /new/composition annotations files r` |
+1. Describe a concrete user action, actual gap, responsible owner and observable
+   completion conditions. Try the existing public capability and reuse valid evidence.
+2. Implement the smallest selected owner change. Existing tools default to reuse;
+   do not invent shared state or adapt all old consumers to close one task.
+3. Run checks for the behavior changed. Report failures, incomplete scope and science
+   limits. Core/plugin owner checks and actual application composition are separate.
+4. Inspect the diff, commit in its owner and check all touched repository states.
+   Preserve unrelated files and ignored runtime/evidence material.
 
-Install application build dependencies with npm ci --ignore-scripts --prefix ui.
-Install plugin build dependencies separately with npm ci --ignore-scripts in
-Rho-plugins. Core needs its pinned Rust toolchain; no application Node modules or
-scientific source is required. Build tools do not install R/Ark or activate plugins.
+Documentation changes need local link/anchor checks, a coherent rendered batch and
+inspection of all affected content. No native build is required for this source
+replacement: the old runnable application is intentionally archived and the new
+one is not implemented. Do not restore code merely to run retired layout tests.
+Actual future UI changes need build/check commands introduced with that implementation,
+representative-width behavior checks and the [interaction review](RHO-DESIGN.md).
+Never run Cargo builds/tests concurrently. Verification uses disposable projects
+and owned Hosts, preserving user sessions and original task identities.
 
-Core and plugins have separate Cargo workspaces and locks. Build only the affected
-owner and run Cargo commands serially. Type generation belongs to core:
-node scripts/generate.mjs in Rho-core. Ordinary application edits use the committed
-public SDK and never invoke Cargo. Imported plugin artifacts remain immutable.
+## Archives and later integration
 
-## Explicit versions and local development
+The [old baseline](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-rebuild)
+and [pre-clear tree](https://github.com/YuLab-SMU/Rho/tree/codex/legacy-app-before-main-reset)
+retain all controlled assets. Ignored local caches, outputs and user data are not
+published or removed. Consult archives only for concrete requirements or failures.
+Their commands and historical acceptance are tied to those versions.
 
-rho.lock.json records development checkout commits, dependency snapshot hashes and
-each selected plugin artifact separately. Plugin artifacts may come from different
-commits of the official-plugin repository; an unrelated plugin/test change does not
-force their rebuild. Build a changed plugin, then explicitly run lock to select it.
-core-sdk.json records the public SDK source revision, inventory, hashes and license.
-Consumer copies in sdk/ (and plugins' public crates/) are generated dependencies,
-not source to edit. After a core change:
-
-1. Verify and commit the core change.
-2. Run `node dev.mjs sdk sync app` and/or `node dev.mjs sdk sync plugins` explicitly.
-3. Verify and commit affected plugin changes, then build affected component artifacts.
-4. Run `node dev.mjs lock` to select those artifacts, then run the selected integration
-   flow before committing the application combination.
-
-Core exports must be clean. Component builds may capture local changes, marked in
-retained receipts; run/verify require --local to select those overrides. Exact
-assembly refuses dirty or off-lock core/plugin receipts. It records the actual
-application source identity, including whether that checkout is dirty. It does not
-claim atomic commits across repositories or rollback of scientific effects.
-
-## Repository separation acceptance
-
-Choose checks from concrete new responsibilities. Old whole-product counts, one
-root workspace, private file layout and an exact historical package inventory are
-not requirements. Retain useful tests, rewrite necessary behavior checks, and
-retire implementation-shape assertions without compatibility scaffolding.
-
-| Boundary | Meaningful evidence |
-| --- | --- |
-| Core | Builds without app/plugin source; empty startup and public transports work |
-| Plugin | Builds with declared public dependencies; executes through a retained core |
-| Application | Builds without Cargo; selects exact artifacts and serves its own assets |
-| Composition | A real file changes once; duplicate/stale requests and restart preserve original identity/results |
-
-The selected initial flow is Files (with its declared Annotations provider) through the core's public session protocol,
-plus external application assets through HTTP. Run node scripts/test-composition.mjs
-with already built artifacts. It uses disposable files/catalogs, never builds, and
-checks empty core, path containment, a real patch, retry, stale-write refusal,
-restart readback, external HTML/JS, asset refresh, asset containment and auth.
-This does not establish real-R analysis, all-plugin compatibility or product-wide
-acceptance. Those need separately selected relevant flows.
-
-## Focused checks
-
-For app changes: npm run build --prefix ui, npm run check --prefix ui, then relevant
-npm run test --prefix ui tests. Browser wiring uses npm run test:browser --prefix ui
-with the retained current core. No type-generation/Cargo prerequisite applies.
-For Rust changes use cargo test -p CRATE FILTER --locked in the owner repository.
-Core's node scripts/check-boundaries.mjs and plugins' node scripts/check.mjs inspect
-actual source closure and the public dependency; these are not full-product suites.
-
-Tests of real effects, caller/project isolation, native preconditions, idempotency
-and recovery remain useful where affected. A fixture is not a real-R result, and
-functional correctness is not visual approval. Removed tests are retired, not
-passed. A selected requirement that fails or times out remains incomplete; preserve
-its evidence. Do not add optional coverage while closing a settled milestone.
-
-## Completion
-
-Inspect the diff; commit coherent work in its owning repositories. Update Status
-when behavior, evidence, focus or remaining work changes. Use Git for history.
-Documentation edits need link and rendered-content review, not native builds.
-Do not restart user Hosts, clear caches, install or publish as a side effect of
-verification. Temporary acceptance data belongs in target/ or disposable folders;
-acceptance runner source belongs in scripts/.
+When selected, application integration must pin actual source and artifact identities,
+use the declared public boundary, expose local overrides and verify the real chosen
+combination. A lock, copied SDK or wrapper around an old launcher cannot establish
+new integration. Do not create these mechanisms before a demonstrated need.
+Publish authorized source through [Release](RELEASE.md); official distribution
+remains a separate future milestone.
