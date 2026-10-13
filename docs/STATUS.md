@@ -1,14 +1,15 @@
 # Rho: current state and focus
 
 Updated: 2026-10-13. Local and organization `main` contain the new application's
-design skeleton after the verified merge of PR #111. The executable application
-and integration have not been rebuilt. Routine Rho changes now proceed directly
-on `main`.
+design after the verified merge of PR #111. The user has now selected the broader
+functional-component model and a joint workbench/Agent/multi-window direction.
+The executable application and integration have not been rebuilt. This update
+changes documents only. Routine Rho changes proceed directly on `main`.
 
 ## Current source boundary
 
-- Rho owns application selection, assembly and presentation. The selected tree has
-  16 controlled files: new architecture/rebuild/development/UI/release documents,
+- Rho is the application container and owns selection, assembly, window/layout
+  coordination and presentation. The selected tree contains design documents,
   repository instructions, license, contribution/privacy/security policies and
   existing Code Owner governance. There is no UI, SDK snapshot, lock, launcher,
   build entry or old scientific example in this tree.
@@ -22,8 +23,12 @@ on `main`.
   It has no new SDK, HTTP/MCP edge or former plugin lifecycle.
 - [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/STATUS.md)
   main contains the selected evaluation plugin, real R recipe and current policies.
+  Its design now covers any actual functional component, with optional CLI,
+  Skills, MCP and UI entries; scientific/evaluation consumers are its implemented
+  subset, not its entire scope.
   Its former controlled implementation is on a published archive branch.
-  Neither component repository is modified by this application source replacement.
+  The application source replacement did not modify either component. The current
+  coordinated document selection also updates Rho-plugins; Core remains unchanged.
 
 ## Existing component evidence and its limits
 
@@ -50,7 +55,7 @@ source and a copied public binary worked without private Core source or the old 
 These are prior component checks, reused here without rerunning the model or R analysis.
 They do not establish a new application composition.
 
-## Selected next work
+## Selected design and next work
 
 Priorities remain R batch-analysis recipes, artifact provenance/integrity/retrieval,
 and reusable bounded evaluation in the plugin owner. Rscript, R packages, RDS,
@@ -59,14 +64,32 @@ gap requires an R-session platform, global artifact registry or Files rebuild.
 Candidate improvement, development/validation/blind-test management and hillclimbing
 remain unimplemented; the Core retains its own deterministic contract regressions.
 
-The first application candidate is opening an original task, distinguishing
-execution from scientific checking, inspecting/retrieving real tables and plots,
-and continuing observation after disconnect. This is design; no researcher-facing
-UI or integration acceptance has been delivered. New SDK/transport, installation,
-discovery, Editor/Studio/Manager and replacement chat need separately demonstrated
-consumer requirements. See [Rebuild](REBUILD.md) and [Architecture](ARCHITECTURE.md).
+Rho-core is the completed execution foundation for this selection; Rho is the
+application container and plugins own actual functionality. Shared action/resource/
+selection/view semantics connect optional entries without a second execution path
+or a global scientific revision. Editing buffers, native facts, Agent sessions and
+window layout retain distinct owners and lifetimes.
+
+The selected main direction is Electron, React/TypeScript, Vite and Dockview;
+plugin UI starts with CodeMirror 6, AG Grid Community, ECharts and a json-render
+catalog. Independent HTML can use MCP Apps when needed; other interoperability
+and packaging boundaries remain optional. No dependencies, schema, loader, bridge
+or running composition have been implemented or pinned by this document change.
+
+The first application flow jointly exercises natural-language action, a typed
+parameter interface, script/real table/plot context, stable selection, movable views/
+multiple windows and continued observation of the original task without replay.
+It must preserve unsaved content and distinguish execution from domain checking.
+There is no researcher-facing UI, native-input, performance or integration acceptance
+yet. See [Technology stack and joint acceptance](TECHSTACK.md),
+[Rebuild](REBUILD.md) and [Architecture](ARCHITECTURE.md). New transport, installation,
+discovery or compatibility machinery still needs its selected consumer requirement.
 
 ## Verification and publication
+
+The 2026-10-13 architecture selection passed local links/anchors and rendered-page
+inspection of all changed documents in the two selected owners. This verifies
+documents only; no application build or behavior checks were run.
 
 The source replacement verifies remote archive heads/trees, exact archived identities
 of removed files, retained governance/license files, local document links/anchors

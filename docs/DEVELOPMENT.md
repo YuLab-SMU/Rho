@@ -1,7 +1,8 @@
 # Developing the rebuilt application
 
 Start with [Status](STATUS.md), [Rebuild](REBUILD.md) and
-[Architecture](ARCHITECTURE.md). The selected `main` tree contains application
+[Architecture](ARCHITECTURE.md) and [Technology stack](TECHSTACK.md).
+The selected `main` tree contains application
 design and policies. There is no runnable new UI, launcher, SDK snapshot,
 composition lock or application build command yet.
 
@@ -28,6 +29,9 @@ build or require recreating a former SDK or plugin protocol.
 
 1. Describe a concrete user action, actual gap, responsible owner and observable
    completion conditions. Try the existing public capability and reuse valid evidence.
+   The first selected application slice jointly exercises Agent interaction,
+   code/table/plot context and movable views/multiple windows; it is documented
+   in [joint acceptance](TECHSTACK.md#joint-acceptance-flow), not implemented yet.
 2. Implement the smallest selected owner change. Existing tools default to reuse;
    do not invent shared state or adapt all old consumers to close one task.
 3. Run checks for the behavior changed. Report failures, incomplete scope and science

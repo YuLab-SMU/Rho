@@ -7,8 +7,9 @@ The selected tree is the new application's design skeleton, with no executable
 application yet. Former implementation assets are on the published archive branches.
 
 Keep implementation in its source owner: generic execution in Rho-core,
-scientific recipes and reusable evaluation in Rho-plugins, application selection
-and presentation here. Preserve unrelated work. Checks should prove the selected
+actual functional components, their native semantics and reusable evaluation in
+Rho-plugins, application selection, assembly and presentation here. Preserve
+unrelated work. Checks should prove the selected
 behavior; do not restore old structure merely to satisfy historical tests.
 Interaction changes follow [UI principles](docs/RHO-DESIGN.md).
 

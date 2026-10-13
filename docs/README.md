@@ -7,7 +7,8 @@ are pending; current component trials do not establish a running application.
 | --- | --- |
 | [Status](STATUS.md) | Current implementation, verified evidence, limits and next focus |
 | [Rebuild](REBUILD.md) | Selected user flows and evidence-led rebuilding decisions |
-| [Architecture](ARCHITECTURE.md) | Three source owners and application boundaries |
+| [Architecture](ARCHITECTURE.md) | Functional components, shared interaction and three source boundaries |
+| [Technology stack](TECHSTACK.md) | Selected container/component direction, tradeoffs and joint acceptance flow |
 | [Development](DEVELOPMENT.md) | Current owner workflow and scoped verification |
 | [UI principles](RHO-DESIGN.md) | Presentation and interaction review rules |
 | [Release](RELEASE.md) | Source publication and future signed-distribution design |

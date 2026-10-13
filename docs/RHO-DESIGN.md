@@ -35,3 +35,29 @@ For an implemented slice, inspect real content at normal, wide and constrained
 sizes. Check focus, keyboard and the applicable clipboard, persistence or native
 input-method behavior. Reuse valid unchanged evidence. New observations are
 required to close a usability issue; a synthetic event is not a native IME check.
+
+## Joint component experience
+
+The selected experience combines natural-language interaction, code/data/graphics
+and freely arranged views/multiple windows. Validate them together through
+[joint acceptance](TECHSTACK.md#joint-acceptance-flow). Menus, editing, files,
+tables, graphics and Agent interaction can be actual plugin functionality; Rho
+coordinates their common presentation and interaction.
+
+An Agent may arrange registered components and bind real resource/action/selection
+references. Keep scientific values and execution facts with their actual owner.
+Validate scope and freshness mechanically; component-schema validity is not an
+authorization or scientific check. Background updates must not steal focus or
+rebuild the user's active editing view.
+
+Use stable domain IDs for table/plot selection and make the current resource and
+window context unambiguous. Opening another view of a document does not create
+another authoritative buffer. Preserve unsaved content and undo while moving views;
+detect external writes before saving. Layout restoration must not execute actions
+or pretend that a missing buffer/plugin has been restored.
+
+Verify native IME, keyboard-only access, focus, clipboard, drag/drop and applicable
+assistive text/table alternatives with actual data at representative widths.
+Closing a popout or hidden panel releases its observation/drawing resources only;
+task ownership and Host shutdown remain explicit. Missing components or failed
+popout provide recoverable presentation without losing drafts or replaying work.

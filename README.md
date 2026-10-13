@@ -1,14 +1,22 @@
 # Rho
 
-Rho owns the scientific application's component selection, assembly and presentation.
+Rho is the application container for a component-based intelligent workbench. It
+owns component selection, assembly and presentation.
 The selected `main` tree contains the new application design and repository policies.
 The rebuilt application has no UI, launcher or build entry yet.
 
 | Repository | Current responsibility |
 | --- | --- |
 | [Rho-core](https://github.com/YuLab-SMU/Rho-core) | Generic managed execution, original request identity, retained facts, resident Host and CLI |
-| [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins) | Scientific recipes and artifact checks; the reusable Agent evaluation plugin |
-| Rho (this repository) | Application design; later selection, assembly and presentation of verified components |
+| [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins) | Actual functional components, with optional CLI, Skills, MCP and UI entries; currently verified R and evaluation consumers |
+| Rho (this repository) | Application container, composition, shared interaction and presentation |
+
+The selected design combines the scientific workbench, freely arranged component
+views/multiple windows and Agent-driven dynamic interfaces in one user flow.
+The implementation direction is Electron, React/TypeScript, Vite and Dockview,
+with functional UI owned by plugins. This is a documented selection, not an
+accepted running composition. Read [Architecture](docs/ARCHITECTURE.md) and
+[Technology stack](docs/TECHSTACK.md).
 
 The new Core CLI has already supported a real R analysis and reusable evaluations.
 Those results belong to their component owners; they do not establish a working

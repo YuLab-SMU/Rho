@@ -14,7 +14,10 @@ This repository owns application selection, assembly and presentation.
 AGENTS.md before editing them. Core currently exposes managed execution and a
 resident CLI; it has no new SDK or HTTP/MCP edge. Use demonstrated public
 capabilities instead of restoring the former protocol or copying private source.
-Plugins own scientific semantics, native conditions, artifacts and domain checks.
+Plugins own actual functional components, with optional CLI, Skills, MCP and UI
+entries. They retain native conditions, resources, artifacts and domain checks.
+Follow the selected [Architecture](docs/ARCHITECTURE.md) and
+[technology direction](docs/TECHSTACK.md); these are design, not implemented APIs.
 Reusable Agent evaluations belong in Rho-plugins; Core retains its own contract
 regressions. Rho presents those owners' facts and does not create another
 scientific execution path or a model loop in Core.
