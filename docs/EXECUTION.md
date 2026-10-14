@@ -46,20 +46,24 @@ an unknown outcome, instead of starting fresh work.
 
 ## Host lifetime
 
-The application owns the resident Host. No view, window, Agent session or renderer
-owns it, and none of their lifetimes is a reason to stop or restart it.
+The main process owns the lifecycle of Hosts started by the application. An
+existing Host retains its original owner. No view, window, Agent session or
+renderer owns a Host, and none of their lifetimes is a reason to stop or restart it.
 
-- At startup the main process probes `state_dir/host.sock`. A Host that answers is
-  adopted. A second Host on the same `state_dir` would fail at the storage lock, so
-  Rho does not start one.
+- At startup the main process uses the public CLI's `capability` command to
+  observe a Host at `state_dir/host.sock` and check its project. An existing Host
+  is reused without transferring lifecycle ownership. A second Host on the same
+  `state_dir` would fail at the storage lock, so Rho does not start one.
 - Otherwise Rho starts `rho-core serve --project ... --state-dir ...`, reads the
   single `ready` JSON line and holds the child process.
 - The state directory is `.rho/` inside the project, already listed in `.gitignore`.
   One Host serves one project. An existing Host on a project is adopted, never
   replaced.
-- On application exit the main process sends SIGTERM and reads the `shutdown`
-  report. Host shutdown, task cancellation and confirmed native stop stay separate
-  operations with separate effects in the interface.
+- On application exit the main process sends SIGTERM only to a Host it started
+  and reads that child's `shutdown` report. It releases observation of an existing
+  Host without stopping it; stopping that Host requires existing authorization
+  covering its shutdown. Host shutdown, task cancellation and confirmed native
+  stop stay separate operations with separate effects in the interface.
 - Renderer failure, view close and popout do not stop the Host, cancel a task or
   restart an R session. They release observation and rendering only.
 

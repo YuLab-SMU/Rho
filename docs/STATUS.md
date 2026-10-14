@@ -1,6 +1,6 @@
 # Rho status
 
-Updated: 2026-10-13.
+Updated: 2026-10-14.
 
 ## Application
 
@@ -44,9 +44,10 @@ functional owner.
 
 ## Verification
 
-Local links and anchors across the three repositories and inspection of every
-changed page have been checked for this revision. A rendered-page inspection of
-the current batch has not been performed. Application behavior, native input,
+Local links and anchors across the three repositories and rendered inspection of
+every changed page have been checked for this revision. The execution bridge also
+distinguishes application-started Hosts from existing Hosts whose lifecycle stays
+with their original owner. Application behavior, native input,
 component composition, signing and installation require evidence from their actual
 implementations. Core and component checks retain the scope recorded by those
 owners; they are not rerun solely to rewrite application documents.
