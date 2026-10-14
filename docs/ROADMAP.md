@@ -9,7 +9,11 @@ one integrated user flow.
 
 Use a disposable project and an owned resident Host. The available real R recipe
 provides a concrete scientific component and retained outputs; execute new work
-only when the selected behavior needs it.
+only when the selected behavior needs it. The flow is delivered as two slices, so
+one observable vertical result exists before cross-window and Agent composition
+work is added.
+
+### Slice A: linked workbench over real execution
 
 1. An authorized natural-language request selects a real component action and
    opens a typed parameter interface. Agent, UI and CLI entries share the
@@ -18,24 +22,33 @@ only when the selected behavior needs it.
 2. Script, actual result table and interactive plot share resource provenance and
    stable selections. Sorting, filtering, missing values and numeric presentation
    preserve domain identity and meaning.
-3. Dock, switch and move views to another window while native Unicode editing,
-   undo, clipboard and focus work. Unsaved documents keep one buffer owner and
-   external writes produce a clear save conflict.
-4. Close or crash an observer, then find the original task from another view.
-   Verify one native dispatch, partial/unknown result preservation and observation
-   without replay. Host shutdown and native-session recovery are separate claims.
-5. Display execution completion, artifact integrity and domain checking with their
+3. Display execution completion, artifact integrity and domain checking with their
    recorded scope/freshness. A model explanation remains distinct. Existing runs
    retain component version, provenance and available outputs after a View becomes
    unavailable or a component is upgraded.
-6. The Agent composes a further comparison/explanation view from registered
-   components, bound to the same resources and selections. Malformed, stale or
-   out-of-scope invocations fail mechanically within the existing authorization.
-7. Keyboard commands and appropriate assistive alternatives work. Failed popout,
-   missing components and layout restore preserve drafts/results and provide
+4. Keyboard commands and appropriate assistive alternatives work. Failed component
+   loading and unavailable resources preserve drafts/results and provide
    recoverable view state without executing actions again.
 
-This flow jointly verifies the workbench, composition and Agent experience.
+Slice A runs in one window: an action produces real artifacts, the script, table
+and plot views open on them, and a selection in one view is visible in the others.
+
+### Slice B: continuity and Agent composition
+
+1. Dock, switch and move views to another window while native Unicode editing,
+   undo, clipboard and focus work. Unsaved documents keep one buffer owner and
+   external writes produce a clear save conflict.
+2. Close or crash an observer, then find the original task from another view.
+   Verify one native dispatch, partial/unknown result preservation and observation
+   without replay. Host shutdown and native-session recovery are separate claims.
+3. The Agent composes a further comparison/explanation view from registered
+   components, bound to the same resources and selections. Malformed, stale or
+   out-of-scope invocations fail mechanically within the existing authorization.
+
+Slice B adds cross-window movement, observer loss and Agent-driven composition on
+top of the Slice A result.
+
+The two slices together verify the workbench, composition and Agent experience.
 Component-only checks establish their recorded scope; integration requires the
 actual selected source/artifact combination and representative platform behavior.
 

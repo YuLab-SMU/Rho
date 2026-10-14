@@ -110,7 +110,10 @@ every component. Sources: [AG-UI](https://docs.ag-ui.com/introduction),
 
 Use the documented [public Core CLI](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/HOST-CLI.md)
 at the selected version. Its resident Host has a lifetime independent of observing
-windows. Reconnect retains the original request identity; reads are bounded and
+windows. Rho owns the application side of this boundary, namely request identity,
+exit-code handling and Host lifetime, specified in the
+[execution bridge](EXECUTION.md). Reconnect retains the original request identity;
+reads are bounded and
 do not start or recover a runtime. Native tools retain the Host's OS authority;
 UI isolation does not establish native containment.
 

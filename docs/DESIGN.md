@@ -47,6 +47,29 @@ popout or unavailable component preserves drafts and result references and offer
 a recoverable presentation. A restored layout does not claim unavailable content
 saved, restored or scientifically valid.
 
+## Interaction constraints
+
+These follow from observed use of the earlier application and constrain the
+selected flow.
+
+- Review follows the action, it does not gate it. An action the user takes writes
+  through; the resulting change is reviewable and can be reverted afterwards.
+  Approval before the write and a review after it are not both applied to the same
+  edit.
+- A settled review collapses. Once a change is accepted or reverted, its diff is
+  dismissed, and an edit control that can no longer take effect (such as undo after
+  a settled accept) is hidden rather than shown inert.
+- Work is not single-threaded. A task in progress does not block starting another
+  session or another action; sessions, views and execution have independent
+  lifetimes.
+- Direct manipulation stays at the point of interest. A contextual operation acts
+  on the element under the cursor or the current selection, instead of requiring a
+  distant control and a modal round trip.
+- A failure offers its continuation. A failing script presents a direct entry to
+  the Agent repair path carrying the actual error and the resource reference, in
+  addition to the problem/diagnostics view. The Agent applies the fix through the
+  same buffer and write conditions as a user edit.
+
 ## Design and acceptance
 
 Substantial layout or component design uses Paper and user review for the selected

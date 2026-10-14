@@ -12,6 +12,7 @@ implementation and verification summary.
 | [Roadmap](ROADMAP.md) | First integrated flow, completion criteria and subsequent milestones |
 | [Development](DEVELOPMENT.md) | Owner workflow, checks and composition evidence |
 | [Status](STATUS.md) | Implemented capabilities, pending work and verification limits |
+| [Execution bridge](EXECUTION.md) | Application side of the Core boundary: request identity, exit codes and Host lifetime |
 | [Release](RELEASE.md) | Source publication and official distribution |
 
 Repository policies cover [contributions](../CONTRIBUTING.md),

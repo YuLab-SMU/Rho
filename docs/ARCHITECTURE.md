@@ -83,10 +83,22 @@ are separate facts. Components interpret their own outputs and expose the scope
 and freshness of checks. Core output streams serve bounded observation; scientific
 artifacts use the component's declared files, manifests and checkers.
 
+The application side of the Core boundary, namely request identity, the exit-code
+state machine, Host lifetime and bounded observation, is owned by the
+[execution bridge](EXECUTION.md).
+
 ## Interface composition
 
+A functional component owns its UI entry source: the view implementation, its
+typed properties and its action bindings live with the component in the component
+owner's repository. Rho builds those views into the application at explicit
+component versions and supplies theme, commands, layout and interaction routing.
+Rho does not hold a second implementation of a component's behavior. The selected
+editor, table and plot UI components are not implemented yet; [Status](STATUS.md)
+records that boundary.
+
 Trusted first-party React views are built with the application at explicit
-component versions. Rho supplies theme, commands, layout and interaction routing.
+component versions.
 An Agent describes a composition using a typed catalog of registered components,
 properties and scoped action/resource/selection references. The container validates
 that description, then routes actions to their actual owner.
@@ -97,6 +109,24 @@ Independent HTML views can use isolated MCP Apps with a controlled message/tool
 bridge, validated origin/CSP and explicit teardown. UI isolation does not sandbox
 the OS authority of native tools; Core caller namespaces are not authenticated
 principals. See [Security](../SECURITY.md) and [Product design](DESIGN.md).
+
+## Resource limits
+
+Rho bounds the resources it actually owns and names the exceeded-limit behavior.
+Values are selected and recorded when the implementation that owns them exists;
+the application does not invent a global quota for the user's environment.
+
+| Protected resource | Configuration | Exceeded-limit behavior |
+| --- | --- | --- |
+| Retained process output rendered per view | Bounded log-view budget | Stop appending, keep the retained prefix visible and mark the stream truncated |
+| Table rows/pages requested per view | Page size | Fetch bounded pages on demand; keep the pages already obtained |
+| Plot points/series drawn per view | Drawing budget | Reduce drawn marks within the budget and mark the reduction |
+| Concurrent component actions | Action-concurrency limit | Queue or reject explicitly; never start work under a new identity |
+| Observation subscriptions per view | Subscription limit | Refuse the extra subscription and explain the limit |
+| Retained Agent-composed message bytes | Message budget | Reject an oversized description before rendering |
+
+Exhausting a view resource preserves obtained output and uncertainty. It does not
+stop unrelated execution, stop a user Host or replay a task.
 
 ## Application composition
 

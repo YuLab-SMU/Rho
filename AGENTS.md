@@ -1,7 +1,8 @@
 # Working on Rho
 
 Read [Status](docs/STATUS.md), [Architecture](docs/ARCHITECTURE.md),
-[Roadmap](docs/ROADMAP.md) and the [documentation index](docs/README.md) first.
+[Roadmap](docs/ROADMAP.md), the [execution bridge](docs/EXECUTION.md) and the
+[documentation index](docs/README.md) first.
 Rho currently contains application design and repository policies. Executable
 application implementation and integrated acceptance are pending.
 
@@ -14,9 +15,9 @@ and UI entries. Read each owner's AGENTS.md before editing there. Keep the three
 independent repositories and use documented public capabilities at selected
 versions. Component semantics and results stay with their source owner.
 
-Follow [Technology stack](docs/TECHSTACK.md). The first application flow jointly
-exercises Agent interaction, code/table/plot context and movable views across
-windows. Deliver bounded owner changes toward the [acceptance](docs/ROADMAP.md#first-integrated-flow).
+Follow [Technology stack](docs/TECHSTACK.md). The first integrated flow exercises
+Agent interaction, code/table/plot context and movable views across windows.
+Deliver bounded owner changes toward the [acceptance](docs/ROADMAP.md#first-integrated-flow).
 Application composition records immutable source/artifact identities, explicit
 local overrides and acceptance of the chosen combination.
 

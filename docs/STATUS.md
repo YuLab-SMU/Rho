@@ -29,20 +29,24 @@ a running Rho composition.
 
 ## Next delivery
 
-Implement the [first integrated flow](ROADMAP.md#first-integrated-flow): a
-natural-language action opens typed parameters, real script/table/plot views share
-resources and selections, views move across windows with unsaved content intact,
-and another observer finds the original task without replay. The Agent then
-composes a further view from registered components and the same resources.
+Implement Slice A of the [first integrated flow](ROADMAP.md#first-integrated-flow):
+a natural-language action opens typed parameters, a real R run produces script,
+table and plot resources in one window, and a selection in one view is visible in
+the others. Cross-window movement, observer loss and Agent composition (Slice B)
+follow.
 
 Action, Resource, Selection and View are design concepts. Public schemas, component
 host adapters and application state services remain to be implemented for this
-flow. Native resource conditions and results retain their functional owner.
+flow. The application side of the Core boundary is specified in the
+[execution bridge](EXECUTION.md). Component host adapters and the UI components
+belong to their source owners. Native resource conditions and results retain their
+functional owner.
 
 ## Verification
 
-Current document links/anchors, rendered pages and consistency between the
-selected source owners have been checked. Application behavior, native input, component
-composition, signing and installation require evidence from their actual
+Local links and anchors across the three repositories and inspection of every
+changed page have been checked for this revision. A rendered-page inspection of
+the current batch has not been performed. Application behavior, native input,
+component composition, signing and installation require evidence from their actual
 implementations. Core and component checks retain the scope recorded by those
 owners; they are not rerun solely to rewrite application documents.
