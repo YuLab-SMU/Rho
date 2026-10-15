@@ -2,9 +2,10 @@
 
 Updated: 2026-10-15. Scope: BP-01–BP-06, `/api/v1` 1.0.
 
-The local service, functional headless package, calling client and inert state
-fixtures are implemented. This record separates actual source checks and
-integration runs from the selected immutable installation candidate. Browser
+BP-01–BP-06 passed for the selected macOS arm64 composition. The local service,
+functional headless package, calling client and inert state fixtures are delivered.
+This record separates actual source checks and integration runs from the accepted
+immutable installation candidate. Browser
 views, native input, accessibility, layout and overall product release remain
 pending under [WEBUI-FIRST](WEBUI-FIRST.md).
 
@@ -37,10 +38,11 @@ and saved native objects remain in each actual run's artifacts.
 | BP-05 | 16,139 real genes, typed NA-preserving pages, KLF15/ENSG00000163884 after sorting, marked plot sampling; real apeglm action/checker and two-input gene join; table/scatter bind the same comparison; unavailable UI intent retained |
 | BP-06 | Lost first reply, crash/restart, observation/binding/view release, partial plus unknown after owned Host loss, cancellation versus confirmed process release; real export/restore and bounded budgets; installed candidate recorded below |
 
-The actual failure-to-Agent-repair experiment supplies `failure.json` and the
-same unsaved script through explicit context. The Agent must conditionally edit
-that buffer and deliberately submit a new immutable operation. Its outcome is
-recorded with installation acceptance; a failed original request stays failed.
+The actual failure-to-Agent-repair experiment supplied `failure.json` and the
+same unsaved script through explicit context. Claude conditionally edited that
+buffer and deliberately submitted a new immutable operation. The new analysis
+completed and passed independent checks in source and installed trials; the
+original request remained failed. Each new operation had one native dispatch.
 
 ## Executed checks and retained evidence
 
@@ -63,6 +65,11 @@ recorded with installation acceptance; a failed original request stays failed.
   group release. Cleanup does not retroactively rewrite the unknown fact.
 - Source `npm run agent`: actual Claude fetched explicit context and edited the
   human's unsaved Chinese/emoji buffer; no scientific Host started in that trial.
+- Source `npm run repair`: actual Claude repaired the failed singleton histogram
+  in the acknowledged shared buffer and submitted deliberately new work. The
+  original failed operation, new caller intent, tool receipts, single native
+  dispatch and independent repaired-result checks agree. The Agent took 540.247 s
+  within the 600 s experiment budget; this is an observed run, not a latency promise.
 
 Local evidence is retained in ignored `work/` experiment directories. It includes
 reports, operation records, code snapshots, native artifacts, failure records and
@@ -70,18 +77,37 @@ private MCP transcripts. Credentials/transcripts are not source artifacts or a
 permanent remote archive. [Fixtures](../fixtures/README.md) project captured owner
 facts into read-only consumer states; they contain no replayable request or code.
 
-## Installation candidate
+## Accepted installation candidate
 
-The immutable clean-source candidate and its outside-checkout installation record
-will be filled after owner commits. Earlier dirty development tarballs are not
-accepted releases. `scripts/pack-local.mjs` records source commits/trees, build
-input hashes, Plugins tarball digest/integrity, selected Core hash/size and the
-production lock digest. The sidecar also records the final tarball hash, size and
-inventory; installed acceptance runs those exact bytes without source overrides.
+The selected candidate passed actual outside-checkout installation on 2026-10-15.
+The [composition and report projection](backend-acceptance/v0.1.0.json) records
+immutable source/tree and build-input identities, package/binary digests, check
+results and hashes of retained local reports. Credentials, machine paths and raw
+Agent transcripts are excluded. Earlier dirty development tarballs are not accepted.
 
-The installed checks exercise actual npm install and `bin/rho`, bundled Core
-selection and private credentials, then real science, recovery, external Agent and
-failure-repair scripts from that installed package. Scientific prerequisites are
+| Item | Accepted identity |
+| --- | --- |
+| Application source | [81e1d4582ff7cf75ab160c918ce332121dcb7721](https://github.com/YuLab-SMU/Rho/commit/81e1d4582ff7cf75ab160c918ce332121dcb7721), tree `19065a364d8a4c362157baea9a55adefb7b1ce87` |
+| Functional source | Plugins `13af3ab7ee47a47fc406df38146118207f2ed2c7`, published before the application reference |
+| Core binary | Selected unchanged source above; SHA-256 `eee223026f7e0b4dd1ee14a409c023919626c4175be5728048a02af739af4ce1`, 7,399,128 bytes |
+| npm artifact | `rho-workspace-local-0.1.0.tgz`, 6,074,792 bytes, 3,751 entries |
+| Artifact SHA-256 | `548f9af370cff75f872ec64877fe397e4c257d77071cd30d22dec814800a2f00` |
+| Distribution scope | Unsigned local npm tarball, macOS arm64; no registry publication |
+
+The packer accepted clean selected build inputs and recorded no local source
+override. Later documentation commits record this candidate's acceptance; they
+do not replace its fixed source or artifact identity. Unrelated local design
+document changes are outside the selected build inputs.
+
+Installed checks passed actual `npm install --omit=dev --ignore-scripts`, `bin/rho`
+startup without Rscript, private credentials and bundled Core selection with source
+overrides removed. The same installed package then passed real science, recovery,
+external Agent and failure-repair scripts. The installed repair Agent took
+227.782 s within its 600 s budget; independent checks verified the new result and
+the original request remained failed. Versioned protocol and read-only fixtures
+were present. The exact tarball was retained and not rebuilt after acceptance.
+
+Scientific prerequisites are
 external; this is a fresh package installation on the existing scientific host,
 not a clean OS image or a proof that npm installs R itself.
 
@@ -105,10 +131,10 @@ not a clean OS image or a proof that npm installs R itself.
    rejected a missing script digest. Rscript encodes spaces in `--file` as `~+~`;
    the recipe now decodes a nonexistent raw path and verifies the real file bytes.
 6. Longer Agent repair trials exhausted first 180-second and then 600-second
-   experiment budgets after context/document reads. Both remain failed. The next
-   trial supplies the actual error with a focused versioned code range and the
-   client's low-effort setting, still bounded to 600 seconds. This is not a product
-   latency guarantee.
+   experiment budgets after context/document reads. Both remain failed. Later
+   source and installed trials supplied the actual error with a focused versioned
+   code range and the client's low-effort setting; both passed within the same
+   600-second bound. This is not a product latency guarantee.
 7. A developer test invocation without the required Core selection failed early
    as unavailable; rerunning with the explicitly selected binary passed all 9 tests.
 8. Final review exposed a launcher requirement for Rscript at service startup.

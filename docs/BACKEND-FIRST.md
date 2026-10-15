@@ -7,7 +7,8 @@ Updated: 2026-10-15
 前端无需重新实现执行、文档、资源或状态判断。UI 开发与验收随后独立开展。
 
 本文安排后端工作包的顺序、边界和验收，不改变 [WEB 首版清单](WEBUI-FIRST.md)的产品任务与
-发布条件。六包的实现、实际证据与剩余边界见[后端验收](BACKEND-ACCEPTANCE.md)；
+发布条件。BP-01 至 BP-06 已在所选 macOS arm64 组合完成无界面与本地 npm 安装验收；
+六包的实现、实际证据与剩余边界见[后端验收](BACKEND-ACCEPTANCE.md)；
 运行与调用方式见[后端接口说明](HEADLESS.md)。真实 shrinkage、partial/unknown 已有执行记录，
 画板中的特定 run 编号和 8,204 行示意仍不作为实测数字。
 

@@ -1,0 +1,460 @@
+{
+  "schemaVersion": 1,
+  "kind": "rho.backend.acceptance",
+  "status": "passed",
+  "observedAt": "2026-10-15T14:26:44.095024+00:00",
+  "scope": {
+    "workPackages": [
+      "BP-01",
+      "BP-02",
+      "BP-03",
+      "BP-04",
+      "BP-05",
+      "BP-06"
+    ],
+    "apiVersion": "1.0",
+    "target": "darwin-arm64",
+    "os": "macOS 26.5.2 (25F84)",
+    "npm": "10.9.8",
+    "node": "v22.22.3",
+    "R": "4.5.2",
+    "scientificHost": "Existing R/package installation; fresh npm install outside source checkouts.",
+    "browserProductAccepted": false,
+    "registryPublication": "not-performed",
+    "signing": "not-performed"
+  },
+  "composition": {
+    "schemaVersion": 1,
+    "platform": "darwin-arm64",
+    "node": "v22.22.3",
+    "application": {
+      "repository": "https://github.com/YuLab-SMU/Rho",
+      "commit": "81e1d4582ff7cf75ab160c918ce332121dcb7721",
+      "tree": "19065a364d8a4c362157baea9a55adefb7b1ce87",
+      "buildInputsSha256": "c4526ff1d0040781a463bff456e6f5fcc3b77d0ffc7f9444b8c47eff5d86ffba",
+      "localOverride": null
+    },
+    "plugins": {
+      "repository": "https://github.com/YuLab-SMU/Rho-plugins",
+      "commit": "13af3ab7ee47a47fc406df38146118207f2ed2c7",
+      "tree": "5bda3d270369897809b197244c6040dfaaf40bd7",
+      "buildInputsSha256": "b84ce08a9ccad70050f7e9961c7b5399805f3e5f1c84651465f2d9cca4a39660",
+      "localOverride": null,
+      "artifactSha256": "26fe4f574e6edd10ce43ae33c2c8ba40a8cf0ce63f95ebabf3c7611ceb45d18d",
+      "integrity": "sha512-lXtoo2rAG1gvlqJYMgLxqMd0D3jbobd58/6oqU8CJjCRmXoXs3Lm3+gAoMJ6H3+1TeoETYJkHe+GbHuL32LboA=="
+    },
+    "core": {
+      "repository": "https://github.com/YuLab-SMU/Rho-core",
+      "commit": "d0159da6feb01d1be9e3b4b34b67953241fedfcb",
+      "tree": "d76820b39b24df9e7b222efc3626f39915022181",
+      "buildInputsSha256": "584b7ebee58f2f2051cecf03eddb6c1013d66cc2781b0c7f0fe75afecb23443b",
+      "localOverride": null,
+      "artifactSha256": "eee223026f7e0b4dd1ee14a409c023919626c4175be5728048a02af739af4ce1",
+      "bytes": 7399128,
+      "buildAssociation": "Explicitly selected local build; no reproducible-build or signing claim."
+    },
+    "productionLockSha256": "7e7a3c520ad8d95759292aa462a2a47aca949dfe153bf56bd48b3718c85ce991",
+    "distribution": "unsigned-local-npm-tarball",
+    "registryPublication": "not-performed",
+    "artifact": {
+      "filename": "rho-workspace-local-0.1.0.tgz",
+      "bytes": 6074792,
+      "sha256": "548f9af370cff75f872ec64877fe397e4c257d77071cd30d22dec814800a2f00",
+      "integrity": "sha512-q9PL/75tIKLHQtlPzffzTIkmgL20z1wJSFIKqp380rWq/I81bGixX+Kzj6qSfFjWb+Sd2PEPEVVT1LBScDzzwg==",
+      "files": 3751
+    }
+  },
+  "sourceChecks": {
+    "application": {
+      "commit": "81e1d4582ff7cf75ab160c918ce332121dcb7721",
+      "command": "RHO_CORE_BINARY=<selected-built-core> npm test",
+      "passed": 9,
+      "failed": 0
+    },
+    "plugins": {
+      "commit": "13af3ab7ee47a47fc406df38146118207f2ed2c7",
+      "command": "npm test",
+      "passed": 8,
+      "failed": 0
+    },
+    "core": {
+      "commit": "d0159da6feb01d1be9e3b4b34b67953241fedfcb",
+      "command": "cargo build --locked --bin rho-core",
+      "exitCode": 0,
+      "sourceChanged": false
+    }
+  },
+  "sourceIntegration": {
+    "science": {
+      "reportSha256": "d7ba36df4d009edcdcb3ef622f71221ddd3c223972743e51cc426461f4110cc6",
+      "status": "passed",
+      "checks": [
+        {
+          "name": "project open does not start a Host"
+        },
+        {
+          "name": "action-local dependencies",
+          "action": "airway.analyze",
+          "R": "R version 4.5.2 (2025-10-31)"
+        },
+        {
+          "name": "explicit scoped dependency preparation accepted",
+          "delivery": "answered"
+        },
+        {
+          "name": "real analysis accepted through public Core CLI"
+        },
+        {
+          "name": "identical HTTP delivery retains native identity"
+        },
+        {
+          "name": "changed input under original identity is rejected"
+        },
+        {
+          "name": "real native execution completed",
+          "nativeExit": {
+            "Finished": {
+              "exit": {
+                "Code": 0
+              },
+              "exit_observed_at": "2026-10-15T13:35:35.527Z",
+              "group_released": true,
+              "pid": 72452,
+              "spawned_at": "2026-10-15T13:35:09.354Z"
+            }
+          }
+        },
+        {
+          "name": "script, table, model and scientific PDF references",
+          "artifacts": 33
+        },
+        {
+          "name": "independent arithmetic and saved native models",
+          "arithmeticExit": 0,
+          "nativeExit": 0
+        },
+        {
+          "name": "16139 real rows and stable KLF15 selection"
+        },
+        {
+          "name": "actual interactive plot data and marked downsampling"
+        },
+        {
+          "name": "dependency preparation rechecked"
+        },
+        {
+          "name": "real apeglm action and two-input gene join",
+          "genes": 16139
+        },
+        {
+          "name": "registered table and scatter share the actual two-input comparison"
+        },
+        {
+          "name": "real scientific bytes, draft and linked composition restore without replay"
+        },
+        {
+          "name": "one native dispatch entry for duplicate submission"
+        }
+      ],
+      "baseline": {
+        "table": {
+          "id": "9d631d14a6e46add9baf334ac1b977d24d1ad4b1965914f30a76ca310dfefb99",
+          "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3"
+        },
+        "model": {
+          "id": "424fe041b4aa103c6fd13de19e19831fc044f20c180cf7235beffc5450dc482c",
+          "version": "a4e547a30a4a9ddf4e814ad0b732ea5963ec5be47143b8b8648d8fce44333de2"
+        },
+        "operationId": "12fbdd73-03d6-40a4-98e8-dc80ddb91204"
+      },
+      "shrinkage": {
+        "id": "d9875983767a60ee86ab714e7c8a0a82902fb2205114e5c9d4b7e5888a4175ab",
+        "version": "d8a98ea91f1c5829a219ed311313baf1867b9563b66c34ab6940468fafa2102d"
+      }
+    },
+    "recovery": {
+      "reportSha256": "04964c6bd9c97af999679b9da6ac87c9138ab84c1def04d18ee49714cb8eec9f",
+      "status": "passed",
+      "checks": [
+        "real partial snapshot has 16139 observed rows and no completion declaration",
+        "concurrent action limit rejects new work while preserving the original request",
+        "closing observation, view and external binding does not cancel the original analysis",
+        "rebinding observes the original task without submitting it",
+        "Host loss retains partial data, original identity, unknown outcome and unconfirmed cancellation",
+        "actual partial export restores bytes and provenance without starting a Host",
+        "explicit cancel acknowledgement and independently observed process-group release are separate facts"
+      ],
+      "originalOperationId": "9bacb89c-8c7c-4e02-b42f-791d6af46e45",
+      "originalNativeIdentity": {
+        "caller": "rho:071fdf5c6e5e0cb005da7035a99491fddce6208b6ce99467",
+        "requestId": "1ee0b53069695b5836edc569314116e2fb91b481970f48191c05167182391762"
+      },
+      "execution": "unknown",
+      "unconfirmedCancelCliExit": 3,
+      "partial": {
+        "availability": "partial",
+        "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3",
+        "coverage": {
+          "completionDeclaration": "absent",
+          "observedAt": "2026-10-15T13:43:40.004Z",
+          "observedRows": 16139,
+          "expectedGenes": 16139,
+          "finiteEffects": 16139
+        }
+      },
+      "separatelyCancelled": {
+        "operationId": "cancel-check",
+        "execution": "failed",
+        "status": {
+          "Finished": {
+            "exit": {
+              "Signal": 15
+            },
+            "exit_observed_at": "2026-10-15T13:43:43.889Z",
+            "group_released": true,
+            "pid": 81985,
+            "spawned_at": "2026-10-15T13:43:43.739Z"
+          }
+        }
+      }
+    },
+    "agent": {
+      "reportSha256": "cb8b93b81e122a3ed30cc3afe69a77a692358381329abf878a95eadb9b85b952",
+      "experiment": "real-claude-code-mcp",
+      "clientVersion": "2.1.300",
+      "sdkVersion": "1.29.0",
+      "exitCode": 0,
+      "projectBound": true,
+      "contextFetched": true,
+      "bufferChangedByAgent": true,
+      "finalVersion": 3,
+      "unsaved": true,
+      "nativeHostStarted": false,
+      "externalConversationOwner": "Claude Code"
+    },
+    "repair": {
+      "reportSha256": "7767490ee322a0cdf6f26da914693de0ac6ba932643d0a8eec152dc82e70a37c",
+      "status": "passed",
+      "checks": [
+        "actual failed native analysis supplies its failure resource and same unsaved buffer",
+        "real Claude Code repairs the shared buffer and submits a deliberately new immutable request",
+        "MCP caller intent, bounded tool receipts, one native entry and independent repaired-result checks agree"
+      ],
+      "client": {
+        "exitCode": 0,
+        "timedOut": false,
+        "elapsedMs": 540247,
+        "clientVersion": "2.1.300 (Claude Code)"
+      },
+      "failed": {
+        "execution": "failed",
+        "operationId": "b5cbd1b3-7367-49c3-a33d-83205043819b"
+      },
+      "repaired": {
+        "execution": "completed",
+        "operationId": "f2ffd2e2-4984-4017-ad04-6740174db576",
+        "bufferVersion": 3,
+        "domain": "passed"
+      }
+    }
+  },
+  "installed": {
+    "reportSha256": "c815d976fea48d858d61600dd13973562a446f5a6bcdabcdbaaef651e9d63fb2",
+    "status": "passed",
+    "artifactSha256": "548f9af370cff75f872ec64877fe397e4c257d77071cd30d22dec814800a2f00",
+    "checks": [
+      "Actual npm install, bin launch without R, private credential, project/document open without Host, unknown action dependencies, bundled Core selected.",
+      "Installed acceptance.mjs passed.",
+      "Installed recovery-acceptance.mjs passed.",
+      "Installed agent-experiment.mjs passed.",
+      "Installed agent-repair.mjs passed.",
+      "Versioned protocol and read-only state fixtures shipped."
+    ],
+    "science": {
+      "reportSha256": "58fc0662ee80f7aab08ac517e88db2f0c4360901f27d0c40c80370d71155b794",
+      "status": "passed",
+      "checks": [
+        {
+          "name": "project open does not start a Host"
+        },
+        {
+          "name": "action-local dependencies",
+          "action": "airway.analyze",
+          "R": "R version 4.5.2 (2025-10-31)"
+        },
+        {
+          "name": "explicit scoped dependency preparation accepted",
+          "delivery": "answered"
+        },
+        {
+          "name": "real analysis accepted through public Core CLI"
+        },
+        {
+          "name": "identical HTTP delivery retains native identity"
+        },
+        {
+          "name": "changed input under original identity is rejected"
+        },
+        {
+          "name": "real native execution completed",
+          "nativeExit": {
+            "Finished": {
+              "exit": {
+                "Code": 0
+              },
+              "exit_observed_at": "2026-10-15T14:20:04.789Z",
+              "group_released": true,
+              "pid": 23841,
+              "spawned_at": "2026-10-15T14:19:39.862Z"
+            }
+          }
+        },
+        {
+          "name": "script, table, model and scientific PDF references",
+          "artifacts": 33
+        },
+        {
+          "name": "independent arithmetic and saved native models",
+          "arithmeticExit": 0,
+          "nativeExit": 0
+        },
+        {
+          "name": "16139 real rows and stable KLF15 selection"
+        },
+        {
+          "name": "actual interactive plot data and marked downsampling"
+        },
+        {
+          "name": "dependency preparation rechecked"
+        },
+        {
+          "name": "real apeglm action and two-input gene join",
+          "genes": 16139
+        },
+        {
+          "name": "registered table and scatter share the actual two-input comparison"
+        },
+        {
+          "name": "real scientific bytes, draft and linked composition restore without replay"
+        },
+        {
+          "name": "one native dispatch entry for duplicate submission"
+        }
+      ],
+      "baseline": {
+        "table": {
+          "id": "67bdcead7eb907b008612d5c2248c1bc9fab9ec48eb19293b2fdfd96b4b7848d",
+          "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3"
+        },
+        "model": {
+          "id": "0f3f7c46e83e087859be71ee11914d93ac6e631d5fd9977febbcebe930e48367",
+          "version": "2c77c684f8730dafa35e61b63f8cac92a06f01d0c2bdff3c5482780773d3e942"
+        },
+        "operationId": "5c860c9c-9f01-4456-9a79-be5c225d14ec"
+      },
+      "shrinkage": {
+        "id": "70d6fd6ce4677d841d766b80ad03ecb730be7dfeceefb893a2d3eda78eea1bdb",
+        "version": "d8a98ea91f1c5829a219ed311313baf1867b9563b66c34ab6940468fafa2102d"
+      }
+    },
+    "recovery": {
+      "reportSha256": "a650d296e56b7b7d50481f5f251b2ca45340b64735e662a61bd3670853ad0e54",
+      "status": "passed",
+      "checks": [
+        "real partial snapshot has 16139 observed rows and no completion declaration",
+        "concurrent action limit rejects new work while preserving the original request",
+        "closing observation, view and external binding does not cancel the original analysis",
+        "rebinding observes the original task without submitting it",
+        "Host loss retains partial data, original identity, unknown outcome and unconfirmed cancellation",
+        "actual partial export restores bytes and provenance without starting a Host",
+        "explicit cancel acknowledgement and independently observed process-group release are separate facts"
+      ],
+      "originalOperationId": "a84b86ad-b7bc-4d5b-a8dc-0de6834cdbbf",
+      "originalNativeIdentity": {
+        "caller": "rho:1fa6c0655f6da25de048d98ae946bb9a203e0922375703e2",
+        "requestId": "0b26d8d2898c558f198fab5fa46368531b9d23a7ca0af608bcc82b75709fc3c8"
+      },
+      "execution": "unknown",
+      "unconfirmedCancelCliExit": 3,
+      "partial": {
+        "availability": "partial",
+        "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3",
+        "coverage": {
+          "completionDeclaration": "absent",
+          "observedAt": "2026-10-15T14:20:43.404Z",
+          "observedRows": 16139,
+          "expectedGenes": 16139,
+          "finiteEffects": 16139
+        }
+      },
+      "separatelyCancelled": {
+        "operationId": "cancel-check",
+        "execution": "failed",
+        "status": {
+          "Finished": {
+            "exit": {
+              "Signal": 15
+            },
+            "exit_observed_at": "2026-10-15T14:20:47.083Z",
+            "group_released": true,
+            "pid": 25802,
+            "spawned_at": "2026-10-15T14:20:46.942Z"
+          }
+        }
+      }
+    },
+    "agent": {
+      "reportSha256": "d5a851f63ef5878d2f7776b8ea211e2902c16d41067edd033f2be8e7bbf95c71",
+      "experiment": "real-claude-code-mcp",
+      "clientVersion": "2.1.300 (Claude Code)",
+      "sdkVersion": "1.29.0",
+      "exitCode": 0,
+      "projectBound": true,
+      "contextFetched": true,
+      "bufferChangedByAgent": true,
+      "finalVersion": 4,
+      "unsaved": true,
+      "nativeHostStarted": false,
+      "externalConversationOwner": "Claude Code"
+    },
+    "repair": {
+      "reportSha256": "a521fb5c72bcacd01e2baa6d66974d869a7f548198a4d2477f63831339ab8a76",
+      "status": "passed",
+      "checks": [
+        "actual failed native analysis supplies its failure resource and same unsaved buffer",
+        "real Claude Code repairs the shared buffer and submits a deliberately new immutable request",
+        "MCP caller intent, bounded tool receipts, one native entry and independent repaired-result checks agree"
+      ],
+      "client": {
+        "exitCode": 0,
+        "timedOut": false,
+        "elapsedMs": 227782,
+        "clientVersion": "2.1.300 (Claude Code)"
+      },
+      "failed": {
+        "execution": "failed",
+        "operationId": "89835423-ecef-491b-bd2c-21895903e5ac"
+      },
+      "repaired": {
+        "execution": "completed",
+        "operationId": "f83c44e5-39c1-4188-82a4-b1b6b0387804",
+        "bufferVersion": 3,
+        "domain": "passed"
+      }
+    },
+    "scientificChecks": {
+      "artifactIntegrity": "verified",
+      "arithmeticChecks": 12,
+      "savedModelObservations": 121,
+      "shrinkageGenes": 16139,
+      "originalWaldTestsUnchanged": true,
+      "scope": "Artifact arithmetic and saved native state checks; not independent biological or clinical validation."
+    }
+  },
+  "evidenceRetention": {
+    "projection": "Actual local reports with credentials, machine paths and raw Agent transcripts excluded.",
+    "rawReportsPublished": false,
+    "rawReportsLocation": "Retained local ignored experiment directories.",
+    "priorFailures": "See BACKEND-ACCEPTANCE.md; earlier failed or timed-out runs remain failed."
+  }
+}
