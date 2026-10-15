@@ -24,6 +24,15 @@ local overrides and acceptance of that combination. A component check does not
 prove application integration. Source publication, binary delivery, installation
 and official release are separate outcomes.
 
+## First npm delivery
+
+The first product delivery uses an npm package and local WebUI. Its package,
+supported installation environments, compatible Core artifacts and real analysis
+flow require their own recorded acceptance. npm publication is not evidence of a
+signed desktop distribution and does not require creating Rho-releases. Package
+name, supported systems and publication details remain to be selected with that
+implementation.
+
 ## Official distribution
 
 This is selected design, not an implemented pipeline. Create Rho-releases only
@@ -77,8 +86,9 @@ scientific Agent request.
 
 ### Accept delivery
 
-The first delivery milestone proves one traceable signed distribution on the
-selected platform: fixed sources, accepted candidate, signing/notarization evidence,
+The first official signed-distribution milestone proves one traceable signed
+distribution on the selected platform: fixed sources, accepted candidate,
+signing/notarization evidence,
 final artifact verification, successful publication and installation acceptance.
 Additional platforms, automatic updates and package-manager channels require their
 own selected scope and checks.

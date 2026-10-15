@@ -6,6 +6,8 @@ implementation and verification summary.
 
 | Document | Purpose |
 | --- | --- |
+| [First-release tasks](WEBUI-FIRST.md) | Prioritized npm + local WebUI backlog, Agent connection, human-Agent flows, dependencies and release gates |
+| [Design priorities](DESIGN-PRIORITIES.md) | Required interaction designs, Paper review scope and design acceptance |
 | [Architecture](ARCHITECTURE.md) | Source ownership, component interaction, state and lifecycle boundaries |
 | [Technology stack](TECHSTACK.md) | Selected libraries, integration choices and adoption conditions |
 | [Product design](DESIGN.md) | Workspace behavior, Agent interfaces and usability acceptance |

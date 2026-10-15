@@ -1,87 +1,119 @@
 # Rho product roadmap
 
-The first delivery is a coherent intelligent workspace: natural-language action,
-real code/data/graphics and freely composed views across windows. Each technical
-boundary is implemented in its source owner, and the product is accepted through
-one integrated user flow.
+The first release is an npm-distributed local WebUI: natural-language action,
+real code/data/graphics and arranged views within one browser window. A local
+Rho service reaches Core through its public CLI. Native desktop clients follow
+later and reuse the component and execution boundaries.
+
+The [first-release task list](WEBUI-FIRST.md) owns task IDs, priorities,
+dependencies, owners and observable completion conditions. The
+[design checklist](DESIGN-PRIORITIES.md) owns interaction-design deliverables.
+All application work and integrated acceptance remain pending; these are selected
+requirements, not implementation evidence.
 
 ## First integrated flow
 
-Use a disposable project and an owned resident Host. The available real R recipe
-provides a concrete scientific component and retained outputs; execute new work
-only when the selected behavior needs it. The flow is delivered as two slices, so
-one observable vertical result exists before cross-window and Agent composition
-work is added.
+Use a disposable project and an owned resident Host. Select one actual Agent
+adapter, one supported OS/architecture and browser baseline, and explicit Core,
+R and component versions before implementation acceptance. The available real R
+recipe supplies a reference analysis and retained outputs; choose its exact inputs
+and expected outputs in the accepted composition. A component evaluation is not
+the product Agent connection.
 
-### Slice A: linked workbench over real execution
+The two slices below are required for the first release. A working npm startup
+and dependency check are exercised early; final installation acceptance then
+repeats the whole flow from the built package in a clean environment.
 
-1. An authorized natural-language request selects a real component action and
-   opens a typed parameter interface. Agent, UI and CLI entries share the
-   implementation and native conditions; managed execution carries its original
-   caller/request identity.
-2. Script, actual result table and interactive plot share resource provenance and
-   stable selections. Sorting, filtering, missing values and numeric presentation
-   preserve domain identity and meaning.
-3. Display execution completion, artifact integrity and domain checking with their
-   recorded scope/freshness. A model explanation remains distinct. Existing runs
-   retain component version, provenance and available outputs after a View becomes
-   unavailable or a component is upgraded.
-4. Keyboard commands and appropriate assistive alternatives work. Failed component
-   loading and unavailable resources preserve drafts/results and provide
-   recoverable view state without executing actions again.
+### Slice A: first analysis with an actual Agent
 
-Slice A runs in one window: an action produces real artifacts, the script, table
-and plot views open on them, and a selection in one view is visible in the others.
+1. Install the npm package, start the local service, open the WebUI and create or
+   open a project. Missing R, Core or component dependencies name the problem and
+   provide a continuation without losing the project choice.
+2. Configure and test the selected Agent adapter, bind it to the project and make
+   its available actions and resource scope visible. The chosen adapter determines
+   whether conversation happens in Rho or an external Agent client; both are not
+   required for this release.
+3. An authorized natural-language request reaches a real component action and
+   opens a typed parameter interface bound to actual inputs. The user can inspect
+   and change parameters directly. Agent, UI and supported CLI entries share the
+   component implementation and conditions; already authorized work receives no
+   additional Rho approval.
+4. Execute once with a persisted original caller/request identity. Open the
+   script, actual result table and interactive plot on owner-provided resources.
+   Sorting/filtering and linked selection preserve stable domain identity.
+5. Inspect execution completion, artifact integrity, domain checks and Agent
+   explanation as separate facts with their scope and freshness. Export actual
+   artifacts with their provenance, then reopen the project and inspect retained
+   runs and outputs without rerunning them.
 
-### Slice B: continuity and Agent composition
+### Slice B: human-Agent handoff and continuity
 
-1. Dock, switch and move views to another window while native Unicode editing,
-   undo, clipboard and focus work. Unsaved documents keep one buffer owner and
-   external writes produce a clear save conflict.
-2. Close or crash an observer, then find the original task from another view.
-   Verify one native dispatch, partial/unknown result preservation and observation
-   without replay. Host shutdown and native-session recovery are separate claims.
-3. The Agent composes a further comparison/explanation view from registered
-   components, bound to the same resources and selections. Malformed, stale or
-   out-of-scope invocations fail mechanically within the existing authorization.
+1. Select code, a table entity or a plot mark and pass an explicit resource/version
+   reference to the Agent. The interface distinguishes saved content from the
+   current unsaved buffer and makes the supplied context inspectable.
+2. The Agent acts through the same component actions and document buffer as the
+   user. Its edits are visible and reviewable; the user continues editing and can
+   undo. Concurrent external writes or stale references produce a clear conflict
+   rather than silently overwriting newer work.
+3. Switch tabs, split and rearrange views, then restore the layout within one
+   browser window. Preserve one logical buffer owner, undo, selection and focus.
+   Use keyboard commands, actual Unicode IME and clipboard with accessible
+   alternatives to dragging and graphical selections.
+4. A failing analysis offers an Agent repair entry containing the actual error
+   and resource reference. A corrected analysis is deliberately new work with a
+   new request identity; observing or reconnecting to the failed run is not.
+5. Lose a submit acknowledgement, disconnect or refresh the browser, and find
+   the original task. Verify one native dispatch, retained partial output and an
+   honest unknown state when the outcome cannot be established. Browser/view
+   closure, cancellation request, confirmed native stop and Host shutdown have
+   separate effects.
+6. The Agent composes one further comparison or explanation view from registered
+   components bound to the same resources and selections. Malformed, stale and
+   out-of-scope invocations fail mechanically. Unavailable components retain
+   inspectable resource/output references and do not replay actions.
 
-Slice B adds cross-window movement, observer loss and Agent-driven composition on
-top of the Slice A result.
-
-The two slices together verify the workbench, composition and Agent experience.
-Component-only checks establish their recorded scope; integration requires the
-actual selected source/artifact combination and representative platform behavior.
+The two slices verify workbench behavior, component composition and Agent
+interaction together. Component-only checks establish their recorded scope;
+integration requires the actual selected source/artifact combination. Native
+desktop windows are not a condition of this browser release.
 
 ## Implementation sequence
 
 | Step | Owner and result |
 | --- | --- |
-| Consumer boundary | Components define the first Action/Resource/Selection/View contract; Rho implements its routing and composition adapter |
-| Desktop and continuity | Rho implements Electron windows/layout and public Core CLI observation; the resident Host has an independent lifetime |
-| Linked functionality | Editing/data/graphics components expose real resources, shared selection and document conditions |
-| Agent composition | Agent component invokes those actions and produces typed catalog compositions in the same workspace |
-| Integrated acceptance | Exercise the full flow, interruption/failure cases, native input and measured resource behavior |
+| Scope and consumer selection | Rho selects the reference Agent, platform/browser, package/runtime requirements, public capabilities and real analysis case with the component owners |
+| Installable application foundation | Rho builds the npm launcher, authenticated local service and browser shell, dependency diagnostics and scoped public Core adapter |
+| Interaction design and linked functionality | Rho and Rho-plugins deliver the first-use flow, Agent binding, real editor/table/plot resources and shared context |
+| Continuity and composition | The owners preserve document and request identity through failure/reconnect, add single-window layout and one typed Agent composition |
+| Package acceptance | Rho verifies both slices, export/reopen, installation, failure cases, input/accessibility and resource behavior on the supported composition |
 
-These steps are bounded implementation units toward one acceptance target. Record
-actual dependency versions and immutable identities when selecting each combination.
-Maintain useful owner regressions and preserve original failure evidence.
+Design review and bounded owner implementation proceed together. Record actual
+dependency versions and immutable identities when selecting each combination.
+Keep original failure evidence and distinguish a designed flow from a tested one.
 
 ## Resource acceptance
 
 Measure cold start, interaction latency and steady/peak memory on representative
-data and platform builds. Define configured limits for retained view/message bytes,
-data pages, drawing work and component concurrency, with explicit exceeded-limit
-behavior. Pass references and bounded pages across windows. Exhaustion preserves
-obtained output and uncertainty without stopping unrelated user execution.
+data and the supported platform/browser. Define configured limits for rendered
+logs, retained messages, data pages, drawing work and component concurrency with
+explicit exceeded-limit behavior. Use references and bounded pages across views.
+Exhaustion preserves obtained output and uncertainty without stopping unrelated
+execution or creating a new request identity. The task list records release gates;
+threshold values are selected with the implementation and measurement environment.
 
 ## Subsequent milestones
 
-After the first flow, add a second functional domain to check reuse of the common
-interaction boundary. Select external MCP/Agent/UI interoperability and component
-publishing from actual consumer needs. Each retains resource scope, original
-identity and inspectable results.
+P1 work improves the accepted browser flow: additional Agent adapters, richer
+view catalogs, advanced terminal functionality and additional platforms/channels
+are selected from actual consumer needs. Each addition requires its own checks;
+having an npm installer alone does not establish platform support.
 
-An official distribution milestone selects one accepted composition and platform.
-The [release owner](RELEASE.md#official-distribution) records candidate and signed
-identities, publication and installation evidence. Additional platforms and update
-channels are selected with their own acceptance.
+The later desktop milestone adds Electron/native windows, cross-window movement,
+menus, file associations and system integration to the accepted WebUI foundation.
+Browser multi-window work is also deferred by scope, not declared impossible.
+
+An official signed-distribution milestone separately selects a platform and
+installation format. The [release owner](RELEASE.md#official-distribution)
+records candidate and signed identities, publication and installation evidence.
+It is not selected merely by choosing npm for the first release. Additional
+platforms and automatic-update channels retain their own acceptance.

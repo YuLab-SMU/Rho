@@ -16,7 +16,9 @@ independent repositories and use documented public capabilities at selected
 versions. Component semantics and results stay with their source owner.
 
 Follow [Technology stack](docs/TECHSTACK.md). The first integrated flow exercises
-Agent interaction, code/table/plot context and movable views across windows.
+Agent interaction, code/table/plot context and movable views within one browser
+window, delivered through npm and a local WebUI. Native desktop clients and
+cross-window movement follow later.
 Deliver bounded owner changes toward the [acceptance](docs/ROADMAP.md#first-integrated-flow).
 Application composition records immutable source/artifact identities, explicit
 local overrides and acceptance of the chosen combination.

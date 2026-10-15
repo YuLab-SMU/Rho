@@ -23,8 +23,10 @@ Component repositories retain their own workflows.
 
 ## Deliver toward the integrated flow
 
-The first product delivery combines natural-language action, linked script/table/
-plot resources and freely movable views across windows. Its
+The first product delivery uses npm and a local WebUI, combining natural-language
+action, linked script/table/plot resources and movable views within one browser
+window. Native cross-window movement belongs to a later desktop client. The
+[prioritized task list](WEBUI-FIRST.md) and
 [completion criteria](ROADMAP.md#first-integrated-flow) guide bounded changes in
 each owner while the final acceptance exercises the actual application combination.
 

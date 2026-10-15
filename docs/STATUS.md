@@ -1,6 +1,6 @@
 # Rho status
 
-Updated: 2026-10-14.
+Updated: 2026-10-15.
 
 ## Application
 
@@ -31,12 +31,23 @@ a running Rho composition.
 
 ## Next delivery
 
-Implement first release as defined in [WebUI-first roadmap](WEBUI-FIRST.md):
-npm-distributed local WebUI with browser-based workbench. P0 requirements are
-first-use flow, Agent integration, human-Agent collaborative editing, working
-code/table/chart components with real R execution, and run center with failure
-recovery. Multi-view layout and Agent-composed interfaces (P1), then npm
-installation acceptance complete the first release.
+Implement the [prioritized first-release tasks](WEBUI-FIRST.md), with interaction
+deliverables in [Design priorities](DESIGN-PRIORITIES.md) and the complete flow in
+[Roadmap](ROADMAP.md#first-integrated-flow). All tasks remain pending.
+
+P0 release gates include an installable npm/local-service foundation, project and
+dependency setup, one actual Agent adapter, human-Agent shared context and editing,
+real linked code/table/plot views, run/error/unknown-outcome continuity,
+single-window multi-view layout with one typed Agent composition, export/reopen,
+and clean-environment installation acceptance. None of these gates is optional
+polish. P1 covers additional adapters, richer views and other nonblocking
+enhancements after the reference flow works.
+
+First select the reference Agent and conversation location, target OS/architecture
+and browser, Node requirement, npm name/channel and component versions. These
+choices are not yet fixed. Native desktop clients, cross-window movement and
+system integration are deferred. npm publication and official signed distribution
+remain separate delivery decisions.
 
 Action, Resource, Selection and View are design concepts. Public schemas, component
 host adapters and application state services remain to be implemented for this
@@ -47,14 +58,17 @@ functional owner.
 
 ## Verification
 
-Local links and anchors across the three repositories and rendered inspection of
-every changed page have been checked for this revision. The execution bridge also
+Repository-local link/anchor checks, `git diff --check` and rendered inspection
+of all 13 changed Markdown documents passed for this documentation revision.
+The execution bridge also
 distinguishes application-started Hosts from existing Hosts whose lifecycle stays
 with their original owner. Application behavior, native input, component composition,
 signing and installation require evidence from their actual implementations. Core
 and component checks retain the scope recorded by those owners; they are not rerun
 solely to rewrite application documents.
 
-First release uses npm distribution; browser refresh and service lifecycle handling
-require explicit verification. Desktop client features (native menus, cross-window
-movement, system integration, signing) deferred to later milestone.
+Browser refresh, Agent connection, service lifecycle, native input and package
+installation still require application evidence. The Paper designs remain design
+references; continuous interaction prototypes, correction of reported S2/S3
+inconsistencies and implementation acceptance are pending. This documentation
+update does not edit Paper, run a Host or publish an npm package.

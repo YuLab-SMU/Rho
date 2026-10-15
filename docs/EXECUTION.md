@@ -2,8 +2,11 @@
 
 Rho reaches [Rho-core](https://github.com/YuLab-SMU/Rho-core) only through its
 documented public CLI. Core owns the managed execution contract and the resident
-Host. This document owns the application side of that boundary: request identity,
-the exit-code state machine, Host lifetime and bounded observation.
+Host. The first-release local Rho service invokes that CLI; the browser WebUI uses
+the service's scoped application operations. This document owns the application
+side of that boundary: request identity, the exit-code state machine, Host lifetime
+and bounded observation. Service transport and authentication mechanisms remain
+to be selected under the [technology boundary](TECHSTACK.md#local-service-and-workspace).
 
 [Architecture](ARCHITECTURE.md) defines ownership; [Status](STATUS.md) records
 implementation; [Roadmap](ROADMAP.md) selects the flow that exercises it. The
@@ -23,7 +26,7 @@ An identity is a caller name plus a request id. Each is 1–128 characters from
   returns the original run and dispatches nothing; different content under the
   same identity is a conflict.
 - A new identity is created only for deliberately new work. A lost reply, a wait
-  timeout, a view crash or a reconnect never mints one.
+  timeout, browser refresh, view crash, service crash or reconnect never mints one.
 - The caller name is an application namespace, not a user or a security principal.
   Core caller namespaces are not authenticated.
 
@@ -37,7 +40,7 @@ place where "do not replay" becomes mechanical rather than a policy sentence.
 | 0 | The Host executed the request | Read `value`; after `wait` the run may still be active |
 | 1 | The Host answered an error, or an over-limit request was not sent | Act on `error.kind` and `message`; do not resend unchanged |
 | 2 | Usage error, nothing sent | Application defect; surface it |
-| 3 | Not delivered: no Host, Host busy, refused or protocol mismatch; no effect | Retry later or start a Host; the identity is unchanged |
+| 3 | Not delivered: no Host, Host busy, refused or protocol mismatch; no effect | Retry later with the same identity; starting a Host is a separate authorized lifecycle action |
 | 4 | Sent but no reply; the request may have executed | `lookup` the same identity, or resend the same identity; never a new one |
 
 Code 4 is the reconnection case the product must show honestly: the task may
@@ -46,26 +49,33 @@ an unknown outcome, instead of starting fresh work.
 
 ## Host lifetime
 
-The main process owns the lifecycle of Hosts started by the application. An
-existing Host retains its original owner. No view, window, Agent session or
-renderer owns a Host, and none of their lifetimes is a reason to stop or restart it.
+The local Rho service owns the lifecycle of Hosts it starts. An existing Host
+retains its original owner. No browser tab, view, window or Agent session owns a
+Host, and none of their lifetimes is a reason to stop or restart it.
 
-- At startup the main process uses the public CLI's `capability` command to
+- At service startup Rho uses the public CLI's `capability` command to
   observe a Host at `state_dir/host.sock` and check its project. An existing Host
   is reused without transferring lifecycle ownership. A second Host on the same
   `state_dir` would fail at the storage lock, so Rho does not start one.
-- Otherwise Rho starts `rho-core serve --project ... --state-dir ...`, reads the
-  single `ready` JSON line and holds the child process.
+- If no Host exists, an authorized service/project start can start
+  `rho-core serve --project ... --state-dir ...`, read the single `ready` JSON line
+  and hold the child process. A browser observation or reconnect alone does not
+  start a Host or recover a native session.
 - The state directory is `.rho/` inside the project, already listed in `.gitignore`.
   One Host serves one project. An existing Host on a project is adopted, never
   replaced.
-- On application exit the main process sends SIGTERM only to a Host it started
-  and reads that child's `shutdown` report. It releases observation of an existing
+- On explicit service exit Rho sends SIGTERM only to a Host it started and reads
+  that child's `shutdown` report. It releases observation of an existing
   Host without stopping it; stopping that Host requires existing authorization
   covering its shutdown. Host shutdown, task cancellation and confirmed native
   stop stay separate operations with separate effects in the interface.
-- Renderer failure, view close and popout do not stop the Host, cancel a task or
-  restart an R session. They release observation and rendering only.
+- Browser close, refresh, connection loss and view failure release observation
+  and rendering only. They do not stop the local service or Host, cancel a task or
+  restart an R session. A later desktop client's view closure has the same boundary.
+- A service crash is not a confirmed Host shutdown or native stop. Preserve the
+  original request identity and any partial/unknown outcome. After a service
+  restart, inspect the existing Host and original request through the public CLI;
+  do not automatically repeat execution or claim native-session recovery.
 
 Reads are bounded observations. A read never starts or recovers a Host or a native
 session.

@@ -13,7 +13,7 @@ implementation; [Technology stack](TECHSTACK.md) records the selected libraries.
 | --- | --- |
 | [Rho-core](https://github.com/YuLab-SMU/Rho-core) | Managed execution, original request identity, retained execution facts, resident Host and public CLI |
 | [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/ARCHITECTURE.md) | Actual functionality, native conditions, resource semantics and results; optional CLI, Skills, MCP and UI entries |
-| Rho | Component selection and assembly, desktop windows, layout, shared interaction routing and presentation |
+| Rho | Component selection and assembly, local service, layout, shared interaction routing and presentation; native windows in a later client |
 
 A functional component may be an Agent, editor, file tool, table, plot, scientific
 method, evaluation or another capability. It can use maintained R, Python, Rust,
@@ -25,6 +25,12 @@ A headless caller uses the component's supported entry. Rho assembles its views
 and actions; selected native execution uses Core's public capability. An Agent
 component owns its model loop and context. Core remains independent of UI bundles
 and model interaction. Each repository delivers and verifies its own boundary.
+
+The [first release](WEBUI-FIRST.md) is an npm-distributed local service and browser
+WebUI. The browser reaches scoped application operations through that service;
+it does not invoke Core or native tools directly. The service uses Core's public
+CLI. A later desktop client reuses these component and execution boundaries and
+adds native window and system integration.
 
 ## Interaction model
 
@@ -60,8 +66,9 @@ explained before they affect data or execution.
 | Cursor, scrolling and rendering resources | Individual view as appropriate |
 | Agent session and model context | Agent component |
 
-Multiple views of a document share one logical unsaved-buffer owner. Moving a
-view between windows preserves content and undo. Saving checks external writes;
+Multiple views of a document share one logical unsaved-buffer owner. Switching
+tabs or moving a view between splits preserves content and undo; the later desktop
+client extends this to native windows. Saving checks external writes;
 disk files and Git history do not substitute for the current buffer. Versions and
 provenance belong to individual resources, with no global scientific revision.
 

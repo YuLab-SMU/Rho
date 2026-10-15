@@ -1,6 +1,7 @@
 # Rho technology stack
 
-This is the implementation direction for the [integrated flow](ROADMAP.md#first-integrated-flow).
+This is the implementation direction for the npm-distributed local WebUI and its
+[integrated flow](ROADMAP.md#first-integrated-flow).
 [Architecture](ARCHITECTURE.md) defines ownership; [Status](STATUS.md) records
 implementation. Exact versions and immutable source/artifact identities are
 selected and verified when the application composition is built.
@@ -9,9 +10,10 @@ selected and verified when the application composition is built.
 
 | Layer | Choice | Responsibility |
 | --- | --- | --- |
-| Desktop container | Electron | Windows, native desktop interaction and a narrow application bridge |
+| Distribution and launcher | npm package and CLI | Install the application, locate compatible Core artifacts and start the local service; package name and Node.js runtime version remain to be selected |
+| Local application service | Node.js | Authenticated browser/application boundary, scoped component routing and Core CLI access; transport remains to be selected |
 | UI and build | React, TypeScript, Vite | Application assembly and trusted component presentation |
-| Workspace layout | Dockview core | Docking, tabs, floating/popout adaptation and layout persistence |
+| Workspace layout | Dockview core | Docking, tabs, split views and layout persistence within one browser window |
 | Editing component | CodeMirror 6 | Document buffers, local versions, undo and write conditions |
 | Data component | AG Grid Community | Real rows, filtering and stable entity selection |
 | Graphics component | ECharts plus original scientific artifacts | Interactive data/specification and selection mapping, with preserved provenance |
@@ -23,32 +25,46 @@ R/Python/Rust/TypeScript libraries, native CLIs and ordinary files, and expose t
 entries their consumers need. Libraries are not mandatory dependencies of every
 component.
 
-## Desktop and workspace
+## Local service and workspace
 
-Electron supplies a Chromium baseline with the application, fitting rich editors,
-charts, generated interfaces and multiple windows. Its selection is an engineering
-judgment for this flow; performance and native-input acceptance require the actual
-application. A measured resource/distribution requirement can justify evaluating
-Tauri's system-WebView approach. Sources:
-[Electron process model](https://www.electronjs.org/docs/latest/tutorial/process-model),
-[Tauri WebView versions](https://v2.tauri.app/reference/webview-versions/).
+The first-release path is browser WebUI → local Rho service → public Core CLI →
+R and functional components. Rho owns the launcher, local service and workspace
+assembly; Core owns managed execution and its resident Host; Rho-plugins owns the
+functional components, native conditions and results. The service can provide or
+locate selected compatible Core artifacts and report missing R/component
+dependencies. Actual supported platforms, artifact acquisition, npm package name,
+runtime versions and service transport require implementation and installation
+acceptance; this direction does not claim a working package.
 
-Use sandboxed renderers, context isolation and no Node integration. The native
-bridge exposes narrow named operations and validates the sender, resource scope
-and conditions at invocation. Trusted React views use normal application layout;
-independent HTML uses isolated origins and a controlled bridge. WebContentsView
-is an option where its native positioning, focus and overlay behavior fits the
-actual view. Sources:
-[Electron security](https://www.electronjs.org/docs/latest/tutorial/security),
-[web embeds](https://www.electronjs.org/docs/latest/tutorial/web-embeds).
+Bind the first-release service to loopback and authenticate its local sessions;
+loopback binding alone does not grant authorization. Validate browser origins,
+caller/project visibility, resource containment and native conditions at each
+operation. The browser uses narrow named operations through the service and does
+not invoke a shell, Core CLI or arbitrary filesystem access directly. Credentials
+stay out of frontend assets and diagnostics. Select the concrete authentication
+and transport mechanisms with implementation, and verify that an unrelated local
+web page cannot invoke the service. LAN/remote exposure needs separate scope and
+acceptance.
 
-Dockview supplies docking, tabs, floating/popout and layout serialization.
-Rho adapts popout to real desktop-window ownership and close events. Layout state
-stores arrangement; editing buffers, scientific resources and execution facts
-retain their owners. Dockview core is MIT; some keyboard docking/navigation,
+Dockview supplies docking, tabs, splits and layout serialization for the initial
+single-window workspace. Layout state stores arrangement; editing buffers,
+scientific resources and execution facts retain their owners. Browser refresh and
+view closure release observation; they do not stop the local service or Host.
+Dockview core is MIT; some keyboard docking/navigation,
 layout-history and other features are Enterprise. The chosen experience must name
 its edition and licensing and provide accessible command-based layout controls.
 Source: [Dockview licensing/features](https://dockview.dev/docs/overview/licence/).
+
+## Later desktop client
+
+Electron remains the selected direction for a later desktop client that reuses the
+WebUI components and adds native windows, menus and system integration. Native
+cross-window movement, desktop packaging and signing are outside first-release
+acceptance. A desktop bridge must validate sender, scope and conditions, with
+sandboxed renderers, context isolation and no Node integration. Desktop-specific
+focus, input, lifecycle and performance need their own actual-client evidence.
+Sources: [Electron process model](https://www.electronjs.org/docs/latest/tutorial/process-model),
+[Electron security](https://www.electronjs.org/docs/latest/tutorial/security).
 
 ## Functional views
 
@@ -86,11 +102,13 @@ schema validity. Model output does not supply privileged JavaScript or replace
 owner-provided values and execution facts.
 Source: [json-render catalog](https://json-render.dev/docs/catalog).
 
-Independent interactive HTML can use MCP Apps when a consumer needs that boundary.
-Rho will implement the isolated View host, allowed messages/tool bridge, origin/CSP
+The first release selects one reference Agent integration and the adapters that
+its actual consumer flow needs. Independent interactive HTML can use MCP Apps
+when that boundary is needed, in the first release or a later milestone. Such an
+adapter requires an isolated View host, allowed messages/tool bridge, origin/CSP
 checks and teardown. Structured/text results remain inspectable when the View is
-unavailable. Select and verify interoperable Apps/base-MCP protocol versions;
-the SDK alone is not a complete workbench host. Sources:
+unavailable. Select and verify interoperable Apps/base-MCP protocol versions for
+that adapter; the SDK alone is not a complete workbench host. Sources:
 [MCP Apps specification](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx),
 [SDK and host API](https://apps.extensions.modelcontextprotocol.io/api/).
 
@@ -102,15 +120,16 @@ the SDK alone is not a complete workbench host. Sources:
 | Agent Plugins | Portable Skills/MCP packaging, with namespaced Rho-specific contributions where needed |
 
 Each adapter retains the actual state owner and invocation conditions. Protocol
-selection follows the concrete consumer rather than becoming a requirement for
-every component. Sources: [AG-UI](https://docs.ag-ui.com/introduction),
+selection follows the reference Agent and concrete consumer; implementing every
+listed protocol is not a first-release gate. Sources: [AG-UI](https://docs.ag-ui.com/introduction),
 [A2UI](https://a2ui.org/), [Agent Plugins](https://agent-plugins.org/specification).
 
 ## Execution and acceptance
 
 Use the documented [public Core CLI](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/HOST-CLI.md)
-at the selected version. Its resident Host has a lifetime independent of observing
-windows. Rho owns the application side of this boundary, namely request identity,
+at the selected version. The local Rho service invokes it; the browser does not.
+Its resident Host has a lifetime independent of observing browser views. Rho owns
+the application side of this boundary, namely request identity,
 exit-code handling and Host lifetime, specified in the
 [execution bridge](EXECUTION.md). Reconnect retains the original request identity;
 reads are bounded and
@@ -123,5 +142,7 @@ memory and protected view/data/message resources. Record configuration and behav
 when limits are exceeded, preserving obtained output and original task identity.
 
 The accepted application combination records versions, immutable identities,
-licenses, local overrides and observed integration results. Official distribution
-uses the separate [release boundary](RELEASE.md#official-distribution).
+licenses, local overrides and observed integration results. First-release npm
+installation and local WebUI startup require their own evidence. A later official
+signed distribution uses the separate
+[release boundary](RELEASE.md#official-distribution).
