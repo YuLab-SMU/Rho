@@ -3,8 +3,10 @@
 Read [Status](docs/STATUS.md), [Architecture](docs/ARCHITECTURE.md),
 [Roadmap](docs/ROADMAP.md), the [execution bridge](docs/EXECUTION.md) and the
 [documentation index](docs/README.md) first.
-Rho currently contains application design and repository policies. Executable
-application implementation and integrated acceptance are pending.
+Rho contains a versioned local backend, client and headless acceptance scripts.
+Read [Headless backend](docs/HEADLESS.md) and its
+[acceptance record](docs/BACKEND-ACCEPTANCE.md); browser UI and full product
+acceptance remain pending.
 
 ## Source ownership
 

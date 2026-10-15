@@ -7,13 +7,15 @@ Updated: 2026-10-15
 前端无需重新实现执行、文档、资源或状态判断。UI 开发与验收随后独立开展。
 
 本文安排后端工作包的顺序、边界和验收，不改变 [WEB 首版清单](WEBUI-FIRST.md)的产品任务与
-发布条件。所有工作包均待实施；画板中的后续 shrinkage、partial/unknown 场景仍是设计示意。
+发布条件。六包的实现、实际证据与剩余边界见[后端验收](BACKEND-ACCEPTANCE.md)；
+运行与调用方式见[后端接口说明](HEADLESS.md)。真实 shrinkage、partial/unknown 已有执行记录，
+画板中的特定 run 编号和 8,204 行示意仍不作为实测数字。
 
 ## 现有基础与本轮边界
 
 | Owner | 已有基础 | 本轮补充 |
 | --- | --- | --- |
-| Rho | 应用架构、执行桥、R1–R14 设计；无可执行应用 | npm 启动器、本地服务、项目和会话范围、持久请求记录、路由与组合校验、恢复及应用验收 |
+| Rho | 审计起点为应用架构、执行桥、R1–R14 设计 | npm 启动器、本地服务、项目和会话范围、持久请求记录、路由与组合校验、恢复及应用验收 |
 | Rho-core | public CLI、resident Host、请求去重、执行观察、partial/unknown 与取消边界 | 先复用公开能力；仅实际集成证明缺口后，才在 Core 追加最小公共能力 |
 | Rho-plugins | real-r-analysis 的 R recipe/产物和验收 consumer；独立 Agent evaluator | 可复用的 headless 功能入口、依赖声明/检查/准备、文档服务、数据/图形资源、实际外部 Agent 适配器及 shrinkage 动作 |
 
@@ -25,15 +27,15 @@ Core socket wire 不是应用公共协议；Rho 仅通过所选版本的公共 C
 [Plugins 架构](https://github.com/YuLab-SMU/Rho-plugins/blob/a8ddfdfbdc9e246887f32c53c6c85eb3dc116e4c/docs/ARCHITECTURE.md)
 及[真实分析验收](https://github.com/YuLab-SMU/Rho-plugins/blob/a8ddfdfbdc9e246887f32c53c6c85eb3dc116e4c/examples/real-r-analysis/ACCEPTANCE.md)。
 
-现有 `run.py` 是科学验收 consumer，`agent-eval` 是评价器，都不是已经实现的产品后端。
-`analyze.R` 目前只在启动时检查包是否存在。共享 buffer、组件公共 schema、表图服务、
-依赖准备和 apeglm shrinkage 均需实际交付，不能把画板字段直接当成现有接口。
+审计起点的 `run.py` 是科学验收 consumer，`agent-eval` 是评价器。新增 headless 包已交付
+共享 buffer、实际表图数据、依赖检查/准备、MCP 接入和 apeglm shrinkage；Rho 通过公共入口组装。
+旧科学验收与新应用验收分别保留来源和范围，不把画板字段当成执行事实。
 
 ## 后端与 UI 的分界
 
 后端采用 Node.js/TypeScript 本地服务，以版本化 HTTP JSON 操作和 SSE 事件提供窄接口。
 服务绑定 loopback，并验证会话、来源和项目范围；外部 Agent 通过所选适配器调用同一动作。
-这些是本轮实施选择，具体库、版本和可安装组合在 BP-01 冻结。
+具体库、版本和可安装组合记录于[后端验收](BACKEND-ACCEPTANCE.md)。
 
 Rho 持有应用协调状态；插件持有文档与功能资源状态；Core 持有其公开契约内的执行事实。
 持久数据先使用 owner 命名空间内的普通文件、条件写与可恢复日志，验证受理顺序和崩溃边界。
@@ -56,7 +58,7 @@ Rho 持有应用协调状态；插件持有文档与功能资源状态；Core �
 ## 公共接口交付范围
 
 先定义有限的首版 catalog 和操作，不建设动态插件市场、通用工作流引擎或所有 Agent 协议。
-下列名称是待冻结的操作族，不是现有命令。BP-01 交付具体 `/api/v1` 路由、JSON Schema、
+下表操作族已落实为[版本 1 schema](../protocol/v1.json)。BP-01 交付 `/api/v1` 路由、JSON Schema、
 事件类型、错误样例和兼容性规则；UI 与 Agent 均不得绕过它们的公共调用条件。
 
 | 操作族 | 最小语义与返回信息 |
@@ -235,5 +237,5 @@ UI 可以从 BP-01 后并行开发外壳和协议 mock，但这不是后端关�
 后端不等待 Paper 再细化或 React 布局落地；协议变更带版本/兼容性说明和双方消费者检查，
 不通过修改前端展示逻辑补偿后端缺失的事实或资源语义。
 
-第一项实施从 BP-01 开始，随后 BP-02；先以 BP-03 做出可运行的真实分析闭环。
-BP-04 可并行，再汇合到数据/组合与恢复验收，最后把稳定后端交给独立 UI 工作。
+六步实现和验收按上述边界交付；后续重点是用相同 schema/client/fixtures 开发实际 WebUI。
+浏览器输入、布局、辅助访问与整体发布仍按 WEB 清单验收，不在后端中重新创建一份状态 owner。

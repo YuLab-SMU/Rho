@@ -7,7 +7,9 @@ implementation and verification summary.
 | Document | Purpose |
 | --- | --- |
 | [First-release tasks](WEBUI-FIRST.md) | Prioritized npm + local WebUI backlog, Agent connection, human-Agent flows, dependencies and release gates |
-| [Backend implementation plan](BACKEND-FIRST.md) | Backend-first work packages, headless acceptance and the contract for independent UI development |
+| [Backend implementation plan](BACKEND-FIRST.md) | Six backend work packages and the contract for independent UI development |
+| [Headless backend](HEADLESS.md) | Installation, versioned HTTP/SSE client, Agent adapter, persistence and budgets |
+| [Backend acceptance](BACKEND-ACCEPTANCE.md) | Actual component/integration evidence, selected composition, failures and unsupported scope |
 | [Design priorities](DESIGN-PRIORITIES.md) | Required interaction designs, Paper review scope and design acceptance |
 | [Architecture](ARCHITECTURE.md) | Source ownership, component interaction, state and lifecycle boundaries |
 | [Technology stack](TECHSTACK.md) | Selected libraries, integration choices and adoption conditions |

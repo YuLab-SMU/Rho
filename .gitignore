@@ -7,6 +7,8 @@ __pycache__/
 
 # Local work, runtime state and diagnostics
 /work/
+/vendor/
+*.tgz
 .worktrees/
 .rho/
 .Rproj.user/

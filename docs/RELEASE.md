@@ -5,8 +5,9 @@
 [Rho-core](https://github.com/YuLab-SMU/Rho-core),
 [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins) and
 [Rho](https://github.com/YuLab-SMU/Rho) independently own their source and commits.
-Rho selects and assembles the application. Its implementation and accepted
-composition are pending.
+Rho selects and assembles the application. A versioned backend and local npm
+assembly are implemented; [backend acceptance](BACKEND-ACCEPTANCE.md) records the
+selected headless composition separately from the pending browser product.
 
 Before publishing, inspect the actual remote URL, branch, selected commit,
 authenticated account and write permission. Remote names do not identify the
@@ -26,12 +27,18 @@ and official release are separate outcomes.
 
 ## First npm delivery
 
-The first product delivery uses an npm package and local WebUI. Its package,
-supported installation environments, compatible Core artifacts and real analysis
-flow require their own recorded acceptance. npm publication is not evidence of a
-signed desktop distribution and does not require creating Rho-releases. Package
-name, supported systems and publication details remain to be selected with that
-implementation.
+The first product delivery uses an npm package and local WebUI. The backend
+assembly uses `@rho-workspace/local` 0.1.0 and bundles the exact selected Core
+binary, Plugins package and production dependencies. The packer emits immutable
+source/tree, input, lock and artifact digests; installed acceptance runs outside
+the source checkouts. See [assembly instructions](HEADLESS.md#development-and-assembly)
+and [accepted scope](BACKEND-ACCEPTANCE.md).
+
+This delivery is an unsigned local tarball on macOS arm64 with external Node,
+Python and R prerequisites. Browser assets, npm registry namespace/channel rights,
+other platforms and full product installation are not accepted by a headless run.
+No registry publication or signing is performed. npm publication would not itself
+establish a signed desktop distribution or require creating Rho-releases.
 
 ## Official distribution
 

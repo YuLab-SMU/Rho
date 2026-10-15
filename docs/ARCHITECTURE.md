@@ -34,8 +34,10 @@ adds native window and system integration.
 
 ## Interaction model
 
-Four concepts connect components to the container. Their public schemas and host
-adapters will be implemented with the first concrete consumer flow.
+Four concepts connect components to the container. The finite 0.1 backend exposes
+their concrete [public schemas](../protocol/v1.json), HTTP/SSE service and client.
+Plugins supplies the headless functional owners; UI entries remain unavailable.
+[Headless backend](HEADLESS.md) records the actual boundary and persistence rules.
 
 | Concept | Meaning |
 | --- | --- |
@@ -120,8 +122,10 @@ principals. See [Security](../SECURITY.md) and [Product design](DESIGN.md).
 ## Resource limits
 
 Rho bounds the resources it actually owns and names the exceeded-limit behavior.
-Values are selected and recorded when the implementation that owns them exists;
-the application does not invent a global quota for the user's environment.
+The headless owners expose the selected defaults and exceeded-limit behavior in
+[backend budgets](HEADLESS.md#observation-budgets-and-recovery). Browser drawing
+and rendering budgets still need their actual UI implementation; the application
+does not invent a global quota for the user's environment.
 
 | Protected resource | Configuration | Exceeded-limit behavior |
 | --- | --- | --- |

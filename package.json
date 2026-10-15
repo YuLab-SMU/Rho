@@ -1,0 +1,50 @@
+{
+  "name": "@rho-workspace/local",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Rho versioned local backend and headless client",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.22.0 <23"
+  },
+  "bin": {
+    "rho": "./dist/cli.js"
+  },
+  "exports": {
+    ".": "./dist/client.js",
+    "./server": "./dist/server.js",
+    "./protocol": "./dist/protocol.js"
+  },
+  "files": [
+    "dist",
+    "protocol",
+    "fixtures",
+    "vendor",
+    "LICENSE",
+    "scripts",
+    "docs/HEADLESS.md"
+  ],
+  "scripts": {
+    "build": "tsc && node scripts/protocol.mjs",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "acceptance": "node scripts/acceptance.mjs",
+    "prepack": "npm run build && node scripts/check-pack.mjs",
+    "pack:local": "node scripts/pack-local.mjs",
+    "recovery": "node scripts/recovery-acceptance.mjs",
+    "agent": "node scripts/agent-experiment.mjs",
+    "repair": "node scripts/agent-repair.mjs"
+  },
+  "dependencies": {
+    "@rho-workspace/headless": "file:../Rho-plugins",
+    "ajv": "8.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.0",
+    "typescript": "5.9.3"
+  },
+  "bundleDependencies": [
+    "@rho-workspace/headless",
+    "ajv"
+  ],
+  "private": true
+}

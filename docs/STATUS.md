@@ -4,111 +4,87 @@ Updated: 2026-10-15.
 
 ## Application
 
-Rho's product, architecture, technology direction and development policies are
-specified. The application container, functional UI assembly and first release
-build are not implemented. No integrated usability, performance or distribution
-acceptance has been completed.
+The versioned local backend is implemented: `/api/v1` HTTP JSON/SSE schemas and
+client, loopback authentication/project scope, durable original intents, public
+Core CLI bridge, shared documents, real analysis/data, typed composition and
+export/recovery. [Headless backend](HEADLESS.md) documents installation and use;
+[backend acceptance](BACKEND-ACCEPTANCE.md) records actual checks and failures.
+The immutable installed candidate is being finalized after owner commits.
 
-First release uses npm distribution with local WebUI: browser → local service →
-Rho-core CLI → R/components. Desktop client deferred to later milestone. The
-selected stack is React/TypeScript, Vite and Dockview. Initial editing, data and
-graphics views use CodeMirror 6, AG Grid Community and ECharts. Agent-composed
-interfaces use a typed json-render catalog; independent HTML views can use
-isolated MCP Apps. Dependency versions and composition identities will be
-recorded when implementation selects the actual artifacts.
+Rho coordinates projects, callers and composition. Rho-plugins owns the headless
+functional implementation, stdio MCP adapter and science. Core supplies the
+existing resident Host/public CLI at `d0159da6feb01d1be9e3b4b34b67953241fedfcb`;
+no Core extension was required. Its source remains unchanged.
 
-## Available foundation and components
-
-[Rho-core](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/PROGRESS.md)
-provides managed execution, original request identity, retained facts, a resident
-Host and public CLI. Rho uses those declared capabilities at the selected version.
-
-[Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/STATUS.md)
-provides an Agent evaluation component and a real R analysis recipe. Their
-component acceptance records contain actual executions, checks, failures and
-limits. Application integration is pending; component results do not establish
-a running Rho composition.
-
-## Next delivery
-
-Implement the [backend-first plan](BACKEND-FIRST.md), beginning with BP-01 public
-contracts and a real external Agent connection experiment, then BP-02's local
-service and public Core CLI bridge. BP-03 delivers the first real analysis;
-BP-04 shared documents/Agent handoff can proceed in parallel. Data/composition,
-continuity and headless installation acceptance follow before independent UI work.
-The [first-release tasks](WEBUI-FIRST.md) retain the product release gates, with
-interaction deliverables in [Design priorities](DESIGN-PRIORITIES.md) and the complete
-flow in [Roadmap](ROADMAP.md#first-integrated-flow). Implementation remains pending.
-
-The backend plan separates Rho coordination from Plugins' headless functional
-services and Core's existing execution contract. No required Core extension was
-identified by the source audit. Versioned schemas, HTTP JSON/SSE operations,
-test clients and state fixtures are planned; they are not implemented interfaces.
-UI will consume these contracts without duplicating execution, document or resource
-state. Backend acceptance will not replace actual browser/product acceptance.
-
-P0 release gates include an installable npm/local-service foundation, project and
-dependency setup, one actual Agent adapter, human-Agent shared context and editing,
-real linked code/table/plot views, run/error/unknown-outcome continuity,
-single-window multi-view layout with one typed Agent composition, export/reopen,
-and clean-environment installation acceptance. None of these gates is optional
-polish. P1 covers additional adapters, richer views and other nonblocking
-enhancements after the reference flow works.
-
-The first-release interaction direction is an external Agent: its actual client
-owns conversation; Rho shows project binding, explicit context, actions and results.
-The R1–R14 designs use a Claude Code terminal session as the reference entry.
-The actual adapter, interfaces/versions, credentials, capability evidence, target
-OS/architecture and browser, Node requirement, npm name/channel and component
-versions remain open under WEB-01. Native desktop clients, cross-window movement
-and system integration are deferred. npm publication and official signed
-distribution remain separate delivery decisions.
-
-Action, Resource, Selection and View are design concepts. Public schemas, component
-host adapters and application state services remain to be implemented for this
-flow. The application side of the Core boundary is specified in the
-[execution bridge](EXECUTION.md). Component host adapters and the UI components
-belong to their source owners. Native resource conditions and results retain their
-functional owner.
+Selected baseline: macOS 26.5.2 arm64, Node 22.22.3/npm 10.9.8, Python 3, R 4.5.2,
+Claude Code 2.1.300 / MCP SDK 1.29.0. The local unsigned npm package is
+`@rho-workspace/local` 0.1.0 with bundled Plugins and a digest-checked Core binary.
+R and scientific packages are external prerequisites. Other platforms, registry
+namespace/channel rights and signed distribution remain unverified/unselected.
 
 ## Verification
 
+- Rho: 9/9 actual protocol/service/crash/continuity/export/budget tests passed.
+  Three SIGKILL boundaries before the first HTTP acknowledgement retain the
+  original operation/Core identity and one native dispatch. Auth, exact Origin,
+  containment, Unicode/concurrent edits, writer leases, unavailable Rscript at
+  service startup and long native socket path rejection are covered.
+- Plugins: 8/8 focused tests passed, including native R singleton/spaced-path
+  checks, immutable MCP caller intents, documents, actual data and retained budgets.
+- Real headless analysis: five DESeq2 fits, 16,139 genes, 33 artifact references;
+  independent arithmetic and saved native model checks pass. Explicit project
+  preparation installs missing apeglm and rechecks; actual shrinkage/checker and
+  two-input comparison pass. Table/scatter descriptions bind the same comparison.
+- Actual Claude MCP handoff fetched explicit context and changed the same unsaved
+  Chinese/emoji buffer. A longer failure-to-buffer-repair experiment and installed
+  repetition are being finalized; failed/time-limited trials stay recorded.
+- Real continuity: paused native analysis retains a 16,139-row partial table
+  without a completion declaration. Host loss preserves original identity and
+  unknown outcome. Observer/view/binding closure does not cancel; a separate
+  cancel confirms native process-group release. Actual bytes/drafts/selection and
+  unavailable compositions restore without executing work.
+
+Failures exposed and repaired include the singleton histogram, shrink checker's
+S4 namespace, macOS socket-path length and Rscript's space-encoded script path.
+[The record](BACKEND-ACCEPTANCE.md#failures-retained-and-repaired) preserves their
+scope and original failures. A fresh npm installation is tested on the existing
+scientific host; it is not a clean OS image or a claim that npm installs R.
+
+## Next delivery
+
+Finish immutable package acceptance, then develop the WebUI against these
+contracts and inert fixtures. [Backend work packages](BACKEND-FIRST.md) retain the
+six-step scope; [first-release tasks](WEBUI-FIRST.md) retain every product gate.
+Backend acceptance does not complete the browser/product release.
+
+The selected UI direction remains React/TypeScript, Vite and Dockview, with
+CodeMirror 6, AG Grid Community, ECharts and a typed json-render catalog. Component
+UI entries, browser shell/layout, native IME/focus/clipboard, responsive widths,
+accessibility and product performance/install acceptance remain pending. Electron
+and cross-window movement follow later. No frontend state owner should duplicate
+document, execution or resource facts supplied by the backend.
+
+## Design evidence and limits
+
 The Paper ["Release 1 · npm WebUI" page](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-5-0)
-contains the revised R1–R14 sequence for `rho-airway-03`, pending user review.
-It connects startup and external Agent binding, a first analysis, shared editing,
-export/reopen, repair, original-request observation and registered comparison views.
-The [design index](DESIGN-PRIORITIES.md#r1r14-连续交互索引) records entries,
-next steps and a resource/state ledger. The S-series pages remain historical
-references. All 14 screens and their flow notes were screenshot-reviewed at the
-1440 px reference width; parameter/footer clipping and overlapping flow-note
-placement were corrected. Other widths and live behavior remain unverified.
-A static sequence is not application acceptance.
+contains R1–R14, pending user review, with the
+[design index](DESIGN-PRIORITIES.md#r1r14-连续交互索引). All 14 reference-width
+screens and notes were reviewed during the design revision; other widths and
+live browser behavior remain unverified. Existing S-series pages are historical.
+The designed run numbers and 8,204-row example are not substituted for actual
+backend evidence. The new partial experiment observed 16,139 rows without full
+pipeline completion.
 
-R1 now contains welcome, open/create and recent-project entries, with no service
-or environment panel. Product startup diagnostics appear only for actual startup
-failures. Dependency checks and preparation belong inside the project at the
-selected capability/action, bound to its actual environment; there is no separate
-global environment page. R2 leaves action requirements unchecked; R3 selects the
-R analysis action and shows its scoped R/package checks. Opening a project neither
-executes scripts nor infers every dependency from their contents. Invocation still
-checks actual native conditions. This is a design correction, not runtime
-detection evidence or a project-wide readiness claim.
+Execution, artifact integrity, domain checks and model judgment remain separate.
+The bounded integration uses one simulation; Plugins' earlier 200-simulation and
+Agent-evaluation records retain their own scope. No clinical/biological validation,
+R-memory recovery after Host loss or OS execution sandbox is implied. Saving
+checks actual disk conditions but does not provide CAS against outside writers.
+MCP supports explicit tool-fetched context; proactive external-chat delivery is
+unavailable. Reads do not start Hosts, and stale sockets are retained for inspection.
 
-The same run 001 baseline remains 16,139 genes, including KLF15's stable gene ID,
-through completion and export/reopen. Later shrinkage repair, run 004's partial
-8,204/16,139 result and unknown outcome are design scenarios, not new execution
-evidence. The comparison declares both inputs and preserves missing values;
-closing or refreshing an observer does not establish that an unknown task is
-still running. Agent, editor, analysis action, table and plot components belong to
-Rho-plugins; Rho assembles the shell, layout, routing and separately sourced facts.
-
-The backend planning revision passed repository-local checks across 18 Markdown
-files and 107 local links/anchors, `git diff --check` and rendered inspection of
-seven changed documents (19 screenshots).
-The backend plan is based on a read-only audit of the adjacent Core and Plugins
-sources; it does not establish a running service or accepted composition.
-Application behavior, actual Agent connection, native input, browser refresh, component
-composition, service lifecycle, installation and signing still require evidence
-from their actual implementations. Core and component checks retain the scope
-recorded by those owners; they are not rerun solely to revise application designs.
-This revision does not run a Host or publish an npm package.
+Source, accepted composition, local npm installation and future official signed
+distribution have separate identities/evidence. No npm registry publish or signing
+has been performed. Local ignored evidence is retained without credentials in
+source. Documentation links and rendered inspection are updated with the final
+coherent delivery batch.

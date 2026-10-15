@@ -31,9 +31,11 @@ functional views use CodeMirror 6, AG Grid Community and ECharts. Agent-composed
 interfaces use a typed json-render catalog; independent HTML views can use an
 isolated MCP Apps host when needed.
 
-The repository currently contains design and development policies. Application
-implementation and integrated acceptance are pending. Component capabilities and
-verification belong to their respective source owners; see [Status](docs/STATUS.md).
+The versioned local backend, npm launcher, client and read-only state fixtures are
+implemented. [Start the headless service](docs/HEADLESS.md) or inspect its
+[acceptance record](docs/BACKEND-ACCEPTANCE.md). The browser shell and component
+views remain to be implemented; backend checks do not establish product release
+acceptance. [Status](docs/STATUS.md) records the current evidence and limits.
 
 Start with the [prioritized first-release tasks](docs/WEBUI-FIRST.md),
 [Architecture](docs/ARCHITECTURE.md), [Technology stack](docs/TECHSTACK.md)

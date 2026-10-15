@@ -10,8 +10,9 @@ dependencies, owners and observable completion conditions. The
 [backend plan](BACKEND-FIRST.md) sequences the required headless implementation
 before independent UI development. The
 [design checklist](DESIGN-PRIORITIES.md) owns interaction-design deliverables.
-All application work and integrated acceptance remain pending; these are selected
-requirements, not implementation evidence.
+The headless service, shared state, real analysis and continuity are implemented;
+[backend acceptance](BACKEND-ACCEPTANCE.md) records their actual checks. Browser
+implementation and integrated product acceptance remain pending.
 
 ## First integrated flow
 
@@ -92,7 +93,9 @@ desktop windows are not a condition of this browser release.
 
 Reuse the R1–R14 design for backend scenarios without waiting for UI implementation.
 Backend acceptance does not establish browser interaction or product release acceptance.
-Record actual dependency versions and immutable identities when selecting each combination.
+The selected Node/MCP/R versions, immutable source/artifact identities and headless
+results are recorded in [backend acceptance](BACKEND-ACCEPTANCE.md). Browser library
+versions and the complete product composition still require selection and acceptance.
 Keep original failure evidence and distinguish a designed flow from a tested one.
 
 ## Resource acceptance

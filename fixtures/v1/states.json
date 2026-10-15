@@ -1,0 +1,2915 @@
+{
+  "apiVersion": "1.0",
+  "schemaVersion": 1,
+  "readOnly": true,
+  "replay": "forbidden",
+  "capturedAt": "2026-10-15T13:45:21.971Z",
+  "scope": "Actual response captures/projections. Native records, executable source, credentials and machine paths are omitted. UI rendering states require independent browser acceptance.",
+  "cases": [
+    {
+      "state": "empty",
+      "operation": "observation.snapshot",
+      "provenance": "Captured from a new project; no Host started.",
+      "envelope": {
+        "apiVersion": "1.0",
+        "ok": true,
+        "value": {
+          "project": {
+            "id": "42baa3e48cfd17714a8ba4df342606d4",
+            "root": "/fixture/fixture-project",
+            "openedAt": "2026-10-15T13:45:21.863Z"
+          },
+          "catalog": {
+            "version": "0.1.0",
+            "actions": [
+              {
+                "id": "airway.analyze",
+                "version": "0.1.0",
+                "owner": "rho-plugins.airway",
+                "effects": [
+                  "native-execution",
+                  "create-artifacts"
+                ],
+                "cancellation": "Core cancellation request; native stop requires observation",
+                "inputSchema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "bootstrapReplicates": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 1000
+                    },
+                    "script": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "disk"
+                            },
+                            "path": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "digest": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "path",
+                            "digest"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "buffer"
+                            },
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "version"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "bootstrapReplicates"
+                  ]
+                },
+                "packages": [
+                  "DESeq2",
+                  "airway",
+                  "SummarizedExperiment",
+                  "jsonlite",
+                  "digest"
+                ],
+                "requirements": {
+                  "status": "unchecked",
+                  "scope": "selected action in the authenticated project"
+                }
+              },
+              {
+                "id": "airway.shrink",
+                "version": "0.1.0",
+                "owner": "rho-plugins.airway",
+                "effects": [
+                  "native-execution",
+                  "create-artifacts"
+                ],
+                "cancellation": "Core cancellation request; native stop requires observation",
+                "inputSchema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ]
+                    },
+                    "baseline": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "baseline"
+                  ]
+                },
+                "packages": [
+                  "DESeq2",
+                  "apeglm",
+                  "jsonlite",
+                  "digest"
+                ],
+                "requirements": {
+                  "status": "unchecked",
+                  "scope": "selected action in the authenticated project"
+                }
+              }
+            ],
+            "components": [
+              {
+                "id": "rho.editor",
+                "version": "0.1.0",
+                "owner": "rho-plugins.documents",
+                "ui": "unavailable",
+                "propsSchema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "title"
+                  ]
+                },
+                "bindings": {
+                  "document": "document"
+                }
+              },
+              {
+                "id": "rho.table",
+                "version": "0.1.0",
+                "owner": "rho-plugins.data",
+                "ui": "unavailable",
+                "propsSchema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "title"
+                  ]
+                },
+                "bindings": {
+                  "data": "table"
+                }
+              },
+              {
+                "id": "rho.scatter",
+                "version": "0.1.0",
+                "owner": "rho-plugins.data",
+                "ui": "unavailable",
+                "propsSchema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "title"
+                  ]
+                },
+                "bindings": {
+                  "data": "table"
+                }
+              },
+              {
+                "id": "rho.comparison",
+                "version": "0.1.0",
+                "owner": "rho-plugins.data",
+                "ui": "unavailable",
+                "propsSchema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "title"
+                  ]
+                },
+                "bindings": {
+                  "baseline": "table",
+                  "shrinkage": "table"
+                }
+              }
+            ],
+            "agent": {
+              "id": "claude-code-mcp",
+              "transport": "stdio",
+              "modelLoop": "external-client",
+              "contextDelivery": "pull-tool-result",
+              "proactivePush": "unsupported"
+            }
+          },
+          "documents": [],
+          "operations": [],
+          "resources": [],
+          "compositions": [],
+          "selection": null,
+          "bindings": [],
+          "cursor": 0,
+          "host": {
+            "exitCode": 3,
+            "reply": {
+              "error": {
+                "kind": "host_unavailable",
+                "message": "no host is listening at `/fixture/capture/fixture-project/.rho/host.sock` (No such file or directory (os error 2)); nothing was sent"
+              },
+              "ok": false
+            }
+          },
+          "limits": {
+            "maxRequestBytes": 1048576,
+            "maxEventBytes": 65536,
+            "eventRetention": 256,
+            "maxSubscriptions": 8,
+            "maxQueue": 32,
+            "maxContexts": 128,
+            "maxBindings": 64,
+            "maxActivities": 256,
+            "maxContextBytes": 1048576,
+            "maxConcurrentActions": 2,
+            "maxOperations": 256,
+            "maxLogPageBytes": 65536,
+            "maxCodeBytes": 1048576,
+            "documents": {
+              "maxBufferBytes": 32,
+              "maxTotalBytes": 8388608,
+              "maxUndoBytes": 8388608,
+              "maxDocuments": 64
+            },
+            "resources": {
+              "maxFileBytes": 67108864,
+              "maxResources": 1024,
+              "maxArtifactBytes": 536870912,
+              "maxRows": 100000,
+              "maxPageRows": 1000,
+              "maxPoints": 20000,
+              "maxReadBytes": 65536
+            }
+          }
+        }
+      }
+    },
+    {
+      "state": "loading",
+      "operation": "action.observe",
+      "provenance": "Captured while the real full DESeq2 fit was paused and its owned Host remained available.",
+      "envelope": {
+        "apiVersion": "1.0",
+        "ok": true,
+        "value": {
+          "operationId": "9bacb89c-8c7c-4e02-b42f-791d6af46e45",
+          "principal": "agent:b1f2d6e7fa61c6ae9932e9a3cd7ce9cf",
+          "projectId": "f7820c9d1e4b0f50f8f3cd7839423d91",
+          "requestDigest": "9098db0c6f6eb239e4b0104707d3b578eb88c37a71f0d4d4ae454775a2e69375",
+          "request": {
+            "kind": "action.submit",
+            "projectId": "f7820c9d1e4b0f50f8f3cd7839423d91",
+            "action": "airway.analyze",
+            "actionVersion": "0.1.0",
+            "input": {
+              "bootstrapReplicates": 1,
+              "script": {
+                "kind": "buffer",
+                "documentId": "165dd9579745f4205c9ddf82ec5ba8b0924fa5ae5348c7a3b499e9a657dab460",
+                "version": 2
+              }
+            },
+            "operationId": "9bacb89c-8c7c-4e02-b42f-791d6af46e45"
+          },
+          "action": "airway.analyze",
+          "actionVersion": "0.1.0",
+          "acceptedAt": "2026-10-15T13:43:31.578Z",
+          "core": {
+            "caller": "rho:071fdf5c6e5e0cb005da7035a99491fddce6208b6ce99467",
+            "requestId": "1ee0b53069695b5836edc569314116e2fb91b481970f48191c05167182391762"
+          },
+          "delivery": "answered",
+          "execution": "active",
+          "native": {
+            "run_id": "18deb7d160719748-81469.1",
+            "request_id": "1ee0b53069695b5836edc569314116e2fb91b481970f48191c05167182391762",
+            "status": {
+              "Running": {
+                "pid": 81472,
+                "spawned_at": "2026-10-15T13:43:31.673Z"
+              }
+            },
+            "held": true,
+            "terminal": false,
+            "stdout": {
+              "eof": false,
+              "limit_bytes": 1048576,
+              "observed_bytes": 212,
+              "retained_bytes": 212,
+              "retention_error": null,
+              "truncated": false
+            },
+            "stderr": {
+              "eof": false,
+              "limit_bytes": 1048576,
+              "observed_bytes": 160,
+              "retained_bytes": 160,
+              "retention_error": null,
+              "truncated": false
+            }
+          },
+          "integrity": {
+            "state": "unchecked"
+          },
+          "domain": {
+            "state": "unchecked"
+          },
+          "interpretation": {
+            "state": "absent"
+          },
+          "plan": {
+            "args": [
+              "/fixture/argument-0",
+              "1"
+            ],
+            "source": {
+              "kind": "buffer",
+              "documentId": "165dd9579745f4205c9ddf82ec5ba8b0924fa5ae5348c7a3b499e9a657dab460",
+              "version": 2,
+              "path": "paused-analysis.R",
+              "dirty": true,
+              "sha256": "dfb43dd154f9f96d28c28ce39556f6340f57f6a66c849ea4f5826b3812f94b38",
+              "dataset": "airway/GSE52778",
+              "expectedGenes": 16139,
+              "contrast": "dex:trt:untrt"
+            },
+            "output": ".rho/plugins/runs/758861cf0a37ef50530b710b8d5eb8b13feea9b4d7ee2110a7e8de3ae77131f4/artifacts",
+            "codeDigest": "dba5bdc6e1de3104b273e9add722389e2d8b67bdea772e8ff9ea199a27366f97"
+          },
+          "lastCli": {
+            "exitCode": 0,
+            "reply": {
+              "ok": true,
+              "scope": "Native record and machine paths omitted from this display fixture."
+            }
+          }
+        }
+      }
+    },
+    {
+      "state": "completed",
+      "operation": "action.observe",
+      "provenance": "Captured after the real science and independent artifact/native checks.",
+      "envelope": {
+        "apiVersion": "1.0",
+        "ok": true,
+        "value": {
+          "operationId": "12fbdd73-03d6-40a4-98e8-dc80ddb91204",
+          "principal": "operator",
+          "projectId": "0babe66d84a69b38794fd58e7a08e6d8",
+          "requestDigest": "a83a8b6ef91c58d4d717e58649e7ea65520c535b7194cd8d708880e62068d55a",
+          "request": {
+            "kind": "action.submit",
+            "projectId": "0babe66d84a69b38794fd58e7a08e6d8",
+            "action": "airway.analyze",
+            "actionVersion": "0.1.0",
+            "input": {
+              "bootstrapReplicates": 1,
+              "script": {
+                "kind": "disk",
+                "path": "analysis.R",
+                "digest": "ac9c61a33ac8c2a3581c64de55d5af39bc639aa99ae9998a7bb0d46f1b107877"
+              }
+            },
+            "operationId": "12fbdd73-03d6-40a4-98e8-dc80ddb91204"
+          },
+          "action": "airway.analyze",
+          "actionVersion": "0.1.0",
+          "acceptedAt": "2026-10-15T13:35:09.246Z",
+          "core": {
+            "caller": "rho:d89499ba9c686682aa4c53a66b38a1e28e9e8d8baa6f51dc",
+            "requestId": "df09524b3d9ae44367e152ca6f64eaf1e677711c4b7cdb8e25ab0b5356a7d86d"
+          },
+          "delivery": "answered",
+          "execution": "completed",
+          "native": {
+            "run_id": "18deb75bd19ebfe8-72372.2",
+            "request_id": "df09524b3d9ae44367e152ca6f64eaf1e677711c4b7cdb8e25ab0b5356a7d86d",
+            "status": {
+              "Finished": {
+                "exit": {
+                  "Code": 0
+                },
+                "exit_observed_at": "2026-10-15T13:35:35.527Z",
+                "group_released": true,
+                "pid": 72452,
+                "spawned_at": "2026-10-15T13:35:09.354Z"
+              }
+            },
+            "held": false,
+            "terminal": true,
+            "stdout": {
+              "eof": true,
+              "limit_bytes": 1048576,
+              "observed_bytes": 2085,
+              "retained_bytes": 2085,
+              "retention_error": null,
+              "truncated": false
+            },
+            "stderr": {
+              "eof": true,
+              "limit_bytes": 1048576,
+              "observed_bytes": 834,
+              "retained_bytes": 834,
+              "retention_error": null,
+              "truncated": false
+            }
+          },
+          "integrity": {
+            "state": "verified",
+            "files": 31,
+            "checkedAt": "2026-10-15T13:35:46.364Z",
+            "manifestDigest": "554b0e68598396be2cd312894e2e0663babd774bb56a001407207bd3adb30ccc"
+          },
+          "domain": {
+            "state": "passed",
+            "checkedAt": "2026-10-15T13:35:46.364Z",
+            "arithmeticExit": 0,
+            "nativeExit": 0,
+            "arithmetic": {
+              "schema_version": 1,
+              "checker": "stdlib-independent-airway-verifier",
+              "output_directory": "/fixture/artifacts",
+              "verified_at": "2026-10-15T13:35:40.428435+00:00",
+              "passed": true,
+              "numeric_tolerances": {
+                "general_relative": 1e-9,
+                "general_absolute": 1e-10,
+                "probability_relative": 1e-7,
+                "probability_absolute": 5e-324
+              },
+              "checks": [
+                {
+                  "check": "artifact_integrity",
+                  "status": "pass",
+                  "evidence": {
+                    "files": 33,
+                    "manifest_entries": 31,
+                    "bytes": 183268160,
+                    "manifest_sha256": "554b0e68598396be2cd312894e2e0663babd774bb56a001407207bd3adb30ccc",
+                    "completion_state": "complete"
+                  },
+                  "limitation": "Self-declared SHA256 and a completion marker detect changed or missing artifacts; they do not prove historical operation provenance. Core receipts must establish that separately. PDF signature is not a visual inspection."
+                },
+                {
+                  "check": "public_input_and_pairing",
+                  "status": "pass",
+                  "evidence": {
+                    "genes": 63677,
+                    "samples": 8,
+                    "donors": [
+                      "N052611",
+                      "N061011",
+                      "N080611",
+                      "N61311"
+                    ],
+                    "paired_samples_per_donor": 2,
+                    "total_counts": 175516423,
+                    "library_totals": {
+                      "SRR1039508": 20637971,
+                      "SRR1039509": 18809481,
+                      "SRR1039512": 25348649,
+                      "SRR1039513": 15163415,
+                      "SRR1039516": 24448408,
+                      "SRR1039517": 30818215,
+                      "SRR1039520": 19126151,
+                      "SRR1039521": 21164133
+                    },
+                    "prefilter_kept": 16139,
+                    "filter": "count >= 10 in >= 4 original samples; fixed gene universe"
+                  },
+                  "limitation": "Checks package input identities, counts, annotation and filtering; it does not rerun FASTQ alignment or independently authenticate every input count."
+                },
+                {
+                  "check": "analysis_plan",
+                  "status": "pass",
+                  "evidence": {
+                    "fits": 5,
+                    "fit_ids": [
+                      "full",
+                      "without_N052611",
+                      "without_N061011",
+                      "without_N080611",
+                      "without_N61311"
+                    ],
+                    "full_design_rank": 5,
+                    "lodo_design_rank": 4,
+                    "fit_elapsed_seconds": {
+                      "full": 2.408,
+                      "without_N052611": 1.98,
+                      "without_N061011": 1.937,
+                      "without_N080611": 2.001,
+                      "without_N61311": 1.916
+                    }
+                  },
+                  "limitation": "Balanced donor-paired design has full rank; plan declarations alone cannot prove which native model was executed."
+                },
+                {
+                  "check": "numerical_full",
+                  "status": "pass",
+                  "evidence": {
+                    "samples": [
+                      "SRR1039508",
+                      "SRR1039509",
+                      "SRR1039512",
+                      "SRR1039513",
+                      "SRR1039516",
+                      "SRR1039517",
+                      "SRR1039520",
+                      "SRR1039521"
+                    ],
+                    "genes": 16139,
+                    "tested_pvalues": 16139,
+                    "NA_pvalues": 0,
+                    "significant_BH_005": 4068,
+                    "unconverged": 0,
+                    "ratio_genes": 16072,
+                    "size_factors": {
+                      "SRR1039508": 1.021976618625623,
+                      "SRR1039509": 0.8960715952374335,
+                      "SRR1039512": 1.1739790049905179,
+                      "SRR1039513": 0.6683682556094077,
+                      "SRR1039516": 1.1753681226709862,
+                      "SRR1039517": 1.3992613115330914,
+                      "SRR1039520": 0.9165166609457628,
+                      "SRR1039521": 0.9450646907772754
+                    },
+                    "size_factor_geometric_mean": 1.00292118804232
+                  },
+                  "limitation": "Independently rederives ratio factors, baseMean, Wald normal tails and BH. It does not independently refit DESeq2 dispersions or coefficients. Cook-filtered NA pvalues remain NA. Size-factor geometric mean need not equal 1."
+                },
+                {
+                  "check": "numerical_without_N052611",
+                  "status": "pass",
+                  "evidence": {
+                    "samples": [
+                      "SRR1039508",
+                      "SRR1039509",
+                      "SRR1039516",
+                      "SRR1039517",
+                      "SRR1039520",
+                      "SRR1039521"
+                    ],
+                    "genes": 16139,
+                    "tested_pvalues": 16139,
+                    "NA_pvalues": 0,
+                    "significant_BH_005": 2645,
+                    "unconverged": 0,
+                    "ratio_genes": 16085,
+                    "size_factors": {
+                      "SRR1039508": 0.9788517295732492,
+                      "SRR1039509": 0.8598832579239399,
+                      "SRR1039516": 1.1264381197789057,
+                      "SRR1039517": 1.3414428641127565,
+                      "SRR1039520": 0.8786862879944891,
+                      "SRR1039521": 0.904290139716475
+                    },
+                    "size_factor_geometric_mean": 1.001758250913394
+                  },
+                  "limitation": "Independently rederives ratio factors, baseMean, Wald normal tails and BH. It does not independently refit DESeq2 dispersions or coefficients. Cook-filtered NA pvalues remain NA. Size-factor geometric mean need not equal 1."
+                },
+                {
+                  "check": "numerical_without_N061011",
+                  "status": "pass",
+                  "evidence": {
+                    "samples": [
+                      "SRR1039508",
+                      "SRR1039509",
+                      "SRR1039512",
+                      "SRR1039513",
+                      "SRR1039516",
+                      "SRR1039517"
+                    ],
+                    "genes": 16139,
+                    "tested_pvalues": 16139,
+                    "NA_pvalues": 0,
+                    "significant_BH_005": 2369,
+                    "unconverged": 0,
+                    "ratio_genes": 16092,
+                    "size_factors": {
+                      "SRR1039508": 0.9964759393543108,
+                      "SRR1039509": 0.8752662163074154,
+                      "SRR1039512": 1.1438513424538088,
+                      "SRR1039513": 0.6523203267980822,
+                      "SRR1039516": 1.1438331615069208,
+                      "SRR1039517": 1.3656942718081941
+                    },
+                    "size_factor_geometric_mean": 1.0027490870878422
+                  },
+                  "limitation": "Independently rederives ratio factors, baseMean, Wald normal tails and BH. It does not independently refit DESeq2 dispersions or coefficients. Cook-filtered NA pvalues remain NA. Size-factor geometric mean need not equal 1."
+                },
+                {
+                  "check": "numerical_without_N080611",
+                  "status": "pass",
+                  "evidence": {
+                    "samples": [
+                      "SRR1039508",
+                      "SRR1039509",
+                      "SRR1039512",
+                      "SRR1039513",
+                      "SRR1039520",
+                      "SRR1039521"
+                    ],
+                    "genes": 16139,
+                    "tested_pvalues": 16139,
+                    "NA_pvalues": 0,
+                    "significant_BH_005": 3223,
+                    "unconverged": 0,
+                    "ratio_genes": 16088,
+                    "size_factors": {
+                      "SRR1039508": 1.107422393136591,
+                      "SRR1039509": 0.971294508402126,
+                      "SRR1039512": 1.2740461949246775,
+                      "SRR1039513": 0.7253341540570455,
+                      "SRR1039520": 0.9952783812636206,
+                      "SRR1039521": 1.0261337328812419
+                    },
+                    "size_factor_geometric_mean": 1.0025114590423356
+                  },
+                  "limitation": "Independently rederives ratio factors, baseMean, Wald normal tails and BH. It does not independently refit DESeq2 dispersions or coefficients. Cook-filtered NA pvalues remain NA. Size-factor geometric mean need not equal 1."
+                },
+                {
+                  "check": "numerical_without_N61311",
+                  "status": "pass",
+                  "evidence": {
+                    "samples": [
+                      "SRR1039512",
+                      "SRR1039513",
+                      "SRR1039516",
+                      "SRR1039517",
+                      "SRR1039520",
+                      "SRR1039521"
+                    ],
+                    "genes": 16139,
+                    "tested_pvalues": 16139,
+                    "NA_pvalues": 0,
+                    "significant_BH_005": 2721,
+                    "unconverged": 0,
+                    "ratio_genes": 16085,
+                    "size_factors": {
+                      "SRR1039512": 1.1555726723271245,
+                      "SRR1039513": 0.6574321488501589,
+                      "SRR1039516": 1.1575046539796339,
+                      "SRR1039517": 1.3773492798796936,
+                      "SRR1039520": 0.9019106794578942,
+                      "SRR1039521": 0.9286024079962603
+                    },
+                    "size_factor_geometric_mean": 1.0023853895846548
+                  },
+                  "limitation": "Independently rederives ratio factors, baseMean, Wald normal tails and BH. It does not independently refit DESeq2 dispersions or coefficients. Cook-filtered NA pvalues remain NA. Size-factor geometric mean need not equal 1."
+                },
+                {
+                  "check": "lodo_exports",
+                  "status": "pass",
+                  "evidence": {
+                    "verified_sensitivity_rows": 16139,
+                    "omitted_pairs": [
+                      "N052611",
+                      "N061011",
+                      "N080611",
+                      "N61311"
+                    ]
+                  },
+                  "limitation": "Leaving out the same original donor pairs describes sensitivity; these correlated fits are not independent biological replication."
+                },
+                {
+                  "check": "published_marker_observations",
+                  "status": "pass",
+                  "evidence": {
+                    "observations": [
+                      {
+                        "gene_id": "ENSG00000103196",
+                        "symbol": "CRISPLD2",
+                        "published_direction": "positive",
+                        "full_log2FoldChange": 2.6272796982015,
+                        "full_padj": 1.62630430399008e-45,
+                        "agrees_with_published_direction": true,
+                        "lodo_log2FoldChange": {
+                          "without_N052611": 2.61489723864144,
+                          "without_N061011": 2.52320291052829,
+                          "without_N080611": 2.88609770671614,
+                          "without_N61311": 2.47687003354207
+                        },
+                        "paired_normalized_log2_ratios": {
+                          "N052611": 2.664049803692744,
+                          "N061011": 2.9235826801528972,
+                          "N080611": 1.833324545766524,
+                          "N61311": 3.075200584350741
+                        }
+                      },
+                      {
+                        "gene_id": "ENSG00000120129",
+                        "symbol": "DUSP1",
+                        "published_direction": "positive",
+                        "full_log2FoldChange": 2.9438588011006,
+                        "full_padj": 1.29895269275327e-124,
+                        "agrees_with_published_direction": true,
+                        "lodo_log2FoldChange": {
+                          "without_N052611": 3.0210002738285,
+                          "without_N061011": 2.83778966894822,
+                          "without_N080611": 3.02331495334787,
+                          "without_N61311": 2.89157826396222
+                        },
+                        "paired_normalized_log2_ratios": {
+                          "N052611": 2.7171219755348215,
+                          "N061011": 3.254659462405414,
+                          "N080611": 2.704467464165392,
+                          "N61311": 3.1059373963751864
+                        }
+                      },
+                      {
+                        "gene_id": "ENSG00000096060",
+                        "symbol": "FKBP5",
+                        "published_direction": "positive",
+                        "full_log2FoldChange": 4.042654613682,
+                        "full_padj": 7.59106211725509e-26,
+                        "agrees_with_published_direction": true,
+                        "lodo_log2FoldChange": {
+                          "without_N052611": 4.00255821928929,
+                          "without_N061011": 3.81815700511876,
+                          "without_N080611": 4.38839404381493,
+                          "without_N61311": 3.93654334949143
+                        },
+                        "paired_normalized_log2_ratios": {
+                          "N052611": 4.159024896786638,
+                          "N061011": 4.696689594180376,
+                          "N080611": 2.9406046618070145,
+                          "N61311": 4.3509438463703685
+                        }
+                      },
+                      {
+                        "gene_id": "ENSG00000163884",
+                        "symbol": "KLF15",
+                        "published_direction": "positive",
+                        "full_log2FoldChange": 4.45533427835306,
+                        "full_padj": 7.96269829470093e-78,
+                        "agrees_with_published_direction": true,
+                        "lodo_log2FoldChange": {
+                          "without_N052611": 4.40540769996709,
+                          "without_N061011": 4.20420814741181,
+                          "without_N080611": 4.72554353331498,
+                          "without_N61311": 4.45484333793365
+                        },
+                        "paired_normalized_log2_ratios": {
+                          "N052611": 4.567578991394466,
+                          "N061011": 5.272362315233918,
+                          "N080611": 3.5063002266397363,
+                          "N61311": 4.4321699053185615
+                        }
+                      },
+                      {
+                        "gene_id": "ENSG00000179094",
+                        "symbol": "PER1",
+                        "published_direction": "positive",
+                        "full_log2FoldChange": 3.18777468184616,
+                        "full_padj": 1.90184177294318e-81,
+                        "agrees_with_published_direction": true,
+                        "lodo_log2FoldChange": {
+                          "without_N052611": 3.12722849913881,
+                          "without_N061011": 3.0723754797753,
+                          "without_N080611": 3.38967099282543,
+                          "without_N61311": 3.1620266471423
+                        },
+                        "paired_normalized_log2_ratios": {
+                          "N052611": 3.3749888282852956,
+                          "N061011": 3.537676460874547,
+                          "N080611": 2.604471769398513,
+                          "N61311": 3.268531698636844
+                        }
+                      },
+                      {
+                        "gene_id": "ENSG00000157514",
+                        "symbol": "TSC22D3",
+                        "published_direction": "positive",
+                        "full_log2FoldChange": 3.18616035523031,
+                        "full_padj": 3.30606055017997e-19,
+                        "agrees_with_published_direction": true,
+                        "lodo_log2FoldChange": {
+                          "without_N052611": 3.11702181029987,
+                          "without_N061011": 3.08726219107494,
+                          "without_N080611": 3.5176101225989,
+                          "without_N61311": 3.00496564958615
+                        },
+                        "paired_normalized_log2_ratios": {
+                          "N052611": 3.381906921450682,
+                          "N061011": 3.4593185011125707,
+                          "N080611": 2.1490158101266337,
+                          "N61311": 3.7173917896842488
+                        }
+                      }
+                    ],
+                    "direction_is_acceptance_threshold": false,
+                    "paper_DEG_count_is_oracle": false
+                  },
+                  "limitation": "Numerical exports are checked; agreement with published directions is recorded as an observation, not a forced pass. Same-dataset agreement is not a novel discovery or a clinical efficacy claim."
+                },
+                {
+                  "check": "session_and_summary",
+                  "status": "pass",
+                  "evidence": {
+                    "R": "R version 4.5.2 (2025-10-31)",
+                    "package_versions": {
+                      "airway": "1.28.0",
+                      "DESeq2": "1.48.2",
+                      "SummarizedExperiment": "1.40.0"
+                    },
+                    "script_sha256": "114a8b556a97b2975ebeeef25312287b14ddcd514d195357222b9dd3d879d7c6",
+                    "recomputed_facts": {
+                      "full_significant": 4068,
+                      "full_tested_pvalues": 16139,
+                      "full_unconverged": 0
+                    }
+                  },
+                  "limitation": "Recorded versions and recomputed counters do not authenticate the runtime or script digest against Core receipts; root checks that separately."
+                },
+                {
+                  "check": "bootstrap_conditional_artifacts",
+                  "status": "pass",
+                  "evidence": {
+                    "replicates": 1,
+                    "fitted_parameter_genes": 16139,
+                    "fitted_mean_contrasts_verified": 64556,
+                    "first_simulated_counts_sum": 174717006,
+                    "first_simulated_counts_sha256": "72aa2374cdd8d16002d468fa57d84eee71601612b0dc979806a43cf7d9f28a6d",
+                    "first_simulated_size_factors": {
+                      "SRR1039508": 1.0186536246509368,
+                      "SRR1039509": 0.8970361970588253,
+                      "SRR1039512": 1.1742467343667131,
+                      "SRR1039513": 0.6731611606589405,
+                      "SRR1039516": 1.1714503441719568,
+                      "SRR1039517": 1.4030401190716693,
+                      "SRR1039520": 0.9166628085173723,
+                      "SRR1039521": 0.9516856540872165
+                    },
+                    "marker_rows": 6,
+                    "marker_Wald_normal_tails_checked": 6,
+                    "bootstrap_whole_BH_independently_recomputed": false,
+                    "first_full_matrix_digest_checked": true,
+                    "remaining_full_matrix_digests_independently_recomputed": false,
+                    "conditional_sampling_summaries": [
+                      {
+                        "gene_id": "ENSG00000103196",
+                        "symbol": "CRISPLD2",
+                        "requested_replicates": 1,
+                        "positive_fraction": 1,
+                        "finite_converged": 1,
+                        "excluded_lfc_or_convergence": 0,
+                        "missing_pvalues": 0,
+                        "positive_count": 1,
+                        "negative_count": 0,
+                        "zero_count": 0,
+                        "q025": 2.66471624965344,
+                        "q50": 2.66471624965344,
+                        "q975": 2.66471624965344
+                      },
+                      {
+                        "gene_id": "ENSG00000120129",
+                        "symbol": "DUSP1",
+                        "requested_replicates": 1,
+                        "positive_fraction": 1,
+                        "finite_converged": 1,
+                        "excluded_lfc_or_convergence": 0,
+                        "missing_pvalues": 0,
+                        "positive_count": 1,
+                        "negative_count": 0,
+                        "zero_count": 0,
+                        "q025": 2.95477896910965,
+                        "q50": 2.95477896910965,
+                        "q975": 2.95477896910965
+                      },
+                      {
+                        "gene_id": "ENSG00000096060",
+                        "symbol": "FKBP5",
+                        "requested_replicates": 1,
+                        "positive_fraction": 1,
+                        "finite_converged": 1,
+                        "excluded_lfc_or_convergence": 0,
+                        "missing_pvalues": 0,
+                        "positive_count": 1,
+                        "negative_count": 0,
+                        "zero_count": 0,
+                        "q025": 4.42981231931056,
+                        "q50": 4.42981231931056,
+                        "q975": 4.42981231931056
+                      },
+                      {
+                        "gene_id": "ENSG00000163884",
+                        "symbol": "KLF15",
+                        "requested_replicates": 1,
+                        "positive_fraction": 1,
+                        "finite_converged": 1,
+                        "excluded_lfc_or_convergence": 0,
+                        "missing_pvalues": 0,
+                        "positive_count": 1,
+                        "negative_count": 0,
+                        "zero_count": 0,
+                        "q025": 4.74464248258944,
+                        "q50": 4.74464248258944,
+                        "q975": 4.74464248258944
+                      },
+                      {
+                        "gene_id": "ENSG00000179094",
+                        "symbol": "PER1",
+                        "requested_replicates": 1,
+                        "positive_fraction": 1,
+                        "finite_converged": 1,
+                        "excluded_lfc_or_convergence": 0,
+                        "missing_pvalues": 0,
+                        "positive_count": 1,
+                        "negative_count": 0,
+                        "zero_count": 0,
+                        "q025": 3.07338163591436,
+                        "q50": 3.07338163591436,
+                        "q975": 3.07338163591436
+                      },
+                      {
+                        "gene_id": "ENSG00000157514",
+                        "symbol": "TSC22D3",
+                        "requested_replicates": 1,
+                        "positive_fraction": 1,
+                        "finite_converged": 1,
+                        "excluded_lfc_or_convergence": 0,
+                        "missing_pvalues": 0,
+                        "positive_count": 1,
+                        "negative_count": 0,
+                        "zero_count": 0,
+                        "q025": 3.39426468815135,
+                        "q50": 3.39426468815135,
+                        "q975": 3.39426468815135
+                      }
+                    ],
+                    "NB_marker_moment_observations": [
+                      {
+                        "gene_id": "ENSG00000103196",
+                        "symbol": "CRISPLD2",
+                        "sample_id": "SRR1039508",
+                        "fitted_mean": 923.995530668035,
+                        "model_variance": 27092.724423563955,
+                        "empirical_mean": 816,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.6561142089913946,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000103196",
+                        "symbol": "CRISPLD2",
+                        "sample_id": "SRR1039509",
+                        "fitted_mean": 5005.66311147314,
+                        "model_variance": 773014.3317573721,
+                        "empirical_mean": 3599,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -1.5999128468652353,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000103196",
+                        "symbol": "CRISPLD2",
+                        "sample_id": "SRR1039512",
+                        "fitted_mean": 1182.20925174725,
+                        "model_variance": 44020.44675243312,
+                        "empirical_mean": 1059,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.5872406317541434,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000103196",
+                        "symbol": "CRISPLD2",
+                        "sample_id": "SRR1039513",
+                        "fitted_mean": 4158.52995731518,
+                        "model_variance": 534215.5072761226,
+                        "empirical_mean": 4743,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 0.7996574924745877,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000103196",
+                        "symbol": "CRISPLD2",
+                        "sample_id": "SRR1039516",
+                        "fitted_mean": 695.582079582018,
+                        "model_variance": 15525.53103344026,
+                        "empirical_mean": 549,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -1.1764071271427539,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000103196",
+                        "symbol": "CRISPLD2",
+                        "sample_id": "SRR1039517",
+                        "fitted_mean": 5116.38596867695,
+                        "model_variance": 807476.7843175612,
+                        "empirical_mean": 4626,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.5457239486840043,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000103196",
+                        "symbol": "CRISPLD2",
+                        "sample_id": "SRR1039520",
+                        "fitted_mean": 803.453139359531,
+                        "model_variance": 20589.72586323601,
+                        "empirical_mean": 720,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.5815906240321008,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000103196",
+                        "symbol": "CRISPLD2",
+                        "sample_id": "SRR1039521",
+                        "fitted_mean": 5118.84196214492,
+                        "model_variance": 808249.7313866103,
+                        "empirical_mean": 4384,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.8173746485942037,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000120129",
+                        "symbol": "DUSP1",
+                        "sample_id": "SRR1039508",
+                        "fitted_mean": 706.184204531471,
+                        "model_variance": 7504.435764768832,
+                        "empirical_mean": 815,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 1.256125172638199,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000120129",
+                        "symbol": "DUSP1",
+                        "sample_id": "SRR1039509",
+                        "fitted_mean": 4764.41466043847,
+                        "model_variance": 314207.18253104645,
+                        "empirical_mean": 5176,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 0.7342633355088989,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000120129",
+                        "symbol": "DUSP1",
+                        "sample_id": "SRR1039512",
+                        "fitted_mean": 1122.65575016016,
+                        "model_variance": 18303.89330645169,
+                        "empirical_mean": 973,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -1.1061694764308525,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000120129",
+                        "symbol": "DUSP1",
+                        "sample_id": "SRR1039513",
+                        "fitted_mean": 4918.03813267503,
+                        "model_variance": 334637.8291802901,
+                        "empirical_mean": 4475,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.7658674125274424,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000120129",
+                        "symbol": "DUSP1",
+                        "sample_id": "SRR1039516",
+                        "fitted_mean": 751.043390010867,
+                        "model_variance": 8440.422771557676,
+                        "empirical_mean": 745,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.06578070476553936,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000120129",
+                        "symbol": "DUSP1",
+                        "sample_id": "SRR1039517",
+                        "fitted_mean": 6879.86234471625,
+                        "model_variance": 652119.0413474734,
+                        "empirical_mean": 8081,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 1.4874053575477284,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000120129",
+                        "symbol": "DUSP1",
+                        "sample_id": "SRR1039520",
+                        "fitted_mean": 781.79112279684,
+                        "model_variance": 9113.665280320722,
+                        "empirical_mean": 843,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 0.6411621491261833,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000120129",
+                        "symbol": "DUSP1",
+                        "sample_id": "SRR1039521",
+                        "fitted_mean": 6202.99898548225,
+                        "model_variance": 530726.1393025009,
+                        "empirical_mean": 6038,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.2264884370973195,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000096060",
+                        "symbol": "FKBP5",
+                        "sample_id": "SRR1039508",
+                        "fitted_mean": 291.348046642954,
+                        "model_variance": 11262.289928019944,
+                        "empirical_mean": 295,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 0.03441215500162238,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000096060",
+                        "symbol": "FKBP5",
+                        "sample_id": "SRR1039509",
+                        "fitted_mean": 4209.92309484293,
+                        "model_variance": 2294908.878594795,
+                        "empirical_mean": 5653,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 0.9525916124986841,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000096060",
+                        "symbol": "FKBP5",
+                        "sample_id": "SRR1039512",
+                        "fitted_mean": 397.140036205501,
+                        "model_variance": 20781.96727396542,
+                        "empirical_mean": 237,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -1.110853004685841,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000096060",
+                        "symbol": "FKBP5",
+                        "sample_id": "SRR1039513",
+                        "fitted_mean": 3726.14247150821,
+                        "model_variance": 1798206.074206407,
+                        "empirical_mean": 5184,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 1.0871647281330055,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000096060",
+                        "symbol": "FKBP5",
+                        "sample_id": "SRR1039516",
+                        "fitted_mean": 439.161451998442,
+                        "model_variance": 25366.052626081368,
+                        "empirical_mean": 208,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -1.4514061841050778,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000096060",
+                        "symbol": "FKBP5",
+                        "sample_id": "SRR1039517",
+                        "fitted_mean": 8616.07422387807,
+                        "model_variance": 9603474.17180928,
+                        "empirical_mean": 8831,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 0.06935444766010987,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000096060",
+                        "symbol": "FKBP5",
+                        "sample_id": "SRR1039520",
+                        "fitted_mean": 198.955703612269,
+                        "model_variance": 5314.978616015466,
+                        "empirical_mean": 363,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 2.2501443226486666,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000096060",
+                        "symbol": "FKBP5",
+                        "sample_id": "SRR1039521",
+                        "fitted_mean": 3380.94314821759,
+                        "model_variance": 1480771.875039209,
+                        "empirical_mean": 2532,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.6976450690238191,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000163884",
+                        "symbol": "KLF15",
+                        "sample_id": "SRR1039508",
+                        "fitted_mean": 69.363743737361,
+                        "model_variance": 265.5818035255538,
+                        "empirical_mean": 58,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.6973041879167511,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000163884",
+                        "symbol": "KLF15",
+                        "sample_id": "SRR1039509",
+                        "fitted_mean": 1334.20798177086,
+                        "model_variance": 73931.59605433466,
+                        "empirical_mean": 1699,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 1.341622355345895,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000163884",
+                        "symbol": "KLF15",
+                        "sample_id": "SRR1039512",
+                        "fitted_mean": 54.4541079551992,
+                        "model_variance": 175.38443376024165,
+                        "empirical_mean": 53,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.10979969353210575,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000163884",
+                        "symbol": "KLF15",
+                        "sample_id": "SRR1039513",
+                        "fitted_mean": 680.104096906505,
+                        "model_variance": 19543.709755005453,
+                        "empirical_mean": 854,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 1.2439010895082359,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000163884",
+                        "symbol": "KLF15",
+                        "sample_id": "SRR1039516",
+                        "fitted_mean": 24.5818572852153,
+                        "model_variance": 49.22540972676241,
+                        "empirical_mean": 24,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.08293193650206844,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000163884",
+                        "symbol": "KLF15",
+                        "sample_id": "SRR1039517",
+                        "fitted_mean": 641.990896665599,
+                        "model_variance": 17450.59571260854,
+                        "empirical_mean": 665,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 0.17417850795166787,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000163884",
+                        "symbol": "KLF15",
+                        "sample_id": "SRR1039520",
+                        "fitted_mean": 49.390356248572,
+                        "model_variance": 148.87550286676603,
+                        "empirical_mean": 43,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.5237372326009608,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000163884",
+                        "symbol": "KLF15",
+                        "sample_id": "SRR1039521",
+                        "fitted_mean": 1117.25572947143,
+                        "model_variance": 52024.443686177954,
+                        "empirical_mean": 987,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.5710749533826446,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000179094",
+                        "symbol": "PER1",
+                        "sample_id": "SRR1039508",
+                        "fitted_mean": 183.606251064746,
+                        "model_variance": 933.5519845713322,
+                        "empirical_mean": 167,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.5435035014790683,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000179094",
+                        "symbol": "PER1",
+                        "sample_id": "SRR1039509",
+                        "fitted_mean": 1466.91521333618,
+                        "model_variance": 49337.08168820864,
+                        "empirical_mean": 1636,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 0.7612333475568429,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000179094",
+                        "symbol": "PER1",
+                        "sample_id": "SRR1039512",
+                        "fitted_mean": 149.620379579988,
+                        "model_variance": 647.62849145107,
+                        "empirical_mean": 176,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 1.036586548482128,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000179094",
+                        "symbol": "PER1",
+                        "sample_id": "SRR1039513",
+                        "fitted_mean": 776.179262559449,
+                        "model_variance": 14178.46840538059,
+                        "empirical_mean": 646,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -1.093269285501302,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000179094",
+                        "symbol": "PER1",
+                        "sample_id": "SRR1039516",
+                        "fitted_mean": 187.253119596499,
+                        "model_variance": 967.286226575028,
+                        "empirical_mean": 172,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.49043468092905135,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000179094",
+                        "symbol": "PER1",
+                        "sample_id": "SRR1039517",
+                        "fitted_mean": 2031.2799358861,
+                        "model_variance": 93821.08975151664,
+                        "empirical_mean": 2332,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 0.9817754516116153,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000179094",
+                        "symbol": "PER1",
+                        "sample_id": "SRR1039520",
+                        "fitted_mean": 137.352973199743,
+                        "model_variance": 557.0453124993876,
+                        "empirical_mean": 180,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": 1.8069390229016067,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000179094",
+                        "symbol": "PER1",
+                        "sample_id": "SRR1039521",
+                        "fitted_mean": 1290.55059894013,
+                        "model_variance": 38341.981594564786,
+                        "empirical_mean": 1156,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.6871449484715104,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000157514",
+                        "symbol": "TSC22D3",
+                        "sample_id": "SRR1039508",
+                        "fitted_mean": 461.635007777394,
+                        "model_variance": 23655.78658650089,
+                        "empirical_mean": 174,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -1.8701353768914437,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000157514",
+                        "symbol": "TSC22D3",
+                        "sample_id": "SRR1039509",
+                        "fitted_mean": 3684.09079253196,
+                        "model_variance": 1480892.150925326,
+                        "empirical_mean": 2716,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.7955259922874014,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000157514",
+                        "symbol": "TSC22D3",
+                        "sample_id": "SRR1039512",
+                        "fitted_mean": 560.175621407886,
+                        "model_variance": 34713.220482793935,
+                        "empirical_mean": 263,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -1.5950185054890318,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000157514",
+                        "symbol": "TSC22D3",
+                        "sample_id": "SRR1039513",
+                        "fitted_mean": 2902.74928687576,
+                        "model_variance": 919967.6535440983,
+                        "empirical_mean": 1217,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -1.7575460212200356,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000157514",
+                        "symbol": "TSC22D3",
+                        "sample_id": "SRR1039516",
+                        "fitted_mean": 264.06353088161,
+                        "model_variance": 7853.29627021881,
+                        "empirical_mean": 193,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.801901066869965,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000157514",
+                        "symbol": "TSC22D3",
+                        "sample_id": "SRR1039517",
+                        "fitted_mean": 2861.29860040831,
+                        "model_variance": 893922.1927028669,
+                        "empirical_mean": 2467,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.4170377567647583,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000157514",
+                        "symbol": "TSC22D3",
+                        "sample_id": "SRR1039520",
+                        "fitted_mean": 481.825008817495,
+                        "model_variance": 25749.17496558956,
+                        "empirical_mean": 344,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -0.8589074500948979,
+                        "variance_ratio": null
+                      },
+                      {
+                        "gene_id": "ENSG00000157514",
+                        "symbol": "TSC22D3",
+                        "sample_id": "SRR1039521",
+                        "fitted_mean": 4522.10195004582,
+                        "model_variance": 2230196.9494119613,
+                        "empirical_mean": 2935,
+                        "empirical_variance": null,
+                        "mean_deviation_in_model_SE": -1.062755145966651,
+                        "variance_ratio": null
+                      }
+                    ],
+                    "moment_or_positive_fraction_threshold_used": false
+                  },
+                  "limitation": "Independently verifies fitted-mean contrasts, source dispersions, first full simulated matrix digest and marker counts, marker Wald tails and type-7 summaries. Whole bootstrap BH cannot be independently recomputed from six-marker exports; only the first whole simulated matrix is exported. NB sample moments are descriptive observations, not distributional pass thresholds. No independent R RNG replay, dispersion/coefficient refitting or biological replication is claimed."
+                }
+              ],
+              "sources": {
+                "input": "https://bioconductor.org/packages/release/data/experiment/vignettes/airway/inst/doc/airway.html",
+                "methods": "https://bioconductor.org/packages/release/bioc/manuals/DESeq2/man/DESeq2.pdf",
+                "paired_design": "https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html#can-i-use-deseq2-to-analyze-paired-samples",
+                "published_direction": "https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0099625",
+                "BH": "https://stat.ethz.ch/R-manual/R-devel/library/stats/html/p.adjust.html",
+                "NB_parameterization": "https://stat.ethz.ch/R-manual/R-devel/library/stats/html/NegBinomial.html",
+                "type7_quantile": "https://stat.ethz.ch/R-manual/R-devel/library/stats/html/quantile.html"
+              },
+              "scope": "Public-data domain artifact and arithmetic checks. Execution continuity, native dispatch count, upstream quantification, visual readability, and scientific generalization require their own evidence."
+            },
+            "native": {
+              "schema_version": 1,
+              "status": "passed",
+              "started_at": "2026-10-15T13:35:40.545+0000",
+              "output_directory": "/fixture/artifacts",
+              "tolerance": 1e-9,
+              "scope": "Read-only observation using the same installed R packages as the native analysis; not an independent statistical oracle. No model is refitted.",
+              "checks": [
+                {
+                  "check": "installed package DESeq2",
+                  "passed": true
+                },
+                {
+                  "check": "installed package SummarizedExperiment",
+                  "passed": true
+                },
+                {
+                  "check": "installed package S4Vectors",
+                  "passed": true
+                },
+                {
+                  "check": "installed package digest",
+                  "passed": true
+                },
+                {
+                  "check": "completed artifact marker exists",
+                  "passed": true
+                },
+                {
+                  "check": "versions.csv required unique columns",
+                  "passed": true
+                },
+                {
+                  "check": "native observation package version matches analysis: DESeq2",
+                  "passed": true
+                },
+                {
+                  "check": "native observation package version matches analysis: SummarizedExperiment",
+                  "passed": true
+                },
+                {
+                  "check": "native observation package version matches analysis: S4Vectors",
+                  "passed": true
+                },
+                {
+                  "check": "input/counts.csv required unique columns",
+                  "passed": true
+                },
+                {
+                  "check": "input/samples.csv required unique columns",
+                  "passed": true
+                },
+                {
+                  "check": "input/prefilter.csv required unique columns",
+                  "passed": true
+                },
+                {
+                  "check": "normalization.csv required unique columns",
+                  "passed": true
+                },
+                {
+                  "check": "analysis_plan.csv required unique columns",
+                  "passed": true
+                },
+                {
+                  "check": "original input dimensions and sample/gene identity",
+                  "passed": true
+                },
+                {
+                  "check": "original raw counts are nonnegative finite integers",
+                  "passed": true
+                },
+                {
+                  "check": "recomputed fixed input prefilter",
+                  "passed": true
+                },
+                {
+                  "check": "original four donor pairs",
+                  "passed": true
+                },
+                {
+                  "check": "five planned model identities and order",
+                  "passed": true
+                },
+                {
+                  "check": "exact five RDS model files",
+                  "passed": true
+                },
+                {
+                  "check": "full native DESeqDataSet read back",
+                  "passed": true
+                },
+                {
+                  "check": "full native ~ cell + dex design",
+                  "passed": true
+                },
+                {
+                  "check": "full native model dimensions and ordered identities",
+                  "passed": true
+                },
+                {
+                  "check": "full all native counts equal fixed selected input",
+                  "passed": true
+                },
+                {
+                  "check": "full native donor/treatment pairing and reference",
+                  "passed": true
+                },
+                {
+                  "check": "full exported plan matches native dimensions and omission",
+                  "passed": true
+                },
+                {
+                  "check": "full normalization sample order",
+                  "passed": true
+                },
+                {
+                  "check": "full native size factors equal CSV",
+                  "passed": true
+                },
+                {
+                  "check": "results/full.csv required unique columns",
+                  "passed": true
+                },
+                {
+                  "check": "full result gene order",
+                  "passed": true
+                },
+                {
+                  "check": "full native dispersions equal CSV",
+                  "passed": true
+                },
+                {
+                  "check": "full native coefficient convergence equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "full native result gene identity",
+                  "passed": true
+                },
+                {
+                  "check": "full native results baseMean equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "full native results log2FoldChange equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "full native results lfcSE equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "full native results stat equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "full native results pvalue equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "full native results padj equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "bootstrap/means.csv required unique columns",
+                  "passed": true
+                },
+                {
+                  "check": "bootstrap/dispersion.csv required unique columns",
+                  "passed": true
+                },
+                {
+                  "check": "full bootstrap parameter identities",
+                  "passed": true
+                },
+                {
+                  "check": "full native fitted means equal all exported simulation means",
+                  "passed": true
+                },
+                {
+                  "check": "full native dispersions equal all exported simulation dispersions",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 native DESeqDataSet read back",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 native ~ cell + dex design",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 native model dimensions and ordered identities",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 all native counts equal fixed selected input",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 native donor/treatment pairing and reference",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 exported plan matches native dimensions and omission",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 normalization sample order",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 native size factors equal CSV",
+                  "passed": true
+                },
+                {
+                  "check": "results/without_N052611.csv required unique columns",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 result gene order",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 native dispersions equal CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 native coefficient convergence equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 native result gene identity",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 native results baseMean equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 native results log2FoldChange equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 native results lfcSE equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 native results stat equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 native results pvalue equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N052611 native results padj equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 native DESeqDataSet read back",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 native ~ cell + dex design",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 native model dimensions and ordered identities",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 all native counts equal fixed selected input",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 native donor/treatment pairing and reference",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 exported plan matches native dimensions and omission",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 normalization sample order",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 native size factors equal CSV",
+                  "passed": true
+                },
+                {
+                  "check": "results/without_N061011.csv required unique columns",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 result gene order",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 native dispersions equal CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 native coefficient convergence equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 native result gene identity",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 native results baseMean equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 native results log2FoldChange equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 native results lfcSE equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 native results stat equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 native results pvalue equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N061011 native results padj equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 native DESeqDataSet read back",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 native ~ cell + dex design",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 native model dimensions and ordered identities",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 all native counts equal fixed selected input",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 native donor/treatment pairing and reference",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 exported plan matches native dimensions and omission",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 normalization sample order",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 native size factors equal CSV",
+                  "passed": true
+                },
+                {
+                  "check": "results/without_N080611.csv required unique columns",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 result gene order",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 native dispersions equal CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 native coefficient convergence equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 native result gene identity",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 native results baseMean equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 native results log2FoldChange equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 native results lfcSE equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 native results stat equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 native results pvalue equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N080611 native results padj equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 native DESeqDataSet read back",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 native ~ cell + dex design",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 native model dimensions and ordered identities",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 all native counts equal fixed selected input",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 native donor/treatment pairing and reference",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 exported plan matches native dimensions and omission",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 normalization sample order",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 native size factors equal CSV",
+                  "passed": true
+                },
+                {
+                  "check": "results/without_N61311.csv required unique columns",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 result gene order",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 native dispersions equal CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 native coefficient convergence equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 native result gene identity",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 native results baseMean equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 native results log2FoldChange equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 native results lfcSE equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 native results stat equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 native results pvalue equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "without_N61311 native results padj equals CSV",
+                  "passed": true
+                },
+                {
+                  "check": "all five saved models observed without refitting",
+                  "passed": true
+                }
+              ],
+              "models": [
+                {
+                  "analysis_id": "full",
+                  "path": "/fixture/full.rds",
+                  "sha256": "a4e547a30a4a9ddf4e814ad0b732ea5963ec5be47143b8b8648d8fce44333de2",
+                  "genes": 16139,
+                  "samples": 8,
+                  "donors": [
+                    "N052611",
+                    "N061011",
+                    "N080611",
+                    "N61311"
+                  ],
+                  "sample_ids": [
+                    "SRR1039508",
+                    "SRR1039509",
+                    "SRR1039512",
+                    "SRR1039513",
+                    "SRR1039516",
+                    "SRR1039517",
+                    "SRR1039520",
+                    "SRR1039521"
+                  ],
+                  "design": "~cell + dex",
+                  "coefficient": "dex_trt_vs_untrt",
+                  "result_columns_checked": [
+                    "baseMean",
+                    "log2FoldChange",
+                    "lfcSE",
+                    "stat",
+                    "pvalue",
+                    "padj"
+                  ],
+                  "unconverged_genes": 0
+                },
+                {
+                  "analysis_id": "without_N052611",
+                  "path": "/fixture/without_N052611.rds",
+                  "sha256": "2baf6730c98c1763a6c4acad8d3397891b3fa332db270bde8e324758b2946797",
+                  "genes": 16139,
+                  "samples": 6,
+                  "donors": [
+                    "N061011",
+                    "N080611",
+                    "N61311"
+                  ],
+                  "sample_ids": [
+                    "SRR1039508",
+                    "SRR1039509",
+                    "SRR1039516",
+                    "SRR1039517",
+                    "SRR1039520",
+                    "SRR1039521"
+                  ],
+                  "design": "~cell + dex",
+                  "coefficient": "dex_trt_vs_untrt",
+                  "result_columns_checked": [
+                    "baseMean",
+                    "log2FoldChange",
+                    "lfcSE",
+                    "stat",
+                    "pvalue",
+                    "padj"
+                  ],
+                  "unconverged_genes": 0
+                },
+                {
+                  "analysis_id": "without_N061011",
+                  "path": "/fixture/without_N061011.rds",
+                  "sha256": "e49e68227904acf72e71190d5563bf37d7719229bbcc2722f0a4cc49e79e28e6",
+                  "genes": 16139,
+                  "samples": 6,
+                  "donors": [
+                    "N052611",
+                    "N080611",
+                    "N61311"
+                  ],
+                  "sample_ids": [
+                    "SRR1039508",
+                    "SRR1039509",
+                    "SRR1039512",
+                    "SRR1039513",
+                    "SRR1039516",
+                    "SRR1039517"
+                  ],
+                  "design": "~cell + dex",
+                  "coefficient": "dex_trt_vs_untrt",
+                  "result_columns_checked": [
+                    "baseMean",
+                    "log2FoldChange",
+                    "lfcSE",
+                    "stat",
+                    "pvalue",
+                    "padj"
+                  ],
+                  "unconverged_genes": 0
+                },
+                {
+                  "analysis_id": "without_N080611",
+                  "path": "/fixture/without_N080611.rds",
+                  "sha256": "f28cbefe68f253109ec1170ddc1633600b9a10a1c39dfee036a677e590fc9d6a",
+                  "genes": 16139,
+                  "samples": 6,
+                  "donors": [
+                    "N052611",
+                    "N061011",
+                    "N61311"
+                  ],
+                  "sample_ids": [
+                    "SRR1039508",
+                    "SRR1039509",
+                    "SRR1039512",
+                    "SRR1039513",
+                    "SRR1039520",
+                    "SRR1039521"
+                  ],
+                  "design": "~cell + dex",
+                  "coefficient": "dex_trt_vs_untrt",
+                  "result_columns_checked": [
+                    "baseMean",
+                    "log2FoldChange",
+                    "lfcSE",
+                    "stat",
+                    "pvalue",
+                    "padj"
+                  ],
+                  "unconverged_genes": 0
+                },
+                {
+                  "analysis_id": "without_N61311",
+                  "path": "/fixture/without_N61311.rds",
+                  "sha256": "81a5e13080fe34100a52bb7ff3ca5a83709d3df363ebbadf321a3a3f38958657",
+                  "genes": 16139,
+                  "samples": 6,
+                  "donors": [
+                    "N052611",
+                    "N061011",
+                    "N080611"
+                  ],
+                  "sample_ids": [
+                    "SRR1039512",
+                    "SRR1039513",
+                    "SRR1039516",
+                    "SRR1039517",
+                    "SRR1039520",
+                    "SRR1039521"
+                  ],
+                  "design": "~cell + dex",
+                  "coefficient": "dex_trt_vs_untrt",
+                  "result_columns_checked": [
+                    "baseMean",
+                    "log2FoldChange",
+                    "lfcSE",
+                    "stat",
+                    "pvalue",
+                    "padj"
+                  ],
+                  "unconverged_genes": 0
+                }
+              ],
+              "analysis_packages": [
+                {
+                  "package": "DESeq2",
+                  "version": "1.48.2"
+                },
+                {
+                  "package": "S4Vectors",
+                  "version": "0.48.0"
+                },
+                {
+                  "package": "SummarizedExperiment",
+                  "version": "1.40.0"
+                }
+              ],
+              "completed_at": "2026-10-15T13:35:46.318+0000",
+              "elapsed_seconds": 5.7736279964447,
+              "R": "R version 4.5.2 (2025-10-31)",
+              "packages": [
+                {
+                  "package": "abind",
+                  "version": "1.4.8",
+                  "_row": "abind"
+                },
+                {
+                  "package": "base",
+                  "version": "4.5.2",
+                  "_row": "base"
+                },
+                {
+                  "package": "Biobase",
+                  "version": "2.70.0",
+                  "_row": "Biobase"
+                },
+                {
+                  "package": "BiocGenerics",
+                  "version": "0.56.0",
+                  "_row": "BiocGenerics"
+                },
+                {
+                  "package": "BiocParallel",
+                  "version": "1.44.0",
+                  "_row": "BiocParallel"
+                },
+                {
+                  "package": "cli",
+                  "version": "3.6.6",
+                  "_row": "cli"
+                },
+                {
+                  "package": "codetools",
+                  "version": "0.2.20",
+                  "_row": "codetools"
+                },
+                {
+                  "package": "compiler",
+                  "version": "4.5.2",
+                  "_row": "compiler"
+                },
+                {
+                  "package": "datasets",
+                  "version": "4.5.2",
+                  "_row": "datasets"
+                },
+                {
+                  "package": "DelayedArray",
+                  "version": "0.36.0",
+                  "_row": "DelayedArray"
+                },
+                {
+                  "package": "DESeq2",
+                  "version": "1.48.2",
+                  "_row": "DESeq2"
+                },
+                {
+                  "package": "dichromat",
+                  "version": "2.0.0.1",
+                  "_row": "dichromat"
+                },
+                {
+                  "package": "digest",
+                  "version": "0.6.39",
+                  "_row": "digest"
+                },
+                {
+                  "package": "dplyr",
+                  "version": "1.2.1",
+                  "_row": "dplyr"
+                },
+                {
+                  "package": "farver",
+                  "version": "2.1.2",
+                  "_row": "farver"
+                },
+                {
+                  "package": "generics",
+                  "version": "0.1.4",
+                  "_row": "generics"
+                },
+                {
+                  "package": "GenomeInfoDb",
+                  "version": "1.46.0",
+                  "_row": "GenomeInfoDb"
+                },
+                {
+                  "package": "GenomicRanges",
+                  "version": "1.62.0",
+                  "_row": "GenomicRanges"
+                },
+                {
+                  "package": "ggplot2",
+                  "version": "4.0.3.9000",
+                  "_row": "ggplot2"
+                },
+                {
+                  "package": "glue",
+                  "version": "1.8.1",
+                  "_row": "glue"
+                },
+                {
+                  "package": "graphics",
+                  "version": "4.5.2",
+                  "_row": "graphics"
+                },
+                {
+                  "package": "grDevices",
+                  "version": "4.5.2",
+                  "_row": "grDevices"
+                },
+                {
+                  "package": "grid",
+                  "version": "4.5.2",
+                  "_row": "grid"
+                },
+                {
+                  "package": "gtable",
+                  "version": "0.3.6",
+                  "_row": "gtable"
+                },
+                {
+                  "package": "httr",
+                  "version": "1.4.8",
+                  "_row": "httr"
+                },
+                {
+                  "package": "IRanges",
+                  "version": "2.44.0",
+                  "_row": "IRanges"
+                },
+                {
+                  "package": "jsonlite",
+                  "version": "2.0.0",
+                  "_row": "jsonlite"
+                },
+                {
+                  "package": "lattice",
+                  "version": "0.22.7",
+                  "_row": "lattice"
+                },
+                {
+                  "package": "lifecycle",
+                  "version": "1.0.5",
+                  "_row": "lifecycle"
+                },
+                {
+                  "package": "locfit",
+                  "version": "1.5.9.12",
+                  "_row": "locfit"
+                },
+                {
+                  "package": "magrittr",
+                  "version": "2.0.5",
+                  "_row": "magrittr"
+                },
+                {
+                  "package": "Matrix",
+                  "version": "1.7.4",
+                  "_row": "Matrix"
+                },
+                {
+                  "package": "MatrixGenerics",
+                  "version": "1.22.0",
+                  "_row": "MatrixGenerics"
+                },
+                {
+                  "package": "matrixStats",
+                  "version": "1.5.0",
+                  "_row": "matrixStats"
+                },
+                {
+                  "package": "methods",
+                  "version": "4.5.2",
+                  "_row": "methods"
+                },
+                {
+                  "package": "parallel",
+                  "version": "4.5.2",
+                  "_row": "parallel"
+                },
+                {
+                  "package": "pillar",
+                  "version": "1.11.1",
+                  "_row": "pillar"
+                },
+                {
+                  "package": "pkgconfig",
+                  "version": "2.0.3",
+                  "_row": "pkgconfig"
+                },
+                {
+                  "package": "R6",
+                  "version": "2.6.1",
+                  "_row": "R6"
+                },
+                {
+                  "package": "RColorBrewer",
+                  "version": "1.1.3",
+                  "_row": "RColorBrewer"
+                },
+                {
+                  "package": "Rcpp",
+                  "version": "1.1.1.1.1",
+                  "_row": "Rcpp"
+                },
+                {
+                  "package": "rlang",
+                  "version": "1.2.0",
+                  "_row": "rlang"
+                },
+                {
+                  "package": "S4Arrays",
+                  "version": "1.10.0",
+                  "_row": "S4Arrays"
+                },
+                {
+                  "package": "S4Vectors",
+                  "version": "0.48.0",
+                  "_row": "S4Vectors"
+                },
+                {
+                  "package": "S7",
+                  "version": "0.2.2",
+                  "_row": "S7"
+                },
+                {
+                  "package": "scales",
+                  "version": "1.4.0",
+                  "_row": "scales"
+                },
+                {
+                  "package": "Seqinfo",
+                  "version": "1.0.0",
+                  "_row": "Seqinfo"
+                },
+                {
+                  "package": "SparseArray",
+                  "version": "1.10.1",
+                  "_row": "SparseArray"
+                },
+                {
+                  "package": "stats",
+                  "version": "4.5.2",
+                  "_row": "stats"
+                },
+                {
+                  "package": "stats4",
+                  "version": "4.5.2",
+                  "_row": "stats4"
+                },
+                {
+                  "package": "SummarizedExperiment",
+                  "version": "1.40.0",
+                  "_row": "SummarizedExperiment"
+                },
+                {
+                  "package": "tibble",
+                  "version": "3.3.1",
+                  "_row": "tibble"
+                },
+                {
+                  "package": "tidyselect",
+                  "version": "1.2.1",
+                  "_row": "tidyselect"
+                },
+                {
+                  "package": "tools",
+                  "version": "4.5.2",
+                  "_row": "tools"
+                },
+                {
+                  "package": "UCSC.utils",
+                  "version": "1.6.0",
+                  "_row": "UCSC.utils"
+                },
+                {
+                  "package": "utils",
+                  "version": "4.5.2",
+                  "_row": "utils"
+                },
+                {
+                  "package": "vctrs",
+                  "version": "0.7.3",
+                  "_row": "vctrs"
+                },
+                {
+                  "package": "XVector",
+                  "version": "0.50.0",
+                  "_row": "XVector"
+                }
+              ]
+            },
+            "scope": "Artifact arithmetic and saved native state checks; not independent biological or clinical validation."
+          },
+          "interpretation": {
+            "state": "absent"
+          },
+          "plan": {
+            "args": [
+              "/fixture/argument-0",
+              "1"
+            ],
+            "source": {
+              "kind": "disk",
+              "path": "analysis.R",
+              "sha256": "ac9c61a33ac8c2a3581c64de55d5af39bc639aa99ae9998a7bb0d46f1b107877",
+              "dataset": "airway/GSE52778",
+              "expectedGenes": 16139,
+              "contrast": "dex:trt:untrt"
+            },
+            "output": ".rho/plugins/runs/298dbf24a4981db54c1c8c0480905bf46fe5c4885fb2a85085aeebc4d49b1142/artifacts",
+            "codeDigest": "114a8b556a97b2975ebeeef25312287b14ddcd514d195357222b9dd3d879d7c6"
+          },
+          "lastCli": {
+            "exitCode": 0,
+            "reply": {
+              "ok": true,
+              "scope": "Native record and machine paths omitted from this display fixture."
+            }
+          }
+        }
+      }
+    },
+    {
+      "state": "failed",
+      "operation": "action.observe",
+      "provenance": "Retained first scientific trial: bootstrap=1 exposed the singleton histogram failure, later repaired in the recipe.",
+      "envelope": {
+        "apiVersion": "1.0",
+        "ok": true,
+        "value": {
+          "operationId": "54743b84-08cb-49a7-95cf-7de6f9e03f25",
+          "principal": "operator",
+          "projectId": "0a43f8174cdf3e678f5e0dd0d069183a",
+          "requestDigest": "50f17a32701c2322fca59b89de1c4d7b02d48e6d02ba401ee7024d41bb4746b4",
+          "request": {
+            "kind": "action.submit",
+            "projectId": "0a43f8174cdf3e678f5e0dd0d069183a",
+            "action": "airway.analyze",
+            "actionVersion": "0.1.0",
+            "input": {
+              "bootstrapReplicates": 1
+            },
+            "operationId": "54743b84-08cb-49a7-95cf-7de6f9e03f25"
+          },
+          "action": "airway.analyze",
+          "actionVersion": "0.1.0",
+          "acceptedAt": "2026-10-15T13:12:36.024Z",
+          "core": {
+            "caller": "rho:57d37a1a7a059f287e8c7d8f3de5ec7e27a6978887f98ee2",
+            "requestId": "2ce5d86b4c7372e3562ad332107657d33cdd329e575c9d89c8c04dfd77a56bff"
+          },
+          "delivery": "answered",
+          "execution": "failed",
+          "native": {
+            "run_id": "18deb620b6dc51e8-46518.2",
+            "request_id": "2ce5d86b4c7372e3562ad332107657d33cdd329e575c9d89c8c04dfd77a56bff",
+            "status": {
+              "Finished": {
+                "exit": {
+                  "Code": 1
+                },
+                "exit_observed_at": "2026-10-15T13:13:02.361Z",
+                "group_released": true,
+                "pid": 46595,
+                "spawned_at": "2026-10-15T13:12:36.088Z"
+              }
+            },
+            "held": false,
+            "terminal": true,
+            "stdout": {
+              "eof": true,
+              "limit_bytes": 1048576,
+              "observed_bytes": 1825,
+              "retained_bytes": 1825,
+              "retention_error": null,
+              "truncated": false
+            },
+            "stderr": {
+              "eof": true,
+              "limit_bytes": 1048576,
+              "observed_bytes": 889,
+              "retained_bytes": 889,
+              "retention_error": null,
+              "truncated": false
+            }
+          },
+          "integrity": {
+            "state": "unchecked"
+          },
+          "domain": {
+            "state": "unchecked"
+          },
+          "interpretation": {
+            "state": "absent"
+          },
+          "plan": {
+            "args": [
+              "/fixture/argument-0",
+              "1"
+            ],
+            "source": {
+              "kind": "disk",
+              "path": "rho-plugins:examples/real-r-analysis/analyze.R",
+              "sha256": "5d4e1c20a4f6cf468ead65d5656729e0cb69e4df0562e65eeaf22a22e32024a9",
+              "dataset": "airway/GSE52778",
+              "expectedGenes": 16139,
+              "contrast": "dex:trt:untrt"
+            },
+            "output": ".rho/plugins/runs/eab3b652598296beaa6ffecd0e449df0d2d387409b4b8ea645d5545b6c245a98/artifacts",
+            "codeDigest": "efb480a49e0b88fd3e5df564f9188deeb3726952b08e24d6af2ca3a2ccc04c65"
+          },
+          "lastCli": {
+            "exitCode": 0,
+            "reply": {
+              "ok": true,
+              "scope": "Native record and machine paths omitted from this display fixture."
+            }
+          }
+        }
+      }
+    },
+    {
+      "state": "partial",
+      "operation": "resource.list",
+      "provenance": "Projection of the real 16,139-row first fit, without a completion declaration.",
+      "envelope": {
+        "apiVersion": "1.0",
+        "ok": true,
+        "value": {
+          "resources": [
+            {
+              "id": "87a471086597613a9159c0072b23bee000a8dad05b88fc1b2d6e512c44cdaa4b",
+              "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3",
+              "projectId": "f7820c9d1e4b0f50f8f3cd7839423d91",
+              "owner": "rho-plugins.airway",
+              "kind": "table",
+              "path": ".rho/plugins/runs/758861cf0a37ef50530b710b8d5eb8b13feea9b4d7ee2110a7e8de3ae77131f4/artifacts/results/full.csv",
+              "bytes": 2596572,
+              "provenance": {
+                "operationId": "9bacb89c-8c7c-4e02-b42f-791d6af46e45",
+                "core": {
+                  "caller": "rho:071fdf5c6e5e0cb005da7035a99491fddce6208b6ce99467",
+                  "requestId": "1ee0b53069695b5836edc569314116e2fb91b481970f48191c05167182391762"
+                },
+                "action": "airway.analyze",
+                "actionVersion": "0.1.0",
+                "codeDigest": "dba5bdc6e1de3104b273e9add722389e2d8b67bdea772e8ff9ea199a27366f97",
+                "source": {
+                  "kind": "buffer",
+                  "documentId": "165dd9579745f4205c9ddf82ec5ba8b0924fa5ae5348c7a3b499e9a657dab460",
+                  "version": 2,
+                  "path": "paused-analysis.R",
+                  "dirty": true,
+                  "sha256": "dfb43dd154f9f96d28c28ce39556f6340f57f6a66c849ea4f5826b3812f94b38",
+                  "dataset": "airway/GSE52778",
+                  "expectedGenes": 16139,
+                  "contrast": "dex:trt:untrt"
+                },
+                "kind": "buffer",
+                "documentId": "165dd9579745f4205c9ddf82ec5ba8b0924fa5ae5348c7a3b499e9a657dab460",
+                "version": 2,
+                "path": "paused-analysis.R",
+                "dirty": true,
+                "sha256": "dfb43dd154f9f96d28c28ce39556f6340f57f6a66c849ea4f5826b3812f94b38",
+                "dataset": "airway/GSE52778",
+                "expectedGenes": 16139,
+                "contrast": "dex:trt:untrt"
+              },
+              "coverage": {
+                "completionDeclaration": "absent",
+                "observedAt": "2026-10-15T13:43:40.004Z",
+                "observedRows": 16139,
+                "expectedGenes": 16139,
+                "finiteEffects": 16139
+              },
+              "availability": "partial"
+            }
+          ],
+          "integrity": {
+            "state": "incomplete",
+            "completionDeclaration": "absent"
+          },
+          "domain": {
+            "state": "unchecked"
+          }
+        }
+      }
+    },
+    {
+      "state": "unknown",
+      "operation": "action.observe",
+      "provenance": "Captured after SIGKILL of the owned Host; earlier native facts do not establish its later outcome.",
+      "envelope": {
+        "apiVersion": "1.0",
+        "ok": true,
+        "value": {
+          "operationId": "9bacb89c-8c7c-4e02-b42f-791d6af46e45",
+          "principal": "agent:b1f2d6e7fa61c6ae9932e9a3cd7ce9cf",
+          "projectId": "f7820c9d1e4b0f50f8f3cd7839423d91",
+          "requestDigest": "9098db0c6f6eb239e4b0104707d3b578eb88c37a71f0d4d4ae454775a2e69375",
+          "request": {
+            "kind": "action.submit",
+            "projectId": "f7820c9d1e4b0f50f8f3cd7839423d91",
+            "action": "airway.analyze",
+            "actionVersion": "0.1.0",
+            "input": {
+              "bootstrapReplicates": 1,
+              "script": {
+                "kind": "buffer",
+                "documentId": "165dd9579745f4205c9ddf82ec5ba8b0924fa5ae5348c7a3b499e9a657dab460",
+                "version": 2
+              }
+            },
+            "operationId": "9bacb89c-8c7c-4e02-b42f-791d6af46e45"
+          },
+          "action": "airway.analyze",
+          "actionVersion": "0.1.0",
+          "acceptedAt": "2026-10-15T13:43:31.578Z",
+          "core": {
+            "caller": "rho:071fdf5c6e5e0cb005da7035a99491fddce6208b6ce99467",
+            "requestId": "1ee0b53069695b5836edc569314116e2fb91b481970f48191c05167182391762"
+          },
+          "delivery": "answered",
+          "execution": "unknown",
+          "native": {
+            "run_id": "18deb7d160719748-81469.1",
+            "request_id": "1ee0b53069695b5836edc569314116e2fb91b481970f48191c05167182391762",
+            "status": {
+              "Running": {
+                "pid": 81472,
+                "spawned_at": "2026-10-15T13:43:31.673Z"
+              }
+            },
+            "held": true,
+            "terminal": false,
+            "stdout": {
+              "eof": false,
+              "limit_bytes": 1048576,
+              "observed_bytes": 212,
+              "retained_bytes": 212,
+              "retention_error": null,
+              "truncated": false
+            },
+            "stderr": {
+              "eof": false,
+              "limit_bytes": 1048576,
+              "observed_bytes": 160,
+              "retained_bytes": 160,
+              "retention_error": null,
+              "truncated": false
+            }
+          },
+          "integrity": {
+            "state": "incomplete",
+            "completionDeclaration": "absent"
+          },
+          "domain": {
+            "state": "unchecked",
+            "scope": "No scientific checker result has been obtained."
+          },
+          "interpretation": {
+            "state": "absent"
+          },
+          "plan": {
+            "args": [
+              "/fixture/argument-0",
+              "1"
+            ],
+            "source": {
+              "kind": "buffer",
+              "documentId": "165dd9579745f4205c9ddf82ec5ba8b0924fa5ae5348c7a3b499e9a657dab460",
+              "version": 2,
+              "path": "paused-analysis.R",
+              "dirty": true,
+              "sha256": "dfb43dd154f9f96d28c28ce39556f6340f57f6a66c849ea4f5826b3812f94b38",
+              "dataset": "airway/GSE52778",
+              "expectedGenes": 16139,
+              "contrast": "dex:trt:untrt"
+            },
+            "output": ".rho/plugins/runs/758861cf0a37ef50530b710b8d5eb8b13feea9b4d7ee2110a7e8de3ae77131f4/artifacts",
+            "codeDigest": "dba5bdc6e1de3104b273e9add722389e2d8b67bdea772e8ff9ea199a27366f97"
+          },
+          "lastCli": {
+            "exitCode": 3,
+            "reply": {
+              "ok": false,
+              "scope": "Native record and machine paths omitted from this display fixture."
+            }
+          }
+        }
+      }
+    },
+    {
+      "state": "unavailable",
+      "operation": "composition.put",
+      "provenance": "Captured from actual composition validation; no UI entry is installed.",
+      "envelope": {
+        "apiVersion": "1.0",
+        "ok": true,
+        "value": {
+          "compositionId": "unavailable",
+          "version": 1,
+          "views": [
+            {
+              "id": "missing",
+              "component": "missing.component",
+              "version": "0.1.0",
+              "props": {},
+              "bindings": {}
+            }
+          ],
+          "layout": {},
+          "availability": {
+            "missing": {
+              "state": "unavailable",
+              "reason": "Component or requested version is not registered."
+            }
+          },
+          "acknowledgedAt": "2026-10-15T13:45:21.901Z"
+        }
+      }
+    },
+    {
+      "state": "stale",
+      "operation": "document.edit",
+      "provenance": "Captured from the real versioned service; acknowledged buffer retained.",
+      "envelope": {
+        "apiVersion": "1.0",
+        "ok": false,
+        "error": {
+          "kind": "stale",
+          "message": "Read the current buffer before editing.",
+          "details": {
+            "documentId": "8236bc4389fc4ebb7d4711a019c7f8f0fd1e1804b33fcd2122f0968c6bc8c1ec",
+            "expectedVersion": 1,
+            "actualVersion": 2
+          },
+          "continuation": "Read the current owner snapshot and reconcile before another write."
+        }
+      }
+    },
+    {
+      "state": "conflict",
+      "operation": "document.save",
+      "provenance": "Captured from the real versioned service; acknowledged buffer retained.",
+      "envelope": {
+        "apiVersion": "1.0",
+        "ok": false,
+        "error": {
+          "kind": "conflict",
+          "message": "Disk changed; the current buffer and undo are retained.",
+          "details": {
+            "documentId": "8236bc4389fc4ebb7d4711a019c7f8f0fd1e1804b33fcd2122f0968c6bc8c1ec",
+            "actualDiskDigest": "7433e5b3bcfc87802e79cf6020b18d8ae2c64c3c0562bc3a73d0a1ce5daa666e",
+            "expectedDiskDigest": null
+          },
+          "continuation": "Read the current owner snapshot and reconcile before another write."
+        }
+      }
+    },
+    {
+      "state": "limit",
+      "operation": "document.edit",
+      "provenance": "Captured from the real versioned service; acknowledged buffer retained.",
+      "envelope": {
+        "apiVersion": "1.0",
+        "ok": false,
+        "error": {
+          "kind": "limit",
+          "message": "Edit exceeds the buffer byte limit.",
+          "details": {
+            "limit": "maxBufferBytes",
+            "maximum": 32
+          },
+          "continuation": "Inspect the stated condition; observe original operations without replaying actions."
+        }
+      }
+    }
+  ]
+}

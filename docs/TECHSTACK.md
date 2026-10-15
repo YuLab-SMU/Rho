@@ -3,15 +3,17 @@
 This is the implementation direction for the npm-distributed local WebUI and its
 [integrated flow](ROADMAP.md#first-integrated-flow).
 [Architecture](ARCHITECTURE.md) defines ownership; [Status](STATUS.md) records
-implementation. Exact versions and immutable source/artifact identities are
-selected and verified when the application composition is built.
+implementation. The headless slice locks Node 22.22.x, TypeScript 5.9.3, Ajv
+8.20.0, MCP SDK 1.29.0 and csv-parse 7.0.3. [Backend acceptance](BACKEND-ACCEPTANCE.md)
+records its native dependencies and immutable selected composition. UI library
+versions remain to be selected with the browser implementation.
 
 ## Main combination
 
 | Layer | Choice | Responsibility |
 | --- | --- | --- |
-| Distribution and launcher | npm package and CLI | Install the application, locate compatible Core artifacts and start the local service; package name and Node.js runtime version remain to be selected |
-| Local application service | Node.js/TypeScript; versioned HTTP JSON and SSE | Authenticated browser/application boundary, scoped component routing, bounded observation and Core CLI access |
+| Distribution and launcher | npm package and CLI | `@rho-workspace/local` 0.1.0, Node >=22.22.0 <23; assembled local tarball bundles the selected Core binary |
+| Local application service | Node.js/TypeScript, built-in HTTP, Ajv 8.20.0; versioned JSON and SSE | Authenticated browser/application boundary, scoped component routing, bounded observation and Core CLI access |
 | UI and build | React, TypeScript, Vite | Application assembly and trusted component presentation |
 | Workspace layout | Dockview core | Docking, tabs, split views and layout persistence within one browser window |
 | Editing component | Headless document service; CodeMirror 6 view | The service owns content, versions, undo and write conditions; the view adapts editing and input |
@@ -32,10 +34,10 @@ R and functional components. Rho owns the launcher, local service and workspace
 assembly; Core owns managed execution and its resident Host; Rho-plugins owns the
 functional components, native conditions and results. The service can provide or
 locate selected compatible Core artifacts and report missing R/component
-dependencies. Actual supported platforms, artifact acquisition, npm package name,
-runtime versions, concrete service libraries and authentication require
-implementation and installation acceptance; this direction does not claim a
-working package.
+dependencies. The implemented [headless package](HEADLESS.md) targets macOS arm64,
+uses built-in Node HTTP, private bearer descriptors and project-scoped credentials,
+and assembles a local installable tarball with a digest-checked Core binary.
+Other platforms, the browser shell and a registry publication channel remain open.
 
 Bind the first-release service to loopback and authenticate its local sessions;
 loopback binding alone does not grant authorization. Validate browser origins,
@@ -43,8 +45,9 @@ caller/project visibility, resource containment and native conditions at each
 operation. The browser uses narrow named operations through the service and does
 not invoke a shell, Core CLI or arbitrary filesystem access directly. Credentials
 stay out of frontend assets and diagnostics. Implement versioned HTTP JSON and SSE
-under the [backend plan](BACKEND-FIRST.md), select concrete authentication and
-verify that an unrelated local web page cannot invoke the service.
+under the [backend plan](BACKEND-FIRST.md). The implemented service checks exact
+Host/Origin, authenticated project/method scope and symlink-free containment;
+HTTP tests exercise unauthorized origins and credentials.
 LAN/remote exposure needs separate scope and
 acceptance.
 
