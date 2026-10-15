@@ -73,6 +73,14 @@ references. All 14 screens and their flow notes were screenshot-reviewed at the
 placement were corrected. Other widths and live behavior remain unverified.
 A static sequence is not application acceptance.
 
+The startup design now limits R1 to observed WebUI/local-service and public
+startup capabilities before project selection; project/component requirements
+remain unevaluated. R2 leaves action requirements unchecked; R3 selects the R
+analysis action and shows its scoped R/package checks. These are scoped checks,
+not a project-wide readiness claim; opening a project neither executes scripts
+nor infers every dependency from their contents. Invocation still checks actual
+native conditions. This is a design correction, not runtime detection evidence.
+
 The same run 001 baseline remains 16,139 genes, including KLF15's stable gene ID,
 through completion and export/reopen. Later shrinkage repair, run 004's partial
 8,204/16,139 result and unknown outcome are design scenarios, not new execution

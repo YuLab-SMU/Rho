@@ -82,8 +82,12 @@ resource context, action, visible feedback, next step and failure continuation.
 Static screen states alone do not establish that the sequence works.
 
 - First use proceeds from installation and local startup to project selection,
-  dependency checks, Agent connection and the first inspectable analysis result.
-  Missing dependencies or an unreachable local service have a clear next step.
+  selected-component dependency checks, Agent connection and the first inspectable
+  analysis result. Before project selection, only WebUI, local-service and public
+  startup-capability states are known; project requirements remain unevaluated.
+  Checks follow component/action declarations, never execute project scripts or
+  infer all dependencies from a script scan, and report their scope and freshness.
+  Missing required dependencies or an unreachable local service have a clear next step.
 - Agent connection proceeds from configuration to an actual connection test,
   project-bound session and first resource-aware request. Unconfigured, connecting,
   available, failed and disconnected states remain distinguishable.
