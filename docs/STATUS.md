@@ -33,7 +33,8 @@ a running Rho composition.
 
 Implement the [prioritized first-release tasks](WEBUI-FIRST.md), with interaction
 deliverables in [Design priorities](DESIGN-PRIORITIES.md) and the complete flow in
-[Roadmap](ROADMAP.md#first-integrated-flow). All tasks remain pending.
+[Roadmap](ROADMAP.md#first-integrated-flow). Application implementation and
+integrated acceptance remain pending; the design sequence is recorded separately.
 
 P0 release gates include an installable npm/local-service foundation, project and
 dependency setup, one actual Agent adapter, human-Agent shared context and editing,
@@ -43,11 +44,14 @@ and clean-environment installation acceptance. None of these gates is optional
 polish. P1 covers additional adapters, richer views and other nonblocking
 enhancements after the reference flow works.
 
-First select the reference Agent and conversation location, target OS/architecture
-and browser, Node requirement, npm name/channel and component versions. These
-choices are not yet fixed. Native desktop clients, cross-window movement and
-system integration are deferred. npm publication and official signed distribution
-remain separate delivery decisions.
+The first-release interaction direction is an external Agent: its actual client
+owns conversation; Rho shows project binding, explicit context, actions and results.
+The R1–R14 designs use a Claude Code terminal session as the reference entry.
+The actual adapter, interfaces/versions, credentials, capability evidence, target
+OS/architecture and browser, Node requirement, npm name/channel and component
+versions remain open under WEB-01. Native desktop clients, cross-window movement
+and system integration are deferred. npm publication and official signed
+distribution remain separate delivery decisions.
 
 Action, Resource, Selection and View are design concepts. Public schemas, component
 host adapters and application state services remain to be implemented for this
@@ -58,21 +62,29 @@ functional owner.
 
 ## Verification
 
-For this revision, repository-local link/anchor checks across 17 Markdown files,
-`git diff --check` and rendered inspection of the three changed documents passed.
-The execution bridge also
-distinguishes application-started Hosts from existing Hosts whose lifecycle stays
-with their original owner. Application behavior, native input, component composition,
-signing and installation require evidence from their actual implementations. Core
-and component checks retain the scope recorded by those owners; they are not rerun
-solely to rewrite application documents.
+The Paper ["Release 1 · npm WebUI" page](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-5-0)
+contains the revised R1–R14 sequence for `rho-airway-03`, pending user review.
+It connects startup and external Agent binding, a first analysis, shared editing,
+export/reopen, repair, original-request observation and registered comparison views.
+The [design index](DESIGN-PRIORITIES.md#r1r14-连续交互索引) records entries,
+next steps and a resource/state ledger. The S-series pages remain historical
+references. All 14 screens and their flow notes were screenshot-reviewed at the
+1440 px reference width; parameter/footer clipping and overlapping flow-note
+placement were corrected. Other widths and live behavior remain unverified.
+A static sequence is not application acceptance.
 
-Browser refresh, Agent connection, service lifecycle, native input and package
-installation still require application evidence. The Paper designs remain design
-references. The reported S2/S3 inconsistencies are corrected in Paper (S2 split
-into S2a/S2b, S3 rebuilt from the Slice A components) and await user review.
-[Product design](DESIGN.md#agent-led-presentation) now treats Rho as the place
-where Agent work becomes visible; an Agent-led S3′ is a trial, and the remaining
-screens still assume step-by-step human operation. Continuous interaction
-prototypes and implementation acceptance are pending. This update does not run a
-Host or publish an npm package.
+The same run 001 baseline remains 16,139 genes, including KLF15's stable gene ID,
+through completion and export/reopen. Later shrinkage repair, run 004's partial
+8,204/16,139 result and unknown outcome are design scenarios, not new execution
+evidence. The comparison declares both inputs and preserves missing values;
+closing or refreshing an observer does not establish that an unknown task is
+still running. Agent, editor, analysis action, table and plot components belong to
+Rho-plugins; Rho assembles the shell, layout, routing and separately sourced facts.
+
+Repository-local link/anchor checks across 17 Markdown files, `git diff --check`
+and rendered inspection of the four changed documents passed for this revision.
+Application behavior, actual Agent connection, native input, browser refresh, component
+composition, service lifecycle, installation and signing still require evidence
+from their actual implementations. Core and component checks retain the scope
+recorded by those owners; they are not rerun solely to revise application designs.
+This revision does not run a Host or publish an npm package.

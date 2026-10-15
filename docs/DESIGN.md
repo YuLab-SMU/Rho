@@ -32,8 +32,11 @@ are reachable without dragging; graphics have suitable text/table alternatives.
 
 ## Agent interaction
 
-The first release provides a real Agent connection and session path. Configuration,
-connection testing, available capabilities and project binding have visible states
+The first release selects an external Agent entry: conversation stays in that
+client, while Rho shows project binding, explicit context, actions and results and
+provides a return to the bound conversation. The design reference is a Claude Code
+terminal session; the actual adapter and capability evidence remain under WEB-01.
+Configuration, connection testing, available capabilities and project binding have visible states
 and a continuation after failure. A provider list or a chat mockup does not
 establish a working Agent. Agent components retain their model loop and context;
 Rho assembles their entries and routes shared interaction.
@@ -99,8 +102,9 @@ Static screen states alone do not establish that the sequence works.
   inspectable fallback without replaying actions.
 
 The [design delivery checklist](DESIGN-PRIORITIES.md) records required prototype
-coverage and pending corrections. Prototype review, implementation and observed
-application acceptance are separate evidence.
+coverage, the current R1–R14 sequence, resource/state ledger and review scope.
+Prototype review, implementation and observed application acceptance are separate
+evidence.
 
 ## Visible state and continuity
 
