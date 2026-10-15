@@ -5,8 +5,10 @@ documented public CLI. Core owns the managed execution contract and the resident
 Host. The first-release local Rho service invokes that CLI; the browser WebUI uses
 the service's scoped application operations. This document owns the application
 side of that boundary: request identity, the exit-code state machine, Host lifetime
-and bounded observation. Service transport and authentication mechanisms remain
-to be selected under the [technology boundary](TECHSTACK.md#local-service-and-workspace).
+and bounded observation. The [backend plan](BACKEND-FIRST.md) selects versioned
+HTTP JSON and SSE for the application service; concrete authentication and library
+versions remain to be implemented under the
+[technology boundary](TECHSTACK.md#local-service-and-workspace).
 
 [Architecture](ARCHITECTURE.md) defines ownership; [Status](STATUS.md) records
 implementation; [Roadmap](ROADMAP.md) selects the flow that exercises it. The

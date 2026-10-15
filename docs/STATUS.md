@@ -31,10 +31,21 @@ a running Rho composition.
 
 ## Next delivery
 
-Implement the [prioritized first-release tasks](WEBUI-FIRST.md), with interaction
-deliverables in [Design priorities](DESIGN-PRIORITIES.md) and the complete flow in
-[Roadmap](ROADMAP.md#first-integrated-flow). Application implementation and
-integrated acceptance remain pending; the design sequence is recorded separately.
+Implement the [backend-first plan](BACKEND-FIRST.md), beginning with BP-01 public
+contracts and a real external Agent connection experiment, then BP-02's local
+service and public Core CLI bridge. BP-03 delivers the first real analysis;
+BP-04 shared documents/Agent handoff can proceed in parallel. Data/composition,
+continuity and headless installation acceptance follow before independent UI work.
+The [first-release tasks](WEBUI-FIRST.md) retain the product release gates, with
+interaction deliverables in [Design priorities](DESIGN-PRIORITIES.md) and the complete
+flow in [Roadmap](ROADMAP.md#first-integrated-flow). Implementation remains pending.
+
+The backend plan separates Rho coordination from Plugins' headless functional
+services and Core's existing execution contract. No required Core extension was
+identified by the source audit. Versioned schemas, HTTP JSON/SSE operations,
+test clients and state fixtures are planned; they are not implemented interfaces.
+UI will consume these contracts without duplicating execution, document or resource
+state. Backend acceptance will not replace actual browser/product acceptance.
 
 P0 release gates include an installable npm/local-service foundation, project and
 dependency setup, one actual Agent adapter, human-Agent shared context and editing,
@@ -91,8 +102,11 @@ closing or refreshing an observer does not establish that an unknown task is
 still running. Agent, editor, analysis action, table and plot components belong to
 Rho-plugins; Rho assembles the shell, layout, routing and separately sourced facts.
 
-Repository-local link/anchor checks across 17 Markdown files, `git diff --check`
-and rendered inspection of the four changed documents passed for this revision.
+The backend planning revision passed repository-local checks across 18 Markdown
+files and 107 local links/anchors, `git diff --check` and rendered inspection of
+seven changed documents (19 screenshots).
+The backend plan is based on a read-only audit of the adjacent Core and Plugins
+sources; it does not establish a running service or accepted composition.
 Application behavior, actual Agent connection, native input, browser refresh, component
 composition, service lifecycle, installation and signing still require evidence
 from their actual implementations. Core and component checks retain the scope

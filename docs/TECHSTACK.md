@@ -11,10 +11,10 @@ selected and verified when the application composition is built.
 | Layer | Choice | Responsibility |
 | --- | --- | --- |
 | Distribution and launcher | npm package and CLI | Install the application, locate compatible Core artifacts and start the local service; package name and Node.js runtime version remain to be selected |
-| Local application service | Node.js | Authenticated browser/application boundary, scoped component routing and Core CLI access; transport remains to be selected |
+| Local application service | Node.js/TypeScript; versioned HTTP JSON and SSE | Authenticated browser/application boundary, scoped component routing, bounded observation and Core CLI access |
 | UI and build | React, TypeScript, Vite | Application assembly and trusted component presentation |
 | Workspace layout | Dockview core | Docking, tabs, split views and layout persistence within one browser window |
-| Editing component | CodeMirror 6 | Document buffers, local versions, undo and write conditions |
+| Editing component | Headless document service; CodeMirror 6 view | The service owns content, versions, undo and write conditions; the view adapts editing and input |
 | Data component | AG Grid Community | Real rows, filtering and stable entity selection |
 | Graphics component | ECharts plus original scientific artifacts | Interactive data/specification and selection mapping, with preserved provenance |
 | Agent-composed interface | json-render typed catalog | Registered components, typed properties and scoped action/resource references |
@@ -33,17 +33,19 @@ assembly; Core owns managed execution and its resident Host; Rho-plugins owns th
 functional components, native conditions and results. The service can provide or
 locate selected compatible Core artifacts and report missing R/component
 dependencies. Actual supported platforms, artifact acquisition, npm package name,
-runtime versions and service transport require implementation and installation
-acceptance; this direction does not claim a working package.
+runtime versions, concrete service libraries and authentication require
+implementation and installation acceptance; this direction does not claim a
+working package.
 
 Bind the first-release service to loopback and authenticate its local sessions;
 loopback binding alone does not grant authorization. Validate browser origins,
 caller/project visibility, resource containment and native conditions at each
 operation. The browser uses narrow named operations through the service and does
 not invoke a shell, Core CLI or arbitrary filesystem access directly. Credentials
-stay out of frontend assets and diagnostics. Select the concrete authentication
-and transport mechanisms with implementation, and verify that an unrelated local
-web page cannot invoke the service. LAN/remote exposure needs separate scope and
+stay out of frontend assets and diagnostics. Implement versioned HTTP JSON and SSE
+under the [backend plan](BACKEND-FIRST.md), select concrete authentication and
+verify that an unrelated local web page cannot invoke the service.
+LAN/remote exposure needs separate scope and
 acceptance.
 
 Dockview supplies docking, tabs, splits and layout serialization for the initial
@@ -68,9 +70,11 @@ Sources: [Electron process model](https://www.electronjs.org/docs/latest/tutoria
 
 ## Functional views
 
-CodeMirror 6 is the default for scripts, configuration, prose and embedded editing.
-Its state/view model fits a shared logical document with multiple views. The
-editing component owns buffer synchronization, undo and write-conflict behavior.
+CodeMirror 6 is the default view for scripts, configuration, prose and embedded
+editing. The editing component's headless document service owns one logical buffer,
+undo and write-conflict behavior; CodeMirror views adapt input and transactions to
+that service without creating another content owner. This boundary allows backend
+implementation and acceptance before the editor UI.
 Monaco can serve a selected fuller IDE/diff/language-service need; it does not run
 VS Code extensions directly. Language intelligence needs its actual provider and
 acceptance. Sources: [CodeMirror API](https://codemirror.net/docs/ref/),

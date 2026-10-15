@@ -7,6 +7,8 @@ later and reuse the component and execution boundaries.
 
 The [first-release task list](WEBUI-FIRST.md) owns task IDs, priorities,
 dependencies, owners and observable completion conditions. The
+[backend plan](BACKEND-FIRST.md) sequences the required headless implementation
+before independent UI development. The
 [design checklist](DESIGN-PRIORITIES.md) owns interaction-design deliverables.
 All application work and integrated acceptance remain pending; these are selected
 requirements, not implementation evidence.
@@ -27,12 +29,12 @@ repeats the whole flow from the built package in a clean environment.
 ### Slice A: first analysis with an actual Agent
 
 1. Install the npm package, start the local service, open the WebUI and create or
-   open a project. Missing R, Core or component dependencies name the problem and
-   provide a continuation without losing the project choice.
+   open a project. Actual startup faults provide diagnostics; scientific dependency
+   checks belong to a selected action inside the project, preserving the project choice.
 2. Configure and test the selected Agent adapter, bind it to the project and make
    its available actions and resource scope visible. The chosen adapter determines
-   whether conversation happens in Rho or an external Agent client; both are not
-   required for this release.
+   the supported external client and its actual interface; conversation remains
+   in that client while Rho binds context, actions and results.
 3. An authorized natural-language request reaches a real component action and
    opens a typed parameter interface bound to actual inputs. The user can inspect
    and change parameters directly. Agent, UI and supported CLI entries share the
@@ -81,14 +83,16 @@ desktop windows are not a condition of this browser release.
 
 | Step | Owner and result |
 | --- | --- |
-| Scope and consumer selection | Rho selects the reference Agent, platform/browser, package/runtime requirements, public capabilities and real analysis case with the component owners |
-| Installable application foundation | Rho builds the npm launcher, authenticated local service and browser shell, dependency diagnostics and scoped public Core adapter |
-| Interaction design and linked functionality | Rho and Rho-plugins deliver the first-use flow, Agent binding, real editor/table/plot resources and shared context |
-| Continuity and composition | The owners preserve document and request identity through failure/reconnect, add single-window layout and one typed Agent composition |
+| Scope and public contracts | BP-01 selects the actual external Agent, platform/runtime and real case; the owners define versioned actions, resources, documents, errors and events |
+| Installable backend foundation | BP-02 builds the npm launcher, authenticated local service, project scope and public Core CLI adapter without a browser shell dependency |
+| Real analysis and shared state | BP-03/BP-04 deliver project-action dependency checks, real analysis, shared document state and external Agent handoff; document work can proceed in parallel |
+| Data, composition and backend acceptance | BP-05/BP-06 verify real data/selection, typed composition descriptions, continuity, export/recovery and installation through headless clients |
+| Independent UI implementation | UI consumes the tested contracts and fixtures to implement component views, shell/layout and the actual browser interaction without duplicating backend state |
 | Package acceptance | Rho verifies both slices, export/reopen, installation, failure cases, input/accessibility and resource behavior on the supported composition |
 
-Design review and bounded owner implementation proceed together. Record actual
-dependency versions and immutable identities when selecting each combination.
+Reuse the R1–R14 design for backend scenarios without waiting for UI implementation.
+Backend acceptance does not establish browser interaction or product release acceptance.
+Record actual dependency versions and immutable identities when selecting each combination.
 Keep original failure evidence and distinguish a designed flow from a tested one.
 
 ## Resource acceptance
