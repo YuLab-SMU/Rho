@@ -58,8 +58,8 @@ functional owner.
 
 ## Verification
 
-Repository-local link/anchor checks, `git diff --check` and rendered inspection
-of all 13 changed Markdown documents passed for this documentation revision.
+For this revision, repository-local link/anchor checks across 17 Markdown files,
+`git diff --check` and rendered inspection of the three changed documents passed.
 The execution bridge also
 distinguishes application-started Hosts from existing Hosts whose lifecycle stays
 with their original owner. Application behavior, native input, component composition,
@@ -69,6 +69,10 @@ solely to rewrite application documents.
 
 Browser refresh, Agent connection, service lifecycle, native input and package
 installation still require application evidence. The Paper designs remain design
-references; continuous interaction prototypes, correction of reported S2/S3
-inconsistencies and implementation acceptance are pending. This documentation
-update does not edit Paper, run a Host or publish an npm package.
+references. The reported S2/S3 inconsistencies are corrected in Paper (S2 split
+into S2a/S2b, S3 rebuilt from the Slice A components) and await user review.
+[Product design](DESIGN.md#agent-led-presentation) now treats Rho as the place
+where Agent work becomes visible; an Agent-led S3′ is a trial, and the remaining
+screens still assume step-by-step human operation. Continuous interaction
+prototypes and implementation acceptance are pending. This update does not run a
+Host or publish an npm package.

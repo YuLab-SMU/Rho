@@ -1,8 +1,11 @@
 # Rho product design
 
-Rho makes functional components feel like one workspace. People describe intent,
-edit directly, inspect actual data and arrange views. Agents use the same actions
-and resources and can compose further interfaces from registered components.
+Rho makes functional components feel like one workspace. Most operations are
+expected to come from an Agent working within its harness: it edits code, submits
+runs, opens and arranges views and points at results. Rho is where that work
+becomes visible. People read what the Agent did, inspect the actual data and step
+in where they choose. Direct editing, running and arranging use the same actions
+and resources, but the interface does not assume a person performs every step.
 The [first release](WEBUI-FIRST.md) is an npm-distributed local WebUI, with tabs
 and split views in one browser window. A later desktop client extends that
 workspace across native windows. Scientific workbench, workspace composition and
@@ -51,6 +54,22 @@ Agent edits to an open document use the same logical buffer, undo and write
 conditions as direct user edits. Direct file actions retain their actual write
 conditions. Context handoff does not lock the workspace; the user can continue
 working, inspect the change and take over at the point of interest.
+
+## Agent-led presentation
+
+Design each screen first for a person following Agent work, then for direct
+operation. An Agent session shows the request it serves, the actions it took
+through Rho in order (reads, edits, submissions, opened views, highlighted
+entities), each linked to its resource, and what it is doing now. Rho presents the
+actions that pass through its own boundary; it does not reconstruct an external
+Agent's conversation or reasoning.
+
+Runs, edits, view changes and selections show who performed them. Agent notes stay
+labelled as explanation, separate from execution, artifact and domain-check facts.
+An Agent can open and arrange views; a person can follow those changes or stop
+following, and views the person moved or pinned stay in place. Cancelling a run,
+taking over an edit, starting a new run from changed inputs and sending context to
+the Agent each remain one step away.
 
 ## Reviewable interaction journeys
 
