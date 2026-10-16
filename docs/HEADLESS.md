@@ -1,12 +1,15 @@
-# Rho local backend 0.2
+# Rho local backend 0.3
 
-The reusable backend exposes `/api/v2` to calling clients and the project-scoped
+Rho selects eight independent capability packages: documents, files, R,
+requirements, tables, media, charts and Agent. Shared contracts have no capability
+state or catalog. The reusable backend exposes `/api/v2` to calling clients and the project-scoped
 stdio MCP adapter. Its sole registered execution action is `r.execute`: an
 explicit project script, requirements, arguments and output declarations.
 Analysis recipes and scientific checkers are external consumers, excluded from
 the application and Plugins npm packages. Browser UI remains separate work.
 See [extraction](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-EXTRACTION.md)
-and [acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/EXTRACTION-ACCEPTANCE.md).
+and [extraction acceptance](EXTRACTION-ACCEPTANCE.md). The
+[split acceptance](PLUGIN-SPLIT-ACCEPTANCE.md) records the independent package boundary.
 
 ## Install and start
 
@@ -19,18 +22,35 @@ An unavailable Rscript returns an unknown dependency probe and prevents executio
 Other platforms and npm registry publication are unverified.
 
 ```sh
-npm install --prefix /absolute/install /absolute/rho-workspace-local-0.2.0.tgz
+npm install --prefix /absolute/install /absolute/rho-workspace-local-0.3.0.tgz
 /absolute/install/node_modules/.bin/rho \
   --root /absolute/projects --state-dir /absolute/service-state
 ```
 
 Create the allowed projects directory first. Keep service state outside projects.
 Startup prints the loopback URL and private connection-file location, never the
-credential. `--port`, `--rscript`, `--core` and `--limits` are explicit
+credential. `--port`, `--rscript`, `--core`, `--plugins` and `--limits` are explicit
 operator selections; `RHO_RSCRIPT`, `RHO_CORE_BINARY` and `RHO_PYTHON` select
 equivalent runtimes. A Core override is outside bundled digest verification.
 Core uses the canonical project path plus `/.rho/host.sock`; macOS permits at
 most 103 UTF-8 bytes. A longer path fails before Host startup.
+
+`--plugins documents,files` selects only those owners; `--plugins ""` selects
+none. The default selects all eight. The allowlisted package identities and exact
+0.3.0 versions are checked before wiring their typed service ports. Requirements
+and Files are required by R; Files by Tables/Media; Tables by Charts. Agent
+context requests need only the sources they actually use. Missing/incompatible
+packages and missing required services report `unavailable`; nothing is installed
+implicitly. `capability.list` returns selected package availability and only the
+available owners' actions/entries. Wire API 2.0 and action/view 0.2.0 remain stable.
+
+Owner removal preserves retained request identities, bytes, drafts/undo and layout
+references. Existing accepted intent delivery returns its original record;
+new work requiring an absent owner is unavailable. Metadata snapshots and
+workspace save retain persisted facts even with no plugin selected. Byte exports
+need Files, and restores need Documents and Files before applying mutations.
+Typed readers validate their own semantics when selected; raw bytes stay usable.
+No read or reselection starts R or a Host.
 
 Exact Host and supplied Origin are checked. The bearer credential is project
 scoped for external callers. CLI shutdown stops only Hosts started by this
@@ -187,6 +207,7 @@ and `workspace` objects through `--limits`. Snapshots expose selected limits.
 | Documents | 64 buffers; 1 MiB each; 8 MiB total and undo per buffer | Reject mutation; preserve acknowledged content/undo. |
 | Artifacts/rows | 64 MiB/file; 1024 resources; 512 MiB retained bytes; 100,000 rows | Reject over-budget reads/registration; preserve prior bytes. |
 | Pages/previews | 1000 rows/page; 20,000 chart points; 64 KiB byte/object/completion reads | Reject oversized requests; declare chart sampling. |
+| Retained owner metadata | `maxRetainedMetadataBytes` 32 MiB and document count limit | Reject oversized observations; keep owner files. |
 | Composition/export | 32 compositions, 32 views each; 32 MiB metadata | Reject additional metadata; keep owner state. |
 
 Core CLI observation uses 20 s/2 MiB; base-R dependency probes use 20 s/1 MiB.
@@ -204,7 +225,7 @@ RHO_CORE_BINARY=/absolute/rho-core npm run recovery
 RHO_CORE_BINARY=/absolute/rho-core npm run agent
 npm run pack:local -- --core /absolute/rho-core \
   --core-source /absolute/Rho-core --plugins /absolute/Rho-plugins
-node scripts/install-acceptance.mjs /absolute/rho-workspace-local-0.2.0.tgz \
+node scripts/install-acceptance.mjs /absolute/rho-workspace-local-0.3.0.tgz \
   /absolute/ordinary-project /absolute/paired-project
 ```
 
@@ -214,7 +235,10 @@ owned Hosts. [Read-only fixtures](../fixtures/README.md) cannot be replayed.
 
 The packer rejects dirty selected build inputs unless explicitly recording
 `--allow-dirty`, builds the Node owners, stages production dependencies and
-Core, and checks that project recipes/native R scripts are absent. The sidecar
+Core, and checks that project recipes/native R scripts and the old aggregate
+package are absent. `--select-plugins documents,files` builds a reduced artifact
+with other capability packages physically absent. Only Tables installs csv-parse;
+only Agent installs the MCP SDK. The sidecar
 records source commits/trees, build-input and lock hashes, binary/package digests
-and platform. It does not build Core, sign or publish to a registry. Direct
+and platform, plus each selected plugin tarball identity. It does not build Core, sign or publish to a registry. Direct
 packing of the development source-linked root is rejected.

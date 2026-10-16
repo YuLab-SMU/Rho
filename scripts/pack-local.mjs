@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 const root = fileURLToPath(new URL('..', import.meta.url));
-const { values } = parseArgs({ options: { core: { type: 'string' }, 'core-source': { type: 'string' }, plugins: { type: 'string' }, destination: { type: 'string' }, 'allow-dirty': { type: 'boolean', default: false } } });
+const { values } = parseArgs({ options: { core: { type: 'string' }, 'core-source': { type: 'string' }, plugins: { type: 'string' }, destination: { type: 'string' }, 'allow-dirty': { type: 'boolean', default: false }, 'select-plugins': { type: 'string' } } });
 if (!values.core || !values['core-source']) throw new Error('Select --core BINARY and --core-source REPOSITORY. The build must already have completed.');
 const pluginRoot = path.resolve(values.plugins ?? path.join(root, '../Rho-plugins'));
 const coreRoot = path.resolve(values['core-source']);
@@ -34,39 +34,42 @@ async function source(directory, paths, committedFiles = []) {
   }
   return { commit, tree, buildInputsSha256: sha(JSON.stringify(inventory)), localOverride: changed ? 'explicit-dirty-build-inputs' : null };
 }
-run('npm', ['run', 'build'], pluginRoot); run('npm', ['run', 'build'], root);
+run('npm', ['run', 'build'], root);
+const pluginIds = ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent'];
+const selected = values['select-plugins'] === undefined ? pluginIds : values['select-plugins'].split(',').filter(Boolean);
+if (new Set(selected).size !== selected.length || selected.some(id => !pluginIds.includes(id))) throw new Error('Select unique known plugin IDs.');
 const application = await source(root, ['src', 'scripts', 'protocol', 'fixtures', 'package.json', 'package-lock.json', 'tsconfig.json', 'README.md', 'LICENSE', 'docs/HEADLESS.md']);
-const plugins = await source(pluginRoot, ['headless/src', 'headless/tsconfig.json', 'package.json', 'package-lock.json', 'LICENSE'], ['README.md']);
+const plugins = await source(pluginRoot, ['packages/contracts', ...selected.map(id => 'plugins/' + id), 'scripts', 'package.json', 'package-lock.json', 'LICENSE']);
 const core = await source(coreRoot, ['src', 'Cargo.toml', 'Cargo.lock', 'LICENSE']);
-const pluginStage = path.join(destination, 'plugins-stage');
-await fs.mkdir(pluginStage);
-const pluginManifest = JSON.parse(await fs.readFile(path.join(pluginRoot, 'package.json'), 'utf8'));
-for (const entry of new Set([...pluginManifest.files, 'package.json'])) await fs.cp(path.join(pluginRoot, entry), path.join(pluginStage, entry), { recursive: true });
-// npm includes README automatically. Select its committed bytes so unrelated
-// documentation drafts cannot silently change the accepted package.
-await fs.writeFile(path.join(pluginStage, 'README.md'), run('git', ['show', 'HEAD:README.md'], pluginRoot));
-const pluginPack = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', destination], pluginStage))[0];
-if (pluginPack.files.some(f => /^(examples|headless\/native)\//.test(f.path) || /\.R$/.test(f.path))) throw new Error('A project recipe leaked into the Plugins package.');
+const pluginPacks = JSON.parse(run(process.execPath, [path.join(pluginRoot, 'scripts/pack.mjs'), '--destination', path.join(destination, 'plugins'), '--plugins', selected.join(',')], pluginRoot));
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
 for (const entry of manifest.files.filter(p => p !== 'vendor')) {
   try { await fs.cp(path.join(root, entry), path.join(stage, entry), { recursive: true }); } catch (e) { if (e.code !== 'ENOENT') throw e; }
 }
 await fs.mkdir(path.join(stage, 'vendor'));
-await fs.copyFile(path.join(destination, pluginPack.filename), path.join(stage, 'vendor/plugins.tgz'));
+for (const item of pluginPacks.packages) {
+  await fs.copyFile(path.join(pluginPacks.destination, item.filename), path.join(stage, 'vendor', item.filename));
+}
+
 const binary = await fs.readFile(path.resolve(values.core));
 await fs.writeFile(path.join(stage, 'vendor/rho-core'), binary, { mode: 0o755 });
 await fs.copyFile(path.join(coreRoot, 'LICENSE'), path.join(stage, 'vendor/CORE-LICENSE'));
-manifest.dependencies['@rho-workspace/headless'] = 'file:vendor/plugins.tgz';
+for (const name of Object.keys(manifest.dependencies).filter(name => name.startsWith('@rho-workspace/plugin-'))) delete manifest.dependencies[name];
+for (const item of pluginPacks.packages) manifest.dependencies[item.package] = 'file:vendor/' + item.filename;
+manifest.bundleDependencies = Object.keys(manifest.dependencies);
 delete manifest.devDependencies;
 manifest.scripts = { acceptance: 'node scripts/acceptance.mjs', recovery: 'node scripts/recovery-acceptance.mjs' };
 await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
 run('npm', ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], stage);
-const composition = { schemaVersion: 1, platform: process.platform + '-' + process.arch, node: process.version, application: { repository: 'https://github.com/YuLab-SMU/Rho', ...application }, plugins: { repository: 'https://github.com/YuLab-SMU/Rho-plugins', ...plugins, artifactSha256: sha(await fs.readFile(path.join(stage, 'vendor/plugins.tgz'))), integrity: pluginPack.integrity }, core: { repository: 'https://github.com/YuLab-SMU/Rho-core', ...core, artifactSha256: sha(binary), bytes: binary.length, buildAssociation: 'Explicitly selected local build; no reproducible-build or signing claim.' }, productionLockSha256: sha(await fs.readFile(path.join(stage, 'package-lock.json'))), distribution: 'unsigned-local-npm-tarball', registryPublication: 'not-performed' };
+const composition = { schemaVersion: 1, platform: process.platform + '-' + process.arch, node: process.version, application: { repository: 'https://github.com/YuLab-SMU/Rho', ...application }, plugins: { repository: 'https://github.com/YuLab-SMU/Rho-plugins', ...plugins, selected, packages: pluginPacks.packages.map(({ files, ...item }) => item) }, core: { repository: 'https://github.com/YuLab-SMU/Rho-core', ...core, artifactSha256: sha(binary), bytes: binary.length, buildAssociation: 'Explicitly selected local build; no reproducible-build or signing claim.' }, productionLockSha256: sha(await fs.readFile(path.join(stage, 'package-lock.json'))), distribution: 'unsigned-local-npm-tarball', registryPublication: 'not-performed' };
 await fs.writeFile(path.join(stage, 'vendor/composition.json'), JSON.stringify(composition, null, 2) + '\n');
 const result = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', destination], stage))[0];
 if (result.files.some(f => path.isAbsolute(f.path) || f.path.split('/').includes('..'))) throw new Error('Package contains a path outside the assembled root.');
-for (const required of ['node_modules/@rho-workspace/headless/dist/index.js', 'node_modules/@modelcontextprotocol/sdk/package.json', 'vendor/rho-core', 'protocol/v1.json', 'protocol/v2.json']) if (!result.files.some(f => f.path === required)) throw new Error('Package is missing ' + required);
-if (result.files.some(f => /^(examples|headless\/native)\//.test(f.path) || /^node_modules\/@rho-workspace\/headless\/(examples|headless\/native)\//.test(f.path) || /\.R$/.test(f.path))) throw new Error('A project recipe leaked into the base package.');
+for (const required of ['vendor/rho-core', 'protocol/v1.json', 'protocol/v2.json', ...pluginPacks.packages.map(p => 'node_modules/' + p.package + '/dist/index.js')]) if (!result.files.some(f => f.path === required)) throw new Error('Package is missing ' + required);
+for (const [id, dependency] of [['tables', 'csv-parse'], ['agent', '@modelcontextprotocol/sdk']]) {
+  if (result.files.some(f => f.path === 'node_modules/' + dependency + '/package.json') !== selected.includes(id)) throw new Error('Optional dependency did not follow its plugin: ' + dependency);
+}
+if (result.files.some(f => /(^|\/)examples\//.test(f.path) || /\.R$/.test(f.path) || f.path.includes('@rho-workspace/headless'))) throw new Error('An aggregate package or project recipe leaked into the application.');
 const artifact = path.join(destination, result.filename);
 const report = { ...composition, artifact: { filename: result.filename, bytes: result.size, sha256: sha(await fs.readFile(artifact)), integrity: result.integrity, files: result.entryCount } };
 await fs.writeFile(path.join(destination, 'composition.json'), JSON.stringify(report, null, 2) + '\n');

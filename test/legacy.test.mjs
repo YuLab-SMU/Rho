@@ -1,10 +1,11 @@
+import { Files } from '@rho-workspace/plugin-files';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { Ajv } from 'ajv';
-import { canonical, digest, Resources } from '@rho-workspace/headless';
+import { canonical, digest } from '@rho-workspace/plugin-contracts';
 import { RhoService } from '../dist/server.js';
 import { RhoClient } from '../dist/client.js';
 import { responseEnvelope } from '../dist/legacy-protocol.js';
@@ -22,7 +23,7 @@ test('v1 retained frozen requests and resource bytes stay observable without rec
     const directory = path.join(p.root, '.rho/rho/operations'); await fs.mkdir(directory, { recursive: true });
     await fs.writeFile(path.join(directory, digest(canonical(['operator', p.id, request.operationId])) + '.json'), JSON.stringify(run));
     await fs.writeFile(path.join(p.root, 'retained.txt'), 'retained bytes');
-    const resources = new Resources(p.root, p.id);
+    const resources = new Files(p.root, p.id);
     const resource = await resources.register('retained.txt', { operationId: run.operationId }, 'partial');
     // Simulate the old registry's descriptor, preserving its native resource ID.
     await fs.writeFile(path.join(p.root, '.rho/plugins/resources.json'), JSON.stringify([{ ...resource, format: 'text' }]));

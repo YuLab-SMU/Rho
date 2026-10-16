@@ -1,4 +1,6 @@
-import { objectSchema as obj, text, refSchema as ref, requirementsSchema, executionInputSchema, declarationSchema } from '@rho-workspace/headless';
+import { requirementsSchema } from '@rho-workspace/plugin-contracts/requirements';
+import { executionInputSchema } from '@rho-workspace/plugin-contracts/execution';
+import { objectSchema as obj, text, refSchema as ref, declarationSchema } from '@rho-workspace/plugin-contracts';
 import { protocol as v1 } from './legacy-protocol.js';
 const base = structuredClone(v1);
 const project = { projectId: base.operations['capability.list'].properties.projectId };

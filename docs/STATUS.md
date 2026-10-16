@@ -4,8 +4,12 @@ Updated: 2026-10-16.
 
 ## Application
 
-Version 0.2 extracts reusable headless capabilities from the original scientific
-prototype. `/api/v2` HTTP/SSE schemas, client and inert fixtures expose explicit
+Version 0.3 splits documents, files, R, requirements, tables, media, charts and
+Agent into eight independent npm plugins. Each owns its descriptor, behavior and
+entry contracts. Rho selects reviewed versions and injects service ports; a thin
+contracts package supplies shared types/schemas/file primitives without capabilities.
+Only Tables brings csv-parse; only Agent brings the MCP SDK.
+The earlier extraction removed scientific workflows from the base dependencies. `/api/v2` HTTP/SSE schemas, client and inert fixtures expose explicit
 scripts/requirements/artifacts, typed tables and entity namespaces, media and
 exported object snapshots. The base npm package contains no project recipe or R
 script. The ordinary base-R project and original paired analysis use the same
@@ -15,7 +19,8 @@ Rho owns authentication/projects, durable caller intents, the public Core CLI
 bridge and composition. Plugins owns document/resource semantics, R plans,
 requirements and scoped MCP. Core remains unchanged at
 `d0159da6feb01d1be9e3b4b34b67953241fedfcb`.
-[HEADLESS](HEADLESS.md) documents the current API; [extraction acceptance](EXTRACTION-ACCEPTANCE.md)
+[HEADLESS](HEADLESS.md) documents the current API and plugin selection;
+[plugin split acceptance](PLUGIN-SPLIT-ACCEPTANCE.md) records the new package boundary; [extraction acceptance](EXTRACTION-ACCEPTANCE.md)
 records actual source/package checks and failures.
 
 Frozen v1 schema/fixtures and an observation bridge preserve original accepted
@@ -33,12 +38,17 @@ unverified/unselected.
 
 ## Verification
 
-- Rho: 12/12 protocol, real stdio MCP, retained v1, service, crash/continuity,
+- Rho: 13/13 protocol, real stdio MCP, retained v1, service, crash/continuity,
   workspace and budget tests passed. Three SIGKILL boundaries retain the original
   operation/Core identity and one dispatch after a missing first acknowledgement.
-- Plugins: 9/9 capability tests and 2/2 separate native example tests passed.
+- Plugin removal/reselection preserves drafts, undo, bytes, layout references,
+  selection intent and original Core identity without replay. Unavailable providers
+  reject new work; retained requests stay observable.
+- Plugins: 10/10 capability tests and 2/2 separate native example tests passed.
   Explicit types preserve `001` and literal `NA`; unkeyed tables remain readable,
   stale/mismatched inputs fail, and comparisons record both versions/provenance.
+- All eight capability tarballs pass independent installation/import with no
+  sibling implementation. Source root packing is rejected.
 - Ordinary R project: real linear model, four rows, typed two-input join, PNG/PDF,
   original bytes and an exported object snapshot pass through the generic runner.
 - Original paired project: five DESeq2 fits, 16,139 genes, 33 baseline artifacts,
@@ -65,7 +75,7 @@ original installed v1 candidate remain recorded separately.
 
 [PX-01–PX-05](PLUGIN-EXTRACTION.md) have passed their backend scope, including
 both installed consumers. The versioned schema/client/fixtures are ready for
-independent UI development. This extraction does no UI work.
+independent UI development. This split continues backend/headless work; no UI is implemented.
 [The six backend work packages](BACKEND-FIRST.md) retain their original
 scope; [first-release tasks](WEBUI-FIRST.md) retain all product gates.
 

@@ -1,4 +1,4 @@
-import { requireThat } from '@rho-workspace/headless';
+import { requireThat } from '@rho-workspace/plugin-contracts';
 // v1 is an observation bridge for retained requests, not a second capability
 // catalog. Do not quietly change its resource kinds or strict descriptors.
 export function legacyResponse(value: any): any {

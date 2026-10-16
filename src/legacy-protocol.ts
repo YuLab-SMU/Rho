@@ -1,4 +1,5 @@
-import { objectSchema as obj, text, refSchema as ref, version, scriptSchema } from '@rho-workspace/headless';
+import { scriptSchema } from '@rho-workspace/plugin-contracts/execution';
+import { objectSchema as obj, text, refSchema as ref, version } from '@rho-workspace/plugin-contracts';
 const id = { type: 'string', pattern: '^[A-Za-z0-9._:@-]{1,128}$' };
 const integer = { type: 'integer', minimum: 0 };
 const positive = { type: 'integer', minimum: 1 };

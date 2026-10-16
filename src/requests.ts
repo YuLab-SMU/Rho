@@ -1,12 +1,12 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { actions, atomicJson, canonical, checkRequirements, collectArtifacts, digest, Documents, now, planExecution, preparation, readJson, requireThat, Resources, stateDirectory, verifyArtifacts } from '@rho-workspace/headless';
-import type { ActionPlan } from '@rho-workspace/headless';
+import { atomicJson, canonical, digest, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
+import type { ActionPlan } from '@rho-workspace/plugin-contracts';
 import { Ajv } from 'ajv';
+import type { ProjectPlugins } from './plugins.js';
 import { CoreBridge, type CliResult } from './bridge.js';
 import type { Principal, Project } from './state.js';
 const ajv = new Ajv({ allErrors: true, strict: false });
-const inputValidators = Object.fromEntries(actions.map(a => [a.id, ajv.compile(a.inputSchema)]));
 export interface Operation {
   operationId: string; principal: string; projectId: string; requestDigest: string; request: any; action: string; actionVersion: string; acceptedAt: string;
   core: { caller: string; requestId: string }; delivery: string; execution: string; native: any; integrity: any; domain: any; interpretation: any; plan: ActionPlan; lastCli?: CliResult; checks?: any; cancellation?: any;
@@ -15,7 +15,7 @@ export const publicOperation = (run: Operation) => ({ ...run, request: run.reque
 export const requestLimits = { maxConcurrentActions: 2, maxOperations: 256, maxLogPageBytes: 65536, maxCodeBytes: 1024 * 1024 };
 export class Requests {
   limits: typeof requestLimits;
-  constructor(public project: Project, public bridge: CoreBridge, public emit: (type: string, subject: string) => Promise<void>, limits: Partial<typeof requestLimits> = {}, public resources = new Resources(project.root, project.id), public documents = new Documents(project.root)) { this.limits = { ...requestLimits, ...Object.fromEntries(Object.entries(limits).filter(([k, v]) => k in requestLimits && v !== undefined)) }; }
+  constructor(public project: Project, public bridge: CoreBridge, public emit: (type: string, subject: string) => Promise<void>, limits: Partial<typeof requestLimits>, public owners: ProjectPlugins) { this.limits = { ...requestLimits, ...Object.fromEntries(Object.entries(limits).filter(([k, v]) => k in requestLimits && v !== undefined)) }; }
   private async directory() { return stateDirectory(this.project.root, '.rho/rho/operations'); }
   private key(principal: Principal, operationId: string) { return digest(canonical([principal.id, this.project.id, operationId])); }
   private async file(principal: Principal, operationId: string) { return path.join(await this.directory(), this.key(principal, operationId) + '.json'); }
@@ -35,10 +35,11 @@ export class Requests {
       requireThat(existing.requestDigest === requestDigest, 'conflict', 'This operationId already names different immutable content.', { operationId: body.operationId, requestDigest: existing.requestDigest });
       return existing; // Explicit action.retry can deliver an accepted not-sent intent.
     }
-    const action = actions.find(a => a.id === (preparationAction ? 'r.execute' : body.action));
+    const actions = this.owners.assembly.catalog.actions;
+    const action = preparationAction ? { id: 'r.execute', version: '0.2.0', inputSchema: {} } : actions.find(a => a.id === body.action);
     requireThat(action, 'unavailable', 'Selected action is not registered.');
     if (!preparationAction) {
-      const validate = inputValidators[action.id]!;
+      const validate = ajv.compile(action.inputSchema);
       requireThat(validate(body.input), 'invalid', 'Action input does not match its component schema.', { fields: validate.errors ?? [] });
     }
     const all = (await fs.readdir(await this.directory())).filter(n => n.endsWith('.json'));
@@ -51,11 +52,12 @@ export class Requests {
       if (observed.exitCode !== 0 || !(observed.reply.value?.terminal)) active++;
     }
     requireThat(active < this.limits.maxConcurrentActions, 'limit', 'Concurrent action budget reached; no new operation was accepted.', { limit: 'maxConcurrentActions', maximum: this.limits.maxConcurrentActions });
+    const provider = this.owners.assembly.need('requirements');
     const requirements = preparationAction ? body.requirements : body.input.requirements;
-    const checks = await checkRequirements(this.project.root, requirements, this.bridge.rscript);
+    const checks = await provider.checkRequirements(this.project.root, requirements, this.bridge.rscript);
     requireThat(preparationAction || checks.status === 'present', 'condition', 'Selected action dependencies are missing or unknown.', { check: checks, continuation: 'Check and explicitly prepare this action in this project.' });
     const core = { caller: 'rho:' + digest(principal.id + ':' + this.project.id).slice(0, 48), requestId: this.key(principal, body.operationId) };
-    const plan = preparationAction ? await preparation(this.project.root, requirements, this.bridge.rscript) : await planExecution(this.project.root, body.input, core.requestId, checks.environment, this.resources, this.documents);
+    const plan = preparationAction ? await provider.preparation(this.project.root, requirements, this.bridge.rscript) : await this.owners.assembly.need('r').planExecution(this.project.root, body.input, core.requestId, checks.environment, this.owners.need('files'), this.owners.documents);
     requireThat(Buffer.byteLength(plan.code) <= this.limits.maxCodeBytes, 'limit', 'Script snapshot exceeds the selected code byte limit.', { limit: 'maxCodeBytes', maximum: this.limits.maxCodeBytes });
     const run: Operation = { operationId: body.operationId, principal: principal.id, projectId: this.project.id, requestDigest, request, action: preparationAction ? 'requirements.prepare:' + action.id : action.id, actionVersion: action.version, acceptedAt: now(), core, delivery: 'not-sent', execution: 'unobserved', native: null, integrity: { state: 'unchecked' }, domain: { state: 'unchecked' }, interpretation: { state: 'absent' }, plan, checks };
     await atomicJson(file, run); // Durable service acknowledgement precedes ANY Core submit.
@@ -97,7 +99,7 @@ export class Requests {
     const run = await this.lookup(principal, operationId);
     const result = await this.bridge.call(this.project.root, 'lookup', run.core.caller, run.core.requestId, ['--record']);
     this.apply(run, result, false);
-    if (run.action.startsWith('requirements.prepare:') && run.execution === 'completed' && run.plan.source.requirements) run.checks = await checkRequirements(this.project.root, run.plan.source.requirements, this.bridge.rscript);
+    if (run.action.startsWith('requirements.prepare:') && run.execution === 'completed' && run.plan.source.requirements && this.owners.assembly.optional('requirements')) run.checks = await this.owners.assembly.need('requirements').checkRequirements(this.project.root, run.plan.source.requirements, this.bridge.rscript);
     await this.persist(run); return run;
   }
   async cancel(principal: Principal, operationId: string) {
@@ -113,13 +115,13 @@ export class Requests {
   }
   async artifacts(principal: Principal, operationId: string) {
     const run = await this.lookup(principal, operationId);
-    const facts = await collectArtifacts(this.project.root, this.project.id, run, this.resources);
+    const facts = await this.owners.assembly.need('files').collectArtifacts(this.project.root, this.project.id, run, this.owners.need('files'));
     if (run.integrity.state !== 'verified') run.integrity = facts.integrity; if (run.domain.state === 'unchecked') run.domain = facts.domain;
     await this.persist(run); return facts;
   }
   async check(principal: Principal, operationId: string) {
     const run = await this.lookup(principal, operationId);
-    const facts = await verifyArtifacts(this.project.root, run, this.resources);
+    const facts = await this.owners.assembly.need('files').verifyArtifacts(this.project.root, run, this.owners.need('files'));
     run.integrity = facts.integrity; run.domain = facts.domain; await this.persist(run); return facts;
   }
 }

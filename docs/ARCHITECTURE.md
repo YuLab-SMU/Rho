@@ -27,7 +27,8 @@ several views over one state owner. Specific analysis workflows remain project
 scripts/recipes or acceptance examples; their dataset, design, contrast and
 sequencing do not belong in the base catalog or application routing. The
 [extraction plan](PLUGIN-EXTRACTION.md) records removal of the 0.1 coupling and
-the gates before plugin UI integration. The 0.2 headless contracts are implemented;
+the gates before plugin UI integration. The 0.3 application selects eight independent plugin packages and retains the
+0.2 action/view contracts;
 [extraction acceptance](EXTRACTION-ACCEPTANCE.md) records their actual consumers.
 
 A headless caller uses the component's supported entry. Rho assembles its views
@@ -45,7 +46,10 @@ adds native window and system integration.
 
 Four concepts connect components to the container. The finite 0.2 backend exposes
 their concrete [v2 schemas](../protocol/v2.json), HTTP/SSE service and client.
-Plugins supplies the headless functional owners; UI entries remain unavailable.
+Plugins supplies independently packaged headless owners. Rho selects a finite
+allowlisted package list, checks versions/service requirements and injects typed
+ports. Missing packages report unavailable; they are not installed implicitly.
+UI entries remain unavailable.
 [Headless backend](HEADLESS.md) records the actual boundary and persistence rules.
 Scripts, requirements, typed fields, keys, entity namespaces and two-input joins
 are explicit declarations. Frozen v1 schemas/fixtures and a retained observation

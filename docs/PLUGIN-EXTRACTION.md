@@ -8,6 +8,7 @@ Rho 的基础插件提供可复用系统能力。具体分析的问题、数据�
 [Rho-plugins 插件模型](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-MODEL.md)持有。
 
 0.2 已按该边界完成后端代码解耦，交付 `/api/v2`、客户端和无副作用状态夹具。
+0.3 进一步将八类能力拆成独立 npm 插件；见[拆分验收](PLUGIN-SPLIT-ACCEPTANCE.md)。
 普通 base-R 项目和原 paired 分析均通过同一套能力运行，实际检查及安装状态见
 [解耦验收](EXTRACTION-ACCEPTANCE.md)。本轮不做 UI。
 原 [BP-01–BP-06 验收](BACKEND-ACCEPTANCE.md)继续证明固定 v1 组合中的真实执行、
@@ -54,9 +55,9 @@ Core 继续通过公开 CLI 提供执行事实与 resident Host。
 | [请求协调](../src/requests.ts) | 直接调用 `planAnalysis`、科学产物收集与 checker | Rho 保留受理/身份/执行桥；通过所选 owner 的执行计划和产物/检查入口分派 |
 | [服务路由](../src/server.ts) | selection/context 硬编码 `gene_id` | reader 声明 key 与坐标；Rho 路由带资源版本的选区 |
 | [组合与恢复](../src/workspace.ts) | 比较视图检查 shrinkage/baseline 的科学关系；恢复选区要求基因 ID | 通用 entry/props/binding 校验；领域关系由领域 owner 检查 |
-| [Plugins catalog](https://github.com/YuLab-SMU/Rho-plugins/blob/main/headless/src/catalog.ts)与 requirements | 固定两条科学动作和 R 包集 | 可复用能力/entry 声明；recipe 显式提供所需依赖 |
-| [Plugins analysis](https://github.com/YuLab-SMU/Rho-plugins/blob/main/headless/src/analysis.ts) | 默认选择内置 airway 脚本；固定数据、contrast、模型路径、基因数及 checker | 运行时接收显式项目脚本快照；科学选择与检查留在 recipe |
-| [Plugins resources](https://github.com/YuLab-SMU/Rho-plugins/blob/main/headless/src/resources.ts) | owner 固定 airway；按科学列名推断类型；散点和比较固定 fold change | provider 声明格式、类型、key 和字段映射；通用文件/表/图 reader 不推断分析含义 |
+| [Plugins catalog](https://github.com/YuLab-SMU/Rho-plugins/blob/eb787ae93a9656f57f9a3f858c253815d0e4e616/headless/src/catalog.ts)与 requirements | 固定两条科学动作和 R 包集 | 可复用能力/entry 声明；recipe 显式提供所需依赖 |
+| [Plugins analysis](https://github.com/YuLab-SMU/Rho-plugins/blob/eb787ae93a9656f57f9a3f858c253815d0e4e616/headless/src/analysis.ts) | 默认选择内置 airway 脚本；固定数据、contrast、模型路径、基因数及 checker | 运行时接收显式项目脚本快照；科学选择与检查留在 recipe |
+| [Plugins resources](https://github.com/YuLab-SMU/Rho-plugins/blob/eb787ae93a9656f57f9a3f858c253815d0e4e616/headless/src/resources.ts) | owner 固定 airway；按科学列名推断类型；散点和比较固定 fold change | provider 声明格式、类型、key 和字段映射；通用文件/表/图 reader 不推断分析含义 |
 | [Plugins 包清单](https://github.com/YuLab-SMU/Rho-plugins/blob/main/package.json)及 [Rho 打包](../scripts/pack-local.mjs) | 基础包携带并依赖科学样例 | 基础能力可独立安装；科学样例由验收 consumer 或项目显式选择 |
 
 测试中的科学数据和 gene ID 可以保留。问题是它们进入了应用路由和基础能力的必需语义。

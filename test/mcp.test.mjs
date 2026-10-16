@@ -9,7 +9,7 @@ import { setTimeout } from 'node:timers/promises';
 import { RhoService } from '../dist/server.js';
 import { RhoClient } from '../dist/client.js';
 import { runtime } from '../dist/runtime.js';
-const pluginRequire = createRequire(import.meta.resolve('@rho-workspace/headless'));
+const pluginRequire = createRequire(import.meta.resolve('@rho-workspace/plugin-agent'));
 const { Client } = await import(pathToFileURL(pluginRequire.resolve('@modelcontextprotocol/sdk/client/index.js')));
 const { StdioClientTransport } = await import(pathToFileURL(pluginRequire.resolve('@modelcontextprotocol/sdk/client/stdio.js')));
 test('real stdio MCP v2 tools share the unsaved buffer, scope and retained native identity', { timeout: 30000 }, async () => {
@@ -23,7 +23,7 @@ test('real stdio MCP v2 tools share the unsaved buffer, scope and retained nativ
     const d = await human.call('document.open', { projectId: p.id, path: 'unsaved.R' });
     const methods = ['capability.list', 'document.read', 'document.edit', 'action.submit', 'action.observe'];
     const grant = await human.call('session.grant', { projectId: p.id, externalSessionId: 'mcp-contract-consumer', methods });
-    const transport = new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(import.meta.resolve('@rho-workspace/headless/mcp'))], env: { PATH: process.env.PATH, RHO_AGENT_CONNECTION: grant.connectionFile }, stderr: 'pipe' });
+    const transport = new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(import.meta.resolve('@rho-workspace/plugin-agent/mcp'))], env: { PATH: process.env.PATH, RHO_AGENT_CONNECTION: grant.connectionFile }, stderr: 'pipe' });
     transport.stderr.resume(); await client.connect(transport);
     const tools = await client.listTools();
     assert.deepEqual(tools.tools.map(t => t.name).sort(), methods.map(m => 'rho_' + m.replaceAll('.', '_')).sort());

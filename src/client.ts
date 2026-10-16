@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { canonical, requireThat } from '@rho-workspace/headless';
+import { canonical, requireThat } from '@rho-workspace/plugin-contracts';
 export type Envelope<T> = { apiVersion: '1.0' | '2.0'; ok: true; value: T } | { apiVersion: '1.0' | '2.0'; ok: false; error: { kind: string; message: string; details: Record<string, unknown>; continuation: string } };
 export interface Connection { url: string; token: string; projectId?: string; methods?: string[]; apiVersion?: '1.0' | '2.0' }
 export class ApiError extends Error {

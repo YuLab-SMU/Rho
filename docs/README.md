@@ -7,6 +7,7 @@ implementation and verification summary.
 | Document | Purpose |
 | --- | --- |
 | [First-release tasks](WEBUI-FIRST.md) | Prioritized npm + local WebUI backlog, Agent connection, human-Agent flows, dependencies and release gates |
+| [Plugin split acceptance](PLUGIN-SPLIT-ACCEPTANCE.md) | Eight independent packages, selective assembly and backend verification |
 | [Backend implementation plan](BACKEND-FIRST.md) | Six backend work packages and the contract for independent UI development |
 | [Reusable plugin extraction](PLUGIN-EXTRACTION.md) | Capability/workflow boundary, current source coupling, owner changes, compatibility and new gates before plugin UI acceptance |
 | [Headless backend](HEADLESS.md) | Installation, versioned HTTP/SSE client, Agent adapter, persistence and budgets |

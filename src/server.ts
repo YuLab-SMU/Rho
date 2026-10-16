@@ -1,9 +1,10 @@
 import * as http from 'node:http';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { Ajv } from 'ajv';
-import { atomicJson, canonical, catalog, checkRequirements, confined, digest, Documents, documentLimits, Fault, now, publicResource, readJson, requireThat, Resources, resourceLimits, stateDirectory } from '@rho-workspace/headless';
+import { atomicJson, canonical, confined, digest, Fault, now, publicResource, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
+import { Plugins, type PluginConfig } from './plugins.js';
 import { protocol, operations } from './protocol.js';
 import { protocol as legacyProtocol } from './legacy-protocol.js';
 import { legacyResponse } from './legacy-response.js';
@@ -11,13 +12,13 @@ import { CoreBridge } from './bridge.js';
 import { State, type Principal, type Project } from './state.js';
 import { Requests, publicOperation, requestLimits } from './requests.js';
 import { Workspace, workspaceLimits } from './workspace.js';
-export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits> { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; documents?: Partial<typeof documentLimits>; resources?: Partial<typeof resourceLimits>; workspace?: Partial<typeof workspaceLimits> }
+export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; workspace?: Partial<typeof workspaceLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 const legacyValidators = Object.fromEntries(Object.entries(legacyProtocol.operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
 const validators = Object.fromEntries(Object.entries(operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
 export class RhoService {
-  state: State; bridge: CoreBridge; url = ''; adminToken = ''; server: http.Server;
+  plugins: Plugins; state: State; bridge: CoreBridge; url = ''; adminToken = ''; server: http.Server;
   private queues = new Map<string, Promise<any>>();
   private queued = new Map<string, number>();
   private subscribers = new Set<{ projectId: string; principal: string; response: http.ServerResponse }>();
@@ -25,12 +26,14 @@ export class RhoService {
     for (const [key, value] of Object.entries({ ...serviceLimits, ...requestLimits, ...config.documents, ...config.resources, ...config.workspace, ...config })) {
       if (typeof value === 'number') requireThat(Number.isSafeInteger(value) && (key === 'port' ? value >= 0 && value <= 65535 : value > 0), 'invalid', 'Invalid service budget.', { field: key });
     }
+    this.plugins = new Plugins(config);
     this.state = new State(config.root, config.stateDir); this.bridge = new CoreBridge(config.coreBinary, config.rscript);
     this.server = http.createServer((req, res) => void this.handle(req, res));
     this.server.requestTimeout = 15000; this.server.headersTimeout = 10000;
   }
   async start() {
     try {
+    await this.plugins.load();
     await this.state.init();
     this.adminToken = randomBytes(32).toString('hex');
     this.state.principals = this.state.principals.filter(p => p.id !== 'operator');
@@ -46,8 +49,10 @@ export class RhoService {
   }
   async agentConnection(projectId: string, externalSessionId: string, file: string, methods?: string[]) {
     await this.state.project(projectId, this.state.principals.find(p => p.id === 'operator')!);
-    const selected = methods ?? Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('project.') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore'));
+    this.plugins.need('agent');
+    const selected = methods ?? Object.keys(operations).filter(m => this.plugins.supports(m) && !m.startsWith('session.') && !m.startsWith('project.') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore'));
     requireThat(selected.every(m => !!operations[m] && !m.startsWith('session.') && !m.startsWith('project.')), 'invalid', 'Unknown or operator-only Agent capability.');
+    requireThat(selected.every(m => this.plugins.supports(m)), 'unavailable', 'A requested Agent operation has no selected provider.');
     const token = randomBytes(32).toString('hex');
     const id = 'agent:' + digest(projectId + ':' + externalSessionId).slice(0, 32);
     this.state.principals = this.state.principals.filter(p => p.id !== id);
@@ -117,18 +122,8 @@ export class RhoService {
   private async recordActivity(principal: Principal, method: string, body: any, result: any, errorKind?: string) {
     if (!principal.projectId || method === 'binding.activity') return;
     const p = await this.state.project(body.projectId, principal);
-    const file = path.join(await this.dataDir(p), 'activity.json');
-    const retained = await readJson<any>(file, { cursor: 0, entries: [] });
-    const entry = { cursor: ++retained.cursor, principal: principal.id, method, at: now(), outcome: errorKind ? 'rejected' : 'returned',
-      ...(errorKind ? { errorKind } : {}),
-      ...(body.operationId ? { operationId: body.operationId } : {}),
-      ...(body.documentId ? { documentId: body.documentId } : {}),
-      ...(result?.version ? { returnedVersion: result.version } : {}),
-      ...(body.contextId ? { contextId: body.contextId } : {}) };
-    retained.entries.push(entry); retained.entries = retained.entries.slice(-(this.config.maxActivities ?? serviceLimits.maxActivities));
-    await atomicJson(file, retained);
+    await this.plugins.project(p.root, p.id).agent?.recordActivity(principal.id, method, body, result, errorKind);
   }
-  private docs(p: Project) { return new Documents(p.root, this.config.documents); }
   private async dataDir(p: Project) { return stateDirectory(p.root, '.rho/rho'); }
   async dispatch(method: string, b: any, principal: Principal): Promise<any> {
     if (method === 'protocol.describe') return protocol;
@@ -136,17 +131,17 @@ export class RhoService {
     if (method === 'project.create') { await fs.mkdir(await confined(this.state.root, b.name, true)); return this.state.open(b.name); }
     if (method === 'project.open') { const p = await this.state.open(b.path); const host = await this.bridge.capability(p.root); return { ...p, host }; }
     const p = await this.state.project(b.projectId, principal);
-    const resources = new Resources(p.root, p.id, this.config.resources);
-    const requests = new Requests(p, this.bridge, (type, subject) => this.emit(p, type, subject), this.config, resources, this.docs(p));
-    const workspace = new Workspace(p, this.docs(p), resources, this.config.workspace);
+    const owners = this.plugins.project(p.root, p.id);
+    const requests = new Requests(p, this.bridge, (type, subject) => this.emit(p, type, subject), this.config, owners);
+    const workspace = new Workspace(p, owners, this.config.workspace);
     if (method === 'session.grant') {
       requireThat(principal.id === 'operator', 'unauthorized', 'Only the local operator may provision a project-scoped session.');
       const file = path.join(this.state.directory, 'agent-' + digest(p.id + ':' + b.externalSessionId) + '.json');
       await this.agentConnection(p.id, b.externalSessionId, file, b.methods);
       return { connectionFile: file, projectId: p.id, methods: b.methods, transport: 'stdio-mcp', externalSessionId: b.externalSessionId };
     }
-    if (method === 'capability.list') return { ...catalog, host: await this.bridge.capability(p.root) };
-    if (method === 'requirements.check') return checkRequirements(p.root, b.requirements, this.bridge.rscript);
+    if (method === 'capability.list') return { ...this.plugins.catalog, host: await this.bridge.capability(p.root) };
+    if (method === 'requirements.check') return this.plugins.need('requirements').checkRequirements(p.root, b.requirements, this.bridge.rscript);
     if (method === 'requirements.prepare') return publicOperation(await requests.submit(principal, b, true));
     if (method === 'action.submit') return publicOperation(await requests.submit(principal, b));
     if (method === 'action.lookup') return publicOperation(await requests.lookup(principal, b.operationId));
@@ -159,14 +154,14 @@ export class RhoService {
     if (method === 'artifact.check') return requests.check(principal, b.operationId);
     if (method === 'resource.register') {
       requireThat(!b.declaration.path.split('/').some((part: string) => ['.rho', '.git'].includes(part)), 'scope', 'Register a project file outside internal state.');
-      return publicResource(await resources.register(b.declaration.path, { operationId: 'registration:' + digest(canonical(b.declaration)), registeredBy: principal.id }, 'available', {}, b.declaration, b.expectedDigest));
+      return publicResource(await owners.need('files').register(b.declaration.path, { operationId: 'registration:' + digest(canonical(b.declaration)), registeredBy: principal.id }, 'available', {}, b.declaration, b.expectedDigest));
     }
-    if (method === 'object.read') return resources.object(b.resource);
-    if (method === 'media.describe') return resources.media(b.resource);
-    if (method === 'resource.read') return resources.read(b.resource, b.offset, b.maxBytes);
-    if (method === 'data.page') return resources.page(b.resource, b.offset, b.limit, b.sort, b.filter);
-    if (method === 'data.plot') return resources.plot(b.resource, b.x, b.y, b.maxPoints);
-    if (method === 'data.compare') return resources.compare(b.left, b.right, b.options);
+    if (method === 'object.read') return owners.need('objects').read(b.resource);
+    if (method === 'media.describe') return owners.need('media').describe(b.resource);
+    if (method === 'resource.read') return owners.need('files').read(b.resource, b.offset, b.maxBytes);
+    if (method === 'data.page') return owners.need('tables').page(b.resource, b.offset, b.limit, b.sort, b.filter);
+    if (method === 'data.plot') return owners.need('charts').plot(b.resource, b.x, b.y, b.maxPoints);
+    if (method === 'data.compare') return owners.need('tables').compare(b.left, b.right, b.options);
     if (method === 'composition.put') { const result = await workspace.put(b); await this.emit(p, 'composition.changed', b.compositionId); return result; }
     if (method === 'composition.read') return workspace.read(b.compositionId);
     if (method === 'view.close') return workspace.closeView(b.compositionId, b.viewId, b.expectedVersion);
@@ -174,14 +169,14 @@ export class RhoService {
     if (method === 'workspace.export') return workspace.export(b.destination);
     if (method === 'workspace.restore') return workspace.restore(b.source, principal.id);
     if (method === 'selection.set') {
-      const data = await resources.rows(b.resource);
+      const data = await owners.need('tables').rows(b.resource);
       requireThat(data.entityKey, 'condition', 'Selection requires an explicit unique key and namespace.');
       requireThat(b.entities.every((id: string) => data.rows.some(r => r[data.entityKey!] === id)), 'stale', 'One or more selected entities are absent from this resource version.');
       const selection = { resource: b.resource, entities: [...new Set(b.entities)], namespace: data.namespace, at: now() };
       await atomicJson(path.join(await this.dataDir(p), 'selection.json'), selection); await this.emit(p, 'selection.changed', b.resource.id); return selection;
     }
     if (method.startsWith('document.')) {
-      const d = this.docs(p); let result;
+      const d = owners.need('documents'); let result;
       if (method === 'document.open') result = await d.open(b.path, principal.id);
       if (method === 'document.read') result = await d.read(b.documentId);
       if (method === 'document.edit') result = await d.edit(b.documentId, b.expectedVersion, b.edits, b.undoGroup, principal.id);
@@ -190,69 +185,15 @@ export class RhoService {
       if (!['document.read', 'document.open'].includes(method)) await this.emit(p, 'document.changed', b.documentId);
       return result;
     }
-    if (method === 'binding.activity') {
-      const activity = await readJson<any>(path.join(await this.dataDir(p), 'activity.json'), { cursor: 0, entries: [] });
-      return { cursor: activity.cursor, retainedFrom: activity.entries[0]?.cursor ?? activity.cursor + 1, entries: activity.entries.filter((x: any) => x.principal === principal.id) };
-    }
+    if (method === 'binding.activity') return owners.need('agent').activity(principal.id);
+    if (method === 'binding.list') return owners.need('agent').bindings(principal.id);
     if (method.startsWith('binding.')) {
-      const file = path.join(await this.dataDir(p), 'bindings.json');
-      const bindings = await readJson<any[]>(file, []);
-      if (method === 'binding.list') return bindings.filter(x => x.principal === principal.id);
-      const key = digest(principal.id + ':' + b.externalSessionId);
-      let binding = bindings.find(x => x.id === key);
-      if (!binding) { requireThat(bindings.length < (this.config.maxBindings ?? serviceLimits.maxBindings), 'limit', 'Binding retention is full.', { limit: 'maxBindings' }); binding = { id: key, projectId: p.id, principal: principal.id, externalSessionId: b.externalSessionId, adapter: 'claude-code-mcp', status: 'connected', at: now() }; bindings.push(binding); }
-      binding.status = method === 'binding.close' ? 'disconnected' : 'connected'; binding.at = now();
-      await atomicJson(file, bindings); await this.emit(p, 'binding.changed', key); return binding;
+      const result = await owners.need('agent').binding(method, principal.id, b.externalSessionId);
+      await this.emit(p, 'binding.changed', result.id); return result;
     }
-    if (method === 'context.create') {
-      requireThat(b.document || b.resource, 'invalid', 'Choose an explicit document or scientific resource.');
-      const context: any = { projectId: p.id, principal: principal.id, at: now(), delivery: 'not-fetched' };
-      if (b.document) {
-        const snapshot = await this.docs(p).snapshot(b.document.documentId, b.document.version);
-        const from = b.document.from ?? 0, to = b.document.to ?? snapshot.code.length;
-        requireThat(from <= to && to <= snapshot.code.length, 'invalid', 'Context text range is outside the buffer.');
-        context.document = { source: snapshot.source, sha256: snapshot.sha256, from, to, text: snapshot.code.slice(from, to) };
-      }
-      if (b.resource) {
-        const metadata = await resources.resolve(b.resource);
-        if (b.region) {
-          requireThat(metadata.kind === 'media' && typeof metadata.format === 'object', 'invalid', 'Coordinate context requires original media.');
-          const f = metadata.format;
-          requireThat(b.region.page <= (f.pages ?? 1) && b.region.units === (f.mimeType === 'application/pdf' ? 'points' : 'pixels'), 'condition', 'Media region page or units do not match the declaration.');
-          requireThat(f.width && f.height && b.region.x + b.region.width <= f.width && b.region.y + b.region.height <= f.height, 'condition', 'Media region exceeds declared page dimensions.');
-          context.region = { ...b.region, resource: b.resource, mapping: 'original-media-coordinates' };
-        }
-        if (metadata.kind === 'table') {
-          const data = await resources.rows(b.resource);
-          requireThat(data.entityKey, 'condition', 'Entity context requires an explicit unique key and namespace.');
-          const selected = b.entities ?? [];
-          requireThat(selected.length > 0 && selected.every((id: string) => data.rows.some(r => r[data.entityKey!] === id)), 'stale', 'Choose stable entities present in this resource version.');
-          context.resource = { reference: b.resource, metadata: publicResource(data.resource), rows: data.rows.filter(r => selected.includes(r[data.entityKey!])) };
-        } else {
-          requireThat(!b.entities?.length, 'invalid', 'Entity selection requires a table resource.');
-          const page = await resources.read(b.resource, 0);
-          const bytes = Buffer.from(page.data, 'base64');
-          let content;
-          try { content = { encoding: 'utf8', text: new TextDecoder('utf-8', { fatal: true }).decode(bytes) }; }
-          catch { content = { encoding: 'base64', data: page.data }; }
-          context.resource = { reference: b.resource, metadata: page.resource, ...content, offset: page.offset, nextOffset: page.nextOffset, more: page.more };
-        }
-      }
-      requireThat(!b.region || b.resource, 'invalid', 'Coordinate context requires a media resource.');
-      const contextId = digest(canonical(context));
-      requireThat(Buffer.byteLength(JSON.stringify(context)) <= (this.config.maxContextBytes ?? serviceLimits.maxContextBytes), 'limit', 'Context package exceeds its byte budget.', { limit: 'maxContextBytes' });
-      const contextDirectory = await stateDirectory(p.root, '.rho/rho/contexts');
-      requireThat((await fs.readdir(contextDirectory)).length < (this.config.maxContexts ?? serviceLimits.maxContexts), 'limit', 'Context retention is full.', { limit: 'maxContexts' });
-      await atomicJson(path.join(contextDirectory, contextId + '.json'), context);
-      return { contextId, ...context };
-    }
-    if (method === 'context.read') {
-      const file = path.join(await stateDirectory(p.root, '.rho/rho/contexts'), b.contextId + '.json');
-      const context = await readJson<any>(file);
-      context.delivery = 'tool-fetched'; context.fetchedBy = principal.id; context.fetchedAt = now();
-      await atomicJson(file, context); return { contextId: b.contextId, ...context };
-    }
-    if (method === 'observation.snapshot') return { project: p, catalog, documents: await this.docs(p).list(), operations: (await requests.list(principal)).map(publicOperation), resources: (await resources.list()).map(publicResource), compositions: await workspace.compositions(), selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: this.docs(p).limits, resources: resources.limits, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
+    if (method === 'context.create') return owners.need('agent').createContext(b, principal.id);
+    if (method === 'context.read') return owners.need('agent').readContext(b.contextId, principal.id);
+    if (method === 'observation.snapshot') return { project: p, catalog: this.plugins.catalog, documents: await owners.retainedDocuments(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: owners.documents?.limits ?? {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
     throw new Fault('unavailable', 'This catalog operation has not been installed.', { operation: method });
   }
   private async events(p: Project) { return readJson<any>(path.join(await this.dataDir(p), 'events.json'), { cursor: 0, events: [] }); }

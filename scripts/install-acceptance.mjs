@@ -30,7 +30,13 @@ try {
   assert.equal(manifest.platform, report.platform); report.composition = manifest;
   const selected = await (await import(pathToFileURL(path.join(pkg, 'dist/runtime.js')))).runtime();
   assert.equal(selected.coreBinary, await fs.realpath(path.join(pkg, 'vendor/rho-core')));
-  assert.equal((await fs.lstat(path.join(pkg, 'node_modules/@rho-workspace/headless'))).isSymbolicLink(), false);
+  for (const item of manifest.plugins.packages) {
+    assert.equal((await fs.lstat(path.join(pkg, 'node_modules', item.package))).isSymbolicLink(), false);
+    const installed = JSON.parse(await fs.readFile(path.join(pkg, 'node_modules', item.package, 'package.json'), 'utf8'));
+    assert.equal(installed.version, item.version);
+    assert.equal(createHash('sha256').update(await fs.readFile(path.join(pkg, 'vendor', item.filename))).digest('hex'), item.sha256);
+  }
+  assert.equal(manifest.plugins.packages.length, 9);
   const projects = path.join(root, 'projects'); await fs.mkdir(projects);
   const state = path.join(root, 'service');
   cli = spawn(path.join(install, 'node_modules/.bin/rho'), ['--root', projects, '--state-dir', state, '--rscript', path.join(root, 'missing-Rscript')], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -40,6 +46,7 @@ try {
     const ready = () => { if (lines.includes('"ready"')) { clearTimeout(timer); cli.stdout.off('data', ready); resolve(); } };
     cli.stdout.on('data', ready); cli.once('error', reject); cli.once('exit', () => reject(new Error('Installed CLI exited during startup.')));
   });
+  assert.equal(JSON.parse(lines.split('\n').find(line => line.includes('\"ready\"'))).ready.apiVersion, '2.0');
   const { RhoClient } = await import(pathToFileURL(path.join(pkg, 'dist/client.js')));
   const c = await RhoClient.fromFile(path.join(state, 'connection.json'));
   const p = await c.call('project.create', { name: 'installed-project' });
@@ -69,12 +76,14 @@ try {
   assert.equal(fixtures.readOnly, true); assert.ok(fixtures.cases.length >= 9);
   assert.equal(fixtures.apiVersion, '2.0');
   await fs.access(path.join(pkg, 'protocol/v1.json')); await fs.access(path.join(pkg, 'protocol/v2.json'));
-  const plugin = path.join(pkg, 'node_modules/@rho-workspace/headless');
-  const pluginFiles = await fs.readdir(plugin);
-  assert.equal(pluginFiles.includes('examples'), false); assert.equal(pluginFiles.includes('headless'), false);
-  const source = await fs.readFile(path.join(plugin, 'dist/analysis.js'), 'utf8');
+  for (const item of manifest.plugins.packages) {
+    const plugin = path.join(pkg, 'node_modules', item.package);
+    const pluginFiles = await fs.readdir(plugin);
+    assert.equal(pluginFiles.includes('examples'), false); assert.equal(pluginFiles.includes('headless'), false);
+  }
+  const source = await fs.readFile(path.join(pkg, 'node_modules/@rho-workspace/plugin-r/dist/index.js'), 'utf8');
   assert.equal(/airway|DESeq2|apeglm|shrink|recipePath/.test(source), false);
-  report.checks.push('Versioned v1/v2 contracts and inert v2 states shipped; base package contains no project recipe or scientific native script.');
+  report.checks.push('Versioned v1/v2 contracts and inert v2 states shipped; nine selected contract/plugin artifacts contain no project recipe or scientific native script.');
   report.status = 'passed';
 } catch (e) { report.status = 'failed'; report.failure = e.message; process.exitCode = 1; }
 finally {

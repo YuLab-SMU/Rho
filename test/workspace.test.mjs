@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { Resources } from '@rho-workspace/headless';
+import { Files } from '@rho-workspace/plugin-files';
+import { declarationValidator } from '@rho-workspace/plugin-tables';
 import { RhoService } from '../dist/server.js';
 import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { runtime } from '../dist/runtime.js';
@@ -18,7 +19,7 @@ test('export/restore verifies actual bytes, drafts, undo, stable selection and u
     let d = await call('document.open', { path: 'analysis.R' });
     d = await call('document.edit', { documentId: d.id, expectedVersion: d.version, edits: [{ from: 0, to: 0, insert: '# 中文 🧬 unsaved\n' }], undoGroup: 'draft' });
     await fs.writeFile(path.join(p.root, 'fixture.csv'), 'gene_id,symbol,baseMean,log2FoldChange\ng1,KLF15,5,2\n');
-    const resource = await new Resources(p.root, p.id).register('fixture.csv', { operationId: 'contract-fixture', evidence: 'Synthetic transport test, no scientific claim.' }, 'partial', {}, { path: 'fixture.csv', kind: 'table', format: { encoding: 'csv', columns: [{ name: 'gene_id', type: 'string', nullValues: [] }, { name: 'symbol', type: 'string', nullValues: [] }, { name: 'baseMean', type: 'number', nullValues: [''] }, { name: 'log2FoldChange', type: 'number', nullValues: [''] }], key: { column: 'gene_id', namespace: 'fixture-entities' } } });
+    const resource = await new Files(p.root, p.id, {}, [declarationValidator]).register('fixture.csv', { operationId: 'contract-fixture', evidence: 'Synthetic transport test, no scientific claim.' }, 'partial', {}, { path: 'fixture.csv', kind: 'table', format: { encoding: 'csv', columns: [{ name: 'gene_id', type: 'string', nullValues: [] }, { name: 'symbol', type: 'string', nullValues: [] }, { name: 'baseMean', type: 'number', nullValues: [''] }, { name: 'log2FoldChange', type: 'number', nullValues: [''] }], key: { column: 'gene_id', namespace: 'fixture-entities' } } });
     const ref = { id: resource.id, version: resource.version };
     await call('selection.set', { resource: ref, entities: ['g1'] });
     const view = { id: 'table', component: 'rho.table', version: '0.2.0', props: { title: 'Result' }, bindings: { data: ref }, selection: ['g1'] };

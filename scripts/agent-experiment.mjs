@@ -17,7 +17,7 @@ try {
   const methods = ['capability.list', 'binding.open', 'binding.close', 'context.read', 'document.read', 'document.edit'];
   await service.agentConnection(p.id, session, descriptor, methods);
   const mcp = path.join(root, 'mcp.json');
-  await fs.writeFile(mcp, JSON.stringify({ mcpServers: { rho: { command: process.execPath, args: [path.join(packageRoot, 'node_modules/@rho-workspace/headless/dist/mcp.js')], env: { RHO_AGENT_CONNECTION: descriptor } } } }), { mode: 0o600 });
+  await fs.writeFile(mcp, JSON.stringify({ mcpServers: { rho: { command: process.execPath, args: [path.join(packageRoot, 'node_modules/@rho-workspace/plugin-agent/dist/mcp.js')], env: { RHO_AGENT_CONNECTION: descriptor } } } }), { mode: 0o600 });
   const prompt = `Test the real Rho project connection using ONLY the rho MCP tools. First call capability.list, bind externalSessionId ${session} using claude-code-mcp, read context ${context.contextId}, and read document ${doc.id}. Apply one conditional edit to the current shared buffer: replace x <- 1 with x <- 2, using the exact version and UTF-16 offsets from document.read, with undoGroup agent-handoff. Read the document again to confirm it. Close the external binding. Return a short factual report of tool receipts. Do not use filesystem or shell tools.`;
   const args = ['--print', '--output-format', 'json', '--no-session-persistence', '--strict-mcp-config', '--mcp-config', mcp, '--tools', '', '--allowedTools', ...methods.map(m => 'mcp__rho__rho_' + m.replaceAll('.', '_')), '--permission-mode', 'dontAsk', '--setting-sources', '', '--max-turns', '12', prompt];
   const { exitCode, clientVersion } = await runClaude(args, p.root, root);

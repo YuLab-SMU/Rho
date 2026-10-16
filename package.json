@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/local",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Rho versioned local backend and headless client",
   "license": "AGPL-3.0-only",
@@ -36,16 +36,32 @@
     "agent": "node scripts/agent-experiment.mjs"
   },
   "dependencies": {
-    "@rho-workspace/headless": "file:../Rho-plugins",
-    "ajv": "8.20.0"
+    "ajv": "8.20.0",
+    "@rho-workspace/plugin-contracts": "file:../Rho-plugins/packages/contracts",
+    "@rho-workspace/plugin-documents": "file:../Rho-plugins/plugins/documents",
+    "@rho-workspace/plugin-files": "file:../Rho-plugins/plugins/files",
+    "@rho-workspace/plugin-r": "file:../Rho-plugins/plugins/r",
+    "@rho-workspace/plugin-requirements": "file:../Rho-plugins/plugins/requirements",
+    "@rho-workspace/plugin-tables": "file:../Rho-plugins/plugins/tables",
+    "@rho-workspace/plugin-media": "file:../Rho-plugins/plugins/media",
+    "@rho-workspace/plugin-charts": "file:../Rho-plugins/plugins/charts",
+    "@rho-workspace/plugin-agent": "file:../Rho-plugins/plugins/agent"
   },
   "devDependencies": {
     "@types/node": "22.20.0",
     "typescript": "5.9.3"
   },
   "bundleDependencies": [
-    "@rho-workspace/headless",
-    "ajv"
+    "ajv",
+    "@rho-workspace/plugin-contracts",
+    "@rho-workspace/plugin-documents",
+    "@rho-workspace/plugin-files",
+    "@rho-workspace/plugin-r",
+    "@rho-workspace/plugin-requirements",
+    "@rho-workspace/plugin-tables",
+    "@rho-workspace/plugin-media",
+    "@rho-workspace/plugin-charts",
+    "@rho-workspace/plugin-agent"
   ],
   "private": true
 }

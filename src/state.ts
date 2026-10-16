@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { atomicJson, confined, digest, readJson, requireThat, stateDirectory } from '@rho-workspace/headless';
+import { atomicJson, confined, digest, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
 export interface Project { id: string; root: string; openedAt: string }
 export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[] }
 export async function lease(directory: string) {

@@ -1,7 +1,9 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { Ajv } from 'ajv';
-import { atomicBytes, atomicJson, canonical, components, confined, digest, Documents, now, readJson, requireThat, Resources, stateDirectory, validateComponentBindings, type DocumentState, type Resource } from '@rho-workspace/headless';
+import { atomicBytes, atomicJson, canonical, confined, digest, now, readJson, requireThat, stateDirectory, type Resource } from '@rho-workspace/plugin-contracts';
+import type { ProjectPlugins } from './plugins.js';
+import type { DocumentState } from '@rho-workspace/plugin-documents';
 import type { Project } from './state.js';
 import { protocol } from './protocol.js';
 const ajv = new Ajv({ strict: false, allowUnionTypes: true });
@@ -15,7 +17,7 @@ const validateWorkspace = ajv.compile({ type: 'object', additionalProperties: fa
 export const workspaceLimits = { maxCompositions: 32, maxMetadataBytes: 32 * 1024 * 1024 };
 export class Workspace {
   limits: typeof workspaceLimits;
-  constructor(public project: Project, public documents = new Documents(project.root), public resources = new Resources(project.root, project.id), limits: Partial<typeof workspaceLimits> = {}) { this.limits = { ...workspaceLimits, ...limits }; }
+  constructor(public project: Project, public owners: ProjectPlugins, limits: Partial<typeof workspaceLimits> = {}) { this.limits = { ...workspaceLimits, ...limits }; }
   private async directory() { return stateDirectory(this.project.root, '.rho/rho/compositions'); }
   private async file(id: string) { return path.join(await this.directory(), digest(id) + '.json'); }
   async compositions() {
@@ -31,18 +33,20 @@ export class Workspace {
     requireThat(current || (await this.compositions()).length < this.limits.maxCompositions, 'limit', 'Composition retention limit reached.', { limit: 'maxCompositions', maximum: this.limits.maxCompositions });
     const availability: Record<string, unknown> = {};
     for (const view of body.views) {
-      const component = components.find(c => c.id === view.component && c.version === view.version);
+      const component = this.owners.assembly.catalog.components.find(c => c.id === view.component && c.version === view.version);
       const boundResources: Record<string, Resource> = {};
       for (const [key, binding] of Object.entries<any>(view.bindings)) {
         if (binding.documentId) {
-          await this.documents.snapshot(binding.documentId, binding.version);
+          if (this.owners.documents) await this.owners.documents.snapshot(binding.documentId, binding.version);
+          else requireThat(!component, 'unavailable', 'The documents provider for this binding is unavailable.');
           requireThat(!component || (component.bindings as any)[key] === 'document', 'invalid', 'Component binding expects a scientific resource.');
         } else {
-          const resource = await this.resources.resolve(binding);
+          if (!this.owners.files) { requireThat(!component, 'unavailable', 'The files provider for this binding is unavailable.'); continue; }
+          const resource = await this.owners.files.resolve(binding);
           boundResources[key] = resource;
           requireThat(!component || (component.bindings as any)[key] === resource.kind, 'invalid', 'Resource kind does not match the registered component binding.', { component: view.component, binding: key, actualKind: resource.kind });
-          if (view.selection?.length) {
-            const data = await this.resources.rows(binding);
+          if (component && view.selection?.length) {
+            const data = await this.owners.need('tables').rows(binding);
             requireThat(data.entityKey && view.selection.every((id: string) => data.rows.some(r => r[data.entityKey!] === id)), 'stale', 'View selection requires unique stable entities present in the bound resource.');
           }
         }
@@ -51,7 +55,7 @@ export class Workspace {
         const validate = ajv.compile(component.propsSchema);
         requireThat(validate(view.props), 'invalid', 'Component properties do not match the registered catalog.', { fields: validate.errors ?? [] });
         requireThat(Object.keys(component.bindings).every(k => k in view.bindings) && Object.keys(view.bindings).every(k => k in component.bindings), 'invalid', 'Component resource bindings do not match its registration.');
-        validateComponentBindings(component.id, view.props, boundResources);
+        this.owners.assembly.validateComponentBindings(component.id, view.props, boundResources);
       }
       availability[view.id] = { state: 'unavailable', reason: component ? 'UI entry is not installed in this headless composition.' : 'Component or requested version is not registered.' };
     }
@@ -67,12 +71,13 @@ export class Workspace {
     await atomicJson(await this.file(compositionId), result); return result;
   }
   async save() {
-    const workspace = { schemaVersion: 2, sourceProjectId: this.project.id, acknowledgedAt: now(), documents: await this.documents.list(), resources: (await this.resources.list()).map(({ storage, ...r }) => r), compositions: await this.compositions(), selection: await readJson(path.join(await stateDirectory(this.project.root, '.rho/rho'), 'selection.json'), null) };
+    const workspace = { schemaVersion: 2, sourceProjectId: this.project.id, acknowledgedAt: now(), documents: await this.owners.retainedDocuments(), resources: (await this.owners.retainedResources()).map(({ storage, ...r }) => r), compositions: await this.compositions(), selection: await readJson(path.join(await stateDirectory(this.project.root, '.rho/rho'), 'selection.json'), null) };
     requireThat(Buffer.byteLength(JSON.stringify(workspace)) <= this.limits.maxMetadataBytes, 'limit', 'Workspace metadata exceeds the export byte budget; acknowledged owner state is retained.', { limit: 'maxMetadataBytes', maximum: this.limits.maxMetadataBytes });
     await atomicJson(path.join(await stateDirectory(this.project.root, '.rho/rho'), 'workspace.json'), workspace);
     return workspace;
   }
   async export(destination: string) {
+    this.owners.need('files');
     requireThat(!destination.split('/').some(p => ['.rho', '.git'].includes(p)), 'scope', 'Choose an export directory outside internal state.');
     const target = await confined(this.project.root, destination, true);
     const parent = path.dirname(target);
@@ -86,7 +91,7 @@ export class Workspace {
     const wb = await fs.readFile(path.join(target, 'workspace.json'));
     inventory.push({ path: 'workspace.json', bytes: wb.length, sha256: digest(wb) });
     for (const resource of workspace.resources) {
-      const { data } = await this.resources.bytes(resource);
+      const { data } = await this.owners.need('files').bytes(resource);
       const relative = 'artifacts/' + resource.id + '-' + resource.version;
       await atomicBytes(path.join(target, relative), data);
       inventory.push({ path: relative, bytes: data.length, sha256: digest(data), resource: resource.id });
@@ -95,12 +100,15 @@ export class Workspace {
     return { destination, state: 'complete', files: inventory.length, writeCondition: 'new-directory', manifestDigest: digest(await fs.readFile(path.join(target, 'manifest.json'))) };
   }
   async restore(source: string, author: string) {
+    // Fail before applying an import when an actual state owner is absent.
+    // The verified export remains available for an explicit later restore.
+    this.owners.need('documents'); this.owners.need('files');
     requireThat(!source.split('/').some(p => ['.rho', '.git'].includes(p)), 'scope', 'Select an import outside internal owner state.');
     const directory = await confined(this.project.root, source);
     const manifestFile = await confined(directory, 'manifest.json');
     requireThat((await fs.stat(manifestFile)).size <= 1024 * 1024, 'limit', 'Export manifest exceeds byte limit.', { limit: 'maxRequestBytes' });
     const manifest = await readJson<any>(manifestFile);
-    requireThat([1, 2].includes(manifest.schemaVersion) && manifest.complete === true && Array.isArray(manifest.inventory) && manifest.inventory.length <= this.resources.limits.maxResources + 1, 'invalid', 'Unsupported or incomplete export manifest.');
+    requireThat([1, 2].includes(manifest.schemaVersion) && manifest.complete === true && Array.isArray(manifest.inventory) && manifest.inventory.length <= this.owners.need('files').limits.maxResources + 1, 'invalid', 'Unsupported or incomplete export manifest.');
     requireThat(manifest.inventory.every((f: any) => typeof f.path === 'string' && Number.isSafeInteger(f.bytes) && f.bytes >= 0 && /^[a-f0-9]{64}$/.test(f.sha256) && (!f.resource || /^[a-f0-9]{64}$/.test(f.resource))) && new Set(manifest.inventory.map((f: any) => f.path)).size === manifest.inventory.length, 'invalid', 'Invalid or duplicate export inventory entries.');
     requireThat(manifest.inventory.filter((f: any) => f.path === 'workspace.json' && !f.resource).length === 1, 'condition', 'Workspace metadata must be covered by the verified manifest.');
     const missing = new Set<string>();
@@ -110,18 +118,18 @@ export class Workspace {
       let stat;
       try { stat = await fs.stat(location); } catch (e: any) { if (e.code !== 'ENOENT' || file.path === 'workspace.json') throw e; missing.add(file.path); continue; }
       total += stat.size;
-      requireThat(stat.isFile() && stat.size <= (file.path === 'workspace.json' ? this.limits.maxMetadataBytes : this.resources.limits.maxFileBytes) && total <= this.resources.limits.maxArtifactBytes + this.limits.maxMetadataBytes, 'limit', 'Restore bytes exceed artifact budgets.', { limit: 'maxArtifactBytes' });
+      requireThat(stat.isFile() && stat.size <= (file.path === 'workspace.json' ? this.limits.maxMetadataBytes : this.owners.need('files').limits.maxFileBytes) && total <= this.owners.need('files').limits.maxArtifactBytes + this.limits.maxMetadataBytes, 'limit', 'Restore bytes exceed artifact budgets.', { limit: 'maxArtifactBytes' });
       const bytes = await fs.readFile(location);
       requireThat(bytes.length === file.bytes && digest(bytes) === file.sha256, 'condition', 'An exported file failed byte verification.', { file: file.path });
     }
     const workspace = await readJson<any>(await confined(directory, 'workspace.json'));
     requireThat(validateWorkspace(workspace), 'invalid', 'Workspace metadata does not match the versioned schemas.', { fields: validateWorkspace.errors ?? [] });
     const report: any = { sourceProjectId: workspace.sourceProjectId, documents: [], resources: [], compositions: [], execution: 'not-replayed' };
-    for (const doc of workspace.documents as DocumentState[]) report.documents.push(await this.documents.restore(doc, author));
+    for (const doc of workspace.documents as DocumentState[]) report.documents.push(await this.owners.need('documents').restore(doc, author));
     for (const resource of workspace.resources as Resource[]) {
       const entry = manifest.inventory.find((f: any) => f.resource === resource.id && f.sha256 === resource.version);
       if (!entry || missing.has(entry.path)) { report.resources.push({ resource: { id: resource.id, version: resource.version }, state: 'missing' }); continue; }
-      report.resources.push(await this.resources.restore(resource, await fs.readFile(await confined(directory, entry.path))));
+      report.resources.push(await this.owners.need('files').restore(resource, await fs.readFile(await confined(directory, entry.path))));
     }
     for (const composition of workspace.compositions) {
       const current = await readJson<any>(await this.file(composition.compositionId), null);
@@ -139,7 +147,7 @@ export class Workspace {
       if (current && canonical(current) !== canonical(workspace.selection)) report.selection = { state: 'conflict' };
       else {
         try {
-          const table = await this.resources.rows(workspace.selection.resource);
+          const table = await this.owners.need('tables').rows(workspace.selection.resource);
           requireThat(table.entityKey && workspace.selection.entities.every((id: string) => table.rows.some(r => r[table.entityKey!] === id)), 'stale', 'Restored selection references absent entities.');
           await atomicJson(file, workspace.selection); report.selection = { state: 'available' };
         } catch { report.selection = { state: 'unavailable', reference: workspace.selection, reason: 'Referenced resource or entities are unavailable; intent is retained in this report.' }; }

@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { once } from 'node:events';
-import { Fault, confined, requireThat, stateDirectory } from '@rho-workspace/headless';
+import { Fault, confined, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
 export interface CliResult { exitCode: number; reply: any }
 export async function command(binary: string, args: string[], stdin?: string, timeoutMs = 20000, maxBytes = 2 * 1024 * 1024): Promise<CliResult> {
   return new Promise((resolve) => {
