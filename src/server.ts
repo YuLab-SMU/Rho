@@ -12,8 +12,10 @@ import { CoreBridge } from './bridge.js';
 import { State, type Principal, type Project } from './state.js';
 import { Requests, publicOperation, requestLimits } from './requests.js';
 import { Workspace, workspaceLimits } from './workspace.js';
+import { Interactions, interactionLimits } from './interactions.js';
+import { Capabilities } from './capabilities.js';
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; workspace?: Partial<typeof workspaceLimits> }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 const legacyValidators = Object.fromEntries(Object.entries(legacyProtocol.operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
 const validators = Object.fromEntries(Object.entries(operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
@@ -23,7 +25,7 @@ export class RhoService {
   private queued = new Map<string, number>();
   private subscribers = new Set<{ projectId: string; principal: string; response: http.ServerResponse }>();
   constructor(public config: ServiceConfig) {
-    for (const [key, value] of Object.entries({ ...serviceLimits, ...requestLimits, ...config.documents, ...config.resources, ...config.workspace, ...config.r, ...config })) {
+    for (const [key, value] of Object.entries({ ...serviceLimits, ...requestLimits, ...config.documents, ...config.resources, ...config.workspace, ...config.interactions, ...config.annotations, ...config.capabilityLimits, ...config.r, ...config })) {
       if (typeof value === 'number') requireThat(Number.isSafeInteger(value) && (key === 'port' ? value >= 0 && value <= 65535 : value > 0), 'invalid', 'Invalid service budget.', { field: key });
     }
     this.plugins = new Plugins(config);
@@ -47,17 +49,21 @@ export class RhoService {
       await this.state.close(); throw e;
     }
   }
-  async agentConnection(projectId: string, externalSessionId: string, file: string, methods?: string[]) {
-    await this.state.project(projectId, this.state.principals.find(p => p.id === 'operator')!);
+  async agentConnection(projectId: string, externalSessionId: string, file: string, methods?: string[], pluginFilter?: string[]) {
+    const project = await this.state.project(projectId, this.state.principals.find(p => p.id === 'operator')!);
     this.plugins.need('agent');
-    const selected = methods ?? Object.keys(operations).filter(m => this.plugins.supports(m) && !m.startsWith('session.') && !m.startsWith('project.') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore'));
+    const capabilities = new Capabilities(this.plugins, project);
+    const state = await capabilities.state();
+    const available = Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('project.') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore'));
+    const selected = methods ?? (await Promise.all(available.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method);
     requireThat(selected.every(m => !!operations[m] && !m.startsWith('session.') && !m.startsWith('project.')), 'invalid', 'Unknown or operator-only Agent capability.');
-    requireThat(selected.every(m => this.plugins.supports(m)), 'unavailable', 'A requested Agent operation has no selected provider.');
+    requireThat(await Promise.all(selected.map(method => capabilities.isAvailable(method, state))).then(values => values.every(Boolean)), 'unavailable', 'A requested Agent operation has no selected provider.');
     const token = randomBytes(32).toString('hex');
     const id = 'agent:' + digest(projectId + ':' + externalSessionId).slice(0, 32);
     this.state.principals = this.state.principals.filter(p => p.id !== id);
-    await this.state.addPrincipal({ id, tokenHash: digest(token), projectId, methods: [...new Set(['protocol.describe', ...selected])] });
-    const connection = { url: this.url, token, projectId, externalSessionId, methods: selected, apiVersion: '2.0' as const };
+    requireThat(!pluginFilter || pluginFilter.every(id => this.plugins.isKnown(id)), 'invalid', 'Unknown MCP plugin filter.');
+    await this.state.addPrincipal({ id, tokenHash: digest(token), projectId, methods: [...new Set(['protocol.describe', 'capability.list', ...selected])] });
+    const connection = { url: this.url, token, projectId, externalSessionId, methods: selected, ...(pluginFilter ? { pluginFilter } : {}), apiVersion: '2.0' as const };
     await atomicJson(file, connection); return connection;
   }
   private authenticate(req: http.IncomingMessage, method: string) {
@@ -133,14 +139,29 @@ export class RhoService {
     const p = await this.state.project(b.projectId, principal);
     const owners = this.plugins.project(p.root, p.id);
     const requests = new Requests(p, this.bridge, (type, subject) => this.emit(p, type, subject), this.config, owners);
-    const workspace = new Workspace(p, owners, this.config.workspace);
+    const workspace = new Workspace(p, owners, this.config.workspace, this.config.interactions);
+    const interactions = new Interactions(p, owners, this.config.interactions);
     if (method === 'session.grant') {
       requireThat(principal.id === 'operator', 'unauthorized', 'Only the local operator may provision a project-scoped session.');
       const file = path.join(this.state.directory, 'agent-' + digest(p.id + ':' + b.externalSessionId) + '.json');
       await this.agentConnection(p.id, b.externalSessionId, file, b.methods);
       return { connectionFile: file, projectId: p.id, methods: b.methods, transport: 'stdio-mcp', externalSessionId: b.externalSessionId };
     }
-    if (method === 'capability.list') return { ...this.plugins.catalog, host: await this.bridge.capability(p.root) };
+    const capabilities = new Capabilities(this.plugins, p);
+    if (method === 'capability.list') return { ...await capabilities.catalog(principal), host: await this.bridge.capability(p.root) };
+    if (method === 'capability.configure') { const result = await capabilities.configure(b, principal.id); await this.emit(p, 'capability.changed', p.id); return result; }
+    if (method === 'skill.list') return capabilities.skills(principal);
+    if (method === 'skill.read') return capabilities.readSkill(principal, b.skillId, b.expectedDigest);
+    // Source ports see the same effective project selection as direct methods.
+    // Thus a composition/context cannot use a disabled provider indirectly.
+    const selection = await capabilities.state();
+    for (const [port, method] of Object.entries({ documents: 'document.read', files: 'resource.read', tables: 'data.page', charts: 'data.plot', media: 'media.describe', objects: 'object.read', annotations: 'annotation.read' })) {
+      if (!await capabilities.isAvailable(method, selection)) (owners as any)[port] = undefined;
+    }
+    // Redelivery of a retained native intent is an observation, even after its
+    // provider is disabled. Requests verifies the complete original payload.
+    const retainedSubmit = ['action.submit', 'requirements.prepare'].includes(method) && await requests.lookup(principal, b.operationId).then(() => true, e => { if (e.code === 'ENOENT') return false; throw e; });
+    if (!retainedSubmit) await capabilities.assertAvailable(method, principal);
     if (method === 'requirements.check') return this.plugins.need('requirements').checkRequirements(p.root, b.requirements, this.bridge.rscript);
     if (method === 'requirements.prepare') return publicOperation(await requests.submit(principal, b, true));
     if (method === 'action.submit') return publicOperation(await requests.submit(principal, b));
@@ -162,12 +183,28 @@ export class RhoService {
     if (method === 'data.page') return owners.need('tables').page(b.resource, b.offset, b.limit, b.sort, b.filter);
     if (method === 'data.plot') return owners.need('charts').plot(b.resource, b.x, b.y, b.maxPoints);
     if (method === 'data.compare') return owners.need('tables').compare(b.left, b.right, b.options);
+    if (['composition.apply', 'composition.undo', 'view.protection.set'].includes(method)) {
+      requireThat(b.expectedVersion > 0 || (await workspace.compositions()).length < workspace.limits.maxCompositions, 'limit', 'Composition retention limit reached.');
+      const result = await workspace.structured().transact(b, principal.id, method === 'composition.undo' ? 'undo' : method === 'view.protection.set' ? 'protect' : 'apply');
+      await this.emit(p, 'composition.changed', b.compositionId); return result;
+    }
+    if (method === 'interaction.selection.read') return interactions.read(b.scope, principal.id);
+    if (method === 'interaction.selection.set') {
+      const result = await interactions.set(b, principal.id); await this.emit(p, 'interaction.selection.changed', result.key, b.scope.kind === 'shared' ? undefined : principal.id); return result;
+    }
+    if (method.startsWith('annotation.')) {
+      const a = owners.need('annotations');
+      if (method === 'annotation.read') return a.read(b.annotationId);
+      if (method === 'annotation.list') return a.list();
+      const result = method === 'annotation.create' ? await a.create(b, principal.id) : await a.reply(b, principal.id);
+      await this.emit(p, 'annotation.changed', b.annotationId); return result;
+    }
     if (method === 'composition.put') { const result = await workspace.put(b); await this.emit(p, 'composition.changed', b.compositionId); return result; }
     if (method === 'composition.read') return workspace.read(b.compositionId);
-    if (method === 'view.close') return workspace.closeView(b.compositionId, b.viewId, b.expectedVersion);
-    if (method === 'workspace.save') return workspace.save();
-    if (method === 'workspace.export') return workspace.export(b.destination);
-    if (method === 'workspace.restore') return workspace.restore(b.source, principal.id);
+    if (method === 'view.close') { const result = await workspace.closeView(b.compositionId, b.viewId, b.expectedVersion, b.changeId, principal.id); await this.emit(p, 'view.closed', b.viewId); return result; }
+    if (method === 'workspace.save') return workspace.save(b.format);
+    if (method === 'workspace.export') return workspace.export(b.destination, b.format);
+    if (method === 'workspace.restore') { const result = await workspace.restore(b.source, principal.id); await this.emit(p, 'workspace.restored', p.id); return result; }
     if (method === 'selection.set') {
       const data = await owners.need('tables').rows(b.resource);
       requireThat(data.entityKey, 'condition', 'Selection requires an explicit unique key and namespace.');
@@ -191,17 +228,28 @@ export class RhoService {
       const result = await owners.need('agent').binding(method, principal.id, b.externalSessionId);
       await this.emit(p, 'binding.changed', result.id); return result;
     }
-    if (method === 'context.create') return owners.need('agent').createContext(b, principal.id);
-    if (method === 'context.read') return owners.need('agent').readContext(b.contextId, principal.id);
-    if (method === 'observation.snapshot') return { project: p, catalog: this.plugins.catalog, documents: await owners.retainedDocuments(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: owners.documents?.limits ?? {}, r: this.plugins.optional('r') ? { ...this.plugins.need('r').executionLimits, ...this.config.r } : {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
+    if (method === 'context.create') { const result = await owners.need('agent').createContext(b, principal.id); await this.emit(p, 'context.changed', result.contextId, principal.id); return result; }
+    if (method === 'context.read') { const result = await owners.need('agent').readContext(b.contextId, principal.id); await this.emit(p, 'context.changed', result.contextId, principal.id); if (result.principal !== principal.id) await this.emit(p, 'context.changed', result.contextId, result.principal); return result; }
+    if (method === 'observation.snapshot') return { project: p, catalog: await capabilities.catalog(principal), documents: await owners.retainedDocuments(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), interactions: await interactions.list(principal.id), annotations: await owners.retainedAnnotations(), contexts: await owners.agent?.contextStates(principal.id) ?? [], selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: owners.documents?.limits ?? {}, r: this.plugins.optional('r') ? { ...this.plugins.need('r').executionLimits, ...this.config.r } : {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
     throw new Fault('unavailable', 'This catalog operation has not been installed.', { operation: method });
   }
   private async events(p: Project) { return readJson<any>(path.join(await this.dataDir(p), 'events.json'), { cursor: 0, events: [] }); }
-  async emit(p: Project, type: string, subject: string) {
-    const retained = await this.events(p); const event = { cursor: ++retained.cursor, type, subject, projectId: p.id, at: now() };
-    retained.events.push(event); retained.events = retained.events.slice(-(this.config.eventRetention ?? 256));
-    await atomicJson(path.join(await this.dataDir(p), 'events.json'), retained);
-    for (const s of this.subscribers) if (s.projectId === p.id) {
+  async emit(p: Project, type: string, subject: string, principal?: string) {
+    let event: any;
+    try {
+      const retained = await this.events(p); event = { cursor: ++retained.cursor, type, subject, projectId: p.id, at: now(), ...(principal ? { principal } : {}) };
+      retained.events.push(event); retained.events = retained.events.slice(-(this.config.eventRetention ?? 256));
+      await atomicJson(path.join(await this.dataDir(p), 'events.json'), retained);
+    }
+    catch {
+      // Durable owner state is not rolled back by failure of its invalidation
+      // channel. Interrupt all project observers so they must resnapshot.
+      for (const s of this.subscribers) if (s.projectId === p.id) {
+        s.response.end('event: gap\ndata: {"kind":"event_gap","continuation":"Read observation.snapshot"}\n\n'); this.subscribers.delete(s);
+      }
+      return;
+    }
+    for (const s of this.subscribers) if (s.projectId === p.id && (!principal || s.principal === principal)) {
       if (s.response.writableLength > (this.config.maxEventBytes ?? 65536)) { s.response.end('event: gap\ndata: {"kind":"event_gap","continuation":"Read observation.snapshot"}\n\n'); this.subscribers.delete(s); }
       else s.response.write('id: ' + event.cursor + '\nevent: ' + type + '\ndata: ' + JSON.stringify(event) + '\n\n');
     }
@@ -217,7 +265,7 @@ export class RhoService {
     const retained = await this.events(project);
     requireThat(after <= retained.cursor && after >= (retained.events[0]?.cursor ?? 1) - 1, 'event_gap', 'Events are outside the retained window; read the owner snapshot.', { currentCursor: retained.cursor });
     response.writeHead(200, { 'content-type': 'text/event-stream', connection: 'keep-alive' });
-    for (const e of retained.events.filter((e: any) => e.cursor > after)) response.write('id: ' + e.cursor + '\nevent: ' + e.type + '\ndata: ' + JSON.stringify(e) + '\n\n');
+    for (const e of retained.events.filter((e: any) => e.cursor > after && (!e.principal || e.principal === principal.id))) response.write('id: ' + e.cursor + '\nevent: ' + e.type + '\ndata: ' + JSON.stringify(e) + '\n\n');
     response.write(': observation only\n\n');
     const subscription = { projectId: project.id, principal: principal.id, response };
     this.subscribers.add(subscription); response.on('close', () => this.subscribers.delete(subscription));

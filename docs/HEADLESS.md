@@ -1,6 +1,6 @@
 # Rho local backend 0.4
 
-Rho selects eight independent capability packages: documents, files, R,
+Rho selects nine independent capability packages: annotations plus documents, files, R,
 requirements, tables, media, charts and Agent. Shared contracts contain generic envelopes/service ports and ordinary-file
 primitives. Each resource/requirement/script schema belongs to its provider
 through a pure `./contract` entry; contracts has no format registry, capability
@@ -16,6 +16,18 @@ and [extraction acceptance](EXTRACTION-ACCEPTANCE.md). The
 The [0.4 boundary review](PLUGIN-BOUNDARY-ACCEPTANCE.md) records the follow-up decoupling.
 The [UI handoff reference](PLUGIN-UI-HANDOFF.md) maps all eight owners to HTTP
 operations and distinguishes implemented backend APIs from missing browser pieces.
+
+## Headless collaboration extension
+
+[Collaboration](COLLABORATION.md) documents project capability configuration,
+shipped Skills, live MCP filtering, conditional structured compositions and undo,
+explicit view protection, caller/view/shared selections, document/table-anchored
+feedback, explicit replies, context delivery facts, DOM-free snapshot/event
+coordination and explicit format-3 archives. These are additive v2 capabilities;
+v1 is frozen. Older exports reject collaboration state they cannot represent.
+The new `annotations` owner requires Documents and optionally Tables for entities.
+Service `--plugins` remains a finite allowlist; project configuration cannot expand
+it. Missing browser renderers do not disable the headless protocol.
 
 ## Install and start
 
@@ -42,7 +54,7 @@ Core uses the canonical project path plus `/.rho/host.sock`; macOS permits at
 most 103 UTF-8 bytes. A longer path fails before Host startup.
 
 `--plugins documents,files` selects only those owners; `--plugins ""` selects
-none. The default selects all eight. The allowlisted package identities and exact
+none. The default selects all nine. The allowlisted package identities and exact
 0.4.0 versions are checked before wiring their typed service ports. Files is required by R object reads and resource resolution; Requirements is
 required only by the `r.execute` action. Buffer execution also requires Documents.
 Files is required by Tables/Media; Tables by Charts. Agent
@@ -57,7 +69,8 @@ Owner removal preserves retained request identities, bytes, drafts/undo and layo
 references. Existing accepted intent delivery returns its original record;
 new work requiring an absent owner is unavailable. Metadata snapshots and
 workspace save retain persisted facts even with no plugin selected. Byte exports
-need Files, and restores need Documents and Files before applying mutations.
+need Files. Restores report each missing owner/conflict and retain the verified
+source archive for an explicit later import; they do not install providers.
 Typed readers validate their own semantics when selected; raw bytes stay usable.
 Document/resource reads and provider reselection start neither R nor a Host.
 An explicit `requirements.check` runs its bounded Rscript probe.
@@ -69,9 +82,9 @@ service and reports confirmation separately. Existing Hosts keep their owner.
 ## Public contract and client
 
 `RhoClient` is a Node caller: it uses filesystem-backed connection/intent files.
-It has no browser entry or generated method-specific types. Its event method
-returns a raw stream; SSE parsing and reconnect reconciliation belong to a future
-browser adapter. Browser consumers should use the versioned HTTP/SSE boundary.
+It has no generated method-specific types. Its event method returns a raw stream.
+The separate `@rho-workspace/local/observation` transport entry provides DOM-free
+HTTP/SSE parsing and snapshot-first reconnect reconciliation without Node files. Browser consumers should use the versioned HTTP/SSE boundary.
 
 [protocol/v2.json](../protocol/v2.json) publishes requests, responses, typed
 errors, events and resource declarations. `protocol.describe` returns the same
@@ -202,7 +215,8 @@ are unchanged. The `/api/v1` bridge supports retained-request observation,
 explicit retry/cancel and compatible raw-resource/document/context reads.
 New writes use v2. Historical typed readers/checkers needing a removed provider
 report unavailable; stored bytes, frozen plans and Core identities remain.
-Schema-1 workspace exports remain readable; new exports use schema 2.
+Schema-1/2 workspace exports remain readable. Choose format 3 explicitly for
+collaboration state; format 2 remains the default and rejects lossy exports.
 Restoration preserves missing entries without installing or executing them.
 
 <a id="observation-budgets-and-recovery"></a>

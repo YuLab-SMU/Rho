@@ -2,6 +2,26 @@
 
 Updated: 2026-10-16.
 
+## Headless collaboration extension
+
+The additive v2 extension now selects nine owners, including Annotations. Project
+capability configuration, shipped Skills and live MCP filtering share the same
+HTTP owners. Structured composition transactions/undo, protected views and
+caller/view/shared selections are implemented. Documents/Tables validate frozen
+feedback anchors; Annotations owns submitted messages and explicit replies. Agent
+contexts distinguish preparation, tool fetch and explicit linked response.
+DOM-free snapshot/event reconciliation and explicit format-3 archives preserve
+collaboration without native replay; older exports reject lossy representation.
+See [Collaboration](COLLABORATION.md) for contracts, limits and executable checks.
+
+Source checks: 24 Rho tests and 14 Plugins tests pass. The deterministic real
+stdio MCP/HTTP scenario and actual Claude Code 2.1.302 scenario pass, with zero
+Host starts and native dispatches. Separate explicit R execution covers one
+native dispatch, close-without-cancel and unknown outcome after owned Host loss.
+The accepted public Core binary/digest is unchanged; current Core checkout
+commits are not selected. Final installed candidates are checked separately;
+the earlier eight-owner candidate below retains its historical identity.
+
 ## Application
 
 Version 0.4 provides documents, files, R, requirements, tables, media, charts and
@@ -88,9 +108,9 @@ package-wide execution dependencies and a borrowed script budget. Full and two
 reduced installations passed, with removal/reselection and recovery acceptance. The versioned
 HTTP schema and inert fixtures form the backend boundary for independent UI work.
 The [plugin interface handoff](PLUGIN-UI-HANDOFF.md) records all eight owners,
-dependencies and routes. The current client is Node-only; browser transport,
-durable browser intent retention, SSE parsing/reconciliation and browser bootstrap
-remain unimplemented, along with all five component renderers.
+dependencies and routes. The Node filesystem client now has a separate DOM-free snapshot/event transport;
+durable browser intent retention and browser bootstrap remain unimplemented,
+along with all five component renderers.
 [The six backend work packages](BACKEND-FIRST.md) retain their original
 scope; [first-release tasks](WEBUI-FIRST.md) retain all product gates.
 

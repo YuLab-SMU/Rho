@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 const root = fileURLToPath(new URL('..', import.meta.url));
-const { values } = parseArgs({ options: { core: { type: 'string' }, 'core-source': { type: 'string' }, plugins: { type: 'string' }, destination: { type: 'string' }, 'allow-dirty': { type: 'boolean', default: false }, 'select-plugins': { type: 'string' } } });
+const { values } = parseArgs({ options: { core: { type: 'string' }, 'core-source': { type: 'string' }, 'core-composition': { type: 'string' }, plugins: { type: 'string' }, destination: { type: 'string' }, 'allow-dirty': { type: 'boolean', default: false }, 'select-plugins': { type: 'string' } } });
 if (!values.core || !values['core-source']) throw new Error('Select --core BINARY and --core-source REPOSITORY. The build must already have completed.');
 const pluginRoot = path.resolve(values.plugins ?? path.join(root, '../Rho-plugins'));
 const coreRoot = path.resolve(values['core-source']);
@@ -35,12 +35,19 @@ async function source(directory, paths, committedFiles = []) {
   return { commit, tree, buildInputsSha256: sha(JSON.stringify(inventory)), localOverride: changed ? 'explicit-dirty-build-inputs' : null };
 }
 run('npm', ['run', 'build'], root);
-const pluginIds = ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent'];
+const pluginIds = ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations'];
 const selected = values['select-plugins'] === undefined ? pluginIds : values['select-plugins'].split(',').filter(Boolean);
 if (new Set(selected).size !== selected.length || selected.some(id => !pluginIds.includes(id))) throw new Error('Select unique known plugin IDs.');
-const application = await source(root, ['src', 'scripts', 'protocol', 'fixtures', 'package.json', 'package-lock.json', 'tsconfig.json', 'README.md', 'LICENSE', 'docs/HEADLESS.md']);
+const application = await source(root, ['src', 'scripts', 'protocol', 'fixtures', 'package.json', 'package-lock.json', 'tsconfig.json', 'README.md', 'LICENSE', 'docs/HEADLESS.md', 'docs/COLLABORATION.md']);
 const plugins = await source(pluginRoot, ['packages/contracts', ...selected.map(id => 'plugins/' + id), 'scripts', 'package.json', 'package-lock.json', 'LICENSE']);
-const core = await source(coreRoot, ['src', 'Cargo.toml', 'Cargo.lock', 'LICENSE']);
+const binary = await fs.readFile(path.resolve(values.core));
+let core;
+if (values['core-composition']) {
+  const recorded = JSON.parse(await fs.readFile(path.resolve(values['core-composition']), 'utf8')).core;
+  if (recorded.repository !== 'https://github.com/YuLab-SMU/Rho-core' || recorded.artifactSha256 !== sha(binary) || recorded.bytes !== binary.length || recorded.localOverride) throw new Error('Selected binary does not match the accepted Core identity.');
+  if (run('git', ['rev-parse', recorded.commit + '^{tree}'], coreRoot).trim() !== recorded.tree) throw new Error('Recorded Core tree is unavailable or mismatched.');
+  core = { ...recorded, buildAssociation: 'Digest-verified accepted public Core binary reused; no local Core source changes selected.' };
+} else core = { ...await source(coreRoot, ['src', 'Cargo.toml', 'Cargo.lock', 'LICENSE']), buildAssociation: 'Explicitly selected local build; no reproducible-build or signing claim.' };
 const pluginPacks = JSON.parse(run(process.execPath, [path.join(pluginRoot, 'scripts/pack.mjs'), '--destination', path.join(destination, 'plugins'), '--plugins', selected.join(',')], pluginRoot));
 const manifest = JSON.parse(await fs.readFile(path.join(root, 'package.json'), 'utf8'));
 for (const entry of manifest.files.filter(p => p !== 'vendor')) {
@@ -51,17 +58,16 @@ for (const item of pluginPacks.packages) {
   await fs.copyFile(path.join(pluginPacks.destination, item.filename), path.join(stage, 'vendor', item.filename));
 }
 
-const binary = await fs.readFile(path.resolve(values.core));
 await fs.writeFile(path.join(stage, 'vendor/rho-core'), binary, { mode: 0o755 });
-await fs.copyFile(path.join(coreRoot, 'LICENSE'), path.join(stage, 'vendor/CORE-LICENSE'));
+await fs.writeFile(path.join(stage, 'vendor/CORE-LICENSE'), run('git', ['show', core.commit + ':LICENSE'], coreRoot));
 for (const name of Object.keys(manifest.dependencies).filter(name => name.startsWith('@rho-workspace/plugin-'))) delete manifest.dependencies[name];
 for (const item of pluginPacks.packages) manifest.dependencies[item.package] = 'file:vendor/' + item.filename;
 manifest.bundleDependencies = Object.keys(manifest.dependencies);
 delete manifest.devDependencies;
-manifest.scripts = { acceptance: 'node scripts/acceptance.mjs', recovery: 'node scripts/recovery-acceptance.mjs' };
+manifest.scripts = { 'acceptance:collaboration': 'node scripts/collaboration-acceptance.mjs', 'acceptance:collaboration:agent': 'RHO_COLLAB_MODEL=1 node scripts/collaboration-acceptance.mjs', acceptance: 'node scripts/acceptance.mjs', recovery: 'node scripts/recovery-acceptance.mjs' };
 await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
 run('npm', ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], stage);
-const composition = { schemaVersion: 1, platform: process.platform + '-' + process.arch, node: process.version, application: { repository: 'https://github.com/YuLab-SMU/Rho', ...application }, plugins: { repository: 'https://github.com/YuLab-SMU/Rho-plugins', ...plugins, selected, packages: pluginPacks.packages.map(({ files, ...item }) => item) }, core: { repository: 'https://github.com/YuLab-SMU/Rho-core', ...core, artifactSha256: sha(binary), bytes: binary.length, buildAssociation: 'Explicitly selected local build; no reproducible-build or signing claim.' }, productionLockSha256: sha(await fs.readFile(path.join(stage, 'package-lock.json'))), distribution: 'unsigned-local-npm-tarball', registryPublication: 'not-performed' };
+const composition = { schemaVersion: 1, platform: process.platform + '-' + process.arch, node: process.version, application: { repository: 'https://github.com/YuLab-SMU/Rho', ...application }, plugins: { repository: 'https://github.com/YuLab-SMU/Rho-plugins', ...plugins, selected, packages: pluginPacks.packages.map(({ files, ...item }) => item) }, core: { repository: 'https://github.com/YuLab-SMU/Rho-core', ...core, artifactSha256: sha(binary), bytes: binary.length }, productionLockSha256: sha(await fs.readFile(path.join(stage, 'package-lock.json'))), distribution: 'unsigned-local-npm-tarball', registryPublication: 'not-performed' };
 await fs.writeFile(path.join(stage, 'vendor/composition.json'), JSON.stringify(composition, null, 2) + '\n');
 const result = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', destination], stage))[0];
 if (result.files.some(f => path.isAbsolute(f.path) || f.path.split('/').includes('..'))) throw new Error('Package contains a path outside the assembled root.');

@@ -98,9 +98,21 @@
               "workspace.export",
               "workspace.restore",
               "observation.snapshot",
+              "capability.configure",
+              "skill.list",
+              "skill.read",
               "resource.register",
               "object.read",
-              "media.describe"
+              "media.describe",
+              "composition.apply",
+              "composition.undo",
+              "view.protection.set",
+              "interaction.selection.read",
+              "interaction.selection.set",
+              "annotation.create",
+              "annotation.reply",
+              "annotation.read",
+              "annotation.list"
             ]
           },
           "maxItems": 64
@@ -1293,6 +1305,36 @@
           },
           "maxItems": 1000
         },
+        "annotations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "annotationId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "annotationId",
+              "version"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 128
+        },
+        "changeId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "expectedVersion": {
+          "const": 0
+        },
         "region": {
           "type": "object",
           "additionalProperties": false,
@@ -1570,6 +1612,10 @@
         "expectedVersion": {
           "type": "integer",
           "minimum": 1
+        },
+        "changeId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
         }
       },
       "required": [
@@ -1586,6 +1632,13 @@
         "projectId": {
           "type": "string",
           "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "format": {
+          "enum": [
+            1,
+            2,
+            3
+          ]
         }
       },
       "required": [
@@ -1603,6 +1656,13 @@
         "destination": {
           "type": "string",
           "minLength": 1
+        },
+        "format": {
+          "enum": [
+            1,
+            2,
+            3
+          ]
         }
       },
       "required": [
@@ -1639,6 +1699,81 @@
       },
       "required": [
         "projectId"
+      ]
+    },
+    "capability.configure": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "expectedVersion": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changeId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "maxItems": 32,
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "projectId",
+        "expectedVersion",
+        "changeId",
+        "enabled"
+      ]
+    },
+    "skill.list": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        }
+      },
+      "required": [
+        "projectId"
+      ]
+    },
+    "skill.read": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "skillId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expectedDigest": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "projectId",
+        "skillId"
       ]
     },
     "resource.register": {
@@ -1941,6 +2076,916 @@
       "required": [
         "projectId",
         "resource"
+      ]
+    },
+    "composition.apply": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "compositionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "expectedVersion": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changeId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "op": {
+                    "const": "replace"
+                  },
+                  "rootId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "nodes": {
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                            },
+                            "kind": {
+                              "const": "group"
+                            },
+                            "children": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                              },
+                              "maxItems": 256,
+                              "uniqueItems": true
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "kind",
+                            "children"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                            },
+                            "component": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "props": {
+                              "type": "object"
+                            },
+                            "bindings": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "version": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "version"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "documentId": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      },
+                                      "version": {
+                                        "type": "integer",
+                                        "minimum": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "documentId",
+                                      "version"
+                                    ]
+                                  }
+                                ]
+                              }
+                            },
+                            "selection": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "maxItems": 1000
+                            },
+                            "kind": {
+                              "const": "view"
+                            },
+                            "protected": {
+                              "type": "boolean"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "component",
+                            "version",
+                            "props",
+                            "bindings",
+                            "kind"
+                          ]
+                        }
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 256
+                  }
+                },
+                "required": [
+                  "op",
+                  "rootId",
+                  "nodes"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "op": {
+                    "const": "insert"
+                  },
+                  "parentId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "index": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "node": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                          },
+                          "kind": {
+                            "const": "group"
+                          },
+                          "children": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                            },
+                            "maxItems": 256,
+                            "uniqueItems": true
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "kind",
+                          "children"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                          },
+                          "component": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "version": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "props": {
+                            "type": "object"
+                          },
+                          "bindings": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "oneOf": [
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "id": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "version": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "version"
+                                  ]
+                                },
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "documentId": {
+                                      "type": "string",
+                                      "pattern": "^[a-f0-9]{64}$"
+                                    },
+                                    "version": {
+                                      "type": "integer",
+                                      "minimum": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "documentId",
+                                    "version"
+                                  ]
+                                }
+                              ]
+                            }
+                          },
+                          "selection": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "maxItems": 1000
+                          },
+                          "kind": {
+                            "const": "view"
+                          },
+                          "protected": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "component",
+                          "version",
+                          "props",
+                          "bindings",
+                          "kind"
+                        ]
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "op",
+                  "parentId",
+                  "index",
+                  "node"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "op": {
+                    "const": "move"
+                  },
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "parentId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "index": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "op",
+                  "id",
+                  "parentId",
+                  "index"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "op": {
+                    "const": "remove"
+                  },
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  }
+                },
+                "required": [
+                  "op",
+                  "id"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "op": {
+                    "const": "props"
+                  },
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "props": {
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "op",
+                  "id",
+                  "props"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "op": {
+                    "const": "bind"
+                  },
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "bindings": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "documentId",
+                            "version"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "op",
+                  "id",
+                  "bindings"
+                ]
+              }
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 256
+        }
+      },
+      "required": [
+        "projectId",
+        "compositionId",
+        "expectedVersion",
+        "changeId",
+        "operations"
+      ]
+    },
+    "composition.undo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "compositionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "expectedVersion": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changeId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        }
+      },
+      "required": [
+        "projectId",
+        "compositionId",
+        "expectedVersion",
+        "changeId"
+      ]
+    },
+    "view.protection.set": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "compositionId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "expectedVersion": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changeId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "viewId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "protected": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "projectId",
+        "compositionId",
+        "expectedVersion",
+        "changeId",
+        "viewId",
+        "protected"
+      ]
+    },
+    "interaction.selection.read": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "scope": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "caller"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "view",
+                    "shared"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                }
+              },
+              "required": [
+                "kind",
+                "id"
+              ]
+            }
+          ]
+        }
+      },
+      "required": [
+        "projectId",
+        "scope"
+      ]
+    },
+    "interaction.selection.set": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "scope": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "caller"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "view",
+                    "shared"
+                  ]
+                },
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                }
+              },
+              "required": [
+                "kind",
+                "id"
+              ]
+            }
+          ]
+        },
+        "expectedVersion": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changeId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "selection": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "document": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "documentId": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "from": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "to": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "documentId",
+                    "version",
+                    "from",
+                    "to"
+                  ]
+                }
+              },
+              "required": [
+                "document"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "resource": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "version": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "version"
+                  ]
+                },
+                "entities": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "minItems": 1,
+                  "maxItems": 1024,
+                  "uniqueItems": true
+                }
+              },
+              "required": [
+                "resource",
+                "entities"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "projectId",
+        "scope",
+        "expectedVersion",
+        "changeId",
+        "selection"
+      ]
+    },
+    "annotation.create": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "annotationId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "expectedVersion": {
+          "const": 0
+        },
+        "changeId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "anchor": {
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "document"
+                },
+                "documentId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "from": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "to": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "kind",
+                "documentId",
+                "version",
+                "from",
+                "to"
+              ]
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "table"
+                },
+                "resource": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "version": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "version"
+                  ]
+                },
+                "entities": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 1024,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "required": [
+                "kind",
+                "resource",
+                "entities"
+              ]
+            }
+          ]
+        },
+        "draft": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "documentId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "documentId",
+            "version"
+          ]
+        }
+      },
+      "required": [
+        "projectId",
+        "annotationId",
+        "expectedVersion",
+        "changeId",
+        "anchor",
+        "draft"
+      ]
+    },
+    "annotation.reply": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "annotationId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "expectedVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "changeId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "replyTo": {
+          "type": "string",
+          "minLength": 1
+        },
+        "draft": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "documentId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "documentId",
+            "version"
+          ]
+        }
+      },
+      "required": [
+        "projectId",
+        "annotationId",
+        "expectedVersion",
+        "changeId",
+        "replyTo",
+        "draft"
+      ]
+    },
+    "annotation.read": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "annotationId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        }
+      },
+      "required": [
+        "projectId",
+        "annotationId"
+      ]
+    },
+    "annotation.list": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        }
+      },
+      "required": [
+        "projectId"
       ]
     }
   },
@@ -4341,74 +5386,10 @@
       ]
     },
     "context.create": {
-      "type": "object",
-      "properties": {
-        "contextId": {
-          "type": "string",
-          "pattern": "^[a-f0-9]{64}$"
-        },
-        "projectId": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-        },
-        "principal": {
-          "type": "string",
-          "minLength": 1
-        },
-        "at": {
-          "type": "string",
-          "minLength": 1
-        },
-        "delivery": {
-          "enum": [
-            "not-fetched",
-            "tool-fetched"
-          ]
-        }
-      },
-      "required": [
-        "contextId",
-        "projectId",
-        "principal",
-        "at",
-        "delivery"
-      ],
-      "additionalProperties": true
+      "type": "object"
     },
     "context.read": {
-      "type": "object",
-      "properties": {
-        "contextId": {
-          "type": "string",
-          "pattern": "^[a-f0-9]{64}$"
-        },
-        "projectId": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-        },
-        "principal": {
-          "type": "string",
-          "minLength": 1
-        },
-        "at": {
-          "type": "string",
-          "minLength": 1
-        },
-        "delivery": {
-          "enum": [
-            "not-fetched",
-            "tool-fetched"
-          ]
-        }
-      },
-      "required": [
-        "contextId",
-        "projectId",
-        "principal",
-        "at",
-        "delivery"
-      ],
-      "additionalProperties": true
+      "type": "object"
     },
     "binding.open": {
       "type": "object",
@@ -4718,240 +5699,750 @@
       ]
     },
     "composition.read": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "compositionId": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-        },
-        "version": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "views": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "id": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-              },
-              "component": {
-                "type": "string",
-                "minLength": 1
-              },
-              "version": {
-                "type": "string",
-                "minLength": 1
-              },
-              "props": {
-                "type": "object"
-              },
-              "bindings": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "compositionId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "views": {
+              "type": "array",
+              "items": {
                 "type": "object",
-                "additionalProperties": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "id": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "component": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "props": {
+                    "type": "object"
+                  },
+                  "bindings": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "documentId",
+                            "version"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "selection": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "maxItems": 1000
+                  }
+                },
+                "required": [
+                  "id",
+                  "component",
+                  "version",
+                  "props",
+                  "bindings"
+                ]
+              },
+              "maxItems": 32
+            },
+            "layout": {
+              "type": "object"
+            },
+            "availability": {
+              "type": "object"
+            },
+            "acknowledgedAt": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "compositionId",
+            "version",
+            "views",
+            "layout",
+            "availability",
+            "acknowledgedAt"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "format": {
+              "const": "rho.composition/1"
+            },
+            "compositionId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "nodes": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                      },
+                      "kind": {
+                        "const": "group"
+                      },
+                      "children": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                        },
+                        "maxItems": 256,
+                        "uniqueItems": true
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind",
+                      "children"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                      },
+                      "component": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "props": {
+                        "type": "object"
+                      },
+                      "bindings": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "version"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "documentId": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "version": {
+                                  "type": "integer",
+                                  "minimum": 1
+                                }
+                              },
+                              "required": [
+                                "documentId",
+                                "version"
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      "selection": {
+                        "type": "array",
+                        "items": {
                           "type": "string",
                           "minLength": 1
                         },
-                        "version": {
-                          "type": "string",
-                          "pattern": "^[a-f0-9]{64}$"
-                        }
+                        "maxItems": 1000
                       },
-                      "required": [
-                        "id",
-                        "version"
-                      ]
+                      "kind": {
+                        "const": "view"
+                      },
+                      "protected": {
+                        "type": "boolean"
+                      }
                     },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "documentId": {
-                          "type": "string",
-                          "pattern": "^[a-f0-9]{64}$"
-                        },
-                        "version": {
-                          "type": "integer",
-                          "minimum": 1
-                        }
-                      },
-                      "required": [
-                        "documentId",
-                        "version"
-                      ]
-                    }
-                  ]
-                }
-              },
-              "selection": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "maxItems": 1000
+                    "required": [
+                      "id",
+                      "component",
+                      "version",
+                      "props",
+                      "bindings",
+                      "kind"
+                    ]
+                  }
+                ]
               }
             },
-            "required": [
-              "id",
-              "component",
-              "version",
-              "props",
-              "bindings"
-            ]
+            "rootId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "receipt": {
+              "type": "object"
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "views": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "component": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "props": {
+                    "type": "object"
+                  },
+                  "bindings": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "documentId",
+                            "version"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "selection": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "maxItems": 1000
+                  }
+                },
+                "required": [
+                  "id",
+                  "component",
+                  "version",
+                  "props",
+                  "bindings"
+                ]
+              }
+            },
+            "availability": {
+              "type": "object"
+            },
+            "acknowledgedAt": {
+              "type": "string",
+              "minLength": 1
+            }
           },
-          "maxItems": 32
-        },
-        "layout": {
-          "type": "object"
-        },
-        "availability": {
-          "type": "object"
-        },
-        "acknowledgedAt": {
-          "type": "string",
-          "minLength": 1
+          "required": [
+            "format",
+            "compositionId",
+            "version",
+            "nodes",
+            "rootId",
+            "receipt",
+            "author",
+            "views",
+            "availability",
+            "acknowledgedAt"
+          ],
+          "additionalProperties": true
         }
-      },
-      "required": [
-        "compositionId",
-        "version",
-        "views",
-        "layout",
-        "availability",
-        "acknowledgedAt"
       ]
     },
     "view.close": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "compositionId": {
-          "type": "string",
-          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-        },
-        "version": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "views": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "id": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-              },
-              "component": {
-                "type": "string",
-                "minLength": 1
-              },
-              "version": {
-                "type": "string",
-                "minLength": 1
-              },
-              "props": {
-                "type": "object"
-              },
-              "bindings": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "compositionId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "views": {
+              "type": "array",
+              "items": {
                 "type": "object",
-                "additionalProperties": {
-                  "oneOf": [
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "id": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "component": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "props": {
+                    "type": "object"
+                  },
+                  "bindings": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "documentId",
+                            "version"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "selection": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "maxItems": 1000
+                  }
+                },
+                "required": [
+                  "id",
+                  "component",
+                  "version",
+                  "props",
+                  "bindings"
+                ]
+              },
+              "maxItems": 32
+            },
+            "layout": {
+              "type": "object"
+            },
+            "availability": {
+              "type": "object"
+            },
+            "acknowledgedAt": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "compositionId",
+            "version",
+            "views",
+            "layout",
+            "availability",
+            "acknowledgedAt"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "format": {
+              "const": "rho.composition/1"
+            },
+            "compositionId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "nodes": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                      },
+                      "kind": {
+                        "const": "group"
+                      },
+                      "children": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                        },
+                        "maxItems": 256,
+                        "uniqueItems": true
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind",
+                      "children"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                      },
+                      "component": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "props": {
+                        "type": "object"
+                      },
+                      "bindings": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "version"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "documentId": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "version": {
+                                  "type": "integer",
+                                  "minimum": 1
+                                }
+                              },
+                              "required": [
+                                "documentId",
+                                "version"
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      "selection": {
+                        "type": "array",
+                        "items": {
                           "type": "string",
                           "minLength": 1
                         },
-                        "version": {
-                          "type": "string",
-                          "pattern": "^[a-f0-9]{64}$"
-                        }
+                        "maxItems": 1000
                       },
-                      "required": [
-                        "id",
-                        "version"
-                      ]
+                      "kind": {
+                        "const": "view"
+                      },
+                      "protected": {
+                        "type": "boolean"
+                      }
                     },
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "documentId": {
-                          "type": "string",
-                          "pattern": "^[a-f0-9]{64}$"
-                        },
-                        "version": {
-                          "type": "integer",
-                          "minimum": 1
-                        }
-                      },
-                      "required": [
-                        "documentId",
-                        "version"
-                      ]
-                    }
-                  ]
-                }
-              },
-              "selection": {
-                "type": "array",
-                "items": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "maxItems": 1000
+                    "required": [
+                      "id",
+                      "component",
+                      "version",
+                      "props",
+                      "bindings",
+                      "kind"
+                    ]
+                  }
+                ]
               }
             },
-            "required": [
-              "id",
-              "component",
-              "version",
-              "props",
-              "bindings"
-            ]
+            "rootId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "receipt": {
+              "type": "object"
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "views": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "component": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "props": {
+                    "type": "object"
+                  },
+                  "bindings": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "documentId",
+                            "version"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "selection": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "maxItems": 1000
+                  }
+                },
+                "required": [
+                  "id",
+                  "component",
+                  "version",
+                  "props",
+                  "bindings"
+                ]
+              }
+            },
+            "availability": {
+              "type": "object"
+            },
+            "acknowledgedAt": {
+              "type": "string",
+              "minLength": 1
+            }
           },
-          "maxItems": 32
-        },
-        "layout": {
-          "type": "object"
-        },
-        "availability": {
-          "type": "object"
-        },
-        "acknowledgedAt": {
-          "type": "string",
-          "minLength": 1
+          "required": [
+            "format",
+            "compositionId",
+            "version",
+            "nodes",
+            "rootId",
+            "receipt",
+            "author",
+            "views",
+            "availability",
+            "acknowledgedAt"
+          ],
+          "additionalProperties": true
         }
-      },
-      "required": [
-        "compositionId",
-        "version",
-        "views",
-        "layout",
-        "availability",
-        "acknowledgedAt"
       ]
     },
     "workspace.save": {
       "type": "object",
       "properties": {
         "schemaVersion": {
-          "const": 2
+          "enum": [
+            1,
+            2,
+            3
+          ]
         },
         "sourceProjectId": {
           "type": "string",
@@ -5052,118 +6543,371 @@
         "compositions": {
           "type": "array",
           "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "compositionId": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-              },
-              "version": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "views": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                    },
-                    "component": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "version": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "props": {
-                      "type": "object"
-                    },
-                    "bindings": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "compositionId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "views": {
+                    "type": "array",
+                    "items": {
                       "type": "object",
-                      "additionalProperties": {
-                        "oneOf": [
-                          {
-                            "type": "object",
-                            "additionalProperties": false,
-                            "properties": {
-                              "id": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                        },
+                        "component": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "props": {
+                          "type": "object"
+                        },
+                        "bindings": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "version"
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "documentId": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "version": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                  }
+                                },
+                                "required": [
+                                  "documentId",
+                                  "version"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "selection": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "maxItems": 1000
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "component",
+                        "version",
+                        "props",
+                        "bindings"
+                      ]
+                    },
+                    "maxItems": 32
+                  },
+                  "layout": {
+                    "type": "object"
+                  },
+                  "availability": {
+                    "type": "object"
+                  },
+                  "acknowledgedAt": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "compositionId",
+                  "version",
+                  "views",
+                  "layout",
+                  "availability",
+                  "acknowledgedAt"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "format": {
+                    "const": "rho.composition/1"
+                  },
+                  "compositionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "nodes": {
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                            },
+                            "kind": {
+                              "const": "group"
+                            },
+                            "children": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                              },
+                              "maxItems": 256,
+                              "uniqueItems": true
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "kind",
+                            "children"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                            },
+                            "component": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "props": {
+                              "type": "object"
+                            },
+                            "bindings": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "version": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "version"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "documentId": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      },
+                                      "version": {
+                                        "type": "integer",
+                                        "minimum": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "documentId",
+                                      "version"
+                                    ]
+                                  }
+                                ]
+                              }
+                            },
+                            "selection": {
+                              "type": "array",
+                              "items": {
                                 "type": "string",
                                 "minLength": 1
                               },
-                              "version": {
-                                "type": "string",
-                                "pattern": "^[a-f0-9]{64}$"
-                              }
+                              "maxItems": 1000
                             },
-                            "required": [
-                              "id",
-                              "version"
-                            ]
+                            "kind": {
+                              "const": "view"
+                            },
+                            "protected": {
+                              "type": "boolean"
+                            }
                           },
-                          {
-                            "type": "object",
-                            "additionalProperties": false,
-                            "properties": {
-                              "documentId": {
-                                "type": "string",
-                                "pattern": "^[a-f0-9]{64}$"
-                              },
-                              "version": {
-                                "type": "integer",
-                                "minimum": 1
-                              }
-                            },
-                            "required": [
-                              "documentId",
-                              "version"
-                            ]
-                          }
-                        ]
-                      }
-                    },
-                    "selection": {
-                      "type": "array",
-                      "items": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "maxItems": 1000
+                          "required": [
+                            "id",
+                            "component",
+                            "version",
+                            "props",
+                            "bindings",
+                            "kind"
+                          ]
+                        }
+                      ]
                     }
                   },
-                  "required": [
-                    "id",
-                    "component",
-                    "version",
-                    "props",
-                    "bindings"
-                  ]
+                  "rootId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "receipt": {
+                    "type": "object"
+                  },
+                  "author": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "views": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                        },
+                        "component": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "props": {
+                          "type": "object"
+                        },
+                        "bindings": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "version"
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "documentId": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "version": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                  }
+                                },
+                                "required": [
+                                  "documentId",
+                                  "version"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "selection": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "maxItems": 1000
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "component",
+                        "version",
+                        "props",
+                        "bindings"
+                      ]
+                    }
+                  },
+                  "availability": {
+                    "type": "object"
+                  },
+                  "acknowledgedAt": {
+                    "type": "string",
+                    "minLength": 1
+                  }
                 },
-                "maxItems": 32
-              },
-              "layout": {
-                "type": "object"
-              },
-              "availability": {
-                "type": "object"
-              },
-              "acknowledgedAt": {
-                "type": "string",
-                "minLength": 1
+                "required": [
+                  "format",
+                  "compositionId",
+                  "version",
+                  "nodes",
+                  "rootId",
+                  "receipt",
+                  "author",
+                  "views",
+                  "availability",
+                  "acknowledgedAt"
+                ],
+                "additionalProperties": true
               }
-            },
-            "required": [
-              "compositionId",
-              "version",
-              "views",
-              "layout",
-              "availability",
-              "acknowledgedAt"
             ]
           }
         },
@@ -5645,118 +7389,371 @@
         "compositions": {
           "type": "array",
           "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "compositionId": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-              },
-              "version": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "views": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                    },
-                    "component": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "version": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "props": {
-                      "type": "object"
-                    },
-                    "bindings": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "compositionId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "views": {
+                    "type": "array",
+                    "items": {
                       "type": "object",
-                      "additionalProperties": {
-                        "oneOf": [
-                          {
-                            "type": "object",
-                            "additionalProperties": false,
-                            "properties": {
-                              "id": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                        },
+                        "component": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "props": {
+                          "type": "object"
+                        },
+                        "bindings": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "version"
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "documentId": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "version": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                  }
+                                },
+                                "required": [
+                                  "documentId",
+                                  "version"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "selection": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "maxItems": 1000
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "component",
+                        "version",
+                        "props",
+                        "bindings"
+                      ]
+                    },
+                    "maxItems": 32
+                  },
+                  "layout": {
+                    "type": "object"
+                  },
+                  "availability": {
+                    "type": "object"
+                  },
+                  "acknowledgedAt": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "compositionId",
+                  "version",
+                  "views",
+                  "layout",
+                  "availability",
+                  "acknowledgedAt"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "format": {
+                    "const": "rho.composition/1"
+                  },
+                  "compositionId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "nodes": {
+                    "type": "array",
+                    "items": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                            },
+                            "kind": {
+                              "const": "group"
+                            },
+                            "children": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                              },
+                              "maxItems": 256,
+                              "uniqueItems": true
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "kind",
+                            "children"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                            },
+                            "component": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "props": {
+                              "type": "object"
+                            },
+                            "bindings": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "id": {
+                                        "type": "string",
+                                        "minLength": 1
+                                      },
+                                      "version": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      }
+                                    },
+                                    "required": [
+                                      "id",
+                                      "version"
+                                    ]
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "documentId": {
+                                        "type": "string",
+                                        "pattern": "^[a-f0-9]{64}$"
+                                      },
+                                      "version": {
+                                        "type": "integer",
+                                        "minimum": 1
+                                      }
+                                    },
+                                    "required": [
+                                      "documentId",
+                                      "version"
+                                    ]
+                                  }
+                                ]
+                              }
+                            },
+                            "selection": {
+                              "type": "array",
+                              "items": {
                                 "type": "string",
                                 "minLength": 1
                               },
-                              "version": {
-                                "type": "string",
-                                "pattern": "^[a-f0-9]{64}$"
-                              }
+                              "maxItems": 1000
                             },
-                            "required": [
-                              "id",
-                              "version"
-                            ]
+                            "kind": {
+                              "const": "view"
+                            },
+                            "protected": {
+                              "type": "boolean"
+                            }
                           },
-                          {
-                            "type": "object",
-                            "additionalProperties": false,
-                            "properties": {
-                              "documentId": {
-                                "type": "string",
-                                "pattern": "^[a-f0-9]{64}$"
-                              },
-                              "version": {
-                                "type": "integer",
-                                "minimum": 1
-                              }
-                            },
-                            "required": [
-                              "documentId",
-                              "version"
-                            ]
-                          }
-                        ]
-                      }
-                    },
-                    "selection": {
-                      "type": "array",
-                      "items": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "maxItems": 1000
+                          "required": [
+                            "id",
+                            "component",
+                            "version",
+                            "props",
+                            "bindings",
+                            "kind"
+                          ]
+                        }
+                      ]
                     }
                   },
-                  "required": [
-                    "id",
-                    "component",
-                    "version",
-                    "props",
-                    "bindings"
-                  ]
+                  "rootId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "receipt": {
+                    "type": "object"
+                  },
+                  "author": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "views": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                        },
+                        "component": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "props": {
+                          "type": "object"
+                        },
+                        "bindings": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "version"
+                                ]
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "documentId": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  },
+                                  "version": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                  }
+                                },
+                                "required": [
+                                  "documentId",
+                                  "version"
+                                ]
+                              }
+                            ]
+                          }
+                        },
+                        "selection": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "maxItems": 1000
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "component",
+                        "version",
+                        "props",
+                        "bindings"
+                      ]
+                    }
+                  },
+                  "availability": {
+                    "type": "object"
+                  },
+                  "acknowledgedAt": {
+                    "type": "string",
+                    "minLength": 1
+                  }
                 },
-                "maxItems": 32
-              },
-              "layout": {
-                "type": "object"
-              },
-              "availability": {
-                "type": "object"
-              },
-              "acknowledgedAt": {
-                "type": "string",
-                "minLength": 1
+                "required": [
+                  "format",
+                  "compositionId",
+                  "version",
+                  "nodes",
+                  "rootId",
+                  "receipt",
+                  "author",
+                  "views",
+                  "availability",
+                  "acknowledgedAt"
+                ],
+                "additionalProperties": true
               }
-            },
-            "required": [
-              "compositionId",
-              "version",
-              "views",
-              "layout",
-              "availability",
-              "acknowledgedAt"
             ]
           }
         },
@@ -5896,6 +7893,123 @@
         "cursor",
         "host",
         "limits"
+      ],
+      "additionalProperties": true
+    },
+    "capability.configure": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "enabled": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "receipt": {
+          "type": "object",
+          "properties": {
+            "changeId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "enabled": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "at": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "changeId",
+            "author",
+            "version",
+            "enabled",
+            "at"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "version",
+        "enabled",
+        "receipt"
+      ],
+      "additionalProperties": true
+    },
+    "skill.list": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "digest",
+          "content"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "skill.read": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "digest",
+        "content"
       ],
       "additionalProperties": true
     },
@@ -6178,6 +8292,774 @@
         "rendering"
       ],
       "additionalProperties": true
+    },
+    "composition.apply": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "rho.composition/1"
+        },
+        "compositionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "kind": {
+                    "const": "group"
+                  },
+                  "children": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                    },
+                    "maxItems": 256,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "children"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "component": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "props": {
+                    "type": "object"
+                  },
+                  "bindings": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "documentId",
+                            "version"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "selection": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "maxItems": 1000
+                  },
+                  "kind": {
+                    "const": "view"
+                  },
+                  "protected": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "id",
+                  "component",
+                  "version",
+                  "props",
+                  "bindings",
+                  "kind"
+                ]
+              }
+            ]
+          }
+        },
+        "rootId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "receipt": {
+          "type": "object"
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1
+        },
+        "views": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "component": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "props": {
+                "type": "object"
+              },
+              "bindings": {
+                "type": "object",
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "documentId": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      },
+                      "required": [
+                        "documentId",
+                        "version"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "selection": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "maxItems": 1000
+              }
+            },
+            "required": [
+              "id",
+              "component",
+              "version",
+              "props",
+              "bindings"
+            ]
+          }
+        },
+        "availability": {
+          "type": "object"
+        },
+        "acknowledgedAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "format",
+        "compositionId",
+        "version",
+        "nodes",
+        "rootId",
+        "receipt",
+        "author",
+        "views",
+        "availability",
+        "acknowledgedAt"
+      ],
+      "additionalProperties": true
+    },
+    "composition.undo": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "rho.composition/1"
+        },
+        "compositionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "kind": {
+                    "const": "group"
+                  },
+                  "children": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                    },
+                    "maxItems": 256,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "children"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "component": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "props": {
+                    "type": "object"
+                  },
+                  "bindings": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "documentId",
+                            "version"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "selection": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "maxItems": 1000
+                  },
+                  "kind": {
+                    "const": "view"
+                  },
+                  "protected": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "id",
+                  "component",
+                  "version",
+                  "props",
+                  "bindings",
+                  "kind"
+                ]
+              }
+            ]
+          }
+        },
+        "rootId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "receipt": {
+          "type": "object"
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1
+        },
+        "views": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "component": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "props": {
+                "type": "object"
+              },
+              "bindings": {
+                "type": "object",
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "documentId": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      },
+                      "required": [
+                        "documentId",
+                        "version"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "selection": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "maxItems": 1000
+              }
+            },
+            "required": [
+              "id",
+              "component",
+              "version",
+              "props",
+              "bindings"
+            ]
+          }
+        },
+        "availability": {
+          "type": "object"
+        },
+        "acknowledgedAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "format",
+        "compositionId",
+        "version",
+        "nodes",
+        "rootId",
+        "receipt",
+        "author",
+        "views",
+        "availability",
+        "acknowledgedAt"
+      ],
+      "additionalProperties": true
+    },
+    "view.protection.set": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "rho.composition/1"
+        },
+        "compositionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "kind": {
+                    "const": "group"
+                  },
+                  "children": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                    },
+                    "maxItems": 256,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "id",
+                  "kind",
+                  "children"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "component": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "props": {
+                    "type": "object"
+                  },
+                  "bindings": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "documentId",
+                            "version"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "selection": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "maxItems": 1000
+                  },
+                  "kind": {
+                    "const": "view"
+                  },
+                  "protected": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "id",
+                  "component",
+                  "version",
+                  "props",
+                  "bindings",
+                  "kind"
+                ]
+              }
+            ]
+          }
+        },
+        "rootId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "receipt": {
+          "type": "object"
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1
+        },
+        "views": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "component": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "props": {
+                "type": "object"
+              },
+              "bindings": {
+                "type": "object",
+                "additionalProperties": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "documentId": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "version": {
+                          "type": "integer",
+                          "minimum": 1
+                        }
+                      },
+                      "required": [
+                        "documentId",
+                        "version"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "selection": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "maxItems": 1000
+              }
+            },
+            "required": [
+              "id",
+              "component",
+              "version",
+              "props",
+              "bindings"
+            ]
+          }
+        },
+        "availability": {
+          "type": "object"
+        },
+        "acknowledgedAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "format",
+        "compositionId",
+        "version",
+        "nodes",
+        "rootId",
+        "receipt",
+        "author",
+        "views",
+        "availability",
+        "acknowledgedAt"
+      ],
+      "additionalProperties": true
+    },
+    "interaction.selection.read": {
+      "type": "object"
+    },
+    "interaction.selection.set": {
+      "type": "object"
+    },
+    "annotation.create": {
+      "type": "object"
+    },
+    "annotation.reply": {
+      "type": "object"
+    },
+    "annotation.read": {
+      "type": "object"
+    },
+    "annotation.list": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
     }
   },
   "descriptions": {
@@ -6189,6 +9071,9 @@
     "action.observe": "Observe original Core facts. Never starts or recovers a Host.",
     "context.read": "Read an explicit versioned context package. Receipt establishes a tool fetch, not proactive delivery to a conversation.",
     "binding.open": "Bind this external session to the authenticated project scope. Conversation stays in Claude Code.",
+    "capability.configure": "Persist the selected project plugins with a conditional version and idempotent changeId. This changes routing only; it installs no package, starts no runtime and cancels no work.",
+    "skill.list": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",
+    "skill.read": "Read one versioned shipped Skill after checking its digest. A stale digest requires rereading instead of applying cached instructions.",
     "resource.register": "Declare scoped existing bytes and their type/schema at the supplied digest. This read and registration starts no runtime.",
     "requirements.check": "Probe only the explicitly declared R packages with bounded base R; no Core Host or project script starts.",
     "data.compare": "Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.",
@@ -7469,7 +10354,13 @@
     "document.changed",
     "selection.changed",
     "composition.changed",
-    "binding.changed"
+    "binding.changed",
+    "capability.changed",
+    "view.closed",
+    "interaction.selection.changed",
+    "annotation.changed",
+    "context.changed",
+    "workspace.restored"
   ],
   "compatibility": "Major API path changes for incompatible fields/semantics; additive optional fields allowed. Per-resource versions are independent.",
   "legacy": "v1 schemas and captured fixtures are frozen. Legacy reads and explicit retry/cancel of accepted requests remain available; new recipe submissions require an explicit v2 project script."

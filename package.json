@@ -13,7 +13,8 @@
   "exports": {
     ".": "./dist/client.js",
     "./server": "./dist/server.js",
-    "./protocol": "./dist/protocol.js"
+    "./protocol": "./dist/protocol.js",
+    "./observation": "./dist/observation.js"
   },
   "files": [
     "dist",
@@ -24,7 +25,10 @@
     "scripts/acceptance.mjs",
     "scripts/recovery-acceptance.mjs",
     "scripts/support.mjs",
-    "docs/HEADLESS.md"
+    "docs/HEADLESS.md",
+    "docs/COLLABORATION.md",
+    "scripts/collaboration-acceptance.mjs",
+    "scripts/claude-consumer.mjs"
   ],
   "scripts": {
     "build": "tsc && node scripts/protocol.mjs",
@@ -33,7 +37,9 @@
     "prepack": "npm run build && node scripts/check-pack.mjs",
     "pack:local": "node scripts/pack-local.mjs",
     "recovery": "node scripts/recovery-acceptance.mjs",
-    "agent": "node scripts/agent-experiment.mjs"
+    "agent": "node scripts/agent-experiment.mjs",
+    "acceptance:collaboration": "node scripts/collaboration-acceptance.mjs",
+    "acceptance:collaboration:agent": "RHO_COLLAB_MODEL=1 node scripts/collaboration-acceptance.mjs"
   },
   "dependencies": {
     "ajv": "8.20.0",
@@ -45,7 +51,8 @@
     "@rho-workspace/plugin-tables": "file:../Rho-plugins/plugins/tables",
     "@rho-workspace/plugin-media": "file:../Rho-plugins/plugins/media",
     "@rho-workspace/plugin-charts": "file:../Rho-plugins/plugins/charts",
-    "@rho-workspace/plugin-agent": "file:../Rho-plugins/plugins/agent"
+    "@rho-workspace/plugin-agent": "file:../Rho-plugins/plugins/agent",
+    "@rho-workspace/plugin-annotations": "file:../Rho-plugins/plugins/annotations"
   },
   "devDependencies": {
     "@types/node": "22.20.0",
@@ -61,7 +68,8 @@
     "@rho-workspace/plugin-tables",
     "@rho-workspace/plugin-media",
     "@rho-workspace/plugin-charts",
-    "@rho-workspace/plugin-agent"
+    "@rho-workspace/plugin-agent",
+    "@rho-workspace/plugin-annotations"
   ],
   "private": true
 }

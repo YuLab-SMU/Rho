@@ -53,3 +53,24 @@ test('real stdio MCP v2 tools share the unsaved buffer, scope and retained nativ
     assert.ok(directory); assert.equal((await fs.readdir(path.join(path.dirname(grant.connectionFile), directory))).filter(n => n.endsWith('.json')).length, 1);
   } finally { await client.close(); await service.close(); }
 });
+
+test('MCP plugin filter only narrows grants and cached tools cannot bypass project disablement', async () => {
+  const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-mcp-filter-'));
+  const service = await new RhoService({ root, stateDir: path.join(root, 'state'), coreBinary: '/missing', rscript: '/missing' }).start();
+  const client = new Client({ name: 'filtered-consumer', version: '1.0.0' });
+  try {
+    const human = new RhoClient({ url: service.url, token: service.adminToken });
+    const p = await human.call('project.create', { name: 'p' });
+    const descriptor = path.join(root, 'agent.json');
+    await service.agentConnection(p.id, 'filtered', descriptor, ['capability.list', 'document.read', 'data.page'], ['documents']);
+    const transport = new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(import.meta.resolve('@rho-workspace/plugin-agent/mcp'))], env: { PATH: process.env.PATH, RHO_AGENT_CONNECTION: descriptor }, stderr: 'pipe' });
+    transport.stderr.resume(); await client.connect(transport);
+    assert.deepEqual((await client.listTools()).tools.map(t => t.name).sort(), ['rho_capability_list', 'rho_document_read']);
+    const denied = await client.callTool({ name: 'rho_data_page', arguments: { resource: { id: 'absent', version: '0'.repeat(64) }, offset: 0, limit: 1 } });
+    assert.equal(denied.isError, true);
+    await human.call('capability.configure', { projectId: p.id, expectedVersion: 0, changeId: 'disable', enabled: ['agent'] });
+    assert.deepEqual((await client.listTools()).tools.map(t => t.name), ['rho_capability_list']);
+    assert.equal((await client.callTool({ name: 'rho_document_read', arguments: { documentId: '0'.repeat(64) } })).isError, true);
+    await assert.rejects(human.call('document.read', { projectId: p.id, documentId: '0'.repeat(64) }), e => e.error.kind === 'unavailable');
+  } finally { await client.close(); await service.close(); await fs.rm(root, { recursive: true, force: true }); }
+});

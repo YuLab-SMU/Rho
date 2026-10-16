@@ -1,5 +1,6 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { confined, readJson, requireThat, type PluginDescriptor, type Resource } from '@rho-workspace/plugin-contracts';
 import type { Documents, documentLimits } from '@rho-workspace/plugin-documents';
 import type { Files, fileLimits, DeclarationValidator } from '@rho-workspace/plugin-files';
@@ -8,6 +9,7 @@ import type { Charts, chartLimits } from '@rho-workspace/plugin-charts';
 import type { Media } from '@rho-workspace/plugin-media';
 import { executionInputSchema } from './entry-contracts.js';
 import type { executionLimits, Objects } from '@rho-workspace/plugin-r';
+import type { Annotations, annotationLimits } from '@rho-workspace/plugin-annotations';
 import type { AgentContext } from '@rho-workspace/plugin-agent';
 
 // A finite application selection, not a discovery service or an arbitrary code
@@ -20,6 +22,7 @@ const entries = {
   tables: () => import('@rho-workspace/plugin-tables'),
   media: () => import('@rho-workspace/plugin-media'),
   charts: () => import('@rho-workspace/plugin-charts'),
+  annotations: () => import('@rho-workspace/plugin-annotations'),
   agent: () => import('@rho-workspace/plugin-agent')
 };
 export type PluginId = keyof typeof entries;
@@ -31,6 +34,8 @@ export interface PluginConfig {
   resources?: Partial<typeof fileLimits & typeof tableLimits & typeof chartLimits>;
   maxRetainedMetadataBytes?: number;
   r?: Partial<typeof executionLimits>;
+  annotations?: Partial<typeof annotationLimits>;
+  capabilityLimits?: { maxReceipts?: number };
   maxContexts?: number; maxBindings?: number; maxActivities?: number; maxContextBytes?: number;
 }
 const only = (defaults: object, values: object = {}) => Object.fromEntries(Object.entries(values).filter(([k, v]) => k in defaults && v !== undefined));
@@ -42,13 +47,23 @@ export class Plugins {
     const selected = this.config.plugins ?? pluginIds;
     requireThat(Array.isArray(selected) && selected.every(id => pluginIds.includes(id)) && new Set(selected).size === selected.length, 'invalid', 'Select unique, known plugin IDs.');
     for (const id of pluginIds) {
-      const status: any = { id, package: '@rho-workspace/plugin-' + id, selected: selected.includes(id), state: 'unavailable', reason: 'Plugin is not selected.' };
+      const status: any = {
+        id,
+        package: '@rho-workspace/plugin-' + id,
+        selected: selected.includes(id),
+        packagePresent: false,
+        state: 'unavailable',
+        reason: 'Plugin is not selected.'
+      };
+      try { await fs.stat(fileURLToPath(import.meta.resolve(status.package))); status.packagePresent = true; } catch {}
       if (status.selected) {
         try {
           const module = await entries[id]();
           requireThat(module.plugin.id === id && module.plugin.package === status.package && module.plugin.version === '0.4.0', 'condition', 'Plugin identity/version does not match this application selection.');
           (this.modules as any)[id] = module;
-          status.version = module.plugin.version; status.state = 'available'; delete status.reason;
+          status.version = module.plugin.version;
+          status.packagePresent = true;
+          status.state = 'available'; delete status.reason;
         } catch { status.reason = 'Selected plugin package is missing, incompatible or cannot be loaded.'; }
       }
       this.availability.push(status);
@@ -70,6 +85,9 @@ export class Plugins {
     return this;
   }
   optional<K extends PluginId>(id: K): Modules[K] | undefined { return this.modules[id] as Modules[K] | undefined; }
+  ids() { return [...pluginIds]; }
+  isKnown(id: string): id is PluginId { return pluginIds.includes(id as PluginId); }
+  availabilityFor(id: PluginId) { return this.availability.find(entry => entry.id === id); }
   need<K extends PluginId>(id: K): Modules[K] {
     const module = this.optional(id);
     requireThat(module, 'unavailable', 'The selected plugin is unavailable; retained data and original requests are preserved.', { plugin: id, availability: this.availability.find(x => x.id === id) });
@@ -80,11 +98,27 @@ export class Plugins {
     const declared = descriptors.flatMap(p => p.actions ?? []);
     const actions = declared.filter(a => (a.requires ?? []).every((id: PluginId) => this.modules[id])).map(a => a.id === 'r.execute' ? { ...a, inputSchema: executionInputSchema } : a);
     const unavailableActions = declared.filter(a => !actions.some(b => b.id === a.id)).map(a => ({ id: a.id, version: a.version, state: 'unavailable', missing: a.requires.filter((id: PluginId) => !this.modules[id]) }));
-    return { version: '0.4.0', plugins: this.availability, actions, unavailableActions, components: descriptors.flatMap(p => p.components ?? []), capabilities: [...descriptors.flatMap(p => p.capabilities), ...actions.flatMap(a => a.capabilities ?? [])], ...(this.modules.agent ? { agent: this.modules.agent.plugin.agent } : {}) };
+    return { version: '0.4.0', plugins: this.availability.map(p => ({
+      ...p,
+      packagePresent: p.packagePresent === true,
+      dependenciesSatisfied: p.packagePresent === true && p.state === 'available' && !(p.missing?.length),
+      uiRenderable: false
+    })), operations: this.operationDeclarations(), actions, unavailableActions, components: descriptors.flatMap(p => p.components ?? []), capabilities: [...descriptors.flatMap(p => p.capabilities), ...actions.flatMap(a => a.capabilities ?? [])], skills: descriptors.flatMap(p => p.skills ?? []), ...(this.modules.agent ? { agent: this.modules.agent.plugin.agent } : {}) };
   }
+  descriptors() { return Object.values(this.modules).map(m => m.plugin as PluginDescriptor); }
+  availableIds() { return this.descriptors().map(p => p.id as PluginId); }
+  descriptor(id: string) { return this.descriptors().find(p => p.id === id); }
+  operationOwner(method: string) {
+    const descriptor = this.descriptors().find(p => p.operations?.some(o => o.method === method));
+    if (descriptor) return descriptor.id as PluginId;
+    const owner = method.startsWith('annotation.') ? 'annotations' : method.startsWith('document.') ? 'documents' : method.startsWith('requirements.') ? 'requirements' : method === 'action.submit' || method === 'object.read' ? 'r' : method === 'data.plot' ? 'charts' : method.startsWith('data.') || method === 'selection.set' ? 'tables' : method.startsWith('media.') ? 'media' : method.startsWith('context.') || method.startsWith('binding.') || method === 'session.grant' ? 'agent' : method.startsWith('resource.') || method === 'artifact.check' ? 'files' : undefined;
+    return owner as PluginId | undefined;
+  }
+  operationDeclarations() { return this.descriptors().flatMap(p => (p.operations ?? []).map(operation => ({ ...operation, owner: p.id }))); }
+  skillOwner(id: string) { return this.descriptors().find(p => p.skills?.some(skill => skill.id === id))?.id ?? 'agent'; }
   supports(method: string) {
     if (method === 'action.submit') return this.catalog.actions.some(a => a.id === 'r.execute');
-    const owner = method.startsWith('document.') ? 'documents' : method.startsWith('requirements.') ? 'requirements' : method === 'action.submit' || method === 'object.read' ? 'r' : method === 'data.plot' ? 'charts' : method.startsWith('data.') || method === 'selection.set' ? 'tables' : method.startsWith('media.') ? 'media' : method.startsWith('context.') || method.startsWith('binding.') || method === 'session.grant' ? 'agent' : method.startsWith('resource.') || method === 'artifact.check' ? 'files' : undefined;
+    const owner = this.operationOwner(method);
     return !owner || !!this.modules[owner as PluginId];
   }
   validateComponentBindings(id: string, props: Record<string, unknown>, resources: Record<string, Resource>) {
@@ -93,10 +127,10 @@ export class Plugins {
   project(root: string, id: string) { return new ProjectPlugins(this, root, id); }
 }
 export class ProjectPlugins {
-  documents?: Documents; files?: Files; tables?: Tables; charts?: Charts; media?: Media; objects?: Objects; agent?: AgentContext;
+  documents?: Documents; files?: Files; tables?: Tables; charts?: Charts; media?: Media; objects?: Objects; agent?: AgentContext; annotations?: Annotations;
   constructor(public assembly: Plugins, public root: string, public projectId: string) {
     const c = assembly.config;
-    const documents = assembly.optional('documents'), files = assembly.optional('files'), tables = assembly.optional('tables'), charts = assembly.optional('charts'), media = assembly.optional('media'), r = assembly.optional('r'), agent = assembly.optional('agent');
+    const documents = assembly.optional('documents'), files = assembly.optional('files'), tables = assembly.optional('tables'), charts = assembly.optional('charts'), media = assembly.optional('media'), r = assembly.optional('r'), agent = assembly.optional('agent'), annotations = assembly.optional('annotations');
     if (documents) this.documents = new documents.Documents(root, c.documents);
     if (files) {
       const validators: DeclarationValidator[] = [tables?.declarationValidator, media?.declarationValidator, r?.declarationValidator].filter((v): v is DeclarationValidator => !!v);
@@ -106,9 +140,10 @@ export class ProjectPlugins {
     if (charts && this.tables) this.charts = new charts.Charts(this.tables, only(charts.chartLimits, c.resources));
     if (media && this.files) this.media = new media.Media(this.files);
     if (r && this.files) this.objects = new r.Objects(this.files);
+    if (annotations) this.annotations = new annotations.Annotations(root, this, c.annotations);
     if (agent) this.agent = new agent.AgentContext(root, projectId, this, only(agent.agentLimits, c));
   }
-  need<K extends 'documents' | 'files' | 'tables' | 'charts' | 'media' | 'objects' | 'agent'>(id: K): NonNullable<ProjectPlugins[K]> {
+  need<K extends 'documents' | 'files' | 'tables' | 'charts' | 'media' | 'objects' | 'agent' | 'annotations'>(id: K): NonNullable<ProjectPlugins[K]> {
     const owner = this[id];
     requireThat(owner, 'unavailable', 'The capability plugin is unavailable; existing owner state is retained.', { plugin: id });
     return owner as NonNullable<ProjectPlugins[K]>;
@@ -131,6 +166,13 @@ export class ProjectPlugins {
       requireThat(total <= maximum, 'limit', 'Retained document metadata is too large; owner records are preserved.', { limit: 'maxRetainedMetadataBytes', maximum });
       return readJson<any>(file);
     }));
+  }
+  async retainedAnnotations() {
+    if (this.annotations) return this.annotations.list();
+    const file = await confined(this.root, '.rho/plugins/annotations/state.json', true);
+    try { requireThat((await fs.stat(file)).size <= (this.assembly.config.annotations?.maxAnnotationBytes ?? 32 * 1024 * 1024), 'limit', 'Retained annotation metadata exceeds the byte budget.'); }
+    catch (e: any) { if (e.code === 'ENOENT') return []; throw e; }
+    return (await readJson<any[]>(file)).map(thread => ({ ...thread, sourceStatus: { state: 'owner-unavailable', snapshot: 'retained' } }));
   }
   async retainedResources(): Promise<Resource[]> {
     if (this.files) return this.files.list();
