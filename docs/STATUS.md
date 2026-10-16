@@ -86,7 +86,11 @@ original installed v1 candidate remain recorded separately.
 both installed consumers. The 0.4 boundary review removed central format schemas,
 package-wide execution dependencies and a borrowed script budget. Full and two
 reduced installations passed, with removal/reselection and recovery acceptance. The versioned
-schema/client/fixtures are ready for independent UI development; no UI is implemented.
+HTTP schema and inert fixtures form the backend boundary for independent UI work.
+The [plugin interface handoff](PLUGIN-UI-HANDOFF.md) records all eight owners,
+dependencies and routes. The current client is Node-only; browser transport,
+durable browser intent retention, SSE parsing/reconciliation and browser bootstrap
+remain unimplemented, along with all five component renderers.
 [The six backend work packages](BACKEND-FIRST.md) retain their original
 scope; [first-release tasks](WEBUI-FIRST.md) retain all product gates.
 

@@ -14,6 +14,8 @@ See [extraction](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-EXTRACTI
 and [extraction acceptance](EXTRACTION-ACCEPTANCE.md). The
 [split acceptance](PLUGIN-SPLIT-ACCEPTANCE.md) records the independent package boundary.
 The [0.4 boundary review](PLUGIN-BOUNDARY-ACCEPTANCE.md) records the follow-up decoupling.
+The [UI handoff reference](PLUGIN-UI-HANDOFF.md) maps all eight owners to HTTP
+operations and distinguishes implemented backend APIs from missing browser pieces.
 
 ## Install and start
 
@@ -57,13 +59,19 @@ new work requiring an absent owner is unavailable. Metadata snapshots and
 workspace save retain persisted facts even with no plugin selected. Byte exports
 need Files, and restores need Documents and Files before applying mutations.
 Typed readers validate their own semantics when selected; raw bytes stay usable.
-No read or reselection starts R or a Host.
+Document/resource reads and provider reselection start neither R nor a Host.
+An explicit `requirements.check` runs its bounded Rscript probe.
 
 Exact Host and supplied Origin are checked. The bearer credential is project
 scoped for external callers. CLI shutdown stops only Hosts started by this
 service and reports confirmation separately. Existing Hosts keep their owner.
 
 ## Public contract and client
+
+`RhoClient` is a Node caller: it uses filesystem-backed connection/intent files.
+It has no browser entry or generated method-specific types. Its event method
+returns a raw stream; SSE parsing and reconnect reconciliation belong to a future
+browser adapter. Browser consumers should use the versioned HTTP/SSE boundary.
 
 [protocol/v2.json](../protocol/v2.json) publishes requests, responses, typed
 errors, events and resource declarations. `protocol.describe` returns the same
