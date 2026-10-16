@@ -12,7 +12,7 @@ versions remain to be selected with the browser implementation.
 
 | Layer | Choice | Responsibility |
 | --- | --- | --- |
-| Distribution and launcher | npm package and CLI | `@rho-workspace/local` 0.3.0, Node >=22.22.0 <23; assembled local tarball bundles the selected Core binary |
+| Distribution and launcher | npm package and CLI | `@rho-workspace/local` 0.4.0, Node >=22.22.0 <23; assembled local tarball bundles the selected Core binary |
 | Local application service | Node.js/TypeScript, built-in HTTP, Ajv 8.20.0; versioned JSON and SSE | Authenticated browser/application boundary, scoped component routing, bounded observation and Core CLI access |
 | UI and build | React, TypeScript, Vite | Application assembly and trusted component presentation |
 | Workspace layout | Dockview core | Docking, tabs, split views and layout persistence within one browser window |

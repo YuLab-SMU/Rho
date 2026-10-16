@@ -4,10 +4,14 @@ Updated: 2026-10-16.
 
 ## Application
 
-Version 0.3 splits documents, files, R, requirements, tables, media, charts and
-Agent into eight independent npm plugins. Each owns its descriptor, behavior and
+Version 0.4 provides documents, files, R, requirements, tables, media, charts and
+Agent through eight independent npm plugins. Each owns its descriptor, behavior and
 entry contracts. Rho selects reviewed versions and injects service ports; a thin
-contracts package supplies shared types/schemas/file primitives without capabilities.
+contracts package supplies generic references/envelopes/ports and file primitives.
+Format, requirement and script schemas belong to pure owner contract entries;
+Contracts has no format registry, native plan or document budget. R owns its
+script snapshot budget. Only its execution action requires Requirements; exported
+objects work with Files/R alone, without Documents, Requirements, R or a Host.
 Only Tables brings csv-parse; only Agent brings the MCP SDK.
 The earlier extraction removed scientific workflows from the base dependencies. `/api/v2` HTTP/SSE schemas, client and inert fixtures expose explicit
 scripts/requirements/artifacts, typed tables and entity namespaces, media and
@@ -20,7 +24,7 @@ bridge and composition. Plugins owns document/resource semantics, R plans,
 requirements and scoped MCP. Core remains unchanged at
 `d0159da6feb01d1be9e3b4b34b67953241fedfcb`.
 [HEADLESS](HEADLESS.md) documents the current API and plugin selection;
-[plugin split acceptance](PLUGIN-SPLIT-ACCEPTANCE.md) records the new package boundary; [extraction acceptance](EXTRACTION-ACCEPTANCE.md)
+[plugin boundary review](PLUGIN-BOUNDARY-ACCEPTANCE.md) records the current responsibilities and dependency checks; [extraction acceptance](EXTRACTION-ACCEPTANCE.md)
 records actual source/package checks and failures.
 
 Frozen v1 schema/fixtures and an observation bridge preserve original accepted
@@ -38,13 +42,14 @@ unverified/unselected.
 
 ## Verification
 
-- Rho: 13/13 protocol, real stdio MCP, retained v1, service, crash/continuity,
+- Rho: 15/15 protocol, real stdio MCP, retained v1, service, crash/continuity,
   workspace and budget tests passed. Three SIGKILL boundaries retain the original
   operation/Core identity and one dispatch after a missing first acknowledgement.
 - Plugin removal/reselection preserves drafts, undo, bytes, layout references,
   selection intent and original Core identity without replay. Unavailable providers
   reject new work; retained requests stay observable.
-- Plugins: 10/10 capability tests and 2/2 separate native example tests passed.
+- Plugins: 12/12 capability tests and 2/2 separate native example tests passed.
+  The additional pure-contract import guard also passed its focused boundary test.
   Explicit types preserve `001` and literal `NA`; unkeyed tables remain readable,
   stale/mismatched inputs fail, and comparisons record both versions/provenance.
 - All eight capability tarballs pass independent installation/import with no
@@ -60,13 +65,14 @@ unverified/unselected.
   request becomes unknown without replay. Observer/view closure preserves work;
   separate cancellation confirms native process-group release. Export/restore
   preserves bytes, drafts, undo, selections and unavailable entries without a Host.
-- Actual 0.3 npm installations outside the checkouts passed: the full eight-plugin
-  candidate runs both explicit consumers and recovery; the reduced candidate
-  physically contains only Contracts/Documents/Files and works without R/Host.
-  No recipe or R script is bundled. The [candidate record](backend-acceptance/v0.3.0.json)
-  freezes both source/package/lock identities, all nine individual package hashes,
-  example inputs and observed request/resource identities. The
-  [0.2 record](backend-acceptance/v0.2.0.json) remains historical evidence.
+- Actual 0.4 npm installations outside the checkouts passed: the full eight-plugin
+  candidate runs both explicit consumers and recovery. Two reduced candidates
+  physically contain only Contracts/Documents/Files or Contracts/Files/R, and
+  work without R/Host. Unavailable execution retains or dispatches no new request.
+  No recipe or R script is bundled. The [candidate record](backend-acceptance/v0.4.0.json)
+  freezes all three source/package/lock compositions, all nine owner package
+  hashes, example inputs and observed request/resource identities. The
+  [0.3 record](backend-acceptance/v0.3.0.json) remains historical evidence.
 
 Retained failed extraction trials exposed checker-wrapper variable collision,
 a generic completion sidecar placed inside the producer's immutable inventory,
@@ -77,8 +83,9 @@ original installed v1 candidate remain recorded separately.
 ## Current focus and remaining work
 
 [PX-01–PX-05](PLUGIN-EXTRACTION.md) have passed their backend scope, including
-both installed consumers. The 0.3 independent-plugin backend scope also passed
-full/reduced installation and removal/reselection acceptance. The versioned
+both installed consumers. The 0.4 boundary review removed central format schemas,
+package-wide execution dependencies and a borrowed script budget. Full and two
+reduced installations passed, with removal/reselection and recovery acceptance. The versioned
 schema/client/fixtures are ready for independent UI development; no UI is implemented.
 [The six backend work packages](BACKEND-FIRST.md) retain their original
 scope; [first-release tasks](WEBUI-FIRST.md) retain all product gates.

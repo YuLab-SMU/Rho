@@ -82,9 +82,31 @@ owner schema parity, independent script budgets, object reads without Requiremen
 real stdio MCP, provider removal/reselection, retained v1 observations, three
 SIGKILL boundaries, partial/unknown state and export/restore behavior.
 
-Installed acceptance and immutable candidate identities are recorded after the
-selected source inputs are committed. Earlier [0.3 acceptance](PLUGIN-SPLIT-ACCEPTANCE.md)
-retains its separate full/reduced installation evidence.
+All eight owner tarballs passed independent npm installation/import, including
+pure contract subpaths, with only Contracts and each owner's declared external
+dependencies. Three application tarballs then passed fresh installation outside
+the checkouts:
+
+| Composition | Observed result |
+| --- | --- |
+| Full eight plugins | Both explicit R projects, typed table/plot/object reads, keyed comparison, export/restore and partial/unknown recovery passed |
+| Documents + Files | Unicode edits/undo and export passed without R or a Host; other providers were physically absent |
+| Files + R | Exported-object reads/export passed without Documents, Requirements, R or a Host; unavailable execution retained/dispatched no request |
+
+The ordinary project produced four typed rows, a real linear model, PNG/PDF and
+an exported object. The original analysis completed five DESeq2 fits, 16,139 genes,
+33 baseline artifacts, 121/121 native observations, 12/12 independent checks and
+explicit apeglm preparation/shrinkage. These are consumers of the same action and
+readers, with their project recipes outside the packages.
+
+The [immutable 0.4 record](backend-acceptance/v0.4.0.json) freezes the selected
+source trees, lockfiles, Core binary, all nine owner package hashes, three
+application artifacts, consumer inputs and observed request/resource identities.
+The selected runtime inputs are Rho `c4e56934081dc3c323bdaa5d06f02d9938a59308`,
+Plugins `183876b111e49035458fe4ef48393adba82f109d` and unchanged Core
+`d0159da6feb01d1be9e3b4b34b67953241fedfcb`. Following documentation/test-guard
+commits do not replace those artifact identities. Earlier
+[0.3 acceptance](PLUGIN-SPLIT-ACCEPTANCE.md) retains its separate evidence.
 
 The initial build attempted concurrently with a Plugins clean build encountered
 missing declarations; the owners were then built sequentially. An initial source

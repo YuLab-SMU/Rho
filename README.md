@@ -25,7 +25,7 @@ application use. Rho connects those components to the Core's public capabilities
 A specific analysis workflow is project code or an acceptance example, not a
 plugin. The [plugin extraction plan](docs/PLUGIN-EXTRACTION.md) applies the
 [capability model](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-MODEL.md)
-to the backend. Version 0.3 independently packages eight selected capabilities and keeps workflow
+to the backend. Version 0.4 independently packages eight selected capabilities and keeps workflow
 actions and recipes outside those packages; an ordinary R project and the original analysis use the same declared
 execution, dependency, resource and selection contracts.
 

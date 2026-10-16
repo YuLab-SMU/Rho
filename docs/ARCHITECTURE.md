@@ -27,7 +27,7 @@ several views over one state owner. Specific analysis workflows remain project
 scripts/recipes or acceptance examples; their dataset, design, contrast and
 sequencing do not belong in the base catalog or application routing. The
 [extraction plan](PLUGIN-EXTRACTION.md) records removal of the 0.1 coupling and
-the gates before plugin UI integration. The 0.3 application selects eight independent plugin packages and retains the
+the gates before plugin UI integration. The 0.4 application selects eight independent plugin packages and retains the
 0.2 action/view contracts;
 [extraction acceptance](EXTRACTION-ACCEPTANCE.md) records their actual consumers.
 
