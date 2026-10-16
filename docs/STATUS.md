@@ -60,10 +60,13 @@ unverified/unselected.
   request becomes unknown without replay. Observer/view closure preserves work;
   separate cancellation confirms native process-group release. Export/restore
   preserves bytes, drafts, undo, selections and unavailable entries without a Host.
-- Actual 0.2 npm installation outside the checkouts passed without bundled
-  recipes: no-R startup, bundled Core/installed Plugins, both explicit consumers
-  and recovery. The [candidate record](backend-acceptance/v0.2.0.json) freezes
-  source, package, lockfile, example inputs and observed resource identities.
+- Actual 0.3 npm installations outside the checkouts passed: the full eight-plugin
+  candidate runs both explicit consumers and recovery; the reduced candidate
+  physically contains only Contracts/Documents/Files and works without R/Host.
+  No recipe or R script is bundled. The [candidate record](backend-acceptance/v0.3.0.json)
+  freezes both source/package/lock identities, all nine individual package hashes,
+  example inputs and observed request/resource identities. The
+  [0.2 record](backend-acceptance/v0.2.0.json) remains historical evidence.
 
 Retained failed extraction trials exposed checker-wrapper variable collision,
 a generic completion sidecar placed inside the producer's immutable inventory,
@@ -74,8 +77,9 @@ original installed v1 candidate remain recorded separately.
 ## Current focus and remaining work
 
 [PX-01–PX-05](PLUGIN-EXTRACTION.md) have passed their backend scope, including
-both installed consumers. The versioned schema/client/fixtures are ready for
-independent UI development. This split continues backend/headless work; no UI is implemented.
+both installed consumers. The 0.3 independent-plugin backend scope also passed
+full/reduced installation and removal/reselection acceptance. The versioned
+schema/client/fixtures are ready for independent UI development; no UI is implemented.
 [The six backend work packages](BACKEND-FIRST.md) retain their original
 scope; [first-release tasks](WEBUI-FIRST.md) retain all product gates.
 

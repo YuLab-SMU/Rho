@@ -1,0 +1,1649 @@
+{
+  "schemaVersion": 3,
+  "kind": "rho.backend.plugin-split.acceptance",
+  "status": "passed",
+  "observedAt": "2026-10-16T11:30:36.961638+00:00",
+  "scope": {
+    "apiVersion": "2.0",
+    "packageVersion": "0.3.0",
+    "actionVersion": "0.2.0",
+    "viewContractVersion": "0.2.0",
+    "target": "darwin-arm64",
+    "node": "v22.22.3",
+    "npm": "10.9.8",
+    "R": "4.5.2",
+    "browserProductAccepted": false,
+    "registryPublication": "not-performed",
+    "signing": "not-performed",
+    "scientificHost": "Existing external R/package installation; disposable owned projects; fresh npm installs outside source checkouts."
+  },
+  "fullComposition": {
+    "schemaVersion": 1,
+    "platform": "darwin-arm64",
+    "node": "v22.22.3",
+    "application": {
+      "repository": "https://github.com/YuLab-SMU/Rho",
+      "commit": "2bb6a8a028103bcf465bb80569f4d6f8e8be7f5d",
+      "tree": "3e2e21f596c2d83b023387221b9f7851e4582017",
+      "buildInputsSha256": "04dc93bacd24faa2bc08a16001fbb7dc67e80733cdae7c932c1cf963b970b769",
+      "localOverride": null
+    },
+    "plugins": {
+      "repository": "https://github.com/YuLab-SMU/Rho-plugins",
+      "commit": "09b5c7f055ab65ed017cbdbd96abe64273739fb0",
+      "tree": "4d2cef171c7e922522d8295869f0cc651e320bab",
+      "buildInputsSha256": "01a913a45a48e32de07243a382c73fea1d4a257227d7e7ad84adea1ccaf39bf1",
+      "localOverride": null,
+      "selected": [
+        "documents",
+        "files",
+        "r",
+        "requirements",
+        "tables",
+        "media",
+        "charts",
+        "agent"
+      ],
+      "packages": [
+        {
+          "id": "contracts",
+          "package": "@rho-workspace/plugin-contracts",
+          "version": "0.3.0",
+          "filename": "rho-workspace-plugin-contracts-0.3.0.tgz",
+          "bytes": 16395,
+          "sha256": "e7f236992e4a9098bd26ac0af289242f5d81f2675748aa2da7f22c9499c3e825",
+          "integrity": "sha512-benk2hnkayoV3/85eNnVTd+PZ9MELiit1H6BlLIi429NGLMr1Wt/mN6aqu1I7+4lsvgKjMspXBhMrwyuAT4g/Q=="
+        },
+        {
+          "id": "documents",
+          "package": "@rho-workspace/plugin-documents",
+          "version": "0.3.0",
+          "filename": "rho-workspace-plugin-documents-0.3.0.tgz",
+          "bytes": 15758,
+          "sha256": "c15e87777cdc357455b49da7bc943ff244dbcfa28c6bdf93b0882dfb84197394",
+          "integrity": "sha512-cL+eMDadTrDH9JTqs0zcGOlg0cxC6BSOOX4jq/op/+nXM6il8D8CPWr0pt9J3HY40JPl+mkzxi3pQ5tgFniONg=="
+        },
+        {
+          "id": "files",
+          "package": "@rho-workspace/plugin-files",
+          "version": "0.3.0",
+          "filename": "rho-workspace-plugin-files-0.3.0.tgz",
+          "bytes": 16764,
+          "sha256": "dc9e594b8db2ea2c3768d368ecb126fb7892e9905ded85b05bfe8184c89e0958",
+          "integrity": "sha512-BBU+BRVrK2ZSSt9rsSW1UL5zcwPPII5tjjBato8pRgATnOOt4naX/a7dsZlmm6jsr3s+cSO0yN4WL0CbJcGpYw=="
+        },
+        {
+          "id": "r",
+          "package": "@rho-workspace/plugin-r",
+          "version": "0.3.0",
+          "filename": "rho-workspace-plugin-r-0.3.0.tgz",
+          "bytes": 14892,
+          "sha256": "30027124117d9648c44345899f49ce6a4ed1974fcd88063cffd6ded4ba8bdbdc",
+          "integrity": "sha512-cJ542xbmwpnczLC7aONOj/3bKtJvUFctunqc8PNt8+LvH/RvmjDGZF7z1jVN2ZbQCscxIC0WRJuYsVOGSQ4c2Q=="
+        },
+        {
+          "id": "requirements",
+          "package": "@rho-workspace/plugin-requirements",
+          "version": "0.3.0",
+          "filename": "rho-workspace-plugin-requirements-0.3.0.tgz",
+          "bytes": 14797,
+          "sha256": "248e7b3aa7cf310d77fc5f63a10026586cc8f84d031f8778c460eda7332b996f",
+          "integrity": "sha512-wqcAwDmCkny9/jxWZIOoex/MnI2Zdjb5G0JRymnWXAK9EmWBRiv8j8ftYf87IRXC91nqrDqTF+KbTN0sM4NcXQ=="
+        },
+        {
+          "id": "tables",
+          "package": "@rho-workspace/plugin-tables",
+          "version": "0.3.0",
+          "filename": "rho-workspace-plugin-tables-0.3.0.tgz",
+          "bytes": 16173,
+          "sha256": "66e4d1c5b44d1c0104504814d321b81342e2e6b9d02b696f7f31a1b58c1ad6b4",
+          "integrity": "sha512-1WujbiXUE2T+B6wMiZ/NJw4QgACKJAaJEnL4fL5VHcDtvxLJqmncxtHmTjyvT0+pMDXfL4k4REcQv3FJjvsRzg=="
+        },
+        {
+          "id": "media",
+          "package": "@rho-workspace/plugin-media",
+          "version": "0.3.0",
+          "filename": "rho-workspace-plugin-media-0.3.0.tgz",
+          "bytes": 13960,
+          "sha256": "2c70de5f5d892a8d218ea5f2d440910a23be1270b83646a6231dc052155394da",
+          "integrity": "sha512-ZxjivOUSqR4k7bGp5Jr+W5FY3lCJlcydADCBAy8Htxdfzeziv2u2oB3EV2K8vo7AiIZM/ooCsD/DvH8Klz61oQ=="
+        },
+        {
+          "id": "charts",
+          "package": "@rho-workspace/plugin-charts",
+          "version": "0.3.0",
+          "filename": "rho-workspace-plugin-charts-0.3.0.tgz",
+          "bytes": 14060,
+          "sha256": "477cfda52ad2338542058c757b1908089bc80a050161ec5d80b585f9e850a6dc",
+          "integrity": "sha512-ZK6fV6gAe77EwbHlJgyhKSalPGm3NYiZ/5sxf+QcJK4hH52XeY5xjinGi/roA5Gvsx/CYFYm18vVmJlt0Xl/MQ=="
+        },
+        {
+          "id": "agent",
+          "package": "@rho-workspace/plugin-agent",
+          "version": "0.3.0",
+          "filename": "rho-workspace-plugin-agent-0.3.0.tgz",
+          "bytes": 17548,
+          "sha256": "b3f1e5b0847433669762892655342ed9426d3e030c1c717893d2f0dd13a8aa8c",
+          "integrity": "sha512-oCoIr1C57q/2BnVtIiE//bI94w71+RikrAgTmwo6FdU/V4/nvrPk1hhHnmV1tRnw9sl14NQ7n9fLohssPHUDfQ=="
+        }
+      ]
+    },
+    "core": {
+      "repository": "https://github.com/YuLab-SMU/Rho-core",
+      "commit": "d0159da6feb01d1be9e3b4b34b67953241fedfcb",
+      "tree": "d76820b39b24df9e7b222efc3626f39915022181",
+      "buildInputsSha256": "584b7ebee58f2f2051cecf03eddb6c1013d66cc2781b0c7f0fe75afecb23443b",
+      "localOverride": null,
+      "artifactSha256": "eee223026f7e0b4dd1ee14a409c023919626c4175be5728048a02af739af4ce1",
+      "bytes": 7399128,
+      "buildAssociation": "Explicitly selected local build; no reproducible-build or signing claim."
+    },
+    "productionLockSha256": "db3b0aaacfe3dd8bc62c0d734422341ad6eaad7ca55ec8d95e8c756c8ee0c607",
+    "distribution": "unsigned-local-npm-tarball",
+    "registryPublication": "not-performed",
+    "artifact": {
+      "filename": "rho-workspace-local-0.3.0.tgz",
+      "bytes": 6249545,
+      "sha256": "e9ced10bc544d20f54ef3c8413c1fffcfdbaefcf303ba25c44fcb3a8da5df875",
+      "integrity": "sha512-suxsehxk4a+mkKq42XKpy6vtas4G57ztJ2AIEGSczZ62xzb+0RSC/zMsqGKcuK/1AOD3vC7xI8z5nPPw6/QPuQ==",
+      "files": 3790
+    }
+  },
+  "minimalComposition": {
+    "schemaVersion": 1,
+    "platform": "darwin-arm64",
+    "node": "v22.22.3",
+    "application": {
+      "repository": "https://github.com/YuLab-SMU/Rho",
+      "commit": "2bb6a8a028103bcf465bb80569f4d6f8e8be7f5d",
+      "tree": "3e2e21f596c2d83b023387221b9f7851e4582017",
+      "buildInputsSha256": "04dc93bacd24faa2bc08a16001fbb7dc67e80733cdae7c932c1cf963b970b769",
+      "localOverride": null
+    },
+    "plugins": {
+      "repository": "https://github.com/YuLab-SMU/Rho-plugins",
+      "commit": "09b5c7f055ab65ed017cbdbd96abe64273739fb0",
+      "tree": "4d2cef171c7e922522d8295869f0cc651e320bab",
+      "buildInputsSha256": "ea0fc69e427bd88265f80446a77a82c8ac765f7df46dbe4eca04fc2001d8ce01",
+      "localOverride": null,
+      "selected": [
+        "documents",
+        "files"
+      ],
+      "packages": [
+        {
+          "id": "contracts",
+          "package": "@rho-workspace/plugin-contracts",
+          "version": "0.3.0",
+          "filename": "rho-workspace-plugin-contracts-0.3.0.tgz",
+          "bytes": 16395,
+          "sha256": "e7f236992e4a9098bd26ac0af289242f5d81f2675748aa2da7f22c9499c3e825",
+          "integrity": "sha512-benk2hnkayoV3/85eNnVTd+PZ9MELiit1H6BlLIi429NGLMr1Wt/mN6aqu1I7+4lsvgKjMspXBhMrwyuAT4g/Q=="
+        },
+        {
+          "id": "documents",
+          "package": "@rho-workspace/plugin-documents",
+          "version": "0.3.0",
+          "filename": "rho-workspace-plugin-documents-0.3.0.tgz",
+          "bytes": 15758,
+          "sha256": "c15e87777cdc357455b49da7bc943ff244dbcfa28c6bdf93b0882dfb84197394",
+          "integrity": "sha512-cL+eMDadTrDH9JTqs0zcGOlg0cxC6BSOOX4jq/op/+nXM6il8D8CPWr0pt9J3HY40JPl+mkzxi3pQ5tgFniONg=="
+        },
+        {
+          "id": "files",
+          "package": "@rho-workspace/plugin-files",
+          "version": "0.3.0",
+          "filename": "rho-workspace-plugin-files-0.3.0.tgz",
+          "bytes": 16764,
+          "sha256": "dc9e594b8db2ea2c3768d368ecb126fb7892e9905ded85b05bfe8184c89e0958",
+          "integrity": "sha512-BBU+BRVrK2ZSSt9rsSW1UL5zcwPPII5tjjBato8pRgATnOOt4naX/a7dsZlmm6jsr3s+cSO0yN4WL0CbJcGpYw=="
+        }
+      ]
+    },
+    "core": {
+      "repository": "https://github.com/YuLab-SMU/Rho-core",
+      "commit": "d0159da6feb01d1be9e3b4b34b67953241fedfcb",
+      "tree": "d76820b39b24df9e7b222efc3626f39915022181",
+      "buildInputsSha256": "584b7ebee58f2f2051cecf03eddb6c1013d66cc2781b0c7f0fe75afecb23443b",
+      "localOverride": null,
+      "artifactSha256": "eee223026f7e0b4dd1ee14a409c023919626c4175be5728048a02af739af4ce1",
+      "bytes": 7399128,
+      "buildAssociation": "Explicitly selected local build; no reproducible-build or signing claim."
+    },
+    "productionLockSha256": "42599cfb0ef4e4a9896736b8bd0cd3beb41f3cb95860f3521fdd4b46a92870de",
+    "distribution": "unsigned-local-npm-tarball",
+    "registryPublication": "not-performed",
+    "artifact": {
+      "filename": "rho-workspace-local-0.3.0.tgz",
+      "bytes": 2658922,
+      "sha256": "81e16aa388bf03ead26e4adbd9a2709816eea693b7325837ce4ab0399b141aae",
+      "integrity": "sha512-tZL0b7woM3zySM+sjnq8EjnDqN+2f7vI9ESEPrM7tPFTe6bOEx0ynmSHYPCfPzhwh/Mds8bLPvg5o1rSV4cscg==",
+      "files": 601
+    }
+  },
+  "sourceChecks": {
+    "application": {
+      "commit": "793a2a0c8c83667b3e5f8a94235d375e8861d9ee",
+      "command": "RHO_CORE_BINARY=<selected-built-core> npm test",
+      "passed": 13,
+      "failed": 0,
+      "scope": "Runtime and test inputs match the accepted candidate; the following commit corrects only the packaging path check, exercised by both accepted packages."
+    },
+    "plugins": {
+      "commit": "09b5c7f055ab65ed017cbdbd96abe64273739fb0",
+      "command": "npm test",
+      "passed": 10,
+      "failed": 0
+    },
+    "nativeExamples": {
+      "commit": "09b5c7f055ab65ed017cbdbd96abe64273739fb0",
+      "command": "npm run test:examples",
+      "passed": 2,
+      "failed": 0
+    },
+    "core": {
+      "commit": "d0159da6feb01d1be9e3b4b34b67953241fedfcb",
+      "sourceChanged": false,
+      "build": "Selected existing binary; no new Cargo build or test in this split."
+    }
+  },
+  "isolatedPluginInstallations": {
+    "reportSha256": "05ea557eec26a9b49820d35a8f2c8af597b6ed862b07e0e0a156cd3c54453d54",
+    "status": "passed",
+    "packages": [
+      {
+        "id": "documents",
+        "artifactSha256": "c15e87777cdc357455b49da7bc943ff244dbcfa28c6bdf93b0882dfb84197394",
+        "state": "passed"
+      },
+      {
+        "id": "files",
+        "artifactSha256": "dc9e594b8db2ea2c3768d368ecb126fb7892e9905ded85b05bfe8184c89e0958",
+        "state": "passed"
+      },
+      {
+        "id": "r",
+        "artifactSha256": "30027124117d9648c44345899f49ce6a4ed1974fcd88063cffd6ded4ba8bdbdc",
+        "state": "passed"
+      },
+      {
+        "id": "requirements",
+        "artifactSha256": "248e7b3aa7cf310d77fc5f63a10026586cc8f84d031f8778c460eda7332b996f",
+        "state": "passed"
+      },
+      {
+        "id": "tables",
+        "artifactSha256": "66e4d1c5b44d1c0104504814d321b81342e2e6b9d02b696f7f31a1b58c1ad6b4",
+        "state": "passed"
+      },
+      {
+        "id": "media",
+        "artifactSha256": "2c70de5f5d892a8d218ea5f2d440910a23be1270b83646a6231dc052155394da",
+        "state": "passed"
+      },
+      {
+        "id": "charts",
+        "artifactSha256": "477cfda52ad2338542058c757b1908089bc80a050161ec5d80b585f9e850a6dc",
+        "state": "passed"
+      },
+      {
+        "id": "agent",
+        "artifactSha256": "b3f1e5b0847433669762892655342ed9426d3e030c1c717893d2f0dd13a8aa8c",
+        "state": "passed"
+      }
+    ]
+  },
+  "exampleConsumers": {
+    "ordinary": {
+      "repository": "https://github.com/YuLab-SMU/Rho-plugins",
+      "commit": "09b5c7f055ab65ed017cbdbd96abe64273739fb0",
+      "directory": "examples/ordinary-r-project",
+      "selectedFiles": [
+        {
+          "path": "analysis.R",
+          "sha256": "6b6413e94bbb0fee0d852aa5d45a84c53af2c9c93feae061cabffd8b2e0fff76"
+        },
+        {
+          "path": "check.R",
+          "sha256": "58e9878c87eafc770e3953cea8c92b04b344a25241c9a9263fdf3721c2701470"
+        },
+        {
+          "path": "project.json",
+          "sha256": "d8f74081aeffd61490e247910ce3db52fc456334c1f9e9f1bbd7454b7a55b0ab"
+        }
+      ],
+      "installedDomainReports": [
+        {
+          "run": "check",
+          "artifact": "check.json",
+          "reportSha256": "8c40e3ab4e52b3cb222e33c515ebc79b9f05e5f5d29a4b0a01b3cfab36ca565e",
+          "assertedField": "state",
+          "value": "passed",
+          "scope": "Saved lm coefficients and declared sample identities; base R project check."
+        }
+      ]
+    },
+    "original-analysis": {
+      "repository": "https://github.com/YuLab-SMU/Rho-plugins",
+      "commit": "09b5c7f055ab65ed017cbdbd96abe64273739fb0",
+      "directory": "examples/real-r-analysis",
+      "selectedFiles": [
+        {
+          "path": "analyze.R",
+          "sha256": "e2c276c3550296dd5573dd4b0a4253bfb29c139c44e99ec0272fb8e809cbacd2"
+        },
+        {
+          "path": "check-baseline.R",
+          "sha256": "2141f47130b292d810f9fd9376edf667df99d339e57d338ead3e10282d16873e"
+        },
+        {
+          "path": "check-shrinkage.R",
+          "sha256": "425d04ee433da769af9b398e6e1e7db87aeeed3e882edd6520a1fdf4500fbc0c"
+        },
+        {
+          "path": "inspect-models.R",
+          "sha256": "41373db9ce371e33f841263cd542256ad0305156eee6033f5c97fad53fce9441"
+        },
+        {
+          "path": "project.json",
+          "sha256": "25830bc24d03179acbbc034f6eac1b7837a1c91cfe3aaa300c18ed5643302202"
+        },
+        {
+          "path": "shrink.R",
+          "sha256": "7988f7d0b225109acf8e5a2b94e2a099eb1737fd28c327a79a2698f9d5c5d3c9"
+        },
+        {
+          "path": "verify-shrink.R",
+          "sha256": "b1a2803c34c8da83e4b691e5fd372697093f3543bec0be41e190dd1c81bad019"
+        },
+        {
+          "path": "verify.py",
+          "sha256": "827a8ffa534cf1cab44130b014b81c8442426d8dde75109fa60a8a07724543e9"
+        }
+      ],
+      "installedDomainReports": [
+        {
+          "run": "check-baseline",
+          "artifact": "native.json",
+          "reportSha256": "943084d73c50cb618555a8ae80837d41b5aae2f2cf5fa462630a156d05992691",
+          "assertedField": "status",
+          "value": "passed",
+          "checks": 121,
+          "passed": 121,
+          "scope": "Read-only observation using the same installed R packages as the native analysis; not an independent statistical oracle. No model is refitted."
+        },
+        {
+          "run": "check-baseline",
+          "artifact": "arithmetic.json",
+          "reportSha256": "ae7c12abfeb58d4799e478e5c6c327d96d98858fdaada694b896146f9ba7ad82",
+          "assertedField": "passed",
+          "value": true,
+          "checks": 12,
+          "passed": 12,
+          "scope": "Public-data domain artifact and arithmetic checks. Execution continuity, native dispatch count, upstream quantification, visual readability, and scientific generalization require their own evidence."
+        },
+        {
+          "run": "check-shrinkage",
+          "artifact": "native.json",
+          "reportSha256": "48336d4cf09f5171986cfda71947c2eda3b8842f1a6bc8e94c0d2f2079f5b4d6",
+          "assertedField": "state",
+          "value": "passed",
+          "scope": "Read saved native shrinkage result and compare every exported numeric field and original Wald p-values; no refit and no independent statistical oracle.",
+          "genes": 16139,
+          "baseline_tests_unchanged": true
+        }
+      ]
+    }
+  },
+  "fullInstallation": {
+    "reportSha256": "91be07f2f9b914f3049389817e2d551247904c8e9520b000e635331fa207cc84",
+    "status": "passed",
+    "artifactSha256": "e9ced10bc544d20f54ef3c8413c1fffcfdbaefcf303ba25c44fcb3a8da5df875",
+    "checks": [
+      "Actual npm install, bin launch without R, private credential, project/document open without Host, unknown selected R runtime, bundled Core selected.",
+      "Installed acceptance.mjs passed.",
+      "Installed acceptance.mjs passed.",
+      "Installed recovery-acceptance.mjs passed.",
+      "Versioned v1/v2 contracts and inert v2 states shipped; nine selected contract/plugin artifacts contain no project recipe or scientific native script."
+    ],
+    "ordinary": {
+      "reportSha256": "89e45cbda48454615740203e33e91ad1f0a79c7ccc1d329282f9afaef353f58b",
+      "status": "passed",
+      "project": "ordinary",
+      "projectSpecSha256": "34d0484ebe6e8d454e905a18e2e4f8c11f1bafd0dbe1357d1d476a99fe5cead7",
+      "checks": [
+        {
+          "name": "base catalog and project/document reads start no Host"
+        },
+        {
+          "name": "same generic execution, declared artifact integrity and one dispatch",
+          "run": "analysis",
+          "artifacts": 7
+        },
+        {
+          "name": "same generic execution, declared artifact integrity and one dispatch",
+          "run": "check",
+          "artifacts": 1
+        },
+        {
+          "name": "declared keys, string values, selection, explicit context and chart fields",
+          "rows": 4,
+          "key": "sample_id"
+        },
+        {
+          "name": "two input versions and declared join; missing entry retains references"
+        },
+        {
+          "name": "original media, coordinate context and bounded exported object snapshots"
+        },
+        {
+          "name": "actual export/restore preserves bytes, undo, unsaved text and unavailable entries without replay"
+        }
+      ],
+      "shutdown": [
+        {
+          "project": "project",
+          "ownership": "service",
+          "shutdown": {
+            "not_confirmed": [],
+            "requests_still_open": 0,
+            "signal": 15,
+            "signal_error": null,
+            "stopped": []
+          },
+          "confirmed": true
+        }
+      ],
+      "runs": {
+        "analysis": {
+          "operationId": "dd2c76de-ab68-4cb0-b2e2-09885c57e64f",
+          "core": {
+            "caller": "rho:2aa420a646c2e436041eb18cb49eb5d9118712311eb69632",
+            "requestId": "712bdbafbcaea240da97df201be8030496ad56fb0a5f40e88b50766b8fdd5486"
+          },
+          "nativeRunId": "18defef3bf6c35a0-578.1",
+          "integrity": {
+            "state": "verified",
+            "missing": [],
+            "completionDeclaration": "present",
+            "files": 7,
+            "checkedAt": "2026-10-16T11:27:05.427Z",
+            "manifestDigest": "6e3939062d1923416daefd6774e589887732ef5e563bce23a6466888ee2d8085"
+          },
+          "resources": [
+            {
+              "id": "3e5f74c8a616e51176649a17414a393017c44ae09601c9e6deafb61d50144e43",
+              "version": "ab39b1adfacf1c57c80059d6391382fb2e9cb5f2a4360cfa58c7a15132bd93a0",
+              "owner": "rho-plugins.table",
+              "kind": "table",
+              "path": ".rho/plugins/runs/14555f6f5bde33be15fe55aabe053d8eabf3cc8682a8bd420853be44c637969f/artifacts/observations.csv",
+              "bytes": 108,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:05.241Z"
+              },
+              "codeDigest": "a6df96297565f159067af60e156c6df7f9d3fb09e39340cb8f87c01322d08b4b",
+              "inputs": []
+            },
+            {
+              "id": "0323caab7760cc21493a292ca8b545cbc2d1290e2210f7fab6995d71e2b53a79",
+              "version": "4111805a2a01dbf3860e0f8e98531e48ba600cb0362b29e4ba1f2ee5ff18e592",
+              "owner": "rho-plugins.table",
+              "kind": "table",
+              "path": ".rho/plugins/runs/14555f6f5bde33be15fe55aabe053d8eabf3cc8682a8bd420853be44c637969f/artifacts/fitted.csv",
+              "bytes": 60,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:05.268Z"
+              },
+              "codeDigest": "a6df96297565f159067af60e156c6df7f9d3fb09e39340cb8f87c01322d08b4b",
+              "inputs": []
+            },
+            {
+              "id": "4a858f7f335db59e29929cb5b3cbb65f2f57ef932a7f5354b25402875a215fd4",
+              "version": "f0772cbd8b63277b4016d3216840d7632e741d0c0ef0c82546313be9376c5284",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/14555f6f5bde33be15fe55aabe053d8eabf3cc8682a8bd420853be44c637969f/artifacts/model.rds",
+              "bytes": 866,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:05.300Z"
+              },
+              "codeDigest": "a6df96297565f159067af60e156c6df7f9d3fb09e39340cb8f87c01322d08b4b",
+              "inputs": []
+            },
+            {
+              "id": "580c6018959c03bc4b0dbb662fa58d55505f3a236f98993894d53aa984e589fe",
+              "version": "711cc8757019f185e32a89c2009b1eb5e9975e890350822c6d06d8b71ed85563",
+              "owner": "rho-plugins.media",
+              "kind": "media",
+              "path": ".rho/plugins/runs/14555f6f5bde33be15fe55aabe053d8eabf3cc8682a8bd420853be44c637969f/artifacts/response.png",
+              "bytes": 22433,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:05.325Z"
+              },
+              "codeDigest": "a6df96297565f159067af60e156c6df7f9d3fb09e39340cb8f87c01322d08b4b",
+              "inputs": []
+            },
+            {
+              "id": "02c04f1b0e6c2c3544d39b71289a0ca3df0ca4d44d20fdd72fe3b8f46ff23e94",
+              "version": "a863f5662cf0031b5cb9536cce8d80e7f12815df69466b0fb77d09b7424bc53d",
+              "owner": "rho-plugins.media",
+              "kind": "media",
+              "path": ".rho/plugins/runs/14555f6f5bde33be15fe55aabe053d8eabf3cc8682a8bd420853be44c637969f/artifacts/response.pdf",
+              "bytes": 4721,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:05.350Z"
+              },
+              "codeDigest": "a6df96297565f159067af60e156c6df7f9d3fb09e39340cb8f87c01322d08b4b",
+              "inputs": []
+            },
+            {
+              "id": "b9d617e575b02cc9e7276bb19dddfbe968c3f3eb5f8f974b14930f5f0fb95c3d",
+              "version": "5f96a5ff0c04df51f7b17323b64029b1e26704b07f2ccdb0257082d3d35a149b",
+              "owner": "rho-plugins.object",
+              "kind": "object",
+              "path": ".rho/plugins/runs/14555f6f5bde33be15fe55aabe053d8eabf3cc8682a8bd420853be44c637969f/artifacts/object.json",
+              "bytes": 62,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:05.376Z"
+              },
+              "codeDigest": "a6df96297565f159067af60e156c6df7f9d3fb09e39340cb8f87c01322d08b4b",
+              "inputs": []
+            },
+            {
+              "id": "fda5e83dc2518ab2ca0fdb225c748eb42f3eab14da063aaed24a83a1b5e59062",
+              "version": "dbdcc32a17c7f4d42e4309452084953719a9a637af8f5a62d3a6e4b878fcaf8d",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/14555f6f5bde33be15fe55aabe053d8eabf3cc8682a8bd420853be44c637969f/artifacts/sessionInfo.txt",
+              "bytes": 647,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:05.402Z"
+              },
+              "codeDigest": "a6df96297565f159067af60e156c6df7f9d3fb09e39340cb8f87c01322d08b4b",
+              "inputs": []
+            }
+          ]
+        },
+        "check": {
+          "operationId": "de9126e4-3778-4e11-b173-698cb826818d",
+          "core": {
+            "caller": "rho:2aa420a646c2e436041eb18cb49eb5d9118712311eb69632",
+            "requestId": "9605b96599357c91f34e19bbbe7302db90129f3e1ce811ee79b548adb55d35ef"
+          },
+          "nativeRunId": "18defef3bf6c35a0-578.2",
+          "integrity": {
+            "state": "verified",
+            "missing": [],
+            "completionDeclaration": "present",
+            "files": 1,
+            "checkedAt": "2026-10-16T11:27:06.346Z",
+            "manifestDigest": "dcf5e8164ed8eae6046eb2b439173c6be4285036d8bc639d7f361a9a3de3b137"
+          },
+          "resources": [
+            {
+              "id": "3916e7efef26376df5e65b6e02f70de5720268263fa0759396cbab014f6dfcff",
+              "version": "8c40e3ab4e52b3cb222e33c515ebc79b9f05e5f5d29a4b0a01b3cfab36ca565e",
+              "owner": "rho-plugins.object",
+              "kind": "object",
+              "path": ".rho/plugins/runs/c913cf73d45323a6f8fc326e473addc8583b749813a1e3e71f165e48bb10f827/artifacts/check.json",
+              "bytes": 105,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:06.319Z"
+              },
+              "codeDigest": "ad8b6963c7786b5421e9c62a9a33de45985c7362df7be6ba20d925b04932fe30",
+              "inputs": [
+                {
+                  "id": "4a858f7f335db59e29929cb5b3cbb65f2f57ef932a7f5354b25402875a215fd4",
+                  "version": "f0772cbd8b63277b4016d3216840d7632e741d0c0ef0c82546313be9376c5284"
+                },
+                {
+                  "id": "3e5f74c8a616e51176649a17414a393017c44ae09601c9e6deafb61d50144e43",
+                  "version": "ab39b1adfacf1c57c80059d6391382fb2e9cb5f2a4360cfa58c7a15132bd93a0"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "original-analysis": {
+      "reportSha256": "444b2d4b55057f5a2af060433aa8a3a8c947e3717361d0f5a501214e154dd692",
+      "status": "passed",
+      "project": "paired-response",
+      "projectSpecSha256": "16a5998ee17f8a0918e206d761032e4448bb062025e7bd4ddc515aa984dc279b",
+      "checks": [
+        {
+          "name": "base catalog and project/document reads start no Host"
+        },
+        {
+          "name": "same generic execution, declared artifact integrity and one dispatch",
+          "run": "baseline",
+          "artifacts": 33
+        },
+        {
+          "name": "same generic execution, declared artifact integrity and one dispatch",
+          "run": "check-baseline",
+          "artifacts": 2
+        },
+        {
+          "name": "explicit dependency preparation",
+          "run": "shrinkage",
+          "requirements": [
+            {
+              "package": "DESeq2",
+              "source": "bioconductor"
+            },
+            {
+              "package": "apeglm",
+              "source": "bioconductor"
+            },
+            {
+              "package": "jsonlite",
+              "source": "cran"
+            },
+            {
+              "package": "digest",
+              "source": "cran"
+            }
+          ]
+        },
+        {
+          "name": "same generic execution, declared artifact integrity and one dispatch",
+          "run": "shrinkage",
+          "artifacts": 7
+        },
+        {
+          "name": "same generic execution, declared artifact integrity and one dispatch",
+          "run": "check-shrinkage",
+          "artifacts": 1
+        },
+        {
+          "name": "declared keys, string values, selection, explicit context and chart fields",
+          "rows": 16139,
+          "key": "gene_id"
+        },
+        {
+          "name": "two input versions and declared join; missing entry retains references"
+        },
+        {
+          "name": "original media, coordinate context and bounded exported object snapshots"
+        },
+        {
+          "name": "actual export/restore preserves bytes, undo, unsaved text and unavailable entries without replay"
+        }
+      ],
+      "shutdown": [
+        {
+          "project": "project",
+          "ownership": "service",
+          "shutdown": {
+            "not_confirmed": [],
+            "requests_still_open": 0,
+            "signal": 15,
+            "signal_error": null,
+            "stopped": []
+          },
+          "confirmed": true
+        }
+      ],
+      "runs": {
+        "baseline": {
+          "operationId": "74921ed8-f3b9-491e-8be9-1132189ca3db",
+          "core": {
+            "caller": "rho:70273313df4a6782dce2531fd4b3f3328eb10a6222a48139",
+            "requestId": "e7956d76a33980af91c1eddb8192717a8ad52be1dfdb82e957b132833399205f"
+          },
+          "nativeRunId": "18defef470d77d90-949.1",
+          "integrity": {
+            "state": "verified",
+            "missing": [],
+            "completionDeclaration": "present",
+            "files": 33,
+            "checkedAt": "2026-10-16T11:27:37.002Z",
+            "manifestDigest": "fa77b36ecfb14fc9c79769fc786c1d3d1a4ce0bb672512a8ae31515afeaa62b1"
+          },
+          "resources": [
+            {
+              "id": "b8533c65b89a0eeb027620f7915caa7e4910347c24629e08bed2d7d01a0a5ac5",
+              "version": "9c6ae18b164538d75a334f6861db300f146e377b78bb36220f6f2ba7da6ac44c",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/analysis_plan.csv",
+              "bytes": 1050,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.075Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "91a70da362d1853e788c26643a1f201931902842d5cb076407cd43b03d08f411",
+              "version": "a70dec5bffcfc01c3f742996994455fc52bcd74a75162a0fcb3c1a7a1976d6b7",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/bootstrap/dispersion.csv",
+              "bytes": 596943,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.099Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "d7223777adc52b1eb8a792779e129430a5415e799093a40f0697fa08b4d069fd",
+              "version": "72735e04dbc6a3e05a36ed82afb7c2d705c758e9039bee5286d775c47acfb6c3",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/bootstrap/first-simulated-counts.csv",
+              "bytes": 793178,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.120Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "deaafc29492ff2268129994cd6dc353e148f71aec1096d4a86543a3331934366",
+              "version": "64d6eb189bcd40ea0238bef1c13cbdb8973295d3b0972116ca21d9b174a0a456",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/bootstrap/marker-counts.csv",
+              "bytes": 516,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.143Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "c51a142a6c933a96bea163f9dcb77d73fa862e77dcc00baa54ebbf35b233f18f",
+              "version": "12ce1687927ecedaf5786834ea346996d5b675c1d5390bcf4436dd6713697291",
+              "owner": "rho-plugins.media",
+              "kind": "media",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/bootstrap/marker-distributions.pdf",
+              "bytes": 5445,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.166Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "d182a8135f969f1cf2239f7a4f5f65168dbdc39a2407233f1aedc01e62d7777e",
+              "version": "7a0acde812f33e66cc98633185088a0ba4862d18fe2ec5c204c5f04b0c0f7fb3",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/bootstrap/markers.csv",
+              "bytes": 993,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.192Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "daf3c8f7e6ce632938372be0769e57a6d52b6b0edfb301e493f5515d61267385",
+              "version": "aea2ca39a270e9f47f0f879de90221e0c6fac01da8352f17d2f24e259595547e",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/bootstrap/means.csv",
+              "bytes": 2470518,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.214Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "e25254ae74b7e73e12a19911c390a269b13d83d51f93683320b4be1fb810bbab",
+              "version": "edf838f9b6878f5f2a5f2411de4ccba705c2c61b9c6c8ffc00ad2721d0fbb8d5",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/bootstrap/plan.json",
+              "bytes": 1010,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.240Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "1eed323e25376303bbf19b6e1f98d64a458c20102731dbeff63c9a7fcad6e521",
+              "version": "6b49f819ce0f8fb5a256e2a2c705eca9f8395ec7318dfaa6d8c4df9992990c9d",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/bootstrap/replicates.csv",
+              "bytes": 284,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.264Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "c06243999e03a7ac6b13774699816ee08cdd740b755468f0a46f97838be5b19d",
+              "version": "eb633e47bcfd99077e9dfac067e0c13ad5b0e10158d8096df529d7d3c0dd1f8d",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/bootstrap/summary.csv",
+              "bytes": 906,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.287Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "b60ab73e116031f767b038c5fa9191d9d3348e18cefecef72a31e189d4d645c1",
+              "version": "a8ef529a7a035a07db0b2a30385325b6ab1443b474fe97545af145dfc9da4546",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/input/counts.csv",
+              "bytes": 2415063,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.309Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "d47db2b1016971b90fa0381f2ac662e82aac0e8e58ce77f7f541f6196b093abb",
+              "version": "6d2513ea94706ace1db8a8778864a266476d794fe6a91d87c7a60820dac6f9ad",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/input/genes.csv",
+              "bytes": 5279444,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.333Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "e59811d092aa1a0e2a8f66320bf786b546664fe53ab2b22ed1f187b942d433dc",
+              "version": "833577a4765d360866303e653c00748dd21a27bcc95b114c66227eb7b83d66c9",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/input/prefilter.csv",
+              "bytes": 1512126,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.360Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "400ef8856f08fc9e9e57def68b9318349ec7b837bdf9f4e1c8fd606d5b41b4f9",
+              "version": "84f821ec4119f4c2b1d89c473f67ed306898e1e17a7936127bc4766069541110",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/input/samples.csv",
+              "bytes": 950,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.385Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "5687144ad9f9b513319d2532488610b7f3d782842ae0d8a252083405b7e8dade",
+              "version": "343830dc9fcc0fbc3b0ca8587ce8c507057e15e195c5890e6e0612c55a240dd4",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/known_genes.csv",
+              "bytes": 5814,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.408Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "0db6f703cb300d0aa13de81cbf10d41b0bcf5e4a53cd0903759503ed44f5bd70",
+              "version": "cd0256321e088bd3cdd107f4cd433f42e6e810c0ca953c9c51b2d75402978797",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/models/full.rds",
+              "bytes": 18004644,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.432Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "d347025edcd4f357437c529c54fe5ba434aa2c56cba8101835bd8dcd9086c2b1",
+              "version": "54acf1eb521e78a401194c4b6994aa881e021acc7fccf185779352e37e878b81",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/models/without_N052611.rds",
+              "bytes": 23669362,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.475Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "fc224fee8522638414fc452d0ddbe26a754ebe0e773047309676b143bd437999",
+              "version": "0f6324268a6c791868dc1a48ca139f76552905330bc67b3229b493155e80bd77",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/models/without_N061011.rds",
+              "bytes": 30707141,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.518Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "d5de7f7273cdd3d0acefd237b0c9b60e26e756a756cab9fa6d03e96a47988c32",
+              "version": "e1e400405c9ae17e2f74696b9ec670761602356f5f3063f60f979e5bad44c81e",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/models/without_N080611.rds",
+              "bytes": 37579303,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.561Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "7f438a26d18b52bf9e5e37d4654d7207b93e97c093ef06deb86cf77a0fe5df6d",
+              "version": "13be3deb14b40e62f16a801e13adaf96e0f560720668093057e3bc3e6967c41b",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/models/without_N61311.rds",
+              "bytes": 44593852,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.612Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "1f77ca8f406c3d0280328097bbd0ac812cddb6c4e86afd1768bc1653e07d6523",
+              "version": "4f2e553d09e14fc9ade03e3beeb1509e6fe647c191a7e40ca75141a4b9e06429",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/normalization.csv",
+              "bytes": 1799,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.674Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "33a80e3cfda26b2a5e1f4109ae3b9a19777042c6ded027b5e310db7f5adb4e3d",
+              "version": "53bbd71beb12b44ddef10c8e5e6e2c287fc17fc019a26d371b826d5fdaf6cfc5",
+              "owner": "rho-plugins.media",
+              "kind": "media",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/plots/qc-and-response.pdf",
+              "bytes": 942465,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.698Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "9a6914ad0c390d50c17cc5e44505fe007d57b9ae59921359d9c3ca1ff4241323",
+              "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3",
+              "owner": "rho-plugins.table",
+              "kind": "table",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/results/full.csv",
+              "bytes": 2596572,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.723Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "230c31c35c5cc67999b349072f7a75ec13ef89b84f3b20a32675c377b0f2d7ad",
+              "version": "8138172b6c64fa968291c9a13e891c76b954dcb8de25c957e0687a338065abfa",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/results/without_N052611.csv",
+              "bytes": 2585438,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.747Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "07ba5aa916bf7eea43149f1d1abc6cebaae38a2c7ccfae7fa6c1726fbbf90aa3",
+              "version": "a53e2cdf703915770a127c0468c708b0023067f09ad83a6760de2fdd65a060b4",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/results/without_N061011.csv",
+              "bytes": 2582953,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.776Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "738b550b56065b38379dcb3b2a9303a85990a2f42e47628a3c58170a9c7cede7",
+              "version": "5359bd4e06af471807b11915512f1a52a2cd68f4b534191819f66e8663dcff4b",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/results/without_N080611.csv",
+              "bytes": 2590290,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.800Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "0aabd696e5606965e16b82fbe32433c43efa3d1df163c6899168ccb38b12dc47",
+              "version": "9a5ced60b612c5cad2dce2de36a21a65acbf80d82c7a1a318ac87f0bf11fa922",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/results/without_N61311.csv",
+              "bytes": 2584617,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.827Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "bd7b959beadaac64d26d5f27ae8b7784370de978ad31ce6819df71e8e6697cd5",
+              "version": "e08e287f5467082c07c28a41a9eea06789315ee7b2a62c7b7e25934295559dd1",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/sensitivity.csv",
+              "bytes": 1737020,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.858Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "2408265d9971b898875ea86f879fd8d7d3c565f914cc51624280fcf1d7dec50d",
+              "version": "ad51f4796543becbb61f9ebd0a285edddaae3d85351ddd1148590311e0412592",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/sessionInfo.txt",
+              "bytes": 1879,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.882Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "40392e76e4a1a883d7a8ddbd6533d0d9af9173d14ad055b9cecc25400be74181",
+              "version": "cc8b3a983ced2b5b7b0b9feee307d8e01cd4b99aba41b6ada88b2153c09a86b7",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/summary.json",
+              "bytes": 2038,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.907Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "389733f6633211c6ac389be5af82b70825d1c2245385e43bf075a0617bb423f9",
+              "version": "37fc6b3623b4a7432fe11602b8b97905e3e3ad25f9b000a5e43b941d02892ea6",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/versions.csv",
+              "bytes": 4477,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.931Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "25fe3395d7e4cf2cd0bdfdb5141f5c8da43d0fbc66880a35fd29cf4dc7ebf3bc",
+              "version": "be019c2d934b3cd7104fa185f4ab076f2ce5fff4cdb11214c242b87170a5ffb8",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/artifact_manifest.csv",
+              "bytes": 3061,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.955Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            },
+            {
+              "id": "88a556829a9224d76a4ae4258940d4c12004fb459c6d53198ca1648b98a0492b",
+              "version": "668a0604076a1a0c2e600105d44f35c800a28347821737bf98420fdde03857d3",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/396e800420985807295c2abb6780153bbd6f1da07c51da87cce780fbe161bef9/artifacts/complete.json",
+              "bytes": 276,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:36.976Z"
+              },
+              "codeDigest": "1de8a2e049444e74278d9374034264e21f39e88371273eac76f6f172eea75eeb",
+              "inputs": []
+            }
+          ]
+        },
+        "check-baseline": {
+          "operationId": "03828cf9-4e51-403b-a3ec-2ec601756007",
+          "core": {
+            "caller": "rho:70273313df4a6782dce2531fd4b3f3328eb10a6222a48139",
+            "requestId": "bcb0130fadf09f9f2b7e713f36c8080fa2bb176bfbfc53ad75e2147ad45a99b4"
+          },
+          "nativeRunId": "18defef470d77d90-949.2",
+          "integrity": {
+            "state": "verified",
+            "missing": [],
+            "completionDeclaration": "present",
+            "files": 2,
+            "checkedAt": "2026-10-16T11:27:45.767Z",
+            "manifestDigest": "14f5f417eb5730cb56027aa6d5461867994fb814a8edc729db0aa8bbc8a6e4d1"
+          },
+          "resources": [
+            {
+              "id": "e26f125f084fb1b441954ce23194fb4acf3fa24e7e123859af1ed70c6270e34f",
+              "version": "943084d73c50cb618555a8ae80837d41b5aae2f2cf5fa462630a156d05992691",
+              "owner": "rho-plugins.object",
+              "kind": "object",
+              "path": ".rho/plugins/runs/40391781792b562cdb5332964affd7e1c2e5482ce9baabed41bad322658dd364/artifacts/native.json",
+              "bytes": 21926,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:45.714Z"
+              },
+              "codeDigest": "7e3bf889dfbe9c9a3a4e96b1cdfd5f304e280586a0f60beb98ece652fba4a2fb",
+              "inputs": [
+                {
+                  "id": "b7902d4aea25d7ed7060df60d1972792ced8c6ccf9ab9329672a3f33bcc25adf",
+                  "version": "41373db9ce371e33f841263cd542256ad0305156eee6033f5c97fad53fce9441"
+                },
+                {
+                  "id": "a3a551bd091b04aa0e4b2df772185dc24ac5bd0b47500a74fa136e47502bed06",
+                  "version": "827a8ffa534cf1cab44130b014b81c8442426d8dde75109fa60a8a07724543e9"
+                }
+              ]
+            },
+            {
+              "id": "3242f573b2c9fbf47bc53c0aba6d525d3ebd2009f0da1e56e679f0487c3acd90",
+              "version": "ae7c12abfeb58d4799e478e5c6c327d96d98858fdaada694b896146f9ba7ad82",
+              "owner": "rho-plugins.object",
+              "kind": "object",
+              "path": ".rho/plugins/runs/40391781792b562cdb5332964affd7e1c2e5482ce9baabed41bad322658dd364/artifacts/arithmetic.json",
+              "bytes": 39523,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:27:45.740Z"
+              },
+              "codeDigest": "7e3bf889dfbe9c9a3a4e96b1cdfd5f304e280586a0f60beb98ece652fba4a2fb",
+              "inputs": [
+                {
+                  "id": "b7902d4aea25d7ed7060df60d1972792ced8c6ccf9ab9329672a3f33bcc25adf",
+                  "version": "41373db9ce371e33f841263cd542256ad0305156eee6033f5c97fad53fce9441"
+                },
+                {
+                  "id": "a3a551bd091b04aa0e4b2df772185dc24ac5bd0b47500a74fa136e47502bed06",
+                  "version": "827a8ffa534cf1cab44130b014b81c8442426d8dde75109fa60a8a07724543e9"
+                }
+              ]
+            }
+          ]
+        },
+        "shrinkage": {
+          "operationId": "bab6cbbe-0343-4aa2-aa1e-82a60bd58e61",
+          "core": {
+            "caller": "rho:70273313df4a6782dce2531fd4b3f3328eb10a6222a48139",
+            "requestId": "2363ec8e09be2426eefe5e6d61e5d708b08d2af5a9b20974381f8414c3511d5e"
+          },
+          "nativeRunId": "18defef470d77d90-949.4",
+          "integrity": {
+            "state": "verified",
+            "missing": [],
+            "completionDeclaration": "present",
+            "files": 7,
+            "checkedAt": "2026-10-16T11:30:10.147Z",
+            "manifestDigest": "4b3fb1f360cb6c7c01b8f40b9c350117cfffe8b510a27158c14ff99df76a2e69"
+          },
+          "resources": [
+            {
+              "id": "5cb6f82f49e49a67ebfa5696556833c933b0775aa9ff0158a16da2b0ef8bd6a0",
+              "version": "d8a98ea91f1c5829a219ed311313baf1867b9563b66c34ab6940468fafa2102d",
+              "owner": "rho-plugins.table",
+              "kind": "table",
+              "path": ".rho/plugins/runs/99efaa2296207e270fb7d92a772dff15b9d9c25852db82e1a44b55482b043cd5/artifacts/shrinkage.csv",
+              "bytes": 1907955,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:30:09.965Z"
+              },
+              "codeDigest": "44911ef95b3abd4cda266caa1d57baba470f99678a43c9d1bbe5bd842a339586",
+              "inputs": [
+                {
+                  "id": "0db6f703cb300d0aa13de81cbf10d41b0bcf5e4a53cd0903759503ed44f5bd70",
+                  "version": "cd0256321e088bd3cdd107f4cd433f42e6e810c0ca953c9c51b2d75402978797"
+                },
+                {
+                  "id": "9a6914ad0c390d50c17cc5e44505fe007d57b9ae59921359d9c3ca1ff4241323",
+                  "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3"
+                }
+              ]
+            },
+            {
+              "id": "a03f18a4fcc43f4430ff684f636510cf7ca853083c119af513740dd08f0eb741",
+              "version": "3f3f67f3882f86114879b23419434e004514ae787551f64c5fdd0633c6836871",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/99efaa2296207e270fb7d92a772dff15b9d9c25852db82e1a44b55482b043cd5/artifacts/shrinkage.rds",
+              "bytes": 754100,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:30:09.992Z"
+              },
+              "codeDigest": "44911ef95b3abd4cda266caa1d57baba470f99678a43c9d1bbe5bd842a339586",
+              "inputs": [
+                {
+                  "id": "0db6f703cb300d0aa13de81cbf10d41b0bcf5e4a53cd0903759503ed44f5bd70",
+                  "version": "cd0256321e088bd3cdd107f4cd433f42e6e810c0ca953c9c51b2d75402978797"
+                },
+                {
+                  "id": "9a6914ad0c390d50c17cc5e44505fe007d57b9ae59921359d9c3ca1ff4241323",
+                  "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3"
+                }
+              ]
+            },
+            {
+              "id": "89ec0be0c37fa5b65519d1d41fa3f1ba27521bb1e6f8a7aaa2ae57c9134ea5fc",
+              "version": "a073a67d30c6851b1ad4360ffa749786b20be4a5876fdd3a81780fc1fbd813e9",
+              "owner": "rho-plugins.media",
+              "kind": "media",
+              "path": ".rho/plugins/runs/99efaa2296207e270fb7d92a772dff15b9d9c25852db82e1a44b55482b043cd5/artifacts/shrinkage.pdf",
+              "bytes": 935853,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:30:10.016Z"
+              },
+              "codeDigest": "44911ef95b3abd4cda266caa1d57baba470f99678a43c9d1bbe5bd842a339586",
+              "inputs": [
+                {
+                  "id": "0db6f703cb300d0aa13de81cbf10d41b0bcf5e4a53cd0903759503ed44f5bd70",
+                  "version": "cd0256321e088bd3cdd107f4cd433f42e6e810c0ca953c9c51b2d75402978797"
+                },
+                {
+                  "id": "9a6914ad0c390d50c17cc5e44505fe007d57b9ae59921359d9c3ca1ff4241323",
+                  "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3"
+                }
+              ]
+            },
+            {
+              "id": "018fdf1e4ae74ec01ba0acd2d56f4fe9361a54dd7585d7ecac7acf817cfbe5d7",
+              "version": "c91d2c45e0503f364786f7315810beeaf55674e470496171e963e53c2c73676c",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/99efaa2296207e270fb7d92a772dff15b9d9c25852db82e1a44b55482b043cd5/artifacts/summary.json",
+              "bytes": 590,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:30:10.041Z"
+              },
+              "codeDigest": "44911ef95b3abd4cda266caa1d57baba470f99678a43c9d1bbe5bd842a339586",
+              "inputs": [
+                {
+                  "id": "0db6f703cb300d0aa13de81cbf10d41b0bcf5e4a53cd0903759503ed44f5bd70",
+                  "version": "cd0256321e088bd3cdd107f4cd433f42e6e810c0ca953c9c51b2d75402978797"
+                },
+                {
+                  "id": "9a6914ad0c390d50c17cc5e44505fe007d57b9ae59921359d9c3ca1ff4241323",
+                  "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3"
+                }
+              ]
+            },
+            {
+              "id": "a66af9f54b13230853de228fff7ccef8bfbfa5156afacd8f3579c0c67e184300",
+              "version": "118353bd59b8a4b8d83c5a06d4ccb9e8c40a5a0a2a4a9d216df88a45fae10db6",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/99efaa2296207e270fb7d92a772dff15b9d9c25852db82e1a44b55482b043cd5/artifacts/sessionInfo.txt",
+              "bytes": 2458,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:30:10.067Z"
+              },
+              "codeDigest": "44911ef95b3abd4cda266caa1d57baba470f99678a43c9d1bbe5bd842a339586",
+              "inputs": [
+                {
+                  "id": "0db6f703cb300d0aa13de81cbf10d41b0bcf5e4a53cd0903759503ed44f5bd70",
+                  "version": "cd0256321e088bd3cdd107f4cd433f42e6e810c0ca953c9c51b2d75402978797"
+                },
+                {
+                  "id": "9a6914ad0c390d50c17cc5e44505fe007d57b9ae59921359d9c3ca1ff4241323",
+                  "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3"
+                }
+              ]
+            },
+            {
+              "id": "d03e9a95dc15f6318800a5247088ca9abc2306c5344fb4ec071ea185a4acf610",
+              "version": "06d214840988537a8cf0331345f576d3451de2b5e569e5b3ea658c783f091e15",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/99efaa2296207e270fb7d92a772dff15b9d9c25852db82e1a44b55482b043cd5/artifacts/artifact_manifest.csv",
+              "bytes": 471,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:30:10.090Z"
+              },
+              "codeDigest": "44911ef95b3abd4cda266caa1d57baba470f99678a43c9d1bbe5bd842a339586",
+              "inputs": [
+                {
+                  "id": "0db6f703cb300d0aa13de81cbf10d41b0bcf5e4a53cd0903759503ed44f5bd70",
+                  "version": "cd0256321e088bd3cdd107f4cd433f42e6e810c0ca953c9c51b2d75402978797"
+                },
+                {
+                  "id": "9a6914ad0c390d50c17cc5e44505fe007d57b9ae59921359d9c3ca1ff4241323",
+                  "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3"
+                }
+              ]
+            },
+            {
+              "id": "d995bd9824e14c50a8402783ead2fa451d91e9dafe1522b7d32446e568419104",
+              "version": "20e3d46d5dc6a208c10c1f66c3b022298405a6722856e5740f40f7355736135b",
+              "owner": "rho-plugins.file",
+              "kind": "file",
+              "path": ".rho/plugins/runs/99efaa2296207e270fb7d92a772dff15b9d9c25852db82e1a44b55482b043cd5/artifacts/complete.json",
+              "bytes": 226,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:30:10.118Z"
+              },
+              "codeDigest": "44911ef95b3abd4cda266caa1d57baba470f99678a43c9d1bbe5bd842a339586",
+              "inputs": [
+                {
+                  "id": "0db6f703cb300d0aa13de81cbf10d41b0bcf5e4a53cd0903759503ed44f5bd70",
+                  "version": "cd0256321e088bd3cdd107f4cd433f42e6e810c0ca953c9c51b2d75402978797"
+                },
+                {
+                  "id": "9a6914ad0c390d50c17cc5e44505fe007d57b9ae59921359d9c3ca1ff4241323",
+                  "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3"
+                }
+              ]
+            }
+          ]
+        },
+        "check-shrinkage": {
+          "operationId": "ab0b7aad-3e3b-48fc-9edf-5bb1cf2f3163",
+          "core": {
+            "caller": "rho:70273313df4a6782dce2531fd4b3f3328eb10a6222a48139",
+            "requestId": "e02dee1883a1b578fe1493ac02cab3a78bd9beb6a1a9b9bedf379e9f6c8927a0"
+          },
+          "nativeRunId": "18defef470d77d90-949.5",
+          "integrity": {
+            "state": "verified",
+            "missing": [],
+            "completionDeclaration": "present",
+            "files": 1,
+            "checkedAt": "2026-10-16T11:30:13.149Z",
+            "manifestDigest": "c6d5b469356916f8edd1348a6f067a512865e051b78d598f31ee64dda2cfaa02"
+          },
+          "resources": [
+            {
+              "id": "d6a829f344cac023b36375a3ee795a347ec25700c2e5879077c6766c4caeea7d",
+              "version": "48336d4cf09f5171986cfda71947c2eda3b8842f1a6bc8e94c0d2f2079f5b4d6",
+              "owner": "rho-plugins.object",
+              "kind": "object",
+              "path": ".rho/plugins/runs/cedccd66f09d8f3bf21209140c036a2f322b4ea65f6564251adb04c87402c8e6/artifacts/native.json",
+              "bytes": 315,
+              "availability": "available",
+              "coverage": {
+                "completionDeclaration": "present",
+                "observedAt": "2026-10-16T11:30:13.121Z"
+              },
+              "codeDigest": "93d41353be7982e596426b26627748ecb251e605e06e55132220e9a70aac9dde",
+              "inputs": [
+                {
+                  "id": "dfac7c5e3a00e2a4061920ee6a6fd1c6bc4027964abbe74a724f21c04635447f",
+                  "version": "b1a2803c34c8da83e4b691e5fd372697093f3543bec0be41e190dd1c81bad019"
+                },
+                {
+                  "id": "9a6914ad0c390d50c17cc5e44505fe007d57b9ae59921359d9c3ca1ff4241323",
+                  "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "recovery": {
+      "reportSha256": "af4c3b843218af3645e400783f12b118b833eecbda85c3544755b1b67998d9d1",
+      "status": "passed",
+      "checks": [
+        "real partial snapshot has 4 observed rows and no completion declaration",
+        "concurrent action limit rejects new work while preserving the original request",
+        "closing observation, view and external binding does not cancel the original analysis",
+        "rebinding observes the original task without submitting it",
+        "Host loss retains partial data, original identity, unknown outcome and unconfirmed cancellation",
+        "actual partial export restores bytes and provenance without starting a Host",
+        "explicit cancel acknowledgement and independently observed process-group release are separate facts"
+      ],
+      "originalOperationId": "14f2fb53-ca35-4d17-bf5b-950a83f7c540",
+      "originalCoreIdentity": {
+        "caller": "rho:0bedbc2bcad2807422410183f3a4064ab496297306adb53c",
+        "requestId": "37ffdc2c887fee5f482d3858e0a3540e9b4e2fbd2149be2eb036e5c0e4dc44ee"
+      },
+      "originalNativeRunId": "18deff20a2abe230-4489.1",
+      "execution": "unknown",
+      "unconfirmedCancelCliExit": 3,
+      "partialRows": 4,
+      "partial": {
+        "id": "f0dcde1de66cf386e64cb10ce6448d907d57ac92474bc4694654f41134e89538",
+        "version": "47305a5d6ee8f28955190b1a8f22bc3f045145fc51aa3634f603c0e413985807",
+        "owner": "rho-plugins.table",
+        "kind": "table",
+        "path": ".rho/plugins/runs/7f7db65b417872e232b664932f91b07b3d35b8decb2e85dd7adbe12597bc820d/artifacts/partial.csv",
+        "bytes": 53,
+        "availability": "partial",
+        "coverage": {
+          "completionDeclaration": "absent",
+          "observedAt": "2026-10-16T11:30:17.598Z"
+        },
+        "codeDigest": "a5f69895b308309bb6b883cbfdbcaf0a0f28507646d81c4f66f1e3e616038d8e",
+        "inputs": []
+      },
+      "confirmedCancel": {
+        "operationId": "cancel-check",
+        "core": {
+          "caller": "rho:4b05052f09b962c38b7865a80584a6bd047701f5ca0047f7",
+          "requestId": "86e820e1dc4b41d4ddfc7ad8c32b7786f046398a587318b891f092d57508a584"
+        },
+        "execution": "failed",
+        "native": {
+          "run_id": "18deff20d75be7c8-4548.1",
+          "request_id": "86e820e1dc4b41d4ddfc7ad8c32b7786f046398a587318b891f092d57508a584",
+          "status": {
+            "Finished": {
+              "exit": {
+                "Signal": 15
+              },
+              "exit_observed_at": "2026-10-16T11:30:18.436Z",
+              "group_released": true,
+              "pid": 4551,
+              "spawned_at": "2026-10-16T11:30:18.294Z"
+            }
+          },
+          "terminal": true,
+          "held": false,
+          "retention": "Removable",
+          "cancel": {
+            "kill_sent_at": null,
+            "reason": "Caller",
+            "requested_at": "2026-10-16T11:30:18.424Z",
+            "signal_error": null,
+            "term_sent_at": "2026-10-16T11:30:18.430Z"
+          }
+        }
+      },
+      "shutdown": [
+        {
+          "project": "partial-project",
+          "ownership": "service",
+          "shutdown": null,
+          "confirmed": false
+        },
+        {
+          "project": "cancel-project",
+          "ownership": "service",
+          "shutdown": {
+            "not_confirmed": [],
+            "requests_still_open": 0,
+            "signal": 15,
+            "signal_error": null,
+            "stopped": []
+          },
+          "confirmed": true
+        }
+      ]
+    }
+  },
+  "minimalInstallation": {
+    "reportSha256": "6a700c362b4d8e80971d57cf1bd3848113cd2bd0a4a0b14b8c23c46aabb1921b",
+    "status": "passed",
+    "artifactSha256": "81e16aa388bf03ead26e4adbd9a2709816eea693b7325837ce4ab0399b141aae",
+    "checks": [
+      "Only contracts/documents/files installed; no CSV parser, MCP SDK, R plugin or aggregate package.",
+      "Missing optional packages report unavailable; Unicode draft/edit/export and project observations work without R or Host startup."
+    ],
+    "physicalPackages": [
+      "contracts",
+      "documents",
+      "files"
+    ]
+  },
+  "compatibility": {
+    "frozenV1AndV2SchemasAndFixtures": "Unchanged in this split.",
+    "retainedRequests": "Original immutable intent lookup precedes provider availability; no replacement dispatch.",
+    "removedPlugins": "Draft/undo, registered bytes, selections, component references and native identities survive disable/reselection.",
+    "workspaceRestore": [
+      1,
+      2
+    ]
+  },
+  "evidenceRetention": {
+    "projection": "Credentials, absolute machine paths and raw tool transcripts excluded; raw reports stay in ignored local trial directories.",
+    "rawReportsPublished": false,
+    "failedTrials": [
+      {
+        "stage": "first application packaging check",
+        "result": "failed",
+        "reason": "The examples path predicate also matched third-party MCP SDK examples; corrected to inspect first-party recipes. The failed candidate was not accepted.",
+        "artifactSha256": "e400f092475286a58785661159a00d2a2987e9e10192d9c539315c1b842a6f39"
+      }
+    ],
+    "historicalFailures": "Earlier extraction/scientific failures and v0.1/v0.2 evidence remain unchanged."
+  },
+  "limits": [
+    "Batch Rscript and exported JSON object snapshots, without live variables or R-memory recovery.",
+    "Media metadata and original bytes; no image/PDF decoder or UI rendering.",
+    "Generic byte integrity, project domain checks and model judgment are separate facts.",
+    "The paired installed trial uses one simulation, without replacing the earlier 200-simulation record.",
+    "Other platforms, browser behavior, registry publication and signing remain unverified/unselected."
+  ]
+}
