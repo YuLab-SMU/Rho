@@ -6,7 +6,8 @@ import type { Files, fileLimits, DeclarationValidator } from '@rho-workspace/plu
 import type { Tables, tableLimits } from '@rho-workspace/plugin-tables';
 import type { Charts, chartLimits } from '@rho-workspace/plugin-charts';
 import type { Media } from '@rho-workspace/plugin-media';
-import type { Objects } from '@rho-workspace/plugin-r';
+import { executionInputSchema } from './entry-contracts.js';
+import type { executionLimits, Objects } from '@rho-workspace/plugin-r';
 import type { AgentContext } from '@rho-workspace/plugin-agent';
 
 // A finite application selection, not a discovery service or an arbitrary code
@@ -29,6 +30,7 @@ export interface PluginConfig {
   documents?: Partial<typeof documentLimits>;
   resources?: Partial<typeof fileLimits & typeof tableLimits & typeof chartLimits>;
   maxRetainedMetadataBytes?: number;
+  r?: Partial<typeof executionLimits>;
   maxContexts?: number; maxBindings?: number; maxActivities?: number; maxContextBytes?: number;
 }
 const only = (defaults: object, values: object = {}) => Object.fromEntries(Object.entries(values).filter(([k, v]) => k in defaults && v !== undefined));
@@ -44,7 +46,7 @@ export class Plugins {
       if (status.selected) {
         try {
           const module = await entries[id]();
-          requireThat(module.plugin.id === id && module.plugin.package === status.package && module.plugin.version === '0.3.0', 'condition', 'Plugin identity/version does not match this application selection.');
+          requireThat(module.plugin.id === id && module.plugin.package === status.package && module.plugin.version === '0.4.0', 'condition', 'Plugin identity/version does not match this application selection.');
           (this.modules as any)[id] = module;
           status.version = module.plugin.version; status.state = 'available'; delete status.reason;
         } catch { status.reason = 'Selected plugin package is missing, incompatible or cannot be loaded.'; }
@@ -75,9 +77,13 @@ export class Plugins {
   }
   get catalog() {
     const descriptors = Object.values(this.modules).map(m => m.plugin as PluginDescriptor);
-    return { version: '0.3.0', plugins: this.availability, actions: descriptors.flatMap(p => p.actions ?? []), components: descriptors.flatMap(p => p.components ?? []), capabilities: descriptors.flatMap(p => p.capabilities), ...(this.modules.agent ? { agent: this.modules.agent.plugin.agent } : {}) };
+    const declared = descriptors.flatMap(p => p.actions ?? []);
+    const actions = declared.filter(a => (a.requires ?? []).every((id: PluginId) => this.modules[id])).map(a => a.id === 'r.execute' ? { ...a, inputSchema: executionInputSchema } : a);
+    const unavailableActions = declared.filter(a => !actions.some(b => b.id === a.id)).map(a => ({ id: a.id, version: a.version, state: 'unavailable', missing: a.requires.filter((id: PluginId) => !this.modules[id]) }));
+    return { version: '0.4.0', plugins: this.availability, actions, unavailableActions, components: descriptors.flatMap(p => p.components ?? []), capabilities: [...descriptors.flatMap(p => p.capabilities), ...actions.flatMap(a => a.capabilities ?? [])], ...(this.modules.agent ? { agent: this.modules.agent.plugin.agent } : {}) };
   }
   supports(method: string) {
+    if (method === 'action.submit') return this.catalog.actions.some(a => a.id === 'r.execute');
     const owner = method.startsWith('document.') ? 'documents' : method.startsWith('requirements.') ? 'requirements' : method === 'action.submit' || method === 'object.read' ? 'r' : method === 'data.plot' ? 'charts' : method.startsWith('data.') || method === 'selection.set' ? 'tables' : method.startsWith('media.') ? 'media' : method.startsWith('context.') || method.startsWith('binding.') || method === 'session.grant' ? 'agent' : method.startsWith('resource.') || method === 'artifact.check' ? 'files' : undefined;
     return !owner || !!this.modules[owner as PluginId];
   }

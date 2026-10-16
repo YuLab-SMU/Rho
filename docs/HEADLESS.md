@@ -1,8 +1,11 @@
-# Rho local backend 0.3
+# Rho local backend 0.4
 
 Rho selects eight independent capability packages: documents, files, R,
-requirements, tables, media, charts and Agent. Shared contracts have no capability
-state or catalog. The reusable backend exposes `/api/v2` to calling clients and the project-scoped
+requirements, tables, media, charts and Agent. Shared contracts contain generic envelopes/service ports and ordinary-file
+primitives. Each resource/requirement/script schema belongs to its provider
+through a pure `./contract` entry; contracts has no format registry, capability
+state or catalog. Rho retains its selected v2 schema snapshot and checks provider
+parity without importing absent implementations. The reusable backend exposes `/api/v2` to calling clients and the project-scoped
 stdio MCP adapter. Its sole registered execution action is `r.execute`: an
 explicit project script, requirements, arguments and output declarations.
 Analysis recipes and scientific checkers are external consumers, excluded from
@@ -10,6 +13,7 @@ the application and Plugins npm packages. Browser UI remains separate work.
 See [extraction](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-EXTRACTION.md)
 and [extraction acceptance](EXTRACTION-ACCEPTANCE.md). The
 [split acceptance](PLUGIN-SPLIT-ACCEPTANCE.md) records the independent package boundary.
+The [0.4 boundary review](PLUGIN-BOUNDARY-ACCEPTANCE.md) records the follow-up decoupling.
 
 ## Install and start
 
@@ -22,7 +26,7 @@ An unavailable Rscript returns an unknown dependency probe and prevents executio
 Other platforms and npm registry publication are unverified.
 
 ```sh
-npm install --prefix /absolute/install /absolute/rho-workspace-local-0.3.0.tgz
+npm install --prefix /absolute/install /absolute/rho-workspace-local-0.4.0.tgz
 /absolute/install/node_modules/.bin/rho \
   --root /absolute/projects --state-dir /absolute/service-state
 ```
@@ -37,12 +41,15 @@ most 103 UTF-8 bytes. A longer path fails before Host startup.
 
 `--plugins documents,files` selects only those owners; `--plugins ""` selects
 none. The default selects all eight. The allowlisted package identities and exact
-0.3.0 versions are checked before wiring their typed service ports. Requirements
-and Files are required by R; Files by Tables/Media; Tables by Charts. Agent
+0.4.0 versions are checked before wiring their typed service ports. Files is required by R object reads and resource resolution; Requirements is
+required only by the `r.execute` action. Buffer execution also requires Documents.
+Files is required by Tables/Media; Tables by Charts. Agent
 context requests need only the sources they actually use. Missing/incompatible
 packages and missing required services report `unavailable`; nothing is installed
 implicitly. `capability.list` returns selected package availability and only the
-available owners' actions/entries. Wire API 2.0 and action/view 0.2.0 remain stable.
+available owners' actions/entries. `unavailableActions` names missing action
+providers. Selecting only Files/R retains `r-objects` and object reads without
+Requirements, Documents or an R installation; execution stays unavailable. Wire API 2.0 and action/view 0.2.0 remain stable.
 
 Owner removal preserves retained request identities, bytes, drafts/undo and layout
 references. Existing accepted intent delivery returns its original record;
@@ -195,13 +202,14 @@ Restoration preserves missing entries without installing or executing them.
 
 ## Budgets, verification and assembly
 
-Configure scalar service/request limits and nested `documents`, `resources`
-and `workspace` objects through `--limits`. Snapshots expose selected limits.
+Configure scalar service/request limits and nested `documents`, `resources`,
+`r` and `workspace` objects through `--limits`. Snapshots expose selected limits.
 
 | Protected resource | Default limit | Exhaustion |
 | --- | --- | --- |
 | HTTP/queue | `maxRequestBytes` 1 MiB; `maxQueue` 32 | Reject new input; retain original identity. |
 | Managed intents/code | `maxConcurrentActions` 2; `maxOperations` 256; `maxCodeBytes` 1 MiB | Reject additional work; unknown native work occupies a slot. |
+| R script snapshots | `r.maxScriptBytes` 1 MiB, independent of Documents | Reject planning for oversized disk/buffer code before dispatch. |
 | Logs/events | `maxLogPageBytes` 64 KiB; `eventRetention` 256; `maxSubscriptions` 8; `maxEventBytes` 64 KiB | Reject oversized pages/subscriptions; slow or old observers receive a gap. |
 | Context/Agent | `maxContexts` 128; `maxContextBytes` 1 MiB; `maxBindings` 64; `maxActivities` 256 | Reject new context/bindings; evict oldest receipts with cursor facts. |
 | Documents | 64 buffers; 1 MiB each; 8 MiB total and undo per buffer | Reject mutation; preserve acknowledged content/undo. |
@@ -225,7 +233,7 @@ RHO_CORE_BINARY=/absolute/rho-core npm run recovery
 RHO_CORE_BINARY=/absolute/rho-core npm run agent
 npm run pack:local -- --core /absolute/rho-core \
   --core-source /absolute/Rho-core --plugins /absolute/Rho-plugins
-node scripts/install-acceptance.mjs /absolute/rho-workspace-local-0.3.0.tgz \
+node scripts/install-acceptance.mjs /absolute/rho-workspace-local-0.4.0.tgz \
   /absolute/ordinary-project /absolute/paired-project
 ```
 
@@ -237,7 +245,11 @@ The packer rejects dirty selected build inputs unless explicitly recording
 `--allow-dirty`, builds the Node owners, stages production dependencies and
 Core, and checks that project recipes/native R scripts and the old aggregate
 package are absent. `--select-plugins documents,files` builds a reduced artifact
-with other capability packages physically absent. Only Tables installs csv-parse;
+with other capability packages physically absent. A separate
+`--select-plugins files,r` artifact exercises exported object reads with no editor
+or dependency checker installed. `scripts/plugin-install-acceptance.mjs` accepts
+either reduced tarball and checks its physical dependency inventory and no-Host
+behavior. Only Tables installs csv-parse;
 only Agent installs the MCP SDK. The sidecar
 records source commits/trees, build-input and lock hashes, binary/package digests
 and platform, plus each selected plugin tarball identity. It does not build Core, sign or publish to a registry. Direct

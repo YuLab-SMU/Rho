@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/local",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "Rho versioned local backend and headless client",
   "license": "AGPL-3.0-only",

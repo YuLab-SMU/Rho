@@ -72,3 +72,27 @@ test('removing providers preserves drafts, native identity, table bytes and comp
     assert.equal((await c.call('capability.list', { projectId: p.id })).host.exitCode, 3);
   } finally { await service.close(); }
 });
+
+test('exported R objects remain usable without requirements, Documents or an R installation', async () => {
+  const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-object-only-'));
+  const service = await new RhoService({ root, stateDir: path.join(root, 'state'), ...await runtime(undefined, path.join(root, 'absent-Rscript')), plugins: ['files', 'r'], r: { maxScriptBytes: 8 } }).start();
+  try {
+    const c = new RhoClient({ url: service.url, token: service.adminToken });
+    const p = await c.call('project.create', { name: 'project' });
+    const catalog = await c.call('capability.list', { projectId: p.id });
+    assert.equal(catalog.plugins.find(p => p.id === 'r').state, 'available');
+    assert.deepEqual(catalog.actions, []);
+    assert.deepEqual(catalog.unavailableActions[0].missing, ['requirements']);
+    assert.ok(catalog.capabilities.includes('r-objects'));
+    assert.ok(!catalog.capabilities.includes('r-execution'));
+    const bytes = '{"value":"中文 🧬"}';
+    await fs.writeFile(path.join(p.root, 'object.json'), bytes);
+    const resource = await c.call('resource.register', { projectId: p.id, expectedDigest: digest(bytes), declaration: { path: 'object.json', kind: 'object', format: { encoding: 'json', observation: 'exported-snapshot', classes: ['list'] } } });
+    assert.equal((await c.call('object.read', { projectId: p.id, resource: { id: resource.id, version: resource.version } })).value.value, '中文 🧬');
+    await assert.rejects(c.call('action.submit', { projectId: p.id, operationId: 'unavailable', action: 'r.execute', actionVersion: '0.2.0', input: { script: { kind: 'disk', path: 'absent.R', digest: digest('') }, args: [], requirements: [], artifacts: [], completion: null } }), e => e.error.kind === 'unavailable');
+    const observation = await c.call('observation.snapshot', { projectId: p.id });
+    assert.equal(observation.host.exitCode, 3);
+    assert.deepEqual(observation.operations, []);
+    assert.deepEqual(observation.limits.r, { maxScriptBytes: 8 });
+  } finally { await service.close(); }
+});
