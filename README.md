@@ -25,8 +25,9 @@ application use. Rho connects those components to the Core's public capabilities
 A specific analysis workflow is project code or an acceptance example, not a
 plugin. The [plugin extraction plan](docs/PLUGIN-EXTRACTION.md) applies the
 [capability model](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-MODEL.md)
-to the current backend. The working 0.1 prototype still has scientific coupling;
-reusable contracts and a non-gene consumer must pass before plugin UI acceptance.
+to the backend. Version 0.2 removes workflow actions and recipes from the base
+package; an ordinary R project and the original analysis use the same declared
+execution, dependency, resource and selection contracts.
 
 ## Technology direction
 
@@ -39,7 +40,7 @@ isolated MCP Apps host when needed.
 
 The versioned local backend, npm launcher, client and read-only state fixtures are
 implemented. [Start the headless service](docs/HEADLESS.md) or inspect its
-[acceptance record](docs/BACKEND-ACCEPTANCE.md). The browser shell and component
+[extraction acceptance](docs/EXTRACTION-ACCEPTANCE.md). The browser shell and component
 views remain to be implemented; backend checks do not establish product release
 acceptance. [Status](docs/STATUS.md) records the current evidence and limits.
 

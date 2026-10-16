@@ -12,9 +12,9 @@ before independent UI development. The
 [design checklist](DESIGN-PRIORITIES.md) owns interaction-design deliverables.
 The headless service, shared state, real analysis and continuity are implemented;
 [backend acceptance](BACKEND-ACCEPTANCE.md) records their actual checks. The current
-vertical prototype still has workflow coupling. [Plugin extraction](PLUGIN-EXTRACTION.md)
-precedes plugin UI acceptance; browser implementation and integrated product
-acceptance remain pending.
+0.2 backend extracts the reusable capabilities; [extraction acceptance](EXTRACTION-ACCEPTANCE.md)
+records two real R consumers and the package boundary. Browser implementation and
+integrated product acceptance remain pending.
 
 ## First integrated flow
 
@@ -97,12 +97,13 @@ desktop windows are not a condition of this browser release.
 
 Reuse the R1–R14 design for backend scenarios without waiting for UI implementation.
 Backend acceptance does not establish browser interaction or product release acceptance.
-It also does not establish the new reusable plugin boundary. The
+The separate extraction checks establish the bounded reusable headless subset. The
 [Plugins model](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-MODEL.md)
 owns that design; the [extraction plan](PLUGIN-EXTRACTION.md) owns implementation
-gates and preservation of original v1 requests/evidence. This work is pending.
+gates and preservation of original v1 requests/evidence. UI entries remain pending.
 The selected Node/MCP/R versions, immutable source/artifact identities and headless
-results are recorded in [backend acceptance](BACKEND-ACCEPTANCE.md). Browser library
+results are recorded in [extraction acceptance](EXTRACTION-ACCEPTANCE.md), with the
+original v1 composition retained in [backend acceptance](BACKEND-ACCEPTANCE.md). Browser library
 versions and the complete product composition still require selection and acceptance.
 Keep original failure evidence and distinguish a designed flow from a tested one.
 

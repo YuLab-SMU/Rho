@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/local",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Rho versioned local backend and headless client",
   "license": "AGPL-3.0-only",
@@ -21,7 +21,9 @@
     "fixtures",
     "vendor",
     "LICENSE",
-    "scripts",
+    "scripts/acceptance.mjs",
+    "scripts/recovery-acceptance.mjs",
+    "scripts/support.mjs",
     "docs/HEADLESS.md"
   ],
   "scripts": {
@@ -31,8 +33,7 @@
     "prepack": "npm run build && node scripts/check-pack.mjs",
     "pack:local": "node scripts/pack-local.mjs",
     "recovery": "node scripts/recovery-acceptance.mjs",
-    "agent": "node scripts/agent-experiment.mjs",
-    "repair": "node scripts/agent-repair.mjs"
+    "agent": "node scripts/agent-experiment.mjs"
   },
   "dependencies": {
     "@rho-workspace/headless": "file:../Rho-plugins",

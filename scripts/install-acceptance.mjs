@@ -1,17 +1,18 @@
 // Installs a selected tarball outside all three source checkouts. No registry publish.
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 const artifact = path.resolve(process.argv[2] ?? '');
 assert.ok(artifact.endsWith('.tgz'), 'Select the assembled application tarball.');
+const examples = process.argv.slice(3).map(p => path.resolve(p));
+assert.equal(examples.length, 2, 'Select the ordinary and original analysis project directories explicitly.');
 const root = await fs.mkdtemp(path.join(await fs.realpath('/tmp'), 'rho 中文 '));
 const install = path.join(root, 'installation'); await fs.mkdir(install);
 const env = { ...process.env }; delete env.RHO_CORE_BINARY; delete env.RHO_PACKAGE_ROOT;
-const report = { schemaVersion: 1, status: 'running', platform: process.platform + '-' + process.arch, node: process.version, artifactSha256: createHash('sha256').update(await fs.readFile(artifact)).digest('hex'), checks: [] };
+const report = { schemaVersion: 2, status: 'running', platform: process.platform + '-' + process.arch, node: process.version, artifactSha256: createHash('sha256').update(await fs.readFile(artifact)).digest('hex'), checks: [] };
 async function command(program, args, cwd, maxMs = 900000) {
   const child = spawn(program, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '', errors = '';
@@ -43,23 +44,37 @@ try {
   const c = await RhoClient.fromFile(path.join(state, 'connection.json'));
   const p = await c.call('project.create', { name: 'installed-project' });
   assert.equal((await c.call('project.open', { path: 'installed-project' })).host.exitCode, 3);
-  assert.equal((await c.call('requirements.check', { projectId: p.id, action: 'airway.analyze' })).status, 'unknown');
+  assert.equal((await c.call('requirements.check', { projectId: p.id, requirements: [] })).status, 'unknown');
   assert.equal((await c.call('document.open', { projectId: p.id, path: 'draft.R' })).version, 1);
   assert.equal((await fs.stat(path.join(state, 'connection.json'))).mode & 0o077, 0);
   const exit = new Promise(resolve => cli.once('close', resolve)); cli.kill('SIGTERM'); assert.equal(await exit, 0); cli = undefined;
-  report.checks.push('Actual npm install, bin launch without R, private credential, project/document open without Host, unknown action dependencies, bundled Core selected.');
-  for (const [script, directory] of [['acceptance.mjs', 'science'], ['recovery-acceptance.mjs', 'recovery'], ['agent-experiment.mjs', 'agent'], ['agent-repair.mjs', 'repair']]) {
+  report.checks.push('Actual npm install, bin launch without R, private credential, project/document open without Host, unknown selected R runtime, bundled Core selected.');
+  const entries = [
+    { script: 'acceptance.mjs', directory: 'ordinary', example: examples[0] },
+    { script: 'acceptance.mjs', directory: 'original-analysis', example: examples[1] },
+    { script: 'recovery-acceptance.mjs', directory: 'recovery' }
+  ];
+  for (const { script, directory, example } of entries) {
+    const selectedProject = path.join(root, 'input-' + directory);
+    if (example) await fs.cp(example, selectedProject, { recursive: true });
     const target = path.join(root, directory);
-    const output = await command(process.execPath, [path.join(pkg, 'scripts', script), target], root);
+    const output = await command(process.execPath, [path.join(pkg, 'scripts', script), target, ...(example ? [selectedProject] : [])], root);
     const result = JSON.parse(await fs.readFile(path.join(target, 'report.json'), 'utf8'));
-    assert.ok(result.status === 'passed' || (result.experiment && result.bufferChangedByAgent && result.contextFetched && result.exitCode === 0));
+    assert.equal(result.status, 'passed');
     report[directory] = result;
     report.checks.push('Installed ' + script + ' passed.');
     process.stdout.write(output);
   }
-  const fixtures = JSON.parse(await fs.readFile(path.join(pkg, 'fixtures/v1/states.json'), 'utf8'));
+  const fixtures = JSON.parse(await fs.readFile(path.join(pkg, 'fixtures/v2/states.json'), 'utf8'));
   assert.equal(fixtures.readOnly, true); assert.ok(fixtures.cases.length >= 9);
-  report.checks.push('Versioned protocol and read-only state fixtures shipped.');
+  assert.equal(fixtures.apiVersion, '2.0');
+  await fs.access(path.join(pkg, 'protocol/v1.json')); await fs.access(path.join(pkg, 'protocol/v2.json'));
+  const plugin = path.join(pkg, 'node_modules/@rho-workspace/headless');
+  const pluginFiles = await fs.readdir(plugin);
+  assert.equal(pluginFiles.includes('examples'), false); assert.equal(pluginFiles.includes('headless'), false);
+  const source = await fs.readFile(path.join(plugin, 'dist/analysis.js'), 'utf8');
+  assert.equal(/airway|DESeq2|apeglm|shrink|recipePath/.test(source), false);
+  report.checks.push('Versioned v1/v2 contracts and inert v2 states shipped; base package contains no project recipe or scientific native script.');
   report.status = 'passed';
 } catch (e) { report.status = 'failed'; report.failure = e.message; process.exitCode = 1; }
 finally {

@@ -18,12 +18,15 @@ test('export/restore verifies actual bytes, drafts, undo, stable selection and u
     let d = await call('document.open', { path: 'analysis.R' });
     d = await call('document.edit', { documentId: d.id, expectedVersion: d.version, edits: [{ from: 0, to: 0, insert: '# 中文 🧬 unsaved\n' }], undoGroup: 'draft' });
     await fs.writeFile(path.join(p.root, 'fixture.csv'), 'gene_id,symbol,baseMean,log2FoldChange\ng1,KLF15,5,2\n');
-    const resource = await new Resources(p.root, p.id).register('fixture.csv', { operationId: 'contract-fixture', evidence: 'Synthetic transport test, no scientific claim.' }, 'partial');
+    const resource = await new Resources(p.root, p.id).register('fixture.csv', { operationId: 'contract-fixture', evidence: 'Synthetic transport test, no scientific claim.' }, 'partial', {}, { path: 'fixture.csv', kind: 'table', format: { encoding: 'csv', columns: [{ name: 'gene_id', type: 'string', nullValues: [] }, { name: 'symbol', type: 'string', nullValues: [] }, { name: 'baseMean', type: 'number', nullValues: [''] }, { name: 'log2FoldChange', type: 'number', nullValues: [''] }], key: { column: 'gene_id', namespace: 'fixture-entities' } } });
     const ref = { id: resource.id, version: resource.version };
     await call('selection.set', { resource: ref, entities: ['g1'] });
-    const view = { id: 'table', component: 'rho.table', version: '0.1.0', props: { title: 'Result' }, bindings: { data: ref }, selection: ['g1'] };
+    const view = { id: 'table', component: 'rho.table', version: '0.2.0', props: { title: 'Result' }, bindings: { data: ref }, selection: ['g1'] };
     await assert.rejects(call('composition.put', { compositionId: 'wrong', expectedVersion: 0, views: [{ ...view, component: 'rho.editor' }], layout: {} }), e => e.error.kind === 'invalid');
-    const views = [view, { id: 'missing', component: 'future.view', version: '9.0.0', props: {}, bindings: { data: ref } }, { id: 'editor', component: 'rho.editor', version: '0.1.0', props: { title: 'Script' }, bindings: { document: { documentId: d.id, version: d.version } } }];
+    const scatter = { ...view, component: 'rho.scatter', props: { title: 'Explicit axes', x: 'baseMean', y: 'log2FoldChange' } };
+    await call('composition.put', { compositionId: 'scatter', expectedVersion: 0, views: [scatter], layout: {} });
+    await assert.rejects(call('composition.put', { compositionId: 'bad-scatter', expectedVersion: 0, views: [{ ...scatter, props: { ...scatter.props, x: 'symbol' } }], layout: {} }), e => e.error.kind === 'condition');
+    const views = [view, { id: 'missing', component: 'future.view', version: '9.0.0', props: {}, bindings: { data: ref } }, { id: 'editor', component: 'rho.editor', version: '0.2.0', props: { title: 'Script' }, bindings: { document: { documentId: d.id, version: d.version } } }];
     const comp = await call('composition.put', { compositionId: 'workspace', expectedVersion: 0, views, layout: { direction: 'horizontal' } });
     assert.equal(comp.availability.missing.state, 'unavailable');
     await assert.rejects(call('composition.put', { compositionId: 'workspace', expectedVersion: 0, views, layout: {} }), e => e.error.kind === 'stale');
@@ -36,7 +39,7 @@ test('export/restore verifies actual bytes, drafts, undo, stable selection and u
     assert.equal(restored.execution, 'not-replayed'); assert.equal(restored.documents[0].state, 'available');
     assert.equal(restored.resources[0].state, 'available'); assert.equal(restored.selection.state, 'available');
     const draft = await c.call('document.read', { projectId: q.id, documentId: d.id }); assert.equal(draft.content, d.content); assert.equal(draft.undo.length, 1); assert.equal(draft.dirty, true);
-    const snapshot = await c.call('observation.snapshot', { projectId: q.id }); assert.equal(snapshot.operations.length, 0); assert.equal(snapshot.host.exitCode, 3); assert.equal(snapshot.compositions[0].views.length, 3);
+    const snapshot = await c.call('observation.snapshot', { projectId: q.id }); assert.equal(snapshot.operations.length, 0); assert.equal(snapshot.host.exitCode, 3); assert.equal(snapshot.compositions.find(c => c.compositionId === 'workspace').views.length, 3);
     assert.equal((await c.call('data.page', { projectId: q.id, resource: ref, offset: 0, limit: 1 })).rows[0].symbol, 'KLF15');
     // Missing artifacts are reported individually; a corrupt existing file is rejected.
     const r = await c.call('project.create', { name: 'missing' });

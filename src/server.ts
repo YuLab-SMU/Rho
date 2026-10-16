@@ -5,6 +5,8 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { Ajv } from 'ajv';
 import { atomicJson, canonical, catalog, checkRequirements, confined, digest, Documents, documentLimits, Fault, now, publicResource, readJson, requireThat, Resources, resourceLimits, stateDirectory } from '@rho-workspace/headless';
 import { protocol, operations } from './protocol.js';
+import { protocol as legacyProtocol } from './legacy-protocol.js';
+import { legacyResponse } from './legacy-response.js';
 import { CoreBridge } from './bridge.js';
 import { State, type Principal, type Project } from './state.js';
 import { Requests, publicOperation, requestLimits } from './requests.js';
@@ -12,6 +14,7 @@ import { Workspace, workspaceLimits } from './workspace.js';
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024 };
 export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits> { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; documents?: Partial<typeof documentLimits>; resources?: Partial<typeof resourceLimits>; workspace?: Partial<typeof workspaceLimits> }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
+const legacyValidators = Object.fromEntries(Object.entries(legacyProtocol.operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
 const validators = Object.fromEntries(Object.entries(operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
 export class RhoService {
   state: State; bridge: CoreBridge; url = ''; adminToken = ''; server: http.Server;
@@ -34,7 +37,7 @@ export class RhoService {
     await this.state.addPrincipal({ id: 'operator', tokenHash: digest(this.adminToken), methods: Object.keys(operations) });
     await new Promise<void>((resolve, reject) => { this.server.once('error', reject); this.server.listen(this.config.port ?? 0, '127.0.0.1', () => resolve()); });
     this.url = 'http://127.0.0.1:' + (this.server.address() as any).port;
-    await atomicJson(path.join(this.state.directory, 'connection.json'), { url: this.url, token: this.adminToken });
+    await atomicJson(path.join(this.state.directory, 'connection.json'), { url: this.url, token: this.adminToken, apiVersion: '2.0' });
     return this;
     } catch (e) {
       if (this.server.listening) await new Promise<void>(resolve => this.server.close(() => resolve()));
@@ -49,7 +52,7 @@ export class RhoService {
     const id = 'agent:' + digest(projectId + ':' + externalSessionId).slice(0, 32);
     this.state.principals = this.state.principals.filter(p => p.id !== id);
     await this.state.addPrincipal({ id, tokenHash: digest(token), projectId, methods: [...new Set(['protocol.describe', ...selected])] });
-    const connection = { url: this.url, token, projectId, externalSessionId, methods: selected };
+    const connection = { url: this.url, token, projectId, externalSessionId, methods: selected, apiVersion: '2.0' as const };
     await atomicJson(file, connection); return connection;
   }
   private authenticate(req: http.IncomingMessage, method: string) {
@@ -63,9 +66,12 @@ export class RhoService {
   }
   private async handle(req: http.IncomingMessage, res: http.ServerResponse) {
     res.setHeader('cache-control', 'no-store'); res.setHeader('x-content-type-options', 'nosniff');
+    let apiVersion = '2.0';
     try {
       const url = new URL(req.url ?? '/', this.url);
-      const method = url.pathname.startsWith('/api/v1/') ? url.pathname.slice(8) : '';
+      const legacy = url.pathname.startsWith('/api/v1/');
+      apiVersion = legacy ? '1.0' : '2.0';
+      const method = legacy || url.pathname.startsWith('/api/v2/') ? url.pathname.slice(8) : '';
       requireThat(method === 'events' || !!operations[method], 'not_found', 'Unknown API operation.');
       const principal = this.authenticate(req, method);
       if (method === 'events') { requireThat(req.method === 'GET', 'invalid', 'Events use GET.'); await this.subscribe(url, principal, res); return; }
@@ -74,8 +80,10 @@ export class RhoService {
       let size = 0; const chunks: Buffer[] = [];
       for await (const b of req.iterator({ destroyOnReturn: false })) { size += b.length; if (size > max) { req.resume(); throw new Fault('limit', 'Request exceeds the configured byte limit.', { limit: 'maxRequestBytes', maximum: max }); } chunks.push(b); }
       let body; try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new Fault('invalid', 'Request is not valid JSON.'); }
-      const valid = validators[method]!;
+      const valid = (legacy ? legacyValidators : validators)[method];
+      requireThat(valid, 'unavailable', 'This operation requires the v2 contract.');
       requireThat(valid(body), 'invalid', 'Request does not match the versioned schema.', { fields: valid.errors ?? [] });
+      if (legacy && !['protocol.describe', 'action.lookup', 'action.observe', 'action.retry', 'action.cancel', 'action.output', 'action.list', 'resource.read', 'resource.list', 'document.open', 'document.read', 'context.read', 'binding.list', 'binding.activity', 'composition.read', 'observation.snapshot', 'project.list'].includes(method)) throw new Fault('unavailable', 'New writes use the explicit v2 project contract; accepted v1 operations remain observable.');
       let value;
       if (body.projectId) {
         value = await this.serial(body.projectId, async () => {
@@ -86,12 +94,14 @@ export class RhoService {
             await this.recordActivity(principal, method, body, undefined, e instanceof Fault ? e.kind : 'storage'); throw e;
           }
         });
-      } else value = await this.dispatch(method, body, principal);
-      this.json(res, 200, { apiVersion: '1.0', ok: true, value });
+      } else value = method === 'protocol.describe' && legacy ? legacyProtocol : await this.dispatch(method, body, principal);
+      if (legacy && method === 'protocol.describe') value = legacyProtocol;
+      else if (legacy) value = legacyResponse(value);
+      this.json(res, 200, { apiVersion, ok: true, value });
     } catch (e: any) {
       const fault = e instanceof Fault ? e : new Fault(e.code === 'ENOENT' ? 'not_found' : 'storage', e.code === 'ENOENT' ? 'Requested owner record or file is missing.' : 'The operation could not be confirmed; retain the original identity and inspect its state.');
       const status = fault.kind === 'unauthorized' ? 401 : ['origin', 'scope'].includes(fault.kind) ? 403 : fault.kind === 'not_found' ? 404 : fault.kind === 'invalid' ? 400 : fault.kind === 'limit' ? 413 : fault.status;
-      this.json(res, status, { apiVersion: '1.0', ok: false, error: { kind: fault.kind, message: fault.message, details: fault.details, continuation: ['stale', 'conflict', 'event_gap'].includes(fault.kind) ? 'Read the current owner snapshot and reconcile before another write.' : 'Inspect the stated condition; observe original operations without replaying actions.' } });
+      this.json(res, status, { apiVersion, ok: false, error: { kind: fault.kind, message: fault.message, details: fault.details, continuation: ['stale', 'conflict', 'event_gap'].includes(fault.kind) ? 'Read the current owner snapshot and reconcile before another write.' : 'Inspect the stated condition; observe original operations without replaying actions.' } });
     }
   }
   private json(res: http.ServerResponse, status: number, data: unknown) { if (!res.destroyed) { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); } }
@@ -136,7 +146,7 @@ export class RhoService {
       return { connectionFile: file, projectId: p.id, methods: b.methods, transport: 'stdio-mcp', externalSessionId: b.externalSessionId };
     }
     if (method === 'capability.list') return { ...catalog, host: await this.bridge.capability(p.root) };
-    if (method === 'requirements.check') return checkRequirements(p.root, b.action, this.bridge.rscript);
+    if (method === 'requirements.check') return checkRequirements(p.root, b.requirements, this.bridge.rscript);
     if (method === 'requirements.prepare') return publicOperation(await requests.submit(principal, b, true));
     if (method === 'action.submit') return publicOperation(await requests.submit(principal, b));
     if (method === 'action.lookup') return publicOperation(await requests.lookup(principal, b.operationId));
@@ -147,10 +157,16 @@ export class RhoService {
     if (method === 'action.list') return (await requests.list(principal)).map(publicOperation);
     if (method === 'resource.list') return requests.artifacts(principal, b.operationId);
     if (method === 'artifact.check') return requests.check(principal, b.operationId);
+    if (method === 'resource.register') {
+      requireThat(!b.declaration.path.split('/').some((part: string) => ['.rho', '.git'].includes(part)), 'scope', 'Register a project file outside internal state.');
+      return publicResource(await resources.register(b.declaration.path, { operationId: 'registration:' + digest(canonical(b.declaration)), registeredBy: principal.id }, 'available', {}, b.declaration, b.expectedDigest));
+    }
+    if (method === 'object.read') return resources.object(b.resource);
+    if (method === 'media.describe') return resources.media(b.resource);
     if (method === 'resource.read') return resources.read(b.resource, b.offset, b.maxBytes);
     if (method === 'data.page') return resources.page(b.resource, b.offset, b.limit, b.sort, b.filter);
-    if (method === 'data.plot') return resources.plot(b.resource, b.maxPoints);
-    if (method === 'data.compare') return resources.compare(b.baseline, b.shrinkage);
+    if (method === 'data.plot') return resources.plot(b.resource, b.x, b.y, b.maxPoints);
+    if (method === 'data.compare') return resources.compare(b.left, b.right, b.options);
     if (method === 'composition.put') { const result = await workspace.put(b); await this.emit(p, 'composition.changed', b.compositionId); return result; }
     if (method === 'composition.read') return workspace.read(b.compositionId);
     if (method === 'view.close') return workspace.closeView(b.compositionId, b.viewId, b.expectedVersion);
@@ -159,9 +175,9 @@ export class RhoService {
     if (method === 'workspace.restore') return workspace.restore(b.source, principal.id);
     if (method === 'selection.set') {
       const data = await resources.rows(b.resource);
-      requireThat(data.entityKey === 'gene_id', 'condition', 'Selection requires a table with unique stable gene identities.');
-      requireThat(b.entities.every((id: string) => data.rows.some(r => r.gene_id === id)), 'stale', 'One or more selected entities are absent from this resource version.');
-      const selection = { resource: b.resource, entities: [...new Set(b.entities)], at: now() };
+      requireThat(data.entityKey, 'condition', 'Selection requires an explicit unique key and namespace.');
+      requireThat(b.entities.every((id: string) => data.rows.some(r => r[data.entityKey!] === id)), 'stale', 'One or more selected entities are absent from this resource version.');
+      const selection = { resource: b.resource, entities: [...new Set(b.entities)], namespace: data.namespace, at: now() };
       await atomicJson(path.join(await this.dataDir(p), 'selection.json'), selection); await this.emit(p, 'selection.changed', b.resource.id); return selection;
     }
     if (method.startsWith('document.')) {
@@ -199,12 +215,19 @@ export class RhoService {
       }
       if (b.resource) {
         const metadata = await resources.resolve(b.resource);
+        if (b.region) {
+          requireThat(metadata.kind === 'media' && typeof metadata.format === 'object', 'invalid', 'Coordinate context requires original media.');
+          const f = metadata.format;
+          requireThat(b.region.page <= (f.pages ?? 1) && b.region.units === (f.mimeType === 'application/pdf' ? 'points' : 'pixels'), 'condition', 'Media region page or units do not match the declaration.');
+          requireThat(f.width && f.height && b.region.x + b.region.width <= f.width && b.region.y + b.region.height <= f.height, 'condition', 'Media region exceeds declared page dimensions.');
+          context.region = { ...b.region, resource: b.resource, mapping: 'original-media-coordinates' };
+        }
         if (metadata.kind === 'table') {
           const data = await resources.rows(b.resource);
-          requireThat(data.entityKey === 'gene_id', 'condition', 'Entity context requires unique stable gene identities.');
+          requireThat(data.entityKey, 'condition', 'Entity context requires an explicit unique key and namespace.');
           const selected = b.entities ?? [];
-          requireThat(selected.length > 0 && selected.every((id: string) => data.rows.some(r => r.gene_id === id)), 'stale', 'Choose stable entities present in this resource version.');
-          context.resource = { reference: b.resource, metadata: publicResource(data.resource), rows: data.rows.filter(r => selected.includes(r.gene_id)) };
+          requireThat(selected.length > 0 && selected.every((id: string) => data.rows.some(r => r[data.entityKey!] === id)), 'stale', 'Choose stable entities present in this resource version.');
+          context.resource = { reference: b.resource, metadata: publicResource(data.resource), rows: data.rows.filter(r => selected.includes(r[data.entityKey!])) };
         } else {
           requireThat(!b.entities?.length, 'invalid', 'Entity selection requires a table resource.');
           const page = await resources.read(b.resource, 0);
@@ -215,6 +238,7 @@ export class RhoService {
           context.resource = { reference: b.resource, metadata: page.resource, ...content, offset: page.offset, nextOffset: page.nextOffset, more: page.more };
         }
       }
+      requireThat(!b.region || b.resource, 'invalid', 'Coordinate context requires a media resource.');
       const contextId = digest(canonical(context));
       requireThat(Buffer.byteLength(JSON.stringify(context)) <= (this.config.maxContextBytes ?? serviceLimits.maxContextBytes), 'limit', 'Context package exceeds its byte budget.', { limit: 'maxContextBytes' });
       const contextDirectory = await stateDirectory(p.root, '.rho/rho/contexts');

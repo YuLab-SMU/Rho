@@ -4,89 +4,74 @@ Updated: 2026-10-16.
 
 ## Application
 
-The versioned local backend is implemented: `/api/v1` HTTP JSON/SSE schemas and
-client, loopback authentication/project scope, durable original intents, public
-Core CLI bridge, shared documents, real analysis/data, typed composition and
-export/recovery. [Headless backend](HEADLESS.md) documents installation and use;
-[backend acceptance](BACKEND-ACCEPTANCE.md) records actual checks and failures.
-BP-01–BP-06 passed on the selected macOS arm64 composition. The accepted npm
-artifact uses application source `81e1d458` and Plugins `13af3ab7`; its immutable
-identities and actual report projections are [recorded](backend-acceptance/v0.1.0.json).
+Version 0.2 extracts reusable headless capabilities from the original scientific
+prototype. `/api/v2` HTTP/SSE schemas, client and inert fixtures expose explicit
+scripts/requirements/artifacts, typed tables and entity namespaces, media and
+exported object snapshots. The base npm package contains no project recipe or R
+script. The ordinary base-R project and original paired analysis use the same
+`r.execute`, readers, keyed comparison and composition validation.
 
-Rho coordinates projects, callers and composition. Rho-plugins owns the headless
-functional implementation, stdio MCP adapter and science. Core supplies the
-existing resident Host/public CLI at `d0159da6feb01d1be9e3b4b34b67953241fedfcb`;
-no Core extension was required. Its source remains unchanged.
+Rho owns authentication/projects, durable caller intents, the public Core CLI
+bridge and composition. Plugins owns document/resource semantics, R plans,
+requirements and scoped MCP. Core remains unchanged at
+`d0159da6feb01d1be9e3b4b34b67953241fedfcb`.
+[HEADLESS](HEADLESS.md) documents the current API; [extraction acceptance](EXTRACTION-ACCEPTANCE.md)
+records actual source/package checks and failures.
 
-Selected baseline: macOS 26.5.2 arm64, Node 22.22.3/npm 10.9.8, Python 3, R 4.5.2,
-Claude Code 2.1.300 / MCP SDK 1.29.0. The local unsigned npm package is
-`@rho-workspace/local` 0.1.0 with bundled Plugins and a digest-checked Core binary.
-R and scientific packages are external prerequisites. Other platforms, registry
-namespace/channel rights and signed distribution remain unverified/unselected.
+Frozen v1 schema/fixtures and an observation bridge preserve original accepted
+parameters, Core identity and resource bytes. New v1 scientific submissions are
+unavailable; reads, explicit retained retry/cancel and schema-1 workspace restore
+do not select a recipe or create a replacement execution.
+The [original v1 acceptance](BACKEND-ACCEPTANCE.md) and
+[immutable candidate record](backend-acceptance/v0.1.0.json) retain their scope.
+
+Selected baseline: macOS arm64, Node 22.22.3/npm 10.9.8, Python 3, R 4.5.2,
+Claude Code 2.1.301 / MCP SDK 1.29.0. R is external; the ordinary project requires
+no add-on R package. Scientific dependencies are explicitly requested by the
+paired project. Other platforms, registry publication and signing remain
+unverified/unselected.
 
 ## Verification
 
-- Rho: 9/9 actual protocol/service/crash/continuity/export/budget tests passed.
-  Three SIGKILL boundaries before the first HTTP acknowledgement retain the
-  original operation/Core identity and one native dispatch. Auth, exact Origin,
-  containment, Unicode/concurrent edits, writer leases, unavailable Rscript at
-  service startup and long native socket path rejection are covered.
-- Plugins: 8/8 focused tests passed, including native R singleton/spaced-path
-  checks, immutable MCP caller intents, documents, actual data and retained budgets.
-- Real headless analysis: five DESeq2 fits, 16,139 genes, 33 artifact references;
-  independent arithmetic and saved native model checks pass. Explicit project
-  preparation installs missing apeglm and rechecks; actual shrinkage/checker and
-  two-input comparison pass. Table/scatter descriptions bind the same comparison.
-- Actual Claude MCP handoff fetched explicit context and changed the same unsaved
-  Chinese/emoji buffer. Source and installed failure-to-buffer-repair trials passed:
-  Claude conditionally edited the failed script and deliberately submitted a new
-  operation; its native result passed independent checks, while the original stayed
-  failed. Earlier failed/time-limited trials stay recorded.
-- Real continuity: paused native analysis retains a 16,139-row partial table
-  without a completion declaration. Host loss preserves original identity and
-  unknown outcome. Observer/view/binding closure does not cancel; a separate
-  cancel confirms native process-group release. Actual bytes/drafts/selection and
-  unavailable compositions restore without executing work.
-- The immutable local npm tarball passed actual installation outside all source
-  checkouts, CLI startup without Rscript, private credentials and bundled Core
-  selection, then real science, recovery and both actual Agent flows. Its SHA-256
-  is `548f9af370cff75f872ec64877fe397e4c257d77071cd30d22dec814800a2f00`.
+- Rho: 12/12 protocol, real stdio MCP, retained v1, service, crash/continuity,
+  workspace and budget tests passed. Three SIGKILL boundaries retain the original
+  operation/Core identity and one dispatch after a missing first acknowledgement.
+- Plugins: 9/9 capability tests and 2/2 separate native example tests passed.
+  Explicit types preserve `001` and literal `NA`; unkeyed tables remain readable,
+  stale/mismatched inputs fail, and comparisons record both versions/provenance.
+- Ordinary R project: real linear model, four rows, typed two-input join, PNG/PDF,
+  original bytes and an exported object snapshot pass through the generic runner.
+- Original paired project: five DESeq2 fits, 16,139 genes, 33 baseline artifacts,
+  121/121 saved-model observations and 12/12 independent checks; explicit apeglm
+  preparation/shrinkage and two-input comparison pass through the same runner.
+- Actual Claude MCP v2 handoff fetched explicit context and changed the same
+  unsaved Chinese/emoji buffer without starting a Host.
+- Actual base-R recovery: four partial rows survive owned Host loss; the original
+  request becomes unknown without replay. Observer/view closure preserves work;
+  separate cancellation confirms native process-group release. Export/restore
+  preserves bytes, drafts, undo, selections and unavailable entries without a Host.
+- Recipe-free npm candidate installation is the next check. Source passes above
+  do not yet establish installation of this candidate.
 
-Failures exposed and repaired include the singleton histogram, shrink checker's
-S4 namespace, macOS socket-path length and Rscript's space-encoded script path.
-[The record](BACKEND-ACCEPTANCE.md#failures-retained-and-repaired) preserves their
-scope and original failures. A fresh npm installation is tested on the existing
-scientific host; it is not a clean OS image or a claim that npm installs R.
+Retained failed extraction trials exposed checker-wrapper variable collision,
+a generic completion sidecar placed inside the producer's immutable inventory,
+and an incorrect declared shrinkage column. New trials fixed those conditions;
+original failed requests remain failed. Historical scientific failures and the
+original installed v1 candidate remain recorded separately.
 
-## Current focus: reusable plugin boundary
+## Current focus and remaining work
 
-The [plugin model](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-MODEL.md)
-defines reusable capability owners and optional entries. The paired analysis is
-a project recipe/acceptance example, not a plugin. The 0.1 catalog, public action
-schemas, table/key/plot readers, comparison checks and packaging still depend on
-that workflow. Current passes prove the recorded vertical composition and do not
-establish a reusable plugin foundation.
+[PX-01–PX-04](PLUGIN-EXTRACTION.md) are implemented; both source consumers pass.
+Complete PX-05 with the actual built npm package, then hand the fixed
+schema/client/fixtures to independent UI development. This extraction does no UI
+work. [The six backend work packages](BACKEND-FIRST.md) retain their original
+scope; [first-release tasks](WEBUI-FIRST.md) retain all product gates.
 
-The [extraction plan](PLUGIN-EXTRACTION.md) records actual coupling, owner changes,
-compatibility and PX-01–PX-05 gates: recipe-free base packaging, generic script/
-requirement/resource contracts, typed view entries, and both an ordinary non-gene
-R project and the scientific recipe using the same capabilities. Architecture and
-backlog corrections are delivered; code extraction and these new checks are pending.
-Batch object snapshots and future live R inspection remain distinct capabilities.
-
-Complete this extraction before plugin UI acceptance. Application shell work can
-use existing generic project/auth/document operations without treating the current
-scientific contracts as stable plugin APIs. [Backend work packages](BACKEND-FIRST.md)
-retain the historical six-step scope; [first-release tasks](WEBUI-FIRST.md) retain
-every product gate. Old requests, candidate identities and acceptance evidence are
-preserved; incompatible protocol changes require an explicit new major version.
-
-The selected UI direction remains React/TypeScript, Vite and Dockview, with
-CodeMirror 6, AG Grid Community, ECharts and a typed json-render catalog. Component
-UI entries, browser shell/layout, native IME/focus/clipboard, responsive widths,
-accessibility and product performance/install acceptance remain pending. Electron
-and cross-window movement follow later. No frontend state owner should duplicate
-document, execution or resource facts supplied by the backend.
+Browser shell/layout and component renderers, native IME/focus/clipboard,
+representative widths, accessibility and full product performance/installation
+acceptance remain pending. React/TypeScript, Vite, Dockview, CodeMirror 6,
+AG Grid Community, ECharts and a typed json-render catalog remain selected UI
+choices. Electron and cross-window movement follow later.
 
 ## Design evidence and limits
 
@@ -100,16 +85,14 @@ backend evidence. The new partial experiment observed 16,139 rows without full
 pipeline completion.
 
 Execution, artifact integrity, domain checks and model judgment remain separate.
-The bounded integration uses one simulation; Plugins' earlier 200-simulation and
-Agent-evaluation records retain their own scope. No clinical/biological validation,
-R-memory recovery after Host loss or OS execution sandbox is implied. Saving
-checks actual disk conditions but does not provide CAS against outside writers.
-MCP supports explicit tool-fetched context; proactive external-chat delivery is
-unavailable. Reads do not start Hosts, and stale sockets are retained for inspection.
+The bounded paired trial uses one simulation; Plugins' earlier 200-simulation and
+Agent-evaluation records retain their own scope. Batch object snapshots do not
+provide live variables or R-memory recovery. Media bytes/metadata are available;
+PDF rendering, image decoding and browser interaction are not implemented.
+Native execution retains OS authority. Saving checks actual disk conditions but
+does not provide CAS against outside writers. MCP supports explicit tool-fetched
+context; proactive external-chat delivery remains unavailable.
 
-Source, accepted composition, local npm installation and future official signed
-distribution have separate identities/evidence. The selected application and
-Plugins sources are published on their owners' `main`; this acceptance record is a
-later documentation change. No npm registry publish or signing has been performed.
-Local ignored evidence is retained without credentials in source. Documentation
-links and rendered inspection cover the coherent delivery batch.
+Source, accepted composition, npm installation and future signed distribution
+have separate identities/evidence. Local ignored evidence stays at the selected
+paths. No npm registry publish or signing has been performed.

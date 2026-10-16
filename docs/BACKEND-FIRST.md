@@ -17,8 +17,9 @@ Updated: 2026-10-16
 [插件模型](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-MODEL.md)与
 [解耦计划](PLUGIN-EXTRACTION.md)明确：具体流程是项目 recipe/验收 consumer；
 基础插件提供文档、运行时/对象、依赖、文件、表格、图片/图表和 Agent 能力。
-PX-01 至 PX-05 插入 BP-06 与功能插件 UI 接入之间，尚未实现和验收。
-本文六包保留原 v1 交付范围；后续工作按该修正推进，保留原请求与候选证据。
+PX-01 至 PX-05 插入 BP-06 与功能插件 UI 接入之间，0.2 已交付 v2 通用后端和两个
+显式 R 项目消费者，实际检查与安装状态见[解耦验收](EXTRACTION-ACCEPTANCE.md)。
+本文六包保留原 v1 交付范围和候选证据；UI 后续独立消费新契约，本轮不实施。
 
 ## 现有基础与本轮边界
 

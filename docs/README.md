@@ -11,6 +11,7 @@ implementation and verification summary.
 | [Reusable plugin extraction](PLUGIN-EXTRACTION.md) | Capability/workflow boundary, current source coupling, owner changes, compatibility and new gates before plugin UI acceptance |
 | [Headless backend](HEADLESS.md) | Installation, versioned HTTP/SSE client, Agent adapter, persistence and budgets |
 | [Backend acceptance](BACKEND-ACCEPTANCE.md) | Actual component/integration evidence, selected composition, failures and unsupported scope |
+| [Extraction acceptance](EXTRACTION-ACCEPTANCE.md) | v2 reusable backend, two explicit R projects, compatibility, failures and actual npm installation |
 | [Design priorities](DESIGN-PRIORITIES.md) | Required interaction designs, Paper review scope and design acceptance |
 | [Architecture](ARCHITECTURE.md) | Source ownership, component interaction, state and lifecycle boundaries |
 | [Technology stack](TECHSTACK.md) | Selected libraries, integration choices and adoption conditions |

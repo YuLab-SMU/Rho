@@ -1,0 +1,1645 @@
+{
+  "apiVersion": "2.0",
+  "schemaVersion": 2,
+  "readOnly": true,
+  "replay": "forbidden",
+  "capturedAt": "2026-10-16T10:30:31.826Z",
+  "scope": "Actual response captures/projections. Native records, executable source, credentials and machine paths are omitted. UI rendering states require independent browser acceptance.",
+  "cases": [
+    {
+      "state": "empty",
+      "operation": "observation.snapshot",
+      "provenance": "Captured from a new project; no Host started.",
+      "envelope": {
+        "apiVersion": "2.0",
+        "ok": true,
+        "value": {
+          "project": {
+            "id": "0726d5fab699b579346536b7095f4705",
+            "root": "/fixture/fixture-project",
+            "openedAt": "2026-10-16T10:30:31.707Z"
+          },
+          "catalog": {
+            "version": "0.2.0",
+            "actions": [
+              {
+                "id": "r.execute",
+                "version": "0.2.0",
+                "owner": "rho-plugins.r",
+                "effects": [
+                  "native-execution",
+                  "create-declared-artifacts"
+                ],
+                "cancellation": "Core cancellation request; native stop requires observation",
+                "inputSchema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "script": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "disk"
+                            },
+                            "path": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "digest": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "path",
+                            "digest"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "buffer"
+                            },
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId",
+                            "version"
+                          ]
+                        }
+                      ]
+                    },
+                    "args": {
+                      "type": "array",
+                      "maxItems": 64,
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "string",
+                            "maxLength": 4096
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "resource": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "version": {
+                                    "type": "string",
+                                    "pattern": "^[a-f0-9]{64}$"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "version"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "resource"
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "requirements": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "package": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z][A-Za-z0-9.]*$"
+                          },
+                          "source": {
+                            "enum": [
+                              "cran",
+                              "bioconductor"
+                            ]
+                          },
+                          "minimumVersion": {
+                            "type": "string",
+                            "pattern": "^[0-9]+([.-][0-9]+)*$"
+                          }
+                        },
+                        "required": [
+                          "package",
+                          "source"
+                        ]
+                      },
+                      "maxItems": 64,
+                      "uniqueItems": true
+                    },
+                    "artifacts": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "path": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "kind": {
+                                "const": "file"
+                              },
+                              "format": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "mimeType": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": [
+                                  "mimeType"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "kind",
+                              "format"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "path": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "kind": {
+                                "const": "table"
+                              },
+                              "format": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "encoding": {
+                                    "enum": [
+                                      "csv",
+                                      "json-rows"
+                                    ]
+                                  },
+                                  "columns": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "name": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "type": {
+                                          "enum": [
+                                            "string",
+                                            "number",
+                                            "boolean"
+                                          ]
+                                        },
+                                        "nullValues": {
+                                          "type": "array",
+                                          "items": {
+                                            "type": "string"
+                                          },
+                                          "maxItems": 16
+                                        }
+                                      },
+                                      "required": [
+                                        "name",
+                                        "type",
+                                        "nullValues"
+                                      ]
+                                    },
+                                    "minItems": 1,
+                                    "maxItems": 256
+                                  },
+                                  "key": {
+                                    "anyOf": [
+                                      {
+                                        "type": "object",
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "column": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          },
+                                          "namespace": {
+                                            "type": "string",
+                                            "minLength": 1
+                                          }
+                                        },
+                                        "required": [
+                                          "column",
+                                          "namespace"
+                                        ]
+                                      },
+                                      {
+                                        "type": "null"
+                                      }
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "encoding",
+                                  "columns",
+                                  "key"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "kind",
+                              "format"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "path": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "kind": {
+                                "const": "media"
+                              },
+                              "format": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "mimeType": {
+                                    "enum": [
+                                      "image/png",
+                                      "image/jpeg",
+                                      "image/svg+xml",
+                                      "application/pdf"
+                                    ]
+                                  },
+                                  "pages": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                  },
+                                  "width": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
+                                  },
+                                  "height": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
+                                  }
+                                },
+                                "required": [
+                                  "mimeType"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "kind",
+                              "format"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "path": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "kind": {
+                                "const": "object"
+                              },
+                              "format": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "encoding": {
+                                    "const": "json"
+                                  },
+                                  "observation": {
+                                    "const": "exported-snapshot"
+                                  },
+                                  "classes": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "maxItems": 32
+                                  }
+                                },
+                                "required": [
+                                  "encoding",
+                                  "observation",
+                                  "classes"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "kind",
+                              "format"
+                            ]
+                          }
+                        ]
+                      },
+                      "maxItems": 128
+                    },
+                    "completion": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "script",
+                    "args",
+                    "requirements",
+                    "artifacts",
+                    "completion"
+                  ]
+                }
+              }
+            ],
+            "components": [
+              {
+                "id": "rho.editor",
+                "bindings": {
+                  "document": "document"
+                },
+                "version": "0.2.0",
+                "owner": "rho-plugins.documents",
+                "ui": "unavailable",
+                "propsSchema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "title"
+                  ]
+                }
+              },
+              {
+                "id": "rho.table",
+                "bindings": {
+                  "data": "table"
+                },
+                "version": "0.2.0",
+                "owner": "rho-plugins.table",
+                "ui": "unavailable",
+                "propsSchema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "title"
+                  ]
+                }
+              },
+              {
+                "id": "rho.scatter",
+                "bindings": {
+                  "data": "table"
+                },
+                "version": "0.2.0",
+                "owner": "rho-plugins.scatter",
+                "ui": "unavailable",
+                "propsSchema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "x": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "y": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "title",
+                    "x",
+                    "y"
+                  ]
+                }
+              },
+              {
+                "id": "rho.media",
+                "bindings": {
+                  "data": "media"
+                },
+                "version": "0.2.0",
+                "owner": "rho-plugins.media",
+                "ui": "unavailable",
+                "propsSchema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "title"
+                  ]
+                }
+              },
+              {
+                "id": "rho.object",
+                "bindings": {
+                  "data": "object"
+                },
+                "version": "0.2.0",
+                "owner": "rho-plugins.object",
+                "ui": "unavailable",
+                "propsSchema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "title"
+                  ]
+                }
+              }
+            ],
+            "capabilities": [
+              "documents",
+              "files",
+              "r-execution",
+              "requirements",
+              "tables",
+              "media",
+              "charts",
+              "agent-context"
+            ],
+            "agent": {
+              "id": "claude-code-mcp",
+              "transport": "stdio",
+              "modelLoop": "external-client",
+              "contextDelivery": "pull-tool-result",
+              "proactivePush": "unsupported"
+            }
+          },
+          "documents": [],
+          "operations": [],
+          "resources": [],
+          "compositions": [],
+          "selection": null,
+          "bindings": [],
+          "cursor": 0,
+          "host": {
+            "exitCode": 3,
+            "reply": {
+              "error": {
+                "kind": "host_unavailable",
+                "message": "no host is listening at `/fixture/capture/fixture-project/.rho/host.sock` (No such file or directory (os error 2)); nothing was sent"
+              },
+              "ok": false
+            }
+          },
+          "limits": {
+            "maxRequestBytes": 1048576,
+            "maxEventBytes": 65536,
+            "eventRetention": 256,
+            "maxSubscriptions": 8,
+            "maxQueue": 32,
+            "maxContexts": 128,
+            "maxBindings": 64,
+            "maxActivities": 256,
+            "maxContextBytes": 1048576,
+            "maxConcurrentActions": 2,
+            "maxOperations": 256,
+            "maxLogPageBytes": 65536,
+            "maxCodeBytes": 1048576,
+            "documents": {
+              "maxBufferBytes": 32,
+              "maxTotalBytes": 8388608,
+              "maxUndoBytes": 8388608,
+              "maxDocuments": 64
+            },
+            "resources": {
+              "maxFileBytes": 67108864,
+              "maxResources": 1024,
+              "maxArtifactBytes": 536870912,
+              "maxRows": 100000,
+              "maxPageRows": 1000,
+              "maxPoints": 20000,
+              "maxReadBytes": 65536
+            }
+          }
+        }
+      }
+    },
+    {
+      "state": "loading",
+      "operation": "action.observe",
+      "provenance": "Captured while an ordinary base-R computation was paused after exporting four rows; its owned Host remained available.",
+      "envelope": {
+        "apiVersion": "2.0",
+        "ok": true,
+        "value": {
+          "operationId": "d7f83e17-8120-4e8d-94b2-ea3cb9d71f82",
+          "principal": "agent:cf0122eccf34bf66654352a340322e24",
+          "projectId": "466734c7bd4bcb6676894f96c867dd7d",
+          "requestDigest": "979e0cd616cce391892f69f195edd6efce0dc5185885cb965208e57b4f058aec",
+          "request": {
+            "kind": "action.submit",
+            "projectId": "466734c7bd4bcb6676894f96c867dd7d",
+            "action": "r.execute",
+            "actionVersion": "0.2.0",
+            "input": {
+              "args": [],
+              "requirements": [],
+              "artifacts": [
+                {
+                  "path": "partial.csv",
+                  "kind": "table",
+                  "format": {
+                    "encoding": "csv",
+                    "columns": [
+                      {
+                        "name": "sample_id",
+                        "type": "string",
+                        "nullValues": []
+                      },
+                      {
+                        "name": "value",
+                        "type": "number",
+                        "nullValues": [
+                          ""
+                        ]
+                      }
+                    ],
+                    "key": {
+                      "column": "sample_id",
+                      "namespace": "ordinary-samples"
+                    }
+                  }
+                }
+              ],
+              "completion": "result.json",
+              "script": {
+                "kind": "buffer",
+                "documentId": "165dd9579745f4205c9ddf82ec5ba8b0924fa5ae5348c7a3b499e9a657dab460",
+                "version": 2
+              }
+            },
+            "operationId": "d7f83e17-8120-4e8d-94b2-ea3cb9d71f82"
+          },
+          "action": "r.execute",
+          "actionVersion": "0.2.0",
+          "acceptedAt": "2026-10-16T10:25:01.757Z",
+          "core": {
+            "caller": "rho:9a541a3feefa1dc37955a7394516c8417e7395c7f6715a68",
+            "requestId": "7b2841d9c4515d57422f5ee04a7b7e1cdbb9c507e26fadae5f36d09ccc81aa20"
+          },
+          "delivery": "answered",
+          "execution": "active",
+          "native": {
+            "run_id": "18defb90f98bdf80-23672.1",
+            "request_id": "7b2841d9c4515d57422f5ee04a7b7e1cdbb9c507e26fadae5f36d09ccc81aa20",
+            "status": {
+              "Running": {
+                "pid": 23676,
+                "spawned_at": "2026-10-16T10:25:01.859Z"
+              }
+            },
+            "held": true,
+            "terminal": false,
+            "stdout": {
+              "eof": false,
+              "limit_bytes": 1048576,
+              "observed_bytes": 0,
+              "retained_bytes": 0,
+              "retention_error": null,
+              "truncated": false
+            },
+            "stderr": {
+              "eof": false,
+              "limit_bytes": 1048576,
+              "observed_bytes": 0,
+              "retained_bytes": 0,
+              "retention_error": null,
+              "truncated": false
+            }
+          },
+          "integrity": {
+            "state": "unchecked"
+          },
+          "domain": {
+            "state": "unchecked"
+          },
+          "interpretation": {
+            "state": "absent"
+          },
+          "plan": {
+            "args": [
+              "/fixture/argument-0"
+            ],
+            "source": {
+              "kind": "buffer",
+              "documentId": "165dd9579745f4205c9ddf82ec5ba8b0924fa5ae5348c7a3b499e9a657dab460",
+              "version": 2,
+              "path": "paused-analysis.R",
+              "dirty": true,
+              "sha256": "1a1419d0751c37a06340908f014970766adc7973e9d0110f7429fe8326e4fe50",
+              "inputs": [],
+              "artifacts": [
+                {
+                  "path": "partial.csv",
+                  "kind": "table",
+                  "format": {
+                    "encoding": "csv",
+                    "columns": [
+                      {
+                        "name": "sample_id",
+                        "type": "string",
+                        "nullValues": []
+                      },
+                      {
+                        "name": "value",
+                        "type": "number",
+                        "nullValues": [
+                          ""
+                        ]
+                      }
+                    ],
+                    "key": {
+                      "column": "sample_id",
+                      "namespace": "ordinary-samples"
+                    }
+                  }
+                }
+              ],
+              "completion": "result.json",
+              "requirements": []
+            },
+            "output": ".rho/plugins/runs/a1583020dcd25f7de0d6df1a081a6c61bfbba41c2af685e95b209ac14d3fbcc8/artifacts",
+            "codeDigest": "b2a7a516780117e6aa2c22d3c1248bed803dce9a4deaf73c03f0feb745c86092"
+          },
+          "lastCli": {
+            "exitCode": 0,
+            "reply": {
+              "ok": true,
+              "scope": "Native record and machine paths omitted from this display fixture."
+            }
+          }
+        }
+      }
+    },
+    {
+      "state": "completed",
+      "operation": "action.observe",
+      "provenance": "Captured after the ordinary base-R project computation and separate project-owned numeric checks.",
+      "envelope": {
+        "apiVersion": "2.0",
+        "ok": true,
+        "value": {
+          "operationId": "ecc6ce60-fcca-4625-85cb-599db21de6d6",
+          "principal": "operator",
+          "projectId": "6c0ba5919c63a0074d85d45ec77d740a",
+          "requestDigest": "924b3d36951b674f4083958be56cc703cfd49a18be3b2fe9fdb239c2c083cbce",
+          "request": {
+            "kind": "action.submit",
+            "projectId": "6c0ba5919c63a0074d85d45ec77d740a",
+            "action": "r.execute",
+            "actionVersion": "0.2.0",
+            "input": {
+              "script": {
+                "kind": "disk",
+                "path": "analysis.R",
+                "digest": "6b6413e94bbb0fee0d852aa5d45a84c53af2c9c93feae061cabffd8b2e0fff76"
+              },
+              "args": [],
+              "requirements": [],
+              "artifacts": [
+                {
+                  "path": "observations.csv",
+                  "kind": "table",
+                  "format": {
+                    "encoding": "csv",
+                    "columns": [
+                      {
+                        "name": "sample_id",
+                        "type": "string",
+                        "nullValues": []
+                      },
+                      {
+                        "name": "label",
+                        "type": "string",
+                        "nullValues": []
+                      },
+                      {
+                        "name": "time",
+                        "type": "number",
+                        "nullValues": [
+                          ""
+                        ]
+                      },
+                      {
+                        "name": "value",
+                        "type": "number",
+                        "nullValues": [
+                          ""
+                        ]
+                      }
+                    ],
+                    "key": {
+                      "column": "sample_id",
+                      "namespace": "ordinary-samples"
+                    }
+                  }
+                },
+                {
+                  "path": "fitted.csv",
+                  "kind": "table",
+                  "format": {
+                    "encoding": "csv",
+                    "columns": [
+                      {
+                        "name": "record_id",
+                        "type": "string",
+                        "nullValues": []
+                      },
+                      {
+                        "name": "fitted",
+                        "type": "number",
+                        "nullValues": [
+                          ""
+                        ]
+                      }
+                    ],
+                    "key": {
+                      "column": "record_id",
+                      "namespace": "ordinary-records"
+                    }
+                  }
+                },
+                {
+                  "path": "model.rds",
+                  "kind": "file",
+                  "format": {
+                    "mimeType": "application/octet-stream"
+                  }
+                },
+                {
+                  "path": "response.png",
+                  "kind": "media",
+                  "format": {
+                    "mimeType": "image/png",
+                    "width": 640,
+                    "height": 480
+                  }
+                },
+                {
+                  "path": "response.pdf",
+                  "kind": "media",
+                  "format": {
+                    "mimeType": "application/pdf",
+                    "pages": 1,
+                    "width": 576,
+                    "height": 432
+                  }
+                },
+                {
+                  "path": "object.json",
+                  "kind": "object",
+                  "format": {
+                    "encoding": "json",
+                    "observation": "exported-snapshot",
+                    "classes": [
+                      "lm"
+                    ]
+                  }
+                },
+                {
+                  "path": "sessionInfo.txt",
+                  "kind": "file",
+                  "format": {
+                    "mimeType": "application/octet-stream"
+                  }
+                }
+              ],
+              "completion": "result.json"
+            },
+            "operationId": "ecc6ce60-fcca-4625-85cb-599db21de6d6"
+          },
+          "action": "r.execute",
+          "actionVersion": "0.2.0",
+          "acceptedAt": "2026-10-16T10:27:28.446Z",
+          "core": {
+            "caller": "rho:40fd98edc8ea3cd6b1b4bdbed4f02314d901f17773716544",
+            "requestId": "cc9e0ccea01b508168d206af39d26ffbf01e3be14cabad6c255ac8036db045c6"
+          },
+          "delivery": "answered",
+          "execution": "completed",
+          "native": {
+            "run_id": "18defbb320609b60-26659.1",
+            "request_id": "cc9e0ccea01b508168d206af39d26ffbf01e3be14cabad6c255ac8036db045c6",
+            "status": {
+              "Finished": {
+                "exit": {
+                  "Code": 0
+                },
+                "exit_observed_at": "2026-10-16T10:27:28.704Z",
+                "group_released": true,
+                "pid": 26662,
+                "spawned_at": "2026-10-16T10:27:28.548Z"
+              }
+            },
+            "held": false,
+            "terminal": true,
+            "stdout": {
+              "eof": true,
+              "limit_bytes": 1048576,
+              "observed_bytes": 52,
+              "retained_bytes": 52,
+              "retention_error": null,
+              "truncated": false
+            },
+            "stderr": {
+              "eof": true,
+              "limit_bytes": 1048576,
+              "observed_bytes": 0,
+              "retained_bytes": 0,
+              "retention_error": null,
+              "truncated": false
+            }
+          },
+          "integrity": {
+            "state": "verified",
+            "files": 7,
+            "checkedAt": "2026-10-16T10:27:29.293Z",
+            "manifestDigest": "15c77c795b03711616d673794d45e1148fd982a0d28fd6ae30f606d8775090bb"
+          },
+          "domain": {
+            "state": "unchecked",
+            "scope": "Project check reports are separate declared resources; no domain judgment is inferred."
+          },
+          "interpretation": {
+            "state": "absent"
+          },
+          "plan": {
+            "args": [
+              "/fixture/argument-0"
+            ],
+            "source": {
+              "kind": "disk",
+              "path": "analysis.R",
+              "sha256": "6b6413e94bbb0fee0d852aa5d45a84c53af2c9c93feae061cabffd8b2e0fff76",
+              "inputs": [],
+              "artifacts": [
+                {
+                  "path": "observations.csv",
+                  "kind": "table",
+                  "format": {
+                    "encoding": "csv",
+                    "columns": [
+                      {
+                        "name": "sample_id",
+                        "type": "string",
+                        "nullValues": []
+                      },
+                      {
+                        "name": "label",
+                        "type": "string",
+                        "nullValues": []
+                      },
+                      {
+                        "name": "time",
+                        "type": "number",
+                        "nullValues": [
+                          ""
+                        ]
+                      },
+                      {
+                        "name": "value",
+                        "type": "number",
+                        "nullValues": [
+                          ""
+                        ]
+                      }
+                    ],
+                    "key": {
+                      "column": "sample_id",
+                      "namespace": "ordinary-samples"
+                    }
+                  }
+                },
+                {
+                  "path": "fitted.csv",
+                  "kind": "table",
+                  "format": {
+                    "encoding": "csv",
+                    "columns": [
+                      {
+                        "name": "record_id",
+                        "type": "string",
+                        "nullValues": []
+                      },
+                      {
+                        "name": "fitted",
+                        "type": "number",
+                        "nullValues": [
+                          ""
+                        ]
+                      }
+                    ],
+                    "key": {
+                      "column": "record_id",
+                      "namespace": "ordinary-records"
+                    }
+                  }
+                },
+                {
+                  "path": "model.rds",
+                  "kind": "file",
+                  "format": {
+                    "mimeType": "application/octet-stream"
+                  }
+                },
+                {
+                  "path": "response.png",
+                  "kind": "media",
+                  "format": {
+                    "mimeType": "image/png",
+                    "width": 640,
+                    "height": 480
+                  }
+                },
+                {
+                  "path": "response.pdf",
+                  "kind": "media",
+                  "format": {
+                    "mimeType": "application/pdf",
+                    "pages": 1,
+                    "width": 576,
+                    "height": 432
+                  }
+                },
+                {
+                  "path": "object.json",
+                  "kind": "object",
+                  "format": {
+                    "encoding": "json",
+                    "observation": "exported-snapshot",
+                    "classes": [
+                      "lm"
+                    ]
+                  }
+                },
+                {
+                  "path": "sessionInfo.txt",
+                  "kind": "file",
+                  "format": {
+                    "mimeType": "application/octet-stream"
+                  }
+                }
+              ],
+              "completion": "result.json",
+              "requirements": []
+            },
+            "output": ".rho/plugins/runs/7892899dba35d88fc4ee7322ee448835dcf5768b57e94310606b5b33c73e82c0/artifacts",
+            "completion": ".rho/plugins/runs/7892899dba35d88fc4ee7322ee448835dcf5768b57e94310606b5b33c73e82c0/result.json",
+            "codeDigest": "91b3b0b2cc907f4896da940b60b376c386bdb2b73df9d6254e2f57d0f38327f5"
+          },
+          "lastCli": {
+            "exitCode": 0,
+            "reply": {
+              "ok": true,
+              "scope": "Native record and machine paths omitted from this display fixture."
+            }
+          }
+        }
+      }
+    },
+    {
+      "state": "failed",
+      "operation": "action.observe",
+      "provenance": "Retained extraction trial: the original project checker rejected the initial harness inventory inside the immutable producer directory; that trial remains failed.",
+      "envelope": {
+        "apiVersion": "2.0",
+        "ok": true,
+        "value": {
+          "operationId": "f544d44d-157b-4e06-897b-02504bed22fa",
+          "principal": "operator",
+          "projectId": "3ed1d198f13c46010bae1a90c43a4d1a",
+          "requestDigest": "a53792ad56f9757c3da517374fabbc13c55cd951f533154cd3cab2a5ad5894ed",
+          "request": {
+            "kind": "action.submit",
+            "projectId": "3ed1d198f13c46010bae1a90c43a4d1a",
+            "action": "r.execute",
+            "actionVersion": "0.2.0",
+            "input": {
+              "script": {
+                "kind": "disk",
+                "path": "check-baseline.R",
+                "digest": "2141f47130b292d810f9fd9376edf667df99d339e57d338ead3e10282d16873e"
+              },
+              "args": [
+                "/fixture/artifacts",
+                {
+                  "resource": {
+                    "id": "b7902d4aea25d7ed7060df60d1972792ced8c6ccf9ab9329672a3f33bcc25adf",
+                    "version": "41373db9ce371e33f841263cd542256ad0305156eee6033f5c97fad53fce9441"
+                  }
+                },
+                {
+                  "resource": {
+                    "id": "a3a551bd091b04aa0e4b2df772185dc24ac5bd0b47500a74fa136e47502bed06",
+                    "version": "827a8ffa534cf1cab44130b014b81c8442426d8dde75109fa60a8a07724543e9"
+                  }
+                }
+              ],
+              "requirements": [
+                {
+                  "package": "DESeq2",
+                  "source": "bioconductor"
+                },
+                {
+                  "package": "airway",
+                  "source": "bioconductor"
+                },
+                {
+                  "package": "SummarizedExperiment",
+                  "source": "bioconductor"
+                },
+                {
+                  "package": "jsonlite",
+                  "source": "cran"
+                },
+                {
+                  "package": "digest",
+                  "source": "cran"
+                }
+              ],
+              "artifacts": [
+                {
+                  "path": "native.json",
+                  "kind": "object",
+                  "format": {
+                    "encoding": "json",
+                    "observation": "exported-snapshot",
+                    "classes": [
+                      "native-check"
+                    ]
+                  }
+                },
+                {
+                  "path": "arithmetic.json",
+                  "kind": "object",
+                  "format": {
+                    "encoding": "json",
+                    "observation": "exported-snapshot",
+                    "classes": [
+                      "arithmetic-check"
+                    ]
+                  }
+                }
+              ],
+              "completion": "result.json"
+            },
+            "operationId": "f544d44d-157b-4e06-897b-02504bed22fa"
+          },
+          "action": "r.execute",
+          "actionVersion": "0.2.0",
+          "acceptedAt": "2026-10-16T10:25:31.625Z",
+          "core": {
+            "caller": "rho:f58cb9f07d322e41e72d9041986107ee16a2aac54d8329e1",
+            "requestId": "015f4ca3c5ecf19e461e5d13cf6dca2fa912ef50ab09f6b855885b3bdda88425"
+          },
+          "delivery": "answered",
+          "execution": "failed",
+          "native": {
+            "run_id": "18defb913e9a5700-23818.2",
+            "request_id": "015f4ca3c5ecf19e461e5d13cf6dca2fa912ef50ab09f6b855885b3bdda88425",
+            "status": {
+              "Finished": {
+                "exit": {
+                  "Code": 1
+                },
+                "exit_observed_at": "2026-10-16T10:25:39.974Z",
+                "group_released": true,
+                "pid": 24328,
+                "spawned_at": "2026-10-16T10:25:31.689Z"
+              }
+            },
+            "held": false,
+            "terminal": true,
+            "stdout": {
+              "eof": true,
+              "limit_bytes": 1048576,
+              "observed_bytes": 570,
+              "retained_bytes": 570,
+              "retention_error": null,
+              "truncated": false
+            },
+            "stderr": {
+              "eof": true,
+              "limit_bytes": 1048576,
+              "observed_bytes": 49,
+              "retained_bytes": 49,
+              "retention_error": null,
+              "truncated": false
+            }
+          },
+          "integrity": {
+            "state": "unchecked"
+          },
+          "domain": {
+            "state": "unchecked"
+          },
+          "interpretation": {
+            "state": "absent"
+          },
+          "plan": {
+            "args": [
+              "/fixture/argument-0",
+              "/fixture/argument-1",
+              "/fixture/argument-2",
+              "/fixture/argument-3"
+            ],
+            "source": {
+              "kind": "disk",
+              "path": "check-baseline.R",
+              "sha256": "2141f47130b292d810f9fd9376edf667df99d339e57d338ead3e10282d16873e",
+              "inputs": [
+                {
+                  "id": "b7902d4aea25d7ed7060df60d1972792ced8c6ccf9ab9329672a3f33bcc25adf",
+                  "version": "41373db9ce371e33f841263cd542256ad0305156eee6033f5c97fad53fce9441"
+                },
+                {
+                  "id": "a3a551bd091b04aa0e4b2df772185dc24ac5bd0b47500a74fa136e47502bed06",
+                  "version": "827a8ffa534cf1cab44130b014b81c8442426d8dde75109fa60a8a07724543e9"
+                }
+              ],
+              "artifacts": [
+                {
+                  "path": "native.json",
+                  "kind": "object",
+                  "format": {
+                    "encoding": "json",
+                    "observation": "exported-snapshot",
+                    "classes": [
+                      "native-check"
+                    ]
+                  }
+                },
+                {
+                  "path": "arithmetic.json",
+                  "kind": "object",
+                  "format": {
+                    "encoding": "json",
+                    "observation": "exported-snapshot",
+                    "classes": [
+                      "arithmetic-check"
+                    ]
+                  }
+                }
+              ],
+              "completion": "result.json",
+              "requirements": [
+                {
+                  "package": "DESeq2",
+                  "source": "bioconductor"
+                },
+                {
+                  "package": "airway",
+                  "source": "bioconductor"
+                },
+                {
+                  "package": "SummarizedExperiment",
+                  "source": "bioconductor"
+                },
+                {
+                  "package": "jsonlite",
+                  "source": "cran"
+                },
+                {
+                  "package": "digest",
+                  "source": "cran"
+                }
+              ]
+            },
+            "output": ".rho/plugins/runs/2240fc6980919ce859ee12beeefcc311db523875a1815aab7cb65c9fb8092a79/artifacts",
+            "codeDigest": "2e94d55210fab3f845df96ea180df28f0aef90f2cb781e787cfefa4671dbaecd"
+          },
+          "lastCli": {
+            "exitCode": 0,
+            "reply": {
+              "ok": true,
+              "scope": "Native record and machine paths omitted from this display fixture."
+            }
+          }
+        }
+      }
+    },
+    {
+      "state": "partial",
+      "operation": "resource.list",
+      "provenance": "Projection of the real four-row base-R export, without a completion declaration.",
+      "envelope": {
+        "apiVersion": "2.0",
+        "ok": true,
+        "value": {
+          "resources": [
+            {
+              "id": "17ac04b971a8c0545fd91fb34610e5cc9a127bcd18aa716f67e8ddf26336baeb",
+              "version": "47305a5d6ee8f28955190b1a8f22bc3f045145fc51aa3634f603c0e413985807",
+              "projectId": "466734c7bd4bcb6676894f96c867dd7d",
+              "owner": "rho-plugins.table",
+              "kind": "table",
+              "path": ".rho/plugins/runs/a1583020dcd25f7de0d6df1a081a6c61bfbba41c2af685e95b209ac14d3fbcc8/artifacts/partial.csv",
+              "bytes": 53,
+              "provenance": {
+                "operationId": "d7f83e17-8120-4e8d-94b2-ea3cb9d71f82",
+                "core": {
+                  "caller": "rho:9a541a3feefa1dc37955a7394516c8417e7395c7f6715a68",
+                  "requestId": "7b2841d9c4515d57422f5ee04a7b7e1cdbb9c507e26fadae5f36d09ccc81aa20"
+                },
+                "action": "r.execute",
+                "actionVersion": "0.2.0",
+                "codeDigest": "b2a7a516780117e6aa2c22d3c1248bed803dce9a4deaf73c03f0feb745c86092",
+                "source": {
+                  "kind": "buffer",
+                  "documentId": "165dd9579745f4205c9ddf82ec5ba8b0924fa5ae5348c7a3b499e9a657dab460",
+                  "version": 2,
+                  "path": "paused-analysis.R",
+                  "dirty": true,
+                  "sha256": "1a1419d0751c37a06340908f014970766adc7973e9d0110f7429fe8326e4fe50",
+                  "inputs": [],
+                  "artifacts": [
+                    {
+                      "path": "partial.csv",
+                      "kind": "table",
+                      "format": {
+                        "encoding": "csv",
+                        "columns": [
+                          {
+                            "name": "sample_id",
+                            "type": "string",
+                            "nullValues": []
+                          },
+                          {
+                            "name": "value",
+                            "type": "number",
+                            "nullValues": [
+                              ""
+                            ]
+                          }
+                        ],
+                        "key": {
+                          "column": "sample_id",
+                          "namespace": "ordinary-samples"
+                        }
+                      }
+                    }
+                  ],
+                  "completion": "result.json",
+                  "requirements": []
+                },
+                "inputs": []
+              },
+              "coverage": {
+                "completionDeclaration": "absent",
+                "observedAt": "2026-10-16T10:25:02.034Z",
+                "observedRows": 4
+              },
+              "availability": "partial",
+              "format": {
+                "encoding": "csv",
+                "columns": [
+                  {
+                    "name": "sample_id",
+                    "type": "string",
+                    "nullValues": []
+                  },
+                  {
+                    "name": "value",
+                    "type": "number",
+                    "nullValues": [
+                      ""
+                    ]
+                  }
+                ],
+                "key": {
+                  "column": "sample_id",
+                  "namespace": "ordinary-samples"
+                }
+              }
+            }
+          ],
+          "integrity": {
+            "state": "incomplete",
+            "completionDeclaration": "absent"
+          },
+          "domain": {
+            "state": "unchecked"
+          }
+        }
+      }
+    },
+    {
+      "state": "unknown",
+      "operation": "action.observe",
+      "provenance": "Captured after SIGKILL of the owned Host; earlier native facts do not establish its later outcome.",
+      "envelope": {
+        "apiVersion": "2.0",
+        "ok": true,
+        "value": {
+          "operationId": "d7f83e17-8120-4e8d-94b2-ea3cb9d71f82",
+          "principal": "agent:cf0122eccf34bf66654352a340322e24",
+          "projectId": "466734c7bd4bcb6676894f96c867dd7d",
+          "requestDigest": "979e0cd616cce391892f69f195edd6efce0dc5185885cb965208e57b4f058aec",
+          "request": {
+            "kind": "action.submit",
+            "projectId": "466734c7bd4bcb6676894f96c867dd7d",
+            "action": "r.execute",
+            "actionVersion": "0.2.0",
+            "input": {
+              "args": [],
+              "requirements": [],
+              "artifacts": [
+                {
+                  "path": "partial.csv",
+                  "kind": "table",
+                  "format": {
+                    "encoding": "csv",
+                    "columns": [
+                      {
+                        "name": "sample_id",
+                        "type": "string",
+                        "nullValues": []
+                      },
+                      {
+                        "name": "value",
+                        "type": "number",
+                        "nullValues": [
+                          ""
+                        ]
+                      }
+                    ],
+                    "key": {
+                      "column": "sample_id",
+                      "namespace": "ordinary-samples"
+                    }
+                  }
+                }
+              ],
+              "completion": "result.json",
+              "script": {
+                "kind": "buffer",
+                "documentId": "165dd9579745f4205c9ddf82ec5ba8b0924fa5ae5348c7a3b499e9a657dab460",
+                "version": 2
+              }
+            },
+            "operationId": "d7f83e17-8120-4e8d-94b2-ea3cb9d71f82"
+          },
+          "action": "r.execute",
+          "actionVersion": "0.2.0",
+          "acceptedAt": "2026-10-16T10:25:01.757Z",
+          "core": {
+            "caller": "rho:9a541a3feefa1dc37955a7394516c8417e7395c7f6715a68",
+            "requestId": "7b2841d9c4515d57422f5ee04a7b7e1cdbb9c507e26fadae5f36d09ccc81aa20"
+          },
+          "delivery": "answered",
+          "execution": "unknown",
+          "native": {
+            "run_id": "18defb90f98bdf80-23672.1",
+            "request_id": "7b2841d9c4515d57422f5ee04a7b7e1cdbb9c507e26fadae5f36d09ccc81aa20",
+            "status": {
+              "Running": {
+                "pid": 23676,
+                "spawned_at": "2026-10-16T10:25:01.859Z"
+              }
+            },
+            "held": true,
+            "terminal": false,
+            "stdout": {
+              "eof": false,
+              "limit_bytes": 1048576,
+              "observed_bytes": 0,
+              "retained_bytes": 0,
+              "retention_error": null,
+              "truncated": false
+            },
+            "stderr": {
+              "eof": false,
+              "limit_bytes": 1048576,
+              "observed_bytes": 0,
+              "retained_bytes": 0,
+              "retention_error": null,
+              "truncated": false
+            }
+          },
+          "integrity": {
+            "state": "incomplete",
+            "missing": [],
+            "completionDeclaration": "absent"
+          },
+          "domain": {
+            "state": "unchecked",
+            "scope": "Project check reports are separate declared resources; no domain judgment is inferred."
+          },
+          "interpretation": {
+            "state": "absent"
+          },
+          "plan": {
+            "args": [
+              "/fixture/argument-0"
+            ],
+            "source": {
+              "kind": "buffer",
+              "documentId": "165dd9579745f4205c9ddf82ec5ba8b0924fa5ae5348c7a3b499e9a657dab460",
+              "version": 2,
+              "path": "paused-analysis.R",
+              "dirty": true,
+              "sha256": "1a1419d0751c37a06340908f014970766adc7973e9d0110f7429fe8326e4fe50",
+              "inputs": [],
+              "artifacts": [
+                {
+                  "path": "partial.csv",
+                  "kind": "table",
+                  "format": {
+                    "encoding": "csv",
+                    "columns": [
+                      {
+                        "name": "sample_id",
+                        "type": "string",
+                        "nullValues": []
+                      },
+                      {
+                        "name": "value",
+                        "type": "number",
+                        "nullValues": [
+                          ""
+                        ]
+                      }
+                    ],
+                    "key": {
+                      "column": "sample_id",
+                      "namespace": "ordinary-samples"
+                    }
+                  }
+                }
+              ],
+              "completion": "result.json",
+              "requirements": []
+            },
+            "output": ".rho/plugins/runs/a1583020dcd25f7de0d6df1a081a6c61bfbba41c2af685e95b209ac14d3fbcc8/artifacts",
+            "codeDigest": "b2a7a516780117e6aa2c22d3c1248bed803dce9a4deaf73c03f0feb745c86092"
+          },
+          "lastCli": {
+            "exitCode": 3,
+            "reply": {
+              "ok": false,
+              "scope": "Native record and machine paths omitted from this display fixture."
+            }
+          }
+        }
+      }
+    },
+    {
+      "state": "unavailable",
+      "operation": "composition.put",
+      "provenance": "Captured from actual composition validation; no UI entry is installed.",
+      "envelope": {
+        "apiVersion": "2.0",
+        "ok": true,
+        "value": {
+          "compositionId": "unavailable",
+          "version": 1,
+          "views": [
+            {
+              "id": "missing",
+              "component": "missing.component",
+              "version": "0.1.0",
+              "props": {},
+              "bindings": {}
+            }
+          ],
+          "layout": {},
+          "availability": {
+            "missing": {
+              "state": "unavailable",
+              "reason": "Component or requested version is not registered."
+            }
+          },
+          "acknowledgedAt": "2026-10-16T10:30:31.742Z"
+        }
+      }
+    },
+    {
+      "state": "stale",
+      "operation": "document.edit",
+      "provenance": "Captured from the real versioned service; acknowledged buffer retained.",
+      "envelope": {
+        "apiVersion": "2.0",
+        "ok": false,
+        "error": {
+          "kind": "stale",
+          "message": "Read the current buffer before editing.",
+          "details": {
+            "documentId": "8236bc4389fc4ebb7d4711a019c7f8f0fd1e1804b33fcd2122f0968c6bc8c1ec",
+            "expectedVersion": 1,
+            "actualVersion": 2
+          },
+          "continuation": "Read the current owner snapshot and reconcile before another write."
+        }
+      }
+    },
+    {
+      "state": "conflict",
+      "operation": "document.save",
+      "provenance": "Captured from the real versioned service; acknowledged buffer retained.",
+      "envelope": {
+        "apiVersion": "2.0",
+        "ok": false,
+        "error": {
+          "kind": "conflict",
+          "message": "Disk changed; the current buffer and undo are retained.",
+          "details": {
+            "documentId": "8236bc4389fc4ebb7d4711a019c7f8f0fd1e1804b33fcd2122f0968c6bc8c1ec",
+            "actualDiskDigest": "7433e5b3bcfc87802e79cf6020b18d8ae2c64c3c0562bc3a73d0a1ce5daa666e",
+            "expectedDiskDigest": null
+          },
+          "continuation": "Read the current owner snapshot and reconcile before another write."
+        }
+      }
+    },
+    {
+      "state": "limit",
+      "operation": "document.edit",
+      "provenance": "Captured from the real versioned service; acknowledged buffer retained.",
+      "envelope": {
+        "apiVersion": "2.0",
+        "ok": false,
+        "error": {
+          "kind": "limit",
+          "message": "Edit exceeds the buffer byte limit.",
+          "details": {
+            "limit": "maxBufferBytes",
+            "maximum": 32
+          },
+          "continuation": "Inspect the stated condition; observe original operations without replaying actions."
+        }
+      }
+    }
+  ]
+}

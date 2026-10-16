@@ -31,7 +31,7 @@ for (const stage of ['before-host', 'before-cli', 'after-cli']) test('lost first
     const doc = await c.call('document.open', { projectId: p.id, path: 'snapshot.R' });
     const code = 'args <- commandArgs(TRUE)\nout <- args[[1L]]\ncat("entry\\n", file=paste0(out,".entries.jsonl"), append=TRUE)\ndir.create(out)\nwriteLines("original unsaved 中文 🧬", file.path(out,"snapshot.txt"))\ncat(paste(rep("界",100), collapse=""))\nSys.sleep(0.2)\n';
     const edited = await c.call('document.edit', { projectId: p.id, documentId: doc.id, expectedVersion: doc.version, edits: [{ from: 0, to: 0, insert: code }], undoGroup: 'initial' });
-    const input = { projectId: p.id, action: 'airway.analyze', actionVersion: '0.1.0', input: { bootstrapReplicates: 1, script: { kind: 'buffer', documentId: doc.id, version: edited.version } } };
+    const input = { projectId: p.id, action: 'r.execute', actionVersion: '0.2.0', input: { args: [], requirements: [], artifacts: [], completion: null, script: { kind: 'buffer', documentId: doc.id, version: edited.version } } };
     const [intent, competingIntent] = await Promise.all([c.retainOperation(path.join(root, 'caller-intent.json'), input), c.retainOperation(path.join(root, 'caller-intent.json'), input)]);
     assert.deepEqual(intent, competingIntent);
     await assert.rejects(c.retainOperation(path.join(root, 'caller-intent.json'), { ...input, actionVersion: 'changed' }), { kind: 'conflict' });

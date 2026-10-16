@@ -9,7 +9,7 @@ export class CheckedClient extends RhoClient {
   async call(method, input) {
     let value;
     try { value = await super.call(method, input); }
-    catch (e) { if (e.error) assert.ok(error({ apiVersion: '1.0', ok: false, error: e.error }), JSON.stringify(error.errors)); throw e; }
+    catch (e) { if (e.error) assert.ok(error({ apiVersion: '2.0', ok: false, error: e.error }), JSON.stringify(error.errors)); throw e; }
     const valid = validators[method]; assert.ok(valid, 'Missing response schema for ' + method);
     assert.ok(valid(value), method + ': ' + JSON.stringify(valid.errors)); return value;
   }

@@ -16,8 +16,8 @@ test('HTTP auth, origins, scope, project read has no Host, and two callers share
     const project = await human.call('project.create', { name: 'project' });
     const opened = await human.call('project.open', { path: 'project' });
     assert.equal(opened.host.exitCode, 3);
-    assert.equal((await human.call('requirements.check', { projectId: project.id, action: 'airway.analyze' })).status, 'unknown');
-    await assert.rejects(human.call('action.submit', { projectId: project.id, operationId: 'missing-r', action: 'airway.analyze', actionVersion: '0.1.0', input: { bootstrapReplicates: 1 } }), e => e.error.kind === 'condition');
+    assert.equal((await human.call('requirements.check', { projectId: project.id, requirements: [] })).status, 'unknown');
+    await assert.rejects(human.call('action.submit', { projectId: project.id, operationId: 'missing-r', action: 'r.execute', actionVersion: '0.2.0', input: { args: [], requirements: [], artifacts: [], completion: null, script: { kind: 'disk', path: 'script.R', digest: 'a'.repeat(64) } } }), e => e.error.kind === 'condition');
     await assert.rejects(fs.stat(path.join(project.root, '.rho/host.sock')), { code: 'ENOENT' });
     let response = await fetch(service.url + '/api/v1/project.list', { method: 'POST', headers: { authorization: 'Bearer ' + service.adminToken, 'content-type': 'application/json', origin: 'http://unrelated.invalid' }, body: '{}' });
     assert.equal(response.status, 403);

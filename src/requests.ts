@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { actions, atomicJson, canonical, checkRequirements, collectArtifacts, digest, Documents, now, planAnalysis, preparation, readJson, requireThat, Resources, stateDirectory, verifyArtifacts } from '@rho-workspace/headless';
+import { actions, atomicJson, canonical, checkRequirements, collectArtifacts, digest, Documents, now, planExecution, preparation, readJson, requireThat, Resources, stateDirectory, verifyArtifacts } from '@rho-workspace/headless';
 import type { ActionPlan } from '@rho-workspace/headless';
 import { Ajv } from 'ajv';
 import { CoreBridge, type CliResult } from './bridge.js';
@@ -35,7 +35,7 @@ export class Requests {
       requireThat(existing.requestDigest === requestDigest, 'conflict', 'This operationId already names different immutable content.', { operationId: body.operationId, requestDigest: existing.requestDigest });
       return existing; // Explicit action.retry can deliver an accepted not-sent intent.
     }
-    const action = actions.find(a => a.id === body.action);
+    const action = actions.find(a => a.id === (preparationAction ? 'r.execute' : body.action));
     requireThat(action, 'unavailable', 'Selected action is not registered.');
     if (!preparationAction) {
       const validate = inputValidators[action.id]!;
@@ -51,10 +51,11 @@ export class Requests {
       if (observed.exitCode !== 0 || !(observed.reply.value?.terminal)) active++;
     }
     requireThat(active < this.limits.maxConcurrentActions, 'limit', 'Concurrent action budget reached; no new operation was accepted.', { limit: 'maxConcurrentActions', maximum: this.limits.maxConcurrentActions });
-    const checks = await checkRequirements(this.project.root, action.id, this.bridge.rscript);
+    const requirements = preparationAction ? body.requirements : body.input.requirements;
+    const checks = await checkRequirements(this.project.root, requirements, this.bridge.rscript);
     requireThat(preparationAction || checks.status === 'present', 'condition', 'Selected action dependencies are missing or unknown.', { check: checks, continuation: 'Check and explicitly prepare this action in this project.' });
     const core = { caller: 'rho:' + digest(principal.id + ':' + this.project.id).slice(0, 48), requestId: this.key(principal, body.operationId) };
-    const plan = preparationAction ? await preparation(this.project.root, action.id, this.bridge.rscript) : await planAnalysis(this.project.root, action.id, body.input, core.requestId, checks.environment, this.resources, this.documents);
+    const plan = preparationAction ? await preparation(this.project.root, requirements, this.bridge.rscript) : await planExecution(this.project.root, body.input, core.requestId, checks.environment, this.resources, this.documents);
     requireThat(Buffer.byteLength(plan.code) <= this.limits.maxCodeBytes, 'limit', 'Script snapshot exceeds the selected code byte limit.', { limit: 'maxCodeBytes', maximum: this.limits.maxCodeBytes });
     const run: Operation = { operationId: body.operationId, principal: principal.id, projectId: this.project.id, requestDigest, request, action: preparationAction ? 'requirements.prepare:' + action.id : action.id, actionVersion: action.version, acceptedAt: now(), core, delivery: 'not-sent', execution: 'unobserved', native: null, integrity: { state: 'unchecked' }, domain: { state: 'unchecked' }, interpretation: { state: 'absent' }, plan, checks };
     await atomicJson(file, run); // Durable service acknowledgement precedes ANY Core submit.
@@ -96,7 +97,7 @@ export class Requests {
     const run = await this.lookup(principal, operationId);
     const result = await this.bridge.call(this.project.root, 'lookup', run.core.caller, run.core.requestId, ['--record']);
     this.apply(run, result, false);
-    if (run.action.startsWith('requirements.prepare:') && run.execution === 'completed') run.checks = await checkRequirements(this.project.root, run.action.split(':')[1]!, this.bridge.rscript);
+    if (run.action.startsWith('requirements.prepare:') && run.execution === 'completed' && run.plan.source.requirements) run.checks = await checkRequirements(this.project.root, run.plan.source.requirements, this.bridge.rscript);
     await this.persist(run); return run;
   }
   async cancel(principal: Principal, operationId: string) {
@@ -118,7 +119,7 @@ export class Requests {
   }
   async check(principal: Principal, operationId: string) {
     const run = await this.lookup(principal, operationId);
-    const facts = await verifyArtifacts(this.project.root, run, this.bridge.rscript);
+    const facts = await verifyArtifacts(this.project.root, run, this.resources);
     run.integrity = facts.integrity; run.domain = facts.domain; await this.persist(run); return facts;
   }
 }
