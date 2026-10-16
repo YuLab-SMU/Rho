@@ -7,7 +7,9 @@ semantics, application routing and npm inventory. The actual headless consumers
 are an ordinary base-R project and the original scientific example. Both use
 the same `r.execute` and explicit declarations; no UI is implemented in this work.
 
-The [extraction plan](PLUGIN-EXTRACTION.md) defines PX-01–PX-05;
+The [v0.2 acceptance record](backend-acceptance/v0.2.0.json) preserves the checked
+source, installed artifact and observation identities. PX-01–PX-05 have passed
+their backend scope. The [extraction plan](PLUGIN-EXTRACTION.md) defines these gates;
 [HEADLESS](HEADLESS.md) describes the implemented operations and budgets.
 The original [v1 acceptance](BACKEND-ACCEPTANCE.md),
 [v1 candidate record](backend-acceptance/v0.1.0.json), protocol and fixtures remain
@@ -77,12 +79,26 @@ and its scope remain in the Plugins example, rather than being relabeled here.
 
 ## Installation candidate
 
-Source checks above have passed. The recipe-free npm candidate will be built from
-checked commits and installed outside all source checkouts. Installation must
-exercise startup without Rscript, bundled Core and actual Plugins resolution,
-then the same two explicitly supplied projects and recovery. Its artifact and
-composition identities are recorded separately after the run; source passes
-alone do not establish installation acceptance.
+The recipe-free npm candidate passed actual installation outside all source
+checkouts under a spaced Chinese path. The installed bin starts without Rscript,
+uses its bundled Core and an ordinary installed Plugins package, and serves
+projects/documents without a Host. The same installed acceptance runner then
+passes the ordinary project, original paired analysis and actual recovery. Both
+project manifests and their selected files match the committed example bytes.
+
+The accepted application source is
+`965e788bbab27273685072281eb51eb74783d8ef`, tree
+`20c083771cf285246467e4694ca4957c29ecd87b`; Plugins is
+`eb787ae93a9656f57f9a3f858c253815d0e4e616`, tree
+`cb3eac516336496f9e342f15a38c1dcc9409752d`. All selected build inputs have no
+local override. The unsigned local `rho-workspace-local-0.2.0.tgz` is 6,050,390
+bytes with 3,746 entries and SHA-256
+`3b84490656e31b352287c84f5413866bc11a566024b540475ca4986562d03ab4`.
+Its immutable [candidate record](backend-acceptance/v0.2.0.json) includes component,
+lockfile, example-input and observed resource identities. Later documentation
+commits do not replace this accepted candidate. The full local installation
+report remains with the ignored package evidence; the committed projection omits
+machine paths and executable request journals.
 
 ## Compatibility and retained failures
 

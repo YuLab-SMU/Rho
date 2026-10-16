@@ -50,8 +50,10 @@ unverified/unselected.
   request becomes unknown without replay. Observer/view closure preserves work;
   separate cancellation confirms native process-group release. Export/restore
   preserves bytes, drafts, undo, selections and unavailable entries without a Host.
-- Recipe-free npm candidate installation is the next check. Source passes above
-  do not yet establish installation of this candidate.
+- Actual 0.2 npm installation outside the checkouts passed without bundled
+  recipes: no-R startup, bundled Core/installed Plugins, both explicit consumers
+  and recovery. The [candidate record](backend-acceptance/v0.2.0.json) freezes
+  source, package, lockfile, example inputs and observed resource identities.
 
 Retained failed extraction trials exposed checker-wrapper variable collision,
 a generic completion sidecar placed inside the producer's immutable inventory,
@@ -61,10 +63,10 @@ original installed v1 candidate remain recorded separately.
 
 ## Current focus and remaining work
 
-[PX-01–PX-04](PLUGIN-EXTRACTION.md) are implemented; both source consumers pass.
-Complete PX-05 with the actual built npm package, then hand the fixed
-schema/client/fixtures to independent UI development. This extraction does no UI
-work. [The six backend work packages](BACKEND-FIRST.md) retain their original
+[PX-01–PX-05](PLUGIN-EXTRACTION.md) have passed their backend scope, including
+both installed consumers. The versioned schema/client/fixtures are ready for
+independent UI development. This extraction does no UI work.
+[The six backend work packages](BACKEND-FIRST.md) retain their original
 scope; [first-release tasks](WEBUI-FIRST.md) retain all product gates.
 
 Browser shell/layout and component renderers, native IME/focus/clipboard,
@@ -81,8 +83,8 @@ contains R1–R14, pending user review, with the
 screens and notes were reviewed during the design revision; other widths and
 live browser behavior remain unverified. Existing S-series pages are historical.
 The designed run numbers and 8,204-row example are not substituted for actual
-backend evidence. The new partial experiment observed 16,139 rows without full
-pipeline completion.
+backend evidence. The historical v1 partial experiment observed 16,139 rows;
+the new ordinary-R recovery experiment observes four rows without completion.
 
 Execution, artifact integrity, domain checks and model judgment remain separate.
 The bounded paired trial uses one simulation; Plugins' earlier 200-simulation and
