@@ -11,17 +11,20 @@ dependencies, owners and observable completion conditions. The
 before independent UI development. The
 [design checklist](DESIGN-PRIORITIES.md) owns interaction-design deliverables.
 The headless service, shared state, real analysis and continuity are implemented;
-[backend acceptance](BACKEND-ACCEPTANCE.md) records their actual checks. Browser
-implementation and integrated product acceptance remain pending.
+[backend acceptance](BACKEND-ACCEPTANCE.md) records their actual checks. The current
+vertical prototype still has workflow coupling. [Plugin extraction](PLUGIN-EXTRACTION.md)
+precedes plugin UI acceptance; browser implementation and integrated product
+acceptance remain pending.
 
 ## First integrated flow
 
 Use a disposable project and an owned resident Host. Select one actual Agent
 adapter, one supported OS/architecture and browser baseline, and explicit Core,
 R and component versions before implementation acceptance. The available real R
-recipe supplies a reference analysis and retained outputs; choose its exact inputs
-and expected outputs in the accepted composition. A component evaluation is not
-the product Agent connection.
+recipe supplies a reference analysis and retained outputs as a consumer, not a
+plugin. The base capabilities must also work without it and serve a non-gene
+project. Choose exact inputs and expected outputs in the accepted composition.
+A component evaluation is not the product Agent connection.
 
 The two slices below are required for the first release. A working npm startup
 and dependency check are exercised early; final installation acceptance then
@@ -88,11 +91,16 @@ desktop windows are not a condition of this browser release.
 | Installable backend foundation | BP-02 builds the npm launcher, authenticated local service, project scope and public Core CLI adapter without a browser shell dependency |
 | Real analysis and shared state | BP-03/BP-04 deliver project-action dependency checks, real analysis, shared document state and external Agent handoff; document work can proceed in parallel |
 | Data, composition and backend acceptance | BP-05/BP-06 verify real data/selection, typed composition descriptions, continuity, export/recovery and installation through headless clients |
-| Independent UI implementation | UI consumes the tested contracts and fixtures to implement component views, shell/layout and the actual browser interaction without duplicating backend state |
+| Reusable capability extraction | PX-01–PX-05 remove recipe/column/model assumptions from base contracts, routing and packaging; verify a base install, non-gene project and explicit scientific consumer through the same capabilities |
+| Independent UI implementation | Plugin views consume the extracted, versioned contracts/client/fixtures; Rho supplies shell/layout and actual browser interaction without duplicating backend state |
 | Package acceptance | Rho verifies both slices, export/reopen, installation, failure cases, input/accessibility and resource behavior on the supported composition |
 
 Reuse the R1–R14 design for backend scenarios without waiting for UI implementation.
 Backend acceptance does not establish browser interaction or product release acceptance.
+It also does not establish the new reusable plugin boundary. The
+[Plugins model](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-MODEL.md)
+owns that design; the [extraction plan](PLUGIN-EXTRACTION.md) owns implementation
+gates and preservation of original v1 requests/evidence. This work is pending.
 The selected Node/MCP/R versions, immutable source/artifact identities and headless
 results are recorded in [backend acceptance](BACKEND-ACCEPTANCE.md). Browser library
 versions and the complete product composition still require selection and acceptance.

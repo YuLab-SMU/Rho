@@ -1,6 +1,7 @@
 # Rho backend acceptance 0.1
 
-Updated: 2026-10-15. Scope: BP-01–BP-06, `/api/v1` 1.0.
+Updated: 2026-10-16; execution evidence: 2026-10-15.
+Scope: BP-01–BP-06, `/api/v1` 1.0.
 
 BP-01–BP-06 passed for the selected macOS arm64 composition. The local service,
 functional headless package, calling client and inert state fixtures are delivered.
@@ -8,6 +9,13 @@ This record separates actual source checks and integration runs from the accepte
 immutable installation candidate. Browser
 views, native input, accessibility, layout and overall product release remain
 pending under [WEBUI-FIRST](WEBUI-FIRST.md).
+
+Architecture clarification, 2026-10-16: this is a successful vertical prototype
+whose catalog, readers and packaging remain coupled to the paired workflow.
+It does not accept a reusable plugin foundation. The new
+[capability extraction gates](PLUGIN-EXTRACTION.md) are pending. The recorded
+candidate, historical results and failures below retain their original identities
+and scope; this clarification changes no runtime or artifact evidence.
 
 ## Selected consumer and environment
 

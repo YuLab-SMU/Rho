@@ -1,6 +1,6 @@
 # Rho status
 
-Updated: 2026-10-15.
+Updated: 2026-10-16.
 
 ## Application
 
@@ -58,12 +58,28 @@ S4 namespace, macOS socket-path length and Rscript's space-encoded script path.
 scope and original failures. A fresh npm installation is tested on the existing
 scientific host; it is not a clean OS image or a claim that npm installs R.
 
-## Next delivery
+## Current focus: reusable plugin boundary
 
-Develop the WebUI against these accepted backend contracts, calling client and
-inert fixtures. [Backend work packages](BACKEND-FIRST.md) retain the
-six-step scope; [first-release tasks](WEBUI-FIRST.md) retain every product gate.
-Backend acceptance does not complete the browser/product release.
+The [plugin model](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-MODEL.md)
+defines reusable capability owners and optional entries. The paired analysis is
+a project recipe/acceptance example, not a plugin. The 0.1 catalog, public action
+schemas, table/key/plot readers, comparison checks and packaging still depend on
+that workflow. Current passes prove the recorded vertical composition and do not
+establish a reusable plugin foundation.
+
+The [extraction plan](PLUGIN-EXTRACTION.md) records actual coupling, owner changes,
+compatibility and PX-01–PX-05 gates: recipe-free base packaging, generic script/
+requirement/resource contracts, typed view entries, and both an ordinary non-gene
+R project and the scientific recipe using the same capabilities. Architecture and
+backlog corrections are delivered; code extraction and these new checks are pending.
+Batch object snapshots and future live R inspection remain distinct capabilities.
+
+Complete this extraction before plugin UI acceptance. Application shell work can
+use existing generic project/auth/document operations without treating the current
+scientific contracts as stable plugin APIs. [Backend work packages](BACKEND-FIRST.md)
+retain the historical six-step scope; [first-release tasks](WEBUI-FIRST.md) retain
+every product gate. Old requests, candidate identities and acceptance evidence are
+preserved; incompatible protocol changes require an explicit new major version.
 
 The selected UI direction remains React/TypeScript, Vite and Dockview, with
 CodeMirror 6, AG Grid Community, ECharts and a typed json-render catalog. Component

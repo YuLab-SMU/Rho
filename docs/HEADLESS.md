@@ -5,6 +5,12 @@ It exposes the same `/api/v1` contract to headless clients and a project-scoped
 Claude Code MCP adapter. Browser views remain independent work. See the
 [acceptance record](https://github.com/YuLab-SMU/Rho/blob/main/docs/BACKEND-ACCEPTANCE.md) for the exact verified scope.
 
+The 0.1 catalog and resource/comparison operations still encode the paired airway
+workflow. That workflow is an example, not a plugin. [Capability extraction](PLUGIN-EXTRACTION.md)
+must remove these base-contract/routing/packaging assumptions and verify a second
+consumer before plugin UI acceptance. This document records actual v1 behavior;
+the new reusable APIs and recipe-free base package are not yet delivered.
+
 ## Install and start
 
 The selected baseline is macOS arm64, Node 22.22.x (engine range

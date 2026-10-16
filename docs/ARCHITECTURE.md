@@ -15,11 +15,19 @@ implementation; [Technology stack](TECHSTACK.md) records the selected libraries.
 | [Rho-plugins](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/ARCHITECTURE.md) | Actual functionality, native conditions, resource semantics and results; optional CLI, Skills, MCP and UI entries |
 | Rho | Component selection and assembly, local service, layout, shared interaction routing and presentation; native windows in a later client |
 
-A functional component may be an Agent, editor, file tool, table, plot, scientific
-method, evaluation or another capability. It can use maintained R, Python, Rust,
-TypeScript, native tools or ordinary files. Components expose the entries their
+A functional component may be an Agent bridge, editor, file tool, runtime/object
+adapter, table, media/chart view or reusable native operation. It can use maintained
+R, Python, Rust, TypeScript, native tools or ordinary files. Components expose the entries their
 consumers need, with the same implementation and conditions across those entries.
 Managed execution entries preserve the original request identity.
+
+The [Plugins capability model](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-MODEL.md)
+defines reusable plugin ownership and optional entries. A plugin may contribute
+several views over one state owner. Specific analysis workflows remain project
+scripts/recipes or acceptance examples; their dataset, design, contrast and
+sequencing do not belong in the base catalog or application routing. The
+[extraction plan](PLUGIN-EXTRACTION.md) records existing 0.1 coupling and the
+new acceptance gates before plugin UI integration. Extraction is not implemented.
 
 A headless caller uses the component's supported entry. Rho assembles its views
 and actions; selected native execution uses Core's public capability. An Agent
@@ -38,6 +46,8 @@ Four concepts connect components to the container. The finite 0.1 backend expose
 their concrete [public schemas](../protocol/v1.json), HTTP/SSE service and client.
 Plugins supplies the headless functional owners; UI entries remain unavailable.
 [Headless backend](HEADLESS.md) records the actual boundary and persistence rules.
+The current schemas/readers still encode airway actions, gene selection and a
+specific comparison. Those are prototype constraints, not reusable plugin contracts.
 
 | Concept | Meaning |
 | --- | --- |
@@ -52,9 +62,13 @@ resource validity and native preconditions. A resource reference does not grant
 access to its parent directory. Models and retrieved content cannot expand scope;
 already authorized actions do not receive an additional container approval.
 
-Tables and plots use stable domain identity. Sorting and filtering do not turn
-visible row positions into entity identifiers. Stale selections are rejected or
-explained before they affect data or execution.
+Tables and charts use provider-declared stable keys and explicit field mappings.
+Linking different resource versions or entity spaces requires an owner-validated
+mapping. Sorting and filtering do not turn visible row positions into identifiers.
+Stale selections are rejected or explained before they affect data or execution.
+Image coordinates have their own contract; image viewing does not imply data
+entity selection. R objects require actual runtime-owned descriptors/snapshots;
+a resident Core Host alone does not establish a live R session.
 
 ## State and lifecycle ownership
 
