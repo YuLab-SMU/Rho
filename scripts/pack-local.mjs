@@ -69,7 +69,8 @@ for (const required of ['vendor/rho-core', 'protocol/v1.json', 'protocol/v2.json
 for (const [id, dependency] of [['tables', 'csv-parse'], ['agent', '@modelcontextprotocol/sdk']]) {
   if (result.files.some(f => f.path === 'node_modules/' + dependency + '/package.json') !== selected.includes(id)) throw new Error('Optional dependency did not follow its plugin: ' + dependency);
 }
-if (result.files.some(f => /(^|\/)examples\//.test(f.path) || /\.R$/.test(f.path) || f.path.includes('@rho-workspace/headless'))) throw new Error('An aggregate package or project recipe leaked into the application.');
+const firstParty = file => !file.startsWith('node_modules/') || file.startsWith('node_modules/@rho-workspace/');
+if (result.files.some(f => (firstParty(f.path) && /(^|\/)examples\//.test(f.path)) || /\.R$/.test(f.path) || f.path.includes('@rho-workspace/headless'))) throw new Error('An aggregate package or project recipe leaked into the application.');
 const artifact = path.join(destination, result.filename);
 const report = { ...composition, artifact: { filename: result.filename, bytes: result.size, sha256: sha(await fs.readFile(artifact)), integrity: result.integrity, files: result.entryCount } };
 await fs.writeFile(path.join(destination, 'composition.json'), JSON.stringify(report, null, 2) + '\n');
