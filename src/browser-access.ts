@@ -1,0 +1,45 @@
+import * as fs from 'node:fs/promises';
+import path from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { confined, digest, requireThat } from '@rho-workspace/plugin-contracts';
+import type { Principal, State } from './state.js';
+
+export const browserLimits = { maxSessions: 16, maxPairings: 8, pairingTtlMs: 300000, sessionTtlMs: 43200000, maxPairAttempts: 32 };
+// U1 is intentionally observation-only apart from choosing/creating a project.
+// Future UI stages must explicitly extend this reviewed operation ceiling.
+export const browserMethods = ['protocol.describe', 'project.list', 'project.open', 'project.create', 'capability.list', 'observation.snapshot', 'composition.read', 'document.read', 'resource.read', 'skill.list', 'skill.read'];
+interface Pairing { hash: string; root: string; methods: string[]; expires: number }
+export class BrowserAccess {
+  limits: typeof browserLimits;
+  private pairings: Pairing[] = [];
+  private attempts: number[] = [];
+  constructor(private state: State, limits: Partial<typeof browserLimits> = {}) { this.limits = { ...browserLimits, ...limits }; }
+  async createPairing(root = this.state.root, methods = browserMethods) {
+    const selectedRoot = await fs.realpath(root);
+    await confined(this.state.root, path.relative(this.state.root, selectedRoot) || '.');
+    requireThat((await fs.stat(selectedRoot)).isDirectory(), 'scope', 'Select a project directory root.');
+    requireThat(methods.length > 0 && new Set(methods).size === methods.length && methods.every(m => browserMethods.includes(m)), 'scope', 'Browser grants cannot exceed the reviewed browser operation scope.');
+    const now = Date.now(); this.pairings = this.pairings.filter(p => p.expires > now);
+    requireThat(this.pairings.length < this.limits.maxPairings, 'limit', 'Pending browser pairing limit reached; existing sessions are retained.', { limit: 'browser.maxPairings' });
+    const code = randomBytes(24).toString('base64url'), expires = now + this.limits.pairingTtlMs;
+    this.pairings.push({ hash: digest(code), root: selectedRoot, methods: [...methods], expires });
+    return { code, expiresAt: new Date(expires).toISOString() };
+  }
+  async pair(code: unknown) {
+    const now = Date.now(); this.attempts = this.attempts.filter(t => t > now - 60000);
+    requireThat(this.attempts.length < this.limits.maxPairAttempts, 'limit', 'Browser pairing attempt limit reached. Wait one minute; no existing session is changed.', { limit: 'browser.maxPairAttempts' });
+    this.attempts.push(now);
+    requireThat(typeof code === 'string' && /^[A-Za-z0-9_-]{32}$/.test(code), 'unauthorized', 'Pairing code is invalid, expired or already used.');
+    const pairing = this.pairings.find(p => p.hash === digest(code) && p.expires > now);
+    requireThat(pairing, 'unauthorized', 'Pairing code is invalid, expired or already used.');
+    const sessions = this.state.principals.filter(p => p.kind === 'browser' && Date.parse(p.expiresAt ?? '') > now);
+    requireThat(sessions.length < this.limits.maxSessions, 'limit', 'Browser session limit reached; existing sessions are retained.', { limit: 'browser.maxSessions' });
+    const token = randomBytes(32).toString('hex'), expiresAt = new Date(now + this.limits.sessionTtlMs).toISOString();
+    const principal: Principal = { id: 'browser:' + randomBytes(16).toString('hex'), kind: 'browser', tokenHash: digest(token), projectRoot: pairing.root, methods: [...pairing.methods], expiresAt };
+    // Consume synchronously before awaiting storage: two tabs cannot redeem once.
+    this.pairings = this.pairings.filter(p => p !== pairing);
+    this.state.principals = this.state.principals.filter(p => p.kind !== 'browser' || Date.parse(p.expiresAt ?? '') > now);
+    await this.state.addPrincipal(principal);
+    return { token, expiresAt, methods: principal.methods };
+  }
+}

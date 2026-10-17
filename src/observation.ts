@@ -28,17 +28,17 @@ export class ObservationClient<T extends { cursor: number }> {
     }
   }
 }
-export function httpObservation(url: string, token: string, projectId: string, maxBufferedEventBytes = observationLimits.maxBufferedEventBytes): ObservationTransport<any> {
+export function httpObservation(url: string, token: string, projectId: string, maxBufferedEventBytes = observationLimits.maxBufferedEventBytes, fetcher: typeof fetch = fetch): ObservationTransport<any> {
   const headers = { authorization: 'Bearer ' + token };
   return {
     async snapshot(signal) {
-      const response = await fetch(new URL('/api/v2/observation.snapshot', url), { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ projectId }), signal });
+      const response = await fetcher(new URL('/api/v2/observation.snapshot', url), { method: 'POST', credentials: 'omit', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ projectId }), signal });
       const envelope: any = await response.json();
       if (!envelope.ok) throw Object.assign(new Error(envelope.error.message), { fatal: ['unauthorized', 'scope', 'origin'].includes(envelope.error.kind) });
       return envelope.value;
     },
     async *events(after, signal) {
-      const response = await fetch(new URL('/api/v2/events?' + new URLSearchParams({ projectId, after: String(after) }), url), { headers, signal });
+      const response = await fetcher(new URL('/api/v2/events?' + new URLSearchParams({ projectId, after: String(after) }), url), { headers, credentials: 'omit', signal });
       if (!response.ok || !response.body) {
         const result: any = await response.json();
         throw Object.assign(new Error(result.error?.message ?? 'Observation stream unavailable.'), { fatal: ['unauthorized', 'scope', 'origin'].includes(result.error?.kind) });

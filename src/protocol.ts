@@ -11,6 +11,9 @@ const record = { type: 'object' };
 const array = (items: any) => ({ type: 'array', items });
 const response = (properties: Record<string, any>, required = Object.keys(properties)) => ({ type: 'object', properties, required, additionalProperties: true });
 export const operations: Record<string, any> = { ...base.operations,
+  'project.create': obj({ name: { type: 'string', minLength: 1, maxLength: 80, pattern: '^[^/\\\\]+$', not: { enum: ['.', '..', '.rho', '.git'] } } }),
+  'session.browser.pair': obj({ path: text }, []),
+  'session.browser.revoke': obj({ sessionId: text }),
   'capability.configure': obj({ ...project, expectedVersion: integer, changeId: text, enabled: { type: 'array', items: text, maxItems: 32, uniqueItems: true } }),
   'skill.list': obj(project),
   'skill.read': obj({ ...project, skillId: text, expectedDigest: { anyOf: [ref.properties.version, { type: 'null' }] } }, ['projectId', 'skillId']),
@@ -55,6 +58,8 @@ const selection = { ...base.definitions.selection, properties: { ...base.definit
 const definitions = { ...base.definitions, run: runSchema, resource: resourceSchema, selection, declaration: declarationSchema, executionInput: executionInputSchema, requirements: requirementsSchema };
 const artifactFacts = response({ integrity: record, domain: record, resources: array(resourceSchema) }, ['integrity', 'domain']);
 export const responses: Record<string, any> = { ...base.responses,
+  'session.browser.pair': response({ code: text, expiresAt: text }),
+  'session.browser.revoke': response({ sessionId: text, revoked: { type: 'boolean' } }),
   'protocol.describe': response({ apiVersion: { const: '2.0' }, schemaVersion: { const: 2 }, operations: record, definitions: record, responses: record }),
   'capability.configure': response({ version: positive, enabled: array(text), receipt: response({ changeId: text, author: text, version: positive, enabled: array(text), at: text }) }),
   'skill.list': array(response({ id: text, version: text, digest: ref.properties.version, content: text })),

@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { atomicJson, confined, digest, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
 export interface Project { id: string; root: string; openedAt: string }
-export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[] }
+export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[]; kind?: 'browser'; projectRoot?: string; expiresAt?: string }
 export async function lease(directory: string) {
   const file = path.join(directory, 'service.lock');
   // Kernel advisory lock on a stable inode, held by an owned helper until pipe
@@ -29,6 +29,7 @@ os.close(fd)
 export class State {
   projects: Project[] = []; principals: Principal[] = [];
   private releases: (() => Promise<void>)[] = [];
+  private principalWrites: Promise<void> = Promise.resolve();
   constructor(public root: string, public directory: string) {}
   async init() {
     this.root = await fs.realpath(this.root);
@@ -38,7 +39,19 @@ export class State {
     this.projects = await readJson(path.join(this.directory, 'projects.json'), []);
     this.principals = await readJson(path.join(this.directory, 'principals.json'), []);
   }
-  async addPrincipal(principal: Principal) { this.principals.push(principal); await atomicJson(path.join(this.directory, 'principals.json'), this.principals); }
+  private persistPrincipals() {
+    // Agent grants and browser pairing use different request queues, but share
+    // one durable principal list. A late write must not overwrite a newer grant.
+    const write = this.principalWrites.catch(() => {}).then(() => atomicJson(path.join(this.directory, 'principals.json'), this.principals));
+    this.principalWrites = write; return write;
+  }
+  async addPrincipal(principal: Principal) { this.principals.push(principal); await this.persistPrincipals(); }
+  async revokeBrowser(id: string) {
+    const previous = this.principals.find(p => p.id === id && p.kind === 'browser');
+    this.principals = this.principals.filter(p => p !== previous);
+    await this.persistPrincipals();
+    return { sessionId: id, revoked: !!previous };
+  }
   async open(relative: string) {
     requireThat(!relative.split('/').some(p => ['.rho', '.git'].includes(p)), 'scope', 'Internal owner state is not a project.');
     const root = await confined(this.root, relative);
@@ -64,6 +77,7 @@ export class State {
     requireThat(!principal.projectId || principal.projectId === id, 'scope', 'Credential belongs to a different project.');
     const project = this.projects.find(p => p.id === id);
     requireThat(project, 'not_found', 'Project is not registered.');
+    if (principal.projectRoot) await confined(principal.projectRoot, path.relative(principal.projectRoot, project.root) || '.');
     await confined(this.root, path.relative(this.root, project.root));
     await this.acquire(project); return project;
   }

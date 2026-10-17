@@ -5,8 +5,11 @@ This is the implementation direction for the npm-distributed local WebUI and its
 [Architecture](ARCHITECTURE.md) defines ownership; [Status](STATUS.md) records
 implementation. The headless slice locks Node 22.22.x, TypeScript 5.9.3, Ajv
 8.20.0, MCP SDK 1.29.0 and csv-parse 7.0.3. [Backend acceptance](BACKEND-ACCEPTANCE.md)
-records its native dependencies and immutable selected composition. UI library
-versions remain to be selected with the browser implementation.
+records its native dependencies and immutable selected composition. U1 selects
+React/React DOM 19.3.1, Vite 8.3.4, Dockview/Dockview React 8.6.0 (MIT, no Enterprise
+package) and Playwright 1.64.1 as an external development driver. The lockfile and
+asset inventory freeze versions/licenses. Functional UI library versions remain
+to be selected with their owner entries; see [Browser UI](UI.md).
 
 ## Main combination
 
@@ -37,7 +40,8 @@ locate selected compatible Core artifacts and report missing R/component
 dependencies. The implemented [headless package](HEADLESS.md) targets macOS arm64,
 uses built-in Node HTTP, private bearer descriptors and project-scoped credentials,
 and assembles a local installable tarball with a digest-checked Core binary.
-Other platforms, the browser shell and a registry publication channel remain open.
+U1 adds the scoped browser shell and same-origin built assets. Functional UI
+entries, other platforms and a registry publication channel remain open.
 
 Bind the first-release service to loopback and authenticate its local sessions;
 loopback binding alone does not grant authorization. Validate browser origins,

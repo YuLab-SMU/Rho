@@ -38,7 +38,7 @@ run('npm', ['run', 'build'], root);
 const pluginIds = ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations'];
 const selected = values['select-plugins'] === undefined ? pluginIds : values['select-plugins'].split(',').filter(Boolean);
 if (new Set(selected).size !== selected.length || selected.some(id => !pluginIds.includes(id))) throw new Error('Select unique known plugin IDs.');
-const application = await source(root, ['src', 'scripts', 'protocol', 'fixtures', 'package.json', 'package-lock.json', 'tsconfig.json', 'README.md', 'LICENSE', 'docs/HEADLESS.md', 'docs/COLLABORATION.md']);
+const application = await source(root, ['src', 'web', 'scripts', 'protocol', 'fixtures', 'package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.web.json', 'vite.config.ts', 'README.md', 'LICENSE', 'docs/HEADLESS.md', 'docs/COLLABORATION.md', 'docs/UI.md']);
 const plugins = await source(pluginRoot, ['packages/contracts', ...selected.map(id => 'plugins/' + id), 'scripts', 'package.json', 'package-lock.json', 'LICENSE']);
 const binary = await fs.readFile(path.resolve(values.core));
 let core;
@@ -64,14 +64,15 @@ for (const name of Object.keys(manifest.dependencies).filter(name => name.starts
 for (const item of pluginPacks.packages) manifest.dependencies[item.package] = 'file:vendor/' + item.filename;
 manifest.bundleDependencies = Object.keys(manifest.dependencies);
 delete manifest.devDependencies;
-manifest.scripts = { 'acceptance:collaboration': 'node scripts/collaboration-acceptance.mjs', 'acceptance:collaboration:agent': 'RHO_COLLAB_MODEL=1 node scripts/collaboration-acceptance.mjs', acceptance: 'node scripts/acceptance.mjs', recovery: 'node scripts/recovery-acceptance.mjs' };
+manifest.scripts = { 'acceptance:collaboration': 'node scripts/collaboration-acceptance.mjs', 'acceptance:collaboration:agent': 'RHO_COLLAB_MODEL=1 node scripts/collaboration-acceptance.mjs', 'acceptance:ui': 'node scripts/ui-acceptance.mjs', acceptance: 'node scripts/acceptance.mjs', recovery: 'node scripts/recovery-acceptance.mjs' };
 await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
 run('npm', ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], stage);
-const composition = { schemaVersion: 1, platform: process.platform + '-' + process.arch, node: process.version, application: { repository: 'https://github.com/YuLab-SMU/Rho', ...application }, plugins: { repository: 'https://github.com/YuLab-SMU/Rho-plugins', ...plugins, selected, packages: pluginPacks.packages.map(({ files, ...item }) => item) }, core: { repository: 'https://github.com/YuLab-SMU/Rho-core', ...core, artifactSha256: sha(binary), bytes: binary.length }, productionLockSha256: sha(await fs.readFile(path.join(stage, 'package-lock.json'))), distribution: 'unsigned-local-npm-tarball', registryPublication: 'not-performed' };
+const web = JSON.parse(await fs.readFile(path.join(stage, 'dist/web/composition.json'), 'utf8'));
+const composition = { schemaVersion: 1, platform: process.platform + '-' + process.arch, node: process.version, application: { repository: 'https://github.com/YuLab-SMU/Rho', ...application }, plugins: { repository: 'https://github.com/YuLab-SMU/Rho-plugins', ...plugins, selected, packages: pluginPacks.packages.map(({ files, ...item }) => item) }, core: { repository: 'https://github.com/YuLab-SMU/Rho-core', ...core, artifactSha256: sha(binary), bytes: binary.length }, web, productionLockSha256: sha(await fs.readFile(path.join(stage, 'package-lock.json'))), distribution: 'unsigned-local-npm-tarball', registryPublication: 'not-performed' };
 await fs.writeFile(path.join(stage, 'vendor/composition.json'), JSON.stringify(composition, null, 2) + '\n');
 const result = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', destination], stage))[0];
 if (result.files.some(f => path.isAbsolute(f.path) || f.path.split('/').includes('..'))) throw new Error('Package contains a path outside the assembled root.');
-for (const required of ['vendor/rho-core', 'protocol/v1.json', 'protocol/v2.json', ...pluginPacks.packages.map(p => 'node_modules/' + p.package + '/dist/index.js')]) if (!result.files.some(f => f.path === required)) throw new Error('Package is missing ' + required);
+for (const required of ['vendor/rho-core', 'protocol/v1.json', 'protocol/v2.json', 'dist/web/index.html', 'dist/web/composition.json', 'dist/web/licenses.md', ...web.assets.map(a => 'dist/web/' + a.path), ...pluginPacks.packages.map(p => 'node_modules/' + p.package + '/dist/index.js')]) if (!result.files.some(f => f.path === required)) throw new Error('Package is missing ' + required);
 for (const [id, dependency] of [['tables', 'csv-parse'], ['agent', '@modelcontextprotocol/sdk']]) {
   if (result.files.some(f => f.path === 'node_modules/' + dependency + '/package.json') !== selected.includes(id)) throw new Error('Optional dependency did not follow its plugin: ' + dependency);
 }

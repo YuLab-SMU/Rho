@@ -1,9 +1,21 @@
-# Plugin interfaces for a future UI
+# Plugin interfaces and browser UI handoff
 
-The implemented composition has **eight capability packages 0.4.0**, one action
+## U1 browser entry
+
+[Browser implementation](UI.md) now supplies scoped pairing, same-origin assets,
+the typed `./browser` Fetch SDK, bounded snapshot/SSE reconciliation and the
+observation-only shell based on Paper's Rho experience V0.1. `./ui-contract` is
+`0.1-draft`; no functional renderer is selected. U2-U4 remain pending. The current
+nine-owner headless extension is in [Collaboration](COLLABORATION.md): conditional
+composition transactions/undo, protection, caller/view/shared selection,
+Annotations feedback/replies, frozen Agent contexts and format-3 archives. The
+inventory below retains the original eight-owner component boundary and calls out
+the additive contracts; it does not supersede the versioned protocol.
+
+The historical component baseline has **eight capability packages 0.4.0**, one action
 (`r.execute` 0.2.0) and five component descriptors (0.2.0). All five descriptors
-report `ui:"unavailable"`. This is an interface inventory and handoff; no browser
-UI or browser SDK is implemented by this document.
+report `ui:"unavailable"`. This is the headless owner inventory; the shell does
+not supply a replacement functional implementation.
 
 The provider-owned [Node API reference](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PUBLIC-INTERFACES.md)
 lists every package entry, export, service port and capability limit. The selected
@@ -16,8 +28,8 @@ in the [boundary review](PLUGIN-BOUNDARY-ACCEPTANCE.md).
 
 | Consumer | Public entry | What it owns |
 | --- | --- | --- |
-| Rho local service | Eight Node package roots and pure owner `./contract` entries | Select versions, inject ports, enforce scope and compose owner capabilities |
-| Browser UI, once implemented | Authenticated `POST /api/v2/{operation}` and `GET /api/v2/events` | Present returned facts; send explicit edits, selections, commands and composition intent |
+| Rho local service | Nine Node package roots and pure owner `./contract` entries | Select versions, inject ports, enforce scope and compose owner capabilities |
+| Browser shell | `@rho-workspace/local/browser`, authenticated HTTP JSON/SSE | Observe owner facts within an explicitly narrowed browser grant |
 | Node caller / headless acceptance | `RhoClient` from `@rho-workspace/local` | JSON calls, raw event stream and filesystem-backed original intent retention |
 | External Agent | `rho-agent-mcp` with an operator-provisioned project descriptor | Expose granted operations as tools; external client retains model loop/chat |
 
@@ -31,14 +43,15 @@ into Contracts or reimplementing provider semantics.
 `fromFile()` and `retainOperation(file,input)` require ordinary local files;
 `call<T>()` accepts generic method/input values rather than generated per-method
 types. `events()` returns a raw `ReadableStream`, without SSE parsing, reconnect
-or reconciliation. There is no browser export. `./server` and `./protocol` are
+or reconciliation. The separate `./browser` export reuses `./observation` without
+Node or DOM imports. `./server` and `./protocol` are
 Node/application entries, not browser SDK promises.
 
-## The eight owners and their HTTP consumers
+## The owners and their HTTP consumers
 
 All operations in this section take `projectId`. Slash-separated suffixes expand
 to separate operations, for example `document.open/read` means `document.open`
-and `document.read`. These are application routes to the owners, not eight
+and `document.read`. These are application routes to the owners, not nine
 independent HTTP servers.
 
 | Owner | UI-facing operations | Facts and conditions to retain |
@@ -51,13 +64,14 @@ independent HTTP servers.
 | Media | `media.describe`, `resource.read`; `context.create` for rectangles | Original bytes/ref, declared pages/dimensions; validated original coordinates |
 | Charts | `data.plot` | Numeric scatter fields, stable entity keys, original count and sampling facts |
 | Agent | `context.create/read`, `binding.open/close/list/activity` | Frozen context and fetch receipts; caller-scoped binding/activity facts |
+| Annotations (additive extension) | `annotation.create/read/list/reply` | Exact document/entity anchors, Documents-owned drafts, submitted messages and explicit `replyTo` |
 
 Dependencies are service ports, not sibling implementation imports. Documents,
 Files and Requirements have no required capability provider. Tables/Media need
 Files; Charts needs Tables. R needs Files for exported objects and additionally
 Requirements for its execution action; buffer scripts additionally need Documents.
 Agent requests use only the document/file/table/media providers their context needs.
-All eight depend on the generic Contracts package; only Tables installs csv-parse,
+All nine depend on the generic Contracts package; only Tables installs csv-parse,
 only Agent installs the MCP SDK. Rho and Core retain assembly and managed execution.
 
 ### Documents and execution inputs
@@ -161,8 +175,11 @@ A `composition.put` includes `compositionId`, `expectedVersion`, `views`, `layou
 Each view has `id`, `component`, `version`, `props`, `bindings`, optional entity
 `selection`. New compositions use `expectedVersion:0`; updates use the returned
 integer version. Unknown/uninstalled entries remain unavailable references.
-`layout` is presently an opaque object: Dockview conversion, browser validation,
-mount/update/release behavior and renderer loading remain to implement.
+The legacy `layout` object is opaque. The additive `composition.apply/undo` path
+uses validated group/view nodes, stable IDs, conditional versions and receipts;
+see [Collaboration](COLLABORATION.md#composition-and-selection).
+U1 incrementally observes view IDs as read-only tabs. Dockview geometry conversion,
+owner renderers and browser layout writes remain U2-U3 work.
 Documents, resources and compositions have separate versions; there is no global
 scientific revision or atomic cross-owner snapshot.
 
@@ -202,14 +219,14 @@ owned Host. Keep `delivery`, `execution`, `native`, `integrity`, `domain` and
 
 | Area | Current limit / remaining capability |
 | --- | --- |
-| Browser transport | No browser-safe typed client, durable browser intent store, SSE parser or reconnect/reconciliation adapter |
-| UI bootstrap | Service has API routes only, no HTML/static UI hosting or browser credential bootstrap; supplied Origin must equal the service URL, with no separate Vite-origin CORS support |
-| UI plugin runtime | Five descriptors only; no renderers, loading/mount/update/release API, browser shell, docking or validated layout adapter; no marketplace/dynamic package loader |
+| Browser transport | Typed U1 SDK and bounded SSE reconciliation exist; durable write intents remain U2-U4 work |
+| UI bootstrap | Same-origin static build and scoped one-time pairing exist; no separate Vite-origin CORS support |
+| UI plugin runtime | U1 shell/read-only Dockview tabs exist; five functional renderers and conditional geometry adapter remain pending; no marketplace/dynamic loader |
 | Editing and files | Backend edit/undo/save works; redo, file watcher, language service, project file tree and upload/rename/delete routes are absent |
 | R/environment | Batch Rscript/exported objects only; no persistent interpreter/live variables/memory recovery, R installer or lockfile environment provisioning |
-| Data and visualization | Bounded whole-resource parsing, single scatter projection and equal-string comparison; no table-cell write, general query/mapping engine, other chart types, chart rendering/export, image/PDF decoding or annotations |
+| Data and visualization | Bounded whole-resource parsing, single scatter projection and equal-string comparison; no table-cell write, general query/mapping engine, other chart types, chart rendering/export, image/PDF decoding or annotations UI |
 | Agent | Scoped MCP and explicit context fetch work; no embedded chat, proactive external-chat delivery, hosted model loop or conversation synchronization |
-| Product acceptance | Browser interactions, IME/focus/clipboard, accessibility, representative widths/performance and complete npm-to-WebUI experience remain unverified |
+| Product acceptance | U1 runner/evidence is separately scoped; native editor input, full accessibility/performance and U2-U4 closure remain pending |
 
 These are capability limits, not additions to this task. Fixed scientific
 workflows stay in ordinary projects/examples and external checkers. They must not

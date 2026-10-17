@@ -1,6 +1,26 @@
 # Rho status
 
-Updated: 2026-10-16.
+Updated: 2026-10-17.
+
+## U1 browser shell candidate
+
+The scoped browser shell is implemented against accepted headless 0.4: one-time
+local pairing, same-origin static assets, tab session credentials, typed Fetch
+SDK, real project/capability state and unavailable retained views. Observation
+resumes after refresh, disconnection and same-port service restart, without native
+execution. The UI contribution entry is `0.1-draft`, not protocol v1.
+[Browser UI](UI.md) separates U1 from the unimplemented U2-U4 collaboration loop.
+
+Source checks: 33 Rho tests pass, including nine browser/security tests. Real
+Chrome 155.0.8059.84 checks pass at 1600/1280/1024/390 widths, with zero Host-start
+and native-submit attempts. Screenshot inspection covers the compact shell,
+context and navigation drawers, command focus and unavailable views. Chrome 154,
+owner editor input/IME/clipboard and full accessibility/product acceptance are
+not claimed. Outside-checkout installation evidence is still pending.
+
+The user selected Paper's Rho experience V0.1 instead of Main app / Composable
+shell. The limited U1 adaptation is on that page for review; implementation and
+internal inspection do not substitute for the user's design acceptance.
 
 ## Headless collaboration extension
 
@@ -112,16 +132,18 @@ both installed consumers. The 0.4 boundary review removed central format schemas
 package-wide execution dependencies and a borrowed script budget. Full and two
 reduced installations passed, with removal/reselection and recovery acceptance. The versioned
 HTTP schema and inert fixtures form the backend boundary for independent UI work.
-The [plugin interface handoff](PLUGIN-UI-HANDOFF.md) records all eight owners,
-dependencies and routes. The Node filesystem client now has a separate DOM-free snapshot/event transport;
-durable browser intent retention and browser bootstrap remain unimplemented,
-along with all five component renderers.
+The [plugin interface handoff](PLUGIN-UI-HANDOFF.md) records selected owners,
+dependencies and routes. The separate DOM-free browser SDK now reuses the
+snapshot/event transport and scoped bootstrap. Durable browser write intents,
+conditional layout writes and all five functional component renderers remain
+U2-U4 work; the U1 registry selects no owner renderer.
 [The six backend work packages](BACKEND-FIRST.md) retain their original
 scope; [first-release tasks](WEBUI-FIRST.md) retain all product gates.
 
-Browser shell/layout and component renderers, native IME/focus/clipboard,
-representative widths, accessibility and full product performance/installation
-acceptance remain pending. React/TypeScript, Vite, Dockview, CodeMirror 6,
+Conditional workspace layout and component renderers, native editor
+IME/focus/clipboard, full accessibility and product performance/installation
+acceptance remain pending. U1 shell widths/command focus are separately checked;
+they do not accept the editor, grid or Agent collaboration loop. React/TypeScript, Vite, Dockview, CodeMirror 6,
 AG Grid Community, ECharts and a typed json-render catalog remain selected UI
 choices. Electron and cross-window movement follow later.
 

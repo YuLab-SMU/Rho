@@ -2,7 +2,7 @@
   "name": "@rho-workspace/local",
   "version": "0.4.0",
   "type": "module",
-  "description": "Rho versioned local backend and headless client",
+  "description": "Rho local workspace service, scoped browser shell and headless client",
   "license": "AGPL-3.0-only",
   "engines": {
     "node": ">=22.22.0 <23"
@@ -14,7 +14,9 @@
     ".": "./dist/client.js",
     "./server": "./dist/server.js",
     "./protocol": "./dist/protocol.js",
-    "./observation": "./dist/observation.js"
+    "./observation": "./dist/observation.js",
+    "./browser": "./dist/browser.js",
+    "./ui-contract": "./dist/ui-contract.js"
   },
   "files": [
     "dist",
@@ -28,10 +30,12 @@
     "docs/HEADLESS.md",
     "docs/COLLABORATION.md",
     "scripts/collaboration-acceptance.mjs",
-    "scripts/claude-consumer.mjs"
+    "scripts/claude-consumer.mjs",
+    "docs/UI.md",
+    "scripts/ui-acceptance.mjs"
   ],
   "scripts": {
-    "build": "tsc && node scripts/protocol.mjs",
+    "build": "npm run build:service && npm run build:web",
     "test": "npm run build && node --test test/*.test.mjs",
     "acceptance": "node scripts/acceptance.mjs",
     "prepack": "npm run build && node scripts/check-pack.mjs",
@@ -39,24 +43,36 @@
     "recovery": "node scripts/recovery-acceptance.mjs",
     "agent": "node scripts/agent-experiment.mjs",
     "acceptance:collaboration": "node scripts/collaboration-acceptance.mjs",
-    "acceptance:collaboration:agent": "RHO_COLLAB_MODEL=1 node scripts/collaboration-acceptance.mjs"
+    "acceptance:collaboration:agent": "RHO_COLLAB_MODEL=1 node scripts/collaboration-acceptance.mjs",
+    "build:service": "tsc && node scripts/protocol.mjs",
+    "build:web": "tsc -p tsconfig.web.json && vite build && node scripts/web-manifest.mjs",
+    "test:ui": "npm run build && node --test test/browser.test.mjs && node scripts/ui-acceptance.mjs",
+    "acceptance:ui": "node scripts/ui-acceptance.mjs"
   },
   "dependencies": {
-    "ajv": "8.20.0",
+    "@rho-workspace/plugin-agent": "file:../Rho-plugins/plugins/agent",
+    "@rho-workspace/plugin-annotations": "file:../Rho-plugins/plugins/annotations",
+    "@rho-workspace/plugin-charts": "file:../Rho-plugins/plugins/charts",
     "@rho-workspace/plugin-contracts": "file:../Rho-plugins/packages/contracts",
     "@rho-workspace/plugin-documents": "file:../Rho-plugins/plugins/documents",
     "@rho-workspace/plugin-files": "file:../Rho-plugins/plugins/files",
+    "@rho-workspace/plugin-media": "file:../Rho-plugins/plugins/media",
     "@rho-workspace/plugin-r": "file:../Rho-plugins/plugins/r",
     "@rho-workspace/plugin-requirements": "file:../Rho-plugins/plugins/requirements",
     "@rho-workspace/plugin-tables": "file:../Rho-plugins/plugins/tables",
-    "@rho-workspace/plugin-media": "file:../Rho-plugins/plugins/media",
-    "@rho-workspace/plugin-charts": "file:../Rho-plugins/plugins/charts",
-    "@rho-workspace/plugin-agent": "file:../Rho-plugins/plugins/agent",
-    "@rho-workspace/plugin-annotations": "file:../Rho-plugins/plugins/annotations"
+    "ajv": "8.20.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@types/node": "22.20.0",
-    "typescript": "5.9.3"
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "dockview": "8.6.0",
+    "dockview-react": "8.6.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "typescript": "5.9.3",
+    "vite": "8.3.4"
   },
   "bundleDependencies": [
     "ajv",
