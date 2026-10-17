@@ -47,7 +47,8 @@
     "build:service": "tsc && node scripts/protocol.mjs",
     "build:web": "tsc -p tsconfig.web.json && vite build && node scripts/web-manifest.mjs",
     "test:ui": "npm run build && node --test test/browser.test.mjs && node scripts/ui-acceptance.mjs",
-    "acceptance:ui": "node scripts/ui-acceptance.mjs"
+    "acceptance:ui": "node scripts/ui-acceptance.mjs",
+    "test:ui:plugins": "npm run build && node scripts/plugin-ui-acceptance.mjs"
   },
   "dependencies": {
     "@rho-workspace/plugin-agent": "file:../Rho-plugins/plugins/agent",

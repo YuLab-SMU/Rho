@@ -2,7 +2,9 @@ import { lazy, Suspense, useEffect, useRef, useState, type FormEvent } from 'rea
 import { createRoot } from 'react-dom/client';
 import { BrowserClient, type BrowserConnection, type ProjectSummary, type WorkspaceSnapshot } from '../src/browser.js';
 import { Icon } from './icons.js';
+import { PluginCatalog } from './plugins.js';
 import './theme.css';
+import './plugins.css';
 
 const Workspace = lazy(() => import('./workspace.js').then(module => ({ default: module.Workspace })));
 
@@ -164,11 +166,7 @@ function App() {
           </form>
           <div className="section-heading"><h2>Recent projects</h2><span className="muted">Registered with this service</span></div>
           {projects.length ? <div className="project-list">{projects.map(p => <button className="project-row" key={p.id} onClick={() => chooseProject(p)}><span className="project-icon"><Icon name="project" /></span><span className="project-row-name"><strong>{name(p)}</strong><small>Opened {new Date(p.openedAt).toLocaleString()}</small></span><Icon name="arrow" /></button>)}</div> : <div className="empty"><h2>No projects yet</h2><p>Open an existing directory, or give your new project a name to get started.</p></div>}
-        </section> : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div> : screen === 'plugins' ? <section className="page-section"><h1>Capabilities &amp; access</h1><p className="muted">Package presence, project enablement, operation permission and UI renderability are separate.</p>
-          <div className="capability-list">{snapshot.catalog.plugins.map(p => <article className="capability" key={p.id}><div><h2>{p.id}</h2><p className="muted">{p.version ?? 'Not installed'} {p.reason ? ' / ' + p.reason : ''}</p></div><dl><dt>Package</dt><dd>{p.packagePresent ? 'Present' : 'Missing'}</dd><dt>Project</dt><dd>{p.projectEnabled ? 'Enabled' : 'Disabled'}</dd><dt>Dependencies</dt><dd>{p.dependenciesSatisfied ? 'Satisfied' : 'Unavailable'}</dd></dl></article>)}</div>
-          <details><summary>Authorized operations</summary><ul>{snapshot.catalog.operations.filter(o => o.authorized).map(o => <li key={o.method}><code>{o.method}</code> / {o.state}</li>)}</ul></details>
-          <details><summary>Registered UI entries</summary><ul>{snapshot.catalog.components.map(c => <li key={c.id}><code>{c.id}@{c.version}</code> / owner: {c.owner} / renderer unavailable in U1</li>)}</ul></details>
-        </section> : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} /></Suspense> : <section className="page-section overview"><h1>{name(project)}</h1><p className="muted">Your confirmed documents and resources, together in one workspace.</p>
+        </section> : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div> : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} /> : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} /></Suspense> : <section className="page-section overview"><h1>{name(project)}</h1><p className="muted">Your confirmed documents and resources, together in one workspace.</p>
           <div className="section-heading"><h2>Workspace</h2><button onClick={() => setScreen('plugins')}>Inspect capabilities</button></div>
           <div className="empty"><h2>No composition yet</h2><p>This project has no saved layout. Retained compositions will appear here when available.</p></div>
           <h2>Documents</h2>{docs.length ? docs.map(d => <article className="resource-fact" key={d.id}><strong>{d.path}</strong><span className="muted">v{d.version} / {d.dirty ? 'Unsaved owner buffer' : 'Saved'} / Renderer unavailable</span></article>) : <p className="muted">No opened documents.</p>}

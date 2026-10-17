@@ -108,7 +108,7 @@ export class Capabilities {
       const available = provider.packagePresent && provider.projectEnabled && dependenciesSatisfied;
       return {
         method,
-        ...(operation ? { version: operation.version, inputSchema: operation.inputSchema, outputSchema: operation.outputSchema, requires: operation.requires, effect: operation.effect } : {}),
+        ...(operation ? { version: operation.version, inputSchema: operation.inputSchema, outputSchema: operation.outputSchema, requires: operation.requires, effect: operation.effect, ...(operation.presentation ? { presentation: operation.presentation } : {}) } : {}),
         ...(owner ? { owner } : {}),
         packagePresent: provider.packagePresent,
         projectEnabled: provider.projectEnabled,

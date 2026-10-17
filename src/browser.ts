@@ -3,10 +3,20 @@ import { ObservationClient, httpObservation, type observationLimits } from './ob
 // This entry deliberately imports neither Node, the DOM nor optional owners.
 export interface BrowserConnection { url: string; token: string; expiresAt: string; methods: string[] }
 export interface ProjectSummary { id: string; root: string; openedAt: string }
-export interface CapabilityOperation { method: string; owner?: string; state: string; authorized: boolean; packagePresent: boolean; projectEnabled: boolean; dependenciesSatisfied: boolean }
-export interface ComponentDescriptor { id: string; version: string; owner: string; ui: string; bindings: Record<string, string> }
+export interface EntryPresentation { displayName?: string; readOnly?: boolean; runsCode?: boolean }
+export interface PluginPresentation extends EntryPresentation { tagline?: string; category?: string; examplePrompts?: string[]; viewNote?: string }
+export interface CapabilityPlugin {
+  id: string; package: string; version?: string; state: string; reason?: string; selected: boolean;
+  packagePresent: boolean; projectEnabled: boolean; dependenciesSatisfied: boolean; uiRenderable?: boolean;
+  requires?: string[]; presentation?: PluginPresentation;
+}
+export interface CapabilityOperation { method: string; owner?: string; state: string; authorized: boolean; packagePresent: boolean; projectEnabled: boolean; dependenciesSatisfied: boolean; presentation?: EntryPresentation }
+export interface CapabilityAction { id: string; version: string; pluginId?: string; owner: string; presentation?: EntryPresentation }
+export interface ComponentDescriptor { id: string; version: string; owner: string; pluginId?: string; ui: string; bindings: Record<string, string>; presentation?: EntryPresentation }
 export interface CapabilityCatalog {
-  plugins: { id: string; package: string; version?: string; state: string; reason?: string; selected: boolean; packagePresent: boolean; projectEnabled: boolean; dependenciesSatisfied: boolean }[];
+  plugins: CapabilityPlugin[];
+  actions?: CapabilityAction[];
+  unavailableActions?: (CapabilityAction & { state: string; missing: string[] })[];
   components: ComponentDescriptor[];
   operations: CapabilityOperation[];
   configuration: { version: number; enabled: string[] };

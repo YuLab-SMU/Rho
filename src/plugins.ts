@@ -62,6 +62,8 @@ export class Plugins {
           requireThat(module.plugin.id === id && module.plugin.package === status.package && module.plugin.version === '0.4.0', 'condition', 'Plugin identity/version does not match this application selection.');
           (this.modules as any)[id] = module;
           status.version = module.plugin.version;
+          status.presentation = module.plugin.presentation;
+          status.requires = [...module.plugin.requires];
           status.packagePresent = true;
           status.state = 'available'; delete status.reason;
         } catch { status.reason = 'Selected plugin package is missing, incompatible or cannot be loaded.'; }
@@ -95,15 +97,15 @@ export class Plugins {
   }
   get catalog() {
     const descriptors = Object.values(this.modules).map(m => m.plugin as PluginDescriptor);
-    const declared = descriptors.flatMap(p => p.actions ?? []);
-    const actions = declared.filter(a => (a.requires ?? []).every((id: PluginId) => this.modules[id])).map(a => a.id === 'r.execute' ? { ...a, inputSchema: executionInputSchema } : a);
-    const unavailableActions = declared.filter(a => !actions.some(b => b.id === a.id)).map(a => ({ id: a.id, version: a.version, state: 'unavailable', missing: a.requires.filter((id: PluginId) => !this.modules[id]) }));
+    const declared = descriptors.flatMap(p => (p.actions ?? []).map(action => ({ ...action, pluginId: p.id })));
+    const actions = declared.filter(a => (a.requires ?? []).every(id => this.modules[id as PluginId])).map(a => a.id === 'r.execute' ? { ...a, inputSchema: executionInputSchema } : a);
+    const unavailableActions = declared.filter(a => !actions.some(b => b.id === a.id)).map(a => ({ ...a, state: 'unavailable', missing: a.requires.filter(id => !this.modules[id as PluginId]) }));
     return { version: '0.4.0', plugins: this.availability.map(p => ({
       ...p,
       packagePresent: p.packagePresent === true,
       dependenciesSatisfied: p.packagePresent === true && p.state === 'available' && !(p.missing?.length),
       uiRenderable: false
-    })), operations: this.operationDeclarations(), actions, unavailableActions, components: descriptors.flatMap(p => p.components ?? []), capabilities: [...descriptors.flatMap(p => p.capabilities), ...actions.flatMap(a => a.capabilities ?? [])], skills: descriptors.flatMap(p => p.skills ?? []), ...(this.modules.agent ? { agent: this.modules.agent.plugin.agent } : {}) };
+    })), operations: this.operationDeclarations(), actions, unavailableActions, components: descriptors.flatMap(p => (p.components ?? []).map(component => ({ ...component, pluginId: p.id }))), capabilities: [...descriptors.flatMap(p => p.capabilities), ...actions.flatMap(a => a.capabilities ?? [])], skills: descriptors.flatMap(p => p.skills ?? []), ...(this.modules.agent ? { agent: this.modules.agent.plugin.agent } : {}) };
   }
   descriptors() { return Object.values(this.modules).map(m => m.plugin as PluginDescriptor); }
   availableIds() { return this.descriptors().map(p => p.id as PluginId); }

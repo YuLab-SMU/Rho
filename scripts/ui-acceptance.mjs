@@ -150,7 +150,7 @@ try {
   assert.equal((await (await operator()).call('document.read', { projectId: p.id, documentId: d.id })).content, edited.content);
   report.checks.push('same-origin-service-restart-retains-browser-session-and-confirmed-owner-state');
   await page.getByRole('button', { name: 'Plugins', exact: true }).click();
-  await page.getByRole('heading', { name: 'Capabilities & access', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Plugins', exact: true }).waitFor();
   await page.screenshot({ path: path.join(directory, 'capabilities-1280.png'), fullPage: true });
   await page.locator('main').evaluate(element => { element.scrollTop = element.scrollHeight; });
   await page.screenshot({ path: path.join(directory, 'capabilities-bottom-1280.png'), fullPage: true });
