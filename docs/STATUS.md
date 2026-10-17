@@ -14,15 +14,20 @@ DOM-free snapshot/event reconciliation and explicit format-3 archives preserve
 collaboration without native replay; older exports reject lossy representation.
 See [Collaboration](COLLABORATION.md) for contracts, limits and executable checks.
 
-Source checks: 24 Rho tests and 14 Plugins tests pass. The deterministic real
-stdio MCP/HTTP scenario and actual Claude Code 2.1.302 scenario pass, with zero
-Host starts and native dispatches. Separate explicit R execution covers one
-native dispatch, close-without-cancel and unknown outcome after owned Host loss.
-The accepted public Core binary/digest is unchanged; current Core checkout
-commits are not selected. Final installed candidates are checked separately;
-the earlier eight-owner candidate below retains its historical identity.
+Source checks: 24 Rho tests and 14 Plugins tests pass. Fixed Full and six-owner
+Collaboration-minimal npm installations outside the checkouts both pass the
+deterministic real stdio MCP/HTTP and actual Claude Code 2.1.302 scenarios, with
+zero Host starts and native dispatches. Independent owner installations and both
+existing reduced combinations also pass. Installed live HTTP/SSE checks cover
+dual observers, restart, cursor gaps and injected publication/backlog boundaries.
+Separate installed explicit R execution covers one native dispatch,
+close-without-cancel and unknown outcome after owned Host loss. The accepted
+public Core binary/digest is unchanged; current Core checkout commits are not
+selected. [Collaboration acceptance](COLLABORATION-ACCEPTANCE.md) freezes the
+source/package identities and limits: headless collaboration is accepted, not UI.
+The earlier eight-owner candidate below retains its historical identity.
 
-## Application
+## Historical application baseline
 
 Version 0.4 provides documents, files, R, requirements, tables, media, charts and
 Agent through eight independent npm plugins. Each owns its descriptor, behavior and
@@ -60,7 +65,7 @@ no add-on R package. Scientific dependencies are explicitly requested by the
 paired project. Other platforms, registry publication and signing remain
 unverified/unselected.
 
-## Verification
+## Historical baseline verification
 
 - Rho: 15/15 protocol, real stdio MCP, retained v1, service, crash/continuity,
   workspace and budget tests passed. Three SIGKILL boundaries retain the original

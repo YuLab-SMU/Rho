@@ -6,6 +6,7 @@ implementation and verification summary.
 
 | Document | Purpose |
 | --- | --- |
+| [Collaboration acceptance](COLLABORATION-ACCEPTANCE.md) | Fixed installed compositions, real Agent replies, zero-native collaboration, recovery and separate native checks |
 | [Headless collaboration](COLLABORATION.md) | Conditional composition/protection, scoped selection, owner-anchored feedback, Skills/MCP and format-3 recovery |
 | [Plugin interfaces and UI handoff](PLUGIN-UI-HANDOFF.md) | Eight owner APIs, HTTP consumers, five unavailable component entries and remaining browser/backend capabilities |
 | [First-release tasks](WEBUI-FIRST.md) | Prioritized npm + local WebUI backlog, Agent connection, human-Agent flows, dependencies and release gates |

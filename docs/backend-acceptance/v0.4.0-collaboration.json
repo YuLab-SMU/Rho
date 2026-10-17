@@ -1,0 +1,1131 @@
+{
+  "schemaVersion": 1,
+  "kind": "rho.backend.collaboration.acceptance",
+  "status": "passed",
+  "observedAt": "2026-10-16T22:33:53.137856+00:00",
+  "scope": {
+    "conclusion": "headless-collaboration-accepted",
+    "phases": [
+      "P1",
+      "P2",
+      "P3",
+      "P4"
+    ],
+    "apiVersion": "2.0",
+    "packageVersion": "0.4.0",
+    "target": "darwin-arm64",
+    "node": "v22.22.3",
+    "npm": "10.9.8",
+    "python": "3",
+    "R": "4.5.2",
+    "agentClient": "Claude Code 2.1.302",
+    "mcpSdk": "1.29.0",
+    "collaborationNativeDispatches": 0,
+    "collaborationHostStarts": 0,
+    "browserProductAccepted": false,
+    "registryPublication": "not-performed",
+    "signing": "not-performed",
+    "sourceOverride": null
+  },
+  "compositions": {
+    "full": {
+      "schemaVersion": 1,
+      "platform": "darwin-arm64",
+      "node": "v22.22.3",
+      "application": {
+        "repository": "https://github.com/YuLab-SMU/Rho",
+        "commit": "3f406d346909779be49f8335af5bde4fdaf83590",
+        "tree": "cfd4b86d12959b77bb5b2d6623671459f4983276",
+        "buildInputsSha256": "ca7f072c77812ae94430abcc2d9dde840e7f6df5e1e5d26158b8a378b4355b17",
+        "localOverride": null
+      },
+      "plugins": {
+        "repository": "https://github.com/YuLab-SMU/Rho-plugins",
+        "commit": "3040ef43cddaf55d15b750bc5eb558e0a0d954f9",
+        "tree": "3c82affb00be706c636957c06942860e303ee5c1",
+        "buildInputsSha256": "2c4a1996aba1ceb96b0d79da8ff78fa62146714ca8e1f5f5a3a56b8b98ade193",
+        "localOverride": null,
+        "selected": [
+          "documents",
+          "files",
+          "r",
+          "requirements",
+          "tables",
+          "media",
+          "charts",
+          "agent",
+          "annotations"
+        ],
+        "packages": [
+          {
+            "id": "contracts",
+            "package": "@rho-workspace/plugin-contracts",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-contracts-0.4.0.tgz",
+            "bytes": 15700,
+            "sha256": "076267057d1b279ff1557c7c45390f4db6eaa1eece80305b58c13dbc300a6c5c",
+            "integrity": "sha512-HGL9XFKpJ1tCY5bWxUstcdsTmfcCLC6bMffxsNpz57p3ay89+qcZcY/+jAkufvGXbKVXOLPPhxqwxqH60N1iOA=="
+          },
+          {
+            "id": "documents",
+            "package": "@rho-workspace/plugin-documents",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-documents-0.4.0.tgz",
+            "bytes": 17940,
+            "sha256": "3f01b27797dd2f9b02fd4db6ab42ca30079c118bde59d718e8c6b015be5c43d9",
+            "integrity": "sha512-KJyUgka+fgMy28aXdIDsgRwp3Tp1/FKB1hy6eTQSfAj0/tbBUWj5HUdwAZvTwdMiwYrVCAVBPOmnkX7KbL5/UQ=="
+          },
+          {
+            "id": "files",
+            "package": "@rho-workspace/plugin-files",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-files-0.4.0.tgz",
+            "bytes": 20977,
+            "sha256": "6bcfccbbcc62ddc5f4aa98da5ba8076a0a2d37779031079b8108952554762dd0",
+            "integrity": "sha512-q+D/Joi6L1gvP7pdNkDFhy+h5Y0guKV8HqgzZnFAMMSKjbzPs5593sZW3xD0dImNWDj7/zlWe3YOm/f/vIQB+g=="
+          },
+          {
+            "id": "r",
+            "package": "@rho-workspace/plugin-r",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-r-0.4.0.tgz",
+            "bytes": 20496,
+            "sha256": "3de80d0fca7cb0b04afccf75b72898591f9b9ca401431a70f9c7a2b60093ac92",
+            "integrity": "sha512-JrKPSX91QLQlX11caLFRz1yIIsqhqaSZe8PiuIjffSrFEIUFpZliOOmc5xkRxStjsiR8Mmf3eX/0+t0D6Yzkkg=="
+          },
+          {
+            "id": "requirements",
+            "package": "@rho-workspace/plugin-requirements",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-requirements-0.4.0.tgz",
+            "bytes": 17166,
+            "sha256": "dd6fcf79797a19864714a8291247cdb0ed86d9f1e805e758e6d771cd36baa575",
+            "integrity": "sha512-IBbiI2c4JPa3BkcvEcJxIXG0vki6HzU8hQjnajeLBKvcmGWVC4YAoUKiwZ2h9nEqqN99WOtmtZl2gEMh4gWPqw=="
+          },
+          {
+            "id": "tables",
+            "package": "@rho-workspace/plugin-tables",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-tables-0.4.0.tgz",
+            "bytes": 19402,
+            "sha256": "4201fba4f37d4e6de0b66c8a4c6eb2db37eea27f9cb373c709440cef27809723",
+            "integrity": "sha512-BzBHxdyXcot2ViMJGAJ9He7D08w+cYk6lBDhpkESAL7GH/7UgtNuSqiIHRhVgsd4lVd+rdHAV/55saVmgWwsbQ=="
+          },
+          {
+            "id": "media",
+            "package": "@rho-workspace/plugin-media",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-media-0.4.0.tgz",
+            "bytes": 15582,
+            "sha256": "3e92de5714be59ffabe4095195d72fd6e5a81a49acb5049884b579065dfdd0cc",
+            "integrity": "sha512-WPclfGD2tyDt9TB5AOELCR2cqw083FHQixquglia+GqeS7/s2EdbPXr5quImvPfimc/zVL1kvTOmsdQ4WFs8mQ=="
+          },
+          {
+            "id": "charts",
+            "package": "@rho-workspace/plugin-charts",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-charts-0.4.0.tgz",
+            "bytes": 15515,
+            "sha256": "78fd1eb16c69bf942f69d1a335fcc044944602a2a5b2b81286e4728e81afda9d",
+            "integrity": "sha512-Qgh8sLVnguSDEeZTpmsxzwNFu4TOnnbiqr8o3SBf8vhMn4uL8RDcBvkemv6A71kaYd+YGPHf0fWfpTm9luw/sw=="
+          },
+          {
+            "id": "agent",
+            "package": "@rho-workspace/plugin-agent",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-agent-0.4.0.tgz",
+            "bytes": 21283,
+            "sha256": "c38d224a5473505941283f909a7476d4a5482749d1d822edc8c78be62f78b754",
+            "integrity": "sha512-W8GZOspuLTdtGC9p8MWAYD4wnzPfZe9hs+3B8ZgOg5fyvPdonWEeU0UDh8E/t4TxflPlMFAo9RK2+BAgCYON5w=="
+          },
+          {
+            "id": "annotations",
+            "package": "@rho-workspace/plugin-annotations",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-annotations-0.4.0.tgz",
+            "bytes": 16352,
+            "sha256": "9f974c403a9e2fa8a03538c3e38bbf224a3329a67cbbdc6056fa475d3fe854a0",
+            "integrity": "sha512-GibueBeBovDcC7/m9XFcRUYuidwyj+UTFexszHKN87OLmvQyHRZEoELUfKSCzpV+NOknUDgYvgMPiZsJUO5blw=="
+          }
+        ]
+      },
+      "core": {
+        "repository": "https://github.com/YuLab-SMU/Rho-core",
+        "commit": "d0159da6feb01d1be9e3b4b34b67953241fedfcb",
+        "tree": "d76820b39b24df9e7b222efc3626f39915022181",
+        "buildInputsSha256": "584b7ebee58f2f2051cecf03eddb6c1013d66cc2781b0c7f0fe75afecb23443b",
+        "localOverride": null,
+        "artifactSha256": "eee223026f7e0b4dd1ee14a409c023919626c4175be5728048a02af739af4ce1",
+        "bytes": 7399128,
+        "buildAssociation": "Digest-verified accepted public Core binary reused; no local Core source changes selected."
+      },
+      "productionLockSha256": "06cabd1ad61046c07670e0ff0784d58630abf1383295a72c86b69cacd34d5b7a",
+      "distribution": "unsigned-local-npm-tarball",
+      "registryPublication": "not-performed",
+      "artifact": {
+        "filename": "rho-workspace-local-0.4.0.tgz",
+        "bytes": 6354262,
+        "sha256": "6a928162366fc7d1477828f32ce1beb66684a2e6d8935485f1ee40ba6629fdf7",
+        "integrity": "sha512-ubERC3rhUafG8pExq/rdQQ8eqn/YDRDHnMzD/u4eOinnpKz8hAMdKTJq72IpLs9A62ZpZmDrAwMur/T0QKdN3w==",
+        "files": 3835
+      }
+    },
+    "collaboration": {
+      "schemaVersion": 1,
+      "platform": "darwin-arm64",
+      "node": "v22.22.3",
+      "application": {
+        "repository": "https://github.com/YuLab-SMU/Rho",
+        "commit": "3f406d346909779be49f8335af5bde4fdaf83590",
+        "tree": "cfd4b86d12959b77bb5b2d6623671459f4983276",
+        "buildInputsSha256": "ca7f072c77812ae94430abcc2d9dde840e7f6df5e1e5d26158b8a378b4355b17",
+        "localOverride": null
+      },
+      "plugins": {
+        "repository": "https://github.com/YuLab-SMU/Rho-plugins",
+        "commit": "3040ef43cddaf55d15b750bc5eb558e0a0d954f9",
+        "tree": "3c82affb00be706c636957c06942860e303ee5c1",
+        "buildInputsSha256": "d29bd0da46b91b55d739bb2c9b9a8dd9e0e1b1905121160059c62b09bb29c2f2",
+        "localOverride": null,
+        "selected": [
+          "documents",
+          "files",
+          "tables",
+          "charts",
+          "agent",
+          "annotations"
+        ],
+        "packages": [
+          {
+            "id": "contracts",
+            "package": "@rho-workspace/plugin-contracts",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-contracts-0.4.0.tgz",
+            "bytes": 15700,
+            "sha256": "076267057d1b279ff1557c7c45390f4db6eaa1eece80305b58c13dbc300a6c5c",
+            "integrity": "sha512-HGL9XFKpJ1tCY5bWxUstcdsTmfcCLC6bMffxsNpz57p3ay89+qcZcY/+jAkufvGXbKVXOLPPhxqwxqH60N1iOA=="
+          },
+          {
+            "id": "documents",
+            "package": "@rho-workspace/plugin-documents",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-documents-0.4.0.tgz",
+            "bytes": 17940,
+            "sha256": "3f01b27797dd2f9b02fd4db6ab42ca30079c118bde59d718e8c6b015be5c43d9",
+            "integrity": "sha512-KJyUgka+fgMy28aXdIDsgRwp3Tp1/FKB1hy6eTQSfAj0/tbBUWj5HUdwAZvTwdMiwYrVCAVBPOmnkX7KbL5/UQ=="
+          },
+          {
+            "id": "files",
+            "package": "@rho-workspace/plugin-files",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-files-0.4.0.tgz",
+            "bytes": 20977,
+            "sha256": "6bcfccbbcc62ddc5f4aa98da5ba8076a0a2d37779031079b8108952554762dd0",
+            "integrity": "sha512-q+D/Joi6L1gvP7pdNkDFhy+h5Y0guKV8HqgzZnFAMMSKjbzPs5593sZW3xD0dImNWDj7/zlWe3YOm/f/vIQB+g=="
+          },
+          {
+            "id": "tables",
+            "package": "@rho-workspace/plugin-tables",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-tables-0.4.0.tgz",
+            "bytes": 19402,
+            "sha256": "4201fba4f37d4e6de0b66c8a4c6eb2db37eea27f9cb373c709440cef27809723",
+            "integrity": "sha512-BzBHxdyXcot2ViMJGAJ9He7D08w+cYk6lBDhpkESAL7GH/7UgtNuSqiIHRhVgsd4lVd+rdHAV/55saVmgWwsbQ=="
+          },
+          {
+            "id": "charts",
+            "package": "@rho-workspace/plugin-charts",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-charts-0.4.0.tgz",
+            "bytes": 15515,
+            "sha256": "78fd1eb16c69bf942f69d1a335fcc044944602a2a5b2b81286e4728e81afda9d",
+            "integrity": "sha512-Qgh8sLVnguSDEeZTpmsxzwNFu4TOnnbiqr8o3SBf8vhMn4uL8RDcBvkemv6A71kaYd+YGPHf0fWfpTm9luw/sw=="
+          },
+          {
+            "id": "agent",
+            "package": "@rho-workspace/plugin-agent",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-agent-0.4.0.tgz",
+            "bytes": 21283,
+            "sha256": "c38d224a5473505941283f909a7476d4a5482749d1d822edc8c78be62f78b754",
+            "integrity": "sha512-W8GZOspuLTdtGC9p8MWAYD4wnzPfZe9hs+3B8ZgOg5fyvPdonWEeU0UDh8E/t4TxflPlMFAo9RK2+BAgCYON5w=="
+          },
+          {
+            "id": "annotations",
+            "package": "@rho-workspace/plugin-annotations",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-annotations-0.4.0.tgz",
+            "bytes": 16352,
+            "sha256": "9f974c403a9e2fa8a03538c3e38bbf224a3329a67cbbdc6056fa475d3fe854a0",
+            "integrity": "sha512-GibueBeBovDcC7/m9XFcRUYuidwyj+UTFexszHKN87OLmvQyHRZEoELUfKSCzpV+NOknUDgYvgMPiZsJUO5blw=="
+          }
+        ]
+      },
+      "core": {
+        "repository": "https://github.com/YuLab-SMU/Rho-core",
+        "commit": "d0159da6feb01d1be9e3b4b34b67953241fedfcb",
+        "tree": "d76820b39b24df9e7b222efc3626f39915022181",
+        "buildInputsSha256": "584b7ebee58f2f2051cecf03eddb6c1013d66cc2781b0c7f0fe75afecb23443b",
+        "localOverride": null,
+        "artifactSha256": "eee223026f7e0b4dd1ee14a409c023919626c4175be5728048a02af739af4ce1",
+        "bytes": 7399128,
+        "buildAssociation": "Digest-verified accepted public Core binary reused; no local Core source changes selected."
+      },
+      "productionLockSha256": "88560eb0cbc1753282538b7e5577c61847889ff7beddc65fb215feaca968c5cf",
+      "distribution": "unsigned-local-npm-tarball",
+      "registryPublication": "not-performed",
+      "artifact": {
+        "filename": "rho-workspace-local-0.4.0.tgz",
+        "bytes": 6258894,
+        "sha256": "053db426e6cd6a50429ed266a878dc8f56d98f5b59aaf11b50bc067e2c26a961",
+        "integrity": "sha512-0xszbYkP51UX8FKh1Fsz8c0DP/eX5OdyyUlVs1M75yQ8wY5YsVM2dgOMlyb1df4dJ8qDkCyPYAPg7VNmDxOBgg==",
+        "files": 3805
+      }
+    },
+    "documents-files": {
+      "schemaVersion": 1,
+      "platform": "darwin-arm64",
+      "node": "v22.22.3",
+      "application": {
+        "repository": "https://github.com/YuLab-SMU/Rho",
+        "commit": "3f406d346909779be49f8335af5bde4fdaf83590",
+        "tree": "cfd4b86d12959b77bb5b2d6623671459f4983276",
+        "buildInputsSha256": "ca7f072c77812ae94430abcc2d9dde840e7f6df5e1e5d26158b8a378b4355b17",
+        "localOverride": null
+      },
+      "plugins": {
+        "repository": "https://github.com/YuLab-SMU/Rho-plugins",
+        "commit": "3040ef43cddaf55d15b750bc5eb558e0a0d954f9",
+        "tree": "3c82affb00be706c636957c06942860e303ee5c1",
+        "buildInputsSha256": "01326fd66f4d7f69b53473414953e9a348773a0f1ca78364f16fb3696db65ad8",
+        "localOverride": null,
+        "selected": [
+          "documents",
+          "files"
+        ],
+        "packages": [
+          {
+            "id": "contracts",
+            "package": "@rho-workspace/plugin-contracts",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-contracts-0.4.0.tgz",
+            "bytes": 15700,
+            "sha256": "076267057d1b279ff1557c7c45390f4db6eaa1eece80305b58c13dbc300a6c5c",
+            "integrity": "sha512-HGL9XFKpJ1tCY5bWxUstcdsTmfcCLC6bMffxsNpz57p3ay89+qcZcY/+jAkufvGXbKVXOLPPhxqwxqH60N1iOA=="
+          },
+          {
+            "id": "documents",
+            "package": "@rho-workspace/plugin-documents",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-documents-0.4.0.tgz",
+            "bytes": 17940,
+            "sha256": "3f01b27797dd2f9b02fd4db6ab42ca30079c118bde59d718e8c6b015be5c43d9",
+            "integrity": "sha512-KJyUgka+fgMy28aXdIDsgRwp3Tp1/FKB1hy6eTQSfAj0/tbBUWj5HUdwAZvTwdMiwYrVCAVBPOmnkX7KbL5/UQ=="
+          },
+          {
+            "id": "files",
+            "package": "@rho-workspace/plugin-files",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-files-0.4.0.tgz",
+            "bytes": 20977,
+            "sha256": "6bcfccbbcc62ddc5f4aa98da5ba8076a0a2d37779031079b8108952554762dd0",
+            "integrity": "sha512-q+D/Joi6L1gvP7pdNkDFhy+h5Y0guKV8HqgzZnFAMMSKjbzPs5593sZW3xD0dImNWDj7/zlWe3YOm/f/vIQB+g=="
+          }
+        ]
+      },
+      "core": {
+        "repository": "https://github.com/YuLab-SMU/Rho-core",
+        "commit": "d0159da6feb01d1be9e3b4b34b67953241fedfcb",
+        "tree": "d76820b39b24df9e7b222efc3626f39915022181",
+        "buildInputsSha256": "584b7ebee58f2f2051cecf03eddb6c1013d66cc2781b0c7f0fe75afecb23443b",
+        "localOverride": null,
+        "artifactSha256": "eee223026f7e0b4dd1ee14a409c023919626c4175be5728048a02af739af4ce1",
+        "bytes": 7399128,
+        "buildAssociation": "Digest-verified accepted public Core binary reused; no local Core source changes selected."
+      },
+      "productionLockSha256": "60a71032bf4f869b6484c25459a5b2fbe894fcf8d254354d6b03acb5849d07c3",
+      "distribution": "unsigned-local-npm-tarball",
+      "registryPublication": "not-performed",
+      "artifact": {
+        "filename": "rho-workspace-local-0.4.0.tgz",
+        "bytes": 2701943,
+        "sha256": "af3418c53401e144f11483dced027a59943d843ad10a3cff6bedb4d3842c6060",
+        "integrity": "sha512-EIrHIiu0PzStGKl73vVTEwFiBYVu9LVyewhPMMN9Ei2bXa1cq8BDbnUH+GL92pU0niMphWP4HkBcpQJG5EOCgg==",
+        "files": 618
+      }
+    },
+    "files-r": {
+      "schemaVersion": 1,
+      "platform": "darwin-arm64",
+      "node": "v22.22.3",
+      "application": {
+        "repository": "https://github.com/YuLab-SMU/Rho",
+        "commit": "3f406d346909779be49f8335af5bde4fdaf83590",
+        "tree": "cfd4b86d12959b77bb5b2d6623671459f4983276",
+        "buildInputsSha256": "ca7f072c77812ae94430abcc2d9dde840e7f6df5e1e5d26158b8a378b4355b17",
+        "localOverride": null
+      },
+      "plugins": {
+        "repository": "https://github.com/YuLab-SMU/Rho-plugins",
+        "commit": "3040ef43cddaf55d15b750bc5eb558e0a0d954f9",
+        "tree": "3c82affb00be706c636957c06942860e303ee5c1",
+        "buildInputsSha256": "2afc2102b3d877e31921e0a8c00ded5f99177eb5bed8d671c70e7e363f6db096",
+        "localOverride": null,
+        "selected": [
+          "files",
+          "r"
+        ],
+        "packages": [
+          {
+            "id": "contracts",
+            "package": "@rho-workspace/plugin-contracts",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-contracts-0.4.0.tgz",
+            "bytes": 15700,
+            "sha256": "076267057d1b279ff1557c7c45390f4db6eaa1eece80305b58c13dbc300a6c5c",
+            "integrity": "sha512-HGL9XFKpJ1tCY5bWxUstcdsTmfcCLC6bMffxsNpz57p3ay89+qcZcY/+jAkufvGXbKVXOLPPhxqwxqH60N1iOA=="
+          },
+          {
+            "id": "files",
+            "package": "@rho-workspace/plugin-files",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-files-0.4.0.tgz",
+            "bytes": 20977,
+            "sha256": "6bcfccbbcc62ddc5f4aa98da5ba8076a0a2d37779031079b8108952554762dd0",
+            "integrity": "sha512-q+D/Joi6L1gvP7pdNkDFhy+h5Y0guKV8HqgzZnFAMMSKjbzPs5593sZW3xD0dImNWDj7/zlWe3YOm/f/vIQB+g=="
+          },
+          {
+            "id": "r",
+            "package": "@rho-workspace/plugin-r",
+            "version": "0.4.0",
+            "filename": "rho-workspace-plugin-r-0.4.0.tgz",
+            "bytes": 20496,
+            "sha256": "3de80d0fca7cb0b04afccf75b72898591f9b9ca401431a70f9c7a2b60093ac92",
+            "integrity": "sha512-JrKPSX91QLQlX11caLFRz1yIIsqhqaSZe8PiuIjffSrFEIUFpZliOOmc5xkRxStjsiR8Mmf3eX/0+t0D6Yzkkg=="
+          }
+        ]
+      },
+      "core": {
+        "repository": "https://github.com/YuLab-SMU/Rho-core",
+        "commit": "d0159da6feb01d1be9e3b4b34b67953241fedfcb",
+        "tree": "d76820b39b24df9e7b222efc3626f39915022181",
+        "buildInputsSha256": "584b7ebee58f2f2051cecf03eddb6c1013d66cc2781b0c7f0fe75afecb23443b",
+        "localOverride": null,
+        "artifactSha256": "eee223026f7e0b4dd1ee14a409c023919626c4175be5728048a02af739af4ce1",
+        "bytes": 7399128,
+        "buildAssociation": "Digest-verified accepted public Core binary reused; no local Core source changes selected."
+      },
+      "productionLockSha256": "2a2160fe4ab07308d3270c3b93397a734c960e57de0b6ef3afdb4f759a1a5251",
+      "distribution": "unsigned-local-npm-tarball",
+      "registryPublication": "not-performed",
+      "artifact": {
+        "filename": "rho-workspace-local-0.4.0.tgz",
+        "bytes": 2706217,
+        "sha256": "5c599178f5298392ec2e81db07e021baa294b7092e9a59168827ce6867ad1160",
+        "integrity": "sha512-Qh6wRrtYOJkiOQlA7v84oP9EwQedPVFFJU0lZK73oh3M07LL6Uupm3Z2lOJM1l4PZd0IJdYFyaepiazanGLH5w==",
+        "files": 620
+      }
+    }
+  },
+  "deliveredDeclarationsAndSkills": [
+    {
+      "owner": "application",
+      "skills": [
+        {
+          "id": "rho.workspace",
+          "version": "1.0",
+          "digest": "80f9f5ac1263eaea46ce76ae0cc57a548aaad08d8ef29dbdee5fa208bddd303d"
+        }
+      ]
+    },
+    {
+      "owner": "documents",
+      "package": "@rho-workspace/plugin-documents",
+      "version": "0.4.0",
+      "operations": [
+        {
+          "method": "document.open",
+          "version": "2.0",
+          "effect": "document",
+          "requires": []
+        },
+        {
+          "method": "document.read",
+          "version": "2.0",
+          "effect": "read",
+          "requires": []
+        },
+        {
+          "method": "document.edit",
+          "version": "2.0",
+          "effect": "document",
+          "requires": []
+        },
+        {
+          "method": "document.undo",
+          "version": "2.0",
+          "effect": "document",
+          "requires": []
+        },
+        {
+          "method": "document.save",
+          "version": "2.0",
+          "effect": "document",
+          "requires": []
+        }
+      ],
+      "skills": [
+        {
+          "id": "documents.workspace",
+          "version": "1.0",
+          "digest": "01ff0856f8b17316980d55c71533fa68e01fd75df20f53fa4704fb2f2132bc2e"
+        }
+      ]
+    },
+    {
+      "owner": "files",
+      "package": "@rho-workspace/plugin-files",
+      "version": "0.4.0",
+      "operations": [
+        {
+          "method": "resource.list",
+          "version": "2.0",
+          "effect": "read",
+          "requires": []
+        },
+        {
+          "method": "resource.read",
+          "version": "2.0",
+          "effect": "read",
+          "requires": []
+        },
+        {
+          "method": "resource.register",
+          "version": "2.0",
+          "effect": "metadata",
+          "requires": []
+        },
+        {
+          "method": "artifact.check",
+          "version": "2.0",
+          "effect": "metadata",
+          "requires": []
+        }
+      ],
+      "skills": [
+        {
+          "id": "files.workspace",
+          "version": "1.0",
+          "digest": "6735a1e5c74990836678e73242d9c0f836d5aa517dd8142884106f7488985a3f"
+        }
+      ]
+    },
+    {
+      "owner": "r",
+      "package": "@rho-workspace/plugin-r",
+      "version": "0.4.0",
+      "operations": [
+        {
+          "method": "object.read",
+          "version": "2.0",
+          "effect": "read",
+          "requires": [
+            "files"
+          ]
+        },
+        {
+          "method": "action.submit",
+          "version": "2.0",
+          "effect": "native",
+          "requires": [
+            "files",
+            "requirements"
+          ]
+        }
+      ],
+      "skills": [
+        {
+          "id": "r.workspace",
+          "version": "1.0",
+          "digest": "01a35a0d8b2a64ba7bc6d601cc62fa7ad20e77c3497d4dfb5f36ac0d52469860"
+        }
+      ]
+    },
+    {
+      "owner": "requirements",
+      "package": "@rho-workspace/plugin-requirements",
+      "version": "0.4.0",
+      "operations": [
+        {
+          "method": "requirements.check",
+          "version": "2.0",
+          "effect": "read",
+          "requires": []
+        },
+        {
+          "method": "requirements.prepare",
+          "version": "2.0",
+          "effect": "native",
+          "requires": []
+        }
+      ],
+      "skills": [
+        {
+          "id": "requirements.workspace",
+          "version": "1.0",
+          "digest": "07ec17debe9b8a0f13db7f97c01b8eca6db1887f602468fc5747fd469d43fbd0"
+        }
+      ]
+    },
+    {
+      "owner": "tables",
+      "package": "@rho-workspace/plugin-tables",
+      "version": "0.4.0",
+      "operations": [
+        {
+          "method": "data.page",
+          "version": "2.0",
+          "effect": "read",
+          "requires": [
+            "files"
+          ]
+        },
+        {
+          "method": "data.compare",
+          "version": "2.0",
+          "effect": "metadata",
+          "requires": [
+            "files"
+          ]
+        }
+      ],
+      "skills": [
+        {
+          "id": "tables.workspace",
+          "version": "1.0",
+          "digest": "1743f833b3112f59c99cf40661583e26258376a99ba1e84fe6ede24200148398"
+        }
+      ]
+    },
+    {
+      "owner": "media",
+      "package": "@rho-workspace/plugin-media",
+      "version": "0.4.0",
+      "operations": [
+        {
+          "method": "media.describe",
+          "version": "2.0",
+          "effect": "read",
+          "requires": [
+            "files"
+          ]
+        }
+      ],
+      "skills": [
+        {
+          "id": "media.workspace",
+          "version": "1.0",
+          "digest": "f0d2ea6715c4ba790cc18fa9887c396c269f17ef05659a840b021d96b0a600ee"
+        }
+      ]
+    },
+    {
+      "owner": "charts",
+      "package": "@rho-workspace/plugin-charts",
+      "version": "0.4.0",
+      "operations": [
+        {
+          "method": "data.plot",
+          "version": "2.0",
+          "effect": "read",
+          "requires": [
+            "tables"
+          ]
+        }
+      ],
+      "skills": [
+        {
+          "id": "charts.workspace",
+          "version": "1.0",
+          "digest": "319cf5734e7a0285a8dd123cda6925b43da859da968c5fd2aa39fdd9aec5b825"
+        }
+      ]
+    },
+    {
+      "owner": "agent",
+      "package": "@rho-workspace/plugin-agent",
+      "version": "0.4.0",
+      "operations": [
+        {
+          "method": "context.create",
+          "version": "2.0",
+          "effect": "metadata",
+          "requires": []
+        },
+        {
+          "method": "context.read",
+          "version": "2.0",
+          "effect": "read",
+          "requires": []
+        },
+        {
+          "method": "binding.list",
+          "version": "2.0",
+          "effect": "read",
+          "requires": []
+        },
+        {
+          "method": "binding.activity",
+          "version": "2.0",
+          "effect": "read",
+          "requires": []
+        },
+        {
+          "method": "binding.open",
+          "version": "2.0",
+          "effect": "metadata",
+          "requires": []
+        },
+        {
+          "method": "binding.close",
+          "version": "2.0",
+          "effect": "metadata",
+          "requires": []
+        }
+      ],
+      "skills": [
+        {
+          "id": "agent.workspace",
+          "version": "1.0",
+          "digest": "cfcb905be740a20523b056afbc090d2a3b1d1a742d3b1fd24526b49ef1e3e10e"
+        }
+      ]
+    },
+    {
+      "owner": "annotations",
+      "package": "@rho-workspace/plugin-annotations",
+      "version": "0.4.0",
+      "operations": [
+        {
+          "method": "annotation.create",
+          "version": "2.0",
+          "effect": "metadata",
+          "requires": [
+            "documents"
+          ]
+        },
+        {
+          "method": "annotation.reply",
+          "version": "2.0",
+          "effect": "metadata",
+          "requires": [
+            "documents"
+          ]
+        },
+        {
+          "method": "annotation.read",
+          "version": "2.0",
+          "effect": "read",
+          "requires": [
+            "documents"
+          ]
+        },
+        {
+          "method": "annotation.list",
+          "version": "2.0",
+          "effect": "read",
+          "requires": [
+            "documents"
+          ]
+        }
+      ],
+      "skills": [
+        {
+          "id": "annotations.workspace",
+          "version": "1.0",
+          "digest": "1b0c21f1465c9e8b4d4870d6169d99ae6392ae3503b16b81f404cc4e1fe93197"
+        }
+      ]
+    }
+  ],
+  "checks": {
+    "full": {
+      "deterministic": {
+        "scenario": "headless-collaboration",
+        "agent": "deterministic-real-stdio-mcp",
+        "passed": true,
+        "node": "v22.22.3",
+        "counts": {
+          "hostStarts": 0,
+          "nativeDispatches": 0
+        },
+        "phases": [
+          "http-human-and-stdio-agent",
+          "shared-documents-composition-protection",
+          "both-anchor-owners-and-explicit-replies",
+          "restart-event-gap-double-observer",
+          "format3-installed-owner-restore"
+        ],
+        "modelRuns": [],
+        "skillsFetched": [
+          "rho.workspace",
+          "documents.workspace",
+          "tables.workspace",
+          "charts.workspace",
+          "annotations.workspace",
+          "agent.workspace"
+        ],
+        "evidence": "full-deterministic-report"
+      },
+      "agent": {
+        "scenario": "headless-collaboration",
+        "agent": "real-claude-code",
+        "passed": true,
+        "node": "v22.22.3",
+        "counts": {
+          "hostStarts": 0,
+          "nativeDispatches": 0
+        },
+        "phases": [
+          "http-human-and-stdio-agent",
+          "shared-documents-composition-protection",
+          "both-anchor-owners-and-explicit-replies",
+          "restart-event-gap-double-observer",
+          "format3-installed-owner-restore"
+        ],
+        "modelRuns": [
+          {
+            "phase": "compose",
+            "exitCode": 0,
+            "timedOut": false,
+            "elapsedMs": 73949,
+            "clientVersion": "2.1.302 (Claude Code)"
+          },
+          {
+            "phase": "respond",
+            "exitCode": 0,
+            "timedOut": false,
+            "elapsedMs": 67938,
+            "clientVersion": "2.1.302 (Claude Code)"
+          }
+        ],
+        "skillsFetched": [
+          "rho.workspace",
+          "documents.workspace",
+          "tables.workspace",
+          "charts.workspace",
+          "annotations.workspace"
+        ],
+        "evidence": "full-agent-report"
+      }
+    },
+    "collaboration": {
+      "deterministic": {
+        "scenario": "headless-collaboration",
+        "agent": "deterministic-real-stdio-mcp",
+        "passed": true,
+        "node": "v22.22.3",
+        "counts": {
+          "hostStarts": 0,
+          "nativeDispatches": 0
+        },
+        "phases": [
+          "http-human-and-stdio-agent",
+          "shared-documents-composition-protection",
+          "both-anchor-owners-and-explicit-replies",
+          "restart-event-gap-double-observer",
+          "format3-installed-owner-restore"
+        ],
+        "modelRuns": [],
+        "skillsFetched": [
+          "rho.workspace",
+          "documents.workspace",
+          "tables.workspace",
+          "charts.workspace",
+          "annotations.workspace",
+          "agent.workspace"
+        ],
+        "evidence": "collaboration-deterministic-report"
+      },
+      "agent": {
+        "scenario": "headless-collaboration",
+        "agent": "real-claude-code",
+        "passed": true,
+        "node": "v22.22.3",
+        "counts": {
+          "hostStarts": 0,
+          "nativeDispatches": 0
+        },
+        "phases": [
+          "http-human-and-stdio-agent",
+          "shared-documents-composition-protection",
+          "both-anchor-owners-and-explicit-replies",
+          "restart-event-gap-double-observer",
+          "format3-installed-owner-restore"
+        ],
+        "modelRuns": [
+          {
+            "phase": "compose",
+            "exitCode": 0,
+            "timedOut": false,
+            "elapsedMs": 72026,
+            "clientVersion": "2.1.302 (Claude Code)"
+          },
+          {
+            "phase": "respond",
+            "exitCode": 0,
+            "timedOut": false,
+            "elapsedMs": 56068,
+            "clientVersion": "2.1.302 (Claude Code)"
+          }
+        ],
+        "skillsFetched": [
+          "rho.workspace",
+          "documents.workspace",
+          "charts.workspace",
+          "annotations.workspace",
+          "tables.workspace"
+        ],
+        "evidence": "collaboration-agent-report"
+      }
+    },
+    "independentOwners": {
+      "status": "passed",
+      "packages": [
+        {
+          "id": "documents",
+          "artifactSha256": "3f01b27797dd2f9b02fd4db6ab42ca30079c118bde59d718e8c6b015be5c43d9",
+          "state": "passed"
+        },
+        {
+          "id": "files",
+          "artifactSha256": "6bcfccbbcc62ddc5f4aa98da5ba8076a0a2d37779031079b8108952554762dd0",
+          "state": "passed"
+        },
+        {
+          "id": "r",
+          "artifactSha256": "3de80d0fca7cb0b04afccf75b72898591f9b9ca401431a70f9c7a2b60093ac92",
+          "state": "passed"
+        },
+        {
+          "id": "requirements",
+          "artifactSha256": "dd6fcf79797a19864714a8291247cdb0ed86d9f1e805e758e6d771cd36baa575",
+          "state": "passed"
+        },
+        {
+          "id": "tables",
+          "artifactSha256": "4201fba4f37d4e6de0b66c8a4c6eb2db37eea27f9cb373c709440cef27809723",
+          "state": "passed"
+        },
+        {
+          "id": "media",
+          "artifactSha256": "3e92de5714be59ffabe4095195d72fd6e5a81a49acb5049884b579065dfdd0cc",
+          "state": "passed"
+        },
+        {
+          "id": "charts",
+          "artifactSha256": "78fd1eb16c69bf942f69d1a335fcc044944602a2a5b2b81286e4728e81afda9d",
+          "state": "passed"
+        },
+        {
+          "id": "agent",
+          "artifactSha256": "c38d224a5473505941283f909a7476d4a5482749d1d822edc8c78be62f78b754",
+          "state": "passed"
+        },
+        {
+          "id": "annotations",
+          "artifactSha256": "9f974c403a9e2fa8a03538c3e38bbf224a3329a67cbbdc6056fa475d3fe854a0",
+          "state": "passed"
+        }
+      ],
+      "evidence": "independent-owner-report"
+    },
+    "documents-files": {
+      "status": "passed",
+      "artifactSha256": "af3418c53401e144f11483dced027a59943d843ad10a3cff6bedb4d3842c6060",
+      "checks": [
+        "Only contracts/documents/files installed; no CSV parser, MCP SDK, unselected plugin or aggregate package.",
+        "Missing optional packages report unavailable; Unicode draft/edit/export and observations work without R or Host startup."
+      ],
+      "evidence": "documents-files-report"
+    },
+    "files-r": {
+      "status": "passed",
+      "artifactSha256": "5c599178f5298392ec2e81db07e021baa294b7092e9a59168827ce6867ad1160",
+      "checks": [
+        "Only contracts/files/r installed; no CSV parser, MCP SDK, unselected plugin or aggregate package.",
+        "Exported object reads/export work without Documents, requirements or R; execution is unavailable and no request or Host is created."
+      ],
+      "evidence": "files-r-report"
+    },
+    "installedObservation": {
+      "passed": true,
+      "counts": {
+        "hostStarts": 0,
+        "nativeDispatches": 0
+      },
+      "checks": [
+        "Two independent authenticated Fetch/SSE clients converge after a live Unicode edit.",
+        "Publication failure interrupts real SSE streams; both clients resnapshot acknowledged content.",
+        "Both observers reconnect after service restart using retained scoped credentials.",
+        "Actual HTTP retained-cursor rejection triggers snapshot-first recovery.",
+        "Injected writable backlog metric closes a real subscription at its configured byte limit without reverting edits."
+      ],
+      "evidence": "installed-observation-report",
+      "driver": "installed-observation-driver",
+      "injectionScope": "Publication persistence failure and writable backlog metric are deterministic fault injections; not a slow-kernel-reader benchmark."
+    },
+    "installedNative": {
+      "passed": true,
+      "candidate": "full",
+      "tests": 1,
+      "nativeDispatches": 1,
+      "assertions": [
+        "close-without-cancel",
+        "duplicate-submit-preserves-Core-identity",
+        "unknown-on-owned-Host-loss",
+        "no-dispatch-on-redelivery",
+        "owned-R-process-group-cleaned"
+      ],
+      "sourceDriverSha256": "bc36531b97ac8199fc1bff7f00a243ebbba5d60222f151f1b452ac6d0f2dd762",
+      "installedDriverSha256": "455c621430930f2b47fa03ac57ab3b28c0ce6a11f59538ad1f244fbd5088ce8d",
+      "transformation": "Only imports target the installed package absolute file URLs; unchanged test behavior.",
+      "evidence": "installed-native-log"
+    },
+    "sourceRegressions": {
+      "rho": {
+        "passed": 24,
+        "failed": 0,
+        "evidence": "rho-tests"
+      },
+      "plugins": {
+        "passed": 14,
+        "failed": 0,
+        "evidence": "plugins-tests"
+      }
+    }
+  },
+  "failedTrials": [
+    {
+      "scope": "development-driver",
+      "result": "failed",
+      "condition": "MCP SDK resolution used a symlink location rather than the owning real package path.",
+      "evidence": "early-sdk-resolution-failure"
+    },
+    {
+      "scope": "supplemental-driver",
+      "result": "failed",
+      "condition": "Invalid newline-containing undoGroup in supplemental driver; request correctly rejected before mutation.",
+      "evidence": "collaboration-observation-failed-driver-report.json"
+    },
+    {
+      "scope": "supplemental-driver",
+      "result": "failed",
+      "condition": "Synthetic corked-response test did not establish receipt of a gap frame; not accepted as a network-load test.",
+      "evidence": "collaboration-observation-failed-backlog-driver-report.json"
+    }
+  ],
+  "evidence": {
+    "full-deterministic-report": {
+      "bytes": 6661,
+      "sha256": "c55015673c484c9df07b7bb761d809f49944a1406d3202c0e8e0f3c68286280c"
+    },
+    "full-agent-report": {
+      "bytes": 6944,
+      "sha256": "2371246ab4c3aa3a55e5a52afe1fb0c7cffb6d2f76fc92c25aa3c14ac03ecf5d"
+    },
+    "collaboration-deterministic-report": {
+      "bytes": 5323,
+      "sha256": "286c88f08b64497ebe8fcee51ae1a58c7a1e1ae0e7a657e05666a1391a63819a"
+    },
+    "collaboration-agent-report": {
+      "bytes": 5606,
+      "sha256": "6b79dbad91a1f2d8860a8e164b15dc56c4c1503fe0e18f4458eab27edf1e2464"
+    },
+    "independent-owner-report": {
+      "bytes": 1410,
+      "sha256": "2277f389f7c067fb389966ddce32a37fc82879a18612249c2e4b0f47c45faa4c"
+    },
+    "documents-files-report": {
+      "bytes": 3271,
+      "sha256": "272f707bcad19eff4b8e9ee0395c894a33451a284f90373f4cd376b5108800bf"
+    },
+    "files-r-report": {
+      "bytes": 3242,
+      "sha256": "35994e47c870954476c94989dc2d37d1c699717a69face4d81b7de4a892d5ae5"
+    },
+    "installed-observation-report": {
+      "bytes": 587,
+      "sha256": "7970df13894f83076a64fc34749e3a1eceb43d3ef41e5e043b7160705cc0c2bd"
+    },
+    "installed-observation-driver": {
+      "bytes": 7095,
+      "sha256": "6e56a38317d4c762f7585a0973333e8a1cc5c784f0f231e0c47e6beb69b06bac"
+    },
+    "installed-native-log": {
+      "bytes": 378,
+      "sha256": "8b32a143e960efabd1dfc22b572b951c9f4099ca20f91c86cf8284496b1c1e6e"
+    },
+    "rho-tests": {
+      "bytes": 6366,
+      "sha256": "dbefcad4ed003e94908c47d3a59b535e84250697704588cb32e7209b02a597ca"
+    },
+    "plugins-tests": {
+      "bytes": 4445,
+      "sha256": "cf7d896445618ea4c47d0d088a0196c04415150c6066406342e20f493b8a602c"
+    },
+    "collaboration-installed-collaboration-agent": {
+      "bytes": 514,
+      "sha256": "6ee1a18b23b90e014dc08325bab9be3ad16630d59d0cdf13a3f76587b1198a7c"
+    },
+    "collaboration-installed-collaboration-deterministic": {
+      "bytes": 311,
+      "sha256": "a0067c95135362f39dc7b0e202705f7b83f55acb7bb836710baedeab93323d6e"
+    },
+    "collaboration-installed-documents-files": {
+      "bytes": 119,
+      "sha256": "603281a50c66803ba79cb2687d9f3e2f7cca8b576b55ffcf00692da1085e7f96"
+    },
+    "collaboration-installed-files-r": {
+      "bytes": 119,
+      "sha256": "83a2433ccc266c1de22253d4bf42affe462a55e1eebada48aee2cfc08e718a70"
+    },
+    "collaboration-installed-full-agent": {
+      "bytes": 514,
+      "sha256": "90d4c21659b380f9f071384c1e1893b640282fb64e7d213e8b9007cc3366971a"
+    },
+    "collaboration-installed-full-deterministic": {
+      "bytes": 311,
+      "sha256": "a0067c95135362f39dc7b0e202705f7b83f55acb7bb836710baedeab93323d6e"
+    },
+    "collaboration-installed-native": {
+      "bytes": 378,
+      "sha256": "8b32a143e960efabd1dfc22b572b951c9f4099ca20f91c86cf8284496b1c1e6e"
+    },
+    "collaboration-installed-observation": {
+      "bytes": 531,
+      "sha256": "cae4c0a3aa7833be134060c88366894a70bddff6ea0415f62199277489fcb7c3"
+    },
+    "early-sdk-resolution-failure": {
+      "bytes": 465,
+      "sha256": "189ba19eeabb01d9aceedc79027534bcfcf461d8eb786fdb1035b1f573051a7b"
+    },
+    "collaboration-observation-failed-driver-report.json": {
+      "bytes": 207,
+      "sha256": "06dba0cf03d5b892ac6ce397ddf14d2501f39ca82a708a15302d7a8fc6e5cd3d"
+    },
+    "collaboration-observation-failed-backlog-driver-report.json": {
+      "bytes": 651,
+      "sha256": "ffa4c99013ad212acc98ae26ed493e4d92f7f6521017e66a2937be58668e083c"
+    }
+  },
+  "evidencePolicy": "Sanitized projections and SHA-256/size identities only. Raw reports, private connection files and model transcripts remain local. Evidence identifiers refer to the local trial ledger, not fetch URLs.",
+  "limits": [
+    "Scope is headless local collaboration, not UI/rendering/native input/accessibility/remote multi-user collaboration/model-loop hosting.",
+    "Actual model phases are bounded at 600 seconds and 24 turns; no unavailable/failed model run is replaced with deterministic output.",
+    "Restore is not a cross-owner filesystem transaction: later operational I/O/budget failure can retain earlier successful imports; preserve archive and inspect owner facts.",
+    "Injected subscription backlog checks the configured boundary, not realistic socket performance.",
+    "Core is an accepted prior public binary reused by digest; the later local Core checkout is not selected.",
+    "Version 0.4.0 is not a unique artifact identity: use the fixed source/package digests; historical baseline remains separate."
+  ]
+}
