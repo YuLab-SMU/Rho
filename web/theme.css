@@ -177,12 +177,6 @@ kbd { display: inline-flex; align-items: center; height: 18px; padding: 0 5px; b
 .state::before { content: ""; width: 6px; height: 6px; flex-shrink: 0; border-radius: 999px; background: var(--color-verified); }
 .state.pending::before { background: var(--color-accent); }
 .state.unknown::before { background: transparent; border: 1.5px solid var(--color-meta); }
-.capability-list { display: flex; flex-direction: column; }
-.capability { display: flex; justify-content: space-between; gap: 24px; padding-block: 18px; border-bottom: 1px solid var(--color-divider); }
-.capability > div { flex: 1; min-width: 0; }
-.capability h2 { text-transform: capitalize; }
-.capability .muted { font-size: 12px; line-height: 16px; color: var(--color-meta); padding-top: 4px; }
-.capability dl { width: 260px; }
 .context-drawer { width: var(--context-width); flex-shrink: 0; background: var(--color-surface); border-top: 1px solid var(--color-hairline); border-left: 1px solid var(--color-divider); display: flex; flex-direction: column; padding-bottom: 16px; overflow: auto; }
 .drawer-heading { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; height: 48px; padding: 0 12px 0 20px; border-bottom: 1px solid var(--color-divider); }
 .drawer-heading h2 { font-size: 13px; line-height: 16px; }
@@ -349,8 +343,6 @@ dialog.sheet::backdrop { background: #15191b3d; }
   .sheet-body { padding-inline: 20px; }
   .sheet-footer { padding-inline: 20px; }
   .sheet-footer button { flex: 1; min-height: 36px; }
-  .capability { flex-direction: column; gap: 12px; }
-  .capability dl { width: 100%; }
   .view-tabs { display: flex; align-items: center; gap: 4px; flex-shrink: 0; height: 44px; padding-inline: 8px; overflow-x: auto; border-bottom: 1px solid var(--color-divider); }
   .view-tabs button { flex-shrink: 0; min-height: 32px; padding: 0 12px; border: 0; border-radius: var(--radius-small); background: transparent; color: var(--color-muted); font-size: 13px; line-height: 16px; font-weight: 400; white-space: nowrap; }
   .view-tabs button[aria-selected="true"] { background: var(--color-tab-active); color: var(--color-ink); font-weight: 600; }

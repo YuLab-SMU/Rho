@@ -81,6 +81,14 @@ two lines of location. Views are tabs instead of a select. On the staged tree
 `npm test` passes 36/36 and `test:ui` passes with 0 / 0 native attempts. See
 [batch 6 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-6-narrow-widths).
 
+Batch 7a follows U1-06c for plugin states. A usable plugin shows no state; one
+that can't be used gives the first reason and who can change it, and plugins
+outside this installation are listed last. No Capabilities wording, state flags
+or method names appear. Focus now returns to the plugin card in the same update;
+the plugin page check had been failing on that. On the staged tree `npm test`
+passes 36/36, and `test:ui` and `test:ui:plugins` pass with 0 / 0 native
+attempts. See [batch 7a evidence](UI-ACCEPTANCE.md#u1-alignment-batch-7a-plugin-naming-and-states).
+
 ## Headless collaboration extension
 
 The additive v2 extension now selects nine owners, including Annotations. Project

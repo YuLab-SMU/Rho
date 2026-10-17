@@ -21,7 +21,21 @@
 .plugin-detail .plugin-tagline { font-size: 14px; }
 .plugin-markers { display: flex; flex-shrink: 0; flex-wrap: wrap; gap: 6px; }
 .plugin-marker { padding: 3px 8px; border-radius: 999px; background: #f1f3f5; color: var(--color-muted); font-size: 11px; line-height: 16px; white-space: nowrap; }
-.plugin-notice { background: var(--color-canvas); padding: 12px 16px; border-radius: 8px; color: var(--color-muted); }
+.plugin-installed { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; height: 28px; padding: 0 10px; border: 1px solid var(--color-control-border); border-radius: var(--radius-small); font-size: 12px; line-height: 14px; font-weight: 600; }
+.plugin-installed svg { color: var(--color-verified); }
+.plugin-installed.absent { border-color: var(--color-tab-active); background: var(--color-tab-active); color: var(--color-meta); }
+.plugin-notice { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px 14px; border-radius: 10px; background: var(--color-row-hover); }
+.plugin-notice strong { font-size: 13px; line-height: 18px; font-weight: 600; }
+.plugin-notice p { color: var(--color-muted); font-size: 13px; line-height: 19px; }
+.plugin-about { display: inline-flex; align-items: center; gap: 6px; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--color-accent); font-size: 13px; line-height: 18px; font-weight: 400; }
+.plugin-about:hover { background: transparent; text-decoration: underline; }
+.plugin-about-symbol { display: flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 5px; background: var(--color-accent-soft); }
+.plugin-card-state { display: flex; align-items: center; gap: 6px; color: var(--color-muted); font-size: 13px; line-height: 18px; font-weight: 400; }
+.plugin-card-state::before { content: ""; width: 6px; height: 6px; flex-shrink: 0; border-radius: 999px; background: var(--color-offline); }
+.plugin-card.absent .plugin-card-copy strong { color: var(--color-muted); }
+.plugin-card.absent .plugin-card-state { color: var(--color-meta); }
+.plugin-card.absent .plugin-card-state::before { display: none; }
+.plugin-card.absent .plugin-symbol { background: var(--color-tab-active); color: var(--color-offline); }
 .plugin-prompts { padding: 24px; border-radius: 14px; background: linear-gradient(135deg, #eff1f7, #f3f4f8); }
 .plugin-prompts h2 { margin-bottom: 12px; }
 .plugin-prompts ul, .plugin-entry-section ul { list-style: none; padding: 0; margin: 0; }

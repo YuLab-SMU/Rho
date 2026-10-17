@@ -261,7 +261,7 @@ function App() {
         {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={folder}
           focusRequest={homeFocus} onFocused={() => setHomeFocus(false)} onChoose={chooseProject} onOpened={opened} onAccessEnded={() => end('ended')} />
           : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div>
-          : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} pluginId={pluginId} onSelect={id => { setPluginId(id); if (!id) setPluginReturn(false); }}
+          : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={id => { setPluginId(id); if (!id) setPluginReturn(false); }}
             back={pluginReturn ? { label: 'Back to ' + name(project), run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
           : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} onAbout={about} /></Suspense>
           : <ProjectOverview project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} />}

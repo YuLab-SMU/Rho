@@ -487,6 +487,71 @@ Remaining differences:
 
 User design acceptance is still pending.
 
+## U1 alignment batch 7a: plugin naming and states
+
+Recorded 2026-10-17 for source after `14851c7a`. The installed tarballs and
+selected identities above were not rebuilt or reselected.
+
+Plugins follows U1-06c:
+
+- A usable plugin shows no state. The detail page shows "Installed" with a
+  check, or "Not installed".
+- A plugin that can't be used gives one reason and who can change it:
+  - "Not part of this installation": Rho on this machine was installed without
+    it; reinstalling with the full plugin set adds it.
+  - "Needs X": a plugin it needs isn't part of this installation.
+  - "Off in project": Claude Code can't use it in this project; whoever runs Rho
+    can turn it on.
+  - "Waiting for X": it needs X, which is off in the project, with About X.
+- Catalog cards show the reason in place of the tagline. Plugins that are not
+  part of this installation form a "Not installed" group, last.
+- No Capabilities wording, Present / Enabled / Satisfied flags or method names
+  appear. The unused `.capability` styles are removed.
+
+Opening a card focused its title, but going back moved focus to the card one
+frame later. `test:ui:plugins` checks focus at once and already failed at
+`14851c7a`. Focus now returns in the same update.
+
+The Paper spec board records these rules under 插件状态, including two
+differences from U1-06c. The waiting text says "Charts needs Tables" because
+descriptors don't say what a plugin uses another for. The board's "can't run
+scripts on this machine" state has no catalog field yet and is not shown.
+
+`npm run build:web` passes on the staged tree exported outside the checkout,
+with browser asset inventory SHA-256 `9a42e3ea8e72c8d4dce31ffac6274bcdcc60b703f351679886e44c852aaf742b`.
+`npm run test:ui` passes there in Chrome 155.0.8059.84: nine browser/security
+tests, then acceptance with **0 / 0** Host-start/native-submit attempts.
+`npm run test:ui:plugins` passes on the same tree with 0 / 0 attempts. The new
+`test:ui` assertions cover:
+
+- no "capabilit", Present, Enabled or Satisfied text, and none of the catalog's
+  method names, on the catalog and on each detail page visited
+- no state line on any card while every plugin is usable
+- with Tables turned off for the project by the operator: Tables "Off in notes
+  中文", Charts "Waiting for Tables", and no other state line
+- Charts' detail with "Installed", "Waiting for Tables" and "Charts needs
+  Tables, which is off in notes 中文."
+- About Tables opening Tables with "Off in notes 中文" and who can turn it on
+- turning Tables back on removing the notice and the card states
+
+Rho `npm test` passes 36/36 on the same staged tree with `RHO_CORE_BINARY` set
+to the accepted Core artifact.
+
+Screenshots under `work/ui-u1/batch7a-staged-20261017-133557` were compared with U1-06c: `plugins-1280`,
+`plugins-bottom-1280`, `plugins-states-1280`, `plugin-waiting-1280` and
+`plugin-off-1280`. They replace `capabilities-1280` and
+`capabilities-bottom-1280`. Plugin page screenshots are under
+`work/plugin-ui/batch7a-staged-20261017-133557`.
+
+Remaining differences:
+
+- Plugins use one generic symbol; descriptors have no icon.
+- "Not part of this installation" was not exercised, because the acceptance
+  installation has every plugin. A plugin that isn't loaded has no descriptor,
+  so its name falls back to its ID.
+
+User design acceptance is still pending.
+
 ## Evidence and limits
 
 Local ignored evidence is under `work/ui-u1`: fixed full/minimal composition

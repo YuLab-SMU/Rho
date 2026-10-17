@@ -457,9 +457,48 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Plugins', exact: true }).getAttribute('aria-current'), 'page');
   assert.equal(await page.locator('header .location').textContent(), 'Plugins');
   report.checks.push('toolbar-location-read-only-chip-and-rail-highlight');
-  await page.screenshot({ path: path.join(directory, 'capabilities-1280.png'), fullPage: true });
+  // Plugins: a usable plugin shows no state; no Capabilities wording, state flags or method names appear.
+  const owner = await operator(), catalog = await owner.call('capability.list', { projectId: p.id });
+  const methods = catalog.operations.map(o => o.method);
+  async function pluginWording() {
+    const text = await page.locator('main').innerText();
+    assert.doesNotMatch(text, /capabilit|\bPresent\b|\bEnabled\b|\bSatisfied\b/i);
+    for (const method of methods) assert.equal(text.includes(method), false, method);
+  }
+  await pluginWording();
+  assert.equal(await page.locator('main .plugin-card-state').count(), 0);
+  await page.screenshot({ path: path.join(directory, 'plugins-1280.png'), fullPage: true });
   await page.locator('main').evaluate(element => { element.scrollTop = element.scrollHeight; });
-  await page.screenshot({ path: path.join(directory, 'capabilities-bottom-1280.png'), fullPage: true });
+  await page.screenshot({ path: path.join(directory, 'plugins-bottom-1280.png'), fullPage: true });
+  // With Tables off for this project, Tables says so and Charts waits for it; each names who can change it.
+  const enabled = catalog.configuration.enabled;
+  await owner.call('capability.configure', { projectId: p.id, expectedVersion: catalog.configuration.version, changeId: 'ui-tables-off', enabled: enabled.filter(id => id !== 'tables') });
+  const card = name => page.locator('.plugin-card').filter({ has: page.locator('strong', { hasText: new RegExp('^' + name + '$') }) });
+  await card('Tables').locator('.plugin-card-state').filter({ hasText: 'Off in notes 中文' }).waitFor();
+  assert.equal(await card('Charts').locator('.plugin-card-state').textContent(), 'Waiting for Tables');
+  assert.equal(await page.locator('main .plugin-card-state').count(), 2);
+  await pluginWording();
+  await page.locator('main').evaluate(element => { element.scrollTop = 0; });
+  await page.screenshot({ path: path.join(directory, 'plugins-states-1280.png'), fullPage: true });
+  await card('Charts').click();
+  await page.getByRole('heading', { name: 'Charts', exact: true }).waitFor();
+  assert.equal(await page.locator('.plugin-installed').textContent(), 'Installed');
+  assert.equal(await page.locator('.plugin-notice strong').textContent(), 'Waiting for Tables');
+  assert.equal(await page.locator('.plugin-notice p').textContent(), 'Charts needs Tables, which is off in notes 中文.');
+  await pluginWording();
+  await page.screenshot({ path: path.join(directory, 'plugin-waiting-1280.png'), fullPage: true });
+  await page.getByRole('button', { name: 'About Tables', exact: true }).click();
+  await page.getByRole('heading', { name: 'Tables', exact: true }).waitFor();
+  assert.equal(await page.locator('.plugin-notice strong').textContent(), 'Off in notes 中文');
+  assert.equal(await page.locator('.plugin-notice p').textContent(), "Claude Code can't use Tables in this project. Whoever runs Rho can turn it on for this project.");
+  await pluginWording();
+  await page.screenshot({ path: path.join(directory, 'plugin-off-1280.png'), fullPage: true });
+  await owner.call('capability.configure', { projectId: p.id, expectedVersion: catalog.configuration.version + 1, changeId: 'ui-tables-on', enabled });
+  await page.locator('.plugin-notice').waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Back to plugins', exact: true }).click();
+  await page.getByRole('heading', { name: 'Plugins', exact: true }).waitFor();
+  assert.equal(await page.locator('main .plugin-card-state').count(), 0);
+  report.checks.push('plugins-no-capabilities-or-state-flags-or-methods-unusable-says-why-and-who');
   await page.getByRole('button', { name: 'Home', exact: true }).click();
   await page.getByRole('heading', { name: 'Welcome back', exact: true }).waitFor();
   // A row shows the project, where it is and when it was added; the full time is in the tooltip.

@@ -181,12 +181,21 @@ sections and Commands. Context & access opens as a bottom sheet with Done. Both
 keep focus inside and return it to the button that opened them. Views are tabs
 instead of a select.
 
+Plugins lists this installation's plugins by category with copy from each
+plugin's descriptor. A usable plugin shows no state. One that can't be used
+gives the first reason and who can change it: not part of this installation,
+needs another plugin, off in this project, or waiting for another plugin, with
+About for that plugin. Plugins that are not part of this installation are
+listed last. The page shows no Capabilities wording, state flags or method
+names.
+
 ## Checks and evidence
 
 ```sh
 npm run build:web
 RHO_CORE_BINARY=/absolute/accepted/rho-core npm test
 RHO_CORE_BINARY=/absolute/accepted/rho-core npm run test:ui
+npm run test:ui:plugins
 # Installed product; driver is a separate development dependency:
 RHO_PACKAGE_ROOT=/absolute/installation/node_modules/@rho-workspace/local \
 RHO_UI_PLAYWRIGHT_MODULE=/absolute/test-driver/node_modules/@playwright/test/index.mjs \
@@ -206,14 +215,17 @@ launches the actual CLI and drives real Chrome with real owner state. It covers:
   typed text that matches no command running nothing
 - below 768: no rail or sidebar, the navigation drawer and context sheet
   keeping and returning focus, and view tabs
+- Plugins without Capabilities wording, state flags or method names, and the
+  off and waiting states with their reasons
 - disconnect confirmation and Escape focus return
 - the project overview, unavailable views without JSON, and About with Back
 - 1600/1280/1024/768/390 widths
 
-Instrumented
-Host-start/native-submit attempts must both be zero. Reports contain asset IDs
-and results, never pairing/session credentials. Inspect screenshots in addition to
-overflow assertions.
+`test:ui:plugins` renders every plugin's descriptor copy, copies each example
+prompt, returns focus to the card and checks a catalog without optional display
+fields. Instrumented Host-start/native-submit attempts must both be zero.
+Reports contain asset IDs and results, never pairing/session credentials.
+Inspect screenshots in addition to overflow assertions.
 
 The driver is not a production dependency. Select explicit paths with
 `RHO_UI_PLAYWRIGHT_MODULE`, `RHO_UI_CHROME`, `RHO_UI_EVIDENCE` and optionally
