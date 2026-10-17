@@ -211,16 +211,50 @@ try {
   await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).waitFor();
   report.checks.push('unicode-project-create-real-catalog-unavailable-view-refresh');
   const commandTrigger = await page.getByRole('button', { name: /Commands/ }).elementHandle();
+  const palette = page.getByRole('dialog', { name: 'Commands', exact: true }), filter = palette.getByRole('combobox', { name: 'Command', exact: true });
+  const chosen = () => palette.getByRole('option', { selected: true }).textContent();
   await page.keyboard.press('Meta+k');
-  await page.getByRole('dialog', { name: 'Workspace commands' }).waitFor();
+  await palette.waitFor();
   await page.keyboard.press('Escape');
-  await page.getByRole('dialog', { name: 'Workspace commands' }).waitFor({ state: 'hidden' });
+  await palette.waitFor({ state: 'hidden' });
   // The dialog hides before its asynchronous close event returns focus to the trigger.
   await focused(commandTrigger);
   report.checks.push('keyboard-command-dialog-and-focus-return');
+  // Commands: a filter, groups and a footer. Verbs follow the current state; arrows move the selection; typed questions run nothing.
+  await page.keyboard.press('Meta+k');
+  await focused(await filter.elementHandle());
+  assert.equal(await filter.getAttribute('placeholder'), 'Type a command');
+  assert.deepEqual(await palette.locator('.command-heading').allTextContents(), ['Go to', 'View', 'Connection', 'This tab']);
+  assert.deepEqual(await palette.getByRole('option').allTextContents(), ['Home', 'Overviewnotes 中文', 'Plugins', 'Open another project…', 'Hide project navigation', 'Show context & access', 'RefreshReads again · starts nothing', 'Disconnect this tab']);
+  assert.equal(await palette.locator('.command-footer p').textContent(), 'Commands only. To ask about your work, use Claude Code.');
+  assert.equal(await chosen(), 'Home');
+  await page.keyboard.press('ArrowUp');
+  assert.equal(await chosen(), 'Disconnect this tab');
+  await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown');
+  assert.equal(await chosen(), 'Overviewnotes 中文');
+  await page.screenshot({ path: path.join(directory, 'commands-1600.png'), fullPage: true });
+  await widths('commands', async () => assert.equal(await palette.isVisible(), true));
+  await filter.fill('context');
+  assert.deepEqual(await palette.getByRole('option').allTextContents(), ['Show context & access']);
+  await page.keyboard.press('Enter');
+  await page.getByRole('complementary', { name: 'Context and access' }).waitFor();
+  await focused(commandTrigger);
+  await page.keyboard.press('Meta+k');
+  await filter.fill('context');
+  assert.deepEqual(await palette.getByRole('option').allTextContents(), ['Hide context & access']);
+  await filter.fill('why is my plot empty');
+  assert.equal(await palette.getByRole('option').count(), 0);
+  assert.equal(await palette.locator('.command-none').textContent(), 'No command matches “why is my plot empty”.');
+  await page.keyboard.press('Enter');
+  assert.equal(await palette.isVisible(), true);
+  await page.keyboard.press('Escape');
+  await palette.waitFor({ state: 'hidden' });
+  await focused(commandTrigger);
+  await page.getByRole('button', { name: 'Close context', exact: true }).click();
+  report.checks.push('command-palette-filter-groups-footer-arrow-keys-state-verbs-runs-no-questions');
   // Disconnecting asks first; Escape cancels and returns focus to what opened the confirmation.
   await page.keyboard.press('Meta+k');
-  await page.getByRole('dialog', { name: 'Workspace commands' }).getByRole('button', { name: 'Disconnect this tab', exact: true }).click();
+  await palette.getByRole('option', { name: 'Disconnect this tab', exact: true }).click();
   await page.getByRole('dialog', { name: 'Disconnect this tab?' }).waitFor();
   await page.screenshot({ path: path.join(directory, 'disconnect-confirm-1600.png'), fullPage: true });
   await page.keyboard.press('Escape');
@@ -277,18 +311,49 @@ try {
   await context.setOffline(true);
   await page.getByRole('status').filter({ hasText: 'Offline' }).waitFor();
   assert.match(await page.locator('header').getByRole('status').textContent(), /^Offline last read \d\d:\d\d$/);
-  await page.getByRole('alert').filter({ hasText: 'Observation interrupted' }).waitFor();
+  // A grey notice says what is shown; everything already read stays on screen.
+  const notice = page.getByRole('alert').and(page.locator('.offline-bar'));
+  assert.match(await notice.locator('p').textContent(), /^Can't reach Rho\. You're seeing what was read at \d\d:\d\d\.$/);
+  await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).first().waitFor();
+  assert.equal(await page.locator('.rho-dock .retained-tab').count(), 2);
+  assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).locator('.nav-row-count').textContent(), '2 views');
+  await page.keyboard.press('Meta+k');
+  assert.equal(await palette.getByRole('option', { name: /^Reconnect/ }).count(), 1);
+  await page.keyboard.press('Escape');
+  await palette.waitFor({ state: 'hidden' });
   await page.screenshot({ path: path.join(directory, 'status-offline-1280.png'), fullPage: true });
+  await widths('offline', async () => assert.equal(await notice.isVisible(), true));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // Coming back from the narrow select, the views return as tabs of one group in layout order.
+  await page.locator('.rho-dock .retained-tab').nth(1).waitFor();
+  assert.equal(await page.locator('.rho-dock .dv-groupview').count(), 1);
+  assert.deepEqual(await page.locator('.rho-dock .retained-tab').allTextContents(), ['Shared notes', 'Second view']);
+  await page.getByRole('button', { name: 'Context & access', exact: true }).click();
+  assert.match(await page.locator('.connection-line strong').textContent(), /^Offline since \d\d:\d\d$/);
+  await page.screenshot({ path: path.join(directory, 'offline-context-1440.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Close context', exact: true }).click();
+  await page.setViewportSize({ width: 1280, height: 900 });
   await context.setOffline(false);
   // Hold the next snapshot so the in-progress state is observable, then release it.
   let release; const held = new Promise(resolve => { release = resolve; });
   await page.route('**/api/v2/observation.snapshot', async route => { await held; await route.continue(); }, { times: 1 });
-  await page.getByRole('button', { name: 'Reconnect and inspect', exact: true }).click();
+  const requests = [], record = request => { const { pathname } = new URL(request.url()); if (pathname.startsWith('/api/')) requests.push(pathname.replace(/^\/api\/(v2\/)?/, '')); };
+  page.on('request', record);
+  await notice.getByRole('button', { name: 'Reconnect', exact: true }).click();
   await page.getByRole('status').filter({ hasText: 'Connecting' }).waitFor();
   assert.match(await page.locator('header').getByRole('status').textContent(), /^Connecting last read \d\d:\d\d$/);
+  assert.match(await notice.locator('p').textContent(), /^Reconnecting\. You're seeing what was read at \d\d:\d\d\.$/);
+  assert.equal(await notice.getByRole('button', { name: 'Reconnect', exact: true }).isDisabled(), true);
   await page.screenshot({ path: path.join(directory, 'status-connecting-1280.png'), fullPage: true });
   release();
   await page.getByRole('status').filter({ hasText: 'Up to date' }).waitFor();
+  await notice.waitFor({ state: 'hidden' });
+  page.off('request', record);
+  // Reconnect only reads again: every request it made is a read.
+  assert.ok(requests.length > 0);
+  for (const method of requests) assert.match(method, /^(project\.list|observation\.[a-z]+|events|capability\.list|composition\.read)$/);
+  report.reconnectReads = [...new Set(requests)];
+  report.checks.push('offline-notice-keeps-what-was-read-reconnect-reads-only');
   report.checks.push('offline-retains-last-snapshot-explicit-resnapshot-status-up-to-date-offline-connecting');
   await stop(); await start();
   await page.reload();
@@ -336,7 +401,7 @@ try {
   assert.equal((await (await operator()).call('project.list', {})).length, 1);
   // "Open another project…" returns home with focus on the most recent project.
   await page.keyboard.press('Meta+k');
-  await page.getByRole('dialog', { name: 'Workspace commands' }).getByRole('button', { name: 'Open another project…', exact: true }).click();
+  await palette.getByRole('option', { name: 'Open another project…', exact: true }).click();
   await page.getByRole('heading', { name: 'Welcome back', exact: true }).waitFor();
   await focused(await row.elementHandle());
   report.checks.push('home-welcome-relative-time-existing-name-open-instead-and-command-focus');

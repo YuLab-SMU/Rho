@@ -351,6 +351,76 @@ Remaining differences:
 
 User design acceptance is still pending.
 
+## U1 alignment batch 5: disconnect and commands
+
+Recorded 2026-10-17 for source after `f7cfe82a`. The installed tarballs and
+selected identities above were not rebuilt or reselected.
+
+Disconnection and commands follow U1-07 and U1-08:
+
+- When Rho can't be reached, a grey notice above the layout says "Can't reach
+  Rho. You're seeing what was read at HH:MM." with a Reconnect button. Views,
+  tabs and the sidebar keep what was read.
+- Reconnect reads again and starts nothing. While it runs the notice says
+  "Reconnecting." and the button is disabled. The last failure is shown under
+  Context & access, next to "Offline since HH:MM".
+- The command palette opens with focus in a "Type a command" filter. Commands
+  are grouped as Go to, View, Connection and This tab. The footer says
+  "Commands only. To ask about your work, use Claude Code." with ↑↓ and ↵ hints.
+- Show and Hide follow the current state of project navigation and context.
+  Refresh and Reconnect say they read again and start nothing.
+- Text that matches no command shows "No command matches" and Enter runs
+  nothing.
+
+Two defects were found and fixed:
+
+- A palette closed by running a command could close again if it was reopened
+  before the browser delivered the close event. The palette now ignores a close
+  event that arrives after it reopened.
+- After the window narrowed and widened again, the two views came back as two
+  side-by-side groups in reverse order. They now return as tabs of one group in
+  layout order.
+
+The Paper spec board records these rules under 断线与命令.
+
+`npm run build:web` passes on the staged tree exported outside the checkout,
+with browser asset inventory SHA-256 `46347fc621043f28d383d0fc86c50bf74cca9480e4ee868334277c965212d18d`.
+`npm run test:ui` passes there in Chrome 155.0.8059.84: nine browser/security
+tests, then acceptance with **0 / 0** Host-start/native-submit attempts. The new
+assertions cover:
+
+- focus in the filter, the placeholder, group headings, every command label and
+  the footer
+- arrow keys wrapping from the first to the last command, and Enter running the
+  selected one
+- "Show context & access" opening the panel and the next palette offering
+  "Hide context & access"
+- a typed question matching no command, showing the empty text, and Enter
+  leaving the palette open
+- the offline notice text, the retained tabs and views, and Reconnect in the
+  palette while offline
+- "Offline since HH:MM" with the last failure under Context & access
+- Reconnect showing "Reconnecting." with the button disabled, then Up to date
+  with the notice gone
+- every request Reconnect made being a read: `project.list`, observation reads,
+  the event stream, `capability.list` and `composition.read`
+- after the narrow widths, one view group with the tabs "Shared notes" then
+  "Second view"
+
+Rho `npm test` passes 36/36 on the same staged tree with `RHO_CORE_BINARY` set
+to the accepted Core artifact.
+
+Screenshots under `work/ui-u1/batch5-staged-20261017-131223` were compared with
+U1-07 and U1-08: `commands-*` and `offline-*` at all five widths,
+`status-offline-1280`, `status-connecting-1280` and `offline-context-1440`.
+
+Remaining differences:
+
+- The test folder is under `/tmp`, so the sidebar location wraps to two lines.
+- Below 768 the view select and the rail remain until batch 6.
+
+User design acceptance is still pending.
+
 ## Evidence and limits
 
 Local ignored evidence is under `work/ui-u1`: fixed full/minimal composition

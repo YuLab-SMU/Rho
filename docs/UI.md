@@ -167,6 +167,13 @@ unavailable view says what it shows, what it needs and what this build lacks,
 offers About for its plugin with a way back to the project, and keeps identifiers
 in the View reference disclosure.
 
+When Rho can't be reached, a notice above the layout keeps what was already read
+and says when it was read. Reconnect only reads again; it is disabled while a
+reconnect is in progress, and the last failure is shown under Context & access.
+The command palette filters commands by name in four groups (Go to, View,
+Connection, This tab). Show and Hide follow the current state, and text that
+matches no command runs nothing; questions about the work go to Claude Code.
+
 ## Checks and evidence
 
 ```sh
@@ -186,8 +193,10 @@ launches the actual CLI and drives real Chrome with real owner state. It covers:
 - `openUrl` redemption, fragment removal and one-use links across tabs
 - Unicode project creation and refresh
 - the Up to date / Offline / Connecting status
-- offline/reconnect and same-port restart
+- the offline notice, reconnect making only reads, and same-port restart
 - stable-ID updates and command focus
+- the command palette: filter, groups, state-following verbs, arrow keys and
+  typed text that matches no command running nothing
 - disconnect confirmation and Escape focus return
 - the project overview, unavailable views without JSON, and About with Back
 - 1600/1280/1024/768/390 widths

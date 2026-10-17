@@ -4,6 +4,7 @@ import { BrowserClient, type BrowserConnection, type ProjectSummary, type Worksp
 import { Home, located, projectName as name } from './home.js';
 import { ProjectNavigation, ProjectOverview, type Section } from './project.js';
 import { Icon } from './icons.js';
+import { CommandPalette, type Command, type CommandGroup } from './commands.js';
 import { PluginCatalog } from './plugins.js';
 import './theme.css';
 import './plugins.css';
@@ -117,7 +118,7 @@ function App() {
       if (!connection || confirming) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setCommands(value => !value); }
     }
-    function offline() { setPhase('offline'); setOfflineAt(at => at ?? new Date()); setError('You are offline. The last confirmed project snapshot is still available.'); }
+    function offline() { setPhase('offline'); setOfflineAt(at => at ?? new Date()); setError('This browser reports no network connection.'); }
     window.addEventListener('keydown', key); window.addEventListener('offline', offline);
     return () => { window.removeEventListener('keydown', key); window.removeEventListener('offline', offline); };
   }, [connection, confirming]);
@@ -143,6 +144,7 @@ function App() {
   useEffect(() => { if (section && snapshot && screen === 'project') { document.getElementById('overview-' + section)?.focus(); setSection(null); } }, [section, snapshot, screen]);
   useEffect(() => { if (mainFocus) { setMainFocus(false); document.getElementById('main')?.focus(); } }, [mainFocus]);
   function command(run: () => void) { setCommands(false); run(); }
+  function runCommand(next: Command) { command(next.run); }
   function reread() { setError(''); setReconnect(v => v + 1); }
   // Disconnecting forgets this tab's credential only; server authorization, projects and work are unchanged.
   function askDisconnect(trigger: HTMLElement | null) { confirmReturn.current = trigger; setCommands(false); setConfirming(true); }
@@ -173,8 +175,27 @@ function App() {
   const folder = { root: connection.root, label: connection.rootLabel ?? connection.root ?? '' };
   const projectVisible = screen !== 'home' && project;
   const connectionNote = phase === 'live' ? `Last read ${clock(readAt ?? new Date(), true)}. Refreshing reads the project again; it never starts work.`
-    : phase === 'offline' ? (readAt ? `Showing what was read at ${clock(readAt, true)}. ` : 'Nothing has been read yet. ') + "Reconnecting only reads again; it doesn't restart Rho or any work."
+    : phase === 'offline' ? (readAt ? `Showing what was read at ${clock(readAt, true)}. ` : 'Nothing has been read yet. ') + "Reconnecting only reads again; it doesn't restart Rho or any work." + (error ? ` Last attempt: ${error}` : '')
     : readAt ? `Reading again. Last read ${clock(readAt, true)}; reading never starts work.` : 'Reading the project. Reading never starts work.';
+  // Reconnecting keeps the notice until a read succeeds; the last read stays on screen meanwhile.
+  const reconnecting = phase === 'connecting' && offlineAt !== null;
+  const seen = readAt ? `You're seeing what was read at ${clock(readAt)}.` : 'Nothing has been read yet.';
+  const groups: CommandGroup[] = [
+    { label: 'Go to', commands: [
+      { id: 'home', label: 'Home', icon: 'home', run: () => setScreen('home') },
+      ...(project ? [
+        { id: 'overview', label: 'Overview', icon: 'overview', meta: name(project), run: () => { setOverview(true); setScreen('project'); } },
+        { id: 'plugins', label: 'Plugins', icon: 'plugins', run: plugins },
+      ] satisfies Command[] : []),
+      { id: 'open', label: project ? 'Open another project…' : 'Open a project…', icon: 'folder', run: () => { afterCommands.current = () => setHomeFocus(true); setScreen('home'); } },
+    ] },
+    { label: 'View', commands: [
+      ...(projectVisible ? [{ id: 'navigation', label: (navigation ? 'Hide' : 'Show') + ' project navigation', icon: 'sidebar', run: () => setNavigation(v => !v) }] satisfies Command[] : []),
+      { id: 'context', label: (context ? 'Hide' : 'Show') + ' context & access', icon: 'context', run: () => setContext(v => !v) },
+    ] },
+    { label: 'Connection', commands: [{ id: 'read', label: phase === 'offline' ? 'Reconnect' : 'Refresh', icon: 'refresh', meta: 'Reads again · starts nothing', run: reread }] },
+    { label: 'This tab', commands: [{ id: 'disconnect', label: 'Disconnect this tab', icon: 'unlink', danger: true, run: () => askDisconnect(commandTrigger.current) }] },
+  ];
   return <div className="application">
     <a className="skip-link" href="#main">Skip to workspace</a>
     <header className="topbar">
@@ -205,7 +226,11 @@ function App() {
           onOverview={() => { setOverview(true); setScreen('project'); }} onLayout={layout} onSection={showSection} />
       </aside>}
       <main id="main" tabIndex={-1} className={projectVisible ? 'main project-main' : 'main'}>
-        {error && <div className="error-banner" role="alert"><strong>{phase === 'offline' ? 'Observation interrupted' : 'Request not confirmed'}</strong><p>{error}</p><button onClick={reread}>Reconnect and inspect</button></div>}
+        {(phase === 'offline' || reconnecting) && <div className="offline-bar" role="alert">
+          <Icon name="offline" size={16} stroke={1.6} />
+          <p>{reconnecting ? 'Reconnecting. ' : "Can't reach Rho. "}{seen}</p>
+          <button className="small-button" disabled={reconnecting} onClick={reread}>Reconnect</button>
+        </div>}
         {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={folder}
           focusRequest={homeFocus} onFocused={() => setHomeFocus(false)} onChoose={chooseProject} onOpened={opened} onAccessEnded={() => end('ended')} />
           : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div>
@@ -233,26 +258,9 @@ function App() {
         <p className="context-footnote">Closing this tab only stops watching. Work that is running keeps running.</p>
       </aside>}
     </div>
-    <dialog ref={dialog} aria-labelledby="command-title" onCancel={() => setCommands(false)} onClose={() => { setCommands(false); const next = afterCommands.current; afterCommands.current = null; if (next) next(); else commandTrigger.current?.focus(); }}>
-      <div className="section-heading"><h2 id="command-title">Workspace commands</h2><button aria-label="Close commands" className="icon-button" onClick={() => setCommands(false)}><Icon name="close" /></button></div>
-      <div className="command-list">
-        <div className="command-group" role="group" aria-label="Go to"><span className="command-heading" aria-hidden="true">Go to</span>
-          <button onClick={() => command(() => setScreen('home'))}>Home</button>
-          {project && <><button onClick={() => command(() => setScreen('project'))}>Workspace<span className="command-meta">{name(project)}</span></button><button onClick={() => command(plugins)}>Plugins</button></>}
-          <button onClick={() => { afterCommands.current = () => setHomeFocus(true); command(() => setScreen('home')); }}>{project ? 'Open another project…' : 'Open a project…'}</button>
-        </div>
-        <div className="command-group" role="group" aria-label="View"><span className="command-heading" aria-hidden="true">View</span>
-          {projectVisible && <button onClick={() => command(() => setNavigation(v => !v))}>{navigation ? 'Hide' : 'Show'} project navigation</button>}
-          <button onClick={() => command(() => setContext(v => !v))}>{context ? 'Hide' : 'Show'} context &amp; access</button>
-        </div>
-        <div className="command-group" role="group" aria-label="Connection"><span className="command-heading" aria-hidden="true">Connection</span>
-          <button onClick={() => command(reread)}>{phase === 'offline' ? 'Reconnect' : 'Refresh'}<span className="command-meta">Reads again · starts nothing</span></button>
-        </div>
-        <div className="command-group" role="group" aria-label="This tab"><span className="command-heading" aria-hidden="true">This tab</span>
-          <button className="command-danger" onClick={() => askDisconnect(commandTrigger.current)}>Disconnect this tab</button>
-        </div>
-      </div>
-      <p className="command-footer">Commands only. To ask about your work, use Claude Code.</p>
+    <dialog ref={dialog} className="commands" aria-label="Commands" onCancel={() => setCommands(false)} onClose={e => { if (e.currentTarget.open) return; setCommands(false); const next = afterCommands.current; afterCommands.current = null; if (next) next(); else commandTrigger.current?.focus(); }}
+      onClick={e => { if (e.target === e.currentTarget) setCommands(false); }}>
+      {commands && <CommandPalette groups={groups} onRun={runCommand} />}
     </dialog>
     <dialog ref={confirmDialog} className="confirm" aria-labelledby="disconnect-title" aria-describedby="disconnect-body" onCancel={() => setConfirming(false)} onClose={() => { setConfirming(false); confirmReturn.current?.focus(); }}>
       <h2 id="disconnect-title">Disconnect this tab?</h2>

@@ -95,7 +95,8 @@ export function Workspace({ composition, snapshot, client, onAbout }: { composit
     for (const view of composition.views) {
       const panel = current.getPanel(view.id), params = { view, snapshot, client, onAbout };
       if (panel) { panel.api.updateParameters(params); panel.api.setTitle(title(view)); }
-      else current.addPanel({ id: view.id, component: 'owner', tabComponent: 'retained', title: title(view), params, inactive: true });
+      // New views join the existing group as tabs, in layout order, rather than opening a new group.
+      else current.addPanel({ id: view.id, component: 'owner', tabComponent: 'retained', title: title(view), params, inactive: true, ...(current.panels.length ? { position: { referencePanel: current.panels.at(-1)!.id } } : {}) });
     }
     const target = current.getPanel(active) ?? current.panels[0];
     if (!current.activePanel && target) target.api.setActive();

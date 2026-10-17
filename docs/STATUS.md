@@ -66,6 +66,14 @@ keeps identifiers in View reference; the main area has no JSON. On the staged
 tree `npm test` passes 36/36 and `test:ui` passes at five widths with 0 / 0
 native attempts. See [batch 4 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-4-inside-a-project).
 
+Batch 5 follows U1-07 and U1-08 for disconnection and commands. When Rho can't
+be reached, a notice keeps what was already read and says when. Reconnect only
+reads again, is disabled while it runs, and the last failure is under Context &
+access. The command palette filters commands in four groups; Show and Hide follow
+the current state, and typed questions run nothing. On the staged tree
+`npm test` passes 36/36 and `test:ui` passes at five widths with 0 / 0 native
+attempts. See [batch 5 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-5-disconnect-and-commands).
+
 ## Headless collaboration extension
 
 The additive v2 extension now selects nine owners, including Annotations. Project
