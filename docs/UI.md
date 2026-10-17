@@ -145,7 +145,8 @@ sessionStorage; the separate Node client retains filesystem intent functions.
 SSE parser. Snapshot on connection, reconnect, invalidation or gap; events are
 hints, not another state owner. Cancellation releases the reader. Resource versions
 stay exact; opening a view does not choose a newer version automatically. Stable-ID
-reconciliation does not reconstruct retained views or steal command focus.
+reconciliation does not reconstruct retained views or steal focus. A layout saved
+elsewhere appears in the overview and sidebar without moving the reader.
 
 `@rho-workspace/local/ui-contract` defines `UiContribution` at `0.1-draft`: package
 and component identities/versions, props schema, binding roles, required operations,
@@ -158,6 +159,13 @@ it before Charts, Annotations and Agent extend it in U4.
 provide executable code/module URLs. A missing entry or required operation produces
 an inspectable unavailable view. Actual functionality belongs in Plugins optional
 `./ui` exports; Rho owns mounting, theme, layout, focus and routing only.
+
+Inside a project the sidebar lists Overview, saved layouts with their view counts,
+and the project's documents and files; retained operations appear only when there
+are some. The overview lists the same content as tables without JSON. An
+unavailable view says what it shows, what it needs and what this build lacks,
+offers About for its plugin with a way back to the project, and keeps identifiers
+in the View reference disclosure.
 
 ## Checks and evidence
 
@@ -181,7 +189,7 @@ launches the actual CLI and drives real Chrome with real owner state. It covers:
 - offline/reconnect and same-port restart
 - stable-ID updates and command focus
 - disconnect confirmation and Escape focus return
-- unavailable entries
+- the project overview, unavailable views without JSON, and About with Back
 - 1600/1280/1024/768/390 widths
 
 Instrumented

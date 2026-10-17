@@ -171,17 +171,44 @@ try {
   assert.equal(await hint.textContent(), `Creates an empty folder at ${label}/notes 中文. Nothing is installed.`);
   await widths('sheet-new', async () => assert.equal(await inSheet(), true));
   await page.keyboard.press('Enter');
-  await page.getByRole('heading', { name: 'No composition yet', exact: true }).waitFor();
+  await page.getByText('No saved layout yet', { exact: true }).waitFor();
   await focused(await page.locator('main').elementHandle());
+  // Inside a project: the sidebar lists Layouts and Content; the overview lists what the project holds, without JSON.
+  const sidebar = page.getByRole('complementary', { name: 'Project navigation', exact: true });
+  assert.equal(await page.getByRole('heading', { level: 1 }).textContent(), 'notes 中文');
+  assert.equal(await sidebar.getByRole('button', { name: 'Overview', exact: true }).getAttribute('aria-current'), 'page');
+  assert.equal(await sidebar.getByRole('group', { name: 'Layouts', exact: true }).textContent(), 'None saved yet');
+  assert.equal(await sidebar.getByText('Retained operations').count(), 0);
+  assert.deepEqual(await page.locator('main h2').allTextContents(), ['Documents 0', 'Files 0']);
+  const noJson = async () => { assert.equal(await page.locator('main pre, main code').count(), 0); assert.doesNotMatch(await page.locator('main').innerText(), /[{[]\s*"/); };
+  await noJson();
+  await widths('overview', noJson);
+  await sidebar.getByRole('button', { name: /^Files/ }).click();
+  await focused(await page.locator('#overview-files').elementHandle());
+  report.checks.push('project-overview-no-saved-layout-sidebar-layouts-content-no-zero-operations-no-json');
   const [p] = await admin.call('project.list', {});
   const d = await admin.call('document.open', { projectId: p.id, path: 'notes 中文.md' });
   const edited = await admin.call('document.edit', { projectId: p.id, documentId: d.id, expectedVersion: d.version, edits: [{ from: 0, to: 0, insert: 'Shared notes 中文 🧬\n' }], undoGroup: 'initial' });
   let composition = await admin.call('composition.apply', { projectId: p.id, compositionId: 'workspace', expectedVersion: 0, changeId: 'initial', operations: [{ op: 'replace', rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: ['notes'] }, { id: 'notes', kind: 'view', component: 'rho.editor', version: '0.2.0', props: { title: 'Shared notes' }, bindings: { document: { documentId: d.id, version: edited.version } } }] }] });
-  await page.getByRole('heading', { name: 'This view is unavailable', exact: true }).waitFor();
+  // A layout saved elsewhere appears in the overview without moving the reader; choosing it opens it.
+  await page.locator('#overview-layouts').waitFor();
+  assert.deepEqual(await page.locator('main h2').allTextContents(), ['Layouts 1', 'Documents 1', 'Files 0']);
+  assert.equal(await sidebar.getByRole('button', { name: 'Overview', exact: true }).getAttribute('aria-current'), 'page');
+  await sidebar.getByRole('button', { name: /^workspace/ }).click();
+  await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).waitFor();
+  // The view explains itself in the reader's terms; identifiers wait behind View reference.
+  assert.deepEqual(await page.locator('.unavailable-facts dt').allTextContents(), ['Shows', 'Needs', 'In this build']);
+  assert.match(await page.locator('.unavailable-facts dd').first().textContent(), /^notes 中文\.md · version \d+ · unsaved changes$/);
+  assert.equal(await page.getByText(d.id, { exact: false }).isVisible(), false);
+  assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).getAttribute('aria-current'), 'page');
+  assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).locator('.nav-row-count').textContent(), '1 view');
+  await page.locator('.retained-tab').filter({ hasText: 'Shared notes' }).waitFor();
+  await noJson();
+  await widths('layout-unavailable', noJson);
   await page.getByText('View reference', { exact: true }).click();
   await page.getByText(d.id, { exact: false }).waitFor();
   await page.reload();
-  await page.getByRole('heading', { name: 'This view is unavailable', exact: true }).waitFor();
+  await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).waitFor();
   report.checks.push('unicode-project-create-real-catalog-unavailable-view-refresh');
   const commandTrigger = await page.getByRole('button', { name: /Commands/ }).elementHandle();
   await page.keyboard.press('Meta+k');
@@ -236,10 +263,13 @@ try {
     report.widths.push({ width, noDocumentOverflow: true, screenshot: 'workspace-' + width + '.png' });
   }
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.getByRole('combobox', { name: 'View', exact: true }).focus();
+  await page.locator('.rho-dock .retained-tab').first().waitFor();
+  const viewReference = page.locator('.view-reference summary');
+  await viewReference.focus();
   composition = await admin.call('composition.apply', { projectId: p.id, compositionId: 'workspace', expectedVersion: composition.version, changeId: 'remote-second-view', operations: [{ op: 'insert', parentId: 'root', index: 1, node: { id: 'second', kind: 'view', component: 'rho.editor', version: '0.2.0', props: { title: 'Second view' }, bindings: { document: { documentId: d.id, version: edited.version } } } }] });
-  await page.getByRole('combobox', { name: 'View', exact: true }).getByRole('option', { name: 'Second view' }).waitFor({ state: 'attached' });
-  assert.equal(await page.getByRole('combobox', { name: 'View', exact: true }).evaluate(element => element === document.activeElement), true);
+  await page.locator('.retained-tab').filter({ hasText: 'Second view' }).waitFor();
+  assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).locator('.nav-row-count').textContent(), '2 views');
+  assert.equal(await viewReference.evaluate(element => element === document.activeElement), true);
   report.checks.push('stable-id-remote-view-update-preserves-command-focus');
   await page.getByRole('status').filter({ hasText: 'Up to date' }).waitFor();
   assert.match(await page.locator('header').getByRole('status').textContent(), /^Up to date \d\d:\d\d$/);
@@ -265,6 +295,15 @@ try {
   await page.getByRole('status').filter({ hasText: 'Up to date' }).waitFor();
   assert.equal((await (await operator()).call('document.read', { projectId: p.id, documentId: d.id })).content, edited.content);
   report.checks.push('same-origin-service-restart-retains-browser-session-and-confirmed-owner-state');
+  // About opens the view's plugin from the project, and Back returns to the same layout.
+  const aboutButton = page.getByRole('button', { name: /^About / }).first();
+  const pluginName = (await aboutButton.textContent()).slice('About '.length);
+  await aboutButton.click();
+  await page.getByRole('heading', { name: pluginName, exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Back to notes 中文', exact: true }).click();
+  await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).first().waitFor();
+  assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).getAttribute('aria-current'), 'page');
+  report.checks.push('unavailable-view-shows-needs-build-about-plugin-and-back-to-project');
   await page.getByRole('button', { name: 'Plugins', exact: true }).click();
   await page.getByRole('heading', { name: 'Plugins', exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Plugins', exact: true }).getAttribute('aria-current'), 'page');
@@ -293,7 +332,7 @@ try {
   assert.equal(await hint.textContent(), `${label}/notes 中文 already exists.`);
   await page.screenshot({ path: path.join(directory, 'sheet-exists-1280.png'), fullPage: true });
   await sheet.getByRole('button', { name: 'Open existing', exact: true }).click();
-  await page.getByRole('heading', { name: 'This view is unavailable', exact: true }).first().waitFor();
+  await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).first().waitFor();
   assert.equal((await (await operator()).call('project.list', {})).length, 1);
   // "Open another project…" returns home with focus on the most recent project.
   await page.keyboard.press('Meta+k');

@@ -19,8 +19,10 @@ function notice(plugin: CapabilityPlugin) {
   return '';
 }
 
-export function PluginCatalog({ catalog }: { catalog: CapabilityCatalog }) {
-  const [pluginId, setPluginId] = useState('');
+export function PluginCatalog({ catalog, pluginId, onSelect: setPluginId, back: leave }: {
+  catalog: CapabilityCatalog; pluginId: string; onSelect: (id: string) => void;
+  back?: { label: string; run: () => void };
+}) {
   const [copied, setCopied] = useState<number | null>(null), [copyError, setCopyError] = useState('');
   const heading = useRef<HTMLHeadingElement>(null);
   const cards = useRef(new Map<string, HTMLButtonElement>());
@@ -41,7 +43,7 @@ export function PluginCatalog({ catalog }: { catalog: CapabilityCatalog }) {
   if (selected) {
     const p = pluginPresentation(selected), entries = pluginEntries(catalog, selected.id), reason = notice(selected);
     return <section className="page-section plugin-page plugin-detail">
-      <button className="plugin-back" onClick={back}>Back to plugins</button>
+      <button className="plugin-back" onClick={leave?.run ?? back}>{leave?.label ?? 'Back to plugins'}</button>
       <header className="plugin-detail-heading">
         <span className="plugin-symbol" aria-hidden="true"><Icon name="plugins" /></span>
         <div><h1 ref={heading} tabIndex={-1}>{p.displayName}</h1><p className="plugin-tagline">{p.tagline}</p></div>

@@ -1,7 +1,8 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserClient, type BrowserConnection, type ProjectSummary, type WorkspaceSnapshot } from '../src/browser.js';
-import { Home, projectName as name } from './home.js';
+import { Home, located, projectName as name } from './home.js';
+import { ProjectNavigation, ProjectOverview, type Section } from './project.js';
 import { Icon } from './icons.js';
 import { PluginCatalog } from './plugins.js';
 import './theme.css';
@@ -52,7 +53,9 @@ function App() {
   const [readAt, setReadAt] = useState<Date | null>(null), [offlineAt, setOfflineAt] = useState<Date | null>(null);
   const [error, setError] = useState('');
   const [homeFocus, setHomeFocus] = useState(false), [mainFocus, setMainFocus] = useState(false);
-  const [compositionId, setCompositionId] = useState('');
+  const [compositionId, setCompositionId] = useState(''), [overview, setOverview] = useState(false), [section, setSection] = useState<Section | null>(null);
+  // About from a view opens that plugin and offers the way back to the project.
+  const [pluginId, setPluginId] = useState(''), [pluginReturn, setPluginReturn] = useState(false);
   const [context, setContext] = useState(false), [navigation, setNavigation] = useState(true);
   const [reconnect, setReconnect] = useState(0), [commands, setCommands] = useState(false), [confirming, setConfirming] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null), commandTrigger = useRef<HTMLButtonElement>(null);
@@ -69,7 +72,8 @@ function App() {
     setPhase('offline'); setOfflineAt(at => at ?? new Date()); setError(humanError(e));
   }
   function chooseProject(next: ProjectSummary) {
-    if (next.id !== project?.id) { setSnapshot(null); setCompositionId(''); }
+    if (next.id !== project?.id) { setSnapshot(null); setCompositionId(''); setPluginId(''); }
+    setOverview(false); setPluginReturn(false);
     sessionStorage.setItem(projectKey, next.id); setProject(next); setScreen('project');
     if (matchMedia('(max-width: 767px)').matches) setNavigation(false);
   }
@@ -119,7 +123,7 @@ function App() {
   }, [connection, confirming]);
   useEffect(() => {
     const media = matchMedia('(max-width: 767px)');
-    function change() { setNarrow(media.matches); if (media.matches) setNavigation(false); }
+    function change() { setNarrow(media.matches); setNavigation(!media.matches); }
     change(); media.addEventListener('change', change);
     return () => media.removeEventListener('change', change);
   }, []);
@@ -136,6 +140,7 @@ function App() {
   useEffect(() => { if (confirming) confirmDialog.current?.showModal(); else if (confirmDialog.current?.open) confirmDialog.current.close(); }, [confirming]);
   useEffect(() => { if (!connection && away !== 'fresh' && away !== 'linking') awayHeading.current?.focus(); }, [connection, away]);
   // The sheet leaves with the home page; once it is gone, focus moves to the project instead of the document body.
+  useEffect(() => { if (section && snapshot && screen === 'project') { document.getElementById('overview-' + section)?.focus(); setSection(null); } }, [section, snapshot, screen]);
   useEffect(() => { if (mainFocus) { setMainFocus(false); document.getElementById('main')?.focus(); } }, [mainFocus]);
   function command(run: () => void) { setCommands(false); run(); }
   function reread() { setError(''); setReconnect(v => v + 1); }
@@ -144,6 +149,10 @@ function App() {
   function opened(next: ProjectSummary) {
     setProjects(list => list.some(p => p.id === next.id) ? list : [...list, next]); chooseProject(next); setMainFocus(true);
   }
+  function layout(id: string) { setCompositionId(id); setOverview(false); setScreen('project'); }
+  function showSection(next: Section) { setOverview(true); setScreen('project'); setSection(next); }
+  function plugins() { setPluginId(''); setPluginReturn(false); setScreen('plugins'); }
+  function about(id: string) { setPluginId(id); setPluginReturn(true); setScreen('plugins'); }
   function goHome() { setScreen('home'); setHomeFocus(true); }
   function end(reason: Away) {
     sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(projectKey); confirmReturn.current = null;
@@ -160,9 +169,9 @@ function App() {
       {away !== 'fresh' && away !== 'linking' && <p className="away-note">Your projects and any running work are unchanged.</p>}
     </section></main></div>;
   }
-  const composition = snapshot?.compositions.find(c => c.compositionId === compositionId) ?? snapshot?.compositions[0];
+  const composition = overview ? undefined : snapshot?.compositions.find(c => c.compositionId === compositionId) ?? snapshot?.compositions[0];
+  const folder = { root: connection.root, label: connection.rootLabel ?? connection.root ?? '' };
   const projectVisible = screen !== 'home' && project;
-  const resources = snapshot?.resources ?? [], docs = snapshot?.documents ?? [];
   const connectionNote = phase === 'live' ? `Last read ${clock(readAt ?? new Date(), true)}. Refreshing reads the project again; it never starts work.`
     : phase === 'offline' ? (readAt ? `Showing what was read at ${clock(readAt, true)}. ` : 'Nothing has been read yet. ') + "Reconnecting only reads again; it doesn't restart Rho or any work."
     : readAt ? `Reading again. Last read ${clock(readAt, true)}; reading never starts work.` : 'Reading the project. Reading never starts work.';
@@ -173,7 +182,7 @@ function App() {
       <div className="location">
         {screen === 'project' && project ? <>
           <span className="location-name">{name(project)}</span>
-          {composition && <> <span className="location-separator" aria-hidden="true">/</span> <span className="location-layout">{composition.compositionId}</span></>}
+          {composition && screen === 'project' && <> <span className="location-separator" aria-hidden="true">/</span> <span className="location-layout">{composition.compositionId}</span></>}
           {' '}<span className="read-only" title="This tab can open and watch projects. It can't edit or run anything."><Icon name="lock" size={12} stroke={2} /><span className="read-only-label">Read-only</span></span>
         </> : <span className="location-name">{screen === 'plugins' ? 'Plugins' : 'Home'}</span>}
       </div>
@@ -188,32 +197,22 @@ function App() {
       <nav className="app-rail" aria-label="Application">
         <Rail name="Home" icon="home" active={screen === 'home'} onClick={() => setScreen('home')} />
         <Rail name="Projects" icon="project" active={screen === 'project'} onClick={() => project ? setScreen('project') : goHome()} />
-        <Rail name="Plugins" icon="plugins" active={screen === 'plugins'} onClick={() => project ? setScreen('plugins') : setScreen('home')} />
+        <Rail name="Plugins" icon="plugins" active={screen === 'plugins'} onClick={() => project ? plugins() : setScreen('home')} />
       </nav>
       {projectVisible && navigation && <aside id="project-navigation" className="project-nav" aria-label="Project navigation">
         {narrow && <button aria-label="Close project navigation" onClick={() => { setNavigation(false); navigationTrigger.current?.focus(); }}>Close navigation</button>}
-        <div className="project-heading"><strong>{name(project)}</strong><span className="muted">Local project</span></div>
-        <button className={screen === 'project' ? 'selected' : ''} onClick={() => setScreen('project')}>Workspace</button>
-        <button className={screen === 'plugins' ? 'selected' : ''} onClick={() => setScreen('plugins')}>Capabilities &amp; access</button>
-        <span className="section-label">Compositions</span>
-        {snapshot?.compositions.map(c => <button key={c.compositionId} className={composition?.compositionId === c.compositionId && screen === 'project' ? 'selected' : ''} onClick={() => { setCompositionId(c.compositionId); setScreen('project'); }}>{c.compositionId}<small>v{c.version}</small></button>)}
-        {!snapshot?.compositions.length && <p className="muted">No retained compositions</p>}
-        <span className="section-label">Project content</span>
-        <div className="fact-row"><span>Documents</span><span>{docs.length}</span></div>
-        <div className="fact-row"><span>Resources</span><span>{resources.length}</span></div>
-        <div className="fact-row"><span>Retained operations</span><span>{snapshot?.operations.length ?? 0}</span></div>
-        <p className="nav-footnote">Local project / Read-only workspace</p>
+        <ProjectNavigation project={project} location={located(project, folder)} snapshot={snapshot} overview={screen === 'project' && !composition} compositionId={screen === 'project' ? composition?.compositionId ?? '' : ''}
+          onOverview={() => { setOverview(true); setScreen('project'); }} onLayout={layout} onSection={showSection} />
       </aside>}
       <main id="main" tabIndex={-1} className={projectVisible ? 'main project-main' : 'main'}>
         {error && <div className="error-banner" role="alert"><strong>{phase === 'offline' ? 'Observation interrupted' : 'Request not confirmed'}</strong><p>{error}</p><button onClick={reread}>Reconnect and inspect</button></div>}
-        {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={{ root: connection.root, label: connection.rootLabel ?? connection.root ?? '' }}
+        {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={folder}
           focusRequest={homeFocus} onFocused={() => setHomeFocus(false)} onChoose={chooseProject} onOpened={opened} onAccessEnded={() => end('ended')} />
-          : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div> : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} /> : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} /></Suspense> : <section className="page-section overview"><h1>{name(project)}</h1><p className="muted">Your confirmed documents and resources, together in one workspace.</p>
-          <div className="section-heading"><h2>Workspace</h2><button onClick={() => setScreen('plugins')}>Inspect capabilities</button></div>
-          <div className="empty"><h2>No composition yet</h2><p>This project has no saved layout. Retained compositions will appear here when available.</p></div>
-          <h2>Documents</h2>{docs.length ? docs.map(d => <article className="resource-fact" key={d.id}><strong>{d.path}</strong><span className="muted">v{d.version} / {d.dirty ? 'Unsaved owner buffer' : 'Saved'} / Renderer unavailable</span></article>) : <p className="muted">No opened documents.</p>}
-          <h2>Resources</h2>{resources.length ? resources.map(r => <article className="resource-fact" key={r.id}><strong>{r.path}</strong><span className="muted">{r.kind} / {r.availability} / {r.bytes.toLocaleString()} bytes</span><details><summary>Version &amp; provenance</summary><pre>{JSON.stringify({ id: r.id, version: r.version, provenance: r.provenance }, null, 2)}</pre></details></article>) : <p className="muted">No registered resources.</p>}
-        </section>}
+          : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div>
+          : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} pluginId={pluginId} onSelect={id => { setPluginId(id); if (!id) setPluginReturn(false); }}
+            back={pluginReturn ? { label: 'Back to ' + name(project), run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
+          : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} onAbout={about} /></Suspense>
+          : <ProjectOverview project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} />}
       </main>
       {context && <aside id="project-context" className="context-drawer" aria-label="Context and access">
         <div className="drawer-heading"><h2>Context &amp; access</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={14} stroke={2} /></button></div>
@@ -239,7 +238,7 @@ function App() {
       <div className="command-list">
         <div className="command-group" role="group" aria-label="Go to"><span className="command-heading" aria-hidden="true">Go to</span>
           <button onClick={() => command(() => setScreen('home'))}>Home</button>
-          {project && <><button onClick={() => command(() => setScreen('project'))}>Workspace<span className="command-meta">{name(project)}</span></button><button onClick={() => command(() => setScreen('plugins'))}>Plugins</button></>}
+          {project && <><button onClick={() => command(() => setScreen('project'))}>Workspace<span className="command-meta">{name(project)}</span></button><button onClick={() => command(plugins)}>Plugins</button></>}
           <button onClick={() => { afterCommands.current = () => setHomeFocus(true); command(() => setScreen('home')); }}>{project ? 'Open another project…' : 'Open a project…'}</button>
         </div>
         <div className="command-group" role="group" aria-label="View"><span className="command-heading" aria-hidden="true">View</span>

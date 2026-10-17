@@ -287,6 +287,70 @@ Remaining differences:
 
 User design acceptance is still pending.
 
+## U1 alignment batch 4: inside a project
+
+Recorded 2026-10-17 for source after `b1047ede`. The installed tarballs and
+selected identities above were not rebuilt or reselected.
+
+The project follows U1-04 and U1-05:
+
+- The sidebar lists Overview, then Layouts with each layout's view count ("None
+  saved yet" when there is none), then Content with Documents and Files and
+  their counts. "Retained operations" appears only when there are some.
+- The overview shows the project name, its location and when it was added. With
+  no layout it says "No saved layout yet"; once a layout exists it lists layouts
+  instead. Documents and Files are tables with readable states such as "Unsaved
+  changes", "Can't be read" or "Last seen 1.2 MB". A layout saved elsewhere
+  appears in the overview and sidebar without moving the reader away.
+- Layout views are Dockview tabs with an icon for what each view shows. The
+  select remains below 768 until batch 6.
+- An unavailable view is titled "This view can't be shown here yet". It says
+  what it Shows, what it Needs and what is In this build, and that the content
+  is untouched and nothing was installed or rerun. About opens the view's plugin
+  with "Back to" the project, which returns to the same layout. View, component
+  and binding identifiers appear only in View reference.
+- The main area shows no JSON or code blocks.
+
+The Paper spec board records these rules under 项目内, including two
+differences from the boards: the subtitle says "added" because the service
+records when a project was added, and the overview lists layouts when there are
+some.
+
+`npm run build:web` passes on the staged tree exported outside the checkout,
+with browser asset inventory SHA-256 `94b00870e5f5061509f56dd0ee476c8102a4f2a003ba20d505a82f9dc2af5922`.
+`npm run test:ui` passes there in Chrome 155.0.8059.84: nine browser/security
+tests, then acceptance with **0 / 0** Host-start/native-submit attempts. The new
+assertions cover:
+
+- the project title, Overview as the current row, "None saved yet", no
+  "Retained operations" row and the Documents 0 / Files 0 sections
+- no `pre` or `code` element and no JSON text in the main area, at all five
+  widths for the overview and the unavailable layout
+- Files in the sidebar focusing the Files section
+- a layout created by the operator appearing in the overview without moving the
+  reader, then opening from the sidebar with "1 view"
+- Shows / Needs / In this build, the document line "notes 中文.md · version N ·
+  unsaved changes", and the document ID hidden until View reference opens
+- a remote second view arriving as a tab, the sidebar changing to "2 views" and
+  focus staying on View reference
+- About opening the plugin and "Back to notes 中文" returning to the layout
+
+Rho `npm test` passes 36/36 on the same staged tree with `RHO_CORE_BINARY` set
+to the accepted Core artifact.
+
+Screenshots under `work/ui-u1/batch4-staged-20261017-125516` were compared with
+U1-04 and U1-05: `overview-*` and `layout-unavailable-*` at all five widths and
+`workspace-*` and `context-*` with one view.
+
+Remaining differences:
+
+- The test folder is under `/tmp`, so the sidebar location wraps to two lines.
+- The test project has no registered files, so the Files table and its states
+  are not in the screenshots. The empty sentence is shown instead.
+- Below 768 the view select and the rail remain until batch 6.
+
+User design acceptance is still pending.
+
 ## Evidence and limits
 
 Local ignored evidence is under `work/ui-u1`: fixed full/minimal composition

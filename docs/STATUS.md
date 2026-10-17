@@ -57,6 +57,15 @@ project was added, not when it was last opened. On the staged tree `npm test`
 passes 36/36 and `test:ui` passes at five widths with 0 / 0 native attempts.
 See [batch 3 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-3-home).
 
+Batch 4 follows U1-04 and U1-05 inside a project. The sidebar lists Overview,
+Layouts with view counts and Content; retained operations appear only when
+there are some. The overview says "No saved layout yet" or lists layouts, then
+documents and files as tables. Layout views are Dockview tabs. An unavailable
+view says what it shows, needs and lacks, offers About with a way back, and
+keeps identifiers in View reference; the main area has no JSON. On the staged
+tree `npm test` passes 36/36 and `test:ui` passes at five widths with 0 / 0
+native attempts. See [batch 4 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-4-inside-a-project).
+
 ## Headless collaboration extension
 
 The additive v2 extension now selects nine owners, including Annotations. Project

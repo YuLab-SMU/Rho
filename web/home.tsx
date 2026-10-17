@@ -23,8 +23,8 @@ export function trapTab(event: KeyboardEvent<HTMLElement>) {
   if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
   else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
 }
-interface Folder { root?: string; label: string }
-function located(project: ProjectSummary, folder: Folder) {
+export interface Folder { root?: string; label: string }
+export function located(project: ProjectSummary, folder: Folder) {
   return folder.root && folder.label && (project.root === folder.root || project.root.startsWith(folder.root + '/')) ? folder.label + project.root.slice(folder.root.length) : project.root;
 }
 type Kind = 'new' | 'open';
