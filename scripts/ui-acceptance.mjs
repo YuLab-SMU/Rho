@@ -54,6 +54,16 @@ async function stop() {
   }
 }
 async function operator() { return RhoClient.fromFile(path.join(state, 'connection.json')); }
+// U1 spec: rendered text uses only weights 400/600 and an enabled primary action is the accent blue.
+async function assertTheme() {
+  const facts = await page.evaluate(() => ({
+    weights: [...new Set([...document.querySelectorAll('body *')].filter(element => element.checkVisibility()).map(element => getComputedStyle(element).fontWeight))],
+    primary: [...document.querySelectorAll('button.primary:enabled')].map(element => getComputedStyle(element).backgroundColor),
+  }));
+  assert.deepEqual(facts.weights.filter(weight => weight !== '400' && weight !== '600'), []);
+  for (const color of facts.primary) assert.equal(color, 'rgb(58, 104, 240)');
+  return facts.primary.length;
+}
 try {
   const ready = await start();
   browser = await chromium.launch({ executablePath: process.env.RHO_UI_CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true });
@@ -64,6 +74,7 @@ try {
   await page.goto(url);
   await page.screenshot({ path: path.join(directory, 'pairing-1600.png'), fullPage: true });
   await page.getByLabel('Pairing code', { exact: true }).fill(ready.pairingCode);
+  assert.equal(await assertTheme(), 1);
   await page.getByRole('button', { name: 'Pair this browser', exact: true }).click();
   await page.getByRole('heading', { name: 'A workspace for your next project', exact: true }).waitFor();
   await page.screenshot({ path: path.join(directory, 'home-empty-1600.png'), fullPage: true });
@@ -95,12 +106,14 @@ try {
   await page.getByRole('dialog').waitFor();
   await page.keyboard.press('Escape');
   await page.getByRole('dialog').waitFor({ state: 'hidden' });
-  assert.equal(await page.getByRole('button', { name: /Commands/ }).evaluate(element => element === document.activeElement), true);
+  // The dialog hides before its asynchronous close event returns focus to the trigger.
+  await page.waitForFunction(element => element === document.activeElement, await page.getByRole('button', { name: /Commands/ }).elementHandle(), { timeout: 2000 });
   report.checks.push('keyboard-command-dialog-and-focus-return');
-  for (const width of [1600, 1280, 1024, 390]) {
+  for (const width of [1600, 1280, 1024, 768, 390]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.waitForTimeout(100);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await assertTheme();
     if (width === 390) {
       await page.getByRole('complementary', { name: 'Project navigation', exact: true }).waitFor({ state: 'hidden' });
       await page.getByRole('button', { name: 'Toggle project navigation', exact: true }).click();
@@ -144,6 +157,9 @@ try {
   await page.getByRole('button', { name: 'Home', exact: true }).click();
   await page.getByRole('heading', { name: 'Continue your work', exact: true }).waitFor();
   await page.screenshot({ path: path.join(directory, 'home-1280.png'), fullPage: true });
+  await page.getByLabel('Project path, relative to your paired root').fill('next');
+  assert.equal(await assertTheme(), 1);
+  report.checks.push('u1-theme-weights-400-600-and-accent-primary');
   await page.close();
   const probe = new RhoClient((await operator()).connection);
   assert.equal((await probe.call('action.list', { projectId: p.id })).length, 0);

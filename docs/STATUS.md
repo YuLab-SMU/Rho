@@ -25,6 +25,12 @@ The user selected Paper's Rho experience V0.1 instead of Main app / Composable
 shell. The limited U1 adaptation is on that page for review; implementation and
 internal inspection do not substitute for the user's design acceptance.
 
+U1 alignment batch 1 adopts the U1 spec board's tokens, control geometry and
+1280/1024/768 breakpoints. Source `test:ui` now also checks 768 and asserts
+400/600 weights and the accent primary button; installed tarballs were not
+rebuilt. Copy, structure and narrow-layout batches remain; see
+[batch 1 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-1-appearance).
+
 ## Headless collaboration extension
 
 The additive v2 extension now selects nine owners, including Annotations. Project

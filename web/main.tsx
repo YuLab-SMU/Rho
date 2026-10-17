@@ -33,7 +33,7 @@ function App() {
   const [observedAt, setObservedAt] = useState('');
   const dialog = useRef<HTMLDialogElement>(null), commandTrigger = useRef<HTMLButtonElement>(null);
   const navigationTrigger = useRef<HTMLButtonElement>(null), contextTrigger = useRef<HTMLButtonElement>(null);
-  const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 700px)').matches);
+  const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 767px)').matches);
   const projectInput = useRef<HTMLInputElement>(null);
   async function action(work: () => Promise<void>) {
     if (busy) return; setBusy(true); setError('');
@@ -42,7 +42,7 @@ function App() {
   function chooseProject(next: ProjectSummary) {
     if (next.id !== project?.id) { setSnapshot(null); setCompositionId(''); }
     sessionStorage.setItem(projectKey, next.id); setProject(next); setScreen('project');
-    if (matchMedia('(max-width: 700px)').matches) setNavigation(false);
+    if (matchMedia('(max-width: 767px)').matches) setNavigation(false);
   }
   useEffect(() => {
     if (!client) return;
@@ -77,7 +77,7 @@ function App() {
     return () => { window.removeEventListener('keydown', key); window.removeEventListener('offline', offline); };
   }, []);
   useEffect(() => {
-    const media = matchMedia('(max-width: 700px)');
+    const media = matchMedia('(max-width: 767px)');
     function change() { setNarrow(media.matches); if (media.matches) setNavigation(false); }
     change(); media.addEventListener('change', change);
     return () => media.removeEventListener('change', change);

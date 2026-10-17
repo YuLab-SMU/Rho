@@ -90,6 +90,42 @@ identity, bytes and unknown outcome without replay. A separate explicit cancel
 checks process-group release. These native checks do not accept a browser
 execution center, and are not included in the zero-native UI path.
 
+## U1 alignment batch 1: appearance
+
+Recorded 2026-10-17 for source after `9cd090f4`. This batch aligns appearance
+only with the spec board on Paper's "Rho · U1 补稿（代码对齐）" page. Structure,
+copy and the narrow redesign are later batches. The installed tarballs and
+selected identities above were not rebuilt or reselected.
+
+- Tokens follow the board: canvas `#F7F7F5`, accent `#3A68F0`, selection
+  `#E8EEFD` with `#2347B8` ink, weights 400/600 only and the 28/20/14/13/12/11
+  type scale. Pairing keeps the board's 22 px title; the 390 view title uses
+  the board's 18 px.
+- Geometry: toolbar 44, rail 64, sidebar 232, context 330; buttons 32/r8, inputs
+  r8, Dockview tabs 30/r7 on a white 48 px bar, status pill 28 fully rounded and
+  panels r12. Only an observing or paired connection shows the green dot.
+- Below 1280 the context drawer overlays the canvas. Below 768 (previously 700)
+  navigation becomes a drawer, with 36 px hit targets and a 48 px toolbar.
+- Acceptance asserts rendered weights 400/600 and accent-colored enabled primary
+  buttons on pairing, home and every width, and adds 768 to 1600/1280/1024/390.
+  Command-dialog focus return waits up to 2 s for Dockview to settle instead of
+  reading once.
+
+`npm run build:web` passes. `npm run test:ui` passes in Chrome 155.0.8059.84:
+nine browser/security tests, then acceptance at all five widths with no document
+overflow and **0 / 0** Host-start/native-submit attempts. Rho `npm test` passes
+33/33 with `RHO_CORE_BINARY` set to the accepted Core artifact. Without it, eight
+execution tests fail with "Required executable is unavailable"; that is an
+environment precondition, not a regression. Plugins `e3a8e96` was built from a
+clean `git archive` export because the local Plugins checkout carries unrelated
+uncommitted work.
+
+Screenshots under `work/ui-u1/batch1-20261017-084410` were compared with U1-01,
+U1-02, U1-04 and U1-09a. Remaining differences belong to later batches: pairing
+eyebrow, wordmark and state copy; the rail on pairing and below 768; the view
+selector instead of tabs; unavailable-view explanation rows; and the closed
+sidebar after a 390 to 1280 resize. User design acceptance is still pending.
+
 ## Evidence and limits
 
 Local ignored evidence is under `work/ui-u1`: fixed full/minimal composition

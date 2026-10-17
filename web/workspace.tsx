@@ -29,9 +29,9 @@ const components = { owner: ViewContent }, tabs = { retained: Tab };
 export function Workspace({ composition, snapshot, client }: { composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient }) {
   const [api, setApi] = useState<DockviewApi | null>(null);
   const [active, setActive] = useState(composition.views[0]?.id ?? '');
-  const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 700px)').matches);
+  const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 767px)').matches);
   useEffect(() => {
-    const query = matchMedia('(max-width: 700px)');
+    const query = matchMedia('(max-width: 767px)');
     const changed = () => setNarrow(query.matches);
     query.addEventListener('change', changed); return () => query.removeEventListener('change', changed);
   }, []);
