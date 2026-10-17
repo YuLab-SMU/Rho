@@ -16,7 +16,10 @@ Chrome 155.0.8059.84 checks pass at 1600/1280/1024/390 widths, with zero Host-st
 and native-submit attempts. Screenshot inspection covers the compact shell,
 context and navigation drawers, command focus and unavailable views. Chrome 154,
 owner editor input/IME/clipboard and full accessibility/product acceptance are
-not claimed. Outside-checkout installation evidence is still pending.
+not claimed. Fixed full and Documents/Files-minimal tarballs also pass the same
+browser flow outside the checkouts, with physically omitted unselected owners.
+[U1 installed checks](UI-ACCEPTANCE.md) freeze sources/assets and remaining gates;
+the separate installed native regression preserves unknown/partial outcomes.
 
 The user selected Paper's Rho experience V0.1 instead of Main app / Composable
 shell. The limited U1 adaptation is on that page for review; implementation and

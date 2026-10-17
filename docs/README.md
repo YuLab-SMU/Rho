@@ -7,6 +7,7 @@ implementation and verification summary.
 | Document | Purpose |
 | --- | --- |
 | [Browser UI implementation](UI.md) | U1 pairing, scoped SDK/shell, contribution draft, four-stage gates and browser checks |
+| [U1 installed browser checks](UI-ACCEPTANCE.md) | Fixed full/minimal npm candidates, zero-native browser scenarios, design/Chrome baseline limits |
 | [Collaboration acceptance](COLLABORATION-ACCEPTANCE.md) | Fixed installed compositions, real Agent replies, zero-native collaboration, recovery and separate native checks |
 | [Headless collaboration](COLLABORATION.md) | Conditional composition/protection, scoped selection, owner-anchored feedback, Skills/MCP and format-3 recovery |
 | [Plugin interfaces and UI handoff](PLUGIN-UI-HANDOFF.md) | Eight owner APIs, HTTP consumers, five unavailable component entries and remaining browser/backend capabilities |
