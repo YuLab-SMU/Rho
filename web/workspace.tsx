@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState, type KeyboardEvent } from 'react';
 import { DockviewReact, themeLight, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps, type IDockviewPanelHeaderProps } from 'dockview-react';
 import type { BrowserClient, CompositionSummary, ViewDescription, WorkspaceSnapshot } from '../src/browser.js';
 import { pluginPresentation } from '../src/plugin-presentation.js';
@@ -108,13 +108,22 @@ export function Workspace({ composition, snapshot, client, onAbout }: { composit
   }, [api, narrow]);
   function onReady(event: DockviewReadyEvent) { setApi(event.api); }
   const selected = composition.views.find(v => v.id === active) ?? composition.views[0];
+  const tabId = useId();
+  // Below 768 the views are tabs: arrows, Home and End move between them and show the view.
+  function moveTab(event: KeyboardEvent<HTMLDivElement>) {
+    const count = composition.views.length, index = composition.views.findIndex(v => v.id === selected?.id);
+    const next = { ArrowRight: (index + 1) % count, ArrowLeft: (index - 1 + count) % count, Home: 0, End: count - 1 }[event.key];
+    if (next === undefined) return;
+    event.preventDefault(); setActive(composition.views[next].id);
+    (event.currentTarget.children[next] as HTMLElement).focus();
+  }
   return <section className="workspace" aria-label="Layout">
     {!composition.views.length ? <div className="empty"><h2>No views in this layout</h2><p>The saved layout is empty. No view is created automatically.</p></div> :
       narrow ? <>
-        <div className="workspace-actions"><div className="view-picker"><label htmlFor="workspace-view">View</label><select id="workspace-view" value={selected?.id ?? ''} onChange={e => setActive(e.target.value)}>
-          {composition.views.map(v => <option key={v.id} value={v.id}>{title(v)}</option>)}
-        </select></div></div>
-        <div className="mobile-view">{selected && <OwnerView params={{ view: selected, snapshot, client, onAbout }} active />}</div>
+        <div className="view-tabs" role="tablist" aria-label="Views" onKeyDown={moveTab}>
+          {composition.views.map((v, index) => <button key={v.id} id={tabId + index} role="tab" aria-selected={v === selected} aria-controls={tabId + 'panel'} tabIndex={v === selected ? 0 : -1} onClick={() => setActive(v.id)}>{title(v)}</button>)}
+        </div>
+        <div id={tabId + 'panel'} className="mobile-view" role="tabpanel" aria-labelledby={tabId + composition.views.indexOf(selected!)}>{selected && <OwnerView params={{ view: selected, snapshot, client, onAbout }} active />}</div>
       </> :
         <div className="dock-container"><DockviewReact theme={themeLight} className="rho-dock" components={components} tabComponents={tabs} onReady={onReady} disableDnd disableFloatingGroups /></div>}
   </section>;

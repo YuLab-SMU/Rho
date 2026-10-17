@@ -421,6 +421,72 @@ Remaining differences:
 
 User design acceptance is still pending.
 
+## U1 alignment batch 6: narrow widths
+
+Recorded 2026-10-17 for source after `3b19ac7b`. The installed tarballs and
+selected identities above were not rebuilt or reselected.
+
+Below 768 the shell follows U1-09a, U1-09b and U1-09c:
+
+- There is no rail or sidebar. The toolbar is 48 high. Its first line is the
+  layout name (the project name on the overview) and its second line is the
+  project, or "Overview", followed by "Read-only". The status is a dot, and the
+  Commands button is not shown. Toolbar targets are 36 pixels.
+- The left button opens a navigation drawer on every page. It has a "Rho"
+  header with a close button, Home / Projects / Plugins, the project's
+  Overview, Layouts and Content when a project is shown, and Commands at the
+  bottom. Rows are 40 high. A choice closes the drawer. Commands closes the
+  drawer and opens the palette, which returns focus to the navigation button.
+- Context & access opens as a bottom sheet with a handle and Done, holding the
+  Connection, This tab and Agents sections.
+- The drawer and the sheet are modal. Tab and Shift+Tab stay inside, and
+  Escape, the backdrop or their own button closes them and returns focus to
+  the button that opened them.
+- Views are tabs instead of a select. Arrow keys, Home and End move between
+  them and show the view.
+- An unavailable view stacks Shows, Needs and In this build, with a full-width
+  About button above View reference.
+
+The Paper spec board records these rules under 窄屏, including three choices
+the boards do not show: the drawer on Home has no project section, the overview
+says "Overview · Read-only", and the sheet leaves out the footnote.
+
+`npm run build:web` passes on the staged tree exported outside the checkout,
+with browser asset inventory SHA-256 `307fa1ed3877a3c534ca9aa4904bee787c3ec642ec86b2d1fead96b27101d465`.
+`npm run test:ui` passes there in Chrome 155.0.8059.84: nine browser/security
+tests, then acceptance with **0 / 0** Host-start/native-submit attempts. The new
+assertions cover, at 390:
+
+- no visible rail, no sidebar, a 48-pixel toolbar, the two location lines, no
+  visible Commands button and toolbar buttons at least 36 high
+- the drawer's header, sections, current rows and Commands, its buttons at
+  least 36 high, focus kept inside for Tab and Shift+Tab, and Escape returning
+  focus to the navigation button
+- Commands in the drawer opening the palette with "Show navigation", and
+  Escape returning focus to the navigation button
+- choosing Overview and then the layout closing the drawer each time
+- on Home, the drawer with Home current and no project section
+- the context sheet anchored to the bottom at full width with three sections,
+  focus kept inside, and Done and Escape returning focus to its button
+- the view tabs "Shared notes" and "Second view", no select, ArrowRight and
+  Home changing the shown view, and the panel labelled by the selected tab
+
+Rho `npm test` passes 36/36 on the same staged tree with `RHO_CORE_BINARY` set
+to the accepted Core artifact.
+
+Screenshots under `work/ui-u1/batch6-staged-20261017-132357` were compared with U1-09a, U1-09b and U1-09c:
+`navigation-390`, `context-390`, `tabs-390`, and the 390 screenshots of home,
+overview, offline, commands and the unavailable layout. The 768 screenshots
+still show the rail and sidebar.
+
+Remaining differences:
+
+- The test folder is under `/tmp`, so the project location is longer than on
+  the boards.
+- The sheet's height follows its content; the board shows a taller sheet.
+
+User design acceptance is still pending.
+
 ## Evidence and limits
 
 Local ignored evidence is under `work/ui-u1`: fixed full/minimal composition

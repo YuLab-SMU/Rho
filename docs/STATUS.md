@@ -74,6 +74,13 @@ the current state, and typed questions run nothing. On the staged tree
 `npm test` passes 36/36 and `test:ui` passes at five widths with 0 / 0 native
 attempts. See [batch 5 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-5-disconnect-and-commands).
 
+Batch 6 follows U1-09a to U1-09c below 768. The rail and sidebar give way to a
+navigation drawer, context opens as a bottom sheet with Done, and both keep
+focus inside and return it. The toolbar is 48 high with 36-pixel targets and
+two lines of location. Views are tabs instead of a select. On the staged tree
+`npm test` passes 36/36 and `test:ui` passes with 0 / 0 native attempts. See
+[batch 6 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-6-narrow-widths).
+
 ## Headless collaboration extension
 
 The additive v2 extension now selects nine owners, including Annotations. Project

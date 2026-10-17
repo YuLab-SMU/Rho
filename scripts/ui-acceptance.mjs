@@ -106,6 +106,14 @@ try {
   assert.equal(await page.locator('header .location').textContent(), 'Home');
   const admin = await operator();
   const focused = handle => page.waitForFunction(element => element === document.activeElement, handle, { timeout: 2000 });
+  // Tab and Shift+Tab keep focus inside an open overlay.
+  async function trapped(container) {
+    for (const key of [...Array(12).fill('Tab'), ...Array(4).fill('Shift+Tab')]) {
+      await page.keyboard.press(key);
+      assert.equal(await container.evaluate(element => element.contains(document.activeElement) && element !== document.activeElement), true);
+    }
+  }
+  const heights = locator => locator.evaluateAll(list => list.map(element => element.getBoundingClientRect().height));
   assert.ok(!(await page.content()).includes(admin.connection.token));
   assert.ok(!(await page.content()).includes(ready.pairingCode));
   // Another tab: the operator command prints a fresh link, which connects exactly one tab.
@@ -267,22 +275,77 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await assertTheme();
     if (width === 390) {
-      await page.getByRole('complementary', { name: 'Project navigation', exact: true }).waitFor({ state: 'hidden' });
-      await page.getByRole('button', { name: 'Toggle project navigation', exact: true }).click();
-      await page.getByRole('button', { name: 'Close project navigation', exact: true }).waitFor();
+      // Below 768 there is no rail or sidebar. The toolbar is 48 high with 36-pixel targets and two lines of location.
+      assert.equal(await page.locator('.app-rail').isVisible(), false);
+      assert.equal(await sidebar.count(), 0);
+      assert.equal(await page.locator('header').evaluate(element => element.getBoundingClientRect().height), 48);
+      assert.deepEqual(await page.locator('header .location-stack > span').allTextContents(), ['workspace', 'notes 中文 · Read-only']);
+      assert.equal(await page.getByRole('button', { name: /Commands/ }).isVisible(), false);
+      for (const size of await heights(page.locator('header button:visible'))) assert.ok(size >= 36);
+      const opener = await page.getByRole('button', { name: 'Open navigation', exact: true }).elementHandle();
+      const drawer = page.getByRole('dialog', { name: 'Navigation', exact: true });
+      await opener.click();
+      await drawer.waitFor();
+      assert.equal(await drawer.locator('.drawer-top strong').textContent(), 'Rho');
+      assert.deepEqual(await drawer.getByRole('navigation', { name: 'Application' }).getByRole('button').allTextContents(), ['Home', 'Projects', 'Plugins']);
+      assert.equal(await drawer.getByRole('button', { name: 'Projects', exact: true }).getAttribute('aria-current'), 'page');
+      assert.equal(await drawer.getByRole('button', { name: /^workspace/ }).getAttribute('aria-current'), 'page');
+      assert.equal(await drawer.locator('.drawer-foot').textContent(), 'Commands');
+      for (const size of await heights(drawer.getByRole('button'))) assert.ok(size >= 36);
       await page.screenshot({ path: path.join(directory, 'navigation-390.png'), fullPage: true });
+      await trapped(drawer);
       await page.keyboard.press('Escape');
-      assert.equal(await page.getByRole('button', { name: 'Toggle project navigation', exact: true }).evaluate(element => element === document.activeElement), true);
+      await drawer.waitFor({ state: 'hidden' });
+      await focused(opener);
+      // Commands in the drawer opens the palette, which returns focus to the navigation button.
+      await opener.click();
+      await drawer.getByRole('button', { name: 'Commands', exact: true }).click();
+      await palette.waitFor();
+      assert.equal(await drawer.count(), 0);
+      assert.equal(await palette.getByRole('option', { name: 'Show navigation', exact: true }).count(), 1);
+      await page.keyboard.press('Escape');
+      await palette.waitFor({ state: 'hidden' });
+      await focused(opener);
+      // A choice closes the drawer.
+      await opener.click();
+      await drawer.getByRole('button', { name: 'Overview', exact: true }).click();
+      await drawer.waitFor({ state: 'hidden' });
+      assert.deepEqual(await page.locator('header .location-stack > span').allTextContents(), ['notes 中文', 'Overview · Read-only']);
+      await opener.click();
+      await drawer.getByRole('button', { name: /^workspace/ }).click();
+      await drawer.waitFor({ state: 'hidden' });
+      await focused(opener);
+      report.checks.push('narrow-no-rail-or-sidebar-toolbar-48-drawer-traps-focus-and-returns-it');
     }
     if (width === 1600) {
       assert.deepEqual(await page.locator('header .location > span').allTextContents(), ['notes 中文', '/', 'workspace', 'Read-only']);
       assert.equal(await page.getByRole('button', { name: 'Projects', exact: true }).getAttribute('aria-current'), 'page');
     }
     await page.screenshot({ path: path.join(directory, 'workspace-' + width + '.png'), fullPage: true });
-    await page.getByRole('button', { name: 'Context & access', exact: true }).click();
-    await page.getByRole('complementary', { name: 'Context and access' }).waitFor();
+    const contextToggle = await page.getByRole('button', { name: 'Context & access', exact: true }).elementHandle();
+    await contextToggle.click();
+    // Below 768 context is a bottom sheet with Done.
+    const contextPanel = width === 390 ? page.getByRole('dialog', { name: 'Context and access', exact: true }) : page.getByRole('complementary', { name: 'Context and access' });
+    await contextPanel.waitFor();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.screenshot({ path: path.join(directory, 'context-' + width + '.png'), fullPage: true });
+    if (width === 390) {
+      assert.equal(await contextPanel.evaluate(element => Math.round(element.getBoundingClientRect().bottom) === innerHeight && Math.round(element.getBoundingClientRect().width) === innerWidth), true);
+      assert.deepEqual(await contextPanel.locator('h3').allTextContents(), ['Connection', 'This tab', 'Agents']);
+      for (const size of await heights(contextPanel.getByRole('button'))) assert.ok(size >= 34);
+      await trapped(contextPanel);
+      await contextPanel.getByRole('button', { name: 'Done', exact: true }).click();
+      await contextPanel.waitFor({ state: 'hidden' });
+      await focused(contextToggle);
+      await page.keyboard.press('Enter');
+      await contextPanel.waitFor();
+      await page.keyboard.press('Escape');
+      await contextPanel.waitFor({ state: 'hidden' });
+      await focused(contextToggle);
+      report.checks.push('narrow-context-bottom-sheet-done-escape-traps-focus-and-returns-it');
+      report.widths.push({ width, noDocumentOverflow: true, screenshot: 'workspace-' + width + '.png' });
+      continue;
+    }
     if (width === 1600) {
       const trigger = await page.getByRole('button', { name: 'Disconnect this tab', exact: true }).elementHandle();
       await trigger.click();
@@ -305,6 +368,26 @@ try {
   assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).locator('.nav-row-count').textContent(), '2 views');
   assert.equal(await viewReference.evaluate(element => element === document.activeElement), true);
   report.checks.push('stable-id-remote-view-update-preserves-command-focus');
+  // Below 768 the views are tabs; arrows, Home and End move between them and show the view.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const viewTabs = page.getByRole('tablist', { name: 'Views', exact: true });
+  await viewTabs.waitFor();
+  assert.deepEqual(await viewTabs.getByRole('tab').allTextContents(), ['Shared notes', 'Second view']);
+  assert.equal(await viewTabs.getByRole('tab', { selected: true }).textContent(), 'Shared notes');
+  assert.equal(await page.locator('select').count(), 0);
+  await viewTabs.getByRole('tab', { name: 'Shared notes', exact: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await viewTabs.getByRole('tab', { selected: true }).textContent(), 'Second view');
+  assert.equal(await viewTabs.getByRole('tab', { name: 'Second view', exact: true }).evaluate(element => element === document.activeElement), true);
+  assert.equal(await page.getByRole('tabpanel').getAttribute('aria-labelledby'), await viewTabs.getByRole('tab', { name: 'Second view', exact: true }).getAttribute('id'));
+  for (const size of await heights(viewTabs.getByRole('tab'))) assert.ok(size >= 32);
+  assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await page.screenshot({ path: path.join(directory, 'tabs-390.png'), fullPage: true });
+  await page.keyboard.press('Home');
+  assert.equal(await viewTabs.getByRole('tab', { selected: true }).textContent(), 'Shared notes');
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.locator('.rho-dock .retained-tab').nth(1).waitFor();
+  report.checks.push('narrow-view-tabs-arrow-home-end-no-select');
   await page.getByRole('status').filter({ hasText: 'Up to date' }).waitFor();
   assert.match(await page.locator('header').getByRole('status').textContent(), /^Up to date \d\d:\d\d$/);
   await page.screenshot({ path: path.join(directory, 'status-online-1280.png'), fullPage: true });
@@ -388,7 +471,17 @@ try {
   assert.match(await row.locator('.project-row-time').getAttribute('title'), /\d{4}/);
   assert.equal(await assertTheme(), 1);
   report.checks.push('u1-theme-weights-400-600-and-accent-primary');
-  await widths('home');
+  await widths('home', async width => {
+    if (width !== 390) return;
+    // On Home the drawer has the three sections and Commands, without a project section.
+    await page.getByRole('button', { name: 'Open navigation', exact: true }).click();
+    const drawer = page.getByRole('dialog', { name: 'Navigation', exact: true });
+    await drawer.waitFor();
+    assert.equal(await drawer.getByRole('button', { name: 'Home', exact: true }).getAttribute('aria-current'), 'page');
+    assert.equal(await drawer.locator('.drawer-project').count(), 0);
+    await page.keyboard.press('Escape');
+    await drawer.waitFor({ state: 'hidden' });
+  });
   // Creating an existing name says so and offers to open it instead.
   await page.getByRole('button', { name: 'New project', exact: true }).click();
   await field.fill('notes 中文');

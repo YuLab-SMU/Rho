@@ -1,7 +1,7 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserClient, type BrowserConnection, type ProjectSummary, type WorkspaceSnapshot } from '../src/browser.js';
-import { Home, located, projectName as name } from './home.js';
+import { Home, located, projectName as name, trapTab } from './home.js';
 import { ProjectNavigation, ProjectOverview, type Section } from './project.js';
 import { Icon } from './icons.js';
 import { CommandPalette, type Command, type CommandGroup } from './commands.js';
@@ -137,7 +137,10 @@ function App() {
     window.addEventListener('keydown', close);
     return () => window.removeEventListener('keydown', close);
   }, [context, narrow, navigation, commands, confirming]);
-  useEffect(() => { if (commands) dialog.current?.showModal(); else if (dialog.current?.open) dialog.current.close(); }, [commands]);
+  useEffect(() => {
+    if (commands && narrow) { setNavigation(false); setContext(false); }
+    if (commands) dialog.current?.showModal(); else if (dialog.current?.open) dialog.current.close();
+  }, [commands]);
   useEffect(() => { if (confirming) confirmDialog.current?.showModal(); else if (confirmDialog.current?.open) confirmDialog.current.close(); }, [confirming]);
   useEffect(() => { if (!connection && away !== 'fresh' && away !== 'linking') awayHeading.current?.focus(); }, [connection, away]);
   // The sheet leaves with the home page; once it is gone, focus moves to the project instead of the document body.
@@ -145,6 +148,8 @@ function App() {
   useEffect(() => { if (mainFocus) { setMainFocus(false); document.getElementById('main')?.focus(); } }, [mainFocus]);
   function command(run: () => void) { setCommands(false); run(); }
   function runCommand(next: Command) { command(next.run); }
+  // Below 768 the Commands button is hidden; the palette and its confirmations return to the navigation button.
+  const commandReturn = () => (narrow ? navigationTrigger : commandTrigger).current;
   function reread() { setError(''); setReconnect(v => v + 1); }
   // Disconnecting forgets this tab's credential only; server authorization, projects and work are unchanged.
   function askDisconnect(trigger: HTMLElement | null) { confirmReturn.current = trigger; setCommands(false); setConfirming(true); }
@@ -156,6 +161,8 @@ function App() {
   function plugins() { setPluginId(''); setPluginReturn(false); setScreen('plugins'); }
   function about(id: string) { setPluginId(id); setPluginReturn(true); setScreen('plugins'); }
   function goHome() { setScreen('home'); setHomeFocus(true); }
+  // A choice in the drawer closes it; focus returns to the navigation button unless the choice moves it.
+  const pick = (run: () => void) => () => { run(); setNavigation(false); };
   function end(reason: Away) {
     sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(projectKey); confirmReturn.current = null;
     setConnection(null); setClient(null); setProject(null); setSnapshot(null); setProjects([]); setError(''); setReadAt(null); setOfflineAt(null);
@@ -190,29 +197,50 @@ function App() {
       { id: 'open', label: project ? 'Open another project…' : 'Open a project…', icon: 'folder', run: () => { afterCommands.current = () => setHomeFocus(true); setScreen('home'); } },
     ] },
     { label: 'View', commands: [
-      ...(projectVisible ? [{ id: 'navigation', label: (navigation ? 'Hide' : 'Show') + ' project navigation', icon: 'sidebar', run: () => setNavigation(v => !v) }] satisfies Command[] : []),
+      ...(narrow ? [{ id: 'navigation', label: 'Show navigation', icon: 'sidebar', run: () => setNavigation(true) }] satisfies Command[]
+        : projectVisible ? [{ id: 'navigation', label: (navigation ? 'Hide' : 'Show') + ' project navigation', icon: 'sidebar', run: () => setNavigation(v => !v) }] satisfies Command[] : []),
       { id: 'context', label: (context ? 'Hide' : 'Show') + ' context & access', icon: 'context', run: () => setContext(v => !v) },
     ] },
     { label: 'Connection', commands: [{ id: 'read', label: phase === 'offline' ? 'Reconnect' : 'Refresh', icon: 'refresh', meta: 'Reads again · starts nothing', run: reread }] },
-    { label: 'This tab', commands: [{ id: 'disconnect', label: 'Disconnect this tab', icon: 'unlink', danger: true, run: () => askDisconnect(commandTrigger.current) }] },
+    { label: 'This tab', commands: [{ id: 'disconnect', label: 'Disconnect this tab', icon: 'unlink', danger: true, run: () => askDisconnect(commandReturn()) }] },
   ];
+  const contextSections = <>
+    <section className="context-section">
+      <h3 className="caption">Connection</h3>
+      <div className="connection-line"><span className={'status-dot ' + phase} /><strong>{phase === 'live' ? 'Up to date' : phase === 'offline' ? 'Offline' + (offlineAt ? ' since ' + clock(offlineAt) : '') : 'Connecting'}</strong><button className="small-button" onClick={reread}>{phase === 'offline' ? 'Reconnect' : 'Refresh'}</button></div>
+      <p>{connectionNote}</p>
+    </section>
+    <section className="context-section">
+      <h3 className="caption">This tab</h3>
+      <dl><dt>Folder</dt><dd>{connection.root ? (connection.rootLabel ?? connection.root) + ' and below' : 'Set by whoever runs Rho'}</dd><dt>Can</dt><dd>Open, create and watch projects. No edits or runs.</dd><dt>Expires</dt><dd>{until(connection.expiresAt)}</dd></dl>
+      <button ref={disconnectTrigger} className="danger-link" onClick={() => askDisconnect(disconnectTrigger.current)}>Disconnect this tab</button>
+    </section>
+    <section className="context-section">
+      <h3 className="caption">Agents</h3>
+      <p className="context-agents">Claude Code and other Agents get access from whoever runs Rho on this machine, not from this page.</p>
+    </section>
+  </>;
   return <div className="application">
     <a className="skip-link" href="#main">Skip to workspace</a>
     <header className="topbar">
-      <div className="topbar-lead">{projectVisible && <button ref={navigationTrigger} className="icon-button" aria-label="Toggle project navigation" aria-controls="project-navigation" aria-expanded={navigation} onClick={() => { setNavigation(v => !v); if (narrow) setContext(false); }}><Icon name="sidebar" size={18} stroke={1.7} /></button>}</div>
-      <div className="location">
+      <div className="topbar-lead">{narrow ? <button ref={navigationTrigger} className="icon-button" aria-label="Open navigation" aria-haspopup="dialog" aria-expanded={navigation} onClick={() => setNavigation(true)}><Icon name="sidebar" size={18} stroke={1.7} /></button>
+        : projectVisible && <button ref={navigationTrigger} className="icon-button" aria-label="Toggle project navigation" aria-controls="project-navigation" aria-expanded={navigation} onClick={() => setNavigation(v => !v)}><Icon name="sidebar" size={18} stroke={1.7} /></button>}</div>
+      {narrow ? <div className="location location-stack">
+        <span className="location-name">{screen === 'project' && project ? composition?.compositionId ?? name(project) : screen === 'plugins' ? 'Plugins' : 'Home'}</span>
+        {screen === 'project' && project && <span className="location-detail">{composition ? name(project) : 'Overview'} · <span title="This tab can open and watch projects. It can't edit or run anything.">Read-only</span></span>}
+      </div> : <div className="location">
         {screen === 'project' && project ? <>
           <span className="location-name">{name(project)}</span>
           {composition && screen === 'project' && <> <span className="location-separator" aria-hidden="true">/</span> <span className="location-layout">{composition.compositionId}</span></>}
           {' '}<span className="read-only" title="This tab can open and watch projects. It can't edit or run anything."><Icon name="lock" size={12} stroke={2} /><span className="read-only-label">Read-only</span></span>
         </> : <span className="location-name">{screen === 'plugins' ? 'Plugins' : 'Home'}</span>}
-      </div>
+      </div>}
       <span className={'connection ' + phase} role="status">
         <span className="connection-label">{phase === 'live' ? 'Up to date' : phase === 'offline' ? 'Offline' : 'Connecting'}</span>
         {readAt && <>{' '}<span className="connection-time">{(phase === 'live' ? '' : 'last read ') + clock(readAt)}</span></>}
       </span>
       <button ref={commandTrigger} className="command-trigger" aria-keyshortcuts="Meta+K Control+K" onClick={() => setCommands(true)}>Commands <kbd>{shortcut}</kbd></button>
-      <button ref={contextTrigger} className="icon-button context-toggle" aria-label="Context & access" aria-controls="project-context" aria-expanded={context} onClick={() => { setContext(v => !v); if (narrow) setNavigation(false); }}><Icon name="context" size={18} stroke={1.7} /></button>
+      <button ref={contextTrigger} className="icon-button context-toggle" aria-label="Context & access" aria-controls={narrow ? undefined : 'project-context'} aria-haspopup={narrow ? 'dialog' : undefined} aria-expanded={context} onClick={() => setContext(v => !v)}><Icon name="context" size={18} stroke={1.7} /></button>
     </header>
     <div className="app-body">
       <nav className="app-rail" aria-label="Application">
@@ -220,8 +248,7 @@ function App() {
         <Rail name="Projects" icon="project" active={screen === 'project'} onClick={() => project ? setScreen('project') : goHome()} />
         <Rail name="Plugins" icon="plugins" active={screen === 'plugins'} onClick={() => project ? plugins() : setScreen('home')} />
       </nav>
-      {projectVisible && navigation && <aside id="project-navigation" className="project-nav" aria-label="Project navigation">
-        {narrow && <button aria-label="Close project navigation" onClick={() => { setNavigation(false); navigationTrigger.current?.focus(); }}>Close navigation</button>}
+      {!narrow && projectVisible && navigation && <aside id="project-navigation" className="project-nav" aria-label="Project navigation">
         <ProjectNavigation project={project} location={located(project, folder)} snapshot={snapshot} overview={screen === 'project' && !composition} compositionId={screen === 'project' ? composition?.compositionId ?? '' : ''}
           onOverview={() => { setOverview(true); setScreen('project'); }} onLayout={layout} onSection={showSection} />
       </aside>}
@@ -239,26 +266,29 @@ function App() {
           : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} onAbout={about} /></Suspense>
           : <ProjectOverview project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} />}
       </main>
-      {context && <aside id="project-context" className="context-drawer" aria-label="Context and access">
+      {context && !narrow && <aside id="project-context" className="context-drawer" aria-label="Context and access">
         <div className="drawer-heading"><h2>Context &amp; access</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={14} stroke={2} /></button></div>
-        <section className="context-section">
-          <h3 className="caption">Connection</h3>
-          <div className="connection-line"><span className={'status-dot ' + phase} /><strong>{phase === 'live' ? 'Up to date' : phase === 'offline' ? 'Offline' + (offlineAt ? ' since ' + clock(offlineAt) : '') : 'Connecting'}</strong><button className="small-button" onClick={reread}>{phase === 'offline' ? 'Reconnect' : 'Refresh'}</button></div>
-          <p>{connectionNote}</p>
-        </section>
-        <section className="context-section">
-          <h3 className="caption">This tab</h3>
-          <dl><dt>Folder</dt><dd>{connection.root ? (connection.rootLabel ?? connection.root) + ' and below' : 'Set by whoever runs Rho'}</dd><dt>Can</dt><dd>Open, create and watch projects. No edits or runs.</dd><dt>Expires</dt><dd>{until(connection.expiresAt)}</dd></dl>
-          <button ref={disconnectTrigger} className="danger-link" onClick={() => askDisconnect(disconnectTrigger.current)}>Disconnect this tab</button>
-        </section>
-        <section className="context-section">
-          <h3 className="caption">Agents</h3>
-          <p className="context-agents">Claude Code and other Agents get access from whoever runs Rho on this machine, not from this page.</p>
-        </section>
+        {contextSections}
         <p className="context-footnote">Closing this tab only stops watching. Work that is running keeps running.</p>
       </aside>}
     </div>
-    <dialog ref={dialog} className="commands" aria-label="Commands" onCancel={() => setCommands(false)} onClose={e => { if (e.currentTarget.open) return; setCommands(false); const next = afterCommands.current; afterCommands.current = null; if (next) next(); else commandTrigger.current?.focus(); }}
+    {narrow && navigation && <Overlay className="drawer" label="Navigation" returnFocus={navigationTrigger} onClose={() => setNavigation(false)}>
+      <div className="drawer-top"><strong>Rho</strong><button className="icon-button" aria-label="Close navigation" onClick={() => setNavigation(false)}><Icon name="close" size={16} stroke={1.8} /></button></div>
+      <nav className="drawer-sections" aria-label="Application">
+        <Rail name="Home" icon="home" active={screen === 'home'} onClick={pick(() => setScreen('home'))} />
+        <Rail name="Projects" icon="project" active={screen === 'project'} onClick={pick(() => project ? setScreen('project') : goHome())} />
+        <Rail name="Plugins" icon="plugins" active={screen === 'plugins'} onClick={pick(() => project ? plugins() : setScreen('home'))} />
+      </nav>
+      {projectVisible && <div className="drawer-project"><ProjectNavigation project={project} location={located(project, folder)} snapshot={snapshot} overview={screen === 'project' && !composition} compositionId={screen === 'project' ? composition?.compositionId ?? '' : ''}
+        onOverview={pick(() => { setOverview(true); setScreen('project'); })} onLayout={id => pick(() => layout(id))()} onSection={next => pick(() => showSection(next))()} /></div>}
+      <div className="drawer-foot"><button className="nav-row" onClick={() => { setNavigation(false); setCommands(true); }}><Icon name="prompt" size={16} stroke={1.8} /><span className="nav-row-name">Commands</span></button></div>
+    </Overlay>}
+    {narrow && context && <Overlay className="context-sheet" label="Context and access" returnFocus={contextTrigger} onClose={() => setContext(false)}>
+      <span className="sheet-handle" aria-hidden="true" />
+      <div className="drawer-heading"><h2>Context &amp; access</h2><button className="done-button" onClick={() => setContext(false)}>Done</button></div>
+      {contextSections}
+    </Overlay>}
+    <dialog ref={dialog} className="commands" aria-label="Commands" onCancel={() => setCommands(false)} onClose={e => { if (e.currentTarget.open) return; setCommands(false); const next = afterCommands.current; afterCommands.current = null; if (next) next(); else commandReturn()?.focus(); }}
       onClick={e => { if (e.target === e.currentTarget) setCommands(false); }}>
       {commands && <CommandPalette groups={groups} onRun={runCommand} />}
     </dialog>
@@ -268,6 +298,17 @@ function App() {
       <div className="dialog-actions"><button onClick={() => setConfirming(false)}>Cancel</button><button className="danger" onClick={() => end('disconnected')}>Disconnect</button></div>
     </dialog>
   </div>;
+}
+// A modal overlay below 768. Focus stays inside; Escape, the backdrop or its own button closes it,
+// and focus returns to the button that opened it.
+function Overlay({ className, label, returnFocus, onClose, children }: { className: string; label: string; returnFocus: RefObject<HTMLElement | null>; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useLayoutEffect(() => {
+    const dialog = ref.current!; dialog.showModal();
+    return () => { if (dialog.open) dialog.close(); returnFocus.current?.focus(); };
+  }, []);
+  return <dialog ref={ref} className={className} aria-label={label} onKeyDown={trapTab} onClose={onClose}
+    onClick={e => { if (e.target === e.currentTarget) e.currentTarget.close(); }}>{children}</dialog>;
 }
 function Rail({ name, icon, active, onClick }: { name: string; icon: Parameters<typeof Icon>[0]['name']; active: boolean; onClick: () => void }) {
   return <button className={'rail-button' + (active ? ' active' : '')} aria-current={active ? 'page' : undefined} onClick={onClick}><Icon name={icon} /><span>{name}</span></button>;

@@ -174,6 +174,13 @@ The command palette filters commands by name in four groups (Go to, View,
 Connection, This tab). Show and Hide follow the current state, and text that
 matches no command runs nothing; questions about the work go to Claude Code.
 
+Below 768 there is no rail or sidebar. The toolbar is 48 high with 36-pixel
+targets and shows the layout name above the project and Read-only. Its left
+button opens a navigation drawer with Home, Projects and Plugins, the project's
+sections and Commands. Context & access opens as a bottom sheet with Done. Both
+keep focus inside and return it to the button that opened them. Views are tabs
+instead of a select.
+
 ## Checks and evidence
 
 ```sh
@@ -197,6 +204,8 @@ launches the actual CLI and drives real Chrome with real owner state. It covers:
 - stable-ID updates and command focus
 - the command palette: filter, groups, state-following verbs, arrow keys and
   typed text that matches no command running nothing
+- below 768: no rail or sidebar, the navigation drawer and context sheet
+  keeping and returning focus, and view tabs
 - disconnect confirmation and Escape focus return
 - the project overview, unavailable views without JSON, and About with Back
 - 1600/1280/1024/768/390 widths
