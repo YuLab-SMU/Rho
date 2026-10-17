@@ -76,7 +76,7 @@ export class RhoService {
     const hash = digest((req.headers.authorization ?? '').replace(/^Bearer /, ''));
     const principal = this.state.principals.find(p => timingSafeEqual(Buffer.from(p.tokenHash, 'hex'), Buffer.from(hash, 'hex')));
     requireThat(principal, 'unauthorized', 'A valid local session credential is required.');
-    requireThat(!principal.expiresAt || Date.parse(principal.expiresAt) > Date.now(), 'unauthorized', 'Browser session expired. Pair again using the local operator entry.');
+    requireThat(!principal.expiresAt || Date.parse(principal.expiresAt) > Date.now(), 'unauthorized', 'Browser session expired. Ask your Agent to open Rho again.');
     requireThat(principal.methods.includes(method === 'events' ? 'observation.snapshot' : method), 'unauthorized', 'Session does not authorize this operation.');
     return principal;
   }

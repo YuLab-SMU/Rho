@@ -5,7 +5,7 @@ Updated: 2026-10-17.
 ## U1 browser shell candidate
 
 The scoped browser shell is implemented against accepted headless 0.4: one-time
-local pairing, same-origin static assets, tab session credentials, typed Fetch
+Agent-opened links, same-origin static assets, tab session credentials, typed Fetch
 SDK, real project/capability state and unavailable retained views. Observation
 resumes after refresh, disconnection and same-port service restart, without native
 execution. The UI contribution entry is `0.1-draft`, not protocol v1.
@@ -30,6 +30,23 @@ U1 alignment batch 1 adopts the U1 spec board's tokens, control geometry and
 400/600 weights and the accent primary button; installed tarballs were not
 rebuilt. Copy, structure and narrow-layout batches remain; see
 [batch 1 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-1-appearance).
+
+People no longer type a pairing code; the user rejected that.
+
+- The Agent runs `rho --open`, or `rho --pair FILE --open` for another tab.
+  Either opens a one-time `#pair=` link. The page redeems the code and removes
+  it from the address bar; a reused link is refused.
+- Batch 2 removes the wordmark from the shell and adds location text with a
+  Read-only chip.
+- The status reads Up to date, Offline or Connecting, with the read time.
+- Rail highlighting follows the boards.
+- The context panel has Connection, This tab and Agents sections.
+- Commands are grouped.
+- "Disconnect this tab" asks for confirmation; Escape cancels and returns focus.
+
+`npm test` passes 36/36. `test:ui` passes at five widths with 0 / 0 native
+attempts. Only macOS `open` is checked, through a stub. See
+[batch 2 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-2-toolbar-rail-and-agent-opened-tabs).
 
 ## Headless collaboration extension
 

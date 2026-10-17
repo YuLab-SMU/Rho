@@ -40,6 +40,6 @@ export class BrowserAccess {
     this.pairings = this.pairings.filter(p => p !== pairing);
     this.state.principals = this.state.principals.filter(p => p.kind !== 'browser' || Date.parse(p.expiresAt ?? '') > now);
     await this.state.addPrincipal(principal);
-    return { token, expiresAt, methods: principal.methods };
+    return { token, expiresAt, methods: principal.methods, root: principal.projectRoot };
   }
 }

@@ -8,7 +8,7 @@ its previously accepted binary by digest.
 
 | Stage | Observable result | Remaining gate |
 | --- | --- | --- |
-| U1 | npm launcher, pairing, project shell, capability discovery, retained unavailable views, observation and refresh | Installed candidate checks and user review are separate evidence |
+| U1 | npm launcher, Agent-opened connected tab, project shell, capability discovery, retained unavailable views, observation and refresh | Installed candidate checks and user review are separate evidence |
 | U2 | Documents CodeMirror and Tables AG Grid Community entries in Plugins | Not implemented; owner change receipts, live-document bindings, input recovery and real IME checks required |
 | U3 | Conditional Dockview layout, protection, scoped selections and actual Claude Code collaboration | Not implemented; no second layout authority or close-on-drag-removal |
 | U4 | Charts, feedback, frozen contexts, explicit replies and format-3 browser recovery | Not implemented; UI protocol v1 and collaboration acceptance remain unfrozen |
@@ -28,27 +28,38 @@ navigation, restrained blue selection, white workspace and collapsible context.
 It does not copy illustrative scientific counts/tasks, macOS window controls or
 annotation-sheet framing. The added U1 board is for review, not user acceptance.
 
-## Install, launch and pair
+## Install, launch and open
 
 Use an assembled tarball, not the source-linked development package; see
-[Headless assembly](HEADLESS.md#development-and-assembly). `dist/web` contains
+[Headless assembly](HEADLESS.md#budgets-verification-and-assembly). `dist/web` contains
 actual built assets, licenses and a digest inventory. Vite is not a production
 server or runtime prerequisite.
 
+The Agent starts Rho and opens the browser; a person does not type a code. The
+page has no pairing form. Without a link it only says to ask the Agent.
+
 ```sh
 npm install --omit=dev --ignore-scripts /absolute/rho-workspace-local-0.4.0.tgz
-npx rho --root /absolute/projects --state-dir /absolute/private-rho-state --port 0
+npx rho --root /absolute/projects --state-dir /absolute/private-rho-state --port 0 --open
 ```
 
-The launcher prints the loopback URL and a one-time `pairingCode`, valid for five
-minutes. Open the URL and enter the code. Do not put credentials in URLs or paste
-the private operator connection file into the page. For another tab/code:
+The ready line contains the loopback `url`, a one-time `pairingCode` valid for
+five minutes, and `openUrl`, which is `url` plus `#pair=` and that code.
+`--open` opens `openUrl` in the default browser (`open`, `xdg-open` or
+`start`; only macOS is verified). Without it, the Agent can open `openUrl`
+itself. For another connected tab on a running service:
 
 ```sh
-npx rho --pair /absolute/private-rho-state/connection.json
+npx rho --pair /absolute/private-rho-state/connection.json --open
 # Optionally narrow to a subdirectory of the original projects root:
-npx rho --pair /absolute/private-rho-state/connection.json --root selected-subdirectory
+npx rho --pair /absolute/private-rho-state/connection.json --root selected-subdirectory --open
 ```
+
+The page redeems the fragment code once through `POST /api/browser/pair`, then
+removes it from the address bar before rendering. A used, expired or unknown code
+shows "This link has already been used" and asks for a new link; other failures
+show the service message. Do not paste the private operator connection file into
+the page.
 
 The private connection file retains operator credentials. The operator can call
 `session.browser.pair` with optional root-relative `path`, and revoke a browser
@@ -69,12 +80,29 @@ persistence; concurrent redemption cannot succeed twice. Only its digest is held
 in service memory. The random bearer token names a persistent, expiring principal,
 root and finite method list. Grant persistence/redemption is serialized.
 
+The one-time code may appear in a URL fragment, never in a path, query, request,
+Referer or log. Browsers do not send fragments. The page strips the fragment
+before rendering, so later requests and the address bar no longer carry it.
+Browser history may still record the original link, which is useless once the
+code is redeemed. Bearer tokens never appear in URLs.
+
+The fragment code is visible for a moment in the opener's process arguments.
+Another local process that reads it first can redeem it. The intended tab then
+shows "already used", so the loss is visible. The code works once and expires in
+five minutes. A redeemed browser token can only reach the U1 methods.
+
 Credentials are stored only in this origin's tab `sessionStorage`: no credential
-cookies, localStorage, static secrets, URL tokens or request-body diagnostics.
-Refresh resumes the same session. Service restart at the same port preserves its
-origin and session until expiry; another port requires pairing again. Unpair this
-tab forgets local credentials/observation only, not server authorization or tasks.
-The operator separately revokes authorization when needed.
+cookies, localStorage, static secrets or request-body diagnostics.
+
+- Refresh resumes the same session.
+- Restarting the service on the same port keeps its origin and session until
+  expiry. On another port, the tab needs a new link.
+- "Disconnect this tab" asks for confirmation. It forgets only this tab's
+  credential and stops its observation. Server authorization and tasks are
+  unchanged.
+- The operator revokes authorization separately when needed.
+- A rejected credential ends the tab's access. The tab returns to the
+  not-connected page. Scope and network failures keep the session.
 
 U1 permits protocol/Skills discovery, project list/open/create, capabilities,
 snapshot/events, composition reads, document reads and bounded resource reads.
@@ -93,7 +121,7 @@ to 16 MiB each; missing builds have a readable 503.
 | Pending pairing codes | `browser.maxPairings` / 8 | Reject another code; retain grants |
 | Active browser grants | `browser.maxSessions` / 16 | Reject redemption; never evict active tabs |
 | Pairing attempts | `browser.maxPairAttempts` / 32 per minute | Refuse attempts until the window clears |
-| Pairing lifetime | `browser.pairingTtlMs` / 300000 | Require another locally issued code |
+| Pairing lifetime | `browser.pairingTtlMs` / 300000 | The link stops working; the Agent opens a new one |
 | Session lifetime | `browser.sessionTtlMs` / 43200000 | Deny requests/end observation; retain owner state |
 | SSE | Existing service/observation limits | Resnapshot; stop after bounded retries |
 
@@ -140,9 +168,18 @@ RHO_UI_INSTALLED=1 npm run acceptance:ui
 
 `test/browser.test.mjs` covers pairing/root scope, forbidden methods, static
 security, credentials, budgets, session restart and revocation. The UI runner
-launches the actual CLI and drives real Chrome with real owner state: Unicode
-project creation, refresh, offline/reconnect, same-port restart, stable-ID updates,
-command focus, unavailable entries and 1600/1280/1024/390 widths. Instrumented
+launches the actual CLI and drives real Chrome with real owner state. It covers:
+
+- `openUrl` redemption, fragment removal and one-use links across tabs
+- Unicode project creation and refresh
+- the Up to date / Offline / Connecting status
+- offline/reconnect and same-port restart
+- stable-ID updates and command focus
+- disconnect confirmation and Escape focus return
+- unavailable entries
+- 1600/1280/1024/768/390 widths
+
+Instrumented
 Host-start/native-submit attempts must both be zero. Reports contain asset IDs
 and results, never pairing/session credentials. Inspect screenshots in addition to
 overflow assertions.

@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 
 const packageRoot = path.resolve(process.env.RHO_PACKAGE_ROOT ?? fileURLToPath(new URL('..', import.meta.url)));
@@ -29,6 +30,7 @@ CoreBridge.prototype.call = function(...args) { if (args[1] === 'submit') append
 `);
 let child, browser, context, page, url, port = 0;
 const errors = [];
+const run = promisify(execFile);
 const report = { scenario: 'u1-browser-shell', passed: false, node: process.version, npmInstall: process.env.RHO_UI_INSTALLED === '1' ? 'outside-checkouts' : 'source-build', browser: '', counts: { hostStarts: 0, nativeDispatches: 0 }, widths: [], checks: [], limits: ['U1 only; no owner renderer', 'Chrome 154 not installed on this host', 'Native editor IME/clipboard and U2-U4 are not accepted'], assets: JSON.parse(await fs.readFile(path.join(packageRoot, 'dist/web/composition.json'), 'utf8')) };
 async function start() {
   child = spawn(process.execPath, ['--import', instrument, path.join(packageRoot, 'dist/cli.js'), '--root', root, '--state-dir', state, '--port', String(port), '--core', native.coreBinary, '--rscript', native.rscript, ...(process.env.RHO_UI_PLUGINS ? ['--plugins', process.env.RHO_UI_PLUGINS] : [])], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, RHO_CORE_BINARY: native.coreBinary } });
@@ -71,21 +73,43 @@ try {
   context = await browser.newContext({ viewport: { width: 1600, height: 1000 }, reducedMotion: 'reduce' });
   page = await context.newPage();
   page.on('pageerror', error => errors.push(error.message));
+  // Without a link the page only says how to get one; there is no code to type.
   await page.goto(url);
-  await page.screenshot({ path: path.join(directory, 'pairing-1600.png'), fullPage: true });
-  await page.getByLabel('Pairing code', { exact: true }).fill(ready.pairingCode);
-  assert.equal(await assertTheme(), 1);
-  await page.getByRole('button', { name: 'Pair this browser', exact: true }).click();
+  await page.getByRole('heading', { name: 'Open Rho from your Agent', exact: true }).waitFor();
+  assert.equal(await page.getByRole('textbox').count(), 0);
+  assert.equal(await assertTheme(), 0);
+  await page.screenshot({ path: path.join(directory, 'not-connected-1600.png'), fullPage: true });
+  // The launcher's openUrl carries the one-time code in the fragment; the page redeems it and removes it.
+  assert.equal(ready.openUrl, url + '/#pair=' + ready.pairingCode);
+  await page.goto('about:blank');
+  await page.goto(ready.openUrl);
   await page.getByRole('heading', { name: 'A workspace for your next project', exact: true }).waitFor();
+  await page.getByRole('status').filter({ hasText: 'Up to date' }).waitFor();
   await page.screenshot({ path: path.join(directory, 'home-empty-1600.png'), fullPage: true });
   assert.equal(new URL(page.url()).search, '');
+  assert.equal(new URL(page.url()).hash, '');
   assert.equal(await page.evaluate(() => localStorage.length), 0);
   const stored = await page.evaluate(() => Object.keys(sessionStorage));
   assert.deepEqual(stored, ['rho.browser.session.v1']);
+  assert.equal(await page.locator('.wordmark').count(), 0);
+  assert.equal(await page.locator('header .location').textContent(), 'Home');
   const admin = await operator();
   assert.ok(!(await page.content()).includes(admin.connection.token));
   assert.ok(!(await page.content()).includes(ready.pairingCode));
-  report.checks.push('npm-launcher-and-same-origin-one-time-pairing');
+  // Another tab: the operator command prints a fresh link, which connects exactly one tab.
+  const { stdout } = await run(process.execPath, [path.join(packageRoot, 'dist/cli.js'), '--pair', path.join(state, 'connection.json')]);
+  const another = JSON.parse(stdout);
+  assert.equal(another.openUrl, url + '/#pair=' + another.pairingCode);
+  const second = await context.newPage(), third = await context.newPage();
+  for (const other of [second, third]) other.on('pageerror', error => errors.push(error.message));
+  await second.goto(another.openUrl);
+  await second.getByRole('status').filter({ hasText: 'Up to date' }).waitFor();
+  await third.goto(another.openUrl);
+  await third.getByRole('heading', { name: 'This link has already been used', exact: true }).waitFor();
+  assert.deepEqual(await third.evaluate(() => [location.hash, Object.keys(sessionStorage)]), ['', []]);
+  await third.screenshot({ path: path.join(directory, 'link-used-1600.png'), fullPage: true });
+  await second.close(); await third.close();
+  report.checks.push('agent-opened-one-time-link-fragment-redeemed-removed-and-not-reusable');
   await page.getByLabel('Project path, relative to your paired root').fill('../escape');
   await page.getByRole('button', { name: 'Open project', exact: true }).click();
   await page.getByRole('alert').waitFor();
@@ -102,13 +126,24 @@ try {
   await page.reload();
   await page.getByRole('heading', { name: 'This view is unavailable', exact: true }).waitFor();
   report.checks.push('unicode-project-create-scope-rejection-real-catalog-unavailable-view-refresh');
+  const commandTrigger = await page.getByRole('button', { name: /Commands/ }).elementHandle();
+  const focused = handle => page.waitForFunction(element => element === document.activeElement, handle, { timeout: 2000 });
   await page.keyboard.press('Meta+k');
-  await page.getByRole('dialog').waitFor();
+  await page.getByRole('dialog', { name: 'Workspace commands' }).waitFor();
   await page.keyboard.press('Escape');
-  await page.getByRole('dialog').waitFor({ state: 'hidden' });
+  await page.getByRole('dialog', { name: 'Workspace commands' }).waitFor({ state: 'hidden' });
   // The dialog hides before its asynchronous close event returns focus to the trigger.
-  await page.waitForFunction(element => element === document.activeElement, await page.getByRole('button', { name: /Commands/ }).elementHandle(), { timeout: 2000 });
+  await focused(commandTrigger);
   report.checks.push('keyboard-command-dialog-and-focus-return');
+  // Disconnecting asks first; Escape cancels and returns focus to what opened the confirmation.
+  await page.keyboard.press('Meta+k');
+  await page.getByRole('dialog', { name: 'Workspace commands' }).getByRole('button', { name: 'Disconnect this tab', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Disconnect this tab?' }).waitFor();
+  await page.screenshot({ path: path.join(directory, 'disconnect-confirm-1600.png'), fullPage: true });
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog', { name: 'Disconnect this tab?' }).waitFor({ state: 'hidden' });
+  await focused(commandTrigger);
+  assert.deepEqual(await page.evaluate(() => Object.keys(sessionStorage).sort()), ['rho.browser.project.v1', 'rho.browser.session.v1']);
   for (const width of [1600, 1280, 1024, 768, 390]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.waitForTimeout(100);
@@ -122,35 +157,63 @@ try {
       await page.keyboard.press('Escape');
       assert.equal(await page.getByRole('button', { name: 'Toggle project navigation', exact: true }).evaluate(element => element === document.activeElement), true);
     }
+    if (width === 1600) {
+      assert.deepEqual(await page.locator('header .location > span').allTextContents(), ['notes 中文', '/', 'workspace', 'Read-only']);
+      assert.equal(await page.getByRole('button', { name: 'Projects', exact: true }).getAttribute('aria-current'), 'page');
+    }
     await page.screenshot({ path: path.join(directory, 'workspace-' + width + '.png'), fullPage: true });
-    await page.getByRole('button', { name: 'Context', exact: true }).click();
+    await page.getByRole('button', { name: 'Context & access', exact: true }).click();
     await page.getByRole('complementary', { name: 'Context and access' }).waitFor();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.screenshot({ path: path.join(directory, 'context-' + width + '.png'), fullPage: true });
+    if (width === 1600) {
+      const trigger = await page.getByRole('button', { name: 'Disconnect this tab', exact: true }).elementHandle();
+      await trigger.click();
+      await page.getByRole('dialog', { name: 'Disconnect this tab?' }).waitFor();
+      await page.keyboard.press('Escape');
+      await page.getByRole('dialog', { name: 'Disconnect this tab?' }).waitFor({ state: 'hidden' });
+      await focused(trigger);
+      await page.getByRole('complementary', { name: 'Context and access' }).waitFor();
+      report.checks.push('disconnect-confirmation-from-commands-and-context-escape-returns-focus');
+    }
     await page.getByRole('button', { name: 'Close context', exact: true }).click();
     report.widths.push({ width, noDocumentOverflow: true, screenshot: 'workspace-' + width + '.png' });
   }
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.getByLabel('View', { exact: true }).focus();
+  await page.getByRole('combobox', { name: 'View', exact: true }).focus();
   composition = await admin.call('composition.apply', { projectId: p.id, compositionId: 'workspace', expectedVersion: composition.version, changeId: 'remote-second-view', operations: [{ op: 'insert', parentId: 'root', index: 1, node: { id: 'second', kind: 'view', component: 'rho.editor', version: '0.2.0', props: { title: 'Second view' }, bindings: { document: { documentId: d.id, version: edited.version } } } }] });
-  await page.getByLabel('View', { exact: true }).getByRole('option', { name: 'Second view' }).waitFor({ state: 'attached' });
-  assert.equal(await page.getByLabel('View', { exact: true }).evaluate(element => element === document.activeElement), true);
+  await page.getByRole('combobox', { name: 'View', exact: true }).getByRole('option', { name: 'Second view' }).waitFor({ state: 'attached' });
+  assert.equal(await page.getByRole('combobox', { name: 'View', exact: true }).evaluate(element => element === document.activeElement), true);
   report.checks.push('stable-id-remote-view-update-preserves-command-focus');
+  await page.getByRole('status').filter({ hasText: 'Up to date' }).waitFor();
+  assert.match(await page.locator('header').getByRole('status').textContent(), /^Up to date \d\d:\d\d$/);
+  await page.screenshot({ path: path.join(directory, 'status-online-1280.png'), fullPage: true });
   await context.setOffline(true);
-  await page.getByRole('status').filter({ hasText: 'Disconnected' }).waitFor();
+  await page.getByRole('status').filter({ hasText: 'Offline' }).waitFor();
+  assert.match(await page.locator('header').getByRole('status').textContent(), /^Offline last read \d\d:\d\d$/);
   await page.getByRole('alert').filter({ hasText: 'Observation interrupted' }).waitFor();
-  await page.screenshot({ path: path.join(directory, 'disconnected-1280.png'), fullPage: true });
+  await page.screenshot({ path: path.join(directory, 'status-offline-1280.png'), fullPage: true });
   await context.setOffline(false);
+  // Hold the next snapshot so the in-progress state is observable, then release it.
+  let release; const held = new Promise(resolve => { release = resolve; });
+  await page.route('**/api/v2/observation.snapshot', async route => { await held; await route.continue(); }, { times: 1 });
   await page.getByRole('button', { name: 'Reconnect and inspect', exact: true }).click();
-  await page.getByRole('status').filter({ hasText: 'Observing' }).waitFor();
-  report.checks.push('offline-retains-last-snapshot-explicit-resnapshot');
+  await page.getByRole('status').filter({ hasText: 'Connecting' }).waitFor();
+  assert.match(await page.locator('header').getByRole('status').textContent(), /^Connecting last read \d\d:\d\d$/);
+  await page.screenshot({ path: path.join(directory, 'status-connecting-1280.png'), fullPage: true });
+  release();
+  await page.getByRole('status').filter({ hasText: 'Up to date' }).waitFor();
+  report.checks.push('offline-retains-last-snapshot-explicit-resnapshot-status-up-to-date-offline-connecting');
   await stop(); await start();
   await page.reload();
-  await page.getByRole('status').filter({ hasText: 'Observing' }).waitFor();
+  await page.getByRole('status').filter({ hasText: 'Up to date' }).waitFor();
   assert.equal((await (await operator()).call('document.read', { projectId: p.id, documentId: d.id })).content, edited.content);
   report.checks.push('same-origin-service-restart-retains-browser-session-and-confirmed-owner-state');
   await page.getByRole('button', { name: 'Plugins', exact: true }).click();
   await page.getByRole('heading', { name: 'Plugins', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Plugins', exact: true }).getAttribute('aria-current'), 'page');
+  assert.equal(await page.locator('header .location').textContent(), 'Plugins');
+  report.checks.push('toolbar-location-read-only-chip-and-rail-highlight');
   await page.screenshot({ path: path.join(directory, 'capabilities-1280.png'), fullPage: true });
   await page.locator('main').evaluate(element => { element.scrollTop = element.scrollHeight; });
   await page.screenshot({ path: path.join(directory, 'capabilities-bottom-1280.png'), fullPage: true });
@@ -160,6 +223,13 @@ try {
   await page.getByLabel('Project path, relative to your paired root').fill('next');
   assert.equal(await assertTheme(), 1);
   report.checks.push('u1-theme-weights-400-600-and-accent-primary');
+  await page.getByRole('button', { name: 'Context & access', exact: true }).click();
+  await page.getByRole('button', { name: 'Disconnect this tab', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Disconnect this tab?' }).getByRole('button', { name: 'Disconnect', exact: true }).click();
+  await page.getByRole('heading', { name: 'This tab is disconnected', exact: true }).waitFor();
+  assert.deepEqual(await page.evaluate(() => Object.keys(sessionStorage)), []);
+  await page.screenshot({ path: path.join(directory, 'disconnected-1280.png'), fullPage: true });
+  report.checks.push('confirmed-disconnect-forgets-only-this-tab-credential');
   await page.close();
   const probe = new RhoClient((await operator()).connection);
   assert.equal((await probe.call('action.list', { projectId: p.id })).length, 0);

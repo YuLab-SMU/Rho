@@ -126,6 +126,79 @@ eyebrow, wordmark and state copy; the rail on pairing and below 768; the view
 selector instead of tabs; unavailable-view explanation rows; and the closed
 sidebar after a 390 to 1280 resize. User design acceptance is still pending.
 
+## U1 alignment batch 2: toolbar, rail and Agent-opened tabs
+
+Recorded 2026-10-17 for source after `a251a788`. The installed tarballs and
+selected identities above were not rebuilt or reselected.
+
+People no longer pair a browser. The user rejected a human-entered code, so
+the pairing form and the U1-01/01b pairing card and failure states are not built.
+
+- The launcher and `rho --pair` print `openUrl`, which is the service URL plus
+  `#pair=<one-time code>`. With `--open`, they pass it to the platform opener.
+- The page redeems the fragment code through the unchanged pair endpoint, then
+  removes it from the address bar before rendering.
+- Without a link, the page says "Open Rho from your Agent". A reused link says
+  "This link has already been used". There is no input.
+- The pair result now includes the principal root, which the context panel
+  shows as Folder.
+- A rejected credential returns the tab to the not-connected page. Scope and
+  network failures keep the session.
+
+Toolbar, rail and context follow U1-04, U1-07 and U1-08:
+
+- The wordmark appears only on the not-connected card.
+- Location is "project / layout" plus a Read-only chip, "Home" or "Plugins".
+- The status reads "Up to date 10:24", "Offline last read 10:24" or
+  "Connecting", with "last read" when there was an earlier read. Below 768 only
+  the dot shows; the words stay for assistive technology.
+- The context toggle is an icon, and the shortcut shows ⌘K on macOS.
+- Projects is highlighted inside a project and Plugins on the catalog.
+- The context panel has Connection, This tab and Agents sections.
+- Commands are grouped Go to, View, Connection and This tab, with Show/Hide verbs
+  and the Claude Code footer. Search input and the offline banner remain batch 5.
+- "Unpair this tab" is now "Disconnect this tab". It sits in the context panel
+  and in Commands. A confirmation dialog appears first; Escape cancels and
+  returns focus to the button that opened it.
+- Below 768 the layout name is hidden. The two-line narrow title remains batch 6.
+
+`npm run build:web` passes on the committed tree (built in a clean worktree), with browser asset inventory SHA-256 `3f5ab4e49b67d15936ced0bf88f20e4bf715f616bc561372b936963e7c228c38`.
+`npm run test:ui` passes in Chrome 155.0.8059.84: nine browser/security tests,
+then acceptance at 1600/1280/1024/768/390 with no document overflow and **0 / 0**
+Host-start/native-submit attempts. The new assertions cover:
+
+- `openUrl` shape and fragment removal
+- an operator `--pair` link connecting one tab and refusing a second
+- toolbar location and rail `aria-current`
+- the three status texts, with the in-progress state held by delaying one snapshot
+- disconnect confirmation from Commands and from context, cancelled with Escape
+  and focus returned
+- a confirmed disconnect clearing tab storage
+
+Rho `npm test` passes 36/36 with `RHO_CORE_BINARY` set to the accepted Core
+artifact. With a stub `open` on `PATH`, `--open` on the launcher and on
+`--pair` each invoked the opener with exactly `openUrl`. No real browser was
+opened. Linux and Windows openers are not verified.
+
+Screenshots under `work/ui-u1/batch2-staged-20261017-114223` were compared with U1-04,
+U1-07, U1-08 and U1-09a:
+
+- status: `status-online/offline/connecting-1280`
+- `context-*` at all five widths
+- `disconnect-confirm-1600`, `not-connected-1600`, `link-used-1600` and
+  `disconnected-1280`
+
+Remaining differences:
+
+- Folder shows the absolute root, not `~/projects`; the browser cannot know the
+  home directory.
+- The offline banner copy, the command search input and the view selector belong
+  to later batches.
+- Home still says "paired root"; batch 3 replaces that copy.
+- The not-connected card has no board yet.
+
+User design acceptance is still pending.
+
 ## Evidence and limits
 
 Local ignored evidence is under `work/ui-u1`: fixed full/minimal composition
