@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'project' | 'plugins' | 'sidebar' | 'context' | 'lock' | 'folder' | 'folder-plus' | 'plus' | 'chevron' | 'info' | 'close' | 'overview' | 'layout' | 'document' | 'table' | 'image' | 'file' | 'offline' | 'prompt' | 'refresh' | 'unlink' | 'enter' | 'check';
+export type IconName = 'home' | 'project' | 'plugins' | 'sidebar' | 'context' | 'lock' | 'folder' | 'folder-plus' | 'plus' | 'chevron' | 'info' | 'close' | 'overview' | 'layout' | 'document' | 'table' | 'image' | 'file' | 'offline' | 'prompt' | 'refresh' | 'unlink' | 'enter' | 'check' | 'grid' | 'copy' | 'eye' | 'run';
 export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?: number; stroke?: number }) {
   const paths = {
     home: 'm3 10 9-7 9 7v10h-6v-7H9v7H3z',
@@ -25,6 +25,10 @@ export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?:
     unlink: 'M9.75 17.25 7.2 19.8a3.6 3.6 0 0 1-5.1-5.1l2.55-2.55M14.25 6.75l2.55-2.55a3.6 3.6 0 0 1 5.1 5.1l-2.55 2.55M4.5 4.5l15 15',
     enter: 'M18.9 6v5.5a2.6 2.6 0 0 1-2.6 2.6H6M9.4 10.3 5.5 14.1l3.9 3.9',
     check: 'M5.1 12.3 9.9 17.1 18.9 7.5',
+    grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+    copy: 'M10 8h9a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 20h-9a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 10 8zM15.5 4H5A1.5 1.5 0 0 0 3.5 5.5V16',
+    eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 9.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 1 0 0-5.6z',
+    run: 'M7 4.5v15l12-7.5z',
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinejoin="round" strokeLinecap="round"><path d={paths[name]} /></svg>;
 }

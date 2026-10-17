@@ -5,7 +5,7 @@ import { Icon } from './icons.js';
 
 function Markers({ presentation }: { presentation?: EntryPresentation }) {
   return <span className="plugin-markers">
-    {presentation?.readOnly === true && <span className="plugin-marker">Read-only</span>}
+    {presentation?.readOnly === true && <span className="plugin-marker">Reads</span>}
     {presentation?.runsCode === true && <span className="plugin-marker">Runs code</span>}
   </span>;
 }
@@ -32,21 +32,44 @@ function Installed({ problem }: { problem: Problem | null }) {
     : <span className="plugin-installed"><Icon name="check" size={12} stroke={2} />Installed</span>;
 }
 
+// The Plugins sidebar: all plugins, then each plugin of this installation.
+export function PluginNavigation({ catalog, pluginId, onSelect }: { catalog?: CapabilityCatalog; pluginId: string; onSelect: (id: string) => void }) {
+  const plugins = catalog?.plugins ?? [], installed = plugins.filter(p => p.selected && p.packagePresent), absent = plugins.filter(p => !installed.includes(p));
+  const row = (plugin: CapabilityPlugin) => <button key={plugin.id} className="nav-row" aria-current={pluginId === plugin.id ? 'page' : undefined} onClick={() => onSelect(plugin.id)}>
+    <span className="nav-plugin-symbol" aria-hidden="true"><Icon name="plugins" size={12} stroke={2} /></span><span className="nav-row-name">{pluginPresentation(plugin).displayName}</span>
+  </button>;
+  return <>
+    <div className="project-heading"><strong>Plugins</strong>{catalog && <span>{installed.length} installed on this machine</span>}</div>
+    <button className="nav-row" aria-current={!pluginId ? 'page' : undefined} onClick={() => onSelect('')}><Icon name="grid" size={16} stroke={1.8} /><span className="nav-row-name">All plugins</span></button>
+    {installed.length > 0 && <><span className="section-label" id="nav-installed">Installed</span>
+      <div role="group" aria-labelledby="nav-installed" className="nav-group">{installed.map(row)}</div></>}
+    {absent.length > 0 && <><span className="section-label" id="nav-absent">Not installed</span>
+      <div role="group" aria-labelledby="nav-absent" className="nav-group">{absent.map(row)}</div></>}
+  </>;
+}
+
+// How the open project uses a plugin, for Information.
+function inProject(plugin: CapabilityPlugin, state: Problem | null) {
+  if (!plugin.projectEnabled) return { on: false, text: "Off. Claude Code can't use it in this project." };
+  if (state) return { on: false, text: 'On, but ' + state.title.charAt(0).toLowerCase() + state.title.slice(1) + '.' };
+  return { on: true, text: 'On. Claude Code can use it in this project.' };
+}
+
 export function PluginCatalog({ catalog, project, pluginId, onSelect: setPluginId, back: leave }: {
   catalog: CapabilityCatalog; project: string; pluginId: string; onSelect: (id: string) => void;
   back?: { label: string; run: () => void };
 }) {
   const [copied, setCopied] = useState<number | null>(null), [copyError, setCopyError] = useState('');
   const heading = useRef<HTMLHeadingElement>(null);
-  const cards = useRef(new Map<string, HTMLButtonElement>()), returnTo = useRef('');
+  const cards = useRef(new Map<string, HTMLButtonElement>()), shown = useRef(pluginId);
   const selected = catalog.plugins.find(p => p.id === pluginId);
-  // Opening a plugin focuses its title; going back focuses the card it was opened from.
+  // Opening a plugin focuses its title; returning to the catalog, by any route, focuses the card it came from.
   useEffect(() => {
     setCopied(null); setCopyError('');
     if (pluginId) heading.current?.focus();
-    else if (returnTo.current) { cards.current.get(returnTo.current)?.focus(); returnTo.current = ''; }
+    else if (shown.current) cards.current.get(shown.current)?.focus();
+    shown.current = pluginId;
   }, [pluginId]);
-  function back() { returnTo.current = pluginId; setPluginId(''); }
   async function copy(prompt: string, index: number) {
     setCopyError(''); setCopied(null);
     try { await navigator.clipboard.writeText(prompt); setCopied(index); }
@@ -54,42 +77,59 @@ export function PluginCatalog({ catalog, project, pluginId, onSelect: setPluginI
   }
   if (selected) {
     const p = pluginPresentation(selected), entries = pluginEntries(catalog, selected.id), state = problem(selected, catalog.plugins, project);
+    const views = entries.views.filter(view => view.displayName), use = inProject(selected, state);
+    const needs = (selected.requires ?? []).flatMap(id => catalog.plugins.filter(other => other.id === id));
     return <section className="page-section plugin-page plugin-detail">
-      <button className="plugin-back" onClick={leave?.run ?? back}>{leave?.label ?? 'Back to plugins'}</button>
+      {/* Below 768 the sidebar is in the drawer, so the page offers its own way back. */}
+      {leave ? <button className="plugin-back" onClick={leave.run}>{leave.label}</button> : <button className="plugin-back narrow-only" onClick={() => setPluginId('')}>All plugins</button>}
       <header className="plugin-detail-heading">
-        <span className="plugin-symbol" aria-hidden="true"><Icon name="plugins" /></span>
-        <div><h1 ref={heading} tabIndex={-1}>{p.displayName}</h1><p className="plugin-tagline">{p.tagline}</p></div>
-        <Markers presentation={p} />
-        <Installed problem={state} />
+        <span className="plugin-symbol large" aria-hidden="true"><Icon name="plugins" size={28} stroke={1.6} /></span>
+        <div className="plugin-detail-title">
+          <div><h1 ref={heading} tabIndex={-1}>{p.displayName}</h1>{p.tagline && <p className="plugin-tagline">{p.tagline}</p>}</div>
+          <Installed problem={state} />
+        </div>
       </header>
       {state && <div className="plugin-notice"><strong>{state.title}</strong><p>{state.body}</p>
         {state.about && <button className="plugin-about" onClick={() => setPluginId(state.about!.id)}><span className="plugin-about-symbol" aria-hidden="true"><Icon name="plugins" size={12} stroke={2} /></span>About {pluginPresentation(state.about).displayName}</button>}
       </div>}
       {p.examplePrompts.length > 0 && <section className="plugin-prompts" aria-labelledby="plugin-prompts-title">
-        <h2 id="plugin-prompts-title">Example prompts</h2>
-        <ul>{p.examplePrompts.map((prompt, index) => <li key={index}><span>{prompt}</span><button aria-label={'Copy prompt ' + (index + 1)} onClick={() => void copy(prompt, index)}>{copied === index ? 'Copied' : 'Copy'}</button></li>)}</ul>
+        <h2 id="plugin-prompts-title" className="visually-hidden">Example prompts</h2>
+        <ul>{p.examplePrompts.map((prompt, index) => <li key={index}><span>{prompt}</span><button aria-label={'Copy prompt ' + (index + 1)} onClick={() => void copy(prompt, index)}><Icon name="copy" size={13} stroke={1.7} />{copied === index ? 'Copied' : 'Copy'}</button></li>)}</ul>
+        <p className="plugin-prompts-note">Copy one and ask Claude Code.</p>
         <p className="plugin-copy-status" role="status">{copyError || (copied !== null ? 'Prompt copied.' : '')}</p>
       </section>}
       <section className="plugin-entry-section" aria-labelledby="plugin-actions-title">
-        <h2 id="plugin-actions-title">Actions</h2>
-        <ul>{entries.actions.map(entry => <li key={entry.displayName}><span>{entry.displayName}</span><Markers presentation={entry} /></li>)}</ul>
+        <h2 id="plugin-actions-title">What Claude Code can do with it</h2>
+        <ul>{entries.actions.map(entry => <li key={entry.displayName}>
+          <span className="plugin-entry-symbol" aria-hidden="true"><Icon name={entry.runsCode ? 'run' : entry.readOnly ? 'eye' : 'prompt'} size={16} stroke={1.7} /></span>
+          <span className="plugin-entry-name">{entry.displayName}</span><Markers presentation={entry} />
+        </li>)}</ul>
       </section>
       <section className="plugin-entry-section" aria-labelledby="plugin-views-title">
-        <h2 id="plugin-views-title">Views</h2>
-        <ul>{entries.views.filter(view => view.displayName).map(view => <li key={view.id}><span>{view.displayName}</span><Markers presentation={view} />{view.ui !== 'available' && <span className="plugin-view-state">Not in this build yet</span>}</li>)}</ul>
+        <h2 id="plugin-views-title">Views <span className="plugin-count">{views.length}</span></h2>
+        <ul>{views.map(view => <li key={view.id}>
+          <span className="plugin-entry-symbol" aria-hidden="true"><Icon name="layout" size={16} stroke={1.7} /></span>
+          <span className="plugin-entry-name">{view.displayName}</span>{view.ui !== 'available' && <span className="plugin-view-state">Not in this build yet</span>}
+        </li>)}</ul>
         <p className="plugin-view-note">{p.viewNote}</p>
       </section>
       <section className="plugin-information" aria-labelledby="plugin-information-title">
         <h2 id="plugin-information-title">Information</h2>
-        <dl><dt>Category</dt><dd>{p.category}</dd><dt>Version</dt><dd>{selected.version ?? ''}</dd><dt>Package</dt><dd><code>{selected.package}</code></dd></dl>
+        <dl>
+          {state?.installed !== false && <><dt>In {project}</dt><dd className="plugin-use"><span className={'status-dot' + (use.on ? ' live' : '')} />{use.text}</dd></>}
+          {needs.length > 0 && <><dt>Works with</dt><dd className="plugin-needs">{needs.map(other => <button key={other.id} onClick={() => setPluginId(other.id)}><span className="plugin-about-symbol" aria-hidden="true"><Icon name="plugins" size={12} stroke={2} /></span>{pluginPresentation(other).displayName}</button>)}</dd></>}
+          {p.category && <><dt>Category</dt><dd>{p.category}</dd></>}
+          {selected.version && <><dt>Version</dt><dd>{selected.version}</dd></>}
+          <dt>Package</dt><dd><code>{selected.package}</code></dd>
+        </dl>
       </section>
     </section>;
   }
+  const absent = catalog.plugins.filter(p => problem(p, catalog.plugins, project)?.installed === false);
   return <section className="page-section plugin-page">
-    <header className="plugin-page-heading"><h1>Plugins</h1></header>
+    <header className="plugin-page-heading"><h1>Plugins</h1><p>Plugins let Claude Code work with your code, data and figures, and let you see that work here.</p></header>
     {/* Plugins that are not part of this installation form their own group, last. */}
-    {[...pluginGroups(catalog.plugins.filter(p => problem(p, catalog.plugins, project)?.installed !== false)),
-      { category: 'Not installed', plugins: catalog.plugins.filter(p => problem(p, catalog.plugins, project)?.installed === false) }].filter(group => group.plugins.length).map(group => <section className="plugin-group" key={group.category}>
+    {[...pluginGroups(catalog.plugins.filter(p => !absent.includes(p))), { category: 'Not installed', plugins: absent }].filter(group => group.plugins.length).map(group => <section className="plugin-group" key={group.category}>
       {group.category && <h2>{group.category}</h2>}
       <div className="plugin-grid">{group.plugins.map(plugin => {
         const p = pluginPresentation(plugin), state = problem(plugin, catalog.plugins, project);

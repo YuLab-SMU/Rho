@@ -552,6 +552,78 @@ Remaining differences:
 
 User design acceptance is still pending.
 
+## U1 alignment batch 7b: plugin catalog and detail
+
+Recorded 2026-10-17 for source after `c42b2925`. The installed tarballs and
+selected identities above were not rebuilt or reselected.
+
+Plugins follows U1-06, U1-06b and U1-06d with copy from plugin descriptors:
+
+- Plugins has its own sidebar: "Plugins", "N installed on this machine", All
+  plugins, then each installed plugin. Only one row is current. The rail
+  highlights Plugins on the catalog and on a plugin's page.
+- The catalog says "Plugins let Claude Code work with your code, data and
+  figures, and let you see that work here." Cards are 68 high with the
+  tagline in regular weight.
+- A plugin's page has a large symbol, its name and tagline, and Installed. Its
+  example prompts sit in a tinted panel with Copy buttons and "Copy one and ask
+  Claude Code." Then come "What Claude Code can do with it", with Reads and
+  Runs code markers, Views with a count and "Not in this build yet", and
+  Information.
+- Information starts with "In project": on, off, or on but waiting. Then come
+  the plugins it works with as links, category, version and package.
+- The toolbar shows "Plugins › name". Plugins returns to the catalog and
+  focuses the card the plugin was opened from. Below 768 the page also has All
+  plugins, because the sidebar is in the drawer.
+- About from a project shows that project's state and "Back to project", which
+  returns to the same layout.
+
+The Paper spec board records these rules under 插件详情, including what is not
+shown because descriptors don't provide it: a description paragraph, Skills,
+descriptions of actions and views, plugin icons, Uses, Developer, License,
+Source, Privacy, and why one plugin works with another. Catalog and group order
+follow the installation's order.
+
+`npm run build:web` passes on the staged tree exported outside the checkout,
+with browser asset inventory SHA-256 `caab1eebb88df71764f44056a2e86a0b8db5b649383ddd3e6259fdead2db7404`.
+`npm run test:ui` passes there in Chrome 155.0.8059.84: nine browser/security
+tests, then acceptance with **0 / 0** Host-start/native-submit attempts.
+`npm run test:ui:plugins` passes on the same tree with 0 / 0 attempts, reading
+action and view names from their new place and going back through All plugins.
+The new `test:ui` assertions cover:
+
+- About from the project: the plugin current in the Plugin navigation sidebar,
+  Plugins current in the rail, "Plugins" and the name in the toolbar, and "In
+  notes 中文" with "On. Claude Code can use it in this project."
+- the catalog subtitle, All plugins current, "9 installed on this machine" and
+  every plugin under Installed
+- Charts with Tables off: the three section headings, the prompt note, "On, but
+  waiting for Tables." and Tables under Works with
+- Tables while off: "Off. Claude Code can't use it in this project."
+- Tables turned back on: "On. Claude Code can use it in this project.", All
+  plugins visible at all five widths, and "Tables" over "Plugins" at 390
+- the toolbar's Plugins returning to the catalog with focus on the Tables card
+
+Rho `npm test` passes 36/36 on the same staged tree with `RHO_CORE_BINARY` set
+to the accepted Core artifact.
+
+Screenshots under `work/ui-u1/batch7b-staged-20261017-134523` were compared with U1-06, U1-06b and U1-06d:
+`plugins-1280`, `plugin-about-1280`, `plugin-waiting-1280`, `plugin-off-1280`
+and `plugin-detail-*` at all five widths. Every plugin's page at 1600 and the
+catalog and detail at five widths are under `work/plugin-ui/batch7b-staged-20261017-134523`.
+
+Remaining differences:
+
+- Descriptors provide no icon, description, Skills, entry descriptions,
+  developer, license or links, so those parts of U1-06b are not shown. The
+  example prompts keep the quotation marks the descriptors include.
+- Groups appear in installation order (Code & data, Project files, Figures &
+  media, Working with your Agent), not the board's order.
+- There is no "…" menu next to Installed; the board doesn't say what it holds.
+
+All seven batches of the U1 alignment plan are implemented. User design
+acceptance is still pending.
+
 ## Evidence and limits
 
 Local ignored evidence is under `work/ui-u1`: fixed full/minimal composition

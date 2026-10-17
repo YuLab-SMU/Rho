@@ -189,6 +189,12 @@ About for that plugin. Plugins that are not part of this installation are
 listed last. The page shows no Capabilities wording, state flags or method
 names.
 
+Plugins has its own sidebar with All plugins and each plugin. A plugin's page
+shows its example prompts to copy, what Claude Code can do with it, its views
+and Information: whether the open project uses it, the plugins it works with,
+category, version and package. Opened with About from a project, it offers the
+way back to that project. The toolbar's Plugins returns to the catalog.
+
 ## Checks and evidence
 
 ```sh
@@ -215,8 +221,9 @@ launches the actual CLI and drives real Chrome with real owner state. It covers:
   typed text that matches no command running nothing
 - below 768: no rail or sidebar, the navigation drawer and context sheet
   keeping and returning focus, and view tabs
-- Plugins without Capabilities wording, state flags or method names, and the
-  off and waiting states with their reasons
+- Plugins without Capabilities wording, state flags or method names, the off
+  and waiting states with their reasons, the plugin sidebar and the project's
+  state under Information
 - disconnect confirmation and Escape focus return
 - the project overview, unavailable views without JSON, and About with Back
 - 1600/1280/1024/768/390 widths

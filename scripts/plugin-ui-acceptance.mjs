@@ -51,8 +51,8 @@ try {
     assert.equal(await heading.textContent(), p.displayName);
     assert.equal(await heading.evaluate(element => element === document.activeElement), true);
     assert.deepEqual(await page.locator('.plugin-prompts li > span').allTextContents(), p.examplePrompts);
-    assert.deepEqual(await page.locator('.plugin-entry-section').first().locator('li > span:first-child').allTextContents(), entries.actions.map(a => a.displayName));
-    assert.deepEqual(await page.locator('.plugin-entry-section').nth(1).locator('li > span:first-child').allTextContents(), entries.views.map(v => v.displayName));
+    assert.deepEqual(await page.locator('.plugin-entry-section').first().locator('.plugin-entry-name').allTextContents(), entries.actions.map(a => a.displayName));
+    assert.deepEqual(await page.locator('.plugin-entry-section').nth(1).locator('.plugin-entry-name').allTextContents(), entries.views.map(v => v.displayName));
     assert.equal(await page.locator('.plugin-view-note').textContent(), p.viewNote ?? '');
     for (const [index, prompt] of p.examplePrompts.entries()) {
       const copy = page.getByRole('button', { name: 'Copy prompt ' + (index + 1), exact: true });
@@ -60,7 +60,7 @@ try {
       assert.equal(await page.evaluate(() => navigator.clipboard.readText()), prompt);
     }
     await page.screenshot({ path: path.join(directory, 'detail-' + plugin.id + '-1600.png'), fullPage: true });
-    await page.getByRole('button', { name: 'Back to plugins', exact: true }).click();
+    await page.getByRole('button', { name: 'All plugins', exact: true }).click();
     await card.waitFor(); assert.equal(await card.evaluate(element => element === document.activeElement), true);
     report.plugins.push({ id: plugin.id, version: plugin.version, displayName: p.displayName, prompts: p.examplePrompts.length });
   }
@@ -72,7 +72,7 @@ try {
     await page.locator('.plugin-card').first().click(); await page.locator('.plugin-detail').waitFor();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.screenshot({ path: path.join(directory, 'detail-' + width + '.png'), fullPage: true });
-    await page.getByRole('button', { name: 'Back to plugins', exact: true }).click();
+    await page.getByRole('button', { name: 'All plugins', exact: true }).click();
     report.widths.push({ width, noOverflow: true });
   }
   await page.setViewportSize({ width: 1280, height: 1200 });
@@ -80,7 +80,7 @@ try {
   await page.evaluate(() => { navigator.clipboard.writeText = async () => { throw new Error('Injected clipboard failure.'); }; });
   await page.getByRole('button', { name: 'Copy prompt 1', exact: true }).click();
   await page.getByText('Could not copy. Select and copy the prompt text instead.', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Back to plugins', exact: true }).click();
+  await page.getByRole('button', { name: 'All plugins', exact: true }).click();
   report.checks.push('clipboard-failure-keeps-selectable-owner-prompt');
   // Simulate an older owner catalog with no optional display fields.
   await page.route('**/api/v2/observation.snapshot', async route => {

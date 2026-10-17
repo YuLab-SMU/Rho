@@ -448,6 +448,14 @@ try {
   const pluginName = (await aboutButton.textContent()).slice('About '.length);
   await aboutButton.click();
   await page.getByRole('heading', { name: pluginName, exact: true }).waitFor();
+  // The plugin opens under Plugins, with its own sidebar, the project's state and the way back.
+  const pluginSidebar = page.getByRole('complementary', { name: 'Plugin navigation', exact: true });
+  assert.equal(await pluginSidebar.getByRole('button', { name: pluginName, exact: true }).getAttribute('aria-current'), 'page');
+  assert.equal(await page.locator('.app-rail').getByRole('button', { name: 'Plugins', exact: true }).getAttribute('aria-current'), 'page');
+  assert.deepEqual(await page.locator('header .location > :not(.location-separator)').allTextContents(), ['Plugins', pluginName]);
+  assert.equal(await page.locator('.plugin-information dt').first().textContent(), 'In notes 中文');
+  assert.equal(await page.locator('.plugin-use').textContent(), 'On. Claude Code can use it in this project.');
+  await page.screenshot({ path: path.join(directory, 'plugin-about-1280.png'), fullPage: true });
   await page.getByRole('button', { name: 'Back to notes 中文', exact: true }).click();
   await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).first().waitFor();
   assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).getAttribute('aria-current'), 'page');
@@ -467,6 +475,12 @@ try {
   }
   await pluginWording();
   assert.equal(await page.locator('main .plugin-card-state').count(), 0);
+  // The catalog says what plugins are for; its sidebar lists all plugins and each installed one.
+  assert.equal(await page.locator('.plugin-page-heading p').textContent(), 'Plugins let Claude Code work with your code, data and figures, and let you see that work here.');
+  const pluginSidebar2 = page.getByRole('complementary', { name: 'Plugin navigation', exact: true });
+  assert.equal(await pluginSidebar2.getByRole('button', { name: 'All plugins', exact: true }).getAttribute('aria-current'), 'page');
+  assert.equal(await pluginSidebar2.locator('.project-heading span').textContent(), catalog.plugins.filter(x => x.selected && x.packagePresent).length + ' installed on this machine');
+  assert.equal(await pluginSidebar2.getByRole('group', { name: 'Installed' }).getByRole('button').count(), catalog.plugins.length);
   await page.screenshot({ path: path.join(directory, 'plugins-1280.png'), fullPage: true });
   await page.locator('main').evaluate(element => { element.scrollTop = element.scrollHeight; });
   await page.screenshot({ path: path.join(directory, 'plugins-bottom-1280.png'), fullPage: true });
@@ -485,19 +499,32 @@ try {
   assert.equal(await page.locator('.plugin-installed').textContent(), 'Installed');
   assert.equal(await page.locator('.plugin-notice strong').textContent(), 'Waiting for Tables');
   assert.equal(await page.locator('.plugin-notice p').textContent(), 'Charts needs Tables, which is off in notes 中文.');
+  assert.deepEqual(await page.locator('.plugin-detail h2:not(.visually-hidden)').evaluateAll(list => list.map(h => h.firstChild.textContent)), ['What Claude Code can do with it', 'Views ', 'Information']);
+  assert.equal(await page.locator('.plugin-prompts-note').textContent(), 'Copy one and ask Claude Code.');
+  assert.equal(await page.locator('.plugin-use').textContent(), 'On, but waiting for Tables.');
+  assert.deepEqual(await page.locator('.plugin-needs button').allTextContents(), ['Tables']);
   await pluginWording();
   await page.screenshot({ path: path.join(directory, 'plugin-waiting-1280.png'), fullPage: true });
   await page.getByRole('button', { name: 'About Tables', exact: true }).click();
   await page.getByRole('heading', { name: 'Tables', exact: true }).waitFor();
   assert.equal(await page.locator('.plugin-notice strong').textContent(), 'Off in notes 中文');
   assert.equal(await page.locator('.plugin-notice p').textContent(), "Claude Code can't use Tables in this project. Whoever runs Rho can turn it on for this project.");
+  assert.equal(await page.locator('.plugin-use').textContent(), "Off. Claude Code can't use it in this project.");
   await pluginWording();
   await page.screenshot({ path: path.join(directory, 'plugin-off-1280.png'), fullPage: true });
   await owner.call('capability.configure', { projectId: p.id, expectedVersion: catalog.configuration.version + 1, changeId: 'ui-tables-on', enabled });
   await page.locator('.plugin-notice').waitFor({ state: 'hidden' });
-  await page.getByRole('button', { name: 'Back to plugins', exact: true }).click();
+  assert.equal(await page.locator('.plugin-use').textContent(), 'On. Claude Code can use it in this project.');
+  await widths('plugin-detail', async width => {
+    assert.equal(await page.getByRole('button', { name: 'All plugins', exact: true }).isVisible(), true);
+    if (width === 390) assert.deepEqual(await page.locator('header .location-stack > span').allTextContents(), ['Tables', 'Plugins']);
+  });
+  // The toolbar's Plugins returns to the catalog and to the card the plugin was opened from.
+  await page.locator('header').getByRole('button', { name: 'Plugins', exact: true }).click();
   await page.getByRole('heading', { name: 'Plugins', exact: true }).waitFor();
+  await focused(await card('Tables').elementHandle());
   assert.equal(await page.locator('main .plugin-card-state').count(), 0);
+  report.checks.push('plugins-catalog-sidebar-detail-sections-information-project-state-breadcrumb-back');
   report.checks.push('plugins-no-capabilities-or-state-flags-or-methods-unusable-says-why-and-who');
   await page.getByRole('button', { name: 'Home', exact: true }).click();
   await page.getByRole('heading', { name: 'Welcome back', exact: true }).waitFor();

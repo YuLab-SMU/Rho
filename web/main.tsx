@@ -5,7 +5,8 @@ import { Home, located, projectName as name, trapTab } from './home.js';
 import { ProjectNavigation, ProjectOverview, type Section } from './project.js';
 import { Icon } from './icons.js';
 import { CommandPalette, type Command, type CommandGroup } from './commands.js';
-import { PluginCatalog } from './plugins.js';
+import { PluginCatalog, PluginNavigation } from './plugins.js';
+import { pluginPresentation } from '../src/plugin-presentation.js';
 import './theme.css';
 import './plugins.css';
 
@@ -181,6 +182,11 @@ function App() {
   const composition = overview ? undefined : snapshot?.compositions.find(c => c.compositionId === compositionId) ?? snapshot?.compositions[0];
   const folder = { root: connection.root, label: connection.rootLabel ?? connection.root ?? '' };
   const projectVisible = screen !== 'home' && project;
+  // Plugins has its own sidebar; the plugin shown names the page.
+  const sidebarName = screen === 'plugins' ? 'Plugin navigation' : 'Project navigation';
+  const shownPlugin = screen === 'plugins' && pluginId ? snapshot?.catalog.plugins.find(p => p.id === pluginId) : undefined;
+  const pluginTitle = shownPlugin ? pluginPresentation(shownPlugin).displayName : '';
+  function choosePlugin(id: string) { setPluginId(id); if (!id) setPluginReturn(false); }
   const connectionNote = phase === 'live' ? `Last read ${clock(readAt ?? new Date(), true)}. Refreshing reads the project again; it never starts work.`
     : phase === 'offline' ? (readAt ? `Showing what was read at ${clock(readAt, true)}. ` : 'Nothing has been read yet. ') + "Reconnecting only reads again; it doesn't restart Rho or any work." + (error ? ` Last attempt: ${error}` : '')
     : readAt ? `Reading again. Last read ${clock(readAt, true)}; reading never starts work.` : 'Reading the project. Reading never starts work.';
@@ -198,7 +204,7 @@ function App() {
     ] },
     { label: 'View', commands: [
       ...(narrow ? [{ id: 'navigation', label: 'Show navigation', icon: 'sidebar', run: () => setNavigation(true) }] satisfies Command[]
-        : projectVisible ? [{ id: 'navigation', label: (navigation ? 'Hide' : 'Show') + ' project navigation', icon: 'sidebar', run: () => setNavigation(v => !v) }] satisfies Command[] : []),
+        : projectVisible ? [{ id: 'navigation', label: (navigation ? 'Hide ' : 'Show ') + sidebarName.toLowerCase(), icon: 'sidebar', run: () => setNavigation(v => !v) }] satisfies Command[] : []),
       { id: 'context', label: (context ? 'Hide' : 'Show') + ' context & access', icon: 'context', run: () => setContext(v => !v) },
     ] },
     { label: 'Connection', commands: [{ id: 'read', label: phase === 'offline' ? 'Reconnect' : 'Refresh', icon: 'refresh', meta: 'Reads again · starts nothing', run: reread }] },
@@ -224,15 +230,20 @@ function App() {
     <a className="skip-link" href="#main">Skip to workspace</a>
     <header className="topbar">
       <div className="topbar-lead">{narrow ? <button ref={navigationTrigger} className="icon-button" aria-label="Open navigation" aria-haspopup="dialog" aria-expanded={navigation} onClick={() => setNavigation(true)}><Icon name="sidebar" size={18} stroke={1.7} /></button>
-        : projectVisible && <button ref={navigationTrigger} className="icon-button" aria-label="Toggle project navigation" aria-controls="project-navigation" aria-expanded={navigation} onClick={() => setNavigation(v => !v)}><Icon name="sidebar" size={18} stroke={1.7} /></button>}</div>
+        : projectVisible && <button ref={navigationTrigger} className="icon-button" aria-label={'Toggle ' + sidebarName.toLowerCase()} aria-controls="project-navigation" aria-expanded={navigation} onClick={() => setNavigation(v => !v)}><Icon name="sidebar" size={18} stroke={1.7} /></button>}</div>
       {narrow ? <div className="location location-stack">
-        <span className="location-name">{screen === 'project' && project ? composition?.compositionId ?? name(project) : screen === 'plugins' ? 'Plugins' : 'Home'}</span>
+        <span className="location-name">{screen === 'project' && project ? composition?.compositionId ?? name(project) : screen === 'plugins' ? pluginTitle || 'Plugins' : 'Home'}</span>
+        {pluginTitle && <span className="location-detail">Plugins</span>}
         {screen === 'project' && project && <span className="location-detail">{composition ? name(project) : 'Overview'} · <span title="This tab can open and watch projects. It can't edit or run anything.">Read-only</span></span>}
       </div> : <div className="location">
         {screen === 'project' && project ? <>
           <span className="location-name">{name(project)}</span>
           {composition && screen === 'project' && <> <span className="location-separator" aria-hidden="true">/</span> <span className="location-layout">{composition.compositionId}</span></>}
           {' '}<span className="read-only" title="This tab can open and watch projects. It can't edit or run anything."><Icon name="lock" size={12} stroke={2} /><span className="read-only-label">Read-only</span></span>
+        </> : pluginTitle ? <>
+          <button className="location-link" onClick={() => choosePlugin('')}>Plugins</button>
+          <span className="location-separator" aria-hidden="true"><Icon name="chevron" size={12} stroke={1.6} /></span>
+          <span className="location-name">{pluginTitle}</span>
         </> : <span className="location-name">{screen === 'plugins' ? 'Plugins' : 'Home'}</span>}
       </div>}
       <span className={'connection ' + phase} role="status">
@@ -248,9 +259,9 @@ function App() {
         <Rail name="Projects" icon="project" active={screen === 'project'} onClick={() => project ? setScreen('project') : goHome()} />
         <Rail name="Plugins" icon="plugins" active={screen === 'plugins'} onClick={() => project ? plugins() : setScreen('home')} />
       </nav>
-      {!narrow && projectVisible && navigation && <aside id="project-navigation" className="project-nav" aria-label="Project navigation">
-        <ProjectNavigation project={project} location={located(project, folder)} snapshot={snapshot} overview={screen === 'project' && !composition} compositionId={screen === 'project' ? composition?.compositionId ?? '' : ''}
-          onOverview={() => { setOverview(true); setScreen('project'); }} onLayout={layout} onSection={showSection} />
+      {!narrow && projectVisible && navigation && <aside id="project-navigation" className="project-nav" aria-label={sidebarName}>
+        {screen === 'plugins' ? <PluginNavigation catalog={snapshot?.catalog} pluginId={pluginId} onSelect={choosePlugin} /> : <ProjectNavigation project={project} location={located(project, folder)} snapshot={snapshot} overview={screen === 'project' && !composition} compositionId={screen === 'project' ? composition?.compositionId ?? '' : ''}
+          onOverview={() => { setOverview(true); setScreen('project'); }} onLayout={layout} onSection={showSection} />}
       </aside>}
       <main id="main" tabIndex={-1} className={projectVisible ? 'main project-main' : 'main'}>
         {(phase === 'offline' || reconnecting) && <div className="offline-bar" role="alert">
@@ -261,7 +272,7 @@ function App() {
         {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={folder}
           focusRequest={homeFocus} onFocused={() => setHomeFocus(false)} onChoose={chooseProject} onOpened={opened} onAccessEnded={() => end('ended')} />
           : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div>
-          : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={id => { setPluginId(id); if (!id) setPluginReturn(false); }}
+          : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin}
             back={pluginReturn ? { label: 'Back to ' + name(project), run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
           : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} onAbout={about} /></Suspense>
           : <ProjectOverview project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} />}
@@ -279,8 +290,8 @@ function App() {
         <Rail name="Projects" icon="project" active={screen === 'project'} onClick={pick(() => project ? setScreen('project') : goHome())} />
         <Rail name="Plugins" icon="plugins" active={screen === 'plugins'} onClick={pick(() => project ? plugins() : setScreen('home'))} />
       </nav>
-      {projectVisible && <div className="drawer-project"><ProjectNavigation project={project} location={located(project, folder)} snapshot={snapshot} overview={screen === 'project' && !composition} compositionId={screen === 'project' ? composition?.compositionId ?? '' : ''}
-        onOverview={pick(() => { setOverview(true); setScreen('project'); })} onLayout={id => pick(() => layout(id))()} onSection={next => pick(() => showSection(next))()} /></div>}
+      {projectVisible && <div className="drawer-project">{screen === 'plugins' ? <PluginNavigation catalog={snapshot?.catalog} pluginId={pluginId} onSelect={id => pick(() => choosePlugin(id))()} /> : <ProjectNavigation project={project} location={located(project, folder)} snapshot={snapshot} overview={screen === 'project' && !composition} compositionId={screen === 'project' ? composition?.compositionId ?? '' : ''}
+        onOverview={pick(() => { setOverview(true); setScreen('project'); })} onLayout={id => pick(() => layout(id))()} onSection={next => pick(() => showSection(next))()} />}</div>}
       <div className="drawer-foot"><button className="nav-row" onClick={() => { setNavigation(false); setCommands(true); }}><Icon name="prompt" size={16} stroke={1.8} /><span className="nav-row-name">Commands</span></button></div>
     </Overlay>}
     {narrow && context && <Overlay className="context-sheet" label="Context and access" returnFocus={contextTrigger} onClose={() => setContext(false)}>

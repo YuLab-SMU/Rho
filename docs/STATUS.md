@@ -28,7 +28,7 @@ internal inspection do not substitute for the user's design acceptance.
 U1 alignment batch 1 adopts the U1 spec board's tokens, control geometry and
 1280/1024/768 breakpoints. Source `test:ui` now also checks 768 and asserts
 400/600 weights and the accent primary button; installed tarballs were not
-rebuilt. Copy, structure and narrow-layout batches remain; see
+rebuilt. Batches 2 to 7b below cover copy, structure and narrow layouts; see
 [batch 1 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-1-appearance).
 
 People no longer type a pairing code; the user rejected that.
@@ -88,6 +88,16 @@ or method names appear. Focus now returns to the plugin card in the same update;
 the plugin page check had been failing on that. On the staged tree `npm test`
 passes 36/36, and `test:ui` and `test:ui:plugins` pass with 0 / 0 native
 attempts. See [batch 7a evidence](UI-ACCEPTANCE.md#u1-alignment-batch-7a-plugin-naming-and-states).
+
+Batch 7b follows U1-06, U1-06b and U1-06d with copy from plugin descriptors.
+Plugins has its own sidebar. A plugin's page shows prompts to copy, what Claude
+Code can do with it, its views and Information, including whether the open
+project uses it. The toolbar's Plugins returns to the catalog. Parts the
+descriptors don't provide, such as icons, descriptions and Skills, are not
+shown. On the staged tree `npm test` passes 36/36, and `test:ui` and
+`test:ui:plugins` pass with 0 / 0 native attempts. All seven alignment batches
+are implemented; user design acceptance is pending. See
+[batch 7b evidence](UI-ACCEPTANCE.md#u1-alignment-batch-7b-plugin-catalog-and-detail).
 
 ## Headless collaboration extension
 
