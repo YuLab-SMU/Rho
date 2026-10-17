@@ -31,6 +31,15 @@ test('one-use pairing grants a narrowed root, never operator/native/session auth
     const browser = new BrowserClient({ url: f.service.url, ...grant });
     const p = await browser.call('project.create', { name: 'project 中文' });
     const reopened = await browser.call('project.open', { path: 'project 中文' }); assert.equal(reopened.id, p.id);
+    // The browser tells an existing folder and a missing one apart from scope refusals.
+    await assert.rejects(browser.call('project.create', { name: 'project 中文' }), e => e.error.kind === 'conflict');
+    await assert.rejects(browser.call('project.open', { path: 'missing' }), e => e.error.kind === 'not_found');
+    assert.equal(grant.rootLabel, grant.root);
+    const home = process.env.HOME; process.env.HOME = f.root;
+    try {
+      const labelled = await f.operator.call('session.browser.pair', { path: 'selected' });
+      assert.equal((await (await f.pair(labelled.code)).json()).value.rootLabel, '~/selected');
+    } finally { process.env.HOME = home; }
     assert.deepEqual((await browser.call('project.list', {})).map(p => p.id), [p.id]);
     for (const path of ['../outside', '..', '.rho', 'project 中文/.rho']) await assert.rejects(browser.call('project.open', { path }), e => e.error.kind === 'scope');
     await assert.rejects(browser.call('observation.snapshot', { projectId: outside.id }), e => e.error.kind === 'scope');

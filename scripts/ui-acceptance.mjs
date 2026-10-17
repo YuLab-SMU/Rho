@@ -66,6 +66,18 @@ async function assertTheme() {
   for (const color of facts.primary) assert.equal(color, 'rgb(58, 104, 240)');
   return facts.primary.length;
 }
+// Each home state is compared with its board at every representative width; the page never scrolls sideways.
+async function widths(name, check = async () => {}) {
+  const { width: restore, height } = page.viewportSize();
+  for (const width of [1600, 1280, 1024, 768, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.waitForTimeout(100);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await assertTheme(); await check(width);
+    await page.screenshot({ path: path.join(directory, name + '-' + width + '.png'), fullPage: true });
+  }
+  await page.setViewportSize({ width: restore, height });
+}
 try {
   const ready = await start();
   browser = await chromium.launch({ executablePath: process.env.RHO_UI_CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true });
@@ -83,9 +95,8 @@ try {
   assert.equal(ready.openUrl, url + '/#pair=' + ready.pairingCode);
   await page.goto('about:blank');
   await page.goto(ready.openUrl);
-  await page.getByRole('heading', { name: 'A workspace for your next project', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Welcome to Rho', exact: true }).waitFor();
   await page.getByRole('status').filter({ hasText: 'Up to date' }).waitFor();
-  await page.screenshot({ path: path.join(directory, 'home-empty-1600.png'), fullPage: true });
   assert.equal(new URL(page.url()).search, '');
   assert.equal(new URL(page.url()).hash, '');
   assert.equal(await page.evaluate(() => localStorage.length), 0);
@@ -94,6 +105,7 @@ try {
   assert.equal(await page.locator('.wordmark').count(), 0);
   assert.equal(await page.locator('header .location').textContent(), 'Home');
   const admin = await operator();
+  const focused = handle => page.waitForFunction(element => element === document.activeElement, handle, { timeout: 2000 });
   assert.ok(!(await page.content()).includes(admin.connection.token));
   assert.ok(!(await page.content()).includes(ready.pairingCode));
   // Another tab: the operator command prints a fresh link, which connects exactly one tab.
@@ -110,12 +122,57 @@ try {
   await third.screenshot({ path: path.join(directory, 'link-used-1600.png'), fullPage: true });
   await second.close(); await third.close();
   report.checks.push('agent-opened-one-time-link-fragment-redeemed-removed-and-not-reusable');
-  await page.getByLabel('Project path, relative to your paired root').fill('../escape');
-  await page.getByRole('button', { name: 'Open project', exact: true }).click();
-  await page.getByRole('alert').waitFor();
-  await page.getByLabel('Project path, relative to your paired root').fill('notes 中文');
+  // The empty home offers both entries once, inside its panel, and names the tab's folder.
+  const label = await page.evaluate(() => JSON.parse(sessionStorage.getItem('rho.browser.session.v1')).rootLabel);
+  assert.equal(label, await fs.realpath(root));
+  assert.equal(await page.locator('.home-header button').count(), 0);
+  assert.deepEqual(await page.locator('.home-empty').getByRole('button').allTextContents(), ['Open folder…', 'New project']);
+  assert.ok((await page.locator('.home-title p').textContent()).includes(label));
+  assert.doesNotMatch(await page.locator('main').textContent(), /pair/i);
+  await widths('home-empty');
+  const sheet = page.getByRole('dialog'), field = sheet.getByRole('textbox'), hint = sheet.locator('.field-hint'), inSheet = () => page.evaluate(() => !!document.activeElement?.closest('dialog[open]'));
+  const openTrigger = await page.getByRole('button', { name: 'Open folder…', exact: true }).elementHandle();
+  await openTrigger.click();
+  await page.getByRole('dialog', { name: 'Open folder', exact: true }).waitFor();
+  assert.equal(await field.evaluate(element => element === document.activeElement), true);
+  assert.equal(await sheet.locator('.input-prefix').textContent(), label + '/');
+  assert.equal(await sheet.getByRole('button', { name: 'Open', exact: true }).isDisabled(), true);
+  await page.screenshot({ path: path.join(directory, 'sheet-open-1600.png'), fullPage: true });
+  // A path outside the folder is refused before any request, and the hint says what to do instead.
+  await field.fill('../escape');
+  assert.match(await hint.textContent(), /^That path is outside .+\. Ask your Agent to open Rho for a folder that includes it\.$/);
+  assert.equal(await field.getAttribute('aria-invalid'), 'true');
+  assert.equal(await sheet.getByRole('button', { name: 'Open', exact: true }).isDisabled(), true);
+  await page.screenshot({ path: path.join(directory, 'sheet-open-outside-1600.png'), fullPage: true });
+  // Tab and Shift+Tab cycle inside the sheet; Escape closes it and returns focus to its trigger.
+  for (const key of ['Tab', 'Tab', 'Tab', 'Shift+Tab', 'Shift+Tab', 'Shift+Tab']) { await page.keyboard.press(key); assert.equal(await inSheet(), true, key); }
+  await page.keyboard.press('Escape');
+  await sheet.waitFor({ state: 'hidden' });
+  await focused(openTrigger);
+  // A pasted full path inside the folder is accepted; a missing single folder offers to create it.
+  await openTrigger.click();
+  await field.fill(label + '/missing');
+  assert.equal(await field.inputValue(), 'missing');
+  await sheet.getByRole('button', { name: 'Open', exact: true }).click();
+  await sheet.getByRole('button', { name: 'Create it', exact: true }).waitFor();
+  assert.equal(await hint.textContent(), `missing isn't in ${label}. Check the name, or create it as a new project.`);
+  await page.screenshot({ path: path.join(directory, 'sheet-open-missing-1600.png'), fullPage: true });
+  await page.mouse.click(8, 8);
+  await sheet.waitFor({ state: 'hidden' });
+  await focused(openTrigger);
+  assert.deepEqual(await admin.call('project.list', {}), []);
+  report.checks.push('home-sheets-focus-trap-escape-backdrop-return-and-outside-missing-next-actions');
   await page.getByRole('button', { name: 'New project', exact: true }).click();
+  await page.getByRole('dialog', { name: 'New project', exact: true }).waitFor();
+  await field.fill('notes/中文');
+  assert.match(await hint.textContent(), /^A name can't include “\/”\. To open a folder inside .+, use Open folder\.$/);
+  await sheet.getByRole('button', { name: 'Use Open folder', exact: true }).waitFor();
+  await field.fill('notes 中文');
+  assert.equal(await hint.textContent(), `Creates an empty folder at ${label}/notes 中文. Nothing is installed.`);
+  await widths('sheet-new', async () => assert.equal(await inSheet(), true));
+  await page.keyboard.press('Enter');
   await page.getByRole('heading', { name: 'No composition yet', exact: true }).waitFor();
+  await focused(await page.locator('main').elementHandle());
   const [p] = await admin.call('project.list', {});
   const d = await admin.call('document.open', { projectId: p.id, path: 'notes 中文.md' });
   const edited = await admin.call('document.edit', { projectId: p.id, documentId: d.id, expectedVersion: d.version, edits: [{ from: 0, to: 0, insert: 'Shared notes 中文 🧬\n' }], undoGroup: 'initial' });
@@ -125,9 +182,8 @@ try {
   await page.getByText(d.id, { exact: false }).waitFor();
   await page.reload();
   await page.getByRole('heading', { name: 'This view is unavailable', exact: true }).waitFor();
-  report.checks.push('unicode-project-create-scope-rejection-real-catalog-unavailable-view-refresh');
+  report.checks.push('unicode-project-create-real-catalog-unavailable-view-refresh');
   const commandTrigger = await page.getByRole('button', { name: /Commands/ }).elementHandle();
-  const focused = handle => page.waitForFunction(element => element === document.activeElement, handle, { timeout: 2000 });
   await page.keyboard.press('Meta+k');
   await page.getByRole('dialog', { name: 'Workspace commands' }).waitFor();
   await page.keyboard.press('Escape');
@@ -218,11 +274,33 @@ try {
   await page.locator('main').evaluate(element => { element.scrollTop = element.scrollHeight; });
   await page.screenshot({ path: path.join(directory, 'capabilities-bottom-1280.png'), fullPage: true });
   await page.getByRole('button', { name: 'Home', exact: true }).click();
-  await page.getByRole('heading', { name: 'Continue your work', exact: true }).waitFor();
-  await page.screenshot({ path: path.join(directory, 'home-1280.png'), fullPage: true });
-  await page.getByLabel('Project path, relative to your paired root').fill('next');
+  await page.getByRole('heading', { name: 'Welcome back', exact: true }).waitFor();
+  // A row shows the project, where it is and when it was added; the full time is in the tooltip.
+  const row = page.locator('.project-row');
+  assert.equal(await row.count(), 1);
+  assert.equal(await row.locator('strong').textContent(), 'notes 中文');
+  assert.equal(await row.locator('small').textContent(), label + '/notes 中文');
+  assert.match(await row.locator('.project-row-time').textContent(), /^Added Today at \d\d:\d\d$/);
+  assert.match(await row.locator('.project-row-time').getAttribute('title'), /\d{4}/);
   assert.equal(await assertTheme(), 1);
   report.checks.push('u1-theme-weights-400-600-and-accent-primary');
+  await widths('home');
+  // Creating an existing name says so and offers to open it instead.
+  await page.getByRole('button', { name: 'New project', exact: true }).click();
+  await field.fill('notes 中文');
+  await sheet.getByRole('button', { name: 'Create', exact: true }).click();
+  await sheet.getByRole('button', { name: 'Open existing', exact: true }).waitFor();
+  assert.equal(await hint.textContent(), `${label}/notes 中文 already exists.`);
+  await page.screenshot({ path: path.join(directory, 'sheet-exists-1280.png'), fullPage: true });
+  await sheet.getByRole('button', { name: 'Open existing', exact: true }).click();
+  await page.getByRole('heading', { name: 'This view is unavailable', exact: true }).first().waitFor();
+  assert.equal((await (await operator()).call('project.list', {})).length, 1);
+  // "Open another project…" returns home with focus on the most recent project.
+  await page.keyboard.press('Meta+k');
+  await page.getByRole('dialog', { name: 'Workspace commands' }).getByRole('button', { name: 'Open another project…', exact: true }).click();
+  await page.getByRole('heading', { name: 'Welcome back', exact: true }).waitFor();
+  await focused(await row.elementHandle());
+  report.checks.push('home-welcome-relative-time-existing-name-open-instead-and-command-focus');
   await page.getByRole('button', { name: 'Context & access', exact: true }).click();
   await page.getByRole('button', { name: 'Disconnect this tab', exact: true }).click();
   await page.getByRole('dialog', { name: 'Disconnect this tab?' }).getByRole('button', { name: 'Disconnect', exact: true }).click();

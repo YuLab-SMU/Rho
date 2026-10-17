@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserClient, type BrowserConnection, type ProjectSummary, type WorkspaceSnapshot } from '../src/browser.js';
+import { Home, projectName as name } from './home.js';
 import { Icon } from './icons.js';
 import { PluginCatalog } from './plugins.js';
 import './theme.css';
@@ -20,7 +21,6 @@ function restoreSession(): BrowserConnection | null {
     return saved && saved.url === location.origin && /^[a-f0-9]{64}$/.test(saved.token) && Date.parse(saved.expiresAt) > Date.now() && Array.isArray(saved.methods) ? saved : null;
   } catch { return null; }
 }
-function name(project: ProjectSummary) { return project.root.split('/').filter(Boolean).at(-1) ?? 'Project'; }
 function humanError(error: unknown) { return error instanceof Error ? error.message : 'The request could not be confirmed. Reconnect to inspect the owner state.'; }
 // Only a rejected credential ends this tab's access; scope and network failures keep it.
 function accessEnded(error: unknown) { const e = error as { kind?: string; error?: { kind?: string } } | null; return (e?.error?.kind ?? e?.kind) === 'unauthorized'; }
@@ -51,8 +51,7 @@ function App() {
   const [phase, setPhase] = useState<Phase>('connecting');
   const [readAt, setReadAt] = useState<Date | null>(null), [offlineAt, setOfflineAt] = useState<Date | null>(null);
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [path, setPath] = useState('');
+  const [homeFocus, setHomeFocus] = useState(false), [mainFocus, setMainFocus] = useState(false);
   const [compositionId, setCompositionId] = useState('');
   const [context, setContext] = useState(false), [navigation, setNavigation] = useState(true);
   const [reconnect, setReconnect] = useState(0), [commands, setCommands] = useState(false), [confirming, setConfirming] = useState(false);
@@ -60,17 +59,14 @@ function App() {
   const confirmDialog = useRef<HTMLDialogElement>(null), disconnectTrigger = useRef<HTMLButtonElement>(null), confirmReturn = useRef<HTMLElement | null>(null);
   const navigationTrigger = useRef<HTMLButtonElement>(null), contextTrigger = useRef<HTMLButtonElement>(null);
   const awayHeading = useRef<HTMLHeadingElement>(null);
+  // Elements behind the open palette are inert, so a command that moves focus waits for it to close.
+  const afterCommands = useRef<(() => void) | null>(null);
   const current = useRef(project); current.current = project;
   const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 767px)').matches);
-  const projectInput = useRef<HTMLInputElement>(null);
   function live() { setPhase('live'); setReadAt(new Date()); setOfflineAt(null); }
   function lost(e: unknown) {
     if (accessEnded(e)) { end('ended'); return; }
     setPhase('offline'); setOfflineAt(at => at ?? new Date()); setError(humanError(e));
-  }
-  async function action(work: () => Promise<void>) {
-    if (busy) return; setBusy(true); setError('');
-    try { await work(); } catch (e) { if (accessEnded(e)) end('ended'); else setError(humanError(e)); } finally { setBusy(false); }
   }
   function chooseProject(next: ProjectSummary) {
     if (next.id !== project?.id) { setSnapshot(null); setCompositionId(''); }
@@ -139,17 +135,16 @@ function App() {
   useEffect(() => { if (commands) dialog.current?.showModal(); else if (dialog.current?.open) dialog.current.close(); }, [commands]);
   useEffect(() => { if (confirming) confirmDialog.current?.showModal(); else if (confirmDialog.current?.open) confirmDialog.current.close(); }, [confirming]);
   useEffect(() => { if (!connection && away !== 'fresh' && away !== 'linking') awayHeading.current?.focus(); }, [connection, away]);
+  // The sheet leaves with the home page; once it is gone, focus moves to the project instead of the document body.
+  useEffect(() => { if (mainFocus) { setMainFocus(false); document.getElementById('main')?.focus(); } }, [mainFocus]);
   function command(run: () => void) { setCommands(false); run(); }
   function reread() { setError(''); setReconnect(v => v + 1); }
   // Disconnecting forgets this tab's credential only; server authorization, projects and work are unchanged.
   function askDisconnect(trigger: HTMLElement | null) { confirmReturn.current = trigger; setCommands(false); setConfirming(true); }
-  async function open(create: boolean) {
-    if (!client) return;
-    await action(async () => {
-      const next = create ? await client.call('project.create', { name: path.trim() }) : await client.call('project.open', { path: path.trim() });
-      setProjects(await client.call('project.list', {})); chooseProject(next); setPath('');
-    });
+  function opened(next: ProjectSummary) {
+    setProjects(list => list.some(p => p.id === next.id) ? list : [...list, next]); chooseProject(next); setMainFocus(true);
   }
+  function goHome() { setScreen('home'); setHomeFocus(true); }
   function end(reason: Away) {
     sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(projectKey); confirmReturn.current = null;
     setConnection(null); setClient(null); setProject(null); setSnapshot(null); setProjects([]); setError(''); setReadAt(null); setOfflineAt(null);
@@ -192,7 +187,7 @@ function App() {
     <div className="app-body">
       <nav className="app-rail" aria-label="Application">
         <Rail name="Home" icon="home" active={screen === 'home'} onClick={() => setScreen('home')} />
-        <Rail name="Projects" icon="project" active={screen === 'project'} onClick={() => project ? setScreen('project') : (setScreen('home'), projectInput.current?.focus())} />
+        <Rail name="Projects" icon="project" active={screen === 'project'} onClick={() => project ? setScreen('project') : goHome()} />
         <Rail name="Plugins" icon="plugins" active={screen === 'plugins'} onClick={() => project ? setScreen('plugins') : setScreen('home')} />
       </nav>
       {projectVisible && navigation && <aside id="project-navigation" className="project-nav" aria-label="Project navigation">
@@ -211,16 +206,9 @@ function App() {
       </aside>}
       <main id="main" tabIndex={-1} className={projectVisible ? 'main project-main' : 'main'}>
         {error && <div className="error-banner" role="alert"><strong>{phase === 'offline' ? 'Observation interrupted' : 'Request not confirmed'}</strong><p>{error}</p><button onClick={reread}>Reconnect and inspect</button></div>}
-        {screen === 'home' || !project ? <section className="home page-section">
-          <h1>{projects.length ? 'Continue your work' : 'A workspace for your next project'}</h1>
-          <p className="muted">Open a project under the paired root, or create an empty project. Nothing starts running when you open it.</p>
-          <form className="project-form" onSubmit={e => { e.preventDefault(); void open(false); }}>
-            <label htmlFor="project-path">Project path, relative to your paired root</label>
-            <div className="input-actions"><input id="project-path" ref={projectInput} value={path} onChange={e => setPath(e.target.value)} required placeholder="my-project" autoComplete="off" /><button className="primary" type="submit" disabled={busy || !path.trim()}>Open project</button><button type="button" disabled={busy || !path.trim()} onClick={() => void open(true)}>New project</button></div>
-          </form>
-          <div className="section-heading"><h2>Recent projects</h2><span className="muted">Registered with this service</span></div>
-          {projects.length ? <div className="project-list">{projects.map(p => <button className="project-row" key={p.id} onClick={() => chooseProject(p)}><span className="project-icon"><Icon name="project" /></span><span className="project-row-name"><strong>{name(p)}</strong><small>Opened {new Date(p.openedAt).toLocaleString()}</small></span><Icon name="arrow" /></button>)}</div> : <div className="empty"><h2>No projects yet</h2><p>Open an existing directory, or give your new project a name to get started.</p></div>}
-        </section> : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div> : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} /> : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} /></Suspense> : <section className="page-section overview"><h1>{name(project)}</h1><p className="muted">Your confirmed documents and resources, together in one workspace.</p>
+        {screen === 'home' || !project ? <Home client={client!} projects={projects} folder={{ root: connection.root, label: connection.rootLabel ?? connection.root ?? '' }}
+          focusRequest={homeFocus} onFocused={() => setHomeFocus(false)} onChoose={chooseProject} onOpened={opened} onAccessEnded={() => end('ended')} />
+          : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div> : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} /> : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} /></Suspense> : <section className="page-section overview"><h1>{name(project)}</h1><p className="muted">Your confirmed documents and resources, together in one workspace.</p>
           <div className="section-heading"><h2>Workspace</h2><button onClick={() => setScreen('plugins')}>Inspect capabilities</button></div>
           <div className="empty"><h2>No composition yet</h2><p>This project has no saved layout. Retained compositions will appear here when available.</p></div>
           <h2>Documents</h2>{docs.length ? docs.map(d => <article className="resource-fact" key={d.id}><strong>{d.path}</strong><span className="muted">v{d.version} / {d.dirty ? 'Unsaved owner buffer' : 'Saved'} / Renderer unavailable</span></article>) : <p className="muted">No opened documents.</p>}
@@ -236,7 +224,7 @@ function App() {
         </section>
         <section className="context-section">
           <h3 className="caption">This tab</h3>
-          <dl><dt>Folder</dt><dd>{connection.root ? connection.root + ' and below' : 'Set by whoever runs Rho'}</dd><dt>Can</dt><dd>Open, create and watch projects. No edits or runs.</dd><dt>Expires</dt><dd>{until(connection.expiresAt)}</dd></dl>
+          <dl><dt>Folder</dt><dd>{connection.root ? (connection.rootLabel ?? connection.root) + ' and below' : 'Set by whoever runs Rho'}</dd><dt>Can</dt><dd>Open, create and watch projects. No edits or runs.</dd><dt>Expires</dt><dd>{until(connection.expiresAt)}</dd></dl>
           <button ref={disconnectTrigger} className="danger-link" onClick={() => askDisconnect(disconnectTrigger.current)}>Disconnect this tab</button>
         </section>
         <section className="context-section">
@@ -246,13 +234,13 @@ function App() {
         <p className="context-footnote">Closing this tab only stops watching. Work that is running keeps running.</p>
       </aside>}
     </div>
-    <dialog ref={dialog} aria-labelledby="command-title" onCancel={() => setCommands(false)} onClose={() => { setCommands(false); commandTrigger.current?.focus(); }}>
+    <dialog ref={dialog} aria-labelledby="command-title" onCancel={() => setCommands(false)} onClose={() => { setCommands(false); const next = afterCommands.current; afterCommands.current = null; if (next) next(); else commandTrigger.current?.focus(); }}>
       <div className="section-heading"><h2 id="command-title">Workspace commands</h2><button aria-label="Close commands" className="icon-button" onClick={() => setCommands(false)}><Icon name="close" /></button></div>
       <div className="command-list">
         <div className="command-group" role="group" aria-label="Go to"><span className="command-heading" aria-hidden="true">Go to</span>
           <button onClick={() => command(() => setScreen('home'))}>Home</button>
           {project && <><button onClick={() => command(() => setScreen('project'))}>Workspace<span className="command-meta">{name(project)}</span></button><button onClick={() => command(() => setScreen('plugins'))}>Plugins</button></>}
-          <button onClick={() => command(() => { setScreen('home'); setTimeout(() => projectInput.current?.focus()); })}>{project ? 'Open another project…' : 'Open a project…'}</button>
+          <button onClick={() => { afterCommands.current = () => setHomeFocus(true); command(() => setScreen('home')); }}>{project ? 'Open another project…' : 'Open a project…'}</button>
         </div>
         <div className="command-group" role="group" aria-label="View"><span className="command-heading" aria-hidden="true">View</span>
           {projectVisible && <button onClick={() => command(() => setNavigation(v => !v))}>{navigation ? 'Hide' : 'Show'} project navigation</button>}

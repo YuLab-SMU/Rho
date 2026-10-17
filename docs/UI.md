@@ -67,8 +67,13 @@ session with `session.browser.revoke` and its ID from local principal metadata.
 Revocation also releases its event readers. Neither operation is granted to
 browsers or external Agents.
 
-Open paths are relative to the paired root; creation takes a single Unicode
-directory name. Recent projects are actual registered projects filtered by scope.
+Open paths are relative to the tab's folder. The pair result also carries a
+display label such as `~/projects`; the page shows it as a fixed prefix and
+reduces a pasted full path inside the folder to its relative part. Creation takes
+a single Unicode directory name. An existing folder is reported as `conflict`
+and is never adopted as a new project; a missing folder is `not_found`. The home
+lists actual registered projects filtered by scope, newest first, with the time
+each was added; the service does not record a last-opened time.
 Internal state, parent traversal and links cannot expand the root. Opening and
 observing never start a Host, run code or install packages.
 

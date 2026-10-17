@@ -48,6 +48,15 @@ People no longer type a pairing code; the user rejected that.
 attempts. Only macOS `open` is checked, through a stub. See
 [batch 2 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-2-toolbar-rail-and-agent-opened-tabs).
 
+Batch 3 rebuilds the home from U1-02, U1-03 and U1-03b. It adds Welcome titles,
+rows with location and added time (full time in a tooltip) and New project /
+Open folder sheets. The sheets keep focus inside and give every refusal a next
+action. The service adds a `~/` folder label and reports an existing folder as
+`conflict`. The boards now say "Added", because the service records when a
+project was added, not when it was last opened. On the staged tree `npm test`
+passes 36/36 and `test:ui` passes at five widths with 0 / 0 native attempts.
+See [batch 3 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-3-home).
+
 ## Headless collaboration extension
 
 The additive v2 extension now selects nine owners, including Annotations. Project

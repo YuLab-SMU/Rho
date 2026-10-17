@@ -199,6 +199,94 @@ Remaining differences:
 
 User design acceptance is still pending.
 
+## U1 alignment batch 3: home
+
+Recorded 2026-10-17 for source after `5172d0e3`. The installed tarballs and
+selected identities above were not rebuilt or reselected.
+
+The home follows U1-02, U1-03 and U1-03b:
+
+- With projects, the title is "Welcome back" and Open folder… and New project
+  sit beside it. Without projects, the title is "Welcome to Rho" and both
+  actions appear only in the empty panel.
+- Rows show the folder name, its location and when it was added: "Today at
+  12:07", "Yesterday" or "Oct 9". The full date and time are in the tooltip.
+  The newest project comes first.
+- New project and Open folder open a 480-wide sheet. Focus starts in its field
+  and Tab or Shift+Tab stays inside. Escape or a backdrop click closes it and
+  returns focus to the button that opened it. It cannot close while a request is
+  in flight.
+- Open folder shows the tab's folder as a fixed prefix. A pasted full path
+  inside it keeps only the relative part.
+- Each refusal names the next step:
+  - an existing name offers Open existing
+  - a missing folder offers Create it
+  - a "/" in a name offers Use Open folder
+  - a path outside the folder asks the Agent to open Rho for a folder that
+    includes it, and Open stays disabled
+- "Open another project…" in Commands returns home with focus on the newest
+  project. After a project opens, focus moves to the workspace.
+- The home no longer mentions a paired root or pairing.
+
+Service changes:
+
+- The pair result adds `rootLabel`: the folder relative to the user's home, such
+  as `~/projects`, or the absolute path outside home. Requests still use
+  root-relative paths.
+- `project.create` on an existing folder returns `conflict` instead of a storage
+  error and never adopts the folder.
+
+The Paper boards were changed to match before commit:
+
+- The U1-02 list heading "Recent / Last opened" is now "Projects / Added". The
+  service records when a project was added, not when it was last opened; this
+  answers open question d.
+- U1-03b ④ asks the Agent instead of asking for a code. New states ⑤ (missing
+  folder, Create it) and ⑥ ("/" in a name, Use Open folder) were added, and the
+  spec board records the home rules.
+
+`npm run build:web` passes on the staged tree exported outside the checkout,
+with browser asset inventory SHA-256 `a08287afe555a049a8c462f89cb862ddeee4e5328393d61215f23e4b1218b653`.
+`npm run test:ui` passes there in Chrome 155.0.8059.84: nine browser/security
+tests, now with create `conflict`, open `not_found` and the `~/` label, then
+acceptance with **0 / 0** Host-start/native-submit attempts. The new assertions
+cover:
+
+- empty-home copy, both actions only in its panel and no pairing text
+- focus in the sheet field, six Tab/Shift+Tab presses staying inside, and
+  Escape and backdrop closing with focus returned
+- the outside and missing-folder messages with their next actions, and a pasted
+  full path reduced to `missing`
+- the "/" check, the create preview, and Enter creating `notes 中文` with focus
+  moved to the workspace
+- row name, location, "Added Today at HH:MM" and a dated tooltip
+- an existing name offering Open existing, which opens the same project without
+  registering another
+- "Open another project…" focusing the newest row
+
+Rho `npm test` passes 36/36 on the same staged tree with `RHO_CORE_BINARY` set
+to the accepted Core artifact.
+
+Screenshots under `work/ui-u1/batch3-staged-20261017-121432` were compared with
+U1-02, U1-03 and U1-03b:
+
+- `home-empty-*`, `home-*` and `sheet-new-*` at all five widths
+- `sheet-open-1600`, `sheet-open-outside-1600`, `sheet-open-missing-1600` and
+  `sheet-exists-1280`
+
+Remaining differences:
+
+- The test folder is under `/tmp`, so screenshots show an absolute path instead
+  of `~/projects`. The service test covers the `~/` form.
+- "Added" is not "Last opened". Showing the last open needs the service to
+  record opens.
+- Below 768 a row keeps the time beside a wrapped path. The narrow home has no
+  board yet; narrow layouts are batch 6.
+- Tabs connected before this change show the absolute folder until the Agent
+  opens a new link.
+
+User design acceptance is still pending.
+
 ## Evidence and limits
 
 Local ignored evidence is under `work/ui-u1`: fixed full/minimal composition

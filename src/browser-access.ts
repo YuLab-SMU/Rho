@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { homedir } from 'node:os';
 import { confined, digest, requireThat } from '@rho-workspace/plugin-contracts';
 import type { Principal, State } from './state.js';
 
@@ -40,6 +41,11 @@ export class BrowserAccess {
     this.pairings = this.pairings.filter(p => p !== pairing);
     this.state.principals = this.state.principals.filter(p => p.kind !== 'browser' || Date.parse(p.expiresAt ?? '') > now);
     await this.state.addPrincipal(principal);
-    return { token, expiresAt, methods: principal.methods, root: principal.projectRoot };
+    return { token, expiresAt, methods: principal.methods, root: principal.projectRoot, rootLabel: await homeRelative(pairing.root) };
   }
+}
+// A display form of the folder (for example ~/projects); requests keep using root-relative paths.
+async function homeRelative(root: string) {
+  const home = await fs.realpath(homedir()).catch(() => homedir());
+  return root === home ? '~' : root.startsWith(home + path.sep) ? '~/' + path.relative(home, root).split(path.sep).join('/') : root;
 }

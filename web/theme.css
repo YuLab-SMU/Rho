@@ -113,20 +113,35 @@ kbd { display: inline-flex; align-items: center; height: 18px; padding: 0 5px; b
 .standalone p { color: var(--color-muted); line-height: 22px; }
 .standalone .away-detail { font-size: 12px; line-height: 18px; color: var(--color-meta); padding: 10px 12px; background: var(--color-well); border: 1px solid var(--color-divider); border-radius: var(--radius-control); overflow-wrap: anywhere; }
 .standalone .away-note { margin-top: 8px; padding-top: 16px; border-top: 1px solid var(--color-divider); font-size: 12px; line-height: 18px; color: var(--color-meta); }
-.project-form { display: flex; flex-direction: column; gap: 6px; padding-block: 16px 24px; }
-.input-actions { display: flex; gap: 8px; }
-.input-actions button { flex-shrink: 0; min-height: 36px; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .section-heading .muted { font-size: 12px; line-height: 16px; color: var(--color-meta); }
-.home .section-heading { padding: 0 12px; }
-.home .section-heading h2 { font-size: 12px; line-height: 16px; color: var(--color-meta); }
-.project-list { display: flex; flex-direction: column; margin-top: -8px; }
+/* Home: one 760 column of welcome, projects and a reading note. */
+.home { padding: 72px 64px 48px; }
+.home-column { max-width: 760px; margin-inline: auto; display: flex; flex-direction: column; gap: 36px; }
+.home-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; }
+.home-title { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.home-title p { font-size: 14px; line-height: 20px; color: var(--color-muted); overflow-wrap: anywhere; }
+.home-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.project-list { display: flex; flex-direction: column; }
+.project-list-heading { display: flex; align-items: center; justify-content: space-between; padding: 0 12px 8px; font-size: 12px; line-height: 16px; color: var(--color-meta); }
+.project-list-heading span:first-child { font-weight: 600; }
 .project-row { display: flex; align-items: center; justify-content: flex-start; gap: 12px; min-height: 60px; text-align: left; border: 0; border-radius: 10px; padding: 0 12px; background: transparent; font-weight: 400; color: var(--color-muted); }
 .project-row:hover { background: var(--color-row-hover); }
 .project-icon { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex-shrink: 0; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 9px; }
 .project-row-name { display: flex; flex-direction: column; flex: 1; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
 .project-row-name strong { font-size: 14px; line-height: 18px; font-weight: 600; color: var(--color-ink); }
 .project-row-name small { font-size: 12px; line-height: 16px; color: var(--color-meta); }
+.project-row-time { width: 140px; flex-shrink: 0; text-align: right; font-size: 12px; line-height: 16px; }
+.project-row-chevron { display: flex; flex-shrink: 0; color: #c3c9cd; }
+.project-row:hover .project-row-chevron, .project-row:focus-visible .project-row-chevron { color: var(--color-muted); }
+.home-empty { display: flex; flex-direction: column; align-items: center; gap: 22px; padding: 48px 32px; background: var(--color-well); border-radius: var(--radius-panel); text-align: center; }
+.home-empty-text { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.home-empty-icon { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin-bottom: 8px; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: 11px; color: var(--color-muted); }
+.home-empty h2 { font-size: 15px; line-height: 20px; }
+.home-empty p { max-width: 420px; font-size: 13px; line-height: 20px; color: var(--color-muted); }
+.home-note { display: flex; align-items: flex-start; gap: 8px; padding-inline: 12px; font-size: 12px; line-height: 18px; color: var(--color-meta); }
+.home-note svg { flex-shrink: 0; margin-top: 2px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .empty { display: flex; flex-direction: column; gap: 8px; padding: 26px 24px; border: 1px solid var(--color-hairline); border-radius: var(--radius-panel); }
 .empty p { color: var(--color-muted); max-width: 620px; }
 .resource-fact { border-bottom: 1px solid var(--color-divider); padding-block: 12px; display: flex; flex-direction: column; gap: 4px; overflow-wrap: anywhere; }
@@ -209,6 +224,26 @@ dialog::backdrop { background: #15191b38; }
 .command-list .command-danger { color: var(--color-failed); }
 .command-footer { margin: 12px -20px -20px; padding: 12px 20px; border-top: 1px solid var(--color-divider); background: var(--color-well); color: var(--color-meta); font-size: 12px; line-height: 16px; }
 dialog.confirm { width: min(400px, calc(100vw - 32px)); }
+/* New project and Open folder: a 480 sheet whose focus stays inside until it closes. */
+dialog.sheet { width: min(480px, calc(100vw - 32px)); padding: 0; border: 0; box-shadow: 0 12px 32px #15191b24, 0 0 0 1px #15191b0f; }
+dialog.sheet::backdrop { background: #15191b3d; }
+.sheet-body { display: flex; flex-direction: column; gap: 18px; padding: 22px 24px 0; }
+.sheet-body h2 { font-size: 17px; line-height: 22px; }
+.sheet-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 22px 24px 20px; }
+.sheet-footer .primary { padding-inline: 16px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 13px; line-height: 18px; }
+.field input { height: 36px; font-size: 14px; line-height: 18px; }
+.field-hint { font-size: 12px; line-height: 18px; color: var(--color-meta); overflow-wrap: anywhere; }
+.field.invalid input, .field.invalid .prefixed-input { border-color: var(--color-failed); }
+.field.invalid .field-hint { color: var(--color-failed); }
+.field.invalid > input:focus-visible, .field.invalid .prefixed-input:focus-within { box-shadow: 0 0 0 3px #b23b3729; }
+/* The fixed folder prefix sits inside the field; a long one keeps its end visible. */
+.prefixed-input { display: flex; align-items: center; height: 36px; padding-left: 12px; border: 1px solid var(--color-control-border); border-radius: var(--radius-control); background: var(--color-surface); }
+.prefixed-input:focus-within { border-color: var(--color-accent); box-shadow: var(--focus-ring); }
+.prefixed-input input { height: 34px; min-height: 0; padding-left: 1px; border: 0; background: transparent; }
+.prefixed-input input:focus-visible { box-shadow: none; }
+.input-prefix { max-width: 55%; flex-shrink: 0; overflow: hidden; direction: rtl; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; line-height: 18px; color: var(--color-offline); }
 .confirm h2 { font-size: 14px; line-height: 20px; }
 .confirm p { padding-top: 6px; color: var(--color-muted); line-height: 20px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 20px; }
@@ -217,6 +252,7 @@ dialog.confirm { width: min(400px, calc(100vw - 32px)); }
 @media (max-width: 1279px) {
   .context-drawer { position: absolute; right: 0; top: 0; bottom: 0; z-index: 4; border-top-left-radius: 10px; border-left-color: var(--color-hairline); box-shadow: -10px 0 30px #15191b12; }
   .page-section { padding: 56px 40px 40px; }
+  .home { padding: 56px 40px 40px; }
 }
 @media (max-width: 767px) {
   .topbar { height: 48px; gap: 6px; padding-inline: 8px; }
@@ -240,11 +276,21 @@ dialog.confirm { width: min(400px, calc(100vw - 32px)); }
   .page-section { padding: 28px 18px; gap: 16px; }
   .standalone { width: auto; margin: 16px; padding: 24px 20px; }
   h1 { font-size: 22px; line-height: 28px; }
-  .input-actions { flex-wrap: wrap; }
-  .input-actions input { flex-basis: 100%; }
-  .input-actions button { flex: 1; padding-inline: 8px; }
   .section-heading { align-items: flex-start; }
-  .home .section-heading { flex-direction: column; gap: 4px; }
+  .home { padding: 28px 18px; }
+  .home-column { gap: 28px; }
+  .home-header { flex-direction: column; align-items: stretch; gap: 16px; }
+  .home-actions { flex-wrap: wrap; }
+  .home-actions button { flex: 1; min-height: 36px; padding-inline: 8px; }
+  .project-row { padding-inline: 8px; }
+  .project-row-time { width: auto; max-width: 96px; }
+  .project-list-heading { padding-inline: 8px; }
+  .home-empty { padding: 32px 20px; }
+  .home-empty .home-actions { align-self: stretch; }
+  .home-note { padding-inline: 8px; }
+  .sheet-body { padding-inline: 20px; }
+  .sheet-footer { padding-inline: 20px; }
+  .sheet-footer button { flex: 1; min-height: 36px; }
   .capability { flex-direction: column; gap: 12px; }
   .capability dl { width: 100%; }
   .workspace-actions { flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px; }

@@ -170,7 +170,8 @@ export class RhoService {
       const relative = method === 'project.create' ? b.name : b.path;
       requireThat(!relative.split(/[\\/]/).some((part: string) => ['.rho', '.git'].includes(part)), 'scope', 'Internal owner state is not a project.');
       const target = await confined(root, relative, method === 'project.create');
-      if (method === 'project.create') await fs.mkdir(target);
+      // mkdir is not recursive, so an existing folder is reported, never adopted as a new project.
+      if (method === 'project.create') await fs.mkdir(target).catch(e => { throw e.code === 'EEXIST' ? new Fault('conflict', 'A folder with that name already exists; open it instead.', { name: relative }) : e; });
       const p = await this.state.open(path.relative(this.state.root, target) || '.');
       return method === 'project.create' ? p : { ...p, host: await this.bridge.capability(p.root) };
     }

@@ -1,7 +1,7 @@
 import { ObservationClient, httpObservation, type observationLimits } from './observation.js';
 
 // This entry deliberately imports neither Node, the DOM nor optional owners.
-export interface BrowserConnection { url: string; token: string; expiresAt: string; methods: string[]; root?: string }
+export interface BrowserConnection { url: string; token: string; expiresAt: string; methods: string[]; root?: string; rootLabel?: string }
 export interface ProjectSummary { id: string; root: string; openedAt: string }
 export interface EntryPresentation { displayName?: string; readOnly?: boolean; runsCode?: boolean }
 export interface PluginPresentation extends EntryPresentation { tagline?: string; category?: string; examplePrompts?: string[]; viewNote?: string }
