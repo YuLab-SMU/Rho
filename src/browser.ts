@@ -3,12 +3,16 @@ import { ObservationClient, httpObservation, type observationLimits } from './ob
 // This entry deliberately imports neither Node, the DOM nor optional owners.
 export interface BrowserConnection { url: string; token: string; expiresAt: string; methods: string[]; root?: string; rootLabel?: string }
 export interface ProjectSummary { id: string; root: string; openedAt: string }
-export interface EntryPresentation { displayName?: string; readOnly?: boolean; runsCode?: boolean }
-export interface PluginPresentation extends EntryPresentation { tagline?: string; category?: string; examplePrompts?: string[]; viewNote?: string }
+import type { EntryPresentation, PluginPresentation } from '@rho-workspace/plugin-contracts';
+export type { EntryPresentation, PluginPresentation } from '@rho-workspace/plugin-contracts';
+export interface NativeAvailability { state: 'present' | 'missing' | 'unknown'; tool: string; scope: string; checkedAt: string; methods: string[]; title?: string; body?: string }
+export interface PluginSkill { id: string; version: string; digest: string; presentation?: EntryPresentation }
 export interface CapabilityPlugin {
   id: string; package: string; version?: string; state: string; reason?: string; selected: boolean;
   packagePresent: boolean; projectEnabled: boolean; dependenciesSatisfied: boolean; uiRenderable?: boolean;
   requires?: string[]; presentation?: PluginPresentation;
+  nativeAvailability?: NativeAvailability;
+  listing?: { skills?: PluginSkill[]; actions?: { presentation?: EntryPresentation }[]; views?: { id: string; version: string; ui: string; presentation?: EntryPresentation }[] };
 }
 export interface CapabilityOperation { method: string; owner?: string; state: string; authorized: boolean; packagePresent: boolean; projectEnabled: boolean; dependenciesSatisfied: boolean; presentation?: EntryPresentation }
 export interface CapabilityAction { id: string; version: string; pluginId?: string; owner: string; presentation?: EntryPresentation }

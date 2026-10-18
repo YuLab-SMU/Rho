@@ -1,6 +1,6 @@
 # Rho status
 
-Updated: 2026-10-17.
+Updated: 2026-10-18.
 
 ## U1 browser shell candidate
 
@@ -98,6 +98,16 @@ shown. On the staged tree `npm test` passes 36/36, and `test:ui` and
 `test:ui:plugins` pass with 0 / 0 native attempts. All seven alignment batches
 are implemented; user design acceptance is pending. See
 [batch 7b evidence](UI-ACCEPTANCE.md#u1-alignment-batch-7b-plugin-catalog-and-detail).
+
+The remaining U1 catalog fields now come from the nine owner descriptors: icons,
+body text, Skills, entry descriptions, developer/license/links and dependency
+purposes. Descriptor ordering matches Paper. Missing selected Rscript is observed
+without execution, with exported object reads preserved. A frozen descriptive
+inventory supplies introductions in reduced installations without loading owners
+or granting access. Source checks pass: Rho 36/36, browser/security 9/9 and the
+plugin browser flow at all five widths with zero Host starts/native submissions.
+Fixed package reassembly/installed verification follows; user design acceptance
+is still pending. See [Browser UI](UI.md).
 
 ## Headless collaboration extension
 

@@ -122,7 +122,8 @@ export class Capabilities {
   async catalog(principal: Principal) {
     const state = await this.state();
     const base = this.plugins.catalog;
-    const plugins = base.plugins.map((entry: any) => ({ ...entry, ...this.pluginStatus(entry.id, state) }));
+    const native = await this.plugins.nativeAvailability((this.plugins.config as { rscript?: string }).rscript ?? 'Rscript');
+    const plugins = base.plugins.map((entry: any) => ({ ...entry, ...this.pluginStatus(entry.id, state), ...(native[entry.id] ? { nativeAvailability: native[entry.id] } : {}) }));
     const operations = await this.operationStatus(principal, state);
     const actionStatus = operations.find(operation => operation.method === 'action.submit');
     return {

@@ -189,11 +189,23 @@ About for that plugin. Plugins that are not part of this installation are
 listed last. The page shows no Capabilities wording, state flags or method
 names.
 
+Category and entry ordering, icons, descriptions, Skills and dependency purposes
+come from owner descriptors. External tool observations name their limited
+scope: Rscript is checked as an executable file without running it. Missing or
+unknown Rscript availability has owner-authored copy and leaves exported object
+reads available. Actual native conditions are checked when an action is invoked.
+
 Plugins has its own sidebar with All plugins and each plugin. A plugin's page
-shows its example prompts to copy, what Claude Code can do with it, its views
+shows its example prompts to copy, body description, Skills, what Claude Code can do with it, its views
 and Information: whether the open project uses it, the plugins it works with,
-category, version and package. Opened with About from a project, it offers the
+category, version, package, developer, license and public links. Opened with About from a project, it offers the
 way back to that project. The toolbar's Plugins returns to the catalog.
+
+The build freezes a descriptive `dist/plugin-inventory.json` from the nine
+reviewed owners. Reduced installations retain those introductions without
+importing missing owners or adding operations, callable Skills or grants.
+Assembly records the inventory digest and its owner source commit. Selected
+owners replace the build copy with their real descriptor when loaded.
 
 ## Checks and evidence
 
@@ -231,6 +243,9 @@ launches the actual CLI and drives real Chrome with real owner state. It covers:
 `test:ui:plugins` renders every plugin's descriptor copy, copies each example
 prompt, returns focus to the card and checks a catalog without optional display
 fields. Instrumented Host-start/native-submit attempts must both be zero.
+The same script accepts `RHO_PACKAGE_ROOT` for fixed installed packages and
+checks physically absent owners, their introduction and the lack of callable
+entries. Missing selected Rscript is checked separately in a full installation.
 Reports contain asset IDs and results, never pairing/session credentials.
 Inspect screenshots in addition to overflow assertions.
 

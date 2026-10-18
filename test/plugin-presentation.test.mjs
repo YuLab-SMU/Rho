@@ -64,7 +64,7 @@ test('missing presentation shows the plugin ID and empty fields, never inferred 
   assert.deepEqual(pluginPresentation({ ...plugin, presentation: {} }), pluginPresentation(plugin));
   assert.deepEqual(pluginGroups([plugin]), [{ category: '', plugins: [plugin] }]);
   const catalog = { plugins: [plugin], operations: [{ method: 'document.read', owner: plugin.id, effect: 'read' }], components: [{ id: 'rho.editor', pluginId: plugin.id, version: '1', ui: 'unavailable' }], actions: [{ id: 'r.execute', pluginId: plugin.id }] };
-  assert.deepEqual(pluginEntries(catalog, plugin.id), { actions: [], views: [{ id: 'rho.editor', version: '1', ui: 'unavailable', displayName: '', readOnly: undefined, runsCode: undefined }] });
+  assert.deepEqual(pluginEntries(catalog, plugin.id), { actions: [], skills: [], views: [{ id: 'rho.editor', version: '1', ui: 'unavailable', displayName: '', description: '', readOnly: undefined, runsCode: undefined }] });
   const partial = pluginPresentation({ ...plugin, presentation: { displayName: 'Owner name', tagline: 'Owner copy' } });
   assert.equal(partial.displayName, 'Owner name'); assert.equal(partial.category, ''); assert.deepEqual(partial.examplePrompts, []);
 });
@@ -75,7 +75,9 @@ test('unavailable actions retain their own copy; grouped operations do not misla
   assert.deepEqual(unavailable.presentation, plugins.descriptor('r').actions[0].presentation);
   assert.equal(unavailable.pluginId, 'r');
   assert.equal(unavailable.presentation.runsCode, true);
-  assert.equal(plugins.catalog.plugins.find(p => p.id === 'documents').presentation, undefined);
+  assert.equal(plugins.catalog.plugins.find(p => p.id === 'documents').presentation.displayName, 'Documents');
+  assert.equal(plugins.catalog.operations.some(o => o.owner === 'documents'), false);
+  assert.equal(plugins.catalog.skills.some(s => s.id === 'documents.workspace'), false);
   const catalog = (await new Plugins({}).load()).catalog;
   const actions = pluginEntries(catalog, 'agent').actions;
   assert.equal(actions.length, 3);

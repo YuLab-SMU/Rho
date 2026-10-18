@@ -81,6 +81,8 @@ test('exported R objects remain usable without requirements, Documents or an R i
     const p = await c.call('project.create', { name: 'project' });
     const catalog = await c.call('capability.list', { projectId: p.id });
     assert.equal(catalog.plugins.find(p => p.id === 'r').state, 'available');
+    assert.equal(catalog.plugins.find(p => p.id === 'r').nativeAvailability.state, 'missing');
+    assert.equal(catalog.plugins.find(p => p.id === 'r').nativeAvailability.scope, 'executable-file');
     assert.deepEqual(catalog.actions, []);
     assert.deepEqual(catalog.unavailableActions[0].missing, ['requirements']);
     assert.ok(catalog.capabilities.includes('r-objects'));

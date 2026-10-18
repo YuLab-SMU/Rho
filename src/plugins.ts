@@ -44,10 +44,12 @@ export class Plugins {
   private availability: any[] = [];
   constructor(public config: PluginConfig) {}
   async load() {
+    const inventory = await readJson<{ plugins: any[] }>(fileURLToPath(new URL('./plugin-inventory.json', import.meta.url)));
     const selected = this.config.plugins ?? pluginIds;
     requireThat(Array.isArray(selected) && selected.every(id => pluginIds.includes(id)) && new Set(selected).size === selected.length, 'invalid', 'Select unique, known plugin IDs.');
     for (const id of pluginIds) {
       const status: any = {
+        ...inventory.plugins.find(p => p.id === id),
         id,
         package: '@rho-workspace/plugin-' + id,
         selected: selected.includes(id),
@@ -64,6 +66,9 @@ export class Plugins {
           status.version = module.plugin.version;
           status.presentation = module.plugin.presentation;
           status.requires = [...module.plugin.requires];
+          status.listing = {
+            skills: module.plugin.skills.map(({ content, ...skill }) => skill),
+          };
           status.packagePresent = true;
           status.state = 'available'; delete status.reason;
         } catch { status.reason = 'Selected plugin package is missing, incompatible or cannot be loaded.'; }
@@ -110,6 +115,9 @@ export class Plugins {
   descriptors() { return Object.values(this.modules).map(m => m.plugin as PluginDescriptor); }
   availableIds() { return this.descriptors().map(p => p.id as PluginId); }
   descriptor(id: string) { return this.descriptors().find(p => p.id === id); }
+  async nativeAvailability(rscript: string) {
+    return Object.fromEntries(await Promise.all((['r', 'requirements'] as const).map(async id => [id, await this.modules[id]?.observeNativeAvailability(rscript)])));
+  }
   operationOwner(method: string) {
     const descriptor = this.descriptors().find(p => p.operations?.some(o => o.method === method));
     if (descriptor) return descriptor.id as PluginId;

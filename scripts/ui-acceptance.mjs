@@ -499,7 +499,7 @@ try {
   assert.equal(await page.locator('.plugin-installed').textContent(), 'Installed');
   assert.equal(await page.locator('.plugin-notice strong').textContent(), 'Waiting for Tables');
   assert.equal(await page.locator('.plugin-notice p').textContent(), 'Charts needs Tables, which is off in notes 中文.');
-  assert.deepEqual(await page.locator('.plugin-detail h2:not(.visually-hidden)').evaluateAll(list => list.map(h => h.firstChild.textContent)), ['What Claude Code can do with it', 'Views ', 'Information']);
+  assert.deepEqual(await page.locator('.plugin-detail h2:not(.visually-hidden)').evaluateAll(list => list.map(h => h.firstChild.textContent)), ['Skills ', 'What Claude Code can do with it', 'Views ', 'Information']);
   assert.equal(await page.locator('.plugin-prompts-note').textContent(), 'Copy one and ask Claude Code.');
   assert.equal(await page.locator('.plugin-use').textContent(), 'On, but waiting for Tables.');
   assert.deepEqual(await page.locator('.plugin-needs button').allTextContents(), ['Tables']);

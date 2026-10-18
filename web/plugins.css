@@ -9,6 +9,20 @@
 .plugin-card:hover { background: var(--color-row-hover); }
 .plugin-symbol { width: 40px; height: 40px; flex-shrink: 0; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--color-accent); background: var(--color-accent-soft); }
 .plugin-symbol.large { width: 60px; height: 60px; border-radius: 14px; }
+.plugin-symbol.large svg { width: 30px; height: 30px; }
+.plugin-symbol.small { width: 18px; height: 18px; border-radius: 5px; }
+.plugin-symbol.small svg { width: 12px; height: 12px; }
+.plugin-symbol-text { font-size: 20px; font-weight: 600; line-height: 22px; }
+.plugin-symbol.large .plugin-symbol-text { font-size: 30px; line-height: 32px; }
+.plugin-symbol.small .plugin-symbol-text { font-size: 12px; line-height: 14px; }
+.plugin-description { font-size: 14px; line-height: 23px; }
+.plugin-entry-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.plugin-entry-description { color: var(--color-meta); font-size: 13px; line-height: 18px; overflow-wrap: anywhere; }
+.plugin-dependency { display: inline-flex; align-items: center; gap: 8px; }
+.plugin-dependency > span { color: var(--color-meta); }
+.plugin-link-row { display: contents; }
+.plugin-information a { color: var(--color-accent); text-decoration: none; }
+.plugin-information a:hover { text-decoration: underline; }
 .plugin-card-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
 .plugin-card-copy strong { font-size: 14px; line-height: 18px; font-weight: 600; }
 .plugin-tagline { color: var(--color-meta); font-size: 13px; line-height: 18px; font-weight: 400; }
