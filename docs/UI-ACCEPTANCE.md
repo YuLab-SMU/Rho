@@ -10,7 +10,67 @@ owner tarballs, browser assets, licenses, production locks, installation scenari
 failures and limits. [Browser implementation](UI.md) documents the actual entry
 and the four-stage boundary.
 
-## Selected identities
+## Catalog completion and rebuilt packages: 2026-10-18
+
+The [completion record](ui-acceptance/u1-plugin-completion.json) freezes Rho
+`6598ec333366cfc2215e5bb2e50123a75c24dafc` and Plugins
+`dddd9833f233380556bce823c735b6ba52b371b2`, their trees, all owner tarballs,
+catalog inventory, browser assets and production locks. Selected inputs are
+committed, with no dirty override. Existing local design edits are preserved and
+excluded. The accepted public Core binary is reused by digest without rebuilding.
+The older identities and evidence below retain their original historical scope.
+
+Nine owner descriptors now supply icons, body descriptions, real Skill names and
+descriptions, action/view descriptions, category and entry order, developer,
+license, public links, external-tool use and dependency purposes. Rho renders
+those fields. The catalog follows Paper's Code & data, Figures & media, Working
+with your Agent and Project files order, including the order within each group.
+R's read action precedes its run action.
+
+R and Requirements observe the selected Rscript executable file without running
+it. A missing executable names the limitation and who can resolve it; R still
+supports exported object reads. This is not an R version/package/readiness check.
+The owner fixture would write a marker if executed; no marker is created.
+Source regression also reads a real exported Unicode object without Rscript.
+
+The build freezes an introduction-only inventory for all nine owners. Reduced
+packages keep those introductions without importing absent owners, adding callable
+Skills, enabling operations or expanding grants. Both fixed tarballs were
+installed with `npm install --omit=dev --ignore-scripts` outside the checkouts:
+
+| Composition | Tarball SHA-256 |
+| --- | --- |
+| Full, nine owners plus Contracts | `ed6b5312132cab8acec6d1a4d6294f968a961ab8f0df3dccc9c4f4aae35daed0` |
+| Documents/Files plus Contracts | `c977b90b4e86ceb5d3f9c5968a25bbf1fe9a3289a4188174a36720506b646999` |
+
+Both installed catalogs pass all nine detail pages, 27 actual clipboard copies,
+focus return, missing-metadata fallback and 1600/1280/1024/768/390 widths. The
+minimal installation physically omits the other seven owners, csv-parse and the
+MCP SDK; every absent owner reports Not part of this installation and has no
+project-use claim or callable entry. The full installation additionally passes
+the missing-Rscript state and the whole existing U1 browser acceptance flow.
+Every browser run records zero Host-start and native-submit attempts.
+
+Rho's staged tree passes `npm test` 36/36 and `test:ui` browser/security 9/9 plus
+the acceptance flow. Plugins passes 17/17 and all nine isolated owner imports.
+Initial failures are retained: the first owner run exposed the finite Contracts
+export guard; the first Rho run had no selected Core executable. After correcting
+the guard and selecting the accepted binary, the checks pass. Neither failure is
+counted as a pass.
+
+Screenshot inspection covers all nine detail pages and their Information sections,
+catalog/detail top and bottom at five widths, partial native availability and an
+actual absent-owner detail. Text wraps, SVG/text icons, dependency buttons, links
+and the narrow Information stack remain legible without overlap or horizontal
+overflow. Evidence is retained under `work/ui-u1/plugin-completion-*`. Paper's
+U1 rules, R detail and missing-Rscript copy are updated. Documentation links and
+rendered pages are checked as a coherent batch.
+
+This completes the implementation and installed U1 catalog checks. User design
+acceptance remains pending; functional renderers, U2-U4 and signed/registry
+distribution are not accepted by these checks. No user installation is replaced.
+
+## Original selected identities
 
 | Item | Selected identity |
 | --- | --- |

@@ -11,8 +11,8 @@ resumes after refresh, disconnection and same-port service restart, without nati
 execution. The UI contribution entry is `0.1-draft`, not protocol v1.
 [Browser UI](UI.md) separates U1 from the unimplemented U2-U4 collaboration loop.
 
-Source checks: 33 Rho tests pass, including nine browser/security tests. Real
-Chrome 155.0.8059.84 checks pass at 1600/1280/1024/390 widths, with zero Host-start
+Source checks: 36 Rho tests pass, including nine browser/security tests. Real
+Chrome 155.0.8059.84 checks pass at 1600/1280/1024/768/390 widths, with zero Host-start
 and native-submit attempts. Screenshot inspection covers the compact shell,
 context and navigation drawers, command focus and unavailable views. Chrome 154,
 owner editor input/IME/clipboard and full accessibility/product acceptance are
@@ -92,9 +92,9 @@ attempts. See [batch 7a evidence](UI-ACCEPTANCE.md#u1-alignment-batch-7a-plugin-
 Batch 7b follows U1-06, U1-06b and U1-06d with copy from plugin descriptors.
 Plugins has its own sidebar. A plugin's page shows prompts to copy, what Claude
 Code can do with it, its views and Information, including whether the open
-project uses it. The toolbar's Plugins returns to the catalog. Parts the
-descriptors don't provide, such as icons, descriptions and Skills, are not
-shown. On the staged tree `npm test` passes 36/36, and `test:ui` and
+project uses it. The toolbar's Plugins returns to the catalog. Its original
+metadata gaps are covered by the catalog completion below.
+On the staged tree `npm test` passes 36/36, and `test:ui` and
 `test:ui:plugins` pass with 0 / 0 native attempts. All seven alignment batches
 are implemented; user design acceptance is pending. See
 [batch 7b evidence](UI-ACCEPTANCE.md#u1-alignment-batch-7b-plugin-catalog-and-detail).
@@ -106,8 +106,10 @@ without execution, with exported object reads preserved. A frozen descriptive
 inventory supplies introductions in reduced installations without loading owners
 or granting access. Source checks pass: Rho 36/36, browser/security 9/9 and the
 plugin browser flow at all five widths with zero Host starts/native submissions.
-Fixed package reassembly/installed verification follows; user design acceptance
-is still pending. See [Browser UI](UI.md).
+Fixed Full and Documents/Files tarballs pass outside-checkout installation and
+all nine plugin pages, including seven physically absent owners in the minimal
+package. Installed Full also passes the U1 shell flow, with browser attempts 0/0.
+User design acceptance is still pending. See [completion evidence](UI-ACCEPTANCE.md#catalog-completion-and-rebuilt-packages-2026-10-18).
 
 ## Headless collaboration extension
 
