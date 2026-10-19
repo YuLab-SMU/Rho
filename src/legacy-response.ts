@@ -4,7 +4,11 @@ import { requireThat } from '@rho-workspace/plugin-contracts';
 export function legacyResponse(value: any): any {
   if (Array.isArray(value)) return value.map(legacyResponse);
   if (!value || typeof value !== 'object') return value;
+  if (value.compositionId && Array.isArray(value.views)) requireThat(!value.views.some((view: any) => Object.values<any>(view.bindings ?? {}).some(binding => binding.kind === 'live-document')), 'unavailable', 'Live document bindings require the v2 contract.');
   const result = Object.fromEntries(Object.entries(value).map(([k, v]) => [k, legacyResponse(v)]));
+  if (value.id && value.path && typeof value.content === 'string' && Array.isArray(value.undo)) {
+    for (const key of ['revision', 'receipts', 'retainedFromRevision', 'pendingSave', 'receipt']) delete result[key];
+  }
   if (value.id && value.version && value.owner && value.kind && value.coverage && value.provenance) {
     requireThat(['file', 'table', 'plot', 'model'].includes(value.kind), 'unavailable', 'This resource requires the v2 descriptor; retained v1 resources remain readable.');
     delete result.format;

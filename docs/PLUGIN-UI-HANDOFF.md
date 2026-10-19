@@ -1,5 +1,9 @@
 # Plugin interfaces and browser UI handoff
 
+The [U2 Documents handoff](U2-BACKEND-HANDOFF.md) adds mutation identities,
+revision/receipt retention, pending saves and live-document bindings. Frontend
+entries and browser write grants remain pending.
+
 ## U1 browser entry
 
 [Browser implementation](UI.md) now supplies scoped pairing, same-origin assets,
@@ -165,7 +169,7 @@ Rho validates the selected entry/version, props and binding roles before saving.
 
 | Component / owner package | Required props | Binding |
 | --- | --- | --- |
-| `rho.editor` / Documents | `title` | `document:{documentId,version}` |
+| `rho.editor` / Documents | `title` | `document`: exact version or explicit live-document; see [U2](U2-BACKEND-HANDOFF.md) |
 | `rho.object` / R | `title` | `data:{id,version}` of kind `object` |
 | `rho.table` / Tables | `title` | `data:{id,version}` of kind `table` |
 | `rho.media` / Media | `title` | `data:{id,version}` of kind `media` |

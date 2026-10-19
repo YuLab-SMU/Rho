@@ -2,6 +2,7 @@ import { requirementsSchema, executionInputSchema, declarationSchema } from './e
 import { objectSchema as obj, text, refSchema as ref } from '@rho-workspace/plugin-contracts';
 import { inputs as annotationInputs, outputs as annotationOutputs } from './annotation-contracts.js';
 import { protocol as v1 } from './legacy-protocol.js';
+import { operationContracts as documentContracts, documentSchema } from './document-contract.js';
 const base = structuredClone(v1);
 const project = { projectId: base.operations['capability.list'].properties.projectId };
 const op = { ...project, operationId: base.operations['action.lookup'].properties.operationId };
@@ -27,8 +28,11 @@ export const operations: Record<string, any> = { ...base.operations,
   'media.describe': obj({ ...project, resource: ref })
 };
 const changeId = { type: 'string', pattern: '^[A-Za-z0-9._:@-]{1,128}$' };
+for (const [method, contract] of Object.entries(documentContracts)) operations[method] = { ...contract.inputSchema, properties: { ...project, ...contract.inputSchema.properties }, required: ['projectId', ...contract.inputSchema.required] };
 const condition = { ...project, compositionId: changeId, expectedVersion: integer, changeId };
 const view = { ...base.operations['composition.put'].properties.views.items, additionalProperties: false };
+view.properties.bindings = { type: 'object', additionalProperties: { oneOf: [ref, obj({ documentId: ref.properties.version, version: positive }), obj({ kind: { const: 'live-document' }, documentId: ref.properties.version })] } };
+operations['composition.put'].properties.views.items = view;
 const node = { oneOf: [obj({ id: changeId, kind: { const: 'group' }, children: { ...array(changeId), maxItems: 256, uniqueItems: true } }), obj({ ...view.properties, kind: { const: 'view' }, protected: { type: 'boolean' } }, [...view.required, 'kind'])] };
 const applyOperation = { oneOf: [
   obj({ op: { const: 'replace' }, rootId: changeId, nodes: { ...array(node), minItems: 1, maxItems: 256 } }),
@@ -55,7 +59,7 @@ export const resourceSchema = { ...base.definitions.resource, additionalProperti
 const retainedPlan: any = base.definitions.run.properties.plan;
 export const runSchema = { ...base.definitions.run, properties: { ...base.definitions.run.properties, plan: { ...retainedPlan, properties: { ...retainedPlan.properties, completion: { type: ['string', 'null'] } } } } };
 const selection = { ...base.definitions.selection, properties: { ...base.definitions.selection.properties, namespace: text } };
-const definitions = { ...base.definitions, run: runSchema, resource: resourceSchema, selection, declaration: declarationSchema, executionInput: executionInputSchema, requirements: requirementsSchema };
+const definitions = { ...base.definitions, document: documentSchema, run: runSchema, resource: resourceSchema, selection, declaration: declarationSchema, executionInput: executionInputSchema, requirements: requirementsSchema };
 const artifactFacts = response({ integrity: record, domain: record, resources: array(resourceSchema) }, ['integrity', 'domain']);
 export const responses: Record<string, any> = { ...base.responses,
   'session.browser.pair': response({ code: text, expiresAt: text }),
@@ -77,6 +81,9 @@ export const responses: Record<string, any> = { ...base.responses,
   'observation.snapshot': { ...base.responses['observation.snapshot'], properties: { ...base.responses['observation.snapshot'].properties, resources: array(resourceSchema), operations: array(runSchema), selection: { anyOf: [selection, { type: 'null' }] } } }
 };
 const structuredComposition = response({ format: { const: 'rho.composition/1' }, compositionId: text, version: positive, nodes: array(node), rootId: changeId, receipt: record, author: text, views: array(view), availability: record, acknowledgedAt: text });
+for (const method of Object.keys(documentContracts)) responses[method] = documentSchema;
+responses['observation.snapshot'].properties.documents = array(documentSchema);
+responses['workspace.save'].properties.documents = array(documentSchema);
 for (const method of ['composition.apply', 'composition.undo', 'view.protection.set']) responses[method] = structuredComposition;
 const composition = { anyOf: [base.definitions.composition, structuredComposition] };
 responses['composition.read'] = composition;

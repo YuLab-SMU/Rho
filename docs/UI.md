@@ -9,7 +9,7 @@ its previously accepted binary by digest.
 | Stage | Observable result | Remaining gate |
 | --- | --- | --- |
 | U1 | npm launcher, Agent-opened connected tab, project shell, capability discovery, retained unavailable views, observation and refresh | Installed candidate checks and user review are separate evidence |
-| U2 | Documents CodeMirror and Tables AG Grid Community entries in Plugins | Not implemented; owner change receipts, live-document bindings, input recovery and real IME checks required |
+| U2 | Documents CodeMirror and Tables AG Grid Community entries in Plugins | Backend receipts/live bindings implemented; frontend entries, input recovery and real IME checks pending |
 | U3 | Conditional Dockview layout, protection, scoped selections and actual Claude Code collaboration | Not implemented; no second layout authority or close-on-drag-removal |
 | U4 | Charts, feedback, frozen contexts, explicit replies and format-3 browser recovery | Not implemented; UI protocol v1 and collaboration acceptance remain unfrozen |
 
@@ -19,6 +19,10 @@ existing descriptors remain unavailable as renderers. U1 observes stable view ID
 without changing bindings/layout. Views appear as tabs in one observation-only
 Dockview group; structured group geometry is U3. No close/drag control pretends to
 persist transactions.
+
+The [U2 backend handoff](U2-BACKEND-HANDOFF.md) supplies identified document
+mutations and live bindings. The frontend team provides all new UI and input
+handling before integration; browser grants retain the U1 ceiling.
 
 The visual reference is Paper's
 [Rho experience V0.1](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-9-0):
@@ -140,6 +144,7 @@ budget for unconfirmed input, and 200-row blocks/five-block cache without input 
 U1 methods/snapshots, with no Node, DOM or React imports. Fetch/abort primitives
 come from the runtime; importing the SDK reads no browser storage. The shell owns
 sessionStorage; the separate Node client retains filesystem intent functions.
+It also types Documents methods for U2; these do not expand browser grants.
 
 `BrowserClient.observe(projectId)` reuses `ObservationClient` and its bounded Fetch
 SSE parser. Snapshot on connection, reconnect, invalidation or gap; events are

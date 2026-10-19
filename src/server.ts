@@ -255,9 +255,11 @@ export class RhoService {
       const d = owners.need('documents'); let result;
       if (method === 'document.open') result = await d.open(b.path, principal.id);
       if (method === 'document.read') result = await d.read(b.documentId);
-      if (method === 'document.edit') result = await d.edit(b.documentId, b.expectedVersion, b.edits, b.undoGroup, principal.id);
-      if (method === 'document.undo') result = await d.undo(b.documentId, b.expectedVersion, principal.id);
-      if (method === 'document.save') result = await d.save(b.documentId, b.expectedVersion, b.expectedDiskDigest, principal.id);
+      const change = b.changeId === undefined ? undefined : { changeId: b.changeId, expectedRevision: b.expectedRevision };
+      if (principal.kind === 'browser' && ['document.edit', 'document.undo', 'document.save'].includes(method)) requireThat(change, 'invalid', 'Browser document writes require changeId and expectedRevision.');
+      if (method === 'document.edit') result = await d.edit(b.documentId, b.expectedVersion, b.edits, b.undoGroup, principal.id, change);
+      if (method === 'document.undo') result = await d.undo(b.documentId, b.expectedVersion, principal.id, change);
+      if (method === 'document.save') result = await d.save(b.documentId, b.expectedVersion, b.expectedDiskDigest, principal.id, change);
       if (!['document.read', 'document.open'].includes(method)) await this.emit(p, 'document.changed', b.documentId);
       return result;
     }

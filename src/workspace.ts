@@ -39,7 +39,11 @@ export class Workspace {
       for (const [key, binding] of Object.entries<any>(view.bindings)) {
         const retainedBinding = retained.some(v => v.id === view.id && canonical(v.bindings?.[key]) === canonical(binding));
         if (binding.documentId) {
-          if (!retainedBinding) await this.owners.need('documents').snapshot(binding.documentId, binding.version);
+          if (!retainedBinding) {
+            if (binding.kind === 'live-document') await this.owners.need('documents').read(binding.documentId);
+            else await this.owners.need('documents').snapshot(binding.documentId, binding.version);
+          }
+          requireThat(binding.kind !== 'live-document' || retainedBinding || !!component, 'invalid', 'Live document bindings require a registered document component.');
           requireThat(!component || (component.bindings as any)[key] === 'document', 'invalid', 'Component binding expects a scientific resource.');
         } else {
           if (!this.owners.files && retainedBinding) continue;

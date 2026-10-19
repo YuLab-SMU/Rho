@@ -26,6 +26,16 @@ export interface CapabilityCatalog {
   configuration: { version: number; enabled: string[] };
 }
 export interface DocumentSummary { id: string; path: string; version: number; content: string; dirty: boolean; diskDigest: string | null; acknowledgedAt: string }
+export interface DocumentChange { changeId: string; expectedRevision: number }
+export interface DocumentReceipt { changeId: string; requestDigest: string; kind: 'edit' | 'undo' | 'save'; author: string; revision: number; version: number; at: string }
+export interface DocumentBuffer extends DocumentSummary {
+  author: string; undo: { content: string; group: string; author: string }[];
+  revision: number; receipts: DocumentReceipt[]; retainedFromRevision: number;
+  receipt?: DocumentReceipt;
+  pendingSave?: { requestDigest: string; author: string; expectedDiskDigest: string | null; contentDigest: string; at: string; change?: DocumentChange };
+}
+export type DocumentBinding = { documentId: string; version: number } | { kind: 'live-document'; documentId: string };
+interface DocumentWrite extends DocumentChange { projectId: string; documentId: string; expectedVersion: number }
 export interface ResourceSummary { id: string; version: string; kind: string; path: string; bytes: number; owner: string; availability: string; provenance: Record<string, unknown> }
 export interface ViewDescription { id: string; component: string; version: string; props: Record<string, unknown>; bindings: Record<string, unknown>; protected?: boolean }
 export interface CompositionSummary { compositionId: string; version: number; views: ViewDescription[]; availability: Record<string, unknown>; rootId?: string; nodes?: ({ id: string; kind: 'group'; children: string[] } | (ViewDescription & { kind: 'view' }))[] }
@@ -43,6 +53,11 @@ export interface BrowserApi {
   'capability.list': { input: { projectId: string }; output: CapabilityCatalog };
   'observation.snapshot': { input: { projectId: string }; output: WorkspaceSnapshot };
   'composition.read': { input: { projectId: string; compositionId: string }; output: CompositionSummary };
+  'document.open': { input: { projectId: string; path: string }; output: DocumentBuffer };
+  'document.read': { input: { projectId: string; documentId: string }; output: DocumentBuffer };
+  'document.edit': { input: DocumentWrite & { edits: { from: number; to: number; insert: string }[]; undoGroup: string }; output: DocumentBuffer };
+  'document.undo': { input: DocumentWrite; output: DocumentBuffer };
+  'document.save': { input: DocumentWrite & { expectedDiskDigest: string | null }; output: DocumentBuffer };
 }
 export interface ApiFailure { kind: string; message: string; details?: Record<string, unknown>; continuation?: string }
 export class BrowserApiError extends Error {
