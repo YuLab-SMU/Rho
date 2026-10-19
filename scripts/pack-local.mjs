@@ -34,11 +34,12 @@ async function source(directory, paths, committedFiles = []) {
   }
   return { commit, tree, buildInputsSha256: sha(JSON.stringify(inventory)), localOverride: changed ? 'explicit-dirty-build-inputs' : null };
 }
-run('npm', ['run', 'build'], root);
 const pluginIds = ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations'];
 const selected = values['select-plugins'] === undefined ? pluginIds : values['select-plugins'].split(',').filter(Boolean);
 if (new Set(selected).size !== selected.length || selected.some(id => !pluginIds.includes(id))) throw new Error('Select unique known plugin IDs.');
-const application = await source(root, ['src', 'web', 'scripts', 'protocol', 'fixtures', 'package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.web.json', 'vite.config.ts', 'README.md', 'LICENSE', 'docs/HEADLESS.md', 'docs/COLLABORATION.md', 'docs/UI.md']);
+process.env.RHO_UI_PLUGINS = selected.join(',');
+run('npm', ['run', 'build'], root);
+const application = await source(root, ['src', 'web', 'scripts', 'protocol', 'fixtures', 'package.json', 'package-lock.json', 'tsconfig.json', 'tsconfig.web.json', 'vite.config.ts', 'ui-entries.json', 'README.md', 'LICENSE', 'docs/HEADLESS.md', 'docs/COLLABORATION.md', 'docs/UI.md']);
 const plugins = await source(pluginRoot, ['packages/contracts', ...selected.map(id => 'plugins/' + id), 'scripts', 'package.json', 'package-lock.json', 'LICENSE']);
 // The descriptive inventory contains all reviewed owners, including owners
 // physically omitted from a reduced package. Freeze those inputs too.
@@ -67,7 +68,7 @@ for (const name of Object.keys(manifest.dependencies).filter(name => name.starts
 for (const item of pluginPacks.packages) manifest.dependencies[item.package] = 'file:vendor/' + item.filename;
 manifest.bundleDependencies = Object.keys(manifest.dependencies);
 delete manifest.devDependencies;
-manifest.scripts = { 'acceptance:collaboration': 'node scripts/collaboration-acceptance.mjs', 'acceptance:collaboration:agent': 'RHO_COLLAB_MODEL=1 node scripts/collaboration-acceptance.mjs', 'acceptance:ui': 'node scripts/ui-acceptance.mjs', acceptance: 'node scripts/acceptance.mjs', recovery: 'node scripts/recovery-acceptance.mjs' };
+manifest.scripts = { 'acceptance:collaboration': 'node scripts/collaboration-acceptance.mjs', 'acceptance:collaboration:agent': 'RHO_COLLAB_MODEL=1 node scripts/collaboration-acceptance.mjs', 'acceptance:ui': 'node scripts/ui-acceptance.mjs', 'acceptance:ui:u2': 'node scripts/u2-ui-acceptance.mjs', acceptance: 'node scripts/acceptance.mjs', recovery: 'node scripts/recovery-acceptance.mjs' };
 await fs.writeFile(path.join(stage, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
 run('npm', ['install', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], stage);
 const web = JSON.parse(await fs.readFile(path.join(stage, 'dist/web/composition.json'), 'utf8'));

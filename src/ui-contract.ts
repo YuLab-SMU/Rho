@@ -9,6 +9,12 @@ export interface UiViewProps {
   snapshot: WorkspaceSnapshot;
   client: BrowserClient;
   active: boolean;
+  // A shell-owned place in the context panel; null while that panel is closed.
+  contextTarget: HTMLElement | null;
+  // This tab's principal when known, so authors can be named "You".
+  principalId?: string;
+  // Shell-owned right side of the view tab bar; plugin supplies its controls.
+  headerTarget?: HTMLElement | null;
 }
 export interface UiContribution {
   entryVersion: '0.1-draft';

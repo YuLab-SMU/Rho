@@ -6,9 +6,11 @@ import { confined, digest, requireThat } from '@rho-workspace/plugin-contracts';
 import type { Principal, State } from './state.js';
 
 export const browserLimits = { maxSessions: 16, maxPairings: 8, pairingTtlMs: 300000, sessionTtlMs: 43200000, maxPairAttempts: 32 };
-// U1 is intentionally observation-only apart from choosing/creating a project.
-// Future UI stages must explicitly extend this reviewed operation ceiling.
-export const browserMethods = ['protocol.describe', 'project.list', 'project.open', 'project.create', 'capability.list', 'observation.snapshot', 'composition.read', 'document.read', 'resource.read', 'skill.list', 'skill.read'];
+// U1 observes and chooses projects. U2 adds identity-bearing buffer edits,
+// author-scoped undo, per-change revert, bounded table pages and selection.
+// Saving, abandoning saves, global undo and execution remain Agent/operator work.
+export const browserMethods = ['protocol.describe', 'project.list', 'project.open', 'project.create', 'capability.list', 'observation.snapshot', 'composition.read', 'document.read', 'resource.read', 'skill.list', 'skill.read',
+  'document.edit', 'document.undoOwn', 'document.revert', 'document.history', 'document.change.read', 'data.page', 'interaction.selection.read', 'interaction.selection.set'];
 interface Pairing { hash: string; root: string; methods: string[]; expires: number }
 export class BrowserAccess {
   limits: typeof browserLimits;
@@ -41,7 +43,7 @@ export class BrowserAccess {
     this.pairings = this.pairings.filter(p => p !== pairing);
     this.state.principals = this.state.principals.filter(p => p.kind !== 'browser' || Date.parse(p.expiresAt ?? '') > now);
     await this.state.addPrincipal(principal);
-    return { token, expiresAt, methods: principal.methods, root: principal.projectRoot, rootLabel: await homeRelative(pairing.root) };
+    return { token, expiresAt, principalId: principal.id, methods: principal.methods, root: principal.projectRoot, rootLabel: await homeRelative(pairing.root) };
   }
 }
 // A display form of the folder (for example ~/projects); requests keep using root-relative paths.

@@ -1,8 +1,8 @@
 # U2 Documents backend handoff
 
-Updated: 2026-10-19. This batch supplies backend prerequisites. Documents and
-Tables UI await the frontend team. No interface, editor, input adapter or layout
-is built here. Core and the U1 browser grant ceiling are unchanged.
+Updated: 2026-10-19. This document retains the backend prerequisite contracts.
+Documents and Tables now integrate the existing frontend entries and confirmed
+Paper design; see [U2 UI acceptance](U2-UI-ACCEPTANCE.md). Core remains unchanged.
 
 ## Owner and wire contracts
 
@@ -134,10 +134,10 @@ must refer to an actual acknowledged Agent edit. This batch supplies history and
 undo contracts; external-file merging and Agent scheduling still need their actual
 consumer integration and existing disk write conditions remain enforced.
 
-## Frontend delivery before integration
+## Frontend integration
 
-The frontend team supplies the agreed Documents design and optional `./ui` entry
-in Rho-plugins. Multiple views share one browser adapter per document; Documents
+Documents and Tables now export optional `./ui` entries in Rho-plugins, using
+the existing frontend implementation and the confirmed Paper design. Multiple views share one browser adapter per document; Documents
 remains the sole buffer/undo owner. Required behavior includes bounded serial
 input, native IME, cursor/selection retention, owner undo and recovery copies.
 Conflicts retain unconfirmed input and stop automatic submission without rebasing.
@@ -149,10 +149,16 @@ selection. Unkeyed tables stay readable without entity linking. Consume the
 [owner interfaces](PLUGIN-UI-HANDOFF.md) and
 [draft contribution contract](../src/ui-contract.ts); UI protocol v1 is unfrozen.
 
-After frontend delivery, review those actual entries, enable only required
-browser operations and accept the installed dual-editor flow, real Chinese IME,
-clipboard, conflicts, table identity, widths and accessibility. Until then the U1
-shell retains unavailable renderers and its read-only browser ceiling.
+U2 pairs new tabs with only the implemented edit/history/page/selection methods.
+Saving, save abandonment, global undo, composition writes and native execution
+remain excluded. Session `principalId` supplies “You”; receipt authors never do.
+Exact-version editors read retained owner snapshots without joining the live
+adapter, and have no Changes panel. Unavailable historical text retains its
+original reference instead of showing the live buffer.
+
+See [U2 UI acceptance](U2-UI-ACCEPTANCE.md) for source/installed browser evidence
+and the remaining physical macOS IME and U3/U4 gates. Browser composition uses
+Chrome’s CDP IME engine; it is not a manual candidate-window claim.
 
 ## Verification scope
 
@@ -170,7 +176,7 @@ After building, the focused checks are
 Isolated owner imports check the headless package without React/DOM. Executed
 counts and remaining work are recorded in [Status](STATUS.md).
 
-The selected Documents owner source is
+The backend-only prerequisite used Documents owner source
 [`781a0f4`](https://github.com/YuLab-SMU/Rho-plugins/commit/781a0f42c9f2ddb9db801ca135734b8103276f94),
 published before this application handoff. Its 0.4.0 Documents tarball SHA-256 is
 `bbf4267f9ff64b7390276cb65f38437c30c2606a5ada9edba82b2bf33c4adfe1`.

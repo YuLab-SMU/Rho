@@ -9,20 +9,21 @@ its previously accepted binary by digest.
 | Stage | Observable result | Remaining gate |
 | --- | --- | --- |
 | U1 | npm launcher, Agent-opened connected tab, project shell, capability discovery, retained unavailable views, observation and refresh | Installed candidate checks and user review are separate evidence |
-| U2 | Documents CodeMirror and Tables AG Grid Community entries in Plugins | Backend receipts/live bindings implemented; frontend entries, input recovery and real IME checks pending |
+| U2 | Documents CodeMirror and Tables AG Grid Community entries in Plugins | Entries, input recovery and browser composition/clipboard checks implemented; physical macOS IME candidate-window check pending |
 | U3 | Conditional Dockview layout, protection, scoped selections and actual Claude Code collaboration | Not implemented; no second layout authority or close-on-drag-removal |
 | U4 | Charts, feedback, frozen contexts, explicit replies and format-3 browser recovery | Not implemented; UI protocol v1 and collaboration acceptance remain unfrozen |
 
 U1 is a vertical shell, not the final collaboration loop. No sample inquiries,
-inferred Agent states, fake renderers or embedded chat are included. The five
-existing descriptors remain unavailable as renderers. U1 observes stable view IDs
+inferred Agent states, fake renderers or embedded chat are included. Documents and Tables now have owner renderers. Charts, Media and Objects remain unavailable as renderers. U1 observes stable view IDs
 without changing bindings/layout. Views appear as tabs in one observation-only
 Dockview group; structured group geometry is U3. No close/drag control pretends to
 persist transactions.
 
 The [U2 backend handoff](U2-BACKEND-HANDOFF.md) supplies identified document
-mutations and live bindings. The frontend team provides all new UI and input
-handling before integration; browser grants retain the U1 ceiling.
+mutations and live bindings. U2 integrates the frontend team’s confirmed Paper design and existing entries.
+The browser ceiling now admits identified document edits, own undo, per-change
+revert/history, bounded table pages and explicit shared selections. Saves remain
+external Agent work; the page has no save state or write timer.
 
 The visual reference is Paper's
 [Rho experience V0.1](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-9-0):
@@ -98,7 +99,7 @@ code is redeemed. Bearer tokens never appear in URLs.
 The fragment code is visible for a moment in the opener's process arguments.
 Another local process that reads it first can redeem it. The intended tab then
 shows "already used", so the loss is visible. The code works once and expires in
-five minutes. A redeemed browser token can only reach the U1 methods.
+five minutes. A redeemed browser token can only reach the reviewed U1/U2 method ceiling.
 
 Credentials are stored only in this origin's tab `sessionStorage`: no credential
 cookies, localStorage, static secrets or request-body diagnostics.
@@ -115,9 +116,12 @@ cookies, localStorage, static secrets or request-body diagnostics.
 
 U1 permits protocol/Skills discovery, project list/open/create, capabilities,
 snapshot/events, composition reads, document reads and bounded resource reads.
-It excludes `session.grant`, capability reconfiguration, document mutations,
-native actions, installation and archive writes. Later stages must explicitly
-extend this reviewed ceiling after implementing their conditions.
+U2 adds `document.edit`, `document.undoOwn`, `document.revert`,
+`document.history`, `document.change.read`, `data.page` and selection read/set.
+Browser mutations require stable change identities and version conditions.
+`session.grant`, document open/save/abandon/global undo, composition writes, native
+actions, installation and archive writes remain excluded. Existing U1 sessions
+retain their original narrower grants; pair a new tab for U2 access.
 
 Static routes serve only HTML and named build assets, not arbitrary project files.
 Responses enforce no-store, no-referrer, same-origin resource/opener policies and
@@ -134,9 +138,13 @@ to 16 MiB each; missing builds have a readable 503.
 | Session lifetime | `browser.sessionTtlMs` / 43200000 | Deny requests/end observation; retain owner state |
 | SSE | Existing service/observation limits | Resnapshot; stop after bounded retries |
 
-Set browser budgets under `browser` in the existing `--limits` JSON. U1 mounts no
-heavy functional views. U2-U4 still need the eight-heavy-view limit, document-byte
-budget for unconfirmed input, and 200-row blocks/five-block cache without input loss.
+Set browser budgets under `browser` in the existing `--limits` JSON. U2 mounts
+at most eight heavy views per layout (lower with build setting
+`VITE_RHO_MAX_HEAVY_VIEWS`); extra references show a limit state, preserving
+existing views and input. Unconfirmed document text uses the smaller of the
+owner’s `documents.maxBufferBytes` and 1 MiB. Over-budget editor transactions are
+refused before replacing earlier input. Tables request 200 rows per block and
+cache at most five blocks.
 
 ## SDK and contribution draft
 
@@ -144,7 +152,8 @@ budget for unconfirmed input, and 200-row blocks/five-block cache without input 
 U1 methods/snapshots, with no Node, DOM or React imports. Fetch/abort primitives
 come from the runtime; importing the SDK reads no browser storage. The shell owns
 sessionStorage; the separate Node client retains filesystem intent functions.
-It also types Documents methods for U2; these do not expand browser grants.
+Its U2 methods share the service’s authenticated caller and owner conditions;
+SDK type availability does not grant an operation.
 
 `BrowserClient.observe(projectId)` reuses `ObservationClient` and its bounded Fetch
 SSE parser. Snapshot on connection, reconnect, invalidation or gap; events are
@@ -160,7 +169,12 @@ client and active state. React is a type-only dependency of this optional entry;
 the headless root imports none. This is not protocol v1. U2 consumers must refine
 it before Charts, Annotations and Agent extend it in U4.
 
-`web/registry.ts` is a trusted build-time registry, empty in U1. Descriptions cannot
+`web/registry.tsx` uses the finite `ui-entries.json` build selection, with
+Documents and Tables selected in the full build. `RHO_UI_PLUGINS` selects a
+reduced frontend; `pack:local` derives it from the selected backend owners.
+Unselected owner entry modules and their UI libraries are omitted from assets.
+`dist/web/composition.json` records the selected package/component identities,
+compiled entry digests, dependency versions/licenses and asset digest inventory. Descriptions cannot
 provide executable code/module URLs. A missing entry or required operation produces
 an inspectable unavailable view. Actual functionality belongs in Plugins optional
 `./ui` exports; Rho owns mounting, theme, layout, focus and routing only.
@@ -256,6 +270,37 @@ Inspect screenshots in addition to overflow assertions.
 
 The driver is not a production dependency. Select explicit paths with
 `RHO_UI_PLAYWRIGHT_MODULE`, `RHO_UI_CHROME`, `RHO_UI_EVIDENCE` and optionally
-`RHO_UI_PLUGINS`. This host has Chrome 155, not the planned 154. Native editor
-IME/clipboard and actual browser/human/Agent closure remain U2-U4 gates. A U1 pass
+`RHO_UI_PLUGINS`. This host has Chrome 155, not the planned 154. Physical macOS IME input and actual browser/human/Agent closure remain separate gates;
+U2’s Chrome composition and clipboard checks are recorded below. A U1 pass
 is not UI collaboration, overall product or signed-release acceptance.
+
+## U2 editor and table consumer
+
+`npm run test:ui:u2` builds and runs the Documents/Tables browser scenario;
+`npm run acceptance:ui:u2` runs the same check against existing assets. It accepts
+the same driver/package/evidence environment settings as U1.
+
+Live editor views share one browser adapter per document and client. Only the
+paired session’s principal ID labels edits “You”; a document or receipt author
+never changes that identity. Inputs are serialized with their original
+`changeId`, conditions and group. Lost replies retry that exact input. IME
+composition neither submits intermediate text nor applies remote edits. A stale
+input keeps a copy, pauses automatic submission and offers Copy/Dismiss; the copy
+is local to this tab, not persisted through browser closure. Documents owns undo;
+keyboard redo is disabled. The tab-bar switch controls Agent line marks; Changes
+provides exact Show before and individual Agent-change Revert.
+
+Exact version bindings use retained owner snapshots separately from the live
+adapter. Already read exact text stays pinned. A fresh read outside retained
+history shows unavailable and keeps the original reference; it never substitutes
+current text. Pinned views have no Changes panel.
+
+Tables use the Infinite Row Model with one sort and one typed filter. Removing a
+filter resets the exact row count. Key/namespace plus the original resource
+version establish identity; selection uses an explicit shared channel named by
+view ID. Unkeyed tables remain readable with selection unavailable. “empty” is
+italic and distinct from literal strings such as “NA”.
+
+See [U2 acceptance](U2-UI-ACCEPTANCE.md) for executed source/installed checks and
+remaining boundaries. U3/U4, actual-model UI collaboration and physical macOS IME
+input remain separate from these browser composition tests.

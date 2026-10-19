@@ -31,7 +31,7 @@ CoreBridge.prototype.call = function(...args) { if (args[1] === 'submit') append
 let child, browser, context, page, url, port = 0;
 const errors = [];
 const run = promisify(execFile);
-const report = { scenario: 'u1-browser-shell', passed: false, node: process.version, npmInstall: process.env.RHO_UI_INSTALLED === '1' ? 'outside-checkouts' : 'source-build', browser: '', counts: { hostStarts: 0, nativeDispatches: 0 }, widths: [], checks: [], limits: ['U1 only; no owner renderer', 'Chrome 154 not installed on this host', 'Native editor IME/clipboard and U2-U4 are not accepted'], assets: JSON.parse(await fs.readFile(path.join(packageRoot, 'dist/web/composition.json'), 'utf8')) };
+const report = { scenario: 'u1-browser-shell', passed: false, node: process.version, npmInstall: process.env.RHO_UI_INSTALLED === '1' ? 'outside-checkouts' : 'source-build', browser: '', counts: { hostStarts: 0, nativeDispatches: 0 }, widths: [], checks: [], limits: ['U1 shell regression; owner input is checked by acceptance:ui:u2', 'Chrome 154 not installed on this host', 'Native editor IME/clipboard and U2-U4 are not accepted'], assets: JSON.parse(await fs.readFile(path.join(packageRoot, 'dist/web/composition.json'), 'utf8')) };
 async function start() {
   child = spawn(process.execPath, ['--import', instrument, path.join(packageRoot, 'dist/cli.js'), '--root', root, '--state-dir', state, '--port', String(port), '--core', native.coreBinary, '--rscript', native.rscript, ...(process.env.RHO_UI_PLUGINS ? ['--plugins', process.env.RHO_UI_PLUGINS] : [])], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, RHO_CORE_BINARY: native.coreBinary } });
   child.stderr.resume();
@@ -197,24 +197,28 @@ try {
   const [p] = await admin.call('project.list', {});
   const d = await admin.call('document.open', { projectId: p.id, path: 'notes 中文.md' });
   const edited = await admin.call('document.edit', { projectId: p.id, documentId: d.id, expectedVersion: d.version, edits: [{ from: 0, to: 0, insert: 'Shared notes 中文 🧬\n' }], undoGroup: 'initial' });
-  let composition = await admin.call('composition.apply', { projectId: p.id, compositionId: 'workspace', expectedVersion: 0, changeId: 'initial', operations: [{ op: 'replace', rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: ['notes'] }, { id: 'notes', kind: 'view', component: 'rho.editor', version: '0.2.0', props: { title: 'Shared notes' }, bindings: { document: { documentId: d.id, version: edited.version } } }] }] });
+  // Charts' scatter view is not in this build, so it explains itself; the editor views render.
+  const csv = 'id,x,y\n001,1,2\n002,3,4\n';
+  await fs.writeFile(path.join(p.root, 'trend.csv'), csv);
+  const table = await admin.call('resource.register', { projectId: p.id, expectedDigest: createHash('sha256').update(csv).digest('hex'), declaration: { path: 'trend.csv', kind: 'table', format: { encoding: 'csv', columns: [{ name: 'id', type: 'string', nullValues: [] }, { name: 'x', type: 'number', nullValues: [] }, { name: 'y', type: 'number', nullValues: [] }], key: { column: 'id', namespace: 'trend' } } } });
+  let composition = await admin.call('composition.apply', { projectId: p.id, compositionId: 'workspace', expectedVersion: 0, changeId: 'initial', operations: [{ op: 'replace', rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: ['notes'] }, { id: 'notes', kind: 'view', component: 'rho.scatter', version: '0.2.0', props: { title: 'Shared notes', x: 'x', y: 'y' }, bindings: { data: { id: table.id, version: table.version } } }] }] });
   // A layout saved elsewhere appears in the overview without moving the reader; choosing it opens it.
   await page.locator('#overview-layouts').waitFor();
-  assert.deepEqual(await page.locator('main h2').allTextContents(), ['Layouts 1', 'Documents 1', 'Files 0']);
+  assert.deepEqual(await page.locator('main h2').allTextContents(), ['Layouts 1', 'Documents 1', 'Files 1']);
   assert.equal(await sidebar.getByRole('button', { name: 'Overview', exact: true }).getAttribute('aria-current'), 'page');
   await sidebar.getByRole('button', { name: /^workspace/ }).click();
   await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).waitFor();
   // The view explains itself in the reader's terms; identifiers wait behind View reference.
   assert.deepEqual(await page.locator('.unavailable-facts dt').allTextContents(), ['Shows', 'Needs', 'In this build']);
-  assert.match(await page.locator('.unavailable-facts dd').first().textContent(), /^notes 中文\.md · version \d+ · unsaved changes$/);
-  assert.equal(await page.getByText(d.id, { exact: false }).isVisible(), false);
+  assert.equal(await page.locator('.unavailable-facts dd').first().textContent(), 'trend.csv · table');
+  assert.equal(await page.getByText(table.id, { exact: false }).isVisible(), false);
   assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).getAttribute('aria-current'), 'page');
   assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).locator('.nav-row-count').textContent(), '1 view');
   await page.locator('.retained-tab').filter({ hasText: 'Shared notes' }).waitFor();
   await noJson();
   await widths('layout-unavailable', noJson);
   await page.getByText('View reference', { exact: true }).click();
-  await page.getByText(d.id, { exact: false }).waitFor();
+  await page.getByText(table.id, { exact: false }).waitFor();
   await page.reload();
   await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).waitFor();
   report.checks.push('unicode-project-create-real-catalog-unavailable-view-refresh');
@@ -279,7 +283,8 @@ try {
       assert.equal(await page.locator('.app-rail').isVisible(), false);
       assert.equal(await sidebar.count(), 0);
       assert.equal(await page.locator('header').evaluate(element => element.getBoundingClientRect().height), 48);
-      assert.deepEqual(await page.locator('header .location-stack > span').allTextContents(), ['workspace', 'notes 中文 · Read-only']);
+      // An editing grant has no Read-only chip; the access copy says what this tab can do.
+      assert.deepEqual(await page.locator('header .location-stack > span').allTextContents(), ['workspace', 'notes 中文']);
       assert.equal(await page.getByRole('button', { name: /Commands/ }).isVisible(), false);
       for (const size of await heights(page.locator('header button:visible'))) assert.ok(size >= 36);
       const opener = await page.getByRole('button', { name: 'Open navigation', exact: true }).elementHandle();
@@ -310,7 +315,7 @@ try {
       await opener.click();
       await drawer.getByRole('button', { name: 'Overview', exact: true }).click();
       await drawer.waitFor({ state: 'hidden' });
-      assert.deepEqual(await page.locator('header .location-stack > span').allTextContents(), ['notes 中文', 'Overview · Read-only']);
+      assert.deepEqual(await page.locator('header .location-stack > span').allTextContents(), ['notes 中文', 'Overview']);
       await opener.click();
       await drawer.getByRole('button', { name: /^workspace/ }).click();
       await drawer.waitFor({ state: 'hidden' });
@@ -318,7 +323,8 @@ try {
       report.checks.push('narrow-no-rail-or-sidebar-toolbar-48-drawer-traps-focus-and-returns-it');
     }
     if (width === 1600) {
-      assert.deepEqual(await page.locator('header .location > span').allTextContents(), ['notes 中文', '/', 'workspace', 'Read-only']);
+      assert.deepEqual(await page.locator('header .location > span').allTextContents(), ['notes 中文', '/', 'workspace']);
+      assert.equal(await page.locator('header .read-only').count(), 0);
       assert.equal(await page.getByRole('button', { name: 'Projects', exact: true }).getAttribute('aria-current'), 'page');
     }
     await page.screenshot({ path: path.join(directory, 'workspace-' + width + '.png'), fullPage: true });
@@ -367,6 +373,13 @@ try {
   await page.locator('.retained-tab').filter({ hasText: 'Second view' }).waitFor();
   assert.equal(await sidebar.getByRole('button', { name: /^workspace/ }).locator('.nav-row-count').textContent(), '2 views');
   assert.equal(await viewReference.evaluate(element => element === document.activeElement), true);
+  // The editor view now renders. An exact-version binding shows that version and cannot be edited.
+  await page.locator('.retained-tab').filter({ hasText: 'Second view' }).click();
+  await page.locator('.rho-doc .cm-content').filter({ hasText: 'Shared notes 中文 🧬' }).waitFor();
+  assert.equal(await page.locator('.rho-doc .cm-content').getAttribute('contenteditable'), 'false');
+  assert.match(await page.locator('.rho-doc-exact').textContent(), /^Showing version \d+\. This view is pinned/);
+  await page.locator('.retained-tab').filter({ hasText: 'Shared notes' }).click();
+  report.checks.push('editor-view-renders-exact-version-read-only');
   report.checks.push('stable-id-remote-view-update-preserves-command-focus');
   // Below 768 the views are tabs; arrows, Home and End move between them and show the view.
   await page.setViewportSize({ width: 390, height: 844 });
@@ -434,7 +447,7 @@ try {
   page.off('request', record);
   // Reconnect only reads again: every request it made is a read.
   assert.ok(requests.length > 0);
-  for (const method of requests) assert.match(method, /^(project\.list|observation\.[a-z]+|events|capability\.list|composition\.read)$/);
+  for (const method of requests) assert.match(method, /^(project\.list|observation\.[a-z]+|events|capability\.list|composition\.read|document\.read)$/);
   report.reconnectReads = [...new Set(requests)];
   report.checks.push('offline-notice-keeps-what-was-read-reconnect-reads-only');
   report.checks.push('offline-retains-last-snapshot-explicit-resnapshot-status-up-to-date-offline-connecting');

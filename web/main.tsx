@@ -59,6 +59,8 @@ function App() {
   // About from a view opens that plugin and offers the way back to the project.
   const [pluginId, setPluginId] = useState(''), [pluginReturn, setPluginReturn] = useState(false);
   const [context, setContext] = useState(false), [navigation, setNavigation] = useState(true);
+  // A view may place its own section (for example Changes) at the top of the context panel.
+  const [contextSlot, setContextSlot] = useState<HTMLDivElement | null>(null);
   const [reconnect, setReconnect] = useState(0), [commands, setCommands] = useState(false), [confirming, setConfirming] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null), commandTrigger = useRef<HTMLButtonElement>(null);
   const confirmDialog = useRef<HTMLDialogElement>(null), disconnectTrigger = useRef<HTMLButtonElement>(null), confirmReturn = useRef<HTMLElement | null>(null);
@@ -210,7 +212,11 @@ function App() {
     { label: 'Connection', commands: [{ id: 'read', label: phase === 'offline' ? 'Reconnect' : 'Refresh', icon: 'refresh', meta: 'Reads again · starts nothing', run: reread }] },
     { label: 'This tab', commands: [{ id: 'disconnect', label: 'Disconnect this tab', icon: 'unlink', danger: true, run: () => askDisconnect(commandReturn()) }] },
   ];
+  // Session grants decide the access copy; older read-only sessions keep theirs.
+  const edits = connection.methods.includes('document.edit');
+  const access = edits ? 'Open and watch projects, edit open documents and pick table rows. Saving and runs stay with Claude Code.' : 'Open, create and watch projects. No edits or runs.';
   const contextSections = <>
+    <div ref={setContextSlot} className="context-slot" />
     <section className="context-section">
       <h3 className="caption">Connection</h3>
       <div className="connection-line"><span className={'status-dot ' + phase} /><strong>{phase === 'live' ? 'Up to date' : phase === 'offline' ? 'Offline' + (offlineAt ? ' since ' + clock(offlineAt) : '') : 'Connecting'}</strong><button className="small-button" onClick={reread}>{phase === 'offline' ? 'Reconnect' : 'Refresh'}</button></div>
@@ -218,7 +224,7 @@ function App() {
     </section>
     <section className="context-section">
       <h3 className="caption">This tab</h3>
-      <dl><dt>Folder</dt><dd>{connection.root ? (connection.rootLabel ?? connection.root) + ' and below' : 'Set by whoever runs Rho'}</dd><dt>Can</dt><dd>Open, create and watch projects. No edits or runs.</dd><dt>Expires</dt><dd>{until(connection.expiresAt)}</dd></dl>
+      <dl><dt>Folder</dt><dd>{connection.root ? (connection.rootLabel ?? connection.root) + ' and below' : 'Set by whoever runs Rho'}</dd><dt>Can</dt><dd>{access}</dd><dt>Expires</dt><dd>{until(connection.expiresAt)}</dd></dl>
       <button ref={disconnectTrigger} className="danger-link" onClick={() => askDisconnect(disconnectTrigger.current)}>Disconnect this tab</button>
     </section>
     <section className="context-section">
@@ -234,12 +240,12 @@ function App() {
       {narrow ? <div className="location location-stack">
         <span className="location-name">{screen === 'project' && project ? composition?.compositionId ?? name(project) : screen === 'plugins' ? pluginTitle || 'Plugins' : 'Home'}</span>
         {pluginTitle && <span className="location-detail">Plugins</span>}
-        {screen === 'project' && project && <span className="location-detail">{composition ? name(project) : 'Overview'} · <span title="This tab can open and watch projects. It can't edit or run anything.">Read-only</span></span>}
+        {screen === 'project' && project && <span className="location-detail">{composition ? name(project) : 'Overview'}{!edits && <> · <span title="This tab can open and watch projects. It can't edit or run anything.">Read-only</span></>}</span>}
       </div> : <div className="location">
         {screen === 'project' && project ? <>
           <span className="location-name">{name(project)}</span>
           {composition && screen === 'project' && <> <span className="location-separator" aria-hidden="true">/</span> <span className="location-layout">{composition.compositionId}</span></>}
-          {' '}<span className="read-only" title="This tab can open and watch projects. It can't edit or run anything."><Icon name="lock" size={12} stroke={2} /><span className="read-only-label">Read-only</span></span>
+          {!edits && <>{' '}<span className="read-only" title="This tab can open and watch projects. It can't edit or run anything."><Icon name="lock" size={12} stroke={2} /><span className="read-only-label">Read-only</span></span></>}
         </> : pluginTitle ? <>
           <button className="location-link" onClick={() => choosePlugin('')}>Plugins</button>
           <span className="location-separator" aria-hidden="true"><Icon name="chevron" size={12} stroke={1.6} /></span>
@@ -274,7 +280,7 @@ function App() {
           : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div>
           : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin}
             back={pluginReturn ? { label: 'Back to ' + name(project), run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
-          : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} onAbout={about} /></Suspense>
+          : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} /></Suspense>
           : <ProjectOverview project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} />}
       </main>
       {context && !narrow && <aside id="project-context" className="context-drawer" aria-label="Context and access">

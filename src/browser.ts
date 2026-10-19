@@ -1,7 +1,7 @@
 import { ObservationClient, httpObservation, type observationLimits } from './observation.js';
 
 // This entry deliberately imports neither Node, the DOM nor optional owners.
-export interface BrowserConnection { url: string; token: string; expiresAt: string; methods: string[]; root?: string; rootLabel?: string }
+export interface BrowserConnection { url: string; token: string; expiresAt: string; methods: string[]; principalId?: string; root?: string; rootLabel?: string }
 export interface ProjectSummary { id: string; root: string; openedAt: string }
 import type { EntryPresentation, PluginPresentation } from '@rho-workspace/plugin-contracts';
 export type { EntryPresentation, PluginPresentation } from '@rho-workspace/plugin-contracts';
@@ -71,7 +71,14 @@ export interface BrowserApi {
   'document.change.read': { input: { projectId: string; documentId: string; targetChangeId: string }; output: { documentId: string; change: DocumentHistory['entries'][number]; before: { version: number; digest: string; content: string }; after: { version: number; digest: string; content: string } } };
   'document.save': { input: DocumentWrite & { expectedDiskDigest: string | null }; output: DocumentBuffer };
   'document.abandonSave': { input: DocumentWrite & { pendingRequestDigest: string }; output: DocumentBuffer };
+  'data.page': { input: { projectId: string; resource: { id: string; version: string }; offset: number; limit: number; sort?: { column: string; direction: 'asc' | 'desc' }; filter?: { column: string; op: 'eq' | 'lt' | 'gt' | 'isNull'; value?: string | number | boolean | null } }; output: TablePage };
+  'interaction.selection.read': { input: { projectId: string; scope: SelectionScope }; output: SelectionChannel };
+  'interaction.selection.set': { input: { projectId: string; scope: SelectionScope; expectedVersion: number; changeId: string; selection: SelectionValue }; output: SelectionChannel };
 }
+export interface TablePage { resource: ResourceSummary; columns: { name: string; type: 'string' | 'number' | 'boolean'; nullValues: string[] }[]; total: number; filtered: number; offset: number; nextOffset: number; more: boolean; rows: Record<string, string | number | boolean | null>[]; entityKey: string | null; namespace: string | null }
+export type SelectionScope = { kind: 'caller' } | { kind: 'view' | 'shared'; id: string };
+export type SelectionValue = { document: { documentId: string; version: number; from: number; to: number } } | { resource: { id: string; version: string }; entities: string[] } | null;
+export interface SelectionChannel { key: string; scope: SelectionScope; version: number; selection: SelectionValue; author?: string }
 export interface ApiFailure { kind: string; message: string; details?: Record<string, unknown>; continuation?: string }
 export class BrowserApiError extends Error {
   readonly fatal: boolean;

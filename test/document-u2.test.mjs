@@ -28,7 +28,7 @@ async function fixture(t) {
 test('typed Fetch document calls preserve original requests after lost HTTP replies and concurrent retries', async t => {
   const f = await fixture(t);
   // Exercise SDK transport with an operator test credential. Shipped browser
-  // grants remain read-only until the frontend input/recovery adapter is ready.
+  // grants are separately tested below against the U2 ceiling.
   let lose = '';
   const sdk = new BrowserClient({ url: f.s.url, token: f.s.adminToken }, async (...args) => {
     const result = await fetch(...args);
@@ -52,11 +52,10 @@ test('typed Fetch document calls preserve original requests after lost HTTP repl
   const grant = await BrowserClient.pair(f.s.url, pair.code, (url, init) => fetch(url, { ...init, headers: { ...init.headers, origin: f.s.url } }));
   const browser = new BrowserClient(grant);
   assert.equal((await browser.call('document.read', { projectId: f.p.id, documentId: d.id })).revision, 3);
-  await assert.rejects(browser.call('document.edit', edit), e => e.error.kind === 'unauthorized');
-  // Test the future dispatch guard with an intentionally injected test grant;
-  // BrowserAccess itself still refuses to issue such a grant.
+  // The U2 grant edits only with an identity; saving and global undo stay unavailable.
+  for (const method of ['document.save', 'document.abandonSave', 'document.undo']) await assert.rejects(browser.call(method, undo), e => e.error.kind === 'unauthorized', method);
   const principal = f.s.state.principals.find(p => p.kind === 'browser');
-  principal.methods.push('document.edit');
+  assert.equal(grant.principalId, principal.id);
   const guarded = await f.call('document.open', { path: 'guarded.md' });
   const guardedEdit = { projectId: f.p.id, documentId: guarded.id, expectedVersion: 1, undoGroup: 'guard', edits: [{ from: 0, to: 0, insert: 'guarded' }] };
   await assert.rejects(browser.call('document.edit', guardedEdit), e => e.error.kind === 'invalid');

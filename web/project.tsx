@@ -1,7 +1,7 @@
 import type { CapabilityCatalog, CompositionSummary, ProjectSummary, ResourceSummary, WorkspaceSnapshot } from '../src/browser.js';
 import { projectName, when } from './home.js';
 import { Icon, type IconName } from './icons.js';
-import { registry } from './registry.js';
+import { renders } from './rendered.js';
 
 export type Section = 'documents' | 'files';
 export function size(bytes: number) {
@@ -18,7 +18,7 @@ export function availability(resource: ResourceSummary) {
 function views(composition: CompositionSummary) { return composition.views.length + (composition.views.length === 1 ? ' view' : ' views'); }
 // A document viewer exists only when this build renders a component that binds documents.
 function documentViewer(catalog: CapabilityCatalog) {
-  const viewer = catalog.components.find(c => Object.values(c.bindings).includes('document') && registry.entries.some(e => e.component === c.id && e.componentVersion === c.version));
+  const viewer = catalog.components.find(c => Object.values(c.bindings).includes('document') && renders(c.id, c.version));
   return viewer ? viewer.presentation?.displayName ?? viewer.id : 'Not in this build';
 }
 

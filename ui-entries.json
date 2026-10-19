@@ -1,0 +1,4 @@
+[
+  { "plugin": "documents", "package": "@rho-workspace/plugin-documents", "entry": "./ui", "component": "rho.editor", "version": "0.2.0", "source": "web/entries/documents.tsx" },
+  { "plugin": "tables", "package": "@rho-workspace/plugin-tables", "entry": "./ui", "component": "rho.table", "version": "0.2.0", "source": "web/entries/tables.tsx" }
+]

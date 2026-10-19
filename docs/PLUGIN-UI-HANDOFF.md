@@ -1,15 +1,15 @@
 # Plugin interfaces and browser UI handoff
 
 The [U2 Documents handoff](U2-BACKEND-HANDOFF.md) adds mutation identities,
-revision/receipt retention, pending saves and live-document bindings. Frontend
-entries and browser write grants remain pending.
+revision/receipt retention, pending saves and live-document bindings. U2 now integrates the owner Documents and Tables `./ui` entries with scoped
+browser edit/history/page/selection grants; see [U2 UI acceptance](U2-UI-ACCEPTANCE.md).
 
 ## U1 browser entry
 
 [Browser implementation](UI.md) now supplies scoped pairing, same-origin assets,
 the typed `./browser` Fetch SDK, bounded snapshot/SSE reconciliation and the
 observation-only shell based on Paper's Rho experience V0.1. `./ui-contract` is
-`0.1-draft`; no functional renderer is selected. U2-U4 remain pending. The current
+`0.1-draft`; Documents and Tables now provide the U2 renderers. U3/U4 remain pending. The current
 nine-owner headless extension is in [Collaboration](COLLABORATION.md): conditional
 composition transactions/undo, protection, caller/view/shared selection,
 Annotations feedback/replies, frozen Agent contexts and format-3 archives. The
@@ -17,9 +17,9 @@ inventory below retains the original eight-owner component boundary and calls ou
 the additive contracts; it does not supersede the versioned protocol.
 
 The historical component baseline has **eight capability packages 0.4.0**, one action
-(`r.execute` 0.2.0) and five component descriptors (0.2.0). All five descriptors
-report `ui:"unavailable"`. This is the headless owner inventory; the shell does
-not supply a replacement functional implementation.
+(`r.execute` 0.2.0) and five component descriptors (0.2.0). Documents and Tables now report `ui:"./ui"`; the other three remain unavailable.
+These are owner entries, independently selected for a browser build; the shell
+does not supply a replacement functional implementation.
 
 The provider-owned [Node API reference](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PUBLIC-INTERFACES.md)
 lists every package entry, export, service port and capability limit. The selected
@@ -164,7 +164,8 @@ composition `availability`; registration does not imply renderability.
 ### Five registered entries
 
 All entries below have version **0.2.0**, require exactly the listed bindings and
-report UI unavailable. Required props are closed schemas; extra props fail.
+retain their component contracts. Documents and Tables have optional UI entries;
+the other three remain unavailable. Required props are closed schemas; extra props fail.
 Rho validates the selected entry/version, props and binding roles before saving.
 
 | Component / owner package | Required props | Binding |
@@ -223,14 +224,14 @@ owned Host. Keep `delivery`, `execution`, `native`, `integrity`, `domain` and
 
 | Area | Current limit / remaining capability |
 | --- | --- |
-| Browser transport | Typed U1 SDK and bounded SSE reconciliation exist; durable write intents remain U2-U4 work |
+| Browser transport | Typed U2 SDK, bounded SSE and identified document retries exist; durable native intents remain separate |
 | UI bootstrap | Same-origin static build and scoped one-time pairing exist; no separate Vite-origin CORS support |
-| UI plugin runtime | U1 shell/read-only Dockview tabs exist; five functional renderers and conditional geometry adapter remain pending; no marketplace/dynamic loader |
+| UI plugin runtime | Documents/Tables render in the shell; three other renderers and conditional geometry remain pending; no marketplace/dynamic loader |
 | Editing and files | Backend edit/undo/save works; redo, file watcher, language service, project file tree and upload/rename/delete routes are absent |
 | R/environment | Batch Rscript/exported objects only; no persistent interpreter/live variables/memory recovery, R installer or lockfile environment provisioning |
 | Data and visualization | Bounded whole-resource parsing, single scatter projection and equal-string comparison; no table-cell write, general query/mapping engine, other chart types, chart rendering/export, image/PDF decoding or annotations UI |
 | Agent | Scoped MCP and explicit context fetch work; no embedded chat, proactive external-chat delivery, hosted model loop or conversation synchronization |
-| Product acceptance | U1 runner/evidence is separately scoped; native editor input, full accessibility/performance and U2-U4 closure remain pending |
+| Product acceptance | U1 and U2 runners/evidence are separately scoped; physical IME, full accessibility/performance and U3/U4 closure remain pending |
 
 These are capability limits, not additions to this task. Fixed scientific
 workflows stay in ordinary projects/examples and external checkers. They must not

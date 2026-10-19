@@ -44,7 +44,10 @@ test('one-use pairing grants a narrowed root, never operator/native/session auth
     for (const path of ['../outside', '..', '.rho', 'project 中文/.rho']) await assert.rejects(browser.call('project.open', { path }), e => e.error.kind === 'scope');
     await assert.rejects(browser.call('observation.snapshot', { projectId: outside.id }), e => e.error.kind === 'scope');
     const direct = new RhoClient({ url: f.service.url, token: grant.token });
-    for (const method of ['session.grant', 'session.browser.pair', 'session.browser.revoke', 'action.submit', 'capability.configure', 'document.edit']) await assert.rejects(direct.call(method, {}), e => e.error.kind === 'unauthorized');
+    // U2 grants identity-bearing edits, never saving, global undo or execution.
+    assert.ok(grant.principalId.startsWith('browser:'));
+    for (const method of ['document.edit', 'document.undoOwn', 'document.revert', 'data.page', 'interaction.selection.set']) assert.ok(grant.methods.includes(method), method);
+    for (const method of ['session.grant', 'session.browser.pair', 'session.browser.revoke', 'action.submit', 'capability.configure', 'document.save', 'document.abandonSave', 'document.undo', 'document.open', 'composition.put', 'view.close']) await assert.rejects(direct.call(method, {}), e => e.error.kind === 'unauthorized', method);
     assert.equal((await browser.call('observation.snapshot', { projectId: p.id })).host.exitCode, 3);
     assert.equal(f.service.bridge.owned.size, 0);
     await assert.rejects(fs.stat(path.join(p.root, '.rho/host.sock')), { code: 'ENOENT' });

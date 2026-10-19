@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CapabilityCatalog, CapabilityPlugin, EntryPresentation } from '../src/browser.js';
 import { pluginEntries, pluginGroups, pluginPresentation } from '../src/plugin-presentation.js';
 import { Icon } from './icons.js';
+import { renders } from './rendered.js';
 
 function Markers({ presentation }: { presentation?: EntryPresentation }) {
   return <span className="plugin-markers">
@@ -126,7 +127,7 @@ export function PluginCatalog({ catalog, project, pluginId, onSelect: setPluginI
         <h2 id="plugin-views-title">Views <span className="plugin-count">{views.length}</span></h2>
         <ul>{views.map(view => <li key={view.id}>
           <span className="plugin-entry-symbol" aria-hidden="true"><Icon name="layout" size={16} stroke={1.7} /></span>
-          <span className="plugin-entry-copy"><span className="plugin-entry-name">{view.displayName}</span>{view.description && <span className="plugin-entry-description">{view.description}</span>}</span>{view.ui !== 'available' && <span className="plugin-view-state">Not in this build yet</span>}
+          <span className="plugin-entry-copy"><span className="plugin-entry-name">{view.displayName}</span>{view.description && <span className="plugin-entry-description">{view.description}</span>}</span>{!renders(view.id, view.version) && <span className="plugin-view-state">Not in this build yet</span>}
         </li>)}</ul>
         <p className="plugin-view-note">{p.viewNote}</p>
       </section>

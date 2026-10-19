@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type KeyboardEvent } from 'react';
+import { createContext, useContext, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { DockviewReact, themeLight, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps, type IDockviewPanelHeaderProps } from 'dockview-react';
 import type { BrowserClient, CompositionSummary, ViewDescription, WorkspaceSnapshot } from '../src/browser.js';
 import { pluginPresentation } from '../src/plugin-presentation.js';
@@ -7,7 +7,7 @@ import { resourceIcon } from './project.js';
 import { registry } from './registry.js';
 import 'dockview/dist/styles/dockview.css';
 
-interface ViewParams { view: ViewDescription; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void }
+interface ViewParams { view: ViewDescription; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; renderAllowed?: boolean; headerTarget?: HTMLElement | null }
 type Binding = { documentId?: string; id?: string; version?: string | number };
 const title = (view: ViewDescription) => String(view.props.title ?? view.component);
 function bindings(view: ViewDescription) { return Object.entries(view.bindings ?? {}) as [string, Binding][]; }
@@ -46,7 +46,8 @@ function OwnerView({ params, active }: { params: ViewParams; active: boolean }) 
   const entry = registry.entries.find(e => e.component === view.component && e.componentVersion === view.version);
   const owner = snapshot.catalog.components.find(c => c.id === view.component && c.version === view.version);
   const available = entry && owner && entry.requiredOperations.every(method => snapshot.catalog.operations.some(o => o.method === method && o.state === 'available' && o.authorized));
-  if (available) return <entry.View viewId={view.id} view={view} projectId={snapshot.project.id} snapshot={snapshot} client={params.client} active={active} />;
+  if (available && params.renderAllowed === false) return <section className="unavailable" role="status"><h2>This layout has reached its view limit</h2><p>Existing views and input are kept. Close another view before opening this one.</p></section>;
+  if (available) return <entry.View viewId={view.id} view={view} projectId={snapshot.project.id} snapshot={snapshot} client={params.client} active={active} contextTarget={params.contextTarget} principalId={params.principalId} headerTarget={params.headerTarget} />;
   const why = explain(view, snapshot);
   return <section className="unavailable" aria-label={title(view)}>
     <span className="unavailable-icon"><Icon name={viewIcon(view, snapshot)} size={22} stroke={1.7} /></span>
@@ -78,8 +79,15 @@ function ViewContent({ params, api }: IDockviewPanelProps<ViewParams>) {
 function Tab({ params }: IDockviewPanelHeaderProps<ViewParams>) {
   return <span className="retained-tab"><Icon name={viewIcon(params.view, params.snapshot)} size={14} stroke={2} />{title(params.view)}</span>;
 }
+const HeaderSlotContext = createContext<(target: HTMLDivElement | null) => void>(() => {});
+function HeaderSlot() { return <div className="owner-header-slot" style={{ display: 'flex', alignItems: 'center', minHeight: 32, flexShrink: 0 }} ref={useContext(HeaderSlotContext)} />; }
 const components = { owner: ViewContent }, tabs = { retained: Tab };
-export function Workspace({ composition, snapshot, client, onAbout }: { composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void }) {
+export function Workspace({ composition, snapshot, client, onAbout, contextTarget, principalId }: { composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string }) {
+  const [headerTarget, setHeaderTarget] = useState<HTMLDivElement | null>(null);
+  const mounted = useRef(new Set<string>());
+  const maxMountedViews = Math.max(1, Math.min(8, Number(import.meta.env.VITE_RHO_MAX_HEAVY_VIEWS) || 8));
+  for (const id of mounted.current) if (!composition.views.some(v => v.id === id)) mounted.current.delete(id);
+  for (const view of composition.views) if (mounted.current.size < maxMountedViews && registry.entries.some(e => e.component === view.component)) mounted.current.add(view.id);
   const [api, setApi] = useState<DockviewApi | null>(null);
   const [active, setActive] = useState(composition.views[0]?.id ?? '');
   const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 767px)').matches);
@@ -93,14 +101,14 @@ export function Workspace({ composition, snapshot, client, onAbout }: { composit
     const current = api;
     for (const panel of current.panels) if (!composition.views.some(v => v.id === panel.id)) current.removePanel(panel);
     for (const view of composition.views) {
-      const panel = current.getPanel(view.id), params = { view, snapshot, client, onAbout };
+      const panel = current.getPanel(view.id), params = { view, snapshot, client, onAbout, contextTarget, principalId, renderAllowed: mounted.current.has(view.id), headerTarget };
       if (panel) { panel.api.updateParameters(params); panel.api.setTitle(title(view)); }
       // New views join the existing group as tabs, in layout order, rather than opening a new group.
       else current.addPanel({ id: view.id, component: 'owner', tabComponent: 'retained', title: title(view), params, inactive: true, ...(current.panels.length ? { position: { referencePanel: current.panels.at(-1)!.id } } : {}) });
     }
     const target = current.getPanel(active) ?? current.panels[0];
     if (!current.activePanel && target) target.api.setActive();
-  }, [composition, snapshot, client, api, narrow]);
+  }, [composition, snapshot, client, api, narrow, contextTarget, principalId, headerTarget]);
   useEffect(() => {
     if (!api || narrow) return;
     const listener = api.onDidActivePanelChange(({ panel }) => { if (panel) setActive(panel.id); });
@@ -117,14 +125,15 @@ export function Workspace({ composition, snapshot, client, onAbout }: { composit
     event.preventDefault(); setActive(composition.views[next].id);
     (event.currentTarget.children[next] as HTMLElement).focus();
   }
-  return <section className="workspace" aria-label="Layout">
+  return <HeaderSlotContext.Provider value={setHeaderTarget}><section className="workspace" aria-label="Layout">
     {!composition.views.length ? <div className="empty"><h2>No views in this layout</h2><p>The saved layout is empty. No view is created automatically.</p></div> :
       narrow ? <>
         <div className="view-tabs" role="tablist" aria-label="Views" onKeyDown={moveTab}>
           {composition.views.map((v, index) => <button key={v.id} id={tabId + index} role="tab" aria-selected={v === selected} aria-controls={tabId + 'panel'} tabIndex={v === selected ? 0 : -1} onClick={() => setActive(v.id)}>{title(v)}</button>)}
         </div>
-        <div id={tabId + 'panel'} className="mobile-view" role="tabpanel" aria-labelledby={tabId + composition.views.indexOf(selected!)}>{selected && <OwnerView params={{ view: selected, snapshot, client, onAbout }} active />}</div>
+        <HeaderSlot />
+        <div id={tabId + 'panel'} className="mobile-view" role="tabpanel" aria-labelledby={tabId + composition.views.indexOf(selected!)}>{selected && <OwnerView params={{ view: selected, snapshot, client, onAbout, contextTarget, principalId, renderAllowed: true, headerTarget }} active />}</div>
       </> :
-        <div className="dock-container"><DockviewReact theme={themeLight} className="rho-dock" components={components} tabComponents={tabs} onReady={onReady} disableDnd disableFloatingGroups /></div>}
-  </section>;
+        <div className="dock-container"><DockviewReact rightHeaderActionsComponent={HeaderSlot} theme={themeLight} className="rho-dock" components={components} tabComponents={tabs} onReady={onReady} disableDnd disableFloatingGroups /></div>}
+  </section></HeaderSlotContext.Provider>;
 }
