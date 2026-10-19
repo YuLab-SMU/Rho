@@ -9,7 +9,8 @@ is built here. Core and the U1 browser grant ceiling are unchanged.
 Rho-plugins owns document state, undo, conditional save and durable receipts.
 `@rho-workspace/plugin-documents/contract` exports its pure Node schemas, not a
 browser runtime. Rho's wire mirror is tested for exact parity. The Node/DOM-free
-`@rho-workspace/local/browser` SDK types `document.open/read/edit/undo/save`.
+`@rho-workspace/local/browser` SDK types document reads, edits, saves and the
+author/history operations described below.
 SDK types grant no permission: paired tabs still permit U1 reads only, without
 document mutations or `document.open`. `session.grant` remains operator-only.
 Direct Node embeddings must serialize mutations under the project writer lease;
@@ -70,8 +71,9 @@ project. `document.abandonSave` releases a pending save only when disk matches
 neither its write condition nor its intended content. It requires `changeId`,
 `expectedRevision` and the pending `pendingRequestDigest`, writes no disk bytes and
 keeps the buffer, dirty state and undo. A resumable save is refused; resume it
-instead. Paired browser tabs cannot call it; a future write grant follows the
-frontend recovery UI.
+instead. Paired browser tabs cannot call it. The selected Paper design gives the
+external Agent responsibility for explicit save/recovery calls; the frontend
+does not schedule writes or need to display their internal progress.
 
 An editor following the shared buffer binds
 `{document:{kind:"live-document",documentId}}`. It supplies no version. Presence
@@ -80,6 +82,57 @@ and the registered component's document role are validated. Existing
 do not migrate. Protected live views remain editable; layout/binding protection
 still applies. Format-3 recovery retains bindings and receipts. The v1 bridge
 projects ordinary document reads into its frozen shape and refuses live layouts.
+
+## Author undo, individual revert and Show before
+
+The reviewed [U2 Paper handoff](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-F-0)
+assigns keyboard undo to the human's own edits and individual Revert to a chosen
+Claude Code edit. The new owner operations are:
+
+| Operation | Required business input | Result |
+| --- | --- | --- |
+| `document.undoOwn` | `documentId`, `expectedVersion`, `expectedRevision`, `changeId` | Reverses the authenticated caller's latest complete active input group |
+| `document.revert` | The same conditions plus `targetChangeId` | Reverses one active retained content change, including another author's edit |
+| `document.history` | `documentId` | Bounded change summaries, authenticated authors, groups, versions/digests, explicit compensation links and retention boundary |
+| `document.change.read` | `documentId`, `targetChangeId` | Exact historical before/after text, versions and digests; changes no buffer state |
+
+Rho adds `projectId` to all HTTP requests and injects the caller identity. An
+`author` supplied in a request is rejected. Display names and binding metadata do
+not establish authorship. Node entries are `undoOwn(id,version,author,change)`,
+`revert(id,version,targetChangeId,author,change)`, `history(id)` and
+`readChange(id,targetChangeId)` under the existing serialized writer boundary.
+
+Keyboard undo must call `undoOwn`. Legacy `document.undo` retains its global
+snapshot behavior for compatibility, and browser dispatch refuses it. There is
+no new redo action. Selective undo/revert adds a new acknowledged change with
+`reverts` links; it does not delete or rewrite old history. Repeated delivery uses
+the original receipt and conditions. A second new reversal of an already reverted
+change is refused. An active compensation record may itself be explicitly
+reverted; its original target then becomes active again. This is an explicit
+per-change action, not a separate keyboard redo stack.
+
+The owner composes a retained input group and maps its inverse through later net
+edits using explicit UTF-16 ranges. Unrelated text is preserved. Overlapping later
+edits or ambiguous insertions at the same empty boundary produce `conflict` and
+retain the whole current buffer. An incomplete or partly reverted input group
+is refused as a group; retained individual edits can still be inspected/reverted.
+No unconfirmed browser input is rebased by this calculation.
+
+`maxHistoryEntries` defaults to 256 and `maxHistoryEdits` to 4096 per document.
+Oldest history entries are evicted above either count, with
+`historyRetainedFromVersion` / history response `retainedFromVersion` marking the
+first retained change version. Missing before text is reported unavailable;
+older undo snapshots are not presented as invented per-author history.
+`maxUndoBytes` (8 MiB) covers legacy snapshots and retained inserted/removed text.
+Exhausting it rejects the mutation before acknowledgement. Historical snapshots
+also obey `maxBufferBytes`. Format-3 restore validates the history's version chain,
+text ranges and before/after digests while preserving original authors.
+
+The frontend team supplies the existing design's highlight switch, Changes list,
+Show before and Revert controls. Compare remains inspection only. A merge report
+must refer to an actual acknowledged Agent edit. This batch supplies history and
+undo contracts; external-file merging and Agent scheduling still need their actual
+consumer integration and existing disk write conditions remain enforced.
 
 ## Frontend delivery before integration
 
@@ -118,12 +171,11 @@ Isolated owner imports check the headless package without React/DOM. Executed
 counts and remaining work are recorded in [Status](STATUS.md).
 
 The selected Documents owner source is
-[`325fbda`](https://github.com/YuLab-SMU/Rho-plugins/commit/325fbdae16459bdffad5f4fd46493b2c68c11366),
-published before this application change; it adds `abandonSave` to
-[`af6f634`](https://github.com/YuLab-SMU/Rho-plugins/commit/af6f634196fa8ae63a762ccdea050f0f30e224ff).
-Its 0.4.0 Documents tarball SHA-256 is
-`7e77d0ddac6084e1077e09fb51048c9d9d5ff4127e381e39256b0ebaa6997dc9`; isolated
-install/import of all nine tarballs, each with only Contracts, passes. Plugins'
-24 tests (seven receipt/recovery scenarios) and Rho's 39 tests pass with the
-accepted Core artifact. This is backend source/owner evidence, not an installed
-U2 browser candidate.
+[`781a0f4`](https://github.com/YuLab-SMU/Rho-plugins/commit/781a0f42c9f2ddb9db801ca135734b8103276f94),
+published before this application handoff. Its 0.4.0 Documents tarball SHA-256 is
+`bbf4267f9ff64b7390276cb65f38437c30c2606a5ada9edba82b2bf33c4adfe1`.
+That fixed tarball passes isolated import and 14 receipt/history scenarios with
+only Contracts installed alongside it. Plugins' 31 tests and Rho's 40 tests pass
+with the accepted Core artifact; the new real stdio MCP/HTTP flow starts no Host
+and submits no native work. This is backend source/owner evidence, not installed
+U2 browser or actual-model collaboration acceptance.

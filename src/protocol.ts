@@ -81,7 +81,7 @@ export const responses: Record<string, any> = { ...base.responses,
   'observation.snapshot': { ...base.responses['observation.snapshot'], properties: { ...base.responses['observation.snapshot'].properties, resources: array(resourceSchema), operations: array(runSchema), selection: { anyOf: [selection, { type: 'null' }] } } }
 };
 const structuredComposition = response({ format: { const: 'rho.composition/1' }, compositionId: text, version: positive, nodes: array(node), rootId: changeId, receipt: record, author: text, views: array(view), availability: record, acknowledgedAt: text });
-for (const method of Object.keys(documentContracts)) responses[method] = documentSchema;
+for (const [method, contract] of Object.entries(documentContracts)) responses[method] = contract.outputSchema;
 responses['observation.snapshot'].properties.documents = array(documentSchema);
 responses['workspace.save'].properties.documents = array(documentSchema);
 for (const method of ['composition.apply', 'composition.undo', 'view.protection.set']) responses[method] = structuredComposition;

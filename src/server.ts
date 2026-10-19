@@ -256,12 +256,17 @@ export class RhoService {
       if (method === 'document.open') result = await d.open(b.path, principal.id);
       if (method === 'document.read') result = await d.read(b.documentId);
       const change = b.changeId === undefined ? undefined : { changeId: b.changeId, expectedRevision: b.expectedRevision };
-      if (principal.kind === 'browser' && ['document.edit', 'document.undo', 'document.save'].includes(method)) requireThat(change, 'invalid', 'Browser document writes require changeId and expectedRevision.');
+      if (principal.kind === 'browser' && method === 'document.undo') requireThat(false, 'unavailable', 'Browser undo uses document.undoOwn; global undo is not a keyboard action.');
+      if (principal.kind === 'browser' && ['document.edit', 'document.undoOwn', 'document.revert', 'document.save', 'document.abandonSave'].includes(method)) requireThat(change, 'invalid', 'Browser document writes require changeId and expectedRevision.');
       if (method === 'document.edit') result = await d.edit(b.documentId, b.expectedVersion, b.edits, b.undoGroup, principal.id, change);
       if (method === 'document.undo') result = await d.undo(b.documentId, b.expectedVersion, principal.id, change);
+      if (method === 'document.undoOwn') result = await d.undoOwn(b.documentId, b.expectedVersion, principal.id, change!);
+      if (method === 'document.revert') result = await d.revert(b.documentId, b.expectedVersion, b.targetChangeId, principal.id, change!);
+      if (method === 'document.history') result = await d.history(b.documentId);
+      if (method === 'document.change.read') result = await d.readChange(b.documentId, b.targetChangeId);
       if (method === 'document.save') result = await d.save(b.documentId, b.expectedVersion, b.expectedDiskDigest, principal.id, change);
       if (method === 'document.abandonSave') result = await d.abandonSave(b.documentId, b.expectedVersion, b.pendingRequestDigest, principal.id, change!);
-      if (!['document.read', 'document.open'].includes(method)) await this.emit(p, 'document.changed', b.documentId);
+      if (!['document.read', 'document.open', 'document.history', 'document.change.read'].includes(method)) await this.emit(p, 'document.changed', b.documentId);
       return result;
     }
     if (method === 'binding.activity') return owners.need('agent').activity(principal.id);

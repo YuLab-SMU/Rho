@@ -4,12 +4,12 @@ Updated: 2026-10-19.
 
 ## U2 backend prerequisites
 
-Documents mutation receipts/revision, interrupted-save retention, abandoning a
-save that can no longer complete and explicit live-document bindings are
-implemented; Rho 39/39 and Plugins 24/24 tests pass.
-[The frontend handoff](U2-BACKEND-HANDOFF.md) defines input/recovery requirements.
-No UI was built; browser grants retain U1 scope. Await frontend delivery before
-CodeMirror/Tables integration or browser editing acceptance.
+Documents now supports authenticated own-group undo, single-edit revert and exact
+change history alongside receipts, save resume/abandon and live bindings.
+Rho 40/40 and Plugins 31/31 tests pass, with real stdio MCP/HTTP author checks.
+[The frontend handoff](U2-BACKEND-HANDOFF.md) records overlap/retention limits and
+the updated U2 Paper decisions. No UI was built; browser grants retain U1 scope.
+Await frontend delivery before editor/Table integration or browser acceptance.
 
 ## U1 browser shell candidate
 

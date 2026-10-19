@@ -27,11 +27,19 @@ export interface CapabilityCatalog {
 }
 export interface DocumentSummary { id: string; path: string; version: number; content: string; dirty: boolean; diskDigest: string | null; acknowledgedAt: string }
 export interface DocumentChange { changeId: string; expectedRevision: number }
-export interface DocumentReceipt { changeId: string; requestDigest: string; kind: 'edit' | 'undo' | 'save' | 'abandon-save'; author: string; revision: number; version: number; at: string }
+export interface DocumentReceipt { changeId: string; requestDigest: string; kind: 'edit' | 'undo' | 'save' | 'abandon-save' | 'undo-own' | 'revert'; author: string; revision: number; version: number; at: string }
+export interface DocumentHistoryEntry {
+  changeId: string; requestDigest: string; author: string; kind: 'edit' | 'undo' | 'undo-own' | 'revert';
+  undoGroup: string; groupId: string; version: number; revision: number; at: string;
+  beforeDigest: string; afterDigest: string; reverts: string[];
+}
+export interface DocumentHistory { documentId: string; currentVersion: number; currentRevision: number; retainedFromVersion: number; entries: (DocumentHistoryEntry & { revertedBy: string | null })[] }
 export interface DocumentBuffer extends DocumentSummary {
-  author: string; undo: { content: string; group: string; author: string }[];
+  author: string; undo: { content: string; group: string; author: string; changeIds?: string[] }[];
   revision: number; receipts: DocumentReceipt[]; retainedFromRevision: number;
   receipt?: DocumentReceipt;
+  history: (DocumentHistoryEntry & { edits: { from: number; to: number; insert: string; removed: string }[] })[];
+  historyRetainedFromVersion: number;
   pendingSave?: { requestDigest: string; author: string; expectedDiskDigest: string | null; contentDigest: string; at: string; change?: DocumentChange };
 }
 export type DocumentBinding = { documentId: string; version: number } | { kind: 'live-document'; documentId: string };
@@ -57,6 +65,10 @@ export interface BrowserApi {
   'document.read': { input: { projectId: string; documentId: string }; output: DocumentBuffer };
   'document.edit': { input: DocumentWrite & { edits: { from: number; to: number; insert: string }[]; undoGroup: string }; output: DocumentBuffer };
   'document.undo': { input: DocumentWrite; output: DocumentBuffer };
+  'document.undoOwn': { input: DocumentWrite; output: DocumentBuffer };
+  'document.revert': { input: DocumentWrite & { targetChangeId: string }; output: DocumentBuffer };
+  'document.history': { input: { projectId: string; documentId: string }; output: DocumentHistory };
+  'document.change.read': { input: { projectId: string; documentId: string; targetChangeId: string }; output: { documentId: string; change: DocumentHistory['entries'][number]; before: { version: number; digest: string; content: string }; after: { version: number; digest: string; content: string } } };
   'document.save': { input: DocumentWrite & { expectedDiskDigest: string | null }; output: DocumentBuffer };
   'document.abandonSave': { input: DocumentWrite & { pendingRequestDigest: string }; output: DocumentBuffer };
 }
