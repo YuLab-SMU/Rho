@@ -5,7 +5,7 @@ const positive = { type: 'integer', minimum: 1 };
 const integer = { type: 'integer', minimum: 0 };
 const identity = { type: 'string', pattern: '^[A-Za-z0-9._:@-]{1,128}$' };
 const nullableDigest = { anyOf: [digest, { type: 'null' }] };
-export const receiptSchema = obj({ changeId: identity, requestDigest: digest, kind: { enum: ['edit', 'undo', 'save'] }, author: text, revision: positive, version: positive, at: text });
+export const receiptSchema = obj({ changeId: identity, requestDigest: digest, kind: { enum: ['edit', 'undo', 'save', 'abandon-save'] }, author: text, revision: positive, version: positive, at: text });
 const change = obj({ changeId: identity, expectedRevision: integer });
 export const pendingSaveSchema = obj({ requestDigest: digest, author: text, expectedDiskDigest: nullableDigest, contentDigest: digest, at: text, change }, ['requestDigest', 'author', 'expectedDiskDigest', 'contentDigest', 'at']);
 const original = { id: digest, path: text, version: positive, content: { type: 'string' }, diskDigest: nullableDigest, dirty: { type: 'boolean' }, author: text, acknowledgedAt: text, undo: { type: 'array', items: obj({ content: { type: 'string' }, group: text, author: text }) } };
@@ -17,5 +17,6 @@ export const operationContracts = {
   'document.read': { inputSchema: obj({ documentId: digest }), outputSchema: documentSchema, requires: [], effect: 'read' },
   'document.edit': { inputSchema: conditional({ documentId: digest, expectedVersion: positive, edits: { type: 'array', items: obj({ from: integer, to: integer, insert: { type: 'string' } }), minItems: 1, maxItems: 1000 }, undoGroup: identity }), outputSchema: documentSchema, requires: [], effect: 'document' },
   'document.undo': { inputSchema: conditional({ documentId: digest, expectedVersion: positive }), outputSchema: documentSchema, requires: [], effect: 'document' },
-  'document.save': { inputSchema: conditional({ documentId: digest, expectedVersion: positive, expectedDiskDigest: nullableDigest }), outputSchema: documentSchema, requires: [], effect: 'document' }
+  'document.save': { inputSchema: conditional({ documentId: digest, expectedVersion: positive, expectedDiskDigest: nullableDigest }), outputSchema: documentSchema, requires: [], effect: 'document' },
+  'document.abandonSave': { inputSchema: obj({ documentId: digest, expectedVersion: positive, pendingRequestDigest: digest, changeId: identity, expectedRevision: integer }), outputSchema: documentSchema, requires: [], effect: 'document' }
 } as const;

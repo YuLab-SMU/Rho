@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { RhoService } from '../dist/server.js';
 import { CheckedClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
+import { Documents } from '@rho-workspace/plugin-documents';
 
 async function fixture(t) {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-u2-contract-'));
@@ -100,5 +101,30 @@ test('live editor bindings follow a buffer without changing exact-version bindin
   const restored = await f.c.call('document.read', { projectId: q.id, documentId: d.id });
   assert.equal(restored.revision, edited.revision); assert.deepEqual(restored.receipts, edited.receipts);
   assert.deepEqual((await f.c.call('composition.read', { projectId: q.id, compositionId: 'work' })).views[0].bindings.document, live);
+  assert.deepEqual(f.native(), { starts: 0, dispatches: 0 });
+});
+
+test('a pending save that can no longer complete is abandoned over HTTP without writing disk or granting the browser', async t => {
+  const f = await fixture(t);
+  const d = await f.call('document.open', { path: 'stuck.md' });
+  const edited = await f.call('document.edit', { documentId: d.id, expectedVersion: 1, expectedRevision: 0, changeId: 'draft', undoGroup: 'a', edits: [{ from: 0, to: 0, insert: '草稿 🧬' }] });
+  // Interrupt a save after its intent is durable, as a process crash would.
+  const owner = new Documents(f.p.root); const persist = owner.persist.bind(owner);
+  owner.persist = async state => { await persist(state); if (state.pendingSave) throw new Error('injected crash before replacement'); };
+  await assert.rejects(owner.save(d.id, edited.version, null, 'operator', { changeId: 'save', expectedRevision: edited.revision }), /injected crash/);
+  const pending = await f.call('document.read', { documentId: d.id });
+  const input = { documentId: d.id, expectedVersion: pending.version, expectedRevision: pending.revision, changeId: 'give-up', pendingRequestDigest: pending.pendingSave.requestDigest };
+  await assert.rejects(f.call('document.abandonSave', input), e => e.error.kind === 'condition', 'a resumable save is not dropped');
+  await fs.writeFile(path.join(f.p.root, 'stuck.md'), 'outside');
+  for (const missing of ['changeId', 'pendingRequestDigest']) await assert.rejects(f.call('document.abandonSave', { ...input, [missing]: undefined }), e => e.error.kind === 'invalid');
+  const pair = await f.s.browser.createPairing();
+  const browser = new BrowserClient(await BrowserClient.pair(f.s.url, pair.code, (url, init) => fetch(url, { ...init, headers: { ...init.headers, origin: f.s.url } })));
+  await assert.rejects(browser.call('document.abandonSave', { projectId: f.p.id, ...input }), e => e.error.kind === 'unauthorized');
+  const abandoned = await f.call('document.abandonSave', input);
+  assert.equal(abandoned.pendingSave, undefined); assert.equal(abandoned.receipt.kind, 'abandon-save');
+  assert.equal(abandoned.content, edited.content); assert.equal(abandoned.dirty, true);
+  assert.deepEqual(await f.call('document.abandonSave', input), abandoned);
+  assert.equal(await fs.readFile(path.join(f.p.root, 'stuck.md'), 'utf8'), 'outside');
+  await f.call('document.edit', { documentId: d.id, expectedVersion: abandoned.version, expectedRevision: abandoned.revision, changeId: 'after', undoGroup: 'b', edits: [{ from: 0, to: 0, insert: '+' }] });
   assert.deepEqual(f.native(), { starts: 0, dispatches: 0 });
 });

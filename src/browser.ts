@@ -27,7 +27,7 @@ export interface CapabilityCatalog {
 }
 export interface DocumentSummary { id: string; path: string; version: number; content: string; dirty: boolean; diskDigest: string | null; acknowledgedAt: string }
 export interface DocumentChange { changeId: string; expectedRevision: number }
-export interface DocumentReceipt { changeId: string; requestDigest: string; kind: 'edit' | 'undo' | 'save'; author: string; revision: number; version: number; at: string }
+export interface DocumentReceipt { changeId: string; requestDigest: string; kind: 'edit' | 'undo' | 'save' | 'abandon-save'; author: string; revision: number; version: number; at: string }
 export interface DocumentBuffer extends DocumentSummary {
   author: string; undo: { content: string; group: string; author: string }[];
   revision: number; receipts: DocumentReceipt[]; retainedFromRevision: number;
@@ -58,6 +58,7 @@ export interface BrowserApi {
   'document.edit': { input: DocumentWrite & { edits: { from: number; to: number; insert: string }[]; undoGroup: string }; output: DocumentBuffer };
   'document.undo': { input: DocumentWrite; output: DocumentBuffer };
   'document.save': { input: DocumentWrite & { expectedDiskDigest: string | null }; output: DocumentBuffer };
+  'document.abandonSave': { input: DocumentWrite & { pendingRequestDigest: string }; output: DocumentBuffer };
 }
 export interface ApiFailure { kind: string; message: string; details?: Record<string, unknown>; continuation?: string }
 export class BrowserApiError extends Error {

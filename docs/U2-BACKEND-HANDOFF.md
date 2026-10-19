@@ -66,8 +66,12 @@ plus atomic replacement is not filesystem CAS against outside writers.
 
 An archive with an unresolved save reports a document conflict on restore and
 retains the original source reference; it does not execute that save in another
-project. Abandoning a permanently conflicting pending save is not implemented in
-this batch.
+project. `document.abandonSave` releases a pending save only when disk matches
+neither its write condition nor its intended content. It requires `changeId`,
+`expectedRevision` and the pending `pendingRequestDigest`, writes no disk bytes and
+keeps the buffer, dirty state and undo. A resumable save is refused; resume it
+instead. Paired browser tabs cannot call it; a future write grant follows the
+frontend recovery UI.
 
 An editor following the shared buffer binds
 `{document:{kind:"live-document",documentId}}`. It supplies no version. Presence
@@ -114,9 +118,12 @@ Isolated owner imports check the headless package without React/DOM. Executed
 counts and remaining work are recorded in [Status](STATUS.md).
 
 The selected Documents owner source is
-[`af6f634`](https://github.com/YuLab-SMU/Rho-plugins/commit/af6f634196fa8ae63a762ccdea050f0f30e224ff),
-published before this application handoff. The 0.4.0 Documents tarball SHA-256 is
-`a42e4c112f3304ca70eefc62c9ad5bca7f97ac109c25d896636123ddfac463d2`.
-That fixed tarball passes isolated import and all six receipt/recovery scenarios,
-with only Contracts installed alongside it. Rho's 38 tests and Plugins' 23 tests
-pass. This is backend source/owner evidence, not an installed U2 browser candidate.
+[`325fbda`](https://github.com/YuLab-SMU/Rho-plugins/commit/325fbdae16459bdffad5f4fd46493b2c68c11366),
+published before this application change; it adds `abandonSave` to
+[`af6f634`](https://github.com/YuLab-SMU/Rho-plugins/commit/af6f634196fa8ae63a762ccdea050f0f30e224ff).
+Its 0.4.0 Documents tarball SHA-256 is
+`7e77d0ddac6084e1077e09fb51048c9d9d5ff4127e381e39256b0ebaa6997dc9`; isolated
+install/import of all nine tarballs, each with only Contracts, passes. Plugins'
+24 tests (seven receipt/recovery scenarios) and Rho's 39 tests pass with the
+accepted Core artifact. This is backend source/owner evidence, not an installed
+U2 browser candidate.

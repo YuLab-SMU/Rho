@@ -260,6 +260,7 @@ export class RhoService {
       if (method === 'document.edit') result = await d.edit(b.documentId, b.expectedVersion, b.edits, b.undoGroup, principal.id, change);
       if (method === 'document.undo') result = await d.undo(b.documentId, b.expectedVersion, principal.id, change);
       if (method === 'document.save') result = await d.save(b.documentId, b.expectedVersion, b.expectedDiskDigest, principal.id, change);
+      if (method === 'document.abandonSave') result = await d.abandonSave(b.documentId, b.expectedVersion, b.pendingRequestDigest, principal.id, change!);
       if (!['document.read', 'document.open'].includes(method)) await this.emit(p, 'document.changed', b.documentId);
       return result;
     }

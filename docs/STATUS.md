@@ -4,8 +4,9 @@ Updated: 2026-10-19.
 
 ## U2 backend prerequisites
 
-Documents mutation receipts/revision, interrupted-save retention and explicit
-live-document bindings are implemented; Rho 38/38 and Plugins 23/23 tests pass.
+Documents mutation receipts/revision, interrupted-save retention, abandoning a
+save that can no longer complete and explicit live-document bindings are
+implemented; Rho 39/39 and Plugins 24/24 tests pass.
 [The frontend handoff](U2-BACKEND-HANDOFF.md) defines input/recovery requirements.
 No UI was built; browser grants retain U1 scope. Await frontend delivery before
 CodeMirror/Tables integration or browser editing acceptance.
