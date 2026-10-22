@@ -19,7 +19,8 @@ a display name, Source folders and a native macOS Add folder window. Existing
 folders stay in place; names do not create same-name directories. Overview adds
 further sources to the same project. There is no fixed-prefix path input.
 
-The source candidate selects Documents 0.4.2, Files 0.4.1 and R 0.4.1. Rho passes
+The source candidate selects Documents 0.4.2, Files 0.4.1, R 0.4.1 and
+Annotations 0.4.2 (optional Documents peer compatibility). Rho passes
 66/66 application checks; Plugins passes 46/46 component checks. The 12 browser
 boundary tests cover selected-folder authorization, cancellation, post-dialog
 revocation, project creation replay, source addition, equal filenames, retained
@@ -33,6 +34,8 @@ expectations, focus restoration while a trigger was disabled and Dockview's
 programmatic tab activation/disposed API on narrow-to-wide return. The final
 Chrome 155 run passes 23 checks at all five widths, with zero Host starts/native
 submissions and no page errors (`work/multisource-browser-verified/report.json`).
+An initial offline assembly rejected Annotations’ old exact Documents peer;
+the bounded peer declaration was updated before rebuilding.
 Source-folder picks in that runner use trusted fixtures; the real local system
 chooser also opened a folder outside the preview startup root during user review. Paper has separate native-folder and multi-source review drafts; prior
 boards were preserved. User design acceptance remains pending. Other-platform
