@@ -17,6 +17,8 @@ export class Compositions {
     for (const n of c.nodes) {
       requireThat(identity(n.id) && !nodes.has(n.id) && ['group', 'view'].includes(n.kind), 'invalid', 'Nodes need unique stable identities and group/view kinds.');
       requireThat(n.kind === 'group' ? Array.isArray(n.children) && new Set(n.children).size === n.children.length : typeof n.component === 'string' && typeof n.version === 'string' && n.props && n.bindings && !n.children, 'invalid', 'Invalid group or view contract.');
+      if (n.kind === 'group' && n.presentation) requireThat(n.presentation.mode === 'tabs' || n.presentation.mode === 'split' && ['horizontal', 'vertical'].includes(n.presentation.axis) && n.presentation.weights?.length === n.children.length && n.presentation.weights.every((x: number) => Number.isFinite(x) && x > 0 && x <= 100), 'invalid', 'Split weights must match their group children.');
+      if (n.kind === 'view' && n.presentation) requireThat(['normal', 'highlight'].includes(n.presentation.emphasis), 'invalid', 'View emphasis must use the selected presentation profile.');
       nodes.set(n.id, n);
     }
     const reached = new Set<string>();
@@ -45,6 +47,8 @@ export class Compositions {
       // Reordering any ancestor is movement too. Ignore unrelated siblings
       // inserted/removed before it, but preserve the order of retained siblings.
       for (const id of [...this.ancestors(current, v.id), v.id]) {
+        const oldNode = current.nodes.find((n: any) => n.id === id), newNode = next.nodes.find((n: any) => n.id === id);
+        requireThat(canonical(oldNode?.presentation ?? null) === canonical(newNode?.presentation ?? null), 'condition', 'Protected view presentation and ancestor geometry cannot change.', { viewId: v.id });
         const before = current.nodes.find((n: any) => n.children?.includes(id));
         const after = next.nodes.find((n: any) => n.children?.includes(id));
         if (before && after) {
@@ -124,7 +128,7 @@ export class Compositions {
     const receipt = { changeId: body.changeId, author, version: (current?.version ?? 0) + 1, requestDigest, at: now(), kind };
     const receipts = [...(current?.receipts ?? []), receipt].slice(-this.limits.maxReceipts);
     const result = { format, compositionId: body.compositionId, rootId: next.rootId, nodes: next.nodes, views, availability, version: receipt.version, author, acknowledgedAt: receipt.at, history, receipts, retainedFromVersion: receipts[0].version, undoRetainedFromVersion: history[0]?.version ?? receipt.version, receipt };
-    requireThat(Buffer.byteLength(JSON.stringify(result)) <= this.limits.maxBytes, 'limit', 'Composition byte budget reached; existing state is preserved.', { limit: 'maxBytes', maximum: this.limits.maxBytes });
+    requireThat(Buffer.byteLength(JSON.stringify(result) + '\n') <= this.limits.maxBytes, 'limit', 'Composition byte budget reached; existing state is preserved.', { limit: 'maxBytes', maximum: this.limits.maxBytes });
     await atomicJson(file, result); return result;
   }
 }

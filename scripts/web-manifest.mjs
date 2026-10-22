@@ -29,6 +29,7 @@ const ownerEntries = await Promise.all(chosen.map(async entry => {
   const bytes = await fs.readFile(new URL(pkg.exports[entry.entry], folder));
   return { ...entry, packageVersion: pkg.version, entrySha256: hash(bytes) };
 }));
-const record = { format: 'rho.web-build/1', uiProtocol: '0.1-draft', ownerEntries, selection: chosen.map(e => e.plugin).join(',') || 'shell-only', dependencies, assets: inventory, assetsSha256: hash(JSON.stringify(inventory)), licenses: 'licenses.md', node: process.version };
+const renderer = JSON.parse(await fs.readFile(new URL('renderer.json', output), 'utf8'));
+const record = { format: 'rho.web-build/1', uiProtocol: '0.1-draft', rendererBuild: renderer.rendererBuild, ownerEntries, selection: chosen.map(e => e.plugin).join(',') || 'shell-only', dependencies, assets: inventory, assetsSha256: hash(JSON.stringify(inventory)), licenses: 'licenses.md', node: process.version };
 await fs.writeFile(new URL('composition.json', output), JSON.stringify(record, null, 2) + '\n');
 console.log('Browser assets: ' + inventory.length + ' / SHA-256 ' + record.assetsSha256);

@@ -1,4 +1,34 @@
 [
-  { "plugin": "documents", "package": "@rho-workspace/plugin-documents", "entry": "./ui", "component": "rho.editor", "version": "0.2.0", "source": "web/entries/documents.tsx" },
-  { "plugin": "tables", "package": "@rho-workspace/plugin-tables", "entry": "./ui", "component": "rho.table", "version": "0.2.0", "source": "web/entries/tables.tsx" }
+  {
+    "plugin": "documents",
+    "package": "@rho-workspace/plugin-documents",
+    "entry": "./ui",
+    "component": "rho.editor",
+    "version": "0.2.0",
+    "source": "web/entries/documents.tsx"
+  },
+  {
+    "plugin": "tables",
+    "package": "@rho-workspace/plugin-tables",
+    "entry": "./ui",
+    "component": "rho.table",
+    "version": "0.2.0",
+    "source": "web/entries/tables.tsx"
+  },
+  {
+    "plugin": "annotations",
+    "package": "@rho-workspace/plugin-annotations",
+    "entry": "./ui",
+    "component": "rho.feedback",
+    "version": "0.2.0",
+    "source": "web/entries/annotations.tsx"
+  },
+  {
+    "plugin": "agent",
+    "package": "@rho-workspace/plugin-agent",
+    "entry": "./ui",
+    "component": "rho.agent-note",
+    "version": "0.2.0",
+    "source": "web/entries/agent.tsx"
+  }
 ]

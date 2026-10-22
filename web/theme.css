@@ -31,6 +31,14 @@
   --radius-control: 8px;
   --radius-small: 7px;
   --radius-panel: 12px;
+  --radius-button: 8px;
+  --radius-button-small: 7px;
+  --radius-input: 8px;
+  --radius-pill: 999px;
+  --height-button: 32px;
+  --height-button-small: 26px;
+  --height-input: 38px;
+  --height-row: 30px;
   font: 13px/1.5 var(--font-ui);
   color: var(--color-ink);
   background: var(--color-canvas);

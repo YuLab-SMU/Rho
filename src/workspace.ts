@@ -30,10 +30,18 @@ export class Workspace {
     return Promise.all((await fs.readdir(d)).filter(f => /^[a-f0-9]{64}\.json$/.test(f)).map(f => readJson<any>(path.join(d, f))));
   }
   async read(id: string) { return readJson<any>(await this.file(id)); }
-  structured() { return new Compositions(this.project, (views, retained) => this.validateViews(views, retained), this.limits); }
-  async validateViews(views: any[], retained: any[] = []) {
+  structured(trustedPresentation?: { authorBindingId: string; basisWitnessId: string }, retainedNotes: any[] = []) { return new Compositions(this.project, (views, retained) => this.validateViews(views, retained, trustedPresentation, retainedNotes), this.limits); }
+  async apply(body: any, author: string, kind: 'apply' | 'undo' | 'protect' = 'apply', trustedPresentation?: { authorBindingId: string; basisWitnessId: string }) {
+    // Existing receipt must remain readable even at the composition count limit.
+    const current = await readJson<any>(await this.file(body.compositionId), null);
+    requireThat(current || (await this.compositions()).length < this.limits.maxCompositions, 'limit', 'Composition retention limit reached.');
+    const retainedNotes = kind === 'undo' ? (current?.history ?? []).flatMap((h: any) => h.snapshot.nodes.filter((n: any) => n.kind === 'view' && n.component === 'rho.agent-note')) : [];
+    return this.structured(trustedPresentation, retainedNotes).transact(body, author, kind);
+  }
+  async validateViews(views: any[], retained: any[] = [], trustedPresentation?: { authorBindingId: string; basisWitnessId: string }, retainedNotes: any[] = []) {
     const availability: Record<string, unknown> = {};
     for (const view of views) {
+      if (view.component === 'rho.agent-note' && ![...retained, ...retainedNotes].some(v => v.id === view.id && v.component === view.component && canonical(v.props) === canonical(view.props) && canonical(v.bindings) === canonical(view.bindings))) requireThat(trustedPresentation && view.props.authorBindingId === trustedPresentation.authorBindingId && view.props.basisWitnessId === trustedPresentation.basisWitnessId, 'scope', 'Agent note authorship and basis are written only by the assigned presentation path.');
       const component = this.owners.assembly.catalog.components.find(c => c.id === view.component && c.version === view.version);
       const boundResources: Record<string, Resource> = {};
       for (const [key, binding] of Object.entries<any>(view.bindings)) {

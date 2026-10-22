@@ -276,3 +276,404 @@ only Agent installs the MCP SDK. The sidecar
 records source commits/trees, build-input and lock hashes, binary/package digests
 and platform, plus each selected plugin tarball identity. It does not build Core, sign or publish to a registry. Direct
 packing of the development source-linked root is rejected.
+
+
+## Native artifact intake (phase 1)
+
+The phase-1 source candidate selects Agent 0.4.1 independently; unchanged owners
+stay at 0.4.0. Core, Files, Tables and Documents need no source changes. This is
+native artifact intake, not the later automatic layout or feedback queue.
+The inert application wire snapshot remains usable without an installed Agent.
+
+The trusted embedding integration observes a real Claude Code init/session ID,
+provisions separate business/adapter credentials with existing `agentConnection`,
+and calls `RhoService.registerNativeAdapter`. This Node control-plane method is
+not an HTTP/MCP tool and does not start the CLI. Its selected capabilities remain
+pull context only, with no native deduplication or consumption acknowledgement.
+
+`binding.open` accepts the frozen optional attachment. Existing IDs and legacy
+calls remain unchanged. Only the control plane uses conditional
+`task.routing.put`; the selected profile allows one task and one business binding
+per project. Two projects may share one Rho service. Extra same-project tasks and
+presentation assignments are refused in this phase. An ordinary default Agent
+session receives neither routing control nor observation-append authority.
+
+`binding.activity.append` accepts the frozen native source/epoch/sequence batch
+only from the separately registered adapter. Existing tool-return association is
+required for an artifact hint. MCP excludes this method even for an explicitly
+provisioned adapter descriptor. `binding.activity` with `source: native` reads
+complete bounded objects; its old profile remains the principal-filtered API log.
+Event invalidation reuses SSE, with no new event bus. Layered discovery is later
+work; these real business sessions used native tools and no Rho MCP tools.
+
+The integration passes an `artifact.ready` event ID to the internal
+`RhoService.observeNativeOutput(projectId, eventId)`. It reuses Files registration
+and Tables paging, checks current project capability selection and returns
+separate source, registration and validation facts. Only `typed-ready` returns a
+consumer resource reference. It supports declared tables in this selected flow;
+other format policies remain unimplemented. The first page validates the entire
+bounded table; it is not a domain correctness or teacher-adoption receipt.
+
+Existing matching Files metadata supplies the resource identity; re-observation
+does not register it again. Changed output bytes require a new versioned path.
+An invalid hint stays in activity history; rejection retains prior valid files
+and references. A valid CSV prefix with an incorrect completion claim still
+requires the recipe's expected-row/domain check. Generic readers do not know
+class sizes. Completion discovery and arithmetic remain project recipe concerns.
+There is no resident file watcher in this phase.
+
+Native history uses the existing project kernel lease/serializer and atomic JSON,
+not a second queue/lock/database. Its defaults under `agentNativeActivity` are:
+16 KiB per event, 64 events / 256 KiB per batch, 256 retained events / 4 MiB,
+and 128 source epochs. Epoch exhaustion rejects; event eviction exposes gaps and
+retains watermarks. Expired original sequences reject without replay. A complete
+object too large for its requested page returns `limit`; no object is truncated.
+Fresh routing explicitly initializes history; missing/corrupt retained history
+fails closed. Read operations do not initialize or recover a native runtime.
+Routing receipts reuse `capabilityLimits.maxReceipts` (256) and the existing
+`maxRetainedMetadataBytes` bound. Native registrations reuse `maxBindings` (64).
+Existing workspace archive/restore formats reject active native tasks because
+they omit routing/history; they must not silently claim a complete checkpoint.
+
+Run the explicit synthetic recipe from this source checkout after building owners
+and Rho sequentially:
+
+```sh
+RHO_NATIVE_MODEL=1 RHO_NATIVE_EVIDENCE=work/your-new-trial \
+  node scripts/native-artifact-acceptance.mjs
+```
+
+It uses the existing private Claude environment, explicitly selects
+`westlakehpc/deepseek-v4.1-flash[1m]`, and confirms the actual client/model/session.
+The protected process defaults are 25 CLI turns, 900 seconds, 16 MiB stdout,
+256 KiB stderr, 1 MiB per line and 2,048 observed tool IDs. A zero-model wrapper
+preflight runs first. On limits, retained output/usage and uncertainty survive;
+there is no hard provider-token cap or global OS sandbox claim.
+
+The 2026-10-21 trial used Claude Code 2.1.306. A was accepted directly; B placed
+its ready manifest in the wrong directory. An explicit original-session resume,
+limited to Read/Write/Edit, corrected that path without rerunning Python. This
+was not delivery through a Rho queue. The successful run plus repair used 31 model
+tool calls, 225,883 input tokens including cache and 12,761 output tokens. An
+initial instrumentation failure used 25 calls / 185,286 input / 18,941 output
+and remains in the denominator. These CLI usage figures are not provider billing.
+The independent expected-row/key/value/arithmetic checks stay separate from model
+conclusions. Two designated Python computations entered once each; one extra
+read-only Python hash check is separately recorded.
+
+Source checks cover native provenance, concurrent original retries, target
+isolation, typed/digest rejection, retention/cursor gaps and missing/corrupt state.
+This phase does not accept automatic side-by-side UI, DOM visibility, reliable
+feedback delivery, queue/ACK recovery, same-project multi-task isolation, native
+execution exactly-once or an independently installed application composition.
+
+## Automatic base presentation and DOM receipts (phase 2)
+
+The phase-2 source candidate selected Agent 0.4.1 and Tables 0.4.1; other owners
+remained at 0.4.0. This continuation authorizes the scoped phase 2–5 implementation.
+The existing Paper candidate-beside-
+source arrangement supplies the split intent; no new teaching dashboard is selected.
+
+After original resources and task routing exist, a trusted embedding integration
+calls `RhoService.configurePresentation(projectId, policy)`. The complete
+`BasicPolicy` profile is the inert application snapshot in
+[src/presentation-contracts.ts](../src/presentation-contracts.ts). Its canonical
+SHA-256 must equal the route's `policyRef`. It declares the source resource,
+exact candidate declaration, two view IDs, table component version, equal-string
+key/namespace mapping and horizontal split weights. It starts no runtime and is
+not an HTTP/MCP tool. Fresh setup precedes native observations; missing prior
+presentation/history cannot be silently initialized after work has begun. Each policy
+configuration is immutable; phase 3 adds explicit conditional selection of a new
+configuration ID, described below.
+
+A registered adapter's `artifact.ready` append now triggers the deterministic
+internal controller immediately: Files registration, typed Tables read, then the
+existing conditional composition transaction. No presentation model call or later
+poll is required. The accepted native-source receipt, integrity/shape result,
+layout commit and DOM receipt remain separate. A failed or incompatible placement
+keeps the registered output and current layout, with a bounded pending notice.
+The existing Files page remains reachable. It never silently replaces unrelated
+views or adopts a candidate as a domain decision.
+
+The controller persists the original layout transaction before commit. The same
+source/candidate retries its original changeId, input and expectedVersion. Original
+receipts remain readable at the composition count limit. A binding witness names
+exact layout version, source event, policy, view/component versions and resources;
+a write does not claim visibility. Post-commit witness failure returns pending and
+can reconcile the original transaction. A lost historical layout snapshot returns
+expired. Existing protected views/ancestors retain their geometry. Background
+binding/metadata updates preserve owner input and focus. The browser consumes
+structured split groups as actual Dockview groups; below 768 it retains the
+selected single-view/tab adaptation.
+
+`view.observe` accepts the frozen `VisibilityInput` only from a scoped browser
+principal whose `clientId` matches that principal. `rendererBuild` identifies the
+selected source build and is associated with asset hashes in the web manifest.
+This is authenticated client evidence, not compositor or human-perception attestation.
+Tables supplies the optional `renderObservation` UI callback and its exact
+`tableDomCoverageSchema`. It waits two animation frames after data, checks actual
+DOM cell text, viewport bounds and element hit tests, and hashes the exact typed
+owner values in visible row/column order. Buffered, clipped and header-covered
+rows are excluded. Scrolled/filtered pages name their actual query; coverage never
+stands for an entire virtual table. Native hidden events report immediately,
+because background pages suspend animation frames.
+
+Rho rechecks the witness, assignment, selected renderer, current Tables availability,
+page keys/columns/namespace and the typed digest. Identical observation IDs return
+original receipts; changed reuse conflicts. Resource-first and layout-first facts
+are independent of latest observations and survive refresh/epoch changes. Old
+layout observations are retained as historical and cannot advance current indexes.
+`view.observations.read` pages complete records with caller/query/snapshot-pinned
+cursors. A changed snapshot is stale; reads neither mount views nor start runtimes.
+
+| Protected metadata | Configuration / defaults | At the limit |
+| --- | --- | --- |
+| Binding witnesses and original layout intents | `presentationWitness`: 256 records / 4 MiB | Keep layout/output; pending or expired witness remains explicit. |
+| DOM records | `visibility`: 256 records, 16 KiB/record, 4 MiB total | Refuse a new receipt; keep rendered data, previous receipts and original first facts. |
+| First/latest indexes | `visibility`: 512 entries / 2 MiB | Refuse new retained metadata; never reset first facts or silently evict them. |
+
+All writes reuse the project lease/serializer and atomic JSON. Missing or corrupt
+configured visibility storage fails closed. No new database, event bus, managed
+execution journal or queue is introduced. Format-3 native-state export guards
+remain in force. Service shutdown rejects new observations before draining, so
+SSE reconnection cannot keep an owned closing service alive.
+
+Source verification: four new application suites plus the existing suite total
+48/48; Plugins total 43/43. Disposable real-browser checks cover two grade fixtures,
+wide/narrow rendering, exact cells, refresh, service restart, input/focus retention,
+virtual paging/filtering, pending placement, genuine native hidden tabs and an
+occluding overlay. These are zero-model display checks; they do not repeat the
+Claude business experiment or accept reliable feedback, optional enhancement or
+outside-checkout installation. The remaining phases must repeat those actual
+flows with Claude Code and the selected Westlake HPC model.
+
+
+## Original-session feedback and durable delivery (phase 3)
+
+`configureFeedback(projectId, { draftPath, relatedDocumentId })` is an explicit
+Node control-plane selection after task routing. Documents opens the ordinary
+question draft; the application stores only its task/draft pointers. The browser
+uses the existing table selection and contextual Annotations `rho.feedback`
+entry. It reuses Documents' one logical live buffer and own undo. Pending edits
+and native composition disable submission; a confirmed version is checked again
+before freezing. Browser storage retains only a bounded original submission
+intent (16 KiB), scoped to project/task/view/principal. The original text remains
+with Documents/Annotations. Reload observes that intent before offering a retry.
+
+`feedback.submit` is browser-only and retains its original input, authenticated
+author and responsibility snapshot before calling owners. Annotations owns the
+committed message/source and explicit replies; Agent prepares that exact committed
+message even if the thread advances. Agent then writes the frozen delivery.
+Retrying an original submission never replaces its source, target or identity.
+Changed draft/source conditions without a retained receipt need reconciliation.
+`feedback.read` is only for the original business binding and returns one whole
+frozen object plus `relatedDocumentId`; that pointer requires a current Documents
+read and conditional edit/save to preserve human changes. Legacy `context.read`
+cannot bypass a selected feedback delivery's target/fetch ledger. Ordinary
+unselected projects retain their legacy behavior without initializing a queue.
+
+`feedback.status` is a read for its submitting browser, original business or
+operator. It distinguishes committed message, queued envelope, durable inbox,
+observed enqueue ACK, emission attempt, hook stdout acknowledgement, owner-served
+fetch, actual native MCP-tool return and an explicit `replyTo` response from the
+assigned business principal. None proves model consumption, understanding or
+scientific correctness. Whole-item paging pins caller/query/delivery/thread
+versions; stale continuation requires rereading. Reads start no model, tool or Host.
+
+Agent's sole `.rho/plugins/agent/delivery.json` uses the exact private
+`deliveryStoreSchema`, `rho.agent-delivery/1` plus `coordinationVersion: 1`.
+The frozen public profiles stay unchanged. The private refinement retains only
+ACK-observation time and original hook boundary/emission times; the phase-0 draft
+had no fields for those concrete coordination facts. No second queue, database
+or execution journal is introduced. All writes reuse Rho's project serializer,
+writer lease and atomic files. Schema and cross-reference/digest corruption or a
+missing activated store fail closed; reading/retrying never recreates it.
+
+The trusted integration can select a transport with `selectFeedbackTransport`.
+`stepFeedback` persists its sole attempt before acceptance; every later step only
+looks up that original inbox receipt. Lost ACK, missing receipt or client loss
+retains uncertainty without re-enqueue, new delivery IDs or automatic native
+resume. The private authenticated adapter ports `feedback.pending/step/next/emitted`
+are transport endpoints, absent from public MCP. They verify the registered
+project, adapter and native session. `next` requires an actual retained original
+native tool boundary and persists emission intent before helper stdout. After
+an ambiguous crash it never emits the reference again. This intentionally does
+not guarantee native computation deduplication or model-consumption ACKs.
+
+The optional Agent package exports `./claude-feedback-worker` and
+`./claude-feedback-hook`; the embedding harness explicitly starts its bounded
+worker and configures Claude's PostToolUse hook. The worker may share at most 16
+selected project/session descriptors. It never starts/resumes Claude. Stopping
+it stops coordination only. The hook sends a small original fetch reference;
+questions are fetched by the assigned Agent, and the presenter receives no body.
+
+| Protected resource | Configuration / default | Exceeded-limit behavior |
+| --- | --- | --- |
+| Durable submissions | `agentDelivery.maxRecords`: 128 maximum; `maxBytes`: 4 MiB | Refuse new intent/stage; keep draft, completed owner receipts and original identities. |
+| Fetch receipts | `maxFetchReceiptsPerDelivery`: 128 maximum | Refuse new receipt/fetch; retain earlier facts. |
+| Whole selected feedback | `maxFeedbackObjectBytes`: 12 KiB maximum; request page maximum 64 KiB | Refuse before serving a partial object; report required size. |
+| Hook input / HTTP | 64 KiB stdin / 5-second requests | Keep original emission uncertainty; never re-emit automatically. |
+| Worker observations | 16 connections; 1,200 cycles / 600,000 ms by default; each request at most 6 seconds and remaining time | Stop coordination at the selected bound; preserve owner state. |
+| Policy configurations | `presentationWitness.maxConfigurations`: 32 / existing 4 MiB aggregate file | Refuse a new configuration; preserve policies, layout and artifacts. |
+
+A new candidate path selects a new immutable BasicPolicy ID using conditional
+`task.routing.put`, then `configurePresentation`. Prior configurations and binding
+witnesses remain. A known source/candidate pair updates only the candidate binding,
+preserving manual titles, extra views, geometry and protection checks. Incompatible
+or protected placement remains pending. A late old artifact can only observe its
+original registered resource/transaction; it cannot switch the UI back. This is
+an explicit per-task policy change, not same-project multi-task support.
+
+Verification: Rho 57/57 and Plugins 44/44 source regressions; eight targeted feedback
+suites include killed worker restart after durable acceptance, lost ACK lookup,
+hook helper crashes before/after stdout, isolation, original-message recovery,
+whole fetch limits, stale pages and corrupt/missing/full stores. Actual Chrome
+checks exercise two separate grade fixtures, native Unicode input held pending,
+lost submit/save responses, current human edits, original-business linked replies
+and 1600/390 widths. Native event metadata is fixture evidence here. No Claude or
+provider request ran in this phase, so subject model calls/input/output tokens are
+0/0/0. Actual live-Claude consumption and native computation counts, optional
+presentation enhancement and outside-checkout installation remain phases 4–5.
+
+## Optional presentation and layered MCP (phase 4)
+
+The selected Agent source candidate is 0.4.3; Documents/Tables/Annotations keep
+0.4.1/0.4.2/0.4.1 and Core is unchanged. `session.grant` or the trusted Node
+`agentConnection(..., pluginFilter, profile)` explicitly chooses
+`layered-business` or `layered-presentation`. Existing descriptors without a
+profile retain compatibility behavior. A layered descriptor has at most 64
+methods. Its authenticated principal retains the profile and plugin filter;
+changing a model argument or local tool request cannot widen that grant.
+
+A presentation grant supplies only index/resolve, `workspace.observe/enhance`
+and `binding.open` for trusted bootstrap. The two display methods alone appear
+in its small index; the harness opens its native-evidenced binding. Rho assigns
+one business binding and at most one presentation binding to the selected one
+task per project. It computes a monotonic presenter generation on replacement,
+including removal/reassignment. Original feedback ownership remains separate.
+P gets no full catalog/protocol, `observation.snapshot`, business documents,
+feedback, raw native trace, raw composition writes or protection authority.
+These are Rho capability boundaries, not an OS sandbox; the external harness
+must also select the presentation client's native tools. Live-Claude harness
+selection/consumption remains part of phase 5.
+
+`workspace.observe` is the assigned presenter's bounded projection: current
+layout identity/version, retained binding witness, latest exact-layout visibility
+identity, typed owner summary and gap. It contains no question body or full table
+rows. Complete witness/visibility/summary objects may page; cursors pin caller,
+query and snapshot. One object that cannot fit returns a size refusal. The owner
+rechecks current Tables availability; reads start no model, renderer or Host.
+
+`workspace.enhance` accepts only emphasis, an optional title and a plain note of
+at most 600 Unicode characters. A new write requires the current assignment
+and generation, conditional layout version, exact binding witness and a real
+visible observation for that layout. It retains the original enhancement intent
+in the existing presentation file before translating to `composition.apply`.
+Protected views/ancestors and manual layout/input remain with their existing
+owners. A note can be placed below the unprotected target while the original
+view stays in place. Rho writes its author binding and basis; raw layout writes
+cannot create or modify a forged note. Normal layout undo may restore authentic
+retained note history. A duplicate uses the exact original body/receipt, even
+after layout/generation advances, only while the principal remains the assigned
+presenter. Replacement presenters cannot use an old principal's assignment.
+A commit never claims visibility; old commit and current versions are separate.
+
+Agent supplies optional read-only `rho.agent-note` 0.2.0 via `./ui`: plain React
+text, the existing type/color system, and author/basis details. It has no document
+buffer, chat loop, arbitrary code or feedback state. Rho consumes the frozen
+optional view `presentation.emphasis` metadata in wide/narrow tabs. Missing or
+disabled UI owners remain unavailable; no domain result is inferred from a note.
+Formal DOM coverage remains the selected Tables port. Note visibility is checked
+by the real browser acceptance, not represented as fabricated table coverage.
+
+`capability.index` projects the current authorized/enabled descriptor sources,
+short summaries, scope hints and immutable Skill/contract hashes. A requested
+role can only match/narrow its authenticated role. `capability.resolve` combines
+relevant shipped Skills and full public owner contracts, stripping only the
+privately injected project field and including the complete schema dependency
+closure. It does not duplicate a second capability registry. A contract records
+its effect, provider/version and current public conditions. Pagination keeps whole
+objects and pins the catalog/bundle/caller/query; each page rechecks availability
+and authorization. Immutable content cannot substitute for current task, resource
+or permission state. A stale catalog requires a fresh small index.
+
+The selected MCP entry exposes only `rho_index`, `rho_resolve`, `rho_call`.
+Its tools/list has small fixed input schemas and no initial full protocol/catalog
+fetch. Resolve returns one JSON text body without a structuredContent mirror.
+`rho_call` requires a complete cached contract and relevant guidance, checks its
+closed input schema, preserves existing managed intents, and sends a contract
+precondition on the ordinary operation request. Rho rechecks that precondition
+under the same project serializer immediately before dispatch. Missing/partial
+schemas, changed contracts, revoked scope and unavailable providers do not run.
+Legacy MCP behavior remains explicit compatibility, not silently migrated.
+
+| Protected knowledge resource | Limit / configuration | Exceeded or changed state |
+| --- | --- | --- |
+| Selected entries / known references | Frozen profile: 16 / 128 | Reject the request before expanding it. |
+| Knowledge response | Default convention 16 KiB; maximum 64 KiB | Page whole objects. A first object that does not fit yields requiredBytes and complete=false; over 64 KiB refuses rather than splitting a schema. |
+| Complete cached immutable bodies | `RHO_KNOWLEDGE_CACHE_ENTRIES`: 128 maximum; `RHO_KNOWLEDGE_CACHE_BYTES`: 4 MiB default | Evict complete least-recently-used bodies. Fetched outputs are still returned; missing proof requires refetch, never execution from half a body. This bounds serialized bodies/count, not a hard OS heap budget. |
+| Projection / enhancement metadata | Existing query limits and `presentationWitness` record/byte caps | Refuse new state or expose pending witness; preserve layout, prior receipts and original intents. |
+
+Known references are omitted only for currently selected/available immutable
+bodies. The MCP adapter advertises only references it actually retained complete.
+After model context loss, omit missing knownRefs to get their bodies again; after
+MCP process loss, the empty cache forces refetch even if the caller advertises
+old references. Availability/configuration/role changes invalidate catalog and
+continuation state. Cached content never restarts a task or native session.
+Actual native `rho_call` feedback.read results now carry the same exact fetch
+attribution as the compatibility tool; other operations/prose cannot assert it.
+
+Source verification: Rho 63/63, Plugins 45/45. Real SDK subprocess checks cover
+partial/oversized first objects, complete schemas, knownRefs, context/process loss,
+revocation, stale selection and bounded cache refusal. Two-project Chrome checks
+show base tables before P calls, separate presentation sessions, real DOM bases,
+visible emphasis and notes, retained unconfirmed filter/focus, resource-first
+receipts and 1600/390 widths. These use fixture native metadata and SDK clients,
+with zero model requests/tokens. The following phase-5 evidence covers the selected
+real model and installed consumer; same-project multi-task remains unselected.
+
+## Installed native grades acceptance (phase 5)
+
+The darwin-arm64 local candidate was packed with the explicit dirty-source override
+and installed offline outside all three source checkouts. Its 3,887 installed
+files and selected Core binary match the recorded SHA-256 inventory. Application
+0.4.0 selects Agent 0.4.3, Documents 0.4.1, Files 0.4.0, Tables 0.4.2 and
+Annotations 0.4.1; unselected owners have no runtime authority. Documentation
+updated after acceptance is separate from the immutable package build inputs.
+
+Claude Code 2.1.306 with Westlake HPC `westlakehpc/deepseek-v4.1-flash[1m]`
+completed two grade projects with distinct original business sessions and two
+restricted presentation sessions. Both base tables were actually visible before
+their presenter started. Native-ready to server-received DOM-visible evidence was
+2,391/296 ms for initial A/B and 328/271 ms for updated A/B. These same-host
+measurements include rendering and receipt processing; they are not calibrated
+browser frame times or a general performance result.
+
+The successful trial used 77 model tool calls: 50 native and 27 MCP. Input tokens
+including cache were 1,098,713; output tokens were 29,705. Each presenter used four
+MCP calls. Three native command permission refusals recovered, no MCP schema or
+cross-task misuse occurred, and one deliberately lost save response returned
+unknown before the original document receipt was read. An earlier selector-failed
+trial retains 23 tool calls and observed usage of at least 125,099 input/9,491
+output tokens; its aborted in-flight usage is unavailable, not zero. These trials
+do not establish a matched token-saving comparison with earlier shorter tasks.
+
+Actual teacher questions stayed with their original business sessions. A shared
+worker was killed after durable B acceptance and lost ACK; its replacement only
+looked up the original receipt. Accept counts were one per project, B lookup one.
+Each business entered Python analysis once per intended initial/feedback phase,
+preserved teacher buffer edits, saved v3 and linked an explicit original-author
+reply. Core Host starts and managed submissions were both zero. The native review
+wait is explicit test coordination, separate from computation and throughput.
+
+Acceptance records 32 unique installed checks, a stronger pending-save rerun,
+34 real-model assertions, 14 installed browser/restart checks and 95 independent
+domain/identity assertions mapped to frozen AC01–AC21. Contract paging, knownRefs,
+context/process loss, stale authorization, hook crashes and expired-receipt cases
+use installed SDK/fault fixtures; native automatic compaction was not forced.
+Local evidence is `work/phase5-installed-dual-agent-20261021/results.html` with
+requirements, exact identities, filtered actual traces and failure accounting.
+The 900px view retains internal scrolling/column ellipsis. Full Paper teaching
+experience, accessibility, same-project multi-task, OS execution deduplication
+and official distribution are not accepted by this bounded flow. No registry
+publication or signing was performed.

@@ -26,6 +26,7 @@ const entries = {
   agent: () => import('@rho-workspace/plugin-agent')
 };
 export type PluginId = keyof typeof entries;
+export const selectedPluginVersions: Record<keyof typeof entries, string> = { documents: '0.4.1', files: '0.4.0', r: '0.4.0', requirements: '0.4.0', tables: '0.4.2', media: '0.4.0', charts: '0.4.0', annotations: '0.4.1', agent: '0.4.3' };
 export const pluginIds = Object.keys(entries) as PluginId[];
 type Modules = { [K in PluginId]: Awaited<ReturnType<typeof entries[K]>> };
 export interface PluginConfig {
@@ -61,7 +62,7 @@ export class Plugins {
       if (status.selected) {
         try {
           const module = await entries[id]();
-          requireThat(module.plugin.id === id && module.plugin.package === status.package && module.plugin.version === '0.4.0', 'condition', 'Plugin identity/version does not match this application selection.');
+          requireThat(module.plugin.id === id && module.plugin.package === status.package && module.plugin.version === selectedPluginVersions[id], 'condition', 'Plugin identity/version does not match this application selection.');
           (this.modules as any)[id] = module;
           status.version = module.plugin.version;
           status.presentation = module.plugin.presentation;
@@ -121,7 +122,7 @@ export class Plugins {
   operationOwner(method: string) {
     const descriptor = this.descriptors().find(p => p.operations?.some(o => o.method === method));
     if (descriptor) return descriptor.id as PluginId;
-    const owner = method.startsWith('annotation.') ? 'annotations' : method.startsWith('document.') ? 'documents' : method.startsWith('requirements.') ? 'requirements' : method === 'action.submit' || method === 'object.read' ? 'r' : method === 'data.plot' ? 'charts' : method.startsWith('data.') || method === 'selection.set' ? 'tables' : method.startsWith('media.') ? 'media' : method.startsWith('context.') || method.startsWith('binding.') || method === 'session.grant' ? 'agent' : method.startsWith('resource.') || method === 'artifact.check' ? 'files' : undefined;
+    const owner = method.startsWith('annotation.') ? 'annotations' : method.startsWith('document.') ? 'documents' : method.startsWith('requirements.') ? 'requirements' : method === 'action.submit' || method === 'object.read' ? 'r' : method === 'data.plot' ? 'charts' : method.startsWith('data.') || method === 'selection.set' ? 'tables' : method.startsWith('media.') ? 'media' : method.startsWith('feedback.') || method.startsWith('context.') || method.startsWith('binding.') || method === 'session.grant' ? 'agent' : method.startsWith('resource.') || method === 'artifact.check' ? 'files' : undefined;
     return owner as PluginId | undefined;
   }
   operationDeclarations() { return this.descriptors().flatMap(p => (p.operations ?? []).map(operation => ({ ...operation, owner: p.id }))); }

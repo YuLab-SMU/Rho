@@ -1,12 +1,23 @@
 import { defineConfig } from 'vite';
 import path from 'node:path';
+import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import entries from './ui-entries.json';
 const selected = process.env.RHO_UI_PLUGINS?.split(',') ?? entries.map(e => e.plugin);
 const chosen = entries.filter(e => selected.includes(e.plugin));
+const buildInputs: string[] = [];
+function inputs(dir: string) { for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) e.isDirectory() ? inputs(path.join(dir, e.name)) : buildInputs.push(path.join(dir, e.name)); }
+inputs('web');
+for (const entry of chosen) inputs('node_modules/' + entry.package + '/dist');
+const rendererHash = createHash('sha256');
+for (const file of [...buildInputs, 'src/ui-contract.ts', 'src/browser.ts', 'package-lock.json']) rendererHash.update(file).update(fs.readFileSync(file));
+const rendererBuild = rendererHash.digest('hex');
 export default defineConfig({
+  define: { 'import.meta.env.VITE_RHO_RENDERER_BUILD': JSON.stringify(rendererBuild) },
   root: 'web',
   plugins: [{
     name: 'rho-trusted-owner-ui',
+    generateBundle() { this.emitFile({ type: 'asset', fileName: 'renderer.json', source: JSON.stringify({ rendererBuild }) + '\n' }); },
     resolveId(id) { if (id === 'virtual:rho-ui-registry' || id === 'virtual:rho-ui-registry-meta') return '\0' + id; },
     load(id) {
       if (id === '\0virtual:rho-ui-registry-meta') return 'export const rendered = ' + JSON.stringify(chosen.map(e => ({ component: e.component, version: e.version }))) + ';';

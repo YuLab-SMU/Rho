@@ -59,6 +59,7 @@ function App() {
   // About from a view opens that plugin and offers the way back to the project.
   const [pluginId, setPluginId] = useState(''), [pluginReturn, setPluginReturn] = useState(false);
   const [context, setContext] = useState(false), [navigation, setNavigation] = useState(true);
+  const [feedbackContext, setFeedbackContext] = useState(false);
   // A view may place its own section (for example Changes) at the top of the context panel.
   const [contextSlot, setContextSlot] = useState<HTMLDivElement | null>(null);
   const [reconnect, setReconnect] = useState(0), [commands, setCommands] = useState(false), [confirming, setConfirming] = useState(false);
@@ -207,7 +208,7 @@ function App() {
     { label: 'View', commands: [
       ...(narrow ? [{ id: 'navigation', label: 'Show navigation', icon: 'sidebar', run: () => setNavigation(true) }] satisfies Command[]
         : projectVisible ? [{ id: 'navigation', label: (navigation ? 'Hide ' : 'Show ') + sidebarName.toLowerCase(), icon: 'sidebar', run: () => setNavigation(v => !v) }] satisfies Command[] : []),
-      { id: 'context', label: (context ? 'Hide' : 'Show') + ' context & access', icon: 'context', run: () => setContext(v => !v) },
+      { id: 'context', label: (context && !feedbackContext ? 'Hide' : 'Show') + ' context & access', icon: 'context', run: () => { setFeedbackContext(false); setContext(v => feedbackContext || !v); } },
     ] },
     { label: 'Connection', commands: [{ id: 'read', label: phase === 'offline' ? 'Reconnect' : 'Refresh', icon: 'refresh', meta: 'Reads again · starts nothing', run: reread }] },
     { label: 'This tab', commands: [{ id: 'disconnect', label: 'Disconnect this tab', icon: 'unlink', danger: true, run: () => askDisconnect(commandReturn()) }] },
@@ -217,6 +218,7 @@ function App() {
   const access = edits ? 'Open and watch projects, edit open documents and pick table rows. Saving and runs stay with Claude Code.' : 'Open, create and watch projects. No edits or runs.';
   const contextSections = <>
     <div ref={setContextSlot} className="context-slot" />
+    {!feedbackContext && <>
     <section className="context-section">
       <h3 className="caption">Connection</h3>
       <div className="connection-line"><span className={'status-dot ' + phase} /><strong>{phase === 'live' ? 'Up to date' : phase === 'offline' ? 'Offline' + (offlineAt ? ' since ' + clock(offlineAt) : '') : 'Connecting'}</strong><button className="small-button" onClick={reread}>{phase === 'offline' ? 'Reconnect' : 'Refresh'}</button></div>
@@ -231,6 +233,7 @@ function App() {
       <h3 className="caption">Agents</h3>
       <p className="context-agents">Claude Code and other Agents get access from whoever runs Rho on this machine, not from this page.</p>
     </section>
+    </>}
   </>;
   return <div className="application">
     <a className="skip-link" href="#main">Skip to workspace</a>
@@ -257,7 +260,7 @@ function App() {
         {readAt && <>{' '}<span className="connection-time">{(phase === 'live' ? '' : 'last read ') + clock(readAt)}</span></>}
       </span>
       <button ref={commandTrigger} className="command-trigger" aria-keyshortcuts="Meta+K Control+K" onClick={() => setCommands(true)}>Commands <kbd>{shortcut}</kbd></button>
-      <button ref={contextTrigger} className="icon-button context-toggle" aria-label="Context & access" aria-controls={narrow ? undefined : 'project-context'} aria-haspopup={narrow ? 'dialog' : undefined} aria-expanded={context} onClick={() => setContext(v => !v)}><Icon name="context" size={18} stroke={1.7} /></button>
+      <button ref={contextTrigger} className="icon-button context-toggle" aria-label="Context & access" aria-controls={narrow ? undefined : 'project-context'} aria-haspopup={narrow ? 'dialog' : undefined} aria-expanded={context && !feedbackContext} onClick={() => { setFeedbackContext(false); setContext(v => feedbackContext || !v); }}><Icon name="context" size={18} stroke={1.7} /></button>
     </header>
     <div className="app-body">
       <nav className="app-rail" aria-label="Application">
@@ -270,6 +273,10 @@ function App() {
           onOverview={() => { setOverview(true); setScreen('project'); }} onLayout={layout} onSection={showSection} />}
       </aside>}
       <main id="main" tabIndex={-1} className={projectVisible ? 'main project-main' : 'main'}>
+        {screen === 'project' && snapshot?.presentation?.pending && <div className="offline-bar" role="status">
+          <p>New output is ready. Its display could not be confirmed; your current views are kept.</p>
+          <button className="small-button" onClick={() => showSection('files')}>Show files</button>
+        </div>}
         {(phase === 'offline' || reconnecting) && <div className="offline-bar" role="alert">
           <Icon name="offline" size={16} stroke={1.6} />
           <p>{reconnecting ? 'Reconnecting. ' : "Can't reach Rho. "}{seen}</p>
@@ -280,13 +287,13 @@ function App() {
           : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div>
           : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin}
             back={pluginReturn ? { label: 'Back to ' + name(project), run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
-          : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} /></Suspense>
+          : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); }} /></Suspense>
           : <ProjectOverview project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} />}
       </main>
-      {context && !narrow && <aside id="project-context" className="context-drawer" aria-label="Context and access">
-        <div className="drawer-heading"><h2>Context &amp; access</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={14} stroke={2} /></button></div>
+      {context && !narrow && <aside id="project-context" className="context-drawer" aria-label={feedbackContext ? 'Your question' : 'Context and access'}>
+        <div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Context & access'}</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={14} stroke={2} /></button></div>
         {contextSections}
-        <p className="context-footnote">Closing this tab only stops watching. Work that is running keeps running.</p>
+        {!feedbackContext && <p className="context-footnote">Closing this tab only stops watching. Work that is running keeps running.</p>}
       </aside>}
     </div>
     {narrow && navigation && <Overlay className="drawer" label="Navigation" returnFocus={navigationTrigger} onClose={() => setNavigation(false)}>
@@ -300,9 +307,9 @@ function App() {
         onOverview={pick(() => { setOverview(true); setScreen('project'); })} onLayout={id => pick(() => layout(id))()} onSection={next => pick(() => showSection(next))()} />}</div>}
       <div className="drawer-foot"><button className="nav-row" onClick={() => { setNavigation(false); setCommands(true); }}><Icon name="prompt" size={16} stroke={1.8} /><span className="nav-row-name">Commands</span></button></div>
     </Overlay>}
-    {narrow && context && <Overlay className="context-sheet" label="Context and access" returnFocus={contextTrigger} onClose={() => setContext(false)}>
+    {narrow && context && <Overlay className="context-sheet" label={feedbackContext ? 'Your question' : 'Context and access'} returnFocus={contextTrigger} onClose={() => setContext(false)}>
       <span className="sheet-handle" aria-hidden="true" />
-      <div className="drawer-heading"><h2>Context &amp; access</h2><button className="done-button" onClick={() => setContext(false)}>Done</button></div>
+      <div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Context & access'}</h2><button className="done-button" onClick={() => setContext(false)}>Done</button></div>
       {contextSections}
     </Overlay>}
     <dialog ref={dialog} className="commands" aria-label="Commands" onCancel={() => setCommands(false)} onClose={e => { if (e.currentTarget.open) return; setCommands(false); const next = afterCommands.current; afterCommands.current = null; if (next) next(); else commandReturn()?.focus(); }}

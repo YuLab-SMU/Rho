@@ -9,4 +9,4 @@ function Editor(props: UiViewProps) {
   return <DocumentEditorView view={props.view} projectId={props.projectId} client={props.client} active={props.active}
     documentVersion={doc?.version} principalId={props.principalId} contextTarget={props.contextTarget} headerTarget={props.headerTarget} maxUnconfirmedBytes={Math.max(1, Math.min(1024 * 1024, limits?.maxBufferBytes ?? 1024 * 1024))} editable={editable} />;
 }
-export const entry: UiContribution = { ...editorEntry, entryVersion: '0.1-draft', packageVersion: '0.4.0', propsSchema: { type: 'object', properties: { title: { type: 'string' } } }, commands: [], requiredOperations: ['document.read'], View: Editor };
+export const entry: UiContribution = { ...editorEntry, entryVersion: '0.1-draft', packageVersion: '0.4.1', propsSchema: { type: 'object', properties: { title: { type: 'string' } } }, commands: [], requiredOperations: ['document.read'], View: Editor };

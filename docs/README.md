@@ -19,6 +19,7 @@ implementation and verification summary.
 | [Backend implementation plan](BACKEND-FIRST.md) | Six backend work packages and the contract for independent UI development |
 | [Reusable plugin extraction](PLUGIN-EXTRACTION.md) | Capability/workflow boundary, current source coupling, owner changes, compatibility and new gates before plugin UI acceptance |
 | [Headless backend](HEADLESS.md) | Installation, versioned HTTP/SSE client, Agent adapter, persistence and budgets |
+| [Installed native grades acceptance](HEADLESS.md#installed-native-grades-acceptance-phase-5) | Two real business/presentation pairs, immutable offline candidate, original feedback recovery, calls/tokens/latency and AC01–AC21 evidence |
 | [Backend acceptance](BACKEND-ACCEPTANCE.md) | Actual component/integration evidence, selected composition, failures and unsupported scope |
 | [Extraction acceptance](EXTRACTION-ACCEPTANCE.md) | v2 reusable backend, two explicit R projects, compatibility, failures and actual npm installation |
 | [Design priorities](DESIGN-PRIORITIES.md) | Required interaction designs, Paper review scope and design acceptance |

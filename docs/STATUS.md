@@ -1,16 +1,16 @@
 # Rho status
 
-Updated: 2026-10-19.
+Updated: 2026-10-22. **Phases 1–5 selected grades flow:** [installed native acceptance](HEADLESS.md#installed-native-grades-acceptance-phase-5) now covers two actual Claude Code / Westlake HPC DeepSeek business sessions and two restricted presentation sessions. Base tables appear before presenters start; original-session feedback, human edits, versioned outputs and explicit replies survive the selected faults. The external offline candidate passed 32 installed checks, 34 real-model assertions, 14 browser/restart checks and 95 domain/identity assertions against AC01–AC21. Success: 77 model tool calls, 1,098,713 input tokens including cache and 29,705 output tokens; failed-trial calls and observed usage lower bounds are retained separately. Source checks remain Rho 63/63, Plugins 45/45; Agent 0.4.3, Documents/Tables/Annotations 0.4.1/0.4.2/0.4.1; Core unchanged. This bounded acceptance excludes same-project multi-task, full teaching-design acceptance and official distribution. Phase 1–5 source is committed; no registry publication or signing has been performed.
 
-## U2 editor and table integration
+## Teaching case handoff
 
-The confirmed Paper design and existing frontend now connect CodeMirror Documents
-and AG Grid Community Tables: tab-authenticated authors, exact-version snapshots,
-identified serial input, own undo, Agent-change revert, recovery copies and keyed
-selection. Saving/execution stay with the external Agent. Source checks pass:
-Plugins 40/40 and Rho 40/40. [U2 evidence](U2-UI-ACCEPTANCE.md) records actual
-browser/install checks and remaining physical IME and U3/U4 gates. The UI entry
-contract remains `0.1-draft`.
+The earlier UI pause followed review of the gap from the original Paper experience;
+phases 2–5 now have bounded acceptance and committed source. The [teaching-case handoff](TEACHING-CASE-HANDOFF.md)
+maps the grades-mean question to that journey, fixed data, reusable code, owner gaps
+and pending frontend/Agent acceptance. The selected object-feedback inspector now has a bounded question entry; the full teaching journey and user design acceptance remain pending.
+Documents/Tables editing, exact reads, own undo, revert and paging remain reusable.
+[U2 evidence](U2-UI-ACCEPTANCE.md) retains its bounded engineering checks; it does
+not accept the teaching experience. The UI contract remains `0.1-draft`.
 
 ## U1 browser shell candidate
 
@@ -233,26 +233,54 @@ reduced installations passed, with removal/reselection and recovery acceptance. 
 HTTP schema and inert fixtures form the backend boundary for independent UI work.
 The [plugin interface handoff](PLUGIN-UI-HANDOFF.md) records selected owners,
 dependencies and routes. The separate DOM-free browser SDK now reuses the
-snapshot/event transport and scoped bootstrap. Durable browser write intents,
-conditional layout writes and all five functional component renderers remain
-U2-U4 work; the U1 registry selects no owner renderer.
+snapshot/event transport and scoped bootstrap. The original U1 registry selected
+no owner renderer. The current grades candidate adds conditional layouts and
+selected owner entries; this does not accept the entire U2-U4 product journey.
 [The six backend work packages](BACKEND-FIRST.md) retain their original
 scope; [first-release tasks](WEBUI-FIRST.md) retain all product gates.
 
-Conditional workspace layout and component renderers, native editor
-IME/focus/clipboard, full accessibility and product performance/installation
-acceptance remain pending. U1 shell widths/command focus are separately checked;
-they do not accept the editor, grid or Agent collaboration loop. React/TypeScript, Vite, Dockview, CodeMirror 6,
+Full editor IME/clipboard, accessibility and broad product performance/installation
+acceptance remain pending. Grades-flow widths, shared Unicode input and installed
+recovery checks have their recorded scope; they do not accept every editor/grid
+or Agent interaction. React/TypeScript, Vite, Dockview, CodeMirror 6,
 AG Grid Community, ECharts and a typed json-render catalog remain selected UI
 choices. Electron and cross-window movement follow later.
 
 ## Design evidence and limits
 
-The Paper ["Release 1 · npm WebUI" page](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-5-0)
-contains R1–R14, pending user review, with the
-[design index](DESIGN-PRIORITIES.md#r1r14-连续交互索引). All 14 reference-width
-screens and notes were reviewed during the design revision; other widths and
-live browser behavior remain unverified. Existing S-series pages are historical.
+The Paper ["Release 1 · v3 (capabilities)" page](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-8-0)
+contains W1–W5 — the inquiry map, live finding composition, an editable-spec
+explainer, traceback and anchored feedback — and W1a–W5a continuation/error
+states. Panels map to target entries of the Plugins
+[capability catalog](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-CATALOG.md),
+pending user review, with the
+[flow index](DESIGN-PRIORITIES.md#w1w5-能力组合动线索引),
+[state index](DESIGN-PRIORITIES.md#w1aw5a-续接与异常状态索引) and
+[version/feedback ledger](DESIGN-PRIORITIES.md#w-系列资源版本与反馈台账).
+UI entries are unimplemented; C9 presentation/animation and C10 annotations
+remain proposals. Rho owns selection, assembly and routing; a capability label
+does not establish registration, installation or product acceptance.
+
+The design distinguishes feedback draft, context available but not fetched,
+tool-fetch receipt, observed work and an explicitly linked response. F-12's
+later explanation v2 retains the same data sources with no new execution
+observed; old v1 frame anchors remain on v1. Candidate snapshot s3 requires
+bounded inspection, owner field/key/binding validation and explicit switching;
+it has no claimed contents, coverage or checks. Source loss retains s2 rows and
+read time, missing charts retain a table alternative, and spec conflicts retain
+the draft. Unknown q-0004/run 004 observations keep the original request and
+partial outputs; cancellation requested, confirmed native stop and observer
+closure have distinct states. Binding loss keeps the note/context; unavailable
+original frames keep anchor metadata. These are design scenarios.
+
+The earlier
+["Release 1 · v2 (inquiry)" page](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-7-0)
+(I1–I4) is retained as reference. R1–R14 on the
+["Release 1 · npm WebUI" page](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-5-0)
+are retained as flow/state coverage under that direction. W1–W5 and W1a–W4a
+use 1440-wide reference artboards; W5a uses a 1280 × 900 design. These widths
+do not prove live browser layout, native input or accessibility; those checks
+remain pending. Existing S-series and superseded pages are historical.
 The designed run numbers and 8,204-row example are not substituted for actual
 backend evidence. The historical v1 partial experiment observed 16,139 rows;
 the new ordinary-R recovery experiment observes four rows without completion.

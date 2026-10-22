@@ -1,3 +1,4 @@
+import { feedbackSchemas } from './feedback-contracts.js';
 // Retained application wire snapshot; parity is checked against the optional owner.
 import { objectSchema as obj, text, refSchema as ref } from '@rho-workspace/plugin-contracts';
 const version = { type: 'integer', minimum: 1 };
@@ -14,4 +15,4 @@ export const inputs = {
   'annotation.read': obj({ annotationId: changeId }),
   'annotation.list': obj({})
 };
-export const outputs = { 'annotation.create': { type: 'object' }, 'annotation.reply': { type: 'object' }, 'annotation.read': { type: 'object' }, 'annotation.list': { type: 'array', items: { type: 'object' } } };
+export const outputs = { 'annotation.create': feedbackSchemas.AnnotationThreadProfile, 'annotation.reply': feedbackSchemas.AnnotationThreadProfile, 'annotation.read': feedbackSchemas.AnnotationThreadProfile, 'annotation.list': { type: 'array', items: feedbackSchemas.AnnotationThreadProfile } };

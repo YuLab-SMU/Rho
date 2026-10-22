@@ -4,7 +4,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { atomicJson, confined, digest, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
 export interface Project { id: string; root: string; openedAt: string }
-export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[]; kind?: 'browser'; projectRoot?: string; expiresAt?: string }
+export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[]; kind?: 'browser'; profile?: 'layered-business' | 'layered-presentation'; pluginFilter?: string[]; projectRoot?: string; expiresAt?: string }
 export async function lease(directory: string) {
   const file = path.join(directory, 'service.lock');
   // Kernel advisory lock on a stable inode, held by an owned helper until pipe

@@ -15,6 +15,10 @@ export interface UiViewProps {
   principalId?: string;
   // Shell-owned right side of the view tab bar; plugin supplies its controls.
   headerTarget?: HTMLElement | null;
+  // Owner reports real cells, shell attaches exact layout/build/client identity.
+  renderObservation?: (evidence: { evidence: 'dom-visible' | 'hidden' | 'unavailable' | 'unmounted'; coverage: any; time: { browserObservedAt: string; performanceNowMs: number; clockDomain: string } }) => Promise<void>;
+  requestFeedback?: () => void;
+  feedbackConfiguration?: NonNullable<WorkspaceSnapshot['feedback']>;
 }
 export interface UiContribution {
   entryVersion: '0.1-draft';

@@ -45,16 +45,24 @@ export interface DocumentBuffer extends DocumentSummary {
 export type DocumentBinding = { documentId: string; version: number } | { kind: 'live-document'; documentId: string };
 interface DocumentWrite extends DocumentChange { projectId: string; documentId: string; expectedVersion: number }
 export interface ResourceSummary { id: string; version: string; kind: string; path: string; bytes: number; owner: string; availability: string; provenance: Record<string, unknown> }
-export interface ViewDescription { id: string; component: string; version: string; props: Record<string, unknown>; bindings: Record<string, unknown>; protected?: boolean }
-export interface CompositionSummary { compositionId: string; version: number; views: ViewDescription[]; availability: Record<string, unknown>; rootId?: string; nodes?: ({ id: string; kind: 'group'; children: string[] } | (ViewDescription & { kind: 'view' }))[] }
+export interface ViewDescription { id: string; component: string; version: string; props: Record<string, unknown>; bindings: Record<string, unknown>; protected?: boolean; presentation?: { emphasis: 'normal' | 'highlight' } }
+export interface GroupPresentation { mode: 'tabs' | 'split'; axis?: 'horizontal' | 'vertical'; weights?: number[] }
+export interface CompositionSummary { compositionId: string; version: number; views: ViewDescription[]; availability: Record<string, unknown>; rootId?: string; nodes?: ({ id: string; kind: 'group'; children: string[]; presentation?: GroupPresentation } | (ViewDescription & { kind: 'view' }))[] }
 export interface WorkspaceSnapshot {
   project: ProjectSummary; catalog: CapabilityCatalog; cursor: number;
   documents: DocumentSummary[]; resources: ResourceSummary[]; compositions: CompositionSummary[];
   operations: { operationId: string; [key: string]: unknown }[];
   bindings: unknown[]; contexts: unknown[]; annotations: unknown[];
   host: { exitCode: number; [key: string]: unknown }; limits: Record<string, unknown>;
+  presentation?: { taskId: string; pending?: { resource: { id: string; version: string }; sourceEventId: string; reason: string; at: string } | null; witnesses: { witnessId: string; compositionId: string; compositionVersion: number; views: { viewId: string; resource: { id: string; version: string } }[] }[] } | null;
+  feedback?: { taskId: string; compositionId: string; taskVersion: number; targetBindingId: string | null; draftDocumentId: string; relatedDocumentId: string | null } | null;
 }
 export interface BrowserApi {
+  'feedback.submit': { input: Record<string, any>; output: Record<string, any> };
+  'feedback.status': { input: Record<string, any>; output: Record<string, any> };
+  'annotation.read': { input: Record<string, any>; output: Record<string, any> };
+  'view.observe': { input: Record<string, any>; output: Record<string, any> };
+  'view.observations.read': { input: Record<string, any>; output: Record<string, any> };
   'project.list': { input: Record<string, never>; output: ProjectSummary[] };
   'project.open': { input: { path: string }; output: ProjectSummary };
   'project.create': { input: { name: string }; output: ProjectSummary };

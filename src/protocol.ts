@@ -1,6 +1,11 @@
+import { enhancementSchemas } from './enhancement-contracts.js';
+import { discoverySchemas } from './discovery-contracts.js';
+import { feedbackSchemas } from './feedback-contracts.js';
+import { presentationSchemas } from './presentation-contracts.js';
 import { requirementsSchema, executionInputSchema, declarationSchema } from './entry-contracts.js';
 import { objectSchema as obj, text, refSchema as ref } from '@rho-workspace/plugin-contracts';
 import { inputs as annotationInputs, outputs as annotationOutputs } from './annotation-contracts.js';
+import { nativeSchemas } from './native-contracts.js';
 import { protocol as v1 } from './legacy-protocol.js';
 import { operationContracts as documentContracts, documentSchema } from './document-contract.js';
 const base = structuredClone(v1);
@@ -33,7 +38,8 @@ const condition = { ...project, compositionId: changeId, expectedVersion: intege
 const view = { ...base.operations['composition.put'].properties.views.items, additionalProperties: false };
 view.properties.bindings = { type: 'object', additionalProperties: { oneOf: [ref, obj({ documentId: ref.properties.version, version: positive }), obj({ kind: { const: 'live-document' }, documentId: ref.properties.version })] } };
 operations['composition.put'].properties.views.items = view;
-const node = { oneOf: [obj({ id: changeId, kind: { const: 'group' }, children: { ...array(changeId), maxItems: 256, uniqueItems: true } }), obj({ ...view.properties, kind: { const: 'view' }, protected: { type: 'boolean' } }, [...view.required, 'kind'])] };
+view.properties.presentation = obj({ emphasis: { enum: ['normal', 'highlight'] } });
+const node = { oneOf: [obj({ id: changeId, kind: { const: 'group' }, children: { ...array(changeId), maxItems: 256, uniqueItems: true }, presentation: presentationSchemas.GroupPresentation }, ['id', 'kind', 'children']), obj({ ...view.properties, kind: { const: 'view' }, protected: { type: 'boolean' } }, [...view.required, 'kind'])] };
 const applyOperation = { oneOf: [
   obj({ op: { const: 'replace' }, rootId: changeId, nodes: { ...array(node), minItems: 1, maxItems: 256 } }),
   obj({ op: { const: 'insert' }, parentId: changeId, index: integer, node }),
@@ -54,6 +60,15 @@ for (const [method, schema] of Object.entries(annotationInputs)) operations[meth
 operations['context.create'] = obj({ ...operations['context.create'].properties, annotations: { ...array(obj({ annotationId: changeId, version: positive })), minItems: 1, maxItems: 128 }, changeId, expectedVersion: { const: 0 } }, ['projectId']);
 for (const method of ['workspace.save', 'workspace.export']) operations[method] = obj({ ...operations[method].properties, format: { enum: [1, 2, 3] } }, operations[method].required);
 operations['context.create'].properties.region = obj({ page: positive, x: { type: 'number', minimum: 0 }, y: { type: 'number', minimum: 0 }, width: { type: 'number', exclusiveMinimum: 0 }, height: { type: 'number', exclusiveMinimum: 0 }, units: { enum: ['pixels', 'points'] } });
+for (const [method, schema] of Object.entries({ 'feedback.submit': feedbackSchemas.FeedbackSubmitInput, 'feedback.read': feedbackSchemas.FeedbackReadInput, 'feedback.status': feedbackSchemas.DeliveryStatusInput })) operations[method] = schema;
+operations['view.observe'] = presentationSchemas.VisibilityInput;
+operations['view.observations.read'] = presentationSchemas.VisibilityReadInput;
+operations['task.routing.put'] = nativeSchemas.RouteInput;
+operations['binding.open'] = nativeSchemas.BindingOpenExtended;
+operations['binding.activity.append'] = nativeSchemas.ActivityAppendInput;
+operations['binding.activity'] = { ...nativeSchemas.NativeActivityReadInput, required: ['projectId'], allOf: [{ if: { required: ['source'] }, then: { required: ['source', 'taskId', 'query'] }, else: { not: { anyOf: [{ required: ['taskId'] }, { required: ['query'] }] } } }] };
+for (const [method, schema] of Object.entries({ 'workspace.observe': enhancementSchemas.PresentationReadInput, 'workspace.enhance': enhancementSchemas.EnhanceInput, 'capability.index': discoverySchemas.IndexInput, 'capability.resolve': discoverySchemas.ResolveInput })) operations[method] = schema;
+operations['session.grant'].properties.profile = { enum: ['layered-business', 'layered-presentation'] };
 operations['session.grant'].properties.methods.items = { enum: Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('project.')) };
 export const resourceSchema = { ...base.definitions.resource, additionalProperties: true, properties: { ...base.definitions.resource.properties, kind: { enum: ['file', 'table', 'media', 'object', 'plot', 'model'] }, format: { anyOf: [record, { type: 'string' }] } } };
 const retainedPlan: any = base.definitions.run.properties.plan;
@@ -97,11 +112,31 @@ responses['observation.snapshot'].properties.compositions = array(composition);
 responses['workspace.save'].properties.compositions = array(composition);
 for (const method of ['requirements.prepare', 'action.submit', 'action.lookup', 'action.observe', 'action.retry', 'action.cancel']) responses[method] = runSchema;
 responses['action.list'] = array(runSchema);
-export const descriptions = { ...base.descriptions,
+responses['feedback.submit'] = feedbackSchemas.SubmissionRecord;
+responses['feedback.read'] = feedbackSchemas.FeedbackReadOutput;
+responses['feedback.status'] = feedbackSchemas.DeliveryStatusOutput;
+responses['view.observe'] = presentationSchemas.VisibilityReceipt;
+responses['view.observations.read'] = presentationSchemas.VisibilityReadOutput;
+responses['task.routing.put'] = nativeSchemas.RouteOutput;
+responses['binding.open'] = { anyOf: [responses['binding.open'], nativeSchemas.BindingRecordExtension] };
+responses['binding.activity.append'] = nativeSchemas.ActivityAppendOutput;
+responses['binding.activity'] = { anyOf: [responses['binding.activity'], nativeSchemas.NativeActivityReadOutput] };
+for (const [method, schema] of Object.entries({ 'workspace.observe': enhancementSchemas.PresentationReadOutput, 'workspace.enhance': presentationSchemas.CompositionCommit, 'capability.index': discoverySchemas.IndexOutput, 'capability.resolve': discoverySchemas.ResolveOutput })) responses[method] = schema;
+responses['session.grant'].properties.profile = operations['session.grant'].properties.profile;
+export const descriptions = {
+  'workspace.observe': 'Assigned presenter only: bounded layout/basis/owner summary/visibility projection. No feedback, full documents or native trace. Reading starts no model or renderer.',
+  'workspace.enhance': 'Assigned presenter only: conditional display emphasis/title/plain Agent note using exact current generation, witness and observation. Does not modify business resources, feedback or protection.',
+  'capability.index': 'Read a small role-narrowed index of currently authorized, enabled operations and immutable Skill/contract references.',
+  'capability.resolve': 'Fetch selected relevant Skills with complete owner contracts, whole objects only. Pages pin catalog/bundle/caller; knownRefs only reuse currently available immutable bodies.', ...base.descriptions,
+  'feedback.submit': 'Teacher browser only: freeze the original draft/anchor, prepare the committed message and retain one original-session delivery. Preserve submissionId across missing acknowledgements; stages are separate durable facts.',
+  'feedback.read': 'Original business binding only: fetch one complete frozen feedback object using its original delivery/context and a stable fetchId. relatedDocumentId is a pointer: read its CURRENT version before conditional edit/save and preserve human changes. This owner-served receipt does not prove client return or understanding.',
+  'feedback.status': 'Observe original delivery, exact-target fetches and explicitly linked replies. No send, session start or recovery. Keep original identities and unknown outcomes; continuation cursors pin their snapshot.',
   'capability.configure': 'Persist the selected project plugins with a conditional version and idempotent changeId. This changes routing only; it installs no package, starts no runtime and cancels no work.',
   'skill.list': 'List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.',
   'skill.read': 'Read one versioned shipped Skill after checking its digest. A stale digest requires rereading instead of applying cached instructions.',
   'action.submit': 'Execute the explicitly selected project R script snapshot and requirements. Persist operationId before delivery; identical retries retain the original Core identity. Output directory is the first R argument, followed by explicit args or frozen resource paths. Artifact paths are output-relative; completion is run-directory-relative, returned as plan.completion, so an inventory can remain beside immutable producer artifacts.',
+  'binding.activity.append': 'Registered native adapter only: retain original CLI tool and artifact-ready observations. This does not execute, validate, or present artifacts.',
+  'task.routing.put': 'Control plane only: conditionally assign one task and business binding to this project without starting a native session.',
   'resource.register': 'Declare scoped existing bytes and their type/schema at the supplied digest. This read and registration starts no runtime.',
   'requirements.check': 'Probe only the explicitly declared R packages with bounded base R; no Core Host or project script starts.',
   'data.compare': 'Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.',
@@ -112,4 +147,4 @@ export const errorKinds = base.errorKinds;
 export const errorSchema = base.definitions.error;
 export const errorEnvelope = obj({ apiVersion: { const: '2.0' }, ok: { const: false }, error: errorSchema });
 export const responseEnvelope = (method: string) => obj({ apiVersion: { const: '2.0' }, ok: { const: true }, value: responses[method] });
-export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored'])], operations, responses, descriptions, definitions, errorEnvelope, legacy: 'v1 schemas and captured fixtures are frozen. Legacy reads and explicit retry/cancel of accepted requests remain available; new recipe submissions require an explicit v2 project script.' };
+export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed'])], operations, responses, descriptions, definitions, errorEnvelope, legacy: 'v1 schemas and captured fixtures are frozen. Legacy reads and explicit retry/cancel of accepted requests remain available; new recipe submissions require an explicit v2 project script.' };

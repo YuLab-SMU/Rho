@@ -24,8 +24,8 @@ export interface CapabilityState {
 
 const applicationSkill = {
   id: 'rho.workspace',
-  version: '1.0',
-  content: 'Discover project-enabled, dependency-satisfied and authorized operations with capability.list; fetch shipped owner guidance with skill.list/read and verify its digest. Use composition.apply with stable group/view IDs, exact component versions, props/bindings, expectedVersion and changeId; composition.undo affects only layout. Keep protected views and their ancestors in place; protection never prevents authorized document edits. Keep personal/view selections in interaction.selection scopes; use an explicit shared channel to collaborate. Draft feedback and responses in Documents, submit annotation.create/reply against exact source/draft versions, and explicitly link replyTo. Prepare selected feedback with context.create and fetch context.read; prepared, fetched and explicitly replied are distinct facts. Reading is not understanding or task completion. CSV reading, scatter plotting, shared editing and feedback need no native execution. Keep original changeIds after lost acknowledgements, query the current owner and receipt retention boundaries, and never replay under a new identity. Reconnect via a fresh snapshot after event gaps; archive collaboration with workspace.export format 3. Skills grant no authority, install no software and do not start runtimes.',
+  version: '1.1',
+  content: 'In layered mode use rho_index → rho_resolve → rho_call. Resolve selected relevant Skills and the complete exact contract before execution. Only advertise knownRefs whose full bodies remain available; after context loss omit missing refs and refetch them. The adapter also retains bounded complete objects; immutable bodies never replace live resource/version/authorization checks. In compatibility mode, discover project-enabled, dependency-satisfied and authorized operations with capability.list; fetch shipped owner guidance with skill.list/read and verify its digest. Use composition.apply with stable group/view IDs, exact component versions, props/bindings, expectedVersion and changeId; composition.undo affects only layout. Keep protected views and their ancestors in place; protection never prevents authorized document edits. Keep personal/view selections in interaction.selection scopes; use an explicit shared channel to collaborate. Draft feedback and responses in Documents, submit annotation.create/reply against exact source/draft versions, and explicitly link replyTo. Prepare selected feedback with context.create and fetch context.read; prepared, fetched and explicitly replied are distinct facts. Reading is not understanding or task completion. CSV reading, scatter plotting, shared editing and feedback need no native execution. Keep original changeIds after lost acknowledgements, query the current owner and receipt retention boundaries, and never replay under a new identity. Reconnect via a fresh snapshot after event gaps; archive collaboration with workspace.export format 3. Skills grant no authority, install no software and do not start runtimes.',
 };
 const skillDigest = digest(applicationSkill.content);
 export const rhoWorkspaceSkill = { ...applicationSkill, digest: skillDigest };
@@ -87,7 +87,8 @@ export class Capabilities {
   }
 
   private authorized(principal: Principal, method: string) {
-    return principal.methods.includes(method);
+    const owner = this.plugins.operationOwner(method);
+    return principal.methods.includes(method) && (!owner || !principal.pluginFilter || principal.pluginFilter.includes(owner));
   }
 
   async operationStatus(principal: Principal, state: CapabilityState) {
@@ -100,7 +101,7 @@ export class Capabilities {
       const provider = owner && this.plugins.isKnown(owner)
         ? this.pluginStatus(owner as PluginId, state)
         : { projectEnabled: true, dependenciesSatisfied: true, packagePresent: true };
-      const dependenciesSatisfied = provider.dependenciesSatisfied && (operation?.requires ?? []).every(id => {
+      const dependenciesSatisfied = provider.dependenciesSatisfied && [...(operation?.requires ?? []), ...(['workspace.observe', 'workspace.enhance'].includes(method) ? ['agent', 'tables', 'files'] : [])].every(id => {
         if (!this.plugins.isKnown(id)) return false;
         const dep = this.pluginStatus(id, state);
         return dep.projectEnabled && dep.dependenciesSatisfied && dep.packagePresent;
@@ -157,7 +158,6 @@ export class Capabilities {
 
   async assertAvailable(method: string, principal: Principal) {
     const owner = this.plugins.operationOwner(method);
-    if (!owner) return;
     const state = await this.state();
     const status = (await this.operationStatus(principal, state)).find(operation => operation.method === method)!;
     requireThat(status.state === 'available', 'unavailable', 'The requested capability is not available for this project.', { ...status, owner });
@@ -169,7 +169,6 @@ export class Capabilities {
   async isAvailable(method: string, state?: CapabilityState) {
     const effectiveState = state ?? await this.state();
     const owner = this.plugins.operationOwner(method);
-    if (!owner) return true;
     const status = (await this.operationStatus({ methods: [] } as unknown as Principal, effectiveState)).find(operation => operation.method === method);
     return status?.state === 'available';
   }
