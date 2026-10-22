@@ -42,6 +42,19 @@ boards were preserved. User design acceptance remains pending. Other-platform
 system dialogs, source removal after creation and broad native multi-folder
 execution/installation acceptance are not claimed.
 
+The [fixed source-folder candidate](ui-acceptance/u1-source-folders.json) was built
+from clean committed Rho/Plugins inputs and the digest-verified accepted Core
+binary. Its unsigned tarball contains 3,937 entries with SHA-256
+`b23653dc51b7aededd10a05716f5e796679bc94b9a75035dcd71980bd4899809`.
+An offline installation outside all three checkouts passes the same 23 browser
+checks/five widths with zero Host starts/native submissions, plus the installed
+multi-source contract flow (creation replay, two distinct source reads, addition,
+live notification and restart/fresh-tab visibility). The first installed driver
+attempt selected a CommonJS rather than ESM test-driver entry; it remains failed.
+These bounded installed checks do not accept general native multi-folder execution,
+source removal or overall product design. Documentation-only updates after the
+build do not change the frozen candidate inputs. No registry publication/signing.
+
 ## Catalog completion and rebuilt packages: 2026-10-18
 
 The [completion record](ui-acceptance/u1-plugin-completion.json) freezes Rho

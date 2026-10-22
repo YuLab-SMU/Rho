@@ -1,0 +1,377 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-22",
+  "scope": "Named project creation, selected source folders and U1 shell; user design acceptance pending",
+  "composition": {
+    "schemaVersion": 1,
+    "platform": "darwin-arm64",
+    "node": "v22.22.3",
+    "application": {
+      "repository": "https://github.com/YuLab-SMU/Rho",
+      "commit": "9eeadd00793b03f428ec5c49d7e65b89bbf67c76",
+      "tree": "5317b63b0ff5538ff332bbdec79facbc85a999ad",
+      "buildInputsSha256": "1d0ca024c95b853369f190fe6326ff6195ebb813e45dd16d1792bf1d1e33909d",
+      "localOverride": null
+    },
+    "plugins": {
+      "repository": "https://github.com/YuLab-SMU/Rho-plugins",
+      "commit": "e0a35254f9dfa387e7984ac00cee8bf0830a7e54",
+      "tree": "a92dfb7afc893da865dd697763990519e9ef3a13",
+      "buildInputsSha256": "9731c7b1e6223c966fcb1c285266132516efd84cebd5479f84de94f693e52fba",
+      "localOverride": null,
+      "selected": [
+        "documents",
+        "files",
+        "r",
+        "requirements",
+        "tables",
+        "media",
+        "charts",
+        "agent",
+        "annotations"
+      ],
+      "packages": [
+        {
+          "id": "contracts",
+          "package": "@rho-workspace/plugin-contracts",
+          "version": "0.4.0",
+          "filename": "rho-workspace-plugin-contracts-0.4.0.tgz",
+          "bytes": 16649,
+          "sha256": "b6367d97ddac2ec7dfd044cf77374266d2997efb9b8289e35801a3e18bbfb107",
+          "integrity": "sha512-6l80HmPIWGxtUYb74u/YUfF8gLymV0sM9WQRZwUYp6GZRaDndZX2houdaoVgYt+q/2Zsc8h9cILdsCauB78OUw=="
+        },
+        {
+          "id": "documents",
+          "package": "@rho-workspace/plugin-documents",
+          "version": "0.4.2",
+          "filename": "rho-workspace-plugin-documents-0.4.2.tgz",
+          "bytes": 38199,
+          "sha256": "3e48247b6dc8cade7e100c745b4eef48bdc188228e74c01751388b9996dc091f",
+          "integrity": "sha512-d+t45GQOAbmnjenqp6nasAO6KbmcB++13u6OXVkjU2atkXBZ0Wa6jfSGU05L346KjZtxmjSOaddhqAAsL69cTQ=="
+        },
+        {
+          "id": "files",
+          "package": "@rho-workspace/plugin-files",
+          "version": "0.4.1",
+          "filename": "rho-workspace-plugin-files-0.4.1.tgz",
+          "bytes": 23454,
+          "sha256": "295bcaa211703d8002d977f7413aade288202faf9e69d9c8a63c6e2ded82e568",
+          "integrity": "sha512-AVLofsAQnkGQBJeIWIXys7U+2ENzNoNxfT45uYR0l8Sazz+PTzLv4Mqn8IqtOE3BFkIy4mrpop5w4NuRIqxzvA=="
+        },
+        {
+          "id": "r",
+          "package": "@rho-workspace/plugin-r",
+          "version": "0.4.1",
+          "filename": "rho-workspace-plugin-r-0.4.1.tgz",
+          "bytes": 22130,
+          "sha256": "86cdcca054a8422b7e548ca6ef847df5d0fd56ddfc3acbec1220760f4056d239",
+          "integrity": "sha512-D8dB84vswvlWmraywR+E+3Pj2k3tCHSh55OKxBfH7+qynpmbkZ43FhrK5KTfYX0jcBCU8IfPvpNYBIqi+ayc6w=="
+        },
+        {
+          "id": "requirements",
+          "package": "@rho-workspace/plugin-requirements",
+          "version": "0.4.0",
+          "filename": "rho-workspace-plugin-requirements-0.4.0.tgz",
+          "bytes": 18425,
+          "sha256": "519647d596e9fb54ee39a87847ed0c0146101411c2298bed9574c3511be4d91a",
+          "integrity": "sha512-K9Y6pl91LLJ042aNvPsHZo80AvHT7firYuq1sqIp8BkQfl9382GSTUyaf4okkoMREKhgJtRmKI3ZADy/nVHOXA=="
+        },
+        {
+          "id": "tables",
+          "package": "@rho-workspace/plugin-tables",
+          "version": "0.4.2",
+          "filename": "rho-workspace-plugin-tables-0.4.2.tgz",
+          "bytes": 28994,
+          "sha256": "c3aef4fae0566688491e8c97a57d87ba9bfbece14f9731a26783690280cbd5f8",
+          "integrity": "sha512-uL1ZxriVahL0+vQ4nMEjY3F7zFINegeHNXSEpNv4z/sc/S5Udp3TayPR+HGGpPBG+xFe+SdMIeeKQPIRiczJdw=="
+        },
+        {
+          "id": "media",
+          "package": "@rho-workspace/plugin-media",
+          "version": "0.4.0",
+          "filename": "rho-workspace-plugin-media-0.4.0.tgz",
+          "bytes": 16525,
+          "sha256": "1b9fd0cba51f6f3b2091d4da3a863b73d77212104dfc12a2348bec9e5a46044f",
+          "integrity": "sha512-5P0R72vlC5/D99YwfxD4qoCYcZ7WMarwLAaO4O5YVGY8e35FphOrxLYm1hkfFhKa2hCkM9/OiTPCTYTilsy0Mw=="
+        },
+        {
+          "id": "charts",
+          "package": "@rho-workspace/plugin-charts",
+          "version": "0.4.0",
+          "filename": "rho-workspace-plugin-charts-0.4.0.tgz",
+          "bytes": 16408,
+          "sha256": "154d1c208f1f01e325fad931654d522e695df3e5cd1f24647c6a8fb94ef25de4",
+          "integrity": "sha512-o5Gr7hoDrc3jtH5idQBBTQY77Yyemg6lFzfHWPUXkcNIT6yb54sPPqrqzxykxNV7twiYMYpbbL8jLDOOf/0VDA=="
+        },
+        {
+          "id": "agent",
+          "package": "@rho-workspace/plugin-agent",
+          "version": "0.4.3",
+          "filename": "rho-workspace-plugin-agent-0.4.3.tgz",
+          "bytes": 55170,
+          "sha256": "a473a8c239c7129844d5d476c429ced34b5f1a303402b38c789375f39a78e289",
+          "integrity": "sha512-1IEpuL7NnRCUvuWsXSsSpM1w++TzAjnhiYCcwQJifD61UMhlLo7uSq22xGuI7d9RqRJDi13KmtrNCF6qbNm3RQ=="
+        },
+        {
+          "id": "annotations",
+          "package": "@rho-workspace/plugin-annotations",
+          "version": "0.4.2",
+          "filename": "rho-workspace-plugin-annotations-0.4.2.tgz",
+          "bytes": 22887,
+          "sha256": "2e8ac70e6f604d7ac1c982504f92c32a5c21fbc56b07816b8d763f0e951c88b2",
+          "integrity": "sha512-T1GyhIeggXYdPTwp8Q+lMb6zcg9sgL2NFNULip9hG4Ag+gAdhDq8521ufnW+GT79Dq1tg05foHlcXZUAFmXB0w=="
+        }
+      ]
+    },
+    "catalog": {
+      "path": "dist/plugin-inventory.json",
+      "sha256": "d202e98e5051b39e523bb3324a52a42ed62bf6c652cae14ffdf8284347ce8d96",
+      "bytes": 33886,
+      "source": {
+        "commit": "e0a35254f9dfa387e7984ac00cee8bf0830a7e54",
+        "tree": "a92dfb7afc893da865dd697763990519e9ef3a13",
+        "buildInputsSha256": "9731c7b1e6223c966fcb1c285266132516efd84cebd5479f84de94f693e52fba",
+        "localOverride": null
+      },
+      "scope": "Descriptive inventory of all nine reviewed owners; contributes no runtime entry or authority."
+    },
+    "core": {
+      "repository": "https://github.com/YuLab-SMU/Rho-core",
+      "commit": "d0159da6feb01d1be9e3b4b34b67953241fedfcb",
+      "tree": "d76820b39b24df9e7b222efc3626f39915022181",
+      "buildInputsSha256": "584b7ebee58f2f2051cecf03eddb6c1013d66cc2781b0c7f0fe75afecb23443b",
+      "localOverride": null,
+      "artifactSha256": "eee223026f7e0b4dd1ee14a409c023919626c4175be5728048a02af739af4ce1",
+      "bytes": 7399128,
+      "buildAssociation": "Digest-verified accepted public Core binary reused; no local Core source changes selected."
+    },
+    "web": {
+      "format": "rho.web-build/1",
+      "uiProtocol": "0.1-draft",
+      "rendererBuild": "ef98ee459847d77811caf50b1973250052e6e0dc2f5f4422f85f550cd6d7d4a0",
+      "ownerEntries": [
+        {
+          "plugin": "documents",
+          "package": "@rho-workspace/plugin-documents",
+          "entry": "./ui",
+          "component": "rho.editor",
+          "version": "0.2.0",
+          "source": "web/entries/documents.tsx",
+          "packageVersion": "0.4.2",
+          "entrySha256": "2e7391b418529b939b0bc0cf02a3c7a340fb50d2c575e1363f03c4062fa05869"
+        },
+        {
+          "plugin": "tables",
+          "package": "@rho-workspace/plugin-tables",
+          "entry": "./ui",
+          "component": "rho.table",
+          "version": "0.2.0",
+          "source": "web/entries/tables.tsx",
+          "packageVersion": "0.4.2",
+          "entrySha256": "70b85122325cbc5afc575da74178031402d8b93707ab5f5356f99a4baa83b219"
+        },
+        {
+          "plugin": "annotations",
+          "package": "@rho-workspace/plugin-annotations",
+          "entry": "./ui",
+          "component": "rho.feedback",
+          "version": "0.2.0",
+          "source": "web/entries/annotations.tsx",
+          "packageVersion": "0.4.2",
+          "entrySha256": "e70a4b5f6d4378ccab92d42209a6c9eba290c278d11e12ab693fb3bfd7a3f14b"
+        },
+        {
+          "plugin": "agent",
+          "package": "@rho-workspace/plugin-agent",
+          "entry": "./ui",
+          "component": "rho.agent-note",
+          "version": "0.2.0",
+          "source": "web/entries/agent.tsx",
+          "packageVersion": "0.4.3",
+          "entrySha256": "4b8908fe55f5a5966414a9cf8babcdb244be91f46092e4753a96aabc116ae7fb"
+        }
+      ],
+      "selection": "documents,tables,annotations,agent",
+      "dependencies": [
+        {
+          "name": "@codemirror/state",
+          "version": "6.7.6",
+          "license": "MIT"
+        },
+        {
+          "name": "@codemirror/view",
+          "version": "6.43.13",
+          "license": "MIT"
+        },
+        {
+          "name": "ag-grid-community",
+          "version": "36.2.0",
+          "license": "MIT"
+        },
+        {
+          "name": "ag-grid-react",
+          "version": "36.2.0",
+          "license": "MIT"
+        },
+        {
+          "name": "react",
+          "version": "19.3.1",
+          "license": "MIT"
+        },
+        {
+          "name": "react-dom",
+          "version": "19.3.1",
+          "license": "MIT"
+        },
+        {
+          "name": "scheduler",
+          "version": "0.28.0",
+          "license": "MIT"
+        },
+        {
+          "name": "dockview",
+          "version": "8.6.0",
+          "license": "MIT"
+        },
+        {
+          "name": "dockview-core",
+          "version": "8.6.0",
+          "license": "MIT"
+        },
+        {
+          "name": "dockview-react",
+          "version": "8.6.0",
+          "license": "MIT"
+        },
+        {
+          "name": "vite",
+          "version": "8.3.4",
+          "license": "MIT"
+        },
+        {
+          "name": "typescript",
+          "version": "5.9.3",
+          "license": "Apache-2.0"
+        }
+      ],
+      "assets": [
+        {
+          "path": ".vite/manifest.json",
+          "bytes": 489,
+          "sha256": "522cbeedc6a88c289c580349748c032374d4aaa88ea6ed796e88a75cb51a2962"
+        },
+        {
+          "path": "assets/index-oUNQMWOj.js",
+          "bytes": 278520,
+          "sha256": "b4a66d82237f7427f8ca5db9651777000c4b268134a165831d46d05fe6566123"
+        },
+        {
+          "path": "assets/index-p2H96WUK.css",
+          "bytes": 39379,
+          "sha256": "ab99fddf073aee761987b6072c0fd5c986c06edbeb2b9f072cb6e33ead60a854"
+        },
+        {
+          "path": "assets/workspace-DbNnXXPG.css",
+          "bytes": 134380,
+          "sha256": "7ae940c97c9c594d70234872c3b3b27907af24e78303f1ccfb051b7b61557fcf"
+        },
+        {
+          "path": "assets/workspace-NyO7JX7z.js",
+          "bytes": 1402959,
+          "sha256": "6d03af5ec7174b9be2a3d43990957edca93f3fd3fd1cf6625d72379b6383f799"
+        },
+        {
+          "path": "index.html",
+          "bytes": 447,
+          "sha256": "c77d78feddc5a6629ef5c401fa9c65d2a26b3abb8b55da772efd91e79d51b9e4"
+        },
+        {
+          "path": "licenses.md",
+          "bytes": 15764,
+          "sha256": "0d9788075547b7b06595505e9fa8c46c960efe965acee5dc40d2a8843bb55695"
+        },
+        {
+          "path": "renderer.json",
+          "bytes": 85,
+          "sha256": "4532bf3532a4746925d45025f5f58b9f43433b4859ba085bcfda216d1d9fba67"
+        }
+      ],
+      "assetsSha256": "44c0a4290060ab0f458a97f3f085f0a796278970c2db4d0a060cb9754e2acc1d",
+      "licenses": "licenses.md",
+      "node": "v22.22.3"
+    },
+    "productionLockSha256": "f8250037901532732a1661c89153b77dfe646e9c5522aaa1dab1da44b8c368b3",
+    "distribution": "unsigned-local-npm-tarball",
+    "registryPublication": "not-performed",
+    "artifact": {
+      "filename": "rho-workspace-local-0.4.0.tgz",
+      "bytes": 7124950,
+      "sha256": "b23653dc51b7aededd10a05716f5e796679bc94b9a75035dcd71980bd4899809",
+      "integrity": "sha512-1yECLDlpELeI8D98c+KWALO5JbQrDurdyCZvEYsI0J88SQsHjKCX6nyaqyDIFluWCj5Wm8t0swLFwm8gSGG/oA==",
+      "files": 3937
+    }
+  },
+  "verification": {
+    "applicationTests": 66,
+    "ownerTests": 46,
+    "installedContractTests": 1,
+    "installedBrowser": {
+      "passed": true,
+      "browser": "155.0.8059.84",
+      "checks": [
+        "agent-opened-one-time-link-fragment-redeemed-removed-and-not-reusable",
+        "native-picker-cancel-returns-focus-without-path-form-or-project",
+        "project-overview-no-saved-layout-sidebar-layouts-content-no-zero-operations-no-json",
+        "unicode-project-create-real-catalog-unavailable-view-refresh",
+        "keyboard-command-dialog-and-focus-return",
+        "command-palette-filter-groups-footer-arrow-keys-state-verbs-runs-no-questions",
+        "disconnect-confirmation-from-commands-and-context-escape-returns-focus",
+        "narrow-no-rail-or-sidebar-toolbar-48-drawer-traps-focus-and-returns-it",
+        "narrow-context-bottom-sheet-done-escape-traps-focus-and-returns-it",
+        "editor-view-renders-exact-version-read-only",
+        "stable-id-remote-view-update-preserves-command-focus",
+        "narrow-view-tabs-arrow-home-end-no-select",
+        "offline-notice-keeps-what-was-read-reconnect-reads-only",
+        "offline-retains-last-snapshot-explicit-resnapshot-status-up-to-date-offline-connecting",
+        "same-origin-service-restart-retains-browser-session-and-confirmed-owner-state",
+        "unavailable-view-shows-needs-build-about-plugin-and-back-to-project",
+        "toolbar-location-read-only-chip-and-rail-highlight",
+        "plugins-catalog-sidebar-detail-sections-information-project-state-breadcrumb-back",
+        "plugins-no-capabilities-or-state-flags-or-methods-unusable-says-why-and-who",
+        "u1-theme-weights-400-600-and-accent-primary",
+        "home-welcome-relative-time-multiple-sources-display-name-and-command-focus",
+        "confirmed-disconnect-forgets-only-this-tab-credential",
+        "browser-close-no-task-cancel-or-host-shutdown-no-page-errors"
+      ],
+      "widths": [
+        1600,
+        1280,
+        1024,
+        768,
+        390
+      ],
+      "counts": {
+        "hostStarts": 0,
+        "nativeDispatches": 0
+      }
+    },
+    "reportDigests": {
+      "application": "2b6fc30938808a8ba39ecc010b7d35f1a7faeb54e0d5497c4353415e6b1bda7e",
+      "installedContract": "c7f58225da59ef078e7864218ca60e5701d4959fbb2a6f7e5a238496ff74d830",
+      "installedBrowser": "0983cb5496981a5a292a14765a549b5122b4ebba0c28fadd746ad03498a94022"
+    }
+  },
+  "failedTrials": [
+    "Historical typed-path assumptions and disabled-trigger focus return",
+    "Dockview active-panel preservation and disposed API after narrow layout",
+    "Offline assembly with the old exact optional Documents peer",
+    "Installed driver initially selected CommonJS instead of the verified ESM entry"
+  ],
+  "limits": [
+    "macOS system folder window only",
+    "Browser folder choices use trusted fixtures; actual native folder opening also observed during user review",
+    "No source removal after project creation",
+    "No new real-model/scientific execution acceptance",
+    "No registry publication or signing"
+  ]
+}

@@ -24,8 +24,9 @@ shared alias buffers, conditional saves and source-containment checks. Saved R
 script planning can read selected sources without changing execution identities.
 
 Source checks: Rho 66/66; Plugins 46/46. Chrome 155 passes 23 shell checks at 1600/1280/1024/768/390 with zero Host
-starts/native submissions. Installed verification and user design acceptance
-remain separate. The
+starts/native submissions. The clean offline candidate also passes the same installed browser flow and
+installed multi-source reads/addition/restart checks. [Fixed candidate](ui-acceptance/u1-source-folders.json)
+records its identities; user design acceptance remains pending. The
 [U1 record](UI-ACCEPTANCE.md) retains historical five-width, Full/minimal installed
 checks and the seven alignment batches. Those checks did not accept first-use
 usability. The [new Paper review draft](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-C-0)
