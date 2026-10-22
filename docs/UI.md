@@ -108,6 +108,12 @@ derive a project's name and its position under the tab root from either path
 separator, so an owner path such as `C:\work\atlas` keeps its final segment and is
 not mistaken for a child of a sibling that shares its prefix.
 
+One reading of the platform feeds both the home copy and the command shortcut.
+`navigator.platform` is deprecated, so the shell prefers `navigator.userAgentData
+.platform` and falls back to it only where a browser omits the replacement;
+`platformKind` resolves either spelling, so iPadOS reporting `MacIntel` and an
+Apple browser reporting `macOS` both yield Command rather than Control.
+
 ## Security and budgets
 
 `POST /api/browser/pair` requires exact Host/Origin and a JSON `{code}` body of at

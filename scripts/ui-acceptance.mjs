@@ -13,6 +13,7 @@ try { driver = process.env.RHO_UI_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.
 catch { throw new Error('Browser acceptance needs the external test driver. Set RHO_UI_PLAYWRIGHT_MODULE to an installed @playwright/test entry; the product does not install a browser driver.'); }
 const { chromium } = await import(driver);
 const { RhoClient } = await import(pathToFileURL(path.join(packageRoot, 'dist/client.js')));
+const { platformKind } = await import(pathToFileURL(path.join(packageRoot, 'dist/browser.js')));
 const { runtime } = await import(pathToFileURL(path.join(packageRoot, 'dist/runtime.js')));
 const native = await runtime();
 const directory = path.resolve(process.env.RHO_UI_EVIDENCE ?? 'work/ui-u1/browser-' + Date.now());
@@ -141,9 +142,14 @@ try {
   assert.equal(label, await fs.realpath(root));
   assert.equal(await page.locator('.home-header button').count(), 0);
   assert.deepEqual(await page.locator('.home-empty').getByRole('button').allTextContents(), ['Open folder…', 'New project']);
-  // The copy names the reader's own platform; the chooser is macOS-only today.
-  const where = /Mac|iPhone|iPad/.test(await page.evaluate(() => navigator.platform)) ? 'this Mac' : 'this computer';
+  // The copy names the reader's own platform, from the same reading the interface
+  // uses: userAgentData where a browser has it, navigator.platform otherwise.
+  const reported = await page.evaluate(() => navigator.userAgentData?.platform ?? navigator.platform);
+  const kind = platformKind(reported);
+  const where = kind === 'macos' ? 'this Mac' : 'this computer';
   assert.equal(await page.locator('.home-title p').textContent(), 'Open a folder on ' + where + ', or start a new project.');
+  // The command trigger shows the key that this platform's keyboard actually has.
+  assert.equal(await page.locator('.command-trigger kbd').textContent(), kind === 'other' ? 'Ctrl K' : '⌘K');
   assert.doesNotMatch(await page.locator('main').textContent(), /pair/i);
   await widths('home-empty');
   const sheet = page.getByRole('dialog'), field = sheet.getByRole('textbox'), hint = sheet.locator('.field-hint'), inSheet = () => page.evaluate(() => !!document.activeElement?.closest('dialog[open]'));

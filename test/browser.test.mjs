@@ -318,3 +318,24 @@ test('project display helpers read owner paths with either separator', async () 
   assert.equal(beneath('/home/me/projects', '/home/me/projects'), false);
   assert.equal(beneath('/home/me/projects/atlas', ''), false);
 });
+
+test('platformKind reads both the deprecated and replacement spellings', async () => {
+  const { platformKind } = await import('../dist/browser.js');
+  // userAgentData.platform values.
+  assert.equal(platformKind('macOS'), 'macos');
+  assert.equal(platformKind('iOS'), 'ios');
+  assert.equal(platformKind('Windows'), 'other');
+  assert.equal(platformKind('Linux'), 'other');
+  assert.equal(platformKind('Chrome OS'), 'other');
+  assert.equal(platformKind('Android'), 'other');
+  // navigator.platform values, including iPadOS reporting MacIntel.
+  assert.equal(platformKind('MacIntel'), 'macos');
+  assert.equal(platformKind('iPad'), 'ios');
+  assert.equal(platformKind('iPhone'), 'ios');
+  assert.equal(platformKind('iPod'), 'ios');
+  assert.equal(platformKind('Win32'), 'other');
+  assert.equal(platformKind('Linux x86_64'), 'other');
+  // A missing or empty report falls back to the neutral interface.
+  assert.equal(platformKind(undefined), 'other');
+  assert.equal(platformKind(''), 'other');
+});

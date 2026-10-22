@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { beneath, lastSegment, type BrowserClient, type FolderSelection, type ProjectSummary, type SourceFolder } from '../src/browser.js';
+import { onPlatform } from './platform.js';
 import { Icon } from './icons.js';
 
 export function projectName(project: ProjectSummary) { return project.name ?? (lastSegment(project.root) || 'Project'); }
@@ -28,9 +29,6 @@ export function located(project: ProjectSummary, folder: Folder) {
   if (project.sources) return project.sources.length + (project.sources.length === 1 ? ' source folder' : ' source folders');
   return folder.root && folder.label && beneath(project.root, folder.root) ? folder.label + project.root.slice(folder.root.length) : project.root;
 }
-// The folder chooser is macOS-only today (src/native-folders.ts). Name the
-// platform the reader is on rather than claiming every tab runs on a Mac.
-const onPlatform = /Mac|iPhone|iPad/.test(navigator.platform) ? 'this Mac' : 'this computer';
 interface Problem { text: string; next?: { label: string; run: () => void }; blocks?: boolean }
 export function Home({ client, projects, folder, focusRequest, onFocused, onOpened, onChoose, onAccessEnded }: {
   client: BrowserClient; projects: ProjectSummary[]; folder: Folder; focusRequest: boolean; onFocused: () => void;

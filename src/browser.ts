@@ -61,6 +61,17 @@ export function beneath(child: string, parent: string) {
   return child.startsWith(head);
 }
 export interface CompositionSummary { compositionId: string; version: number; views: ViewDescription[]; availability: Record<string, unknown>; rootId?: string; nodes?: ({ id: string; kind: 'group'; children: string[]; presentation?: GroupPresentation } | (ViewDescription & { kind: 'view' }))[] }
+// navigator.platform is deprecated; userAgentData.platform replaces it but Safari
+// and Firefox still omit it, so callers pass whichever string they have. iPadOS
+// reports MacIntel while userAgentData reports iOS, so both spellings have to
+// resolve to an Apple keyboard carrying ⌘.
+export type Platform = 'macos' | 'ios' | 'other';
+export function platformKind(reported: string | undefined): Platform {
+  const value = (reported ?? '').toLowerCase();
+  if (/iphone|ipad|ipod|ios/.test(value)) return 'ios';
+  if (/mac/.test(value)) return 'macos';
+  return 'other';
+}
 export interface WorkspaceSnapshot {
   project: ProjectSummary; catalog: CapabilityCatalog; cursor: number;
   documents: DocumentSummary[]; resources: ResourceSummary[]; compositions: CompositionSummary[];

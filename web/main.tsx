@@ -7,6 +7,7 @@ import { Icon } from './icons.js';
 import { CommandPalette, type Command, type CommandGroup } from './commands.js';
 import { PluginCatalog, PluginNavigation } from './plugins.js';
 import { pluginPresentation } from '../src/plugin-presentation.js';
+import { shortcut } from './platform.js';
 import './theme.css';
 import './plugins.css';
 
@@ -32,7 +33,6 @@ function until(iso: string) {
   const at = new Date(iso), next = new Date(), today = next.toDateString(); next.setDate(next.getDate() + 1);
   return (at.toDateString() === today ? 'Today' : at.toDateString() === next.toDateString() ? 'Tomorrow' : at.toLocaleDateString()) + ' at ' + clock(at);
 }
-const shortcut = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘K' : 'Ctrl K';
 type Phase = 'connecting' | 'live' | 'offline';
 type Away = 'fresh' | 'linking' | 'used' | 'failed' | 'ended' | 'disconnected';
 const awayCopy: Record<Away, [string, string]> = {
