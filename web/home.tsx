@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
-import type { BrowserClient, FolderSelection, ProjectSummary, SourceFolder } from '../src/browser.js';
+import { beneath, lastSegment, type BrowserClient, type FolderSelection, type ProjectSummary, type SourceFolder } from '../src/browser.js';
 import { Icon } from './icons.js';
 
-export function projectName(project: ProjectSummary) { return project.name ?? project.root.split('/').filter(Boolean).at(-1) ?? 'Project'; }
+export function projectName(project: ProjectSummary) { return project.name ?? (lastSegment(project.root) || 'Project'); }
 // Today at 05:47 / Yesterday / Oct 9; the full date and time go in the tooltip.
 export function when(iso: string, now = new Date()) {
   const at = new Date(iso);
@@ -26,8 +26,11 @@ export function trapTab(event: KeyboardEvent<HTMLElement>) {
 export interface Folder { root?: string; label: string }
 export function located(project: ProjectSummary, folder: Folder) {
   if (project.sources) return project.sources.length + (project.sources.length === 1 ? ' source folder' : ' source folders');
-  return folder.root && folder.label && (project.root === folder.root || project.root.startsWith(folder.root + '/')) ? folder.label + project.root.slice(folder.root.length) : project.root;
+  return folder.root && folder.label && beneath(project.root, folder.root) ? folder.label + project.root.slice(folder.root.length) : project.root;
 }
+// The folder chooser is macOS-only today (src/native-folders.ts). Name the
+// platform the reader is on rather than claiming every tab runs on a Mac.
+const onPlatform = /Mac|iPhone|iPad/.test(navigator.platform) ? 'this Mac' : 'this computer';
 interface Problem { text: string; next?: { label: string; run: () => void }; blocks?: boolean }
 export function Home({ client, projects, folder, focusRequest, onFocused, onOpened, onChoose, onAccessEnded }: {
   client: BrowserClient; projects: ProjectSummary[]; folder: Folder; focusRequest: boolean; onFocused: () => void;
@@ -62,7 +65,7 @@ export function Home({ client, projects, folder, focusRequest, onFocused, onOpen
     <div className="home-column">
       <header className="home-header">
         <div className="home-title"><h1>{projects.length ? 'Welcome back' : 'Welcome to Rho'}</h1>
-          <p>{projects.length ? 'Pick up a project, or open another folder on this Mac.' : 'Open a folder on this Mac, or start a new project.'}</p></div>
+          <p>{projects.length ? 'Pick up a project, or open another folder on ' + onPlatform + '.' : 'Open a folder on ' + onPlatform + ', or start a new project.'}</p></div>
         {projects.length > 0 && <div className="home-actions">{entries}</div>}
       </header>
       {projects.length ? <div className="project-list" role="group" aria-labelledby="project-list-label">

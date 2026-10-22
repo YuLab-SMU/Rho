@@ -102,7 +102,11 @@ one buffer within the workspace. Unknown sources, traversal, symlinks and intern
 state fail closed. Sources missing later do not erase retained drafts or output.
 Names and locations are shown in the UI; IDs remain resource-reference details.
 Opening/adding folders starts no Host, executes no project code and installs nothing.
-The native folder dialog is currently implemented for macOS only.
+The native folder dialog is currently implemented for macOS only, and the home
+copy names the reader's own platform rather than assuming a Mac. Display helpers
+derive a project's name and its position under the tab root from either path
+separator, so an owner path such as `C:\work\atlas` keeps its final segment and is
+not mistaken for a child of a sibling that shares its prefix.
 
 ## Security and budgets
 

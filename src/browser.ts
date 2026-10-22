@@ -49,6 +49,17 @@ interface DocumentWrite extends DocumentChange { projectId: string; documentId: 
 export interface ResourceSummary { id: string; version: string; kind: string; path: string; bytes: number; owner: string; availability: string; provenance: Record<string, unknown> }
 export interface ViewDescription { id: string; component: string; version: string; props: Record<string, unknown>; bindings: Record<string, unknown>; protected?: boolean; presentation?: { emphasis: 'normal' | 'highlight' } }
 export interface GroupPresentation { mode: 'tabs' | 'split'; axis?: 'horizontal' | 'vertical'; weights?: number[] }
+// Owner paths carry the host separator, so a Windows root arrives as C:\work\atlas.
+// Display helpers accept either separator instead of assuming '/'.
+const separator = /[\\/]/;
+export function lastSegment(value: string) { return value.split(separator).filter(Boolean).at(-1) ?? ''; }
+// True when child sits below parent. Compares whole segments, so /work/atlas is not
+// read as a parent of /work/atlas-old.
+export function beneath(child: string, parent: string) {
+  if (!parent || child === parent) return false;
+  const head = parent.endsWith('/') || parent.endsWith('\\') ? parent : parent + (parent.includes('\\') ? '\\' : '/');
+  return child.startsWith(head);
+}
 export interface CompositionSummary { compositionId: string; version: number; views: ViewDescription[]; availability: Record<string, unknown>; rootId?: string; nodes?: ({ id: string; kind: 'group'; children: string[]; presentation?: GroupPresentation } | (ViewDescription & { kind: 'view' }))[] }
 export interface WorkspaceSnapshot {
   project: ProjectSummary; catalog: CapabilityCatalog; cursor: number;

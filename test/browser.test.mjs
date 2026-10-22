@@ -296,3 +296,25 @@ test('named projects combine source folders, allow duplicate display names and a
     assert.equal(restarted.bridge.owned.size, 0);
   } finally { await restarted?.close(); await f.cleanup(); await fs.rm(source, { recursive: true, force: true }); }
 });
+
+test('project display helpers read owner paths with either separator', async () => {
+  const { lastSegment, beneath } = await import('../dist/browser.js');
+  // A name with no explicit project.name falls back to the final path segment.
+  assert.equal(lastSegment('/Users/me/projects/tumor-io'), 'tumor-io');
+  assert.equal(lastSegment('C:\\work\\atlas'), 'atlas');
+  assert.equal(lastSegment('/Users/me/projects/notes 中文'), 'notes 中文');
+  assert.equal(lastSegment('/'), '');
+  // Trailing separators and repeated separators do not produce an empty name.
+  assert.equal(lastSegment('/Users/me/projects/atlas/'), 'atlas');
+  assert.equal(lastSegment('C:\\work\\\\atlas\\'), 'atlas');
+  // Containment compares whole segments on both platforms.
+  assert.equal(beneath('/home/me/projects/atlas/data', '/home/me/projects'), true);
+  assert.equal(beneath('C:\\work\\atlas\\data', 'C:\\work'), true);
+  assert.equal(beneath('C:\\work\\atlas', 'C:\\work\\'), true);
+  // A sibling that merely shares a prefix is not contained.
+  assert.equal(beneath('/home/me/projects/atlas-old', '/home/me/projects/atlas'), false);
+  assert.equal(beneath('C:\\work\\atlas-old', 'C:\\work\\atlas'), false);
+  // A project equal to the tab root is not shown as sitting beneath itself.
+  assert.equal(beneath('/home/me/projects', '/home/me/projects'), false);
+  assert.equal(beneath('/home/me/projects/atlas', ''), false);
+});

@@ -141,7 +141,9 @@ try {
   assert.equal(label, await fs.realpath(root));
   assert.equal(await page.locator('.home-header button').count(), 0);
   assert.deepEqual(await page.locator('.home-empty').getByRole('button').allTextContents(), ['Open folder…', 'New project']);
-  assert.equal(await page.locator('.home-title p').textContent(), 'Open a folder on this Mac, or start a new project.');
+  // The copy names the reader's own platform; the chooser is macOS-only today.
+  const where = /Mac|iPhone|iPad/.test(await page.evaluate(() => navigator.platform)) ? 'this Mac' : 'this computer';
+  assert.equal(await page.locator('.home-title p').textContent(), 'Open a folder on ' + where + ', or start a new project.');
   assert.doesNotMatch(await page.locator('main').textContent(), /pair/i);
   await widths('home-empty');
   const sheet = page.getByRole('dialog'), field = sheet.getByRole('textbox'), hint = sheet.locator('.field-hint'), inSheet = () => page.evaluate(() => !!document.activeElement?.closest('dialog[open]'));
