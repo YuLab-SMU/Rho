@@ -6,8 +6,10 @@ implementation and verification summary.
 
 | Document | Purpose |
 | --- | --- |
+| [成绩平均值教学案例交接](TEACHING-CASE-HANDOFF.md) | Original Paper journey, fixed teaching data, reusable capabilities, frontend/backend gaps and pending acceptance |
 | [Browser UI implementation](UI.md) | U1 Agent-opened tabs, scoped SDK/shell, contribution draft, four-stage gates and browser checks |
 | [U1 installed browser checks](UI-ACCEPTANCE.md) | Fixed full/minimal npm candidates, zero-native browser scenarios, design/Chrome baseline limits |
+| [U1 design alignment plan](U1-ALIGNMENT.md) | Gaps between `web/` and the Paper U1 boards, seven batches, blockers |
 | [Collaboration acceptance](COLLABORATION-ACCEPTANCE.md) | Fixed installed compositions, real Agent replies, zero-native collaboration, recovery and separate native checks |
 | [Headless collaboration](COLLABORATION.md) | Conditional composition/protection, scoped selection, owner-anchored feedback, Skills/MCP and format-3 recovery |
 | [Plugin interfaces and UI handoff](PLUGIN-UI-HANDOFF.md) | Eight owner APIs, HTTP consumers, five unavailable component entries and remaining browser/backend capabilities |

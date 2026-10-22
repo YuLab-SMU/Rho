@@ -5,7 +5,8 @@ Updated: 2026-10-16
 Rho 的基础插件提供可复用系统能力。具体分析的问题、数据、设计公式、contrast、步骤和
 领域判断属于项目脚本或 recipe；`Real R analysis: paired dexamethasone response`
 是验收样例，不是插件目录中的功能单元。插件能力与可选 UI entry 的完整定义由
-[Rho-plugins 插件模型](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-MODEL.md)持有。
+[Rho-plugins 插件模型](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-MODEL.md)
+及其[具体能力与 entry 目录](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-CATALOG.md)持有。
 
 0.2 已按该边界完成后端代码解耦，交付 `/api/v2`、客户端和无副作用状态夹具。
 0.3 进一步将八类能力拆成独立 npm 插件；见[拆分验收](PLUGIN-SPLIT-ACCEPTANCE.md)。
