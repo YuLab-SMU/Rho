@@ -79,6 +79,26 @@ Exact Host and supplied Origin are checked. The bearer credential is project
 scoped for external callers. CLI shutdown stops only Hosts started by this
 service and reports confirmation separately. Existing Hosts keep their owner.
 
+## Named workspaces and selected source folders
+
+The browser can create a named workspace from one or more natively selected
+source folders. Its random ID and private owner-state/working directory are
+independent of the display name and source locations. Source content stays in
+place. `project.source.pick` returns a caller-bound receipt; `project.createWorkspace`
+consumes receipts with a retained change identity; `project.source.add` adds a
+further native choice to an authorized project. Legacy single-directory APIs and
+original managed operations retain their identities and behavior.
+
+Source entries have stable IDs and canonical roots. Files resolves references
+`@<sourceId>/<relative-path>` inside the chosen folders; Documents uses that port
+for its existing buffers and actual write conditions. Saved R script snapshots
+can use the same resolver. Plain relative paths and generated outputs belong to
+the workspace directory; no implicit union, file copying, symlinks or change of
+native working directory is performed. Callers must choose explicit sources and
+inputs. The existing macOS socket-path bound still applies to an actual execution.
+See [browser projects](UI.md#projects-and-source-folders) for native-window limits
+and the separately scoped first-use verification.
+
 ## Public contract and client
 
 `RhoClient` is a Node caller: it uses filesystem-backed connection/intent files.

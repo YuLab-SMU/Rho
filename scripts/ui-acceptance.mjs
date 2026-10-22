@@ -19,10 +19,16 @@ const directory = path.resolve(process.env.RHO_UI_EVIDENCE ?? 'work/ui-u1/browse
 await fs.mkdir(directory, { recursive: true });
 const root = await fs.mkdtemp('/tmp/rhou-');
 const state = path.join(root, '.service');
+const sourceFixtures = await fs.mkdtemp('/private/tmp/rho-source-ui-');
+for (const name of ['Source A', 'Source B', 'Source C']) await fs.mkdir(path.join(sourceFixtures, name));
 const countsFile = path.join(root, 'native-counts.jsonl');
 const instrument = path.join(root, 'instrument.mjs');
-await fs.writeFile(instrument, `import { appendFileSync } from 'node:fs';
+const folderResult = path.join(root, 'folder-result.json');
+await fs.writeFile(folderResult, 'null');
+await fs.writeFile(instrument, `import { appendFileSync, readFileSync } from 'node:fs';
 import { CoreBridge } from ${JSON.stringify(pathToFileURL(path.join(packageRoot, 'dist/bridge.js')).href)};
+import { NativeFolderPicker } from ${JSON.stringify(pathToFileURL(path.join(packageRoot, 'dist/native-folders.js')).href)};
+NativeFolderPicker.prototype.choose = async function() { return JSON.parse(readFileSync(${JSON.stringify(folderResult)}, 'utf8')); };
 const file = ${JSON.stringify(countsFile)};
 const start = CoreBridge.prototype.ensureOwnedHost, call = CoreBridge.prototype.call;
 CoreBridge.prototype.ensureOwnedHost = function(...args) { appendFileSync(file, '{"event":"host-start"}\\n'); return start.apply(this, args); };
@@ -135,50 +141,32 @@ try {
   assert.equal(label, await fs.realpath(root));
   assert.equal(await page.locator('.home-header button').count(), 0);
   assert.deepEqual(await page.locator('.home-empty').getByRole('button').allTextContents(), ['Open folder…', 'New project']);
-  assert.ok((await page.locator('.home-title p').textContent()).includes(label));
+  assert.equal(await page.locator('.home-title p').textContent(), 'Open a folder on this Mac, or start a new project.');
   assert.doesNotMatch(await page.locator('main').textContent(), /pair/i);
   await widths('home-empty');
   const sheet = page.getByRole('dialog'), field = sheet.getByRole('textbox'), hint = sheet.locator('.field-hint'), inSheet = () => page.evaluate(() => !!document.activeElement?.closest('dialog[open]'));
   const openTrigger = await page.getByRole('button', { name: 'Open folder…', exact: true }).elementHandle();
   await openTrigger.click();
-  await page.getByRole('dialog', { name: 'Open folder', exact: true }).waitFor();
-  assert.equal(await field.evaluate(element => element === document.activeElement), true);
-  assert.equal(await sheet.locator('.input-prefix').textContent(), label + '/');
-  assert.equal(await sheet.getByRole('button', { name: 'Open', exact: true }).isDisabled(), true);
-  await page.screenshot({ path: path.join(directory, 'sheet-open-1600.png'), fullPage: true });
-  // A path outside the folder is refused before any request, and the hint says what to do instead.
-  await field.fill('../escape');
-  assert.match(await hint.textContent(), /^That path is outside .+\. Ask your Agent to open Rho for a folder that includes it\.$/);
-  assert.equal(await field.getAttribute('aria-invalid'), 'true');
-  assert.equal(await sheet.getByRole('button', { name: 'Open', exact: true }).isDisabled(), true);
-  await page.screenshot({ path: path.join(directory, 'sheet-open-outside-1600.png'), fullPage: true });
-  // Tab and Shift+Tab cycle inside the sheet; Escape closes it and returns focus to its trigger.
-  for (const key of ['Tab', 'Tab', 'Tab', 'Shift+Tab', 'Shift+Tab', 'Shift+Tab']) { await page.keyboard.press(key); assert.equal(await inSheet(), true, key); }
-  await page.keyboard.press('Escape');
-  await sheet.waitFor({ state: 'hidden' });
-  await focused(openTrigger);
-  // A pasted full path inside the folder is accepted; a missing single folder offers to create it.
-  await openTrigger.click();
-  await field.fill(label + '/missing');
-  assert.equal(await field.inputValue(), 'missing');
-  await sheet.getByRole('button', { name: 'Open', exact: true }).click();
-  await sheet.getByRole('button', { name: 'Create it', exact: true }).waitFor();
-  assert.equal(await hint.textContent(), `missing isn't in ${label}. Check the name, or create it as a new project.`);
-  await page.screenshot({ path: path.join(directory, 'sheet-open-missing-1600.png'), fullPage: true });
-  await page.mouse.click(8, 8);
-  await sheet.waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => !document.querySelector('.home-actions button')?.disabled);
+  assert.equal(await page.getByRole('textbox').count(), 0);
+  assert.equal(await sheet.count(), 0);
   await focused(openTrigger);
   assert.deepEqual(await admin.call('project.list', {}), []);
-  report.checks.push('home-sheets-focus-trap-escape-backdrop-return-and-outside-missing-next-actions');
+  report.checks.push('native-picker-cancel-returns-focus-without-path-form-or-project');
   await page.getByRole('button', { name: 'New project', exact: true }).click();
-  await page.getByRole('dialog', { name: 'New project', exact: true }).waitFor();
-  await field.fill('notes/中文');
-  assert.match(await hint.textContent(), /^A name can't include “\/”\. To open a folder inside .+, use Open folder\.$/);
-  await sheet.getByRole('button', { name: 'Use Open folder', exact: true }).waitFor();
+  await page.getByRole('dialog', { name: 'Create project', exact: true }).waitFor();
+  await field.fill('x'.repeat(81));
+  assert.equal(await sheet.getByRole('alert').textContent(), 'Use a name of 80 characters or fewer.');
   await field.fill('notes 中文');
-  assert.equal(await hint.textContent(), `Creates an empty folder at ${label}/notes 中文. Nothing is installed.`);
+  for (const name of ['Source A', 'Source B']) {
+    await fs.writeFile(folderResult, JSON.stringify(path.join(sourceFixtures, name)));
+    await sheet.getByRole('button', { name: 'Add folder…', exact: true }).click();
+    await sheet.getByText(path.join(sourceFixtures, name), { exact: true }).waitFor();
+    await sheet.getByRole('button', { name: 'Add folder…', exact: true }).waitFor();
+  }
+  assert.equal(await sheet.locator('.source-folders li').count(), 2);
   await widths('sheet-new', async () => assert.equal(await inSheet(), true));
-  await page.keyboard.press('Enter');
+  await sheet.getByRole('button', { name: 'Create project', exact: true }).click();
   await page.getByText('No saved layout yet', { exact: true }).waitFor();
   await focused(await page.locator('main').elementHandle());
   // Inside a project: the sidebar lists Layouts and Content; the overview lists what the project holds, without JSON.
@@ -187,7 +175,7 @@ try {
   assert.equal(await sidebar.getByRole('button', { name: 'Overview', exact: true }).getAttribute('aria-current'), 'page');
   assert.equal(await sidebar.getByRole('group', { name: 'Layouts', exact: true }).textContent(), 'None saved yet');
   assert.equal(await sidebar.getByText('Retained operations').count(), 0);
-  assert.deepEqual(await page.locator('main h2').allTextContents(), ['Documents 0', 'Files 0']);
+  assert.deepEqual(await page.locator('main h2').allTextContents(), ['Source folders', 'Documents 0', 'Files 0']);
   const noJson = async () => { assert.equal(await page.locator('main pre, main code').count(), 0); assert.doesNotMatch(await page.locator('main').innerText(), /[{[]\s*"/); };
   await noJson();
   await widths('overview', noJson);
@@ -204,7 +192,7 @@ try {
   let composition = await admin.call('composition.apply', { projectId: p.id, compositionId: 'workspace', expectedVersion: 0, changeId: 'initial', operations: [{ op: 'replace', rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: ['notes'] }, { id: 'notes', kind: 'view', component: 'rho.scatter', version: '0.2.0', props: { title: 'Shared notes', x: 'x', y: 'y' }, bindings: { data: { id: table.id, version: table.version } } }] }] });
   // A layout saved elsewhere appears in the overview without moving the reader; choosing it opens it.
   await page.locator('#overview-layouts').waitFor();
-  assert.deepEqual(await page.locator('main h2').allTextContents(), ['Layouts 1', 'Documents 1', 'Files 1']);
+  assert.deepEqual(await page.locator('main h2').allTextContents(), ['Source folders', 'Layouts 1', 'Documents 1', 'Files 1']);
   assert.equal(await sidebar.getByRole('button', { name: 'Overview', exact: true }).getAttribute('aria-current'), 'page');
   await sidebar.getByRole('button', { name: /^workspace/ }).click();
   await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).waitFor();
@@ -545,7 +533,7 @@ try {
   const row = page.locator('.project-row');
   assert.equal(await row.count(), 1);
   assert.equal(await row.locator('strong').textContent(), 'notes 中文');
-  assert.equal(await row.locator('small').textContent(), label + '/notes 中文');
+  assert.equal(await row.locator('small').textContent(), '2 source folders');
   assert.match(await row.locator('.project-row-time').textContent(), /^Added Today at \d\d:\d\d$/);
   assert.match(await row.locator('.project-row-time').getAttribute('title'), /\d{4}/);
   assert.equal(await assertTheme(), 1);
@@ -561,14 +549,14 @@ try {
     await page.keyboard.press('Escape');
     await drawer.waitFor({ state: 'hidden' });
   });
-  // Creating an existing name says so and offers to open it instead.
+  // A project name is a display label, with no same-name directory collision.
   await page.getByRole('button', { name: 'New project', exact: true }).click();
   await field.fill('notes 中文');
-  await sheet.getByRole('button', { name: 'Create', exact: true }).click();
-  await sheet.getByRole('button', { name: 'Open existing', exact: true }).waitFor();
-  assert.equal(await hint.textContent(), `${label}/notes 中文 already exists.`);
-  await page.screenshot({ path: path.join(directory, 'sheet-exists-1280.png'), fullPage: true });
-  await sheet.getByRole('button', { name: 'Open existing', exact: true }).click();
+  assert.equal(await sheet.getByRole('alert').count(), 0);
+  assert.equal(await sheet.getByRole('button', { name: 'Create project', exact: true }).isDisabled(), true);
+  await page.keyboard.press('Escape');
+  await sheet.waitFor({ state: 'hidden' });
+  await row.click();
   await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).first().waitFor();
   assert.equal((await (await operator()).call('project.list', {})).length, 1);
   // "Open another project…" returns home with focus on the most recent project.
@@ -576,7 +564,7 @@ try {
   await palette.getByRole('option', { name: 'Open another project…', exact: true }).click();
   await page.getByRole('heading', { name: 'Welcome back', exact: true }).waitFor();
   await focused(await row.elementHandle());
-  report.checks.push('home-welcome-relative-time-existing-name-open-instead-and-command-focus');
+  report.checks.push('home-welcome-relative-time-multiple-sources-display-name-and-command-focus');
   await page.getByRole('button', { name: 'Context & access', exact: true }).click();
   await page.getByRole('button', { name: 'Disconnect this tab', exact: true }).click();
   await page.getByRole('dialog', { name: 'Disconnect this tab?' }).getByRole('button', { name: 'Disconnect', exact: true }).click();
@@ -606,6 +594,7 @@ try {
   throw error;
 } finally {
   await context?.close(); await browser?.close(); await stop();
+  await fs.rm(sourceFixtures, { recursive: true, force: true });
   await fs.writeFile(path.join(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n');
   await fs.rm(root, { recursive: true, force: true });
 }

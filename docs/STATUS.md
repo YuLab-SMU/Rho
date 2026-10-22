@@ -14,112 +14,30 @@ not accept the teaching experience. The UI contract remains `0.1-draft`.
 
 ## U1 browser shell candidate
 
-The scoped browser shell is implemented against accepted headless 0.4: one-time
-Agent-opened links, same-origin static assets, tab session credentials, typed Fetch
-SDK, real project/capability state and unavailable retained views. Observation
-resumes after refresh, disconnection and same-port service restart, without native
-execution. The UI contribution entry is `0.1-draft`, not protocol v1.
-[Browser UI](UI.md) separates U1 from the unimplemented U2-U4 collaboration loop.
+First-use review rejected typed paths and the temporary preview root. The current
+correction uses the macOS folder window and separates a project name from its
+source folders. Create project adds one or more existing folders without making
+same-name directories; Overview can add further folders. Named workspaces keep
+owner state separately. Existing projects and managed requests are preserved.
+Files/Documents resolve selected source references with distinct file identities,
+shared alias buffers, conditional saves and source-containment checks. Saved R
+script planning can read selected sources without changing execution identities.
 
-Source checks: 36 Rho tests pass, including nine browser/security tests. Real
-Chrome 155.0.8059.84 checks pass at 1600/1280/1024/768/390 widths, with zero Host-start
-and native-submit attempts. Screenshot inspection covers the compact shell,
-context and navigation drawers, command focus and unavailable views. Chrome 154,
-owner editor input/IME/clipboard and full accessibility/product acceptance are
-not claimed. Fixed full and Documents/Files-minimal tarballs also pass the same
-browser flow outside the checkouts, with physically omitted unselected owners.
-[U1 installed checks](UI-ACCEPTANCE.md) freeze sources/assets and remaining gates;
-the separate installed native regression preserves unknown/partial outcomes.
+Source checks: Rho 66/66; Plugins 46/46. Chrome 155 passes 23 shell checks at 1600/1280/1024/768/390 with zero Host
+starts/native submissions. Installed verification and user design acceptance
+remain separate. The
+[U1 record](UI-ACCEPTANCE.md) retains historical five-width, Full/minimal installed
+checks and the seven alignment batches. Those checks did not accept first-use
+usability. The [new Paper review draft](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-C-0)
+uses the user-provided name-and-source-folders reference; earlier path-entry
+boards remain historical and have not been overwritten.
 
-The user selected Paper's Rho experience V0.1 instead of Main app / Composable
-shell. The limited U1 adaptation is on that page for review; implementation and
-internal inspection do not substitute for the user's design acceptance.
-
-U1 alignment batch 1 adopts the U1 spec board's tokens, control geometry and
-1280/1024/768 breakpoints. Source `test:ui` now also checks 768 and asserts
-400/600 weights and the accent primary button; installed tarballs were not
-rebuilt. Batches 2 to 7b below cover copy, structure and narrow layouts; see
-[batch 1 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-1-appearance).
-
-People no longer type a pairing code; the user rejected that.
-
-- The Agent runs `rho --open`, or `rho --pair FILE --open` for another tab.
-  Either opens a one-time `#pair=` link. The page redeems the code and removes
-  it from the address bar; a reused link is refused.
-- Batch 2 removes the wordmark from the shell and adds location text with a
-  Read-only chip.
-- The status reads Up to date, Offline or Connecting, with the read time.
-- Rail highlighting follows the boards.
-- The context panel has Connection, This tab and Agents sections.
-- Commands are grouped.
-- "Disconnect this tab" asks for confirmation; Escape cancels and returns focus.
-
-`npm test` passes 36/36. `test:ui` passes at five widths with 0 / 0 native
-attempts. Only macOS `open` is checked, through a stub. See
-[batch 2 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-2-toolbar-rail-and-agent-opened-tabs).
-
-Batch 3 rebuilds the home from U1-02, U1-03 and U1-03b. It adds Welcome titles,
-rows with location and added time (full time in a tooltip) and New project /
-Open folder sheets. The sheets keep focus inside and give every refusal a next
-action. The service adds a `~/` folder label and reports an existing folder as
-`conflict`. The boards now say "Added", because the service records when a
-project was added, not when it was last opened. On the staged tree `npm test`
-passes 36/36 and `test:ui` passes at five widths with 0 / 0 native attempts.
-See [batch 3 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-3-home).
-
-Batch 4 follows U1-04 and U1-05 inside a project. The sidebar lists Overview,
-Layouts with view counts and Content; retained operations appear only when
-there are some. The overview says "No saved layout yet" or lists layouts, then
-documents and files as tables. Layout views are Dockview tabs. An unavailable
-view says what it shows, needs and lacks, offers About with a way back, and
-keeps identifiers in View reference; the main area has no JSON. On the staged
-tree `npm test` passes 36/36 and `test:ui` passes at five widths with 0 / 0
-native attempts. See [batch 4 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-4-inside-a-project).
-
-Batch 5 follows U1-07 and U1-08 for disconnection and commands. When Rho can't
-be reached, a notice keeps what was already read and says when. Reconnect only
-reads again, is disabled while it runs, and the last failure is under Context &
-access. The command palette filters commands in four groups; Show and Hide follow
-the current state, and typed questions run nothing. On the staged tree
-`npm test` passes 36/36 and `test:ui` passes at five widths with 0 / 0 native
-attempts. See [batch 5 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-5-disconnect-and-commands).
-
-Batch 6 follows U1-09a to U1-09c below 768. The rail and sidebar give way to a
-navigation drawer, context opens as a bottom sheet with Done, and both keep
-focus inside and return it. The toolbar is 48 high with 36-pixel targets and
-two lines of location. Views are tabs instead of a select. On the staged tree
-`npm test` passes 36/36 and `test:ui` passes with 0 / 0 native attempts. See
-[batch 6 evidence](UI-ACCEPTANCE.md#u1-alignment-batch-6-narrow-widths).
-
-Batch 7a follows U1-06c for plugin states. A usable plugin shows no state; one
-that can't be used gives the first reason and who can change it, and plugins
-outside this installation are listed last. No Capabilities wording, state flags
-or method names appear. Focus now returns to the plugin card in the same update;
-the plugin page check had been failing on that. On the staged tree `npm test`
-passes 36/36, and `test:ui` and `test:ui:plugins` pass with 0 / 0 native
-attempts. See [batch 7a evidence](UI-ACCEPTANCE.md#u1-alignment-batch-7a-plugin-naming-and-states).
-
-Batch 7b follows U1-06, U1-06b and U1-06d with copy from plugin descriptors.
-Plugins has its own sidebar. A plugin's page shows prompts to copy, what Claude
-Code can do with it, its views and Information, including whether the open
-project uses it. The toolbar's Plugins returns to the catalog. Its original
-metadata gaps are covered by the catalog completion below.
-On the staged tree `npm test` passes 36/36, and `test:ui` and
-`test:ui:plugins` pass with 0 / 0 native attempts. All seven alignment batches
-are implemented; user design acceptance is pending. See
-[batch 7b evidence](UI-ACCEPTANCE.md#u1-alignment-batch-7b-plugin-catalog-and-detail).
-
-The remaining U1 catalog fields now come from the nine owner descriptors: icons,
-body text, Skills, entry descriptions, developer/license/links and dependency
-purposes. Descriptor ordering matches Paper. Missing selected Rscript is observed
-without execution, with exported object reads preserved. A frozen descriptive
-inventory supplies introductions in reduced installations without loading owners
-or granting access. Source checks pass: Rho 36/36, browser/security 9/9 and the
-plugin browser flow at all five widths with zero Host starts/native submissions.
-Fixed Full and Documents/Files tarballs pass outside-checkout installation and
-all nine plugin pages, including seven physically absent owners in the minimal
-package. Installed Full also passes the U1 shell flow, with browser attempts 0/0.
-User design acceptance is still pending. See [completion evidence](UI-ACCEPTANCE.md#catalog-completion-and-rebuilt-packages-2026-10-18).
+The shell retains Agent-opened one-time links, same-origin assets, scoped tab
+credentials, observation after refresh/disconnection/restart, grouped commands,
+plugin discovery and unavailable retained views. Native selection adds only the
+chosen folder/project scope. Browser actions never start a Host or native task.
+The UI contract remains `0.1-draft`; full input/accessibility, product acceptance,
+other-platform folder dialogs and signed/registry distribution remain pending.
 
 ## Headless collaboration extension
 

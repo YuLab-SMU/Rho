@@ -72,15 +72,37 @@ session with `session.browser.revoke` and its ID from local principal metadata.
 Revocation also releases its event readers. Neither operation is granted to
 browsers or external Agents.
 
-Open paths are relative to the tab's folder. The pair result also carries a
-display label such as `~/projects`; the page shows it as a fixed prefix and
-reduces a pasted full path inside the folder to its relative part. Creation takes
-a single Unicode directory name. An existing folder is reported as `conflict`
-and is never adopted as a new project; a missing folder is `not_found`. The home
-lists actual registered projects filtered by scope, newest first, with the time
-each was added; the service does not record a last-opened time.
-Internal state, parent traversal and links cannot expand the root. Opening and
-observing never start a Host, run code or install packages.
+## Projects and source folders
+
+On local macOS, Open folder uses the system folder window. There is no path-entry
+sheet or fixed startup-directory prefix. Cancel returns to the triggering control
+without opening a project. Only the exact chosen project is granted to this tab;
+other tabs retain their scope. Legacy `project.open` / `project.create` APIs keep
+their root-relative, single-directory behavior for existing consumers.
+
+Create project takes a display name and one or more Source folders. Add folder
+uses the same system window; draft folders can be removed before creation.
+Project names do not create directories and may repeat. Source content stays in
+place. A named workspace has its own ID and private owner-state/working directory
+beneath service state; its source folders are explicit references, not symlinks.
+Overview lists source names and paths and can add more folders. Adding the same
+folder again is a no-op. Existing single-folder projects can add sources too.
+
+`project.source.pick` returns a short-lived, caller-bound choice receipt, with no
+arbitrary path in its input. `project.createWorkspace` consumes those receipts
+with a retained creation identity. `project.source.add` selects and adds a folder
+to an already authorized project. Revocation/expiry is rechecked after the system
+window closes. Fresh operator-paired tabs at the same original scope can reopen
+its saved named projects; a narrower pairing does not inherit them.
+
+Files owns resolution of `@<sourceId>/<relative-path>` references; Documents uses
+that injected port for reads, conditional saves and restore validation. Equal
+filenames in different folders remain distinct; overlapping aliases normalize to
+one buffer within the workspace. Unknown sources, traversal, symlinks and internal
+state fail closed. Sources missing later do not erase retained drafts or output.
+Names and locations are shown in the UI; IDs remain resource-reference details.
+Opening/adding folders starts no Host, executes no project code and installs nothing.
+The native folder dialog is currently implemented for macOS only.
 
 ## Security and budgets
 
@@ -114,7 +136,7 @@ cookies, localStorage, static secrets or request-body diagnostics.
 - A rejected credential ends the tab's access. The tab returns to the
   not-connected page. Scope and network failures keep the session.
 
-U1 permits protocol/Skills discovery, project list/open/create, capabilities,
+U1 permits protocol/Skills discovery, project selection/creation and source-folder additions, capabilities,
 snapshot/events, composition reads, document reads and bounded resource reads.
 U2 adds `document.edit`, `document.undoOwn`, `document.revert`,
 `document.history`, `document.change.read`, `data.page` and selection read/set.
@@ -131,6 +153,9 @@ to 16 MiB each; missing builds have a readable 503.
 
 | Protected resource | Configuration / default | Exceeded behavior |
 | --- | --- | --- |
+| Native folder window | One per service; `nativeFolders.timeoutMs` / 120,000 ms; `maxOutputBytes` / 16,384 | Reject another window; timeout/output overflow stops the owned chooser and opens nothing |
+| Pending source choices | `nativeFolders.maxSelections` / 64 per tab; `selectionTtlMs` / 600,000 ms | Refuse another choice or require reselecting an expired one; retain existing projects |
+| Named projects / sources | `nativeFolders.maxProjects` / 128 per original scope; `maxSources` / 32 per project | Refuse new additions; retain selected folders and obtained output |
 | Pending pairing codes | `browser.maxPairings` / 8 | Reject another code; retain grants |
 | Active browser grants | `browser.maxSessions` / 16 | Reject redemption; never evict active tabs |
 | Pairing attempts | `browser.maxPairAttempts` / 32 per minute | Refuse attempts until the window clears |

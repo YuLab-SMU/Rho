@@ -103,6 +103,9 @@ export function Workspace({ composition, snapshot, client, onAbout, contextTarge
   const arranged = useRef('');
   const [active, setActive] = useState(composition.views[0]?.id ?? '');
   const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 767px)').matches);
+  // The wide Dockview instance is disposed when the narrow tab surface mounts.
+  // Do not reuse its API during the first render after returning to wide mode.
+  useEffect(() => { if (narrow) { setApi(null); arranged.current = ''; } }, [narrow]);
   const feedbackEntry = registry.entries.find(e => e.component === 'rho.feedback');
   const feedbackAllowed = !!snapshot.feedback && feedbackEntry?.requiredOperations.every(method => snapshot.catalog.operations.some(o => o.method === method && o.authorized && o.state === 'available'));
   useEffect(() => { setFeedbackSource(null); setFeedbackLimit(false); }, [snapshot.project.id, composition.compositionId, snapshot.feedback?.taskId, principalId]);
@@ -114,7 +117,7 @@ export function Workspace({ composition, snapshot, client, onAbout, contextTarge
   }, []);
   useEffect(() => {
     if (!api || narrow) return;
-    const current = api;
+    const current = api, previousActive = current.activePanel?.id;
     for (const panel of current.panels) if (!composition.views.some(v => v.id === panel.id)) current.removePanel(panel);
     for (const view of composition.views) {
       const panel = current.getPanel(view.id), params = { view, snapshot, client, onAbout, contextTarget: feedbackContextActive ? null : contextTarget, principalId, renderAllowed: mounted.current.has(view.id), headerTarget, compositionId: composition.compositionId, compositionVersion: composition.version, onRequestFeedback: requestFeedback };
@@ -133,8 +136,8 @@ export function Workspace({ composition, snapshot, client, onAbout, contextTarge
         for (let i = 1; i < parts.length; i++) {
           const target = current.getPanel(parts[i - 1][0]), panel = current.getPanel(parts[i][0]);
           if (!target || !panel) continue;
-          if (group.presentation?.mode === 'split') panel.api.moveTo({ group: target.api.group, position: group.presentation.axis === 'vertical' ? 'bottom' : 'right' });
-          else for (const id of parts[i]) current.getPanel(id)?.api.moveTo({ group: target.api.group, position: 'center' });
+          if (group.presentation?.mode === 'split') panel.api.moveTo({ group: target.api.group, position: group.presentation.axis === 'vertical' ? 'bottom' : 'right', skipSetActive: true });
+          else for (const id of parts[i]) current.getPanel(id)?.api.moveTo({ group: target.api.group, position: 'center', skipSetActive: true });
         }
         group.children.forEach(arrange);
         if (group.presentation?.mode === 'split') {
@@ -147,6 +150,7 @@ export function Workspace({ composition, snapshot, client, onAbout, contextTarge
       };
       const focused = document.activeElement as HTMLElement | null;
       arrange(composition.rootId); arranged.current = signature;
+      if (previousActive) current.getPanel(previousActive)?.api.setActive();
       if (focused?.isConnected && focused !== document.body) focused.focus({ preventScroll: true });
     }
     const target = current.getPanel(active) ?? current.panels[0];

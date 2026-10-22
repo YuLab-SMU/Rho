@@ -1,5 +1,6 @@
-import type { CapabilityCatalog, CompositionSummary, ProjectSummary, ResourceSummary, WorkspaceSnapshot } from '../src/browser.js';
-import { projectName, when } from './home.js';
+import { useState } from 'react';
+import type { BrowserClient, CapabilityCatalog, CompositionSummary, ProjectSummary, ResourceSummary, WorkspaceSnapshot } from '../src/browser.js';
+import { projectName, SourceFolders, when } from './home.js';
 import { Icon, type IconName } from './icons.js';
 import { renders } from './rendered.js';
 
@@ -16,6 +17,10 @@ export function availability(resource: ResourceSummary) {
   return resource.availability === 'available' ? 'Available' : resource.availability === 'partial' ? 'Partly readable' : resource.availability === 'missing' ? "Can't be read" : 'Not checked';
 }
 function views(composition: CompositionSummary) { return composition.views.length + (composition.views.length === 1 ? ' view' : ' views'); }
+function sourcePath(project: ProjectSummary, value: string) {
+  const source = project.sources?.find(s => value.startsWith('@' + s.id + '/'));
+  return source ? source.name + '/' + value.slice(source.id.length + 2) : value;
+}
 // A document viewer exists only when this build renders a component that binds documents.
 function documentViewer(catalog: CapabilityCatalog) {
   const viewer = catalog.components.find(c => Object.values(c.bindings).includes('document') && renders(c.id, c.version));
@@ -46,13 +51,25 @@ export function ProjectNavigation({ project, location, snapshot, overview, compo
   </>;
 }
 
-export function ProjectOverview({ project, location, snapshot, onLayout }: { project: ProjectSummary; location: string; snapshot: WorkspaceSnapshot; onLayout: (id: string) => void }) {
+export function ProjectOverview({ project, location, snapshot, onLayout, client, onProjectChanged }: { project: ProjectSummary; location: string; snapshot: WorkspaceSnapshot; onLayout: (id: string) => void; client: BrowserClient; onProjectChanged: (p: ProjectSummary) => void }) {
+  const [adding, setAdding] = useState(false), [error, setError] = useState('');
+  async function add() {
+    setAdding(true); setError('');
+    try { const result = await client.call('project.source.add', { projectId: project.id }, new AbortController().signal); if (result.project) onProjectChanged(result.project); }
+    catch (e) { setError(e instanceof Error ? e.message : 'The folder could not be added. Try again.'); }
+    finally { setAdding(false); }
+  }
   const added = when(project.openedAt), docs = snapshot.documents, files = snapshot.resources, viewer = documentViewer(snapshot.catalog);
   return <section className="overview" aria-labelledby="overview-title">
     <header className="overview-header">
       <h1 id="overview-title">{projectName(project)}</h1>
       <p><span>{location}</span>{added.text && <> · <span title={added.full}>added {added.text.replace(/^[TY]/, c => c.toLowerCase())}</span></>}</p>
     </header>
+    <section className="overview-section" aria-labelledby="overview-sources">
+      <h2 id="overview-sources">Source folders</h2>
+      <SourceFolders folders={project.sources ?? [{ id: project.id, root: project.root, name: projectName(project) }]} busy={adding} onAdd={() => void add()} />
+      {error && <p className="field-hint project-problem" role="alert">{error}</p>}
+    </section>
     {snapshot.compositions.length ? <section className="overview-section" aria-labelledby="overview-layouts">
       <h2 id="overview-layouts" tabIndex={-1}>Layouts <span>{snapshot.compositions.length}</span></h2>
       <table><thead><tr><th>Name</th><th className="column-state">Views</th></tr></thead>
@@ -68,7 +85,7 @@ export function ProjectOverview({ project, location, snapshot, onLayout }: { pro
       <h2 id="overview-documents" tabIndex={-1}>Documents <span>{docs.length}</span></h2>
       {docs.length ? <table><thead><tr><th>Name</th><th className="column-short optional">Version</th><th className="column-state">State</th><th className="column-wide optional">Viewer</th></tr></thead>
         <tbody>{docs.map(d => <tr key={d.id}>
-          <td><span className="overview-name"><Icon name="file" size={16} stroke={1.8} />{d.path}</span></td>
+          <td><span className="overview-name"><Icon name="file" size={16} stroke={1.8} />{sourcePath(project, d.path)}</span></td>
           <td className="column-short optional">{d.version}</td>
           <td className="column-state"><span className={'state ' + (d.dirty ? 'pending' : 'good')}>{d.dirty ? 'Unsaved changes' : 'Saved'}</span></td>
           <td className="column-wide optional meta">{viewer}</td>
@@ -78,7 +95,7 @@ export function ProjectOverview({ project, location, snapshot, onLayout }: { pro
       <h2 id="overview-files" tabIndex={-1}>Files <span>{files.length}</span></h2>
       {files.length ? <table><thead><tr><th>Name</th><th className="column-short optional">Kind</th><th className="column-state">State</th><th className="column-wide">Size</th></tr></thead>
         <tbody>{files.map(r => <tr key={r.id}>
-          <td><span className="overview-name"><Icon name={resourceIcon(r.kind)} size={16} stroke={1.8} />{r.path}</span></td>
+          <td><span className="overview-name"><Icon name={resourceIcon(r.kind)} size={16} stroke={1.8} />{sourcePath(project, r.path)}</span></td>
           <td className="column-short optional">{r.kind.charAt(0).toUpperCase() + r.kind.slice(1)}</td>
           <td className="column-state"><span className={'state ' + (r.availability === 'available' ? 'good' : 'unknown')}>{availability(r)}</span></td>
           <td className="column-wide muted">{(r.availability === 'available' ? '' : 'Last seen ') + size(r.bytes)}</td>

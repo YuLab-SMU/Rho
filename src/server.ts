@@ -16,6 +16,8 @@ import { Workspace, workspaceLimits } from './workspace.js';
 import { Interactions, interactionLimits } from './interactions.js';
 import { Capabilities } from './capabilities.js';
 import { BrowserAccess, browserLimits } from './browser-access.js';
+import { NativeFolderPicker, nativeFolderLimits } from './native-folders.js';
+import { homedir } from 'node:os';
 import { serveWeb, webRoot } from './web-assets.js';
 import { Presentation, presentationWitnessLimits, visibilityLimits } from './presentation.js';
 import { presentationSchemas } from './presentation-contracts.js';
@@ -30,7 +32,7 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
 const legacyValidators = Object.fromEntries(Object.entries(legacyProtocol.operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
@@ -41,6 +43,8 @@ export class RhoService {
   private queued = new Map<string, number>();
   private subscribers = new Set<{ projectId: string; principal: string; tokenHash: string; response: http.ServerResponse }>();
   browser: BrowserAccess;
+  folderPicker: NativeFolderPicker;
+  private pickingFolder = false;
   private nativeAdapters = new Map<string, NativeAdapterRegistration>();
   private closing = false;
   private feedbackTransports = new Map<string, FeedbackTransport>();
@@ -197,12 +201,13 @@ export class RhoService {
       return facts;
   }
   constructor(public config: ServiceConfig) {
-    for (const [key, value] of Object.entries({ ...serviceLimits, ...requestLimits, ...config.documents, ...config.resources, ...config.workspace, ...config.interactions, ...config.annotations, ...config.capabilityLimits, ...config.r, ...config.browser, ...config.agentNativeActivity, ...config.agentDelivery, ...config.presentationWitness, ...config.visibility, ...config })) {
+    for (const [key, value] of Object.entries({ ...serviceLimits, ...requestLimits, ...config.documents, ...config.resources, ...config.workspace, ...config.interactions, ...config.annotations, ...config.capabilityLimits, ...config.r, ...config.browser, ...config.nativeFolders, ...config.agentNativeActivity, ...config.agentDelivery, ...config.presentationWitness, ...config.visibility, ...config })) {
       if (typeof value === 'number') requireThat(Number.isSafeInteger(value) && (key === 'port' ? value >= 0 && value <= 65535 : value > 0), 'invalid', 'Invalid service budget.', { field: key });
     }
     this.plugins = new Plugins(config);
     this.state = new State(config.root, config.stateDir); this.bridge = new CoreBridge(config.coreBinary, config.rscript);
     this.browser = new BrowserAccess(this.state, config.browser);
+    this.folderPicker = new NativeFolderPicker({ ...nativeFolderLimits, ...config.nativeFolders });
     this.server = http.createServer((req, res) => void this.handle(req, res));
     this.server.requestTimeout = 15000; this.server.headersTimeout = 10000;
   }
@@ -210,6 +215,7 @@ export class RhoService {
     try {
     await this.plugins.load();
     await this.state.init();
+    for (const project of this.state.projects) if (project.sources) this.plugins.sourceFolders.set(project.id, project.sources);
     this.adminToken = randomBytes(32).toString('hex');
     this.state.principals = this.state.principals.filter(p => p.id !== 'operator');
     await this.state.addPrincipal({ id: 'operator', tokenHash: digest(this.adminToken), methods: Object.keys(operations) });
@@ -318,7 +324,7 @@ export class RhoService {
       requireThat(valid(body), 'invalid', 'Request does not match the versioned schema.', { fields: valid.errors ?? [] });
       if (legacy && !['protocol.describe', 'action.lookup', 'action.observe', 'action.retry', 'action.cancel', 'action.output', 'action.list', 'resource.read', 'resource.list', 'document.open', 'document.read', 'context.read', 'binding.list', 'binding.activity', 'composition.read', 'observation.snapshot', 'project.list'].includes(method)) throw new Fault('unavailable', 'New writes use the explicit v2 project contract; accepted v1 operations remain observable.');
       let value;
-      if (body.projectId) {
+      if (body.projectId && method !== 'project.source.add') {
         value = await this.serial(body.projectId, async () => {
           try {
             const result = await this.dispatch(method, body, principal, typeof req.headers['x-rho-contract-ref'] === 'string' ? req.headers['x-rho-contract-ref'] : undefined);
@@ -368,8 +374,34 @@ export class RhoService {
       for (const s of this.subscribers) if (s.principal === b.sessionId) s.response.end('event: session.invalid\ndata: {}\n\n');
       return result;
     }
-    if (method === 'project.list') return this.state.projects.filter(p => (!principal.projectId || p.id === principal.projectId) && (!principal.projectRoot || p.root === principal.projectRoot || p.root.startsWith(principal.projectRoot + path.sep)));
-    if (method === 'project.create' || method === 'project.open') {
+    if (method === 'project.list') return this.state.projects.filter(p => this.state.visible(p, principal));
+    if (method === 'project.createWorkspace') return this.serial('projects', async () => {
+      const project = await this.state.createWorkspace(b.name, b.selectionIds, b.changeId, principal, this.config.nativeFolders?.maxProjects ?? nativeFolderLimits.maxProjects, this.config.nativeFolders?.maxSources ?? nativeFolderLimits.maxSources);
+      this.plugins.sourceFolders.set(project.id, project.sources!); return project;
+    });
+    if (method === 'project.pick' || method === 'project.source.pick' || method === 'project.source.add') {
+      requireThat(principal.kind === 'browser', 'unauthorized', 'Only an authenticated browser tab may ask the person to select a folder.');
+      requireThat(!this.pickingFolder, 'conflict', 'A system folder window is already open. Finish or cancel it before opening another.');
+      if (method === 'project.source.add') await this.state.project(b.projectId, principal);
+      this.pickingFolder = true;
+      try {
+        const home = homedir(), root = principal.projectRoot ?? this.state.root;
+        const chosen = await this.folderPicker.choose(root === home || root.startsWith(home + path.sep) ? root : home);
+        if (chosen === null) return method === 'project.source.pick' ? { cancelled: true, selection: null } : { cancelled: true, project: null };
+        requireThat(!this.closing, 'unavailable', 'Rho is closing. No selected folder was opened.');
+        if (method === 'project.source.pick') return { cancelled: false, selection: await this.state.selectFolder(chosen, principal, this.config.nativeFolders?.selectionTtlMs ?? nativeFolderLimits.selectionTtlMs, this.config.nativeFolders?.maxSelections ?? nativeFolderLimits.maxSelections) };
+        if (method === 'project.source.add') {
+          const target = await this.state.project(b.projectId, principal);
+          const project = await this.serial(target.id, () => this.serial('projects', () => this.state.addSource(target, chosen, principal, this.config.nativeFolders?.maxSources ?? nativeFolderLimits.maxSources)));
+          this.plugins.sourceFolders.set(project.id, project.sources!);
+          await this.emit(project, 'project.sources.changed', project.id);
+          return { cancelled: false, project };
+        }
+        const project = await this.serial('projects', () => this.state.openSelected(chosen, principal, this.config.nativeFolders?.maxProjects ?? nativeFolderLimits.maxProjects));
+        return { cancelled: false, project };
+      } finally { this.pickingFolder = false; }
+    }
+    if (method === 'project.create' || method === 'project.open') return this.serial('projects', async () => {
       const root = principal.projectRoot ?? this.state.root;
       const relative = method === 'project.create' ? b.name : b.path;
       requireThat(!relative.split(/[\\/]/).some((part: string) => ['.rho', '.git'].includes(part)), 'scope', 'Internal owner state is not a project.');
@@ -378,7 +410,7 @@ export class RhoService {
       if (method === 'project.create') await fs.mkdir(target).catch(e => { throw e.code === 'EEXIST' ? new Fault('conflict', 'A folder with that name already exists; open it instead.', { name: relative }) : e; });
       const p = await this.state.open(path.relative(this.state.root, target) || '.');
       return method === 'project.create' ? p : { ...p, host: await this.bridge.capability(p.root) };
-    }
+    });
     const p = await this.state.project(b.projectId, principal);
     const owners = this.plugins.project(p.root, p.id);
     const requests = new Requests(p, this.bridge, (type, subject) => this.emit(p, type, subject), this.config, owners);
@@ -632,6 +664,7 @@ export class RhoService {
   }
   async close() {
     this.closing = true;
+    this.folderPicker.close();
     for (const s of this.subscribers) s.response.end();
     await new Promise<void>(resolve => this.server.close(() => resolve()));
     const shutdown = await this.bridge.close(); await this.state.close(); return shutdown;

@@ -2,7 +2,9 @@ import { ObservationClient, httpObservation, type observationLimits } from './ob
 
 // This entry deliberately imports neither Node, the DOM nor optional owners.
 export interface BrowserConnection { url: string; token: string; expiresAt: string; methods: string[]; principalId?: string; root?: string; rootLabel?: string }
-export interface ProjectSummary { id: string; root: string; openedAt: string }
+export interface SourceFolder { id: string; root: string; name: string }
+export interface FolderSelection extends SourceFolder { selectionId: string }
+export interface ProjectSummary { id: string; root: string; openedAt: string; name?: string; sources?: SourceFolder[]; workspace?: true }
 import type { EntryPresentation, PluginPresentation } from '@rho-workspace/plugin-contracts';
 export type { EntryPresentation, PluginPresentation } from '@rho-workspace/plugin-contracts';
 export interface NativeAvailability { state: 'present' | 'missing' | 'unknown'; tool: string; scope: string; checkedAt: string; methods: string[]; title?: string; body?: string }
@@ -65,6 +67,10 @@ export interface BrowserApi {
   'view.observations.read': { input: Record<string, any>; output: Record<string, any> };
   'project.list': { input: Record<string, never>; output: ProjectSummary[] };
   'project.open': { input: { path: string }; output: ProjectSummary };
+  'project.pick': { input: Record<string, never>; output: { cancelled: boolean; project: ProjectSummary | null } };
+  'project.source.pick': { input: Record<string, never>; output: { cancelled: boolean; selection: FolderSelection | null } };
+  'project.source.add': { input: { projectId: string }; output: { cancelled: boolean; project: ProjectSummary | null } };
+  'project.createWorkspace': { input: { name: string; selectionIds: string[]; changeId: string }; output: ProjectSummary };
   'project.create': { input: { name: string }; output: ProjectSummary };
   'capability.list': { input: { projectId: string }; output: CapabilityCatalog };
   'observation.snapshot': { input: { projectId: string }; output: WorkspaceSnapshot };

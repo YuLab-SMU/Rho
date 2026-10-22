@@ -2,9 +2,12 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { randomUUID } from 'node:crypto';
 import { atomicJson, confined, digest, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
-export interface Project { id: string; root: string; openedAt: string }
-export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[]; kind?: 'browser'; profile?: 'layered-business' | 'layered-presentation'; pluginFilter?: string[]; projectRoot?: string; expiresAt?: string }
+export interface SourceFolder { id: string; root: string; name: string }
+export interface FolderSelection extends SourceFolder { principalId: string; expiresAt: number }
+export interface Project { id: string; root: string; openedAt: string; nativeSelected?: true; name?: string; sources?: SourceFolder[]; workspace?: true; visibilityRoot?: string; creation?: { id: string; digest: string; author: string } }
+export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[]; kind?: 'browser'; profile?: 'layered-business' | 'layered-presentation'; pluginFilter?: string[]; projectRoot?: string; selectedProjects?: string[]; expiresAt?: string }
 export async function lease(directory: string) {
   const file = path.join(directory, 'service.lock');
   // Kernel advisory lock on a stable inode, held by an owned helper until pipe
@@ -28,6 +31,7 @@ os.close(fd)
 }
 export class State {
   projects: Project[] = []; principals: Principal[] = [];
+  private folderSelections: FolderSelection[] = [];
   private releases: (() => Promise<void>)[] = [];
   private principalWrites: Promise<void> = Promise.resolve();
   constructor(public root: string, public directory: string) {}
@@ -52,19 +56,96 @@ export class State {
     await this.persistPrincipals();
     return { sessionId: id, revoked: !!previous };
   }
+  private liveBrowser(principal: Principal, method: string) {
+    requireThat(this.principals.includes(principal) && principal.kind === 'browser' && principal.methods.includes(method) && Date.parse(principal.expiresAt ?? '') > Date.now(), 'unauthorized', 'This tab no longer has access. No folder was added.');
+  }
+  private async selectedSource(root: string): Promise<SourceFolder> {
+    root = await fs.realpath(root);
+    requireThat(!root.split(path.sep).some(p => ['.rho', '.git'].includes(p)) && root !== this.directory && !root.startsWith(this.directory + path.sep) && !this.directory.startsWith(root + path.sep) && (await fs.stat(root)).isDirectory(), 'scope', 'Choose a source folder that does not contain Rho service credentials or internal state.');
+    return { id: digest(root).slice(0, 32), root, name: path.basename(root) || root };
+  }
+  async selectFolder(root: string, principal: Principal, ttl: number, maximum: number) {
+    this.liveBrowser(principal, 'project.source.pick');
+    const source = await this.selectedSource(root);
+    this.folderSelections = this.folderSelections.filter(s => s.expiresAt > Date.now());
+    const existing = this.folderSelections.find(s => s.principalId === principal.id && s.root === source.root);
+    if (existing) { existing.expiresAt = Date.now() + ttl; return { selectionId: existing.id, ...source }; }
+    requireThat(this.folderSelections.filter(s => s.principalId === principal.id).length < maximum, 'limit', 'Too many pending folder choices. Existing projects are retained.', { limit: 'nativeFolders.maxSelections', maximum });
+    const selection = { ...source, id: randomUUID(), principalId: principal.id, expiresAt: Date.now() + ttl };
+    this.folderSelections.push(selection);
+    return { selectionId: selection.id, ...source };
+  }
+  async createWorkspace(name: string, selectionIds: string[], changeId: string, principal: Principal, maximum: number, maxSources: number) {
+    this.liveBrowser(principal, 'project.createWorkspace');
+    const inputDigest = digest(JSON.stringify({ name, selectionIds }));
+    const retained = this.projects.find(p => p.creation?.id === changeId && p.creation.author === principal.id);
+    if (retained) {
+      requireThat(retained.creation?.digest === inputDigest, 'conflict', 'The original project creation has different content.');
+      await atomicJson(path.join(this.directory, 'projects.json'), this.projects);
+      principal.selectedProjects = [...new Set([...(principal.selectedProjects ?? []), retained.id])];
+      await this.persistPrincipals(); return retained;
+    }
+    const chosen = selectionIds.map(id => this.folderSelections.find(s => s.id === id && s.principalId === principal.id && s.expiresAt > Date.now()));
+    requireThat(chosen.every(Boolean), 'stale', 'A folder choice expired. Choose that folder again.');
+    const sources: SourceFolder[] = [];
+    for (const selected of chosen) { const source = await this.selectedSource(selected!.root); if (!sources.some(s => s.id === source.id)) sources.push(source); }
+    requireThat(sources.length <= maxSources, 'limit', 'The project exceeds its source-folder limit. Existing folders are retained.', { limit: 'nativeFolders.maxSources', maximum: maxSources });
+    requireThat(this.projects.filter(p => p.workspace && p.visibilityRoot === principal.projectRoot).length < maximum, 'limit', 'The project limit is full; existing projects are retained.', { limit: 'nativeFolders.maxProjects', maximum });
+    this.liveBrowser(principal, 'project.createWorkspace');
+    const id = randomUUID().replaceAll('-', ''), root = path.join(this.directory, 'workspaces', id);
+    await fs.mkdir(root, { recursive: true, mode: 0o700 });
+    const project: Project = { id, root, name: name.trim(), sources, workspace: true, visibilityRoot: principal.projectRoot, openedAt: new Date().toISOString(), creation: { id: changeId, digest: inputDigest, author: principal.id } };
+    await this.acquire(project); this.projects.push(project);
+    await atomicJson(path.join(this.directory, 'projects.json'), this.projects);
+    principal.selectedProjects = [...new Set([...(principal.selectedProjects ?? []), project.id])];
+    await this.persistPrincipals();
+    this.folderSelections = this.folderSelections.filter(s => !selectionIds.includes(s.id));
+    return project;
+  }
+  async addSource(project: Project, root: string, principal: Principal, maximum: number) {
+    this.liveBrowser(principal, 'project.source.add');
+    const source = await this.selectedSource(root);
+    const sources = project.sources ?? [{ id: digest(project.root).slice(0, 32), root: project.root, name: path.basename(project.root) }];
+    if (!sources.some(s => s.id === source.id)) {
+      requireThat(sources.length < maximum, 'limit', 'This project has reached its source-folder limit. Existing folders remain available.', { limit: 'nativeFolders.maxSources', maximum });
+      sources.push(source);
+    }
+    this.liveBrowser(principal, 'project.source.add'); project.sources = sources;
+    await atomicJson(path.join(this.directory, 'projects.json'), this.projects);
+    return project;
+  }
   async open(relative: string) {
     requireThat(!relative.split('/').some(p => ['.rho', '.git'].includes(p)), 'scope', 'Internal owner state is not a project.');
     const root = await confined(this.root, relative);
+    return this.openRoot(root);
+  }
+  // Trusted native-dialog result only; never called with an HTTP-supplied path.
+  async openSelected(root: string, principal: Principal, maxProjects: number) {
+    requireThat(this.principals.includes(principal) && principal.kind === 'browser' && principal.methods.includes('project.pick') && Date.parse(principal.expiresAt ?? '') > Date.now(), 'unauthorized', 'This tab no longer has access. No selected folder was opened.');
+    const selected = principal.selectedProjects ?? [];
+    const canonical = await fs.realpath(root), id = digest(canonical).slice(0, 32);
+    requireThat(selected.includes(id) || selected.length < maxProjects, 'limit', 'This tab has reached its selected-project limit. Existing projects remain available.', { limit: 'nativeFolders.maxProjects', maximum: maxProjects });
+    const project = await this.openRoot(canonical, true);
+    // Grant exactly this project, never its parent, siblings or descendants as projects.
+    principal.selectedProjects = [...new Set([...selected, project.id])];
+    await this.persistPrincipals();
+    return project;
+  }
+  private async openRoot(root: string, nativeSelected = false) {
+    requireThat(!root.split(path.sep).some(p => ['.rho', '.git'].includes(p)), 'scope', 'Internal owner state is not a project.');
     requireThat(root !== this.directory && !root.startsWith(this.directory + path.sep) && !this.directory.startsWith(root + path.sep) && (await fs.stat(root)).isDirectory(), 'scope', 'Select a project directory that does not contain service credentials or internal state.');
     const id = digest(root).slice(0, 32);
     let project = this.projects.find(p => p.id === id);
     if (!project) {
-      project = { id, root, openedAt: new Date().toISOString() };
+      project = { id, root, openedAt: new Date().toISOString(), ...(nativeSelected ? { nativeSelected: true as const } : {}) };
       await this.acquire(project);
       this.projects.push(project);
       await atomicJson(path.join(this.directory, 'projects.json'), this.projects);
     } else await this.acquire(project);
     return project;
+  }
+  visible(project: Project, principal: Principal) {
+    return (!principal.projectId || principal.projectId === project.id) && (!principal.projectRoot || project.root === principal.projectRoot || project.root.startsWith(principal.projectRoot + path.sep) || !!principal.selectedProjects?.includes(project.id));
   }
   private acquired = new Set<string>();
   private async acquire(project: Project) {
@@ -77,8 +158,10 @@ export class State {
     requireThat(!principal.projectId || principal.projectId === id, 'scope', 'Credential belongs to a different project.');
     const project = this.projects.find(p => p.id === id);
     requireThat(project, 'not_found', 'Project is not registered.');
-    if (principal.projectRoot) await confined(principal.projectRoot, path.relative(principal.projectRoot, project.root) || '.');
-    await confined(this.root, path.relative(this.root, project.root));
+    requireThat(this.visible(project, principal), 'scope', 'Project is outside this credential’s selected folders.');
+    if (principal.projectRoot && !principal.selectedProjects?.includes(project.id)) await confined(principal.projectRoot, path.relative(principal.projectRoot, project.root) || '.');
+    if (project.nativeSelected || project.workspace) requireThat(await fs.realpath(project.root) === project.root, 'scope', 'The selected project folder changed. Select it again in the system dialog.');
+    else await confined(this.root, path.relative(this.root, project.root));
     await this.acquire(project); return project;
   }
   async close() { for (const release of this.releases.splice(0).reverse()) await release(); this.acquired.clear(); }

@@ -1958,6 +1958,62 @@
         "projectId"
       ]
     },
+    "project.pick": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "required": []
+    },
+    "project.source.pick": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {},
+      "required": []
+    },
+    "project.source.add": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        }
+      },
+      "required": [
+        "projectId"
+      ]
+    },
+    "project.createWorkspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "\\S"
+        },
+        "selectionIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true
+        },
+        "changeId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "name",
+        "selectionIds",
+        "changeId"
+      ]
+    },
     "session.browser.pair": {
       "type": "object",
       "additionalProperties": false,
@@ -13078,6 +13134,163 @@
       ],
       "additionalProperties": true
     },
+    "project.pick": {
+      "type": "object",
+      "properties": {
+        "cancelled": {
+          "type": "boolean"
+        },
+        "project": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                },
+                "root": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "openedAt": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "root",
+                "openedAt"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "cancelled",
+        "project"
+      ],
+      "additionalProperties": true
+    },
+    "project.source.pick": {
+      "type": "object",
+      "properties": {
+        "cancelled": {
+          "type": "boolean"
+        },
+        "selection": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "selectionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "root": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "selectionId",
+                "id",
+                "root",
+                "name"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "cancelled",
+        "selection"
+      ],
+      "additionalProperties": true
+    },
+    "project.source.add": {
+      "type": "object",
+      "properties": {
+        "cancelled": {
+          "type": "boolean"
+        },
+        "project": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                },
+                "root": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "openedAt": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "id",
+                "root",
+                "openedAt"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "cancelled",
+        "project"
+      ],
+      "additionalProperties": true
+    },
+    "project.createWorkspace": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "root": {
+          "type": "string",
+          "minLength": 1
+        },
+        "openedAt": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "root",
+        "openedAt"
+      ],
+      "additionalProperties": true
+    },
     "session.browser.pair": {
       "type": "object",
       "properties": {
@@ -21817,6 +22030,7 @@
     "selection.changed",
     "composition.changed",
     "binding.changed",
+    "project.sources.changed",
     "capability.changed",
     "view.closed",
     "interaction.selection.changed",

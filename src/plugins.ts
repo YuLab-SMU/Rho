@@ -26,7 +26,7 @@ const entries = {
   agent: () => import('@rho-workspace/plugin-agent')
 };
 export type PluginId = keyof typeof entries;
-export const selectedPluginVersions: Record<keyof typeof entries, string> = { documents: '0.4.1', files: '0.4.0', r: '0.4.0', requirements: '0.4.0', tables: '0.4.2', media: '0.4.0', charts: '0.4.0', annotations: '0.4.1', agent: '0.4.3' };
+export const selectedPluginVersions: Record<keyof typeof entries, string> = { documents: '0.4.2', files: '0.4.1', r: '0.4.1', requirements: '0.4.0', tables: '0.4.2', media: '0.4.0', charts: '0.4.0', annotations: '0.4.1', agent: '0.4.3' };
 export const pluginIds = Object.keys(entries) as PluginId[];
 type Modules = { [K in PluginId]: Awaited<ReturnType<typeof entries[K]>> };
 export interface PluginConfig {
@@ -135,6 +135,7 @@ export class Plugins {
   validateComponentBindings(id: string, props: Record<string, unknown>, resources: Record<string, Resource>) {
     this.modules.charts?.validateComponentBindings(id, props, resources);
   }
+  sourceFolders = new Map<string, import('./state.js').SourceFolder[]>();
   project(root: string, id: string) { return new ProjectPlugins(this, root, id); }
 }
 export class ProjectPlugins {
@@ -142,10 +143,11 @@ export class ProjectPlugins {
   constructor(public assembly: Plugins, public root: string, public projectId: string) {
     const c = assembly.config;
     const documents = assembly.optional('documents'), files = assembly.optional('files'), tables = assembly.optional('tables'), charts = assembly.optional('charts'), media = assembly.optional('media'), r = assembly.optional('r'), agent = assembly.optional('agent'), annotations = assembly.optional('annotations');
-    if (documents) this.documents = new documents.Documents(root, c.documents);
+    const sources = assembly.sourceFolders.get(projectId), paths = sources?.length && files ? new files.ProjectPaths(root, sources) : undefined;
+    if (documents) this.documents = new documents.Documents(root, c.documents, paths);
     if (files) {
       const validators: DeclarationValidator[] = [tables?.declarationValidator, media?.declarationValidator, r?.declarationValidator].filter((v): v is DeclarationValidator => !!v);
-      this.files = new files.Files(root, projectId, only(files.fileLimits, c.resources), validators);
+      this.files = new files.Files(root, projectId, only(files.fileLimits, c.resources), validators, paths);
     }
     if (tables && this.files) this.tables = new tables.Tables(this.files, only(tables.tableLimits, c.resources));
     if (charts && this.tables) this.charts = new charts.Charts(this.tables, only(charts.chartLimits, c.resources));

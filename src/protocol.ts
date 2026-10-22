@@ -17,6 +17,10 @@ const record = { type: 'object' };
 const array = (items: any) => ({ type: 'array', items });
 const response = (properties: Record<string, any>, required = Object.keys(properties)) => ({ type: 'object', properties, required, additionalProperties: true });
 export const operations: Record<string, any> = { ...base.operations,
+  'project.pick': obj({}),
+  'project.source.pick': obj({}),
+  'project.source.add': obj(project),
+  'project.createWorkspace': obj({ name: { type: 'string', minLength: 1, maxLength: 80, pattern: '\\S' }, selectionIds: { type: 'array', items: text, minItems: 1, maxItems: 32, uniqueItems: true }, changeId: text }),
   'project.create': obj({ name: { type: 'string', minLength: 1, maxLength: 80, pattern: '^[^/\\\\]+$', not: { enum: ['.', '..', '.rho', '.git'] } } }),
   'session.browser.pair': obj({ path: text }, []),
   'session.browser.revoke': obj({ sessionId: text }),
@@ -77,6 +81,10 @@ const selection = { ...base.definitions.selection, properties: { ...base.definit
 const definitions = { ...base.definitions, document: documentSchema, run: runSchema, resource: resourceSchema, selection, declaration: declarationSchema, executionInput: executionInputSchema, requirements: requirementsSchema };
 const artifactFacts = response({ integrity: record, domain: record, resources: array(resourceSchema) }, ['integrity', 'domain']);
 export const responses: Record<string, any> = { ...base.responses,
+  'project.pick': response({ cancelled: { type: 'boolean' }, project: { anyOf: [base.responses['project.create'], { type: 'null' }] } }),
+  'project.source.pick': response({ cancelled: { type: 'boolean' }, selection: { anyOf: [response({ selectionId: text, id: text, root: text, name: text }), { type: 'null' }] } }),
+  'project.source.add': response({ cancelled: { type: 'boolean' }, project: { anyOf: [base.responses['project.create'], { type: 'null' }] } }),
+  'project.createWorkspace': base.responses['project.create'],
   'session.browser.pair': response({ code: text, expiresAt: text }),
   'session.browser.revoke': response({ sessionId: text, revoked: { type: 'boolean' } }),
   'protocol.describe': response({ apiVersion: { const: '2.0' }, schemaVersion: { const: 2 }, operations: record, definitions: record, responses: record }),
@@ -147,4 +155,4 @@ export const errorKinds = base.errorKinds;
 export const errorSchema = base.definitions.error;
 export const errorEnvelope = obj({ apiVersion: { const: '2.0' }, ok: { const: false }, error: errorSchema });
 export const responseEnvelope = (method: string) => obj({ apiVersion: { const: '2.0' }, ok: { const: true }, value: responses[method] });
-export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed'])], operations, responses, descriptions, definitions, errorEnvelope, legacy: 'v1 schemas and captured fixtures are frozen. Legacy reads and explicit retry/cancel of accepted requests remain available; new recipe submissions require an explicit v2 project script.' };
+export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed'])], operations, responses, descriptions, definitions, errorEnvelope, legacy: 'v1 schemas and captured fixtures are frozen. Legacy reads and explicit retry/cancel of accepted requests remain available; new recipe submissions require an explicit v2 project script.' };

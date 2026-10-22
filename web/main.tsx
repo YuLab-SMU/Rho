@@ -111,7 +111,7 @@ function App() {
       try {
         for await (const value of client.observe(project.id).observe(abort.signal)) {
           if (abort.signal.aborted) return;
-          setSnapshot(value); live();
+          setSnapshot(value); setProject(value.project); setProjects(list => list.map(p => p.id === value.project.id ? value.project : p)); live();
         }
       } catch (e) { if (!abort.signal.aborted) lost(e); }
     })();
@@ -288,7 +288,7 @@ function App() {
           : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin}
             back={pluginReturn ? { label: 'Back to ' + name(project), run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
           : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); }} /></Suspense>
-          : <ProjectOverview project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} />}
+          : <ProjectOverview client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} />}
       </main>
       {context && !narrow && <aside id="project-context" className="context-drawer" aria-label={feedbackContext ? 'Your question' : 'Context and access'}>
         <div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Context & access'}</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={14} stroke={2} /></button></div>

@@ -195,3 +195,104 @@ test('revocation is rechecked after receiving a request body, before a scoped op
     assert.deepEqual(await f.operator.call('project.list', {}), []);
   } finally { release(); await f.cleanup(); }
 });
+
+test('native folder selection grants only the selected project to that browser and survives restart', async () => {
+  const f = await fixture({ nativeFolders: { maxProjects: 1 } });
+  const outside = await fs.mkdtemp('/private/tmp/rho-native-');
+  let restarted;
+  try {
+    const chosen = path.join(outside, 'project 中文 🧬'); await fs.mkdir(chosen);
+    const sibling = path.join(outside, 'sibling'); await fs.mkdir(sibling);
+    const nested = path.join(chosen, 'nested'); await fs.mkdir(nested);
+    let calls = 0; f.service.folderPicker.choose = async () => { calls++; return chosen; };
+    async function tab() { const pairing = await f.service.browser.createPairing(); return (await (await f.pair(pairing.code)).json()).value; }
+    const grant = await tab(), other = await tab();
+    const client = new BrowserClient({ url: f.service.url, ...grant });
+    const stranger = new BrowserClient({ url: f.service.url, ...other });
+    await assert.rejects(f.operator.call('project.pick', {}), e => e.error.kind === 'unauthorized');
+    await assert.rejects(client.call('project.pick', { path: chosen }), e => e.error.kind === 'invalid');
+    assert.equal(calls, 0);
+    const result = await client.call('project.pick', {});
+    assert.equal(result.cancelled, false); assert.equal(result.project.root, await fs.realpath(chosen));
+    assert.equal((await client.call('observation.snapshot', { projectId: result.project.id })).project.id, result.project.id);
+    assert.deepEqual((await client.call('project.list', {})).map(p => p.id), [result.project.id]);
+    assert.deepEqual(await stranger.call('project.list', {}), []);
+    await assert.rejects(stranger.call('observation.snapshot', { projectId: result.project.id }), e => e.error.kind === 'scope');
+    for (const target of [chosen, sibling, nested]) await assert.rejects(client.call('project.open', { path: target }), e => e.error.kind === 'scope');
+    f.service.folderPicker.choose = async () => sibling;
+    await assert.rejects(client.call('project.pick', {}), e => e.error.kind === 'limit');
+    await assert.rejects(fs.stat(path.join(sibling, '.rho')), { code: 'ENOENT' });
+    f.service.folderPicker.choose = async () => chosen;
+    assert.equal((await client.call('project.pick', {})).project.id, result.project.id);
+    f.service.folderPicker.choose = async () => null;
+    assert.deepEqual(await client.call('project.pick', {}), { cancelled: true, project: null });
+    assert.equal(f.service.bridge.owned.size, 0);
+    const port = Number(new URL(f.service.url).port); await f.service.close();
+    restarted = await new RhoService({ ...f.config, port }).start();
+    assert.equal((await client.call('observation.snapshot', { projectId: result.project.id })).project.id, result.project.id);
+    assert.deepEqual(await stranger.call('project.list', {}), []);
+  } finally { await restarted?.close(); await f.cleanup(); await fs.rm(outside, { recursive: true, force: true }); }
+});
+
+test('native selection cancellation, concurrent windows, revocation and internal-state refusal grant nothing', async () => {
+  const f = await fixture();
+  const outside = await fs.mkdtemp('/private/tmp/rho-native-revoke-');
+  let finish = () => {};
+  try {
+    const pairing = await f.service.browser.createPairing(), { value } = await (await f.pair(pairing.code)).json();
+    const client = new BrowserClient({ url: f.service.url, ...value });
+    f.service.folderPicker.choose = async () => null;
+    assert.deepEqual(await client.call('project.pick', {}), { cancelled: true, project: null });
+    for (const selected of [f.config.stateDir, f.root]) {
+      f.service.folderPicker.choose = async () => selected;
+      await assert.rejects(client.call('project.pick', {}), e => e.error.kind === 'scope');
+    }
+    let reached; const started = new Promise(r => { reached = r; });
+    f.service.folderPicker.choose = () => { reached(); return new Promise(r => { finish = r; }); };
+    const pending = client.call('project.pick', {}), refused = assert.rejects(pending, e => e.error.kind === 'unauthorized');
+    await started;
+    await assert.rejects(client.call('project.pick', {}), e => e.error.kind === 'conflict');
+    await f.operator.call('session.browser.revoke', { sessionId: value.principalId });
+    finish(outside); await refused;
+    assert.deepEqual(await f.operator.call('project.list', {}), []);
+    await assert.rejects(fs.stat(path.join(outside, '.rho')), { code: 'ENOENT' });
+    assert.equal(f.service.bridge.owned.size, 0);
+  } finally { finish(null); await f.cleanup(); await fs.rm(outside, { recursive: true, force: true }); }
+});
+
+test('named projects combine source folders, allow duplicate display names and add sources without creating user directories', async () => {
+  const f = await fixture(); const source = await fs.mkdtemp('/private/tmp/rho-project-sources-'); let restarted;
+  try {
+    const a = path.join(source, 'a'), b = path.join(source, 'b'), c = path.join(source, 'c');
+    for (const root of [a, b, c]) { await fs.mkdir(root); await fs.writeFile(path.join(root, 'same.txt'), root.at(-1)); }
+    const pairing = await f.service.browser.createPairing(), { value } = await (await f.pair(pairing.code)).json();
+    const client = new BrowserClient({ url: f.service.url, ...value });
+    const select = async root => { f.service.folderPicker.choose = async () => root; return (await client.call('project.source.pick', {})).selection.selectionId; };
+    const input = { name: 'Project / 中文', selectionIds: [await select(a), await select(b)], changeId: 'create-1' };
+    const project = await client.call('project.createWorkspace', input);
+    assert.equal(project.name, input.name); assert.equal(project.sources.length, 2);
+    assert.equal((await client.call('project.createWorkspace', input)).id, project.id);
+    assert.equal((await client.call('observation.snapshot', { projectId: project.id })).project.sources.length, 2);
+    const docA = await f.operator.call('document.open', { projectId: project.id, path: '@' + project.sources[0].id + '/same.txt' });
+    const docB = await f.operator.call('document.open', { projectId: project.id, path: '@' + project.sources[1].id + '/same.txt' });
+    assert.equal(docA.content, 'a'); assert.equal(docB.content, 'b'); assert.notEqual(docA.id, docB.id);
+    const observer = client.observe(project.id).observe(); await observer.next(); const changed = observer.next();
+    f.service.folderPicker.choose = async () => c;
+    const added = await client.call('project.source.add', { projectId: project.id });
+    assert.equal((await changed).value.project.sources.length, 3); await observer.return();
+    assert.equal(added.project.id, project.id); assert.equal(added.project.sources.length, 3);
+    assert.equal((await client.call('project.source.add', { projectId: project.id })).project.sources.length, 3);
+    const second = await client.call('project.createWorkspace', { name: input.name, selectionIds: [await select(a)], changeId: 'create-2' });
+    assert.notEqual(second.id, project.id);
+    for (const root of [a, b, c]) assert.deepEqual(await fs.readdir(root), ['same.txt']);
+    const port = Number(new URL(f.service.url).port); await f.service.close();
+    restarted = await new RhoService({ ...f.config, port }).start();
+    const operator = new RhoClient({ url: restarted.url, token: restarted.adminToken });
+    assert.equal((await client.call('observation.snapshot', { projectId: project.id })).project.sources.length, 3);
+    assert.equal((await operator.call('document.open', { projectId: project.id, path: '@' + project.sources[0].id + '/same.txt' })).id, docA.id);
+    const fresh = await restarted.browser.createPairing();
+    const grant = await (await fetch(restarted.url + '/api/browser/pair', { method: 'POST', headers: { origin: restarted.url, 'content-type': 'application/json' }, body: JSON.stringify({ code: fresh.code }) })).json();
+    assert.ok((await new BrowserClient({ url: restarted.url, ...grant.value }).call('project.list', {})).some(p => p.id === project.id));
+    assert.equal(restarted.bridge.owned.size, 0);
+  } finally { await restarted?.close(); await f.cleanup(); await fs.rm(source, { recursive: true, force: true }); }
+});
