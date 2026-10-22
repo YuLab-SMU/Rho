@@ -4,11 +4,14 @@ import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import entries from './ui-entries.json';
 const selected = process.env.RHO_UI_PLUGINS?.split(',') ?? entries.map(e => e.plugin);
-const chosen = entries.filter(e => selected.includes(e.plugin));
+// Rho-owned entries are part of the application selection; RHO_UI_OMIT drops one explicitly.
+const omitted = process.env.RHO_UI_OMIT?.split(',') ?? [];
+const chosen = entries.filter(e => e.package ? selected.includes(e.plugin) : !omitted.includes(e.plugin));
 const buildInputs: string[] = [];
 function inputs(dir: string) { for (const e of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) e.isDirectory() ? inputs(path.join(dir, e.name)) : buildInputs.push(path.join(dir, e.name)); }
 inputs('web');
-for (const entry of chosen) inputs('node_modules/' + entry.package + '/dist');
+// Rho-owned entries (the Agent map) have no separate package; their source is under web.
+for (const entry of chosen) if (entry.package) inputs('node_modules/' + entry.package + '/dist');
 const rendererHash = createHash('sha256');
 for (const file of [...buildInputs, 'src/ui-contract.ts', 'src/browser.ts', 'package-lock.json']) rendererHash.update(file).update(fs.readFileSync(file));
 const rendererBuild = rendererHash.digest('hex');

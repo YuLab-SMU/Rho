@@ -261,6 +261,42 @@ importing missing owners or adding operations, callable Skills or grants.
 Assembly records the inventory digest and its owner source commit. Selected
 owners replace the build copy with their real descriptor when loaded.
 
+## Item frame and Agent map
+
+The [whole-task design](DESIGN.md#whole-task-item-cards-and-the-agent-map) is
+implemented as one Rho-owned shared interaction and one frame used by every entry.
+
+- `src/task-frame.ts` is the DOM-free vocabulary: terms, items, presentation
+  records, suggestions, the default form scale and pure helpers (`term`, `roleOf`,
+  `toneOf`, `zoom`, `nearestForm`, `itemsInRange`). An undeclared kind or state
+  renders as its identifier; an unknown tone renders neutral.
+- `src/task-map.ts` keeps `.rho/rho/task-map.json` (`rho.task-map/1`) with
+  conditional versions, idempotent `changeId` receipts and byte/count budgets.
+  `task.map.declare` is Agent-only (never a browser tab); `task.map.present` is
+  shared; `task.map.respond` (pin, unpin, revert, accept, dismiss) is browser-only;
+  `task.map.read` and the snapshot's `taskMap` only observe. Business Agents receive
+  read, declare and present, keeping the layered profile at 61 of 64 methods.
+- Budget `taskMap.agentFormIntervalMs` (default 8000) protects layout stability
+  and the person's attention. An Agent form change to a pinned target, or within
+  the interval after its last applied form change, is not applied; it is merged
+  into one pending suggestion per target and Agent. Focus is not paced and never
+  moves keyboard focus; only a person's own focus brings a view forward.
+- `UiContribution` gains optional `forms`, `Body` and `hiddenNote`; views receive
+  an optional `frame` with the map, the shared controls and Rho's `Card`. Entries
+  without declarations draw only `full`; Rho's generic body stands in for smaller
+  forms. `web/frame.tsx` draws the header/footer, attribution (Keep, Revert),
+  suggestions (Apply, Dismiss), pins and zoom controls.
+- `web/agent-map/ui.tsx` is the map entry (`rho.agent-map@0.1.0`, forms
+  inline/card/summary/full/compare). It imports only the frame contract and is
+  listed in `ui-entries.json` without a separate package. Rho-owned entries join
+  every build selection; `RHO_UI_OMIT=agent-map` drops it. The shell hosts it in
+  the title bar (reference), above the layout (`map:top`) and below it
+  (`map:bottom`, the active view's trail). "Whole task" hides the layout without
+  unmounting it, so views and unsaved input stay.
+
+The task map is not yet part of `workspace.export` archives, and one map is kept
+per project rather than per task route.
+
 ## Checks and evidence
 
 ```sh

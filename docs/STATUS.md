@@ -2,6 +2,30 @@
 
 Updated: 2026-10-22. **Phases 1–5 selected grades flow:** [installed native acceptance](HEADLESS.md#installed-native-grades-acceptance-phase-5) now covers two actual Claude Code / Westlake HPC DeepSeek business sessions and two restricted presentation sessions. Base tables appear before presenters start; original-session feedback, human edits, versioned outputs and explicit replies survive the selected faults. The external offline candidate passed 32 installed checks, 34 real-model assertions, 14 browser/restart checks and 95 domain/identity assertions against AC01–AC21. Success: 77 model tool calls, 1,098,713 input tokens including cache and 29,705 output tokens; failed-trial calls and observed usage lower bounds are retained separately. Source checks remain Rho 63/63, Plugins 45/45; Agent 0.4.3, Documents/Tables/Annotations 0.4.1/0.4.2/0.4.1; Core unchanged. This bounded acceptance excludes same-project multi-task, full teaching-design acceptance and official distribution. Phase 1–5 source is committed; no registry publication or signing has been performed.
 
+## Item frame and Agent map
+
+Source now follows the whole-task design on the Paper page
+[03c · 任务全景](https://app.paper.design/file/01M5HG6R8RBC33N84S245J0YXT/p-7-0);
+see [Item frame and Agent map](UI.md#item-frame-and-agent-map). The Agent
+declares items with its own kind/state vocabulary (`task.map.declare`); Rho fixes
+no closed list and interprets only an optional term role. Every entry draws its
+body inside Rho's frame, with forms ordered by scale, subsets as parameters and a
+hidden-note footer. The Agent map is a Rho-owned registry entry importing only the
+frame contract; its reference, strip, trail, whole-task and compare forms share
+`task.map.present` with people. Pins win, Agent changes are attributed and
+revertible, and Agent form changes within `agentFormIntervalMs` (8 s) merge into
+one suggestion. Reads only observe.
+
+Checks: Rho 73/73 (five new task-map tests, including a controlled-clock budget
+test); U1 browser acceptance 23 checks at 1600/1280/1024/768/390 and U2 editor/table
+acceptance 6 checks, both Chrome 155 with zero Host starts and native dispatches.
+A scripted Chrome pass at 1440/768/390 exercised declaration, attributed change,
+paced suggestion, accept, pin, zoom and opening an item's view, with no failed
+request. Limits: no Plugins owner draws its own compact `Body` yet, so their
+entries use Rho's generic body below `full`; one map per project; not archived by
+`workspace.export`; item boundaries are still whatever the Agent declares (Q1).
+Paper boards remain pending user review; Plugins source is unchanged.
+
 ## Teaching case handoff
 
 The earlier UI pause followed review of the gap from the original Paper experience;

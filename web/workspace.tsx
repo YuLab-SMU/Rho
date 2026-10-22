@@ -6,6 +6,7 @@ import { pluginPresentation } from '../src/plugin-presentation.js';
 import { Icon, type IconName } from './icons.js';
 import { resourceIcon } from './project.js';
 import { registry } from './registry.js';
+import { FrameProvider, MapPlacement, ViewItemHeader, itemForView, useFrameContext, useTaskFrame } from './frame.js';
 import 'dockview/dist/styles/dockview.css';
 
 interface ViewParams { view: ViewDescription; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; renderAllowed?: boolean; headerTarget?: HTMLElement | null; compositionId: string; compositionVersion: number; onRequestFeedback?: (viewId: string) => void }
@@ -45,6 +46,7 @@ function explain(view: ViewDescription, snapshot: WorkspaceSnapshot) {
 }
 function OwnerView({ params, active }: { params: ViewParams; active: boolean }) {
   const { view, snapshot } = params;
+  const frame = useFrameContext(), item = itemForView(frame?.map, view.id);
   const entry = registry.entries.find(e => e.component === view.component && e.componentVersion === view.version);
   const owner = snapshot.catalog.components.find(c => c.id === view.component && c.version === view.version);
   const provider = snapshot.catalog.plugins.find(p => p.id === owner?.pluginId);
@@ -57,7 +59,11 @@ function OwnerView({ params, active }: { params: ViewParams; active: boolean }) 
     try { await params.client.call('view.observe', input); }
     catch (error: any) { if (error?.error?.kind || error?.kind) throw error; await params.client.call('view.observe', input); }
   } : undefined;
-  if (available) return <entry.View viewId={view.id} view={view} projectId={snapshot.project.id} snapshot={snapshot} client={params.client} active={active} contextTarget={params.contextTarget} principalId={params.principalId} headerTarget={params.headerTarget} renderObservation={observation} requestFeedback={params.onRequestFeedback ? () => params.onRequestFeedback!(view.id) : undefined} />;
+  if (available) {
+    const body = <entry.View viewId={view.id} view={view} projectId={snapshot.project.id} snapshot={snapshot} client={params.client} active={active} contextTarget={params.contextTarget} principalId={params.principalId} headerTarget={params.headerTarget} renderObservation={observation} requestFeedback={params.onRequestFeedback ? () => params.onRequestFeedback!(view.id) : undefined}
+      frame={frame ? { ...frame, form: 'full', params: frame.map.presentation['item:' + item?.id]?.params ?? {}, item } : undefined} />;
+    return item ? <div className="framed-view"><ViewItemHeader item={item} /><div className="framed-view-body">{body}</div></div> : body;
+  }
   const why = explain(view, snapshot);
   return <section className="unavailable" aria-label={title(view)}>
     <span className="unavailable-icon"><Icon name={viewIcon(view, snapshot)} size={22} stroke={1.7} /></span>
@@ -92,7 +98,7 @@ function Tab({ params }: IDockviewPanelHeaderProps<ViewParams>) {
 const HeaderSlotContext = createContext<(target: HTMLDivElement | null) => void>(() => {});
 function HeaderSlot() { return <div className="owner-header-slot" style={{ display: 'flex', alignItems: 'center', minHeight: 32, flexShrink: 0 }} ref={useContext(HeaderSlotContext)} />; }
 const components = { owner: ViewContent }, tabs = { retained: Tab };
-export function Workspace({ composition, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive }: { composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean }) {
+export function Workspace({ composition, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, mapChipTarget }: { composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null }) {
   const [headerTarget, setHeaderTarget] = useState<HTMLDivElement | null>(null);
   const [feedbackSource, setFeedbackSource] = useState<string | null>(null), [feedbackLimit, setFeedbackLimit] = useState(false);
   const mounted = useRef(new Set<string>());
@@ -162,6 +168,17 @@ export function Workspace({ composition, snapshot, client, onAbout, contextTarge
     return () => listener.dispose();
   }, [api, narrow]);
   function onReady(event: DockviewReadyEvent) { arranged.current = ''; setApi(event.api); }
+  const frame = useTaskFrame({ snapshot, client, principalId, composition, activeViewId: active });
+  // A person opening an item brings its view forward; the Agent's focus only highlights.
+  const opened = useRef('');
+  useEffect(() => {
+    const focus = frame?.map.focus, item = focus && frame.map.items.find(i => i.id === focus.item);
+    if (!focus || !focus.human || focus.author !== principalId || opened.current === focus.at || !item?.view || !composition.views.some(v => v.id === item.view)) return;
+    opened.current = focus.at; setActive(item.view);
+    api?.getPanel(item.view)?.api.setActive();
+  }, [frame?.map.focus, composition, api, principalId]);
+  const whole = frame?.map.presentation['map:top']?.form === 'full';
+  const trail = !!frame && frame.map.items.some(i => i.view === active);
   const selected = composition.views.find(v => v.id === active) ?? composition.views[0];
   const tabId = useId();
   // Below 768 the views are tabs: arrows, Home and End move between them and show the view.
@@ -172,7 +189,10 @@ export function Workspace({ composition, snapshot, client, onAbout, contextTarge
     event.preventDefault(); setActive(composition.views[next].id);
     (event.currentTarget.children[next] as HTMLElement).focus();
   }
-  return <HeaderSlotContext.Provider value={setHeaderTarget}><section className="workspace" aria-label="Layout">
+  return <FrameProvider value={frame}><HeaderSlotContext.Provider value={setHeaderTarget}><section className="workspace" aria-label="Layout">
+    {mapChipTarget && frame && createPortal(<MapPlacement slot="title" inline />, mapChipTarget)}
+    <MapPlacement slot="top" />
+    <div className="workspace-stage" hidden={whole}>
     {contextTarget && feedbackContextActive && feedbackSource && feedbackAllowed && feedbackEntry && snapshot.feedback && createPortal(feedbackLimit ? <section className="unavailable" role="status"><h3>Close a view before opening feedback</h3><p>Existing views and input are kept within this layout's view limit.</p></section> : <feedbackEntry.View key={[snapshot.project.id, snapshot.feedback.taskId, feedbackSource, principalId].join(':')} viewId={'feedback:' + feedbackSource} view={{ id: 'feedback:' + feedbackSource, component: feedbackEntry.component, version: feedbackEntry.componentVersion, props: { title: 'Your question', taskId: snapshot.feedback.taskId, sourceSelectionScope: { kind: 'shared', id: feedbackSource } }, bindings: { draft: { kind: 'live-document', documentId: snapshot.feedback.draftDocumentId } } }} projectId={snapshot.project.id} snapshot={snapshot} client={client} active principalId={principalId} contextTarget={null} feedbackConfiguration={snapshot.feedback} />, contextTarget)}
     {!composition.views.length ? <div className="empty"><h2>No views in this layout</h2><p>The saved layout is empty. No view is created automatically.</p></div> :
       narrow ? <>
@@ -183,5 +203,7 @@ export function Workspace({ composition, snapshot, client, onAbout, contextTarge
         <div id={tabId + 'panel'} className="mobile-view" role="tabpanel" aria-labelledby={tabId + composition.views.indexOf(selected!)}>{selected && <OwnerView params={{ view: selected, snapshot, client, onAbout, contextTarget: feedbackContextActive ? null : contextTarget, principalId, renderAllowed: true, headerTarget, compositionId: composition.compositionId, compositionVersion: composition.version, onRequestFeedback: requestFeedback }} active />}</div>
       </> :
         <div className="dock-container"><DockviewReact rightHeaderActionsComponent={HeaderSlot} theme={themeLight} className="rho-dock" components={components} tabComponents={tabs} onReady={onReady} disableDnd disableFloatingGroups /></div>}
-  </section></HeaderSlotContext.Provider>;
+    </div>
+    {!whole && trail && <MapPlacement slot="bottom" compact />}
+  </section></HeaderSlotContext.Provider></FrameProvider>;
 }

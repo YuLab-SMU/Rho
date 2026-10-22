@@ -10,7 +10,9 @@ export const browserLimits = { maxSessions: 16, maxPairings: 8, pairingTtlMs: 30
 // author-scoped undo, per-change revert, bounded table pages and selection.
 // Saving, abandoning saves, global undo and execution remain Agent/operator work.
 export const browserMethods = ['protocol.describe', 'project.list', 'project.open', 'project.create', 'project.pick', 'project.createWorkspace', 'project.source.pick', 'project.source.add', 'capability.list', 'observation.snapshot', 'composition.read', 'document.read', 'resource.read', 'skill.list', 'skill.read',
-  'document.edit', 'document.undoOwn', 'document.revert', 'document.history', 'document.change.read', 'data.page', 'interaction.selection.read', 'interaction.selection.set', 'view.observe', 'view.observations.read', 'feedback.submit', 'feedback.status', 'annotation.read'];
+  'document.edit', 'document.undoOwn', 'document.revert', 'document.history', 'document.change.read', 'data.page', 'interaction.selection.read', 'interaction.selection.set', 'view.observe', 'view.observations.read', 'feedback.submit', 'feedback.status', 'annotation.read',
+  // People see and steer the task map; only the Agent declares its items.
+  'task.map.read', 'task.map.present', 'task.map.respond'];
 interface Pairing { hash: string; root: string; methods: string[]; expires: number; selectedProjects: string[] }
 export class BrowserAccess {
   limits: typeof browserLimits;

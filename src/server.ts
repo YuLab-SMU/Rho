@@ -14,6 +14,7 @@ import { State, type Principal, type Project } from './state.js';
 import { Requests, publicOperation, requestLimits } from './requests.js';
 import { Workspace, workspaceLimits } from './workspace.js';
 import { Interactions, interactionLimits } from './interactions.js';
+import { TaskMap, taskMapLimits } from './task-map.js';
 import { Capabilities } from './capabilities.js';
 import { BrowserAccess, browserLimits } from './browser-access.js';
 import { NativeFolderPicker, nativeFolderLimits } from './native-folders.js';
@@ -32,7 +33,7 @@ export interface NativeAdapterRegistration {
   proof: { kind: 'claude-code-init'; sessionId: string; clientVersion: string };
 }
 export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 65536, eventRetention: 256, maxSubscriptions: 8, maxQueue: 32, maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024, maxRetainedMetadataBytes: 32 * 1024 * 1024 };
-export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number }
+export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
 const legacyValidators = Object.fromEntries(Object.entries(legacyProtocol.operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
@@ -234,7 +235,7 @@ export class RhoService {
     this.plugins.need('agent');
     const capabilities = new Capabilities(this.plugins, project);
     const state = await capabilities.state();
-    const available = Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('project.') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read'].includes(m));
+    const available = Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('project.') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond'].includes(m));
     const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance'].includes(m));
     const selected = methods ?? (profile === 'layered-presentation' ? profileMethods : (await Promise.all(profileMethods.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method));
     requireThat(!profile || selected.every(m => profileMethods.includes(m)), 'scope', 'The selected role cannot receive broader methods.');
@@ -506,6 +507,15 @@ export class RhoService {
       }
       await this.emit(p, 'composition.changed', b.compositionId); return result;
     }
+    if (method.startsWith('task.map.')) {
+      const map = new TaskMap(p, this.config.taskMap);
+      if (method === 'task.map.read') return map.read();
+      // The Agent declares what the task is; people answer for their own screen.
+      if (method === 'task.map.declare') requireThat(principal.kind !== 'browser', 'unauthorized', 'Only the Agent declares task items and their words.');
+      if (method === 'task.map.respond') requireThat(principal.kind === 'browser', 'unauthorized', 'Only a person in a browser tab pins, reverts or answers suggestions.');
+      const result = method === 'task.map.declare' ? await map.declare(b, principal.id) : method === 'task.map.present' ? await map.present(b, principal.id, principal.kind === 'browser') : await map.respond(b, principal.id);
+      await this.emit(p, 'task.map.changed', p.id); return result;
+    }
     if (method === 'interaction.selection.read') return interactions.read(b.scope, principal.id);
     if (method === 'interaction.selection.set') {
       const result = await interactions.set(b, principal.id); await this.emit(p, 'interaction.selection.changed', result.key, b.scope.kind === 'shared' ? undefined : principal.id); return result;
@@ -611,7 +621,7 @@ export class RhoService {
       }
       const result = await owners.need('agent').readContext(b.contextId, principal.id); await this.emit(p, 'context.changed', result.contextId, principal.id); if (result.principal !== principal.id) await this.emit(p, 'context.changed', result.contextId, result.principal); return result;
     }
-    if (method === 'observation.snapshot') return { project: p, catalog: await capabilities.catalog(principal), documents: await owners.retainedDocuments(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), feedback: await routing.feedbackConfiguration().then(async configuration => { const route = await routing.read(); return configuration ? { taskId: route.taskId, compositionId: route.compositionId, taskVersion: route.version, targetBindingId: route.feedbackOwnerBindingId, draftDocumentId: configuration.draftDocumentId, relatedDocumentId: configuration.relatedDocumentId } : null; }), presentation: await routing.read().then(async route => route ? { taskId: route.taskId, pending: (await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).state()).pending ?? null, witnesses: await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).witnesses() } : null), interactions: await interactions.list(principal.id), annotations: await owners.retainedAnnotations(), contexts: await owners.agent?.contextStates(principal.id) ?? [], selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: owners.documents?.limits ?? {}, r: this.plugins.optional('r') ? { ...this.plugins.need('r').executionLimits, ...this.config.r } : {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
+    if (method === 'observation.snapshot') return { project: p, catalog: await capabilities.catalog(principal), documents: await owners.retainedDocuments(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), feedback: await routing.feedbackConfiguration().then(async configuration => { const route = await routing.read(); return configuration ? { taskId: route.taskId, compositionId: route.compositionId, taskVersion: route.version, targetBindingId: route.feedbackOwnerBindingId, draftDocumentId: configuration.draftDocumentId, relatedDocumentId: configuration.relatedDocumentId } : null; }), presentation: await routing.read().then(async route => route ? { taskId: route.taskId, pending: (await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).state()).pending ?? null, witnesses: await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).witnesses() } : null), interactions: await interactions.list(principal.id), taskMap: await new TaskMap(p, this.config.taskMap).read(), annotations: await owners.retainedAnnotations(), contexts: await owners.agent?.contextStates(principal.id) ?? [], selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: owners.documents?.limits ?? {}, r: this.plugins.optional('r') ? { ...this.plugins.need('r').executionLimits, ...this.config.r } : {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
     throw new Fault('unavailable', 'This catalog operation has not been installed.', { operation: method });
   }
   private async events(p: Project) { return readJson<any>(path.join(await this.dataDir(p), 'events.json'), { cursor: 0, events: [] }); }

@@ -6,6 +6,8 @@ export interface SourceFolder { id: string; root: string; name: string }
 export interface FolderSelection extends SourceFolder { selectionId: string }
 export interface ProjectSummary { id: string; root: string; openedAt: string; name?: string; sources?: SourceFolder[]; workspace?: true }
 import type { EntryPresentation, PluginPresentation } from '@rho-workspace/plugin-contracts';
+import type { TaskMapState } from './task-frame.js';
+export type { TaskMapState } from './task-frame.js';
 export type { EntryPresentation, PluginPresentation } from '@rho-workspace/plugin-contracts';
 export interface NativeAvailability { state: 'present' | 'missing' | 'unknown'; tool: string; scope: string; checkedAt: string; methods: string[]; title?: string; body?: string }
 export interface PluginSkill { id: string; version: string; digest: string; presentation?: EntryPresentation }
@@ -79,6 +81,7 @@ export interface WorkspaceSnapshot {
   bindings: unknown[]; contexts: unknown[]; annotations: unknown[];
   host: { exitCode: number; [key: string]: unknown }; limits: Record<string, unknown>;
   presentation?: { taskId: string; pending?: { resource: { id: string; version: string }; sourceEventId: string; reason: string; at: string } | null; witnesses: { witnessId: string; compositionId: string; compositionVersion: number; views: { viewId: string; resource: { id: string; version: string } }[] }[] } | null;
+  taskMap?: TaskMapState;
   feedback?: { taskId: string; compositionId: string; taskVersion: number; targetBindingId: string | null; draftDocumentId: string; relatedDocumentId: string | null } | null;
 }
 export interface BrowserApi {
@@ -108,6 +111,9 @@ export interface BrowserApi {
   'document.save': { input: DocumentWrite & { expectedDiskDigest: string | null }; output: DocumentBuffer };
   'document.abandonSave': { input: DocumentWrite & { pendingRequestDigest: string }; output: DocumentBuffer };
   'data.page': { input: { projectId: string; resource: { id: string; version: string }; offset: number; limit: number; sort?: { column: string; direction: 'asc' | 'desc' }; filter?: { column: string; op: 'eq' | 'lt' | 'gt' | 'isNull'; value?: string | number | boolean | null } }; output: TablePage };
+  'task.map.read': { input: { projectId: string }; output: TaskMapState };
+  'task.map.present': { input: { projectId: string; expectedVersion: number; changeId: string; target: string; form?: string; params?: Record<string, unknown>; focus?: string | null; reason?: string }; output: TaskMapState & { receipt: { outcome: Record<string, unknown> } } };
+  'task.map.respond': { input: { projectId: string; expectedVersion: number; changeId: string; target: string; action: 'pin' | 'unpin' | 'revert' | 'accept' | 'dismiss'; form?: string; params?: Record<string, unknown>; suggestionId?: string }; output: TaskMapState & { receipt: { outcome: Record<string, unknown> } } };
   'interaction.selection.read': { input: { projectId: string; scope: SelectionScope }; output: SelectionChannel };
   'interaction.selection.set': { input: { projectId: string; scope: SelectionScope; expectedVersion: number; changeId: string; selection: SelectionValue }; output: SelectionChannel };
 }

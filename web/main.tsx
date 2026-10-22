@@ -51,6 +51,8 @@ function App() {
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [project, setProject] = useState<ProjectSummary | null>(null);
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(null);
+  // The Agent map's reference form lives in the title bar; the workspace draws it here.
+  const [mapChip, setMapChip] = useState<HTMLSpanElement | null>(null);
   const [phase, setPhase] = useState<Phase>('connecting');
   const [readAt, setReadAt] = useState<Date | null>(null), [offlineAt, setOfflineAt] = useState<Date | null>(null);
   const [error, setError] = useState('');
@@ -255,6 +257,7 @@ function App() {
           <span className="location-name">{pluginTitle}</span>
         </> : <span className="location-name">{screen === 'plugins' ? 'Plugins' : 'Home'}</span>}
       </div>}
+      <span ref={setMapChip} className="map-chip-slot" />
       <span className={'connection ' + phase} role="status">
         <span className="connection-label">{phase === 'live' ? 'Up to date' : phase === 'offline' ? 'Offline' : 'Connecting'}</span>
         {readAt && <>{' '}<span className="connection-time">{(phase === 'live' ? '' : 'last read ') + clock(readAt)}</span></>}
@@ -287,7 +290,7 @@ function App() {
           : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div>
           : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin}
             back={pluginReturn ? { label: 'Back to ' + name(project), run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
-          : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); }} /></Suspense>
+          : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); }} mapChipTarget={mapChip} /></Suspense>
           : <ProjectOverview client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} />}
       </main>
       {context && !narrow && <aside id="project-context" className="context-drawer" aria-label={feedbackContext ? 'Your question' : 'Context and access'}>

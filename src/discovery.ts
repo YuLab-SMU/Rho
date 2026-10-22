@@ -5,8 +5,8 @@ import type { Principal, Project } from './state.js';
 import type { Plugins } from './plugins.js';
 const size = (v: any) => Buffer.byteLength(JSON.stringify(v)) + 64;
 const applicationEffects: Record<string, string> = Object.fromEntries([
-  ...['action.lookup', 'action.observe', 'action.output', 'action.list', 'composition.read', 'observation.snapshot', 'interaction.selection.read', 'workspace.observe'].map(m => [m, 'read']),
-  ...['composition.put', 'view.close', 'capability.configure', 'composition.apply', 'composition.undo', 'view.protection.set', 'interaction.selection.set', 'workspace.enhance'].map(m => [m, 'metadata']),
+  ...['action.lookup', 'action.observe', 'action.output', 'action.list', 'composition.read', 'observation.snapshot', 'interaction.selection.read', 'workspace.observe', 'task.map.read'].map(m => [m, 'read']),
+  ...['composition.put', 'view.close', 'capability.configure', 'composition.apply', 'composition.undo', 'view.protection.set', 'interaction.selection.set', 'workspace.enhance', 'task.map.declare', 'task.map.present', 'task.map.respond'].map(m => [m, 'metadata']),
   ...['workspace.save', 'workspace.export', 'workspace.restore'].map(m => [m, 'file']),
   ...['action.retry', 'action.cancel'].map(m => [m, 'native']),
 ]);

@@ -30,5 +30,13 @@
     "component": "rho.agent-note",
     "version": "0.2.0",
     "source": "web/entries/agent.tsx"
+  },
+  {
+    "plugin": "agent-map",
+    "package": null,
+    "entry": null,
+    "component": "rho.agent-map",
+    "version": "0.1.0",
+    "source": "web/agent-map/ui.tsx"
   }
 ]

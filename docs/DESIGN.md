@@ -170,6 +170,36 @@ following, and views the person moved or pinned stay in place. Cancelling a run,
 taking over an edit, starting a new run from changed inputs and sending context to
 the Agent each remain one step away.
 
+## Whole task, item cards and the Agent map
+
+Agent actions are fast, so a screen focused on one small step is the largest zoom
+of the whole task, not the default. The Agent declares the task as items in its own
+words: item kinds and states are vocabulary terms it defines, with a label, a tone
+and an optional role Rho understands (working, waiting, done, planned, unknown,
+stopped). Rho fixes no closed list of kinds, states or card types. Many small
+actions are merged into the item they serve; progress counts come from receipts the
+Agent reports, never from estimated motion.
+
+Every plugin draws inside one item frame. Rho writes the header (kind, state, the
+Agent's title, reported progress) and the footer (what the current form hides, the
+declared next step, the plugin); the plugin writes only the body. Zooming switches
+between the forms an entry declares, ordered by scale; a subset is a form
+parameter, and the footer says what it leaves out. Forms an entry lacks are drawn
+by Rho's generic body, so every item can shrink to a card. Facts the Agent reports
+stay above its judgments in that body.
+
+The Agent map is owned by Rho but drawn by an ordinary entry that uses only the
+shared frame contract. The title-bar reference, the strip above a layout, the trail
+below it and the whole-task panorama are placements and forms of that one entry,
+with parameters choosing the range and axis. The Agent and people steer it with the
+same actions. A person's pin wins: Agent changes to a pinned target become
+suggestions. Agent form changes are attributed and revertible, and reverting
+changes layout only. Agent-initiated form changes are paced to protect layout
+stability and attention; a change inside the configured interval is merged into
+one pending suggestion. Next steps appear only as the Agent declared them, and
+reading the map starts, resumes or reruns nothing. The reviewed boards are on the
+Paper page "03c · 任务全景" of the Rho · 工作台 v2 file.
+
 ## Reviewable interaction journeys
 
 Design the following as independently reviewable sequences, then connect them

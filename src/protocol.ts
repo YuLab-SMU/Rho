@@ -60,6 +60,23 @@ const selectionScope = { oneOf: [obj({ kind: { const: 'caller' } }), obj({ kind:
 const documentRange = obj({ documentId: text, version: positive, from: integer, to: integer });
 operations['interaction.selection.read'] = obj({ ...project, scope: selectionScope });
 operations['interaction.selection.set'] = obj({ ...project, scope: selectionScope, expectedVersion: integer, changeId, selection: { oneOf: [obj({ document: documentRange }), obj({ resource: ref, entities: { ...array(text), minItems: 1, maxItems: 1024, uniqueItems: true } }), { type: 'null' }] } });
+// Task map: the words are the Agent's. Kinds, states, tones, roles and form names
+// are open identifiers; schemas bound only their shape and size.
+// The Agent's words may be any script; prototype keys are refused.
+const word = { type: 'string', minLength: 1, maxLength: 64, pattern: '^\\S+$', not: { enum: ['__proto__', 'constructor', 'prototype'] } };
+const hint = { type: 'string', pattern: '^[a-z][a-z0-9-]{0,31}$' };
+const phrase = (maxLength: number) => ({ type: 'string', minLength: 1, maxLength });
+const term = obj({ label: phrase(80), tone: hint, role: hint, icon: hint, description: phrase(240) }, ['label']);
+const terms = { type: 'object', maxProperties: 64, propertyNames: word, additionalProperties: { anyOf: [term, { type: 'null' }] } };
+const mapTarget = { type: 'string', pattern: '^(map:[a-z0-9-]{1,32}|item:[A-Za-z0-9._:@-]{1,128})$' };
+const formParams = { type: 'object', maxProperties: 16 };
+const taskItem = obj({ id: changeId, kind: word, state: word, title: phrase(160), group: phrase(60), summary: phrase(280),
+  lines: { ...array(obj({ label: phrase(40), text: phrase(280), tone: hint, judgment: { type: 'boolean' } }, ['text'])), maxItems: 12 },
+  progress: obj({ done: integer, total: positive, unit: phrase(24) }, ['done']), view: changeId, from: { ...array(changeId), maxItems: 16, uniqueItems: true } }, ['id', 'kind', 'state', 'title']);
+operations['task.map.read'] = obj(project);
+operations['task.map.declare'] = obj({ ...project, expectedVersion: integer, changeId, question: { anyOf: [phrase(240), { type: 'null' }] }, compositionId: { anyOf: [changeId, { type: 'null' }] }, vocabulary: obj({ kinds: terms, states: terms }, []), items: { ...array(taskItem), maxItems: 256 }, remove: { ...array(changeId), maxItems: 256, uniqueItems: true }, next: { ...array(changeId), maxItems: 16, uniqueItems: true } }, ['projectId', 'expectedVersion', 'changeId']);
+operations['task.map.present'] = obj({ ...project, expectedVersion: integer, changeId, target: mapTarget, form: hint, params: formParams, focus: { anyOf: [changeId, { type: 'null' }] }, reason: phrase(160) }, ['projectId', 'expectedVersion', 'changeId', 'target']);
+operations['task.map.respond'] = obj({ ...project, expectedVersion: integer, changeId, target: mapTarget, action: { enum: ['pin', 'unpin', 'revert', 'accept', 'dismiss'] }, form: hint, params: formParams, suggestionId: changeId }, ['projectId', 'expectedVersion', 'changeId', 'target', 'action']);
 for (const [method, schema] of Object.entries(annotationInputs)) operations[method] = obj({ ...project, ...schema.properties });
 operations['context.create'] = obj({ ...operations['context.create'].properties, annotations: { ...array(obj({ annotationId: changeId, version: positive })), minItems: 1, maxItems: 128 }, changeId, expectedVersion: { const: 0 } }, ['projectId']);
 for (const method of ['workspace.save', 'workspace.export']) operations[method] = obj({ ...operations[method].properties, format: { enum: [1, 2, 3] } }, operations[method].required);
@@ -113,6 +130,8 @@ responses['composition.read'] = composition;
 responses['view.close'] = composition;
 responses['interaction.selection.read'] = record;
 responses['interaction.selection.set'] = record;
+const taskMap = response({ format: { const: 'rho.task-map/1' }, version: integer, vocabulary: record, items: array(record), next: array(text), presentation: record, suggestions: array(record), receipts: array(record) }, ['format', 'version', 'vocabulary', 'items', 'next', 'presentation', 'suggestions']);
+for (const method of ['task.map.read', 'task.map.declare', 'task.map.present', 'task.map.respond']) responses[method] = taskMap;
 Object.assign(responses, annotationOutputs);
 responses['context.create'] = record;
 responses['context.read'] = record;
@@ -139,6 +158,10 @@ export const descriptions = {
   'feedback.submit': 'Teacher browser only: freeze the original draft/anchor, prepare the committed message and retain one original-session delivery. Preserve submissionId across missing acknowledgements; stages are separate durable facts.',
   'feedback.read': 'Original business binding only: fetch one complete frozen feedback object using its original delivery/context and a stable fetchId. relatedDocumentId is a pointer: read its CURRENT version before conditional edit/save and preserve human changes. This owner-served receipt does not prove client return or understanding.',
   'feedback.status': 'Observe original delivery, exact-target fetches and explicitly linked replies. No send, session start or recovery. Keep original identities and unknown outcomes; continuation cursors pin their snapshot.',
+  'task.map.read': 'Observe the task map: declared items, vocabulary, next steps, forms, pins and pending suggestions. Reading starts, resumes or reruns nothing.',
+  'task.map.declare': 'Agent only: conditionally declare task items, your own kind/state vocabulary (label, tone, optional role) and the next steps you will take. Rho shows next only from this declaration and never infers it.',
+  'task.map.present': 'Change a map placement or item card form, its parameters (including a subset) or the focus. Shared by the Agent and people. An Agent change to a pinned target, or within agentFormIntervalMs of its last applied form change, is merged into one pending suggestion instead of applied; Agent changes stay attributed and revertible.',
+  'task.map.respond': 'Browser person only: pin or unpin what they see, revert an Agent form change (layout only, never the work), or accept/dismiss a pending suggestion.',
   'capability.configure': 'Persist the selected project plugins with a conditional version and idempotent changeId. This changes routing only; it installs no package, starts no runtime and cancels no work.',
   'skill.list': 'List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.',
   'skill.read': 'Read one versioned shipped Skill after checking its digest. A stale digest requires rereading instead of applying cached instructions.',
@@ -155,4 +178,4 @@ export const errorKinds = base.errorKinds;
 export const errorSchema = base.definitions.error;
 export const errorEnvelope = obj({ apiVersion: { const: '2.0' }, ok: { const: false }, error: errorSchema });
 export const responseEnvelope = (method: string) => obj({ apiVersion: { const: '2.0' }, ok: { const: true }, value: responses[method] });
-export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed'])], operations, responses, descriptions, definitions, errorEnvelope, legacy: 'v1 schemas and captured fixtures are frozen. Legacy reads and explicit retry/cancel of accepted requests remain available; new recipe submissions require an explicit v2 project script.' };
+export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed'])], operations, responses, descriptions, definitions, errorEnvelope, legacy: 'v1 schemas and captured fixtures are frozen. Legacy reads and explicit retry/cancel of accepted requests remain available; new recipe submissions require an explicit v2 project script.' };
