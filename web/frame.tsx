@@ -19,7 +19,7 @@ const formLabel = (forms: FormDeclarations, form: string) => forms[form]?.label 
 const kept = new Set<string>();
 
 interface Runtime extends Omit<FrameContext, 'Card'> {
-  snapshot: WorkspaceSnapshot; composition?: CompositionSummary; canSteer: boolean;
+  snapshot: WorkspaceSnapshot; client: BrowserClient; composition?: CompositionSummary; canSteer: boolean;
   failure: string; run: (work: Promise<void>) => void; open: (item: TaskItem) => void;
 }
 const Frame = createContext<Runtime | null>(null);
@@ -66,7 +66,7 @@ export function useTaskFrame({ snapshot, client, principalId, composition, activ
     if (latest.current?.presentation['map:top']?.form === 'full') await controls.setForm('map:top', 'summary', mapDefaults.top.params);
   })()), [controls, run]);
   if (!map || !allowed('task.map.read')) return null;
-  return { map, controls, principalId, activeViewId, snapshot, composition, canSteer: allowed('task.map.present') && allowed('task.map.respond'), failure, run, open } satisfies Runtime;
+  return { map, controls, principalId, activeViewId, snapshot, client, composition, canSteer: allowed('task.map.present') && allowed('task.map.respond'), failure, run, open } satisfies Runtime;
 }
 export function FrameProvider({ value, children }: { value: Runtime | null; children: ReactNode }) { return <Frame.Provider value={value}>{children}</Frame.Provider>; }
 export function useFrameContext(): (FrameContext & { item?: TaskItem }) | null {
@@ -112,21 +112,32 @@ function Progress({ item }: { item: TaskItem }) {
 }
 
 // One item, drawn by its own plugin body when the plugin draws this form.
+// A requested inline form is a reference and ignores the item's presentation.
 function Card({ itemId, form: requested }: { itemId: string; form?: string }) {
   const r = useContext(Frame);
+  // The body reports what it leaves out once it has read; a note belongs to the
+  // form and parameters it was reported for.
+  const [reported, setReported] = useState<{ key: string; note: string } | null>(null);
+  const drawn = useRef('');
+  const reportHidden = useCallback((note: string) => setReported(prev => prev?.key === drawn.current && prev.note === note ? prev : { key: drawn.current, note }), []);
   const item = r?.map.items.find(i => i.id === itemId);
   if (!r || !item) return null;
   const view = item.view ? r.composition?.views.find(v => v.id === item.view) : undefined, entry = entryFor(view);
   const own = entry?.Body && entry.forms ? Object.fromEntries(Object.entries(entry.forms).filter(([, f]) => f.scale < standardForms.full.scale)) : {};
   const forms = Object.keys(own).length ? own : genericForms, target = itemTarget(item.id);
   const shown = presentationOf(r.map, target, { form: requested ?? 'card', params: {} });
-  const form = nearestForm(forms, shown.form) ?? 'card';
-  const Body = entry?.Body && own[form] ? entry.Body : GenericBody;
-  const hidden = entry?.hiddenNote && own[form] ? entry.hiddenNote(form, shown.params, { item, map: r.map }) : genericHidden(item, form);
+  const form = requested === 'inline' ? 'inline' : nearestForm(forms, shown.form) ?? 'card';
+  const plugin = !!entry?.Body && !!own[form], Body = plugin ? entry!.Body! : GenericBody;
+  drawn.current = form + '\0' + JSON.stringify(shown.params);
+  const hidden = plugin ? (reported?.key === drawn.current ? reported.note : entry!.hiddenNote?.(form, shown.params, { item, map: r.map }) ?? '') : genericHidden(item, form);
   const tone = toneOf(r.map, item), state = term(r.map, 'states', item.state), smaller = zoom(forms, form, -1), larger = zoom(forms, form, 1);
-  const body = <Body form={form} params={shown.params} item={item} map={r.map} controls={r.controls} Card={Card} principalId={r.principalId} activeViewId={r.activeViewId} />;
-  if (form === 'inline') return <button className={`rho-item-inline tone-${tone}`} onClick={() => r.run(r.controls.setForm(target, larger ?? 'card'))} title={state.label}>
-    <span className="rho-dot" aria-hidden="true" />{item.title}<span className="rho-item-inline-state">{state.label}</span>
+  const bound = view ? { viewId: view.id, view, projectId: r.snapshot.project.id, snapshot: r.snapshot, client: r.client, active: false, contextTarget: null, principalId: r.principalId } : undefined;
+  const present = r.canSteer ? (params: Record<string, unknown>, next = form) => r.run(r.controls.setForm(target, next, params)) : undefined;
+  const body = <Body form={form} params={shown.params} item={item} map={r.map} controls={r.controls} Card={Card} principalId={r.principalId} activeViewId={r.activeViewId}
+    view={bound} present={present} reportHidden={plugin ? reportHidden : undefined} />;
+  if (form === 'inline') return <button className={`rho-item-inline tone-${tone}`} onClick={() => r.run(r.controls.setForm(target, larger ?? 'card'))} title={item.title + ' · ' + state.label}>
+    <span className="rho-dot" aria-hidden="true" />
+    {plugin ? <><span className="visually-hidden">{item.title}: </span>{body}</> : <>{item.title}<span className="rho-item-inline-state">{state.label}</span></>}
   </button>;
   const focused = r.map.focus?.item === item.id;
   return <article className={`rho-item tone-${tone}${focused ? ' focused' : ''}`} data-form={form} aria-label={item.title}>

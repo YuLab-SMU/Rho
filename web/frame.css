@@ -55,7 +55,7 @@
 .rho-attribution .rho-chip-button { background: transparent; color: #fff; border-color: #4a5056; }
 .rho-suggestion { border: 1px dashed color-mix(in srgb, var(--color-accent) 50%, transparent); color: var(--color-accent-strong); background: var(--color-surface); }
 
-.rho-item-inline { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--color-hairline); background: var(--tone-soft, var(--color-surface)); font-size: 11.5px; font-weight: 500; }
+.rho-item-inline { position: relative; align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; min-height: 24px; max-width: 100%; min-width: 0; overflow: hidden; padding: 0 9px; border-radius: 999px; border: 1px solid var(--color-hairline); background: var(--tone-soft, var(--color-surface)); font-size: 11.5px; font-weight: 500; white-space: nowrap; }
 .rho-item-inline-state { color: var(--color-meta); font-weight: 400; }
 
 .rho-generic { display: flex; flex-direction: column; gap: 6px; font-size: 12px; line-height: 17px; }

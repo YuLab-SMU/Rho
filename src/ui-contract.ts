@@ -19,7 +19,8 @@ export interface FrameControls {
 export interface FrameContext {
   map: TaskMapState;
   controls: FrameControls;
-  // Rho's frame around one item, drawn by that item's own plugin body.
+  // Rho's frame around one item, drawn by that item's own plugin body. The
+  // inline form always draws the item's reference, whatever its presentation.
   Card: ComponentType<{ itemId: string; form?: string }>;
   principalId?: string;
   activeViewId?: string;
@@ -32,6 +33,12 @@ export interface FrameBodyProps extends FrameContext {
   item?: TaskItem;
   // The bound layout view when the body belongs to one.
   view?: UiViewProps;
+  // Present when this tab may change how the item is shown. The person becomes
+  // the author of the new presentation; the frame shows a failure.
+  present?: (params: Record<string, unknown>, form?: string) => void;
+  // What the drawn form leaves out once the body has read it, counted from the
+  // whole resource. Preferred over the entry's hiddenNote for this form.
+  reportHidden?: (note: string) => void;
 }
 
 // Draft, not a stable plugin API. Owner entries are selected at build time only.

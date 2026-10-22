@@ -129,6 +129,10 @@ test('frame helpers walk declared forms and summary ranges', () => {
   const forms = { card: { scale: 1 }, full: { scale: 3 } };
   assert.equal(nearestForm(forms, 'summary'), 'card'); assert.equal(nearestForm(forms, 'inline'), 'card'); assert.equal(nearestForm(forms, 'full'), 'full');
   assert.equal(zoom(standardForms, 'card', 1), 'summary'); assert.equal(zoom(standardForms, 'inline', -1), null);
+  // A comparison shares the summary's scale but is reached only by naming it.
+  const named = { ...standardForms, compare: { scale: 2, zoom: false } };
+  assert.equal(zoom(named, 'card', 1), 'summary'); assert.equal(zoom(named, 'full', -1), 'summary');
+  assert.equal(zoom(named, 'compare', -1), 'card'); assert.equal(zoom(named, 'compare', 1), 'full');
   const map = { vocabulary, items: items.map(i => ({ ...i, author: 'agent', at: '' })) };
   assert.deepEqual(itemsInRange(map, { range: 'around', span: 1 }).map(i => i.id), ['filter', 'shrink', 'batch']);
   assert.deepEqual(itemsInRange(map, { range: 'trail', view: 'table' }).map(i => i.id), ['shrink']);

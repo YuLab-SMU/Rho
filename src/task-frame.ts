@@ -64,15 +64,16 @@ export function toneOf(map: Pick<TaskMapState, 'vocabulary'>, item: Pick<TaskIte
 }
 
 // Forms are declared by each entry with a scale; zooming walks that scale.
-// These are the shared defaults, not a closed list.
-export interface FormDeclaration { scale: number; label?: string; params?: Record<string, unknown> }
+// These are the shared defaults, not a closed list. A form with `zoom: false`
+// is reached only by naming it (a comparison, say), never by stepping.
+export interface FormDeclaration { scale: number; label?: string; params?: Record<string, unknown>; zoom?: false }
 export type FormDeclarations = Record<string, FormDeclaration>;
 export const standardForms: FormDeclarations = { inline: { scale: 0, label: 'Reference' }, card: { scale: 1, label: 'Card' }, summary: { scale: 2, label: 'Summary' }, full: { scale: 3, label: 'Full' } };
 export function zoomOrder(forms: FormDeclarations) { return Object.entries(forms).sort((a, b) => a[1].scale - b[1].scale || a[0].localeCompare(b[0])).map(([name]) => name); }
 // The nearest declared form one step larger (delta 1) or smaller (delta -1).
 export function zoom(forms: FormDeclarations, current: string, delta: 1 | -1) {
   const order = zoomOrder(forms), scale = forms[current]?.scale ?? standardForms[current]?.scale ?? 0;
-  const candidates = order.filter(name => delta > 0 ? forms[name].scale > scale : forms[name].scale < scale);
+  const candidates = order.filter(name => forms[name].zoom !== false && (delta > 0 ? forms[name].scale > scale : forms[name].scale < scale));
   return delta > 0 ? candidates[0] ?? null : candidates.at(-1) ?? null;
 }
 // The declared form closest to the requested one; a plugin is never asked to draw a form it lacks.

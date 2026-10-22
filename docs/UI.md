@@ -286,6 +286,21 @@ implemented as one Rho-owned shared interaction and one frame used by every entr
   without declarations draw only `full`; Rho's generic body stands in for smaller
   forms. `web/frame.tsx` draws the header/footer, attribution (Keep, Revert),
   suggestions (Apply, Dismiss), pins and zoom controls.
+- A plugin body receives the item's bound view (`view`, with the scoped client),
+  `present(params, form?)` when this tab may steer, and `reportHidden(note)`. A
+  reported note, counted from the whole resource, replaces the entry's
+  `hiddenNote` for that form and those parameters. A form declared with
+  `zoom: false` is reached only by naming it; stepping from card reaches summary.
+  `Card` with `form="inline"` always draws the item's reference chip; when the
+  entry declares `inline`, its body fills the chip after a visually hidden title.
+- Documents and Tables supply `forms` and `Body` through `web/entries/*.tsx`
+  ([Paper 04 · 插件形态](https://app.paper.design/file/01M5HG6R8RBC33N84S245J0YXT/p-8-0)).
+  Tables draws a count, keyed rows or one cell, a summary with subset chips and a
+  pinned key, and a recorded comparison; Documents draws a passage that follows
+  its anchor, one change, the outline, a section summary and one change compared.
+  The Agent names `show`; people may switch it on the card. Document cards share
+  the editor's buffer. Their only write is reverting an Agent change, which goes
+  through the owner's authorized `document.revert`.
 - `web/agent-map/ui.tsx` is the map entry (`rho.agent-map@0.1.0`, forms
   inline/card/summary/full/compare). It imports only the frame contract and is
   listed in `ui-entries.json` without a separate package. Rho-owned entries join

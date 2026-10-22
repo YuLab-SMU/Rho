@@ -16,15 +16,28 @@ frame contract; its reference, strip, trail, whole-task and compare forms share
 revertible, and Agent form changes within `agentFormIntervalMs` (8 s) merge into
 one suggestion. Reads only observe.
 
-Checks: Rho 73/73 (five new task-map tests, including a controlled-clock budget
-test); U1 browser acceptance 23 checks at 1600/1280/1024/768/390 and U2 editor/table
-acceptance 6 checks, both Chrome 155 with zero Host starts and native dispatches.
-A scripted Chrome pass at 1440/768/390 exercised declaration, attributed change,
-paced suggestion, accept, pin, zoom and opening an item's view, with no failed
-request. Limits: no Plugins owner draws its own compact `Body` yet, so their
-entries use Rho's generic body below `full`; one map per project; not archived by
-`workspace.export`; item boundaries are still whatever the Agent declares (Q1).
-Paper boards remain pending user review; Plugins source is unchanged.
+Tables and Documents now draw their own bodies in this frame, following
+[04 · 插件形态](https://app.paper.design/file/01M5HG6R8RBC33N84S245J0YXT/p-8-0)
+with the four recommended answers accepted. Tables shows a count, keyed rows, a
+cell, a summary or a recorded comparison. Documents shows a passage, a change, the
+outline, a section summary or one change compared. Compare is declared
+`zoom: false`. Bodies read through the item's bound view and report their hidden
+note. See [Item frame and Agent map](UI.md#item-frame-and-agent-map).
+
+Checks: Rho 73/73 (including `zoom: false`); Plugins 53/53 (seven card-model tests).
+Browser tests 14/14, U1 23 checks, U2 6 checks and plugin pages pass on Chrome 155
+with zero Host starts and native dispatches. A scripted Chrome pass at 1440/768/390
+drew all 12 Tables/Documents forms on real tables, a recorded comparison and
+Agent-edited text. In that pass:
+- zooming up from a card reached the summary, not compare;
+- a person's `show` switch was recorded as human;
+- a card revert updated every form of the document;
+- no card overflowed at any width;
+- the only failed request was `/favicon.ico`, and no Host started.
+
+Limits: one map per project, not archived by `workspace.export`; item boundaries
+are whatever the Agent declares (Q1). A keyed subset makes one page read per key,
+at most 50. Paper boards remain pending user review.
 
 ## Teaching case handoff
 
