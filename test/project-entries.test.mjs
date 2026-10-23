@@ -4,7 +4,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { RhoService } from '../dist/server.js';
-import { RhoClient } from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
 
 // A person opens a project folder and reads their own files in it. The tab lists one

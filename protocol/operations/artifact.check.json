@@ -1,7 +1,6 @@
 {
   "method": "artifact.check",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
@@ -9,23 +8,111 @@
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
       "operationId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
       }
     },
     "required": [
       "projectId",
       "operationId"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
     "type": "object",
     "properties": {
       "integrity": {
-        "type": "object"
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "state": {
+            "enum": [
+              "unchecked",
+              "declared",
+              "incomplete",
+              "verified",
+              "not-applicable"
+            ]
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "maxItems": 512
+          },
+          "unavailable": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "kind": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "path",
+                "kind",
+                "reason"
+              ]
+            },
+            "maxItems": 512
+          },
+          "completionDeclaration": {
+            "enum": [
+              "present",
+              "absent"
+            ]
+          },
+          "files": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "manifestDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "state"
+        ]
       },
       "domain": {
-        "type": "object"
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "state": {
+            "enum": [
+              "unchecked",
+              "checked"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "minLength": 1
+          },
+          "detail": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "state"
+        ]
       },
       "resources": {
         "type": "array",

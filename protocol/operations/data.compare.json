@@ -1,7 +1,6 @@
 {
   "method": "data.compare",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
@@ -9,78 +8,59 @@
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
       "left": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "type": "string"
           },
           "version": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
           }
         },
         "required": [
           "id",
           "version"
-        ]
-      },
-      "right": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "version": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
-          }
-        },
-        "required": [
-          "id",
-          "version"
-        ]
+        ],
+        "type": "object"
       },
       "options": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
-          "leftKey": {
-            "type": "string",
-            "minLength": 1
-          },
-          "rightKey": {
-            "type": "string",
-            "minLength": 1
-          },
-          "leftNamespace": {
-            "type": "string",
-            "minLength": 1
-          },
-          "rightNamespace": {
-            "type": "string",
-            "minLength": 1
-          },
-          "mapping": {
-            "const": "equal-string"
-          },
-          "leftField": {
-            "type": "string",
-            "minLength": 1
-          },
-          "rightField": {
-            "type": "string",
-            "minLength": 1
-          },
           "join": {
             "enum": [
               "left",
               "inner",
               "full"
             ]
+          },
+          "leftField": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "leftKey": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "leftNamespace": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "mapping": {
+            "const": "equal-string"
+          },
+          "rightField": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "rightKey": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "rightNamespace": {
+            "minLength": 1,
+            "type": "string"
           }
         },
         "required": [
@@ -92,7 +72,26 @@
           "leftField",
           "rightField",
           "join"
-        ]
+        ],
+        "type": "object"
+      },
+      "right": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "version": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ],
+        "type": "object"
       }
     },
     "required": [
@@ -100,7 +99,8 @@
       "left",
       "right",
       "options"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
     "type": "object",

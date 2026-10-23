@@ -4,54 +4,62 @@ import { ObservationClient, httpObservation, type observationLimits } from './ob
 export interface BrowserConnection { url: string; token: string; expiresAt: string; methods: string[]; principalId?: string; root?: string; rootLabel?: string }
 export interface SourceFolder { id: string; root: string; name: string }
 export interface FolderSelection extends SourceFolder { selectionId: string }
-export interface ProjectSummary { id: string; root: string; openedAt: string; name?: string; sources?: SourceFolder[]; workspace?: true }
+export type ProjectSummary = RhoOutput<'project.list'>[number];
 import type { EntryPresentation, PluginPresentation } from '@rho-workspace/plugin-contracts';
+import type { RhoInput, RhoMethod, RhoOperationError, RhoOutput } from './contract.generated.js';
 import type { TaskMapState } from './task-frame.js';
 export type { TaskMapState } from './task-frame.js';
 export type { EntryPresentation, PluginPresentation } from '@rho-workspace/plugin-contracts';
 export interface NativeAvailability { state: 'present' | 'missing' | 'unknown'; tool: string; scope: string; checkedAt: string; methods: string[]; title?: string; body?: string }
 export interface PluginSkill { id: string; version: string; digest: string; presentation?: EntryPresentation }
-export interface CapabilityPlugin {
-  id: string; package: string; version?: string; state: string; reason?: string; selected: boolean;
-  packagePresent: boolean; projectEnabled: boolean; dependenciesSatisfied: boolean; uiRenderable?: boolean;
-  requires?: string[]; presentation?: PluginPresentation;
-  nativeAvailability?: NativeAvailability;
-  listing?: { skills?: PluginSkill[]; actions?: { presentation?: EntryPresentation }[]; views?: { id: string; version: string; ui: string; presentation?: EntryPresentation }[] };
-}
-export interface CapabilityOperation { method: string; owner?: string; state: string; authorized: boolean; packagePresent: boolean; projectEnabled: boolean; dependenciesSatisfied: boolean; presentation?: EntryPresentation }
-export interface CapabilityAction { id: string; version: string; pluginId?: string; owner: string; presentation?: EntryPresentation }
-export interface ComponentDescriptor { id: string; version: string; owner: string; pluginId?: string; ui: string; bindings: Record<string, string>; presentation?: EntryPresentation }
-export interface CapabilityCatalog {
-  plugins: CapabilityPlugin[];
-  actions?: CapabilityAction[];
-  unavailableActions?: (CapabilityAction & { state: string; missing: string[] })[];
-  components: ComponentDescriptor[];
-  operations: CapabilityOperation[];
-  configuration: { version: number; enabled: string[] };
-}
-export interface DocumentSummary { id: string; path: string; version: number; revision?: number; bytes?: number; dirty: boolean; diskDigest: string | null; acknowledgedAt: string }
-export interface DocumentChange { changeId: string; expectedRevision: number }
-export interface DocumentReceipt { changeId: string; requestDigest: string; kind: 'edit' | 'undo' | 'save' | 'abandon-save' | 'undo-own' | 'revert'; author: string; revision: number; version: number; at: string }
-export interface DocumentHistoryEntry {
-  changeId: string; requestDigest: string; author: string; kind: 'edit' | 'undo' | 'undo-own' | 'revert';
-  undoGroup: string; groupId: string; version: number; revision: number; at: string;
-  beforeDigest: string; afterDigest: string; reverts: string[];
-}
-export interface DocumentHistory { documentId: string; currentVersion: number; currentRevision: number; retainedFromVersion: number; entries: (DocumentHistoryEntry & { revertedBy: string | null })[] }
-export interface DocumentBuffer extends DocumentSummary {
-  content: string;
-  author: string; undo: { content: string; group: string; author: string; changeIds?: string[] }[];
-  revision: number; receipts: DocumentReceipt[]; retainedFromRevision: number;
-  receipt?: DocumentReceipt;
-  history: (DocumentHistoryEntry & { edits: { from: number; to: number; insert: string; removed: string }[] })[];
-  historyRetainedFromVersion: number;
-  pendingSave?: { requestDigest: string; author: string; expectedDiskDigest: string | null; contentDigest: string; at: string; change?: DocumentChange };
-}
-export type DocumentBinding = { documentId: string; version: number } | { kind: 'live-document'; documentId: string };
-interface DocumentWrite extends DocumentChange { projectId: string; documentId: string; expectedVersion: number }
-export interface ResourceSummary { id: string; version: string; kind: string; path: string; bytes: number; owner: string; availability: string; provenance: Record<string, unknown>; format?: Record<string, unknown> | string }
-export interface ViewDescription { id: string; component: string; version: string; props: Record<string, unknown>; bindings: Record<string, unknown>; protected?: boolean; presentation?: { emphasis: 'normal' | 'highlight' } }
-export interface GroupPresentation { mode: 'tabs' | 'split'; axis?: 'horizontal' | 'vertical'; weights?: number[] }
+// These were hand-written copies of the wire contract. They are derived from the one
+// generated contract (src/contract.generated.ts), so the shell cannot compile against
+// a field the service does not return. Only genuinely local view-model shapes stay
+// hand-written here (project bootstrap, folder selection, presentation hints).
+type Catalog = RhoOutput<'capability.list'>;
+export type CapabilityPlugin = Catalog['plugins'][number];
+export type CapabilityOperation = Catalog['operations'][number];
+export type CapabilityAction = Catalog['actions'][number];
+export type ComponentDescriptor = Catalog['components'][number];
+// `observation.snapshot.catalog` and `capability.list` carry the same catalog; only
+// the direct operation adds the Core host report. The shell reads the snapshot form.
+export type CapabilityCatalog = RhoOutput<'observation.snapshot'>['catalog'];
+export type CapabilityList = Catalog;
+export type DocumentSummary = RhoOutput<'observation.snapshot'>['documents'][number];
+export type DocumentChange = { changeId: string; expectedRevision: number };
+export type DocumentBuffer = RhoOutput<'document.read'>;
+export type DocumentReceipt = NonNullable<DocumentBuffer['receipt']>;
+export type DocumentHistoryEntry = NonNullable<DocumentBuffer['history']>[number];
+export type DocumentHistory = RhoOutput<'document.history'>;
+// A view binding names either a resource version or a document: a document at an
+// exact version, or the live shared buffer of one.
+export type DocumentBinding = { id: string; version: string } | { documentId: string; version: number } | { kind: 'live-document'; documentId: string };
+export type ResourceSummary = RhoOutput<'resource.read'>['resource'];
+// A view as the shell draws it: the contract's view fields, with bindings kept as the
+// owner-facing union so both a resource and a live document binding are allowed.
+export type ViewDescription = { id: string; component: string; version: string; props: Record<string, unknown>; bindings: Record<string, DocumentBinding>; selection?: string[]; protected?: boolean; presentation?: { emphasis: 'normal' | 'highlight' } };
+export type GroupPresentation = NonNullable<Extract<RhoOutput<'composition.apply'>['nodes'][number], { kind: 'group' }>['presentation']>;
+// A stored layout is either the legacy put record or the current structured one. The
+// shell reads only the facts both carry, so this is a rendering projection of the
+// contract value rather than a second definition of it.
+export type CompositionSummary = {
+  compositionId: string; version: number; availability?: Record<string, unknown>;
+  views: ViewDescription[];
+  rootId?: string;
+  nodes?: Extract<RhoOutput<'composition.apply'>['nodes'][number], { kind: 'group' | 'view' }>[];
+};
+export type StoredComposition = RhoOutput<'composition.read'>;
+export type WorkspaceSnapshot = RhoOutput<'observation.snapshot'>;
+export type TablePage = RhoOutput<'data.page'>;
+export type SelectionChannel = RhoOutput<'interaction.selection.read'>;
+export type SelectionScope = RhoInput<'interaction.selection.read'>['scope'];
+export type SelectionValue = SelectionChannel['selection'];
+export type TaskMapResponse = RhoOutput<'task.map.read'>;
+export type ProjectRuns = RhoOutput<'project.runs'>;
+export type ProjectEntries = RhoOutput<'project.entries'>;
+export type DoctorReport = RhoOutput<'project.doctor'>;
+// The error half of the envelope comes from the contract's published error object.
+
 // Owner paths carry the host separator, so a Windows root arrives as C:\work\atlas.
 // Display helpers accept either separator instead of assuming '/'.
 const separator = /[\\/]/;
@@ -63,7 +71,6 @@ export function beneath(child: string, parent: string) {
   const head = parent.endsWith('/') || parent.endsWith('\\') ? parent : parent + (parent.includes('\\') ? '\\' : '/');
   return child.startsWith(head);
 }
-export interface CompositionSummary { compositionId: string; version: number; views: ViewDescription[]; availability: Record<string, unknown>; rootId?: string; nodes?: ({ id: string; kind: 'group'; children: string[]; presentation?: GroupPresentation } | (ViewDescription & { kind: 'view' }))[] }
 // navigator.platform is deprecated; userAgentData.platform replaces it but Safari
 // and Firefox still omit it, so callers pass whichever string they have. iPadOS
 // reports MacIntel while userAgentData reports iOS, so both spellings have to
@@ -75,59 +82,8 @@ export function platformKind(reported: string | undefined): Platform {
   if (/mac/.test(value)) return 'macos';
   return 'other';
 }
-export interface WorkspaceSnapshot {
-  project: ProjectSummary; catalog: CapabilityCatalog; cursor: number;
-  documents: DocumentSummary[]; resources: ResourceSummary[]; compositions: CompositionSummary[];
-  operations: { operationId: string; [key: string]: unknown }[];
-  bindings: unknown[]; contexts: unknown[]; annotations: unknown[];
-  host: { exitCode: number; [key: string]: unknown }; limits: Record<string, unknown>;
-  presentation?: { taskId: string; pending?: { resource: { id: string; version: string }; sourceEventId: string; reason: string; at: string } | null; witnesses: { witnessId: string; compositionId: string; compositionVersion: number; views: { viewId: string; resource: { id: string; version: string } }[] }[] } | null;
-  taskMap?: TaskMapState;
-  feedback?: { taskId: string; compositionId: string; taskVersion: number; targetBindingId: string | null; draftDocumentId: string; relatedDocumentId: string | null } | null;
-}
-export interface BrowserApi {
-  'feedback.submit': { input: Record<string, any>; output: Record<string, any> };
-  'feedback.status': { input: Record<string, any>; output: Record<string, any> };
-  'annotation.read': { input: Record<string, any>; output: Record<string, any> };
-  'view.observe': { input: Record<string, any>; output: Record<string, any> };
-  'view.observations.read': { input: Record<string, any>; output: Record<string, any> };
-  'project.list': { input: Record<string, never>; output: ProjectSummary[] };
-  'project.open': { input: { path: string }; output: ProjectSummary };
-  'project.pick': { input: Record<string, never>; output: { cancelled: boolean; project: ProjectSummary | null } };
-  'project.source.pick': { input: Record<string, never>; output: { cancelled: boolean; selection: FolderSelection | null } };
-  'project.source.add': { input: { projectId: string }; output: { cancelled: boolean; project: ProjectSummary | null } };
-  'project.createWorkspace': { input: { name: string; selectionIds: string[]; changeId: string }; output: ProjectSummary };
-  'project.create': { input: { name: string }; output: ProjectSummary };
-  'project.runs': { input: { projectId: string; limit?: number }; output: { runs: Array<{ operationId: string; action: string; execution: string; delivery: string; acceptedAt: string; author: string; artifacts: string[]; hasStderr: boolean }>; total: number; truncated: boolean } };
-  'protocol.validate': { input: { method: string; body: Record<string, unknown> }; output: { method: string; valid: boolean; problems: Array<{ path: string; keyword: string; message: string; fix: string }>; requires: string[] } };
-  'project.doctor': { input: { projectId: string; intent?: 'run-r' | 'edit-documents' | 'inspect-tables' | 'present' }; output: { ok: boolean; checks: Array<{ id: string; state: 'ok' | 'warn' | 'fail'; detail: string; remedy: string }>; intent: { id: string; methods: string[]; missing: string[]; ready: boolean } | null } };
-  'project.entries': { input: { projectId: string; path?: string }; output: { entries: Array<{ path: string; name: string; kind: 'file' | 'folder'; bytes: number; hidden: boolean }>; total: number; truncated: boolean; roots: string[]; path: string } };
-  'project.openFile': { input: { projectId: string; path: string; compositionId: string; expectedVersion: number; changeId: string }; output: { document: Record<string, any>; viewId: string; composition: Record<string, any> } };
-  'capability.list': { input: { projectId: string }; output: CapabilityCatalog };
-  'observation.snapshot': { input: { projectId: string }; output: WorkspaceSnapshot };
-  'composition.read': { input: { projectId: string; compositionId: string }; output: CompositionSummary };
-  'document.open': { input: { projectId: string; path: string }; output: DocumentBuffer };
-  'document.read': { input: { projectId: string; documentId: string }; output: DocumentBuffer };
-  'document.edit': { input: DocumentWrite & { edits: { from: number; to: number; insert: string }[]; undoGroup: string }; output: DocumentBuffer };
-  'document.undo': { input: DocumentWrite; output: DocumentBuffer };
-  'document.undoOwn': { input: DocumentWrite; output: DocumentBuffer };
-  'document.revert': { input: DocumentWrite & { targetChangeId: string }; output: DocumentBuffer };
-  'document.history': { input: { projectId: string; documentId: string }; output: DocumentHistory };
-  'document.change.read': { input: { projectId: string; documentId: string; targetChangeId: string }; output: { documentId: string; change: DocumentHistory['entries'][number]; before: { version: number; digest: string; content: string }; after: { version: number; digest: string; content: string } } };
-  'document.save': { input: DocumentWrite & { expectedDiskDigest: string | null }; output: DocumentBuffer };
-  'document.abandonSave': { input: DocumentWrite & { pendingRequestDigest: string }; output: DocumentBuffer };
-  'data.page': { input: { projectId: string; resource: { id: string; version: string }; offset: number; limit: number; sort?: { column: string; direction: 'asc' | 'desc' }; filter?: { column: string; op: 'eq' | 'lt' | 'gt' | 'isNull'; value?: string | number | boolean | null } }; output: TablePage };
-  'task.map.read': { input: { projectId: string }; output: TaskMapState };
-  'task.map.present': { input: { projectId: string; expectedVersion: number; changeId: string; target: string; form?: string; params?: Record<string, unknown>; focus?: string | null; reason?: string }; output: TaskMapState & { receipt: { outcome: Record<string, unknown> } } };
-  'task.map.respond': { input: { projectId: string; expectedVersion: number; changeId: string; target: string; action: 'pin' | 'unpin' | 'revert' | 'accept' | 'dismiss'; form?: string; params?: Record<string, unknown>; suggestionId?: string }; output: TaskMapState & { receipt: { outcome: Record<string, unknown> } } };
-  'interaction.selection.read': { input: { projectId: string; scope: SelectionScope }; output: SelectionChannel };
-  'interaction.selection.set': { input: { projectId: string; scope: SelectionScope; expectedVersion: number; changeId: string; selection: SelectionValue }; output: SelectionChannel };
-}
-export interface TablePage { resource: ResourceSummary; columns: { name: string; type: 'string' | 'number' | 'boolean'; nullValues: string[] }[]; total: number; filtered: number; offset: number; nextOffset: number; more: boolean; rows: Record<string, string | number | boolean | null>[]; entityKey: string | null; namespace: string | null }
-export type SelectionScope = { kind: 'caller' } | { kind: 'view' | 'shared'; id: string };
-export type SelectionValue = { document: { documentId: string; version: number; from: number; to: number } } | { resource: { id: string; version: string }; entities: string[] } | null;
-export interface SelectionChannel { key: string; scope: SelectionScope; version: number; selection: SelectionValue; author?: string }
-export interface ApiFailure { kind: string; message: string; details?: Record<string, unknown>; continuation?: string }
+
+export type ApiFailure = RhoOperationError;
 export class BrowserApiError extends Error {
   readonly fatal: boolean;
   constructor(public error: ApiFailure) { super(error.message); this.fatal = ['unauthorized', 'scope', 'origin'].includes(error.kind); }
@@ -140,7 +96,7 @@ export class BrowserClient {
     if (!result.ok) throw new BrowserApiError(result.error);
     return { url: new URL(url).origin, ...result.value };
   }
-  async call<M extends keyof BrowserApi>(method: M, input: BrowserApi[M]['input'], signal?: AbortSignal): Promise<BrowserApi[M]['output']> {
+  async call<M extends RhoMethod>(method: M, input: RhoInput<M>, signal?: AbortSignal): Promise<RhoOutput<M>> {
     // Native browser fetch must not receive this client as its receiver.
     const fetcher = this.fetcher;
     const response = await fetcher(new URL('/api/v2/' + method, this.connection.url), {
@@ -149,7 +105,7 @@ export class BrowserClient {
     });
     const result = await response.json();
     if (!result.ok) throw new BrowserApiError(result.error);
-    return result.value;
+    return result.value as RhoOutput<M>;
   }
   observe(projectId: string, limits: Partial<typeof observationLimits> = {}) {
     return new ObservationClient<WorkspaceSnapshot>(httpObservation(this.connection.url, this.connection.token, projectId, limits.maxBufferedEventBytes, this.fetcher), limits);

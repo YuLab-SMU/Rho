@@ -51,7 +51,219 @@
     ]
   },
   "outputSchema": {
-    "type": "object"
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "key": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "scope": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "caller"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "view",
+                  "shared"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              }
+            },
+            "required": [
+              "kind",
+              "id"
+            ]
+          }
+        ]
+      },
+      "version": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "selection": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "document": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "documentId": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "from": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "to": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "documentId",
+                  "version",
+                  "from",
+                  "to"
+                ]
+              }
+            },
+            "required": [
+              "document"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "resource": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ]
+              },
+              "entities": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "minItems": 1,
+                "maxItems": 1024
+              }
+            },
+            "required": [
+              "resource",
+              "entities"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "author": {
+        "type": "string",
+        "minLength": 1
+      },
+      "receipts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "changeId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "requestDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "changeId",
+            "requestDigest",
+            "version",
+            "author",
+            "at"
+          ]
+        },
+        "maxItems": 256
+      },
+      "retainedFromVersion": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "receipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "changeId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "requestDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "author": {
+            "type": "string",
+            "minLength": 1
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "changeId",
+          "requestDigest",
+          "version",
+          "author",
+          "at"
+        ]
+      }
+    },
+    "required": [
+      "key",
+      "scope",
+      "version",
+      "selection"
+    ]
   },
   "description": null
 }

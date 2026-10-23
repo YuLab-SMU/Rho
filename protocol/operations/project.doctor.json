@@ -48,8 +48,7 @@
               "minLength": 1
             },
             "remedy": {
-              "type": "string",
-              "minLength": 1
+              "type": "string"
             }
           },
           "required": [

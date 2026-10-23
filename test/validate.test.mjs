@@ -4,7 +4,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { RhoService } from '../dist/server.js';
-import { RhoClient } from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 
 // Each case here is a request that actually cost a round trip while an Agent was
 // working by hand: a dependency between two fields, a value outside an enum, and a

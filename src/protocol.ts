@@ -1,14 +1,27 @@
+import { ownerContracts } from './contracts/owners.generated.js';
 import { enhancementSchemas } from './enhancement-contracts.js';
 import { discoverySchemas } from './discovery-contracts.js';
-import { feedbackSchemas } from './feedback-contracts.js';
 import { presentationSchemas } from './presentation-contracts.js';
-import { requirementsSchema, executionInputSchema, declarationSchema } from './entry-contracts.js';
+import * as contract from './response-contracts.js';
 import { objectSchema as obj, text, refSchema as ref } from '@rho-workspace/plugin-contracts';
-import { inputs as annotationInputs, outputs as annotationOutputs } from './annotation-contracts.js';
-import { nativeSchemas } from './native-contracts.js';
+import { routeSchemas } from './task-routing-contract.js';
 import { baseProtocol } from './protocol-base.js';
-import { operationContracts as documentContracts, documentSchema, documentSummarySchema } from './document-contract.js';
 const base = structuredClone(baseProtocol);
+
+// ---------------------------------------------------------------------------
+// Owner-declared operations.
+//
+// Each functional component owns the schema of every operation it declares. Rho
+// keeps no second copy: the snapshot in contracts/owners.generated.ts is derived
+// from the owner package's pure contract entry (source identity and entry digest
+// recorded there), and this file adds only what the application actually owns —
+// the project every request is scoped to.
+// ---------------------------------------------------------------------------
+type JsonSchema = { [key: string]: unknown };
+interface OwnerOperationContract { inputSchema: JsonSchema; outputSchema: JsonSchema; requires: string[]; effect: string }
+const ownerSchema = (id: string, name: string): JsonSchema => ownerContracts.selected[id][name] as JsonSchema;
+const ownerSchemaRecord = (id: string, name: string): Record<string, JsonSchema> => ownerContracts.selected[id][name] as Record<string, JsonSchema>;
+
 const project = { projectId: base.operations['capability.list'].properties.projectId };
 const op = { ...project, operationId: base.operations['action.lookup'].properties.operationId };
 const positive = { type: 'integer', minimum: 1 };
@@ -16,6 +29,26 @@ const integer = { type: 'integer', minimum: 0 };
 const record = { type: 'object' };
 const array = (items: any) => ({ type: 'array', items });
 const response = (properties: Record<string, any>, required = Object.keys(properties)) => ({ type: 'object', properties, required, additionalProperties: true });
+const changeId = { type: 'string', pattern: '^[A-Za-z0-9._:@-]{1,128}$' };
+const identity = changeId;
+const digest = ref.properties.version;
+
+// The application's scope is the one field every owner operation gains here. Owner
+// inputs keep their own additionalProperties/required meaning; only the project
+// identity and its requirement are added, exactly as a caller supplies them.
+function scoped(input: JsonSchema): JsonSchema {
+  const properties = (input.properties ?? {}) as Record<string, JsonSchema>;
+  const required = (input.required as string[] | undefined) ?? Object.keys(properties);
+  return { ...input, properties: { ...project, ...properties }, required: ['projectId', ...required.filter(name => name !== 'projectId')] };
+}
+
+const ownerOperations: Record<string, OwnerOperationContract> = {};
+for (const owner of ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent']) {
+  for (const [method, contract] of Object.entries(ownerSchemaRecord(owner, 'operationContracts') as unknown as Record<string, OwnerOperationContract>)) {
+    ownerOperations[method] = contract;
+  }
+}
+
 export const operations: Record<string, any> = { ...base.operations,
   'protocol.describe': obj({ ...project, method: text, cursor: { type: ['string', 'null'], maxLength: 128 }, limit: { type: 'integer', minimum: 1, maximum: 100 }, maxBytes: { type: 'integer', minimum: 1024, maximum: 65536 } }, []),
   'project.pick': obj({}),
@@ -37,17 +70,16 @@ export const operations: Record<string, any> = { ...base.operations,
   'capability.configure': obj({ ...project, expectedVersion: integer, changeId: text, enabled: { type: 'array', items: text, maxItems: 32, uniqueItems: true } }),
   'skill.list': obj(project),
   'skill.read': obj({ ...project, skillId: text, expectedDigest: { anyOf: [ref.properties.version, { type: 'null' }] } }, ['projectId', 'skillId']),
-  'requirements.check': obj({ ...project, requirements: requirementsSchema }),
-  'requirements.prepare': obj({ ...op, requirements: requirementsSchema }),
-  'action.submit': obj({ ...op, action: { const: 'r.execute' }, actionVersion: { const: '0.2.0' }, input: executionInputSchema }),
-  'resource.register': obj({ ...project, declaration: declarationSchema, expectedDigest: ref.properties.version }),
   'data.plot': obj({ ...project, resource: ref, x: text, y: text, maxPoints: positive }, ['projectId', 'resource', 'x', 'y']),
   'data.compare': obj({ ...project, left: ref, right: ref, options: obj({ leftKey: text, rightKey: text, leftNamespace: text, rightNamespace: text, mapping: { const: 'equal-string' }, leftField: text, rightField: text, join: { enum: ['left', 'inner', 'full'] } }) }),
-  'object.read': obj({ ...project, resource: ref }),
   'media.describe': obj({ ...project, resource: ref })
 };
-const changeId = { type: 'string', pattern: '^[A-Za-z0-9._:@-]{1,128}$' };
-for (const [method, contract] of Object.entries(documentContracts)) operations[method] = { ...contract.inputSchema, properties: { ...project, ...contract.inputSchema.properties }, required: ['projectId', ...contract.inputSchema.required] };
+
+// Every owner-declared operation and response comes from the snapshot, scoped once.
+for (const [method, contract] of Object.entries(ownerOperations)) operations[method] = scoped(contract.inputSchema);
+for (const [method, schema] of Object.entries(ownerSchemaRecord('annotations', 'inputs'))) operations[method] = scoped(schema);
+
+
 const condition = { ...project, compositionId: changeId, expectedVersion: integer, changeId };
 const view = { ...base.operations['composition.put'].properties.views.items, additionalProperties: false };
 view.properties.bindings = { type: 'object', additionalProperties: { oneOf: [ref, obj({ documentId: ref.properties.version, version: positive }), obj({ kind: { const: 'live-document' }, documentId: ref.properties.version })] } };
@@ -87,89 +119,138 @@ operations['task.map.read'] = obj(project);
 operations['task.map.declare'] = obj({ ...project, expectedVersion: integer, changeId, question: { anyOf: [phrase(240), { type: 'null' }] }, compositionId: { anyOf: [changeId, { type: 'null' }] }, vocabulary: obj({ kinds: terms, states: terms }, []), items: { ...array(taskItem), maxItems: 256 }, remove: { ...array(changeId), maxItems: 256, uniqueItems: true }, next: { ...array(changeId), maxItems: 16, uniqueItems: true } }, ['projectId', 'expectedVersion', 'changeId']);
 operations['task.map.present'] = obj({ ...project, expectedVersion: integer, changeId, target: mapTarget, form: hint, params: formParams, focus: { anyOf: [changeId, { type: 'null' }] }, reason: phrase(160) }, ['projectId', 'expectedVersion', 'changeId', 'target']);
 operations['task.map.respond'] = obj({ ...project, expectedVersion: integer, changeId, target: mapTarget, action: { enum: ['pin', 'unpin', 'revert', 'accept', 'dismiss'] }, form: hint, params: formParams, suggestionId: changeId }, ['projectId', 'expectedVersion', 'changeId', 'target', 'action']);
-for (const [method, schema] of Object.entries(annotationInputs)) operations[method] = obj({ ...project, ...schema.properties });
 operations['context.create'] = obj({ ...operations['context.create'].properties, annotations: { ...array(obj({ annotationId: changeId, version: positive })), minItems: 1, maxItems: 128 }, changeId, expectedVersion: { const: 0 } }, ['projectId']);
 for (const method of ['workspace.save', 'workspace.export']) operations[method] = obj({ ...operations[method].properties, format: { enum: [1, 2, 3] } }, operations[method].required);
 operations['context.create'].properties.region = obj({ page: positive, x: { type: 'number', minimum: 0 }, y: { type: 'number', minimum: 0 }, width: { type: 'number', exclusiveMinimum: 0 }, height: { type: 'number', exclusiveMinimum: 0 }, units: { enum: ['pixels', 'points'] } });
-for (const [method, schema] of Object.entries({ 'feedback.submit': feedbackSchemas.FeedbackSubmitInput, 'feedback.read': feedbackSchemas.FeedbackReadInput, 'feedback.status': feedbackSchemas.DeliveryStatusInput })) operations[method] = schema;
+// Application refinements of owner operations keep their owner schema and add the
+// one relation this application enforces.
+operations['binding.activity'] = { ...operations['binding.activity'], required: ['projectId'], allOf: [{ if: { required: ['source'] }, then: { required: ['source', 'taskId', 'query'] }, else: { not: { anyOf: [{ required: ['taskId'] }, { required: ['query'] }] } } }] };
 operations['view.observe'] = presentationSchemas.VisibilityInput;
 operations['view.observations.read'] = presentationSchemas.VisibilityReadInput;
-operations['task.routing.put'] = nativeSchemas.RouteInput;
-operations['binding.open'] = nativeSchemas.BindingOpenExtended;
-operations['binding.activity.append'] = nativeSchemas.ActivityAppendInput;
-operations['binding.activity'] = { ...nativeSchemas.NativeActivityReadInput, required: ['projectId'], allOf: [{ if: { required: ['source'] }, then: { required: ['source', 'taskId', 'query'] }, else: { not: { anyOf: [{ required: ['taskId'] }, { required: ['query'] }] } } }] };
 for (const [method, schema] of Object.entries({ 'workspace.observe': enhancementSchemas.PresentationReadInput, 'workspace.enhance': enhancementSchemas.EnhanceInput, 'capability.index': discoverySchemas.IndexInput, 'capability.resolve': discoverySchemas.ResolveInput })) operations[method] = schema;
+operations['task.routing.put'] = { ...routeSchemas.RouteInput };
 operations['session.grant'].properties.profile = { enum: ['layered-business', 'layered-presentation'] };
 operations['session.grant'].properties.methods.items = { enum: Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('project.')).sort() };
+
+const documentSchema = ownerSchema('documents', 'documentSchema');
+const documentSummarySchema = ownerSchema('documents', 'documentSummarySchema');
 export const resourceSchema = { ...base.definitions.resource, additionalProperties: true, properties: { ...base.definitions.resource.properties, kind: { enum: ['file', 'table', 'media', 'object', 'plot', 'model'] }, format: { anyOf: [record, { type: 'string' }] } } };
 const retainedPlan: any = base.definitions.run.properties.plan;
-export const runSchema = { ...base.definitions.run, properties: { ...base.definitions.run.properties, plan: { ...retainedPlan, properties: { ...retainedPlan.properties, completion: { type: ['string', 'null'] } } } } };
+// A retained run reports exactly what the execution bridge keeps: the original
+// request digest and body, the Core identity, distinct delivery/execution facts and
+// the bounded native/usage reports. Open payloads stay open where the owner owns
+// them (native, interpretation, provenance); required facts stay required.
+export const runSchema = { ...base.definitions.run, additionalProperties: false, properties: {
+  ...base.definitions.run.properties,
+  request: { type: 'object', additionalProperties: true },
+  core: obj({ caller: identity, requestId: identity }, ['caller', 'requestId']),
+  native: { anyOf: [contract.nativeRunSchema, { type: 'null' }] },
+  integrity: contract.integrityReportSchema,
+  domain: contract.domainReportSchema,
+  interpretation: { type: 'object', additionalProperties: true },
+  plan: { ...retainedPlan, properties: { ...retainedPlan.properties, source: contract.planSourceSchema, completion: { type: ['string', 'null'] } } },
+  lastCli: contract.cliSchema,
+  checks: contract.checkSchema,
+  cancellation: contract.cancellationSchema
+} };
 const selection = { ...base.definitions.selection, properties: { ...base.definitions.selection.properties, namespace: text } };
-const definitions = { ...base.definitions, document: documentSchema, run: runSchema, resource: resourceSchema, selection, declaration: declarationSchema, executionInput: executionInputSchema, requirements: requirementsSchema };
-const artifactFacts = response({ integrity: record, domain: record, resources: array(resourceSchema) }, ['integrity', 'domain']);
-export const responses: Record<string, any> = { ...base.responses,
-  'project.pick': response({ cancelled: { type: 'boolean' }, project: { anyOf: [base.responses['project.create'], { type: 'null' }] } }),
+const definitions = { ...base.definitions, document: documentSchema, run: runSchema, resource: resourceSchema, selection, declaration: ownerSchema('entry-files', 'declarationSchema'), executionInput: ownerSchema('execution', 'input'), requirements: ownerSchema('entry-requirements', 'requirementsSchema') };
+const artifactFacts = response({ integrity: contract.integrityReportSchema, domain: contract.domainReportSchema, resources: array(resourceSchema) }, ['integrity', 'domain']);
+
+// Layer one: every operation an owner declares takes that owner's response schema.
+// Layer two: the application adds the facts Rho itself puts in the reply. Writing it
+// in this order means an owner's schema is never silently replaced by a Rho copy,
+// and an application override is always visible as such.
+const ownerResponses: Record<string, any> = {};
+for (const [method, ownerContract] of Object.entries(ownerOperations)) ownerResponses[method] = ownerContract.outputSchema;
+for (const [method, schema] of Object.entries(ownerSchemaRecord('annotations', 'outputs'))) ownerResponses[method] = schema;
+
+const catalog = { ...contract.capabilityCatalogSchema };
+const observationSnapshot = response({
+  project: contract.projectRecordSchema,
+  catalog,
+  documents: array(documentSummarySchema),
+  operations: array(runSchema),
+  resources: array(resourceSchema),
+  compositions: array({ anyOf: [contract.legacyCompositionSchema, contract.structuredCompositionSchema] }),
+  feedback: { anyOf: [contract.feedbackConfigurationSchema, { type: 'null' }] },
+  presentation: { anyOf: [contract.presentationStateSchema, { type: 'null' }] },
+  interactions: { type: 'array', items: contract.selectionChannelSchema, maxItems: 128 },
+  taskMap: contract.taskMapStateSchema,
+  annotations: { type: 'array', items: { type: 'object', additionalProperties: true }, maxItems: 128 },
+  contexts: { type: 'array', items: { type: 'object', additionalProperties: true }, maxItems: 128 },
+  selection: { anyOf: [selection, { type: 'null' }] },
+  bindings: array(contract.bindingSchema),
+  cursor: integer,
+  host: contract.cliSchema,
+  limits: contract.limitReportSchema
+});
+
+const structuredComposition = contract.structuredCompositionSchema;
+const composition = { anyOf: [contract.legacyCompositionSchema, structuredComposition] };
+const taskMap = { ...contract.taskMapStateSchema, properties: { ...contract.taskMapStateSchema.properties, receipt: obj({ changeId: identity, requestDigest: digest, kind: { enum: ['declare', 'present', 'respond'] }, author: text, version: positive, at: { type: 'string', format: 'date-time' }, outcome: contract.taskMapReceiptField }, ['changeId', 'kind', 'author', 'version', 'at']) } };
+
+export const responses: Record<string, any> = { ...base.responses, ...ownerResponses,
+  'project.open': { ...contract.projectRecordSchema, properties: { ...contract.projectRecordSchema.properties, host: contract.cliSchema }, required: [...contract.projectRecordSchema.required, 'host'] },
+  'project.pick': response({ cancelled: { type: 'boolean' }, project: { anyOf: [contract.projectSummarySchema, { type: 'null' }] } }),
   'project.source.pick': response({ cancelled: { type: 'boolean' }, selection: { anyOf: [response({ selectionId: text, id: text, root: text, name: text }), { type: 'null' }] } }),
-  'project.source.add': response({ cancelled: { type: 'boolean' }, project: { anyOf: [base.responses['project.create'], { type: 'null' }] } }),
-  'project.createWorkspace': base.responses['project.create'],
+  'project.source.add': response({ cancelled: { type: 'boolean' }, project: { anyOf: [contract.projectSummarySchema, { type: 'null' }] } }),
+  'project.createWorkspace': contract.projectSummarySchema,
+  'project.create': contract.projectSummarySchema,
+  'project.list': array(contract.projectSummarySchema),
   'project.runs': response({ runs: array(response({ operationId: text, action: text, execution: text, delivery: text, acceptedAt: text, author: text, artifacts: array(text), hasStderr: { type: 'boolean' } })), total: integer, truncated: { type: 'boolean' } }),
   'protocol.validate': response({ method: text, valid: { type: 'boolean' }, problems: array(response({ path: text, keyword: text, message: text, fix: text })), requires: array(text) }),
-  'project.doctor': response({ ok: { type: 'boolean' }, checks: array(response({ id: text, state: { enum: ['ok', 'warn', 'fail'] }, detail: text, remedy: text })), intent: { anyOf: [response({ id: text, methods: array(text), missing: array(text), ready: { type: 'boolean' } }), { type: 'null' }] } }),
+  // A passing check carries no remedy, so the remedy is a possibly-empty string.
+  'project.doctor': response({ ok: { type: 'boolean' }, checks: array(response({ id: text, state: { enum: ['ok', 'warn', 'fail'] }, detail: text, remedy: { type: 'string' } })), intent: { anyOf: [response({ id: text, methods: array(text), missing: array(text), ready: { type: 'boolean' } }), { type: 'null' }] } }),
   'project.entries': response({ entries: array(response({ path: text, name: text, kind: { enum: ['file', 'folder'] }, bytes: integer, hidden: { type: 'boolean' } })), total: integer, truncated: { type: 'boolean' }, roots: array(text), path: text }),
   'session.browser.pair': response({ code: text, expiresAt: text }),
   'session.browser.revoke': response({ sessionId: text, revoked: { type: 'boolean' } }),
-  'protocol.describe': response({ apiVersion: { const: '2.0' }, schemaVersion: { const: 2 }, revision: ref.properties.version, entries: array(response({ method: text, summary: text })), next: { type: ['string', 'null'] }, complete: { type: 'boolean' }, contract: response({ method: text, inputSchema: record, outputSchema: record, definitions: record, description: text }) }, ['apiVersion', 'schemaVersion', 'revision', 'entries', 'next', 'complete']),
+  'protocol.describe': response({ apiVersion: { const: '2.0' }, schemaVersion: { const: 2 }, revision: digest, entries: array(response({ method: text, summary: text })), next: { type: ['string', 'null'] }, complete: { type: 'boolean' }, contract: response({ method: text, inputSchema: { type: 'object' }, outputSchema: { type: 'object' }, definitions: { type: 'object' }, description: text }) }, ['apiVersion', 'schemaVersion', 'revision', 'entries', 'next', 'complete']),
+  'capability.list': { ...catalog, properties: { ...catalog.properties, host: contract.cliSchema }, required: [...(catalog.required ?? []), 'host'] },
   'capability.configure': response({ version: positive, enabled: array(text), receipt: response({ changeId: text, author: text, version: positive, enabled: array(text), at: text }) }),
-  'skill.list': array(response({ id: text, version: text, digest: ref.properties.version, content: text })),
-  'skill.read': response({ id: text, version: text, digest: ref.properties.version, content: text }),
-  'requirements.check': response({ requirements: requirementsSchema, checkedAt: text, environment: record, native: record, status: { enum: ['present', 'missing', 'unknown'] }, checkId: ref.properties.version }),
+  'skill.list': array(response({ id: text, version: text, digest, content: text })),
+  'skill.read': response({ id: text, version: text, digest, content: text }),
+  // The application's resource view accepts every registered kind and keeps the
+  // owner's provenance/coverage as open, bounded payloads.
   'resource.register': resourceSchema, 'resource.list': artifactFacts, 'artifact.check': artifactFacts,
-  'resource.read': response({ resource: resourceSchema, encoding: { const: 'base64' }, data: { type: 'string' }, offset: integer, nextOffset: integer, more: { type: 'boolean' } }),
-  'data.page': { ...base.responses['data.page'], properties: { ...base.responses['data.page'].properties, resource: resourceSchema, namespace: { type: ['string', 'null'] } } },
-  'data.plot': { ...base.responses['data.plot'], properties: { ...base.responses['data.plot'].properties, resource: resourceSchema } },
+  'resource.read': { ...ownerResponses['resource.read'], properties: { ...ownerResponses['resource.read'].properties, resource: resourceSchema, maxReadBytes: integer } },
+  'data.page': { ...ownerResponses['data.page'], properties: { ...ownerResponses['data.page'].properties, resource: resourceSchema, namespace: { type: ['string', 'null'] }, columns: array(response({ name: text, type: { enum: ['string', 'number', 'boolean'] }, nullValues: { type: 'array', items: { type: 'string' }, maxItems: 16 } })), rows: array(contract.rowSchema) } },
+  'data.plot': { ...ownerResponses['data.plot'], properties: { ...ownerResponses['data.plot'].properties, resource: resourceSchema } },
   'data.compare': resourceSchema,
   'selection.set': selection,
   'object.read': response({ resource: resourceSchema, observation: { const: 'exported-snapshot' }, value: {} }),
-  'media.describe': response({ resource: resourceSchema, original: ref, mimeType: text, rendering: { const: 'unobserved' } }),
-  'workspace.save': { ...base.responses['workspace.save'], properties: { ...base.responses['workspace.save'].properties, schemaVersion: { enum: [1, 2, 3] }, selection: { anyOf: [selection, { type: 'null' }] } } },
-  'observation.snapshot': { ...base.responses['observation.snapshot'], properties: { ...base.responses['observation.snapshot'].properties, resources: array(resourceSchema), operations: array(runSchema), selection: { anyOf: [selection, { type: 'null' }] } } }
+  // Media metadata is spread from the registration, so pages/width/height are only
+  // present when they were declared.
+  'media.describe': response({ resource: resourceSchema, original: ref, mimeType: { enum: ['image/png', 'image/jpeg', 'image/svg+xml', 'application/pdf'] }, pages: positive, width: { type: 'number' }, height: { type: 'number' }, rendering: { const: 'unobserved' } }, ['resource', 'original', 'mimeType', 'rendering']),
+  'workspace.save': contract.workspaceSaveSchema,
+  'workspace.restore': contract.workspaceRestoreSchema,
+  'observation.snapshot': observationSnapshot,
+  'composition.apply': structuredComposition, 'composition.undo': structuredComposition, 'view.protection.set': structuredComposition,
+  'composition.read': composition, 'view.close': composition,
+  'project.openFile': response({ document: ownerResponses['document.open'], viewId: text, composition: structuredComposition }),
+  'interaction.selection.read': contract.selectionChannelSchema,
+  'interaction.selection.set': contract.selectionChannelSchema,
+  'task.map.read': taskMap, 'task.map.declare': taskMap, 'task.map.present': taskMap, 'task.map.respond': taskMap,
+  'requirements.prepare': runSchema, 'action.submit': runSchema, 'action.lookup': runSchema, 'action.observe': runSchema, 'action.retry': runSchema, 'action.cancel': runSchema,
+  'action.list': array(runSchema),
+  'context.create': contract.contextSchema,
+  'context.read': { ...contract.contextSchema, required: [...contract.contextSchema.required, 'responses'] },
+  'task.routing.put': { ...routeSchemas.RouteOutput },
+  'view.observe': presentationSchemas.VisibilityReceipt,
+  'view.observations.read': presentationSchemas.VisibilityReadOutput,
+  'workspace.observe': enhancementSchemas.PresentationReadOutput,
+  'workspace.enhance': presentationSchemas.CompositionCommit,
+  'capability.index': discoverySchemas.IndexOutput,
+  'capability.resolve': discoverySchemas.ResolveOutput
 };
-const structuredComposition = response({ format: { const: 'rho.composition/1' }, compositionId: text, version: positive, nodes: array(node), rootId: changeId, receipt: record, author: text, views: array(view), availability: record, acknowledgedAt: text });
-for (const [method, contract] of Object.entries(documentContracts)) responses[method] = contract.outputSchema;
-responses['observation.snapshot'].properties.documents = array(documentSummarySchema);
-responses['workspace.save'].properties.documents = array(documentSchema);
-for (const method of ['composition.apply', 'composition.undo', 'view.protection.set']) responses[method] = structuredComposition;
-responses['project.openFile'] = response({ document: base.responses['document.open'], viewId: text, composition: structuredComposition });
-const composition = { anyOf: [base.definitions.composition, structuredComposition] };
-responses['composition.read'] = composition;
-responses['view.close'] = composition;
-responses['interaction.selection.read'] = record;
-responses['interaction.selection.set'] = record;
-const taskMap = response({ format: { const: 'rho.task-map/1' }, version: integer, vocabulary: record, items: array(record), next: array(text), presentation: record, suggestions: array(record), receipts: array(record) }, ['format', 'version', 'vocabulary', 'items', 'next', 'presentation', 'suggestions']);
-for (const method of ['task.map.read', 'task.map.declare', 'task.map.present', 'task.map.respond']) responses[method] = taskMap;
-Object.assign(responses, annotationOutputs);
-responses['context.create'] = record;
-responses['context.read'] = record;
-responses['observation.snapshot'].properties.compositions = array(composition);
-responses['workspace.save'].properties.compositions = array(composition);
-for (const method of ['requirements.prepare', 'action.submit', 'action.lookup', 'action.observe', 'action.retry', 'action.cancel']) responses[method] = runSchema;
-responses['action.list'] = array(runSchema);
-responses['feedback.submit'] = feedbackSchemas.SubmissionRecord;
-responses['feedback.read'] = feedbackSchemas.FeedbackReadOutput;
-responses['feedback.status'] = feedbackSchemas.DeliveryStatusOutput;
-responses['view.observe'] = presentationSchemas.VisibilityReceipt;
-responses['view.observations.read'] = presentationSchemas.VisibilityReadOutput;
-responses['task.routing.put'] = nativeSchemas.RouteOutput;
-responses['binding.open'] = { anyOf: [responses['binding.open'], nativeSchemas.BindingRecordExtension] };
-responses['binding.activity.append'] = nativeSchemas.ActivityAppendOutput;
-responses['binding.activity'] = { anyOf: [responses['binding.activity'], nativeSchemas.NativeActivityReadOutput] };
-for (const [method, schema] of Object.entries({ 'workspace.observe': enhancementSchemas.PresentationReadOutput, 'workspace.enhance': presentationSchemas.CompositionCommit, 'capability.index': discoverySchemas.IndexOutput, 'capability.resolve': discoverySchemas.ResolveOutput })) responses[method] = schema;
 responses['session.grant'].properties.profile = operations['session.grant'].properties.profile;
 export const descriptions = {
   'workspace.observe': 'Assigned presenter only: bounded layout/basis/owner summary/visibility projection. No feedback, full documents or native trace. Reading starts no model or renderer.',
   'workspace.enhance': 'Assigned presenter only: conditional display emphasis/title/plain Agent note using exact current generation, witness and observation. Does not modify business resources, feedback or protection.',
   'capability.index': 'Read a small role-narrowed index of currently authorized, enabled operations and immutable Skill/contract references.',
   'capability.resolve': 'Fetch selected relevant Skills with complete owner contracts, whole objects only. Pages pin catalog/bundle/caller; knownRefs only reuse currently available immutable bodies.', ...base.descriptions,
+  'document.read': 'Read the shared acknowledged buffer, including unsaved text and its version.',
+  'document.edit': 'Apply conditional UTF-16 text edits to the shared buffer; keep the returned version.',
   'feedback.submit': 'Teacher browser only: freeze the original draft/anchor, prepare the committed message and retain one original-session delivery. Preserve submissionId across missing acknowledgements; stages are separate durable facts.',
   'feedback.read': 'Original business binding only: fetch one complete frozen feedback object using its original delivery/context and a stable fetchId. relatedDocumentId is a pointer: read its CURRENT version before conditional edit/save and preserve human changes. This owner-served receipt does not prove client return or understanding.',
   'feedback.status': 'Observe original delivery, exact-target fetches and explicitly linked replies. No send, session start or recovery. Keep original identities and unknown outcomes; continuation cursors pin their snapshot.',
@@ -192,7 +273,9 @@ export const descriptions = {
   'requirements.check': 'Probe only the explicitly declared R packages with bounded base R; no Core Host or project script starts.',
   'data.compare': 'Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.',
   'object.read': 'Read a bounded exported JSON object snapshot, not live R memory.',
-  'artifact.check': 'Verify the selected completion inventory and file bytes only; domain check reports remain project resources.'
+  'artifact.check': 'Verify the selected completion inventory and file bytes only; domain check reports remain project resources.',
+  'context.read': 'Read an explicit versioned context package. Receipt establishes a tool fetch, not proactive delivery to a conversation.',
+  'binding.open': 'Bind this external session to the authenticated project scope. Conversation stays in Claude Code.'
 };
 // The published artifact is content-addressed, so its bytes must not move when a
 // description is added or an operation is inserted. Sorting both derived maps keeps
@@ -202,4 +285,4 @@ export const errorKinds = base.errorKinds;
 export const errorSchema = base.definitions.error;
 export const errorEnvelope = obj({ apiVersion: { const: '2.0' }, ok: { const: false }, error: errorSchema });
 export const responseEnvelope = (method: string) => obj({ apiVersion: { const: '2.0' }, ok: { const: true }, value: responses[method] });
-export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed'])], operations, responses, descriptions: orderedDescriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };
+export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed', 'feedback.changed'])], operations, responses, descriptions: orderedDescriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };

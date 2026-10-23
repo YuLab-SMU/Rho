@@ -1,39 +1,46 @@
 {
   "method": "document.save",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
+    "dependencies": {
+      "changeId": [
+        "expectedRevision"
+      ],
+      "expectedRevision": [
+        "changeId"
+      ]
+    },
     "properties": {
       "projectId": {
         "type": "string",
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
-      "documentId": {
-        "type": "string",
-        "pattern": "^[a-f0-9]{64}$"
+      "changeId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
       },
-      "expectedVersion": {
-        "type": "integer",
-        "minimum": 1
+      "documentId": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
       },
       "expectedDiskDigest": {
         "anyOf": [
           {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
           },
           {
             "type": "null"
           }
         ]
       },
-      "changeId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-      },
       "expectedRevision": {
-        "type": "integer",
-        "minimum": 0
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expectedVersion": {
+        "minimum": 1,
+        "type": "integer"
       }
     },
     "required": [
@@ -42,336 +49,77 @@
       "expectedVersion",
       "expectedDiskDigest"
     ],
-    "dependencies": {
-      "changeId": [
-        "expectedRevision"
-      ],
-      "expectedRevision": [
-        "changeId"
-      ]
-    }
+    "type": "object"
   },
   "outputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
-      "id": {
-        "type": "string",
-        "pattern": "^[a-f0-9]{64}$"
+      "acknowledgedAt": {
+        "minLength": 1,
+        "type": "string"
       },
-      "path": {
-        "type": "string",
-        "minLength": 1
-      },
-      "version": {
-        "type": "integer",
-        "minimum": 1
+      "author": {
+        "minLength": 1,
+        "type": "string"
       },
       "content": {
         "type": "string"
       },
+      "dirty": {
+        "type": "boolean"
+      },
       "diskDigest": {
         "anyOf": [
           {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
           },
           {
             "type": "null"
           }
         ]
       },
-      "dirty": {
-        "type": "boolean"
-      },
-      "author": {
-        "type": "string",
-        "minLength": 1
-      },
-      "acknowledgedAt": {
-        "type": "string",
-        "minLength": 1
-      },
-      "undo": {
-        "type": "array",
+      "history": {
         "items": {
-          "type": "object",
           "additionalProperties": false,
           "properties": {
-            "content": {
+            "afterDigest": {
+              "pattern": "^[a-f0-9]{64}$",
               "type": "string"
             },
-            "group": {
-              "type": "string",
-              "minLength": 1
-            },
-            "author": {
-              "type": "string",
-              "minLength": 1
-            },
-            "changeIds": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-              }
-            }
-          },
-          "required": [
-            "content",
-            "group",
-            "author"
-          ]
-        }
-      },
-      "revision": {
-        "type": "integer",
-        "minimum": 0
-      },
-      "receipts": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "changeId": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-            },
-            "requestDigest": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
-            },
-            "kind": {
-              "enum": [
-                "edit",
-                "undo",
-                "save",
-                "abandon-save",
-                "undo-own",
-                "revert"
-              ]
-            },
-            "author": {
-              "type": "string",
-              "minLength": 1
-            },
-            "revision": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "version": {
-              "type": "integer",
-              "minimum": 1
-            },
             "at": {
-              "type": "string",
-              "minLength": 1
-            }
-          },
-          "required": [
-            "changeId",
-            "requestDigest",
-            "kind",
-            "author",
-            "revision",
-            "version",
-            "at"
-          ]
-        }
-      },
-      "retainedFromRevision": {
-        "type": "integer",
-        "minimum": 1
-      },
-      "pendingSave": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "requestDigest": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
-          },
-          "author": {
-            "type": "string",
-            "minLength": 1
-          },
-          "expectedDiskDigest": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "contentDigest": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
-          },
-          "at": {
-            "type": "string",
-            "minLength": 1
-          },
-          "change": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "changeId": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-              },
-              "expectedRevision": {
-                "type": "integer",
-                "minimum": 0
-              }
-            },
-            "required": [
-              "changeId",
-              "expectedRevision"
-            ]
-          }
-        },
-        "required": [
-          "requestDigest",
-          "author",
-          "expectedDiskDigest",
-          "contentDigest",
-          "at"
-        ]
-      },
-      "receipt": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "changeId": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-          },
-          "requestDigest": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
-          },
-          "kind": {
-            "enum": [
-              "edit",
-              "undo",
-              "save",
-              "abandon-save",
-              "undo-own",
-              "revert"
-            ]
-          },
-          "author": {
-            "type": "string",
-            "minLength": 1
-          },
-          "revision": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "version": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "at": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": [
-          "changeId",
-          "requestDigest",
-          "kind",
-          "author",
-          "revision",
-          "version",
-          "at"
-        ]
-      },
-      "history": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "changeId": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-            },
-            "requestDigest": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
+              "minLength": 1,
+              "type": "string"
             },
             "author": {
-              "type": "string",
-              "minLength": 1
-            },
-            "kind": {
-              "enum": [
-                "edit",
-                "undo",
-                "undo-own",
-                "revert"
-              ]
-            },
-            "undoGroup": {
-              "type": "string",
-              "minLength": 1
-            },
-            "groupId": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-            },
-            "version": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "revision": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "at": {
-              "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "type": "string"
             },
             "beforeDigest": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
             },
-            "afterDigest": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
-            },
-            "reverts": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-              },
-              "uniqueItems": true
+            "changeId": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
             },
             "edits": {
-              "type": "array",
               "items": {
-                "type": "object",
                 "additionalProperties": false,
                 "properties": {
                   "from": {
-                    "type": "integer",
-                    "minimum": 0
-                  },
-                  "to": {
-                    "type": "integer",
-                    "minimum": 0
+                    "minimum": 0,
+                    "type": "integer"
                   },
                   "insert": {
                     "type": "string"
                   },
                   "removed": {
                     "type": "string"
+                  },
+                  "to": {
+                    "minimum": 0,
+                    "type": "integer"
                   }
                 },
                 "required": [
@@ -379,8 +127,46 @@
                   "to",
                   "insert",
                   "removed"
-                ]
-              }
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "groupId": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "edit",
+                "undo",
+                "undo-own",
+                "revert"
+              ]
+            },
+            "requestDigest": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "reverts": {
+              "items": {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "revision": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "undoGroup": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "version": {
+              "minimum": 1,
+              "type": "integer"
             }
           },
           "required": [
@@ -397,12 +183,225 @@
             "afterDigest",
             "reverts",
             "edits"
-          ]
-        }
+          ],
+          "type": "object"
+        },
+        "type": "array"
       },
       "historyRetainedFromVersion": {
-        "type": "integer",
-        "minimum": 1
+        "minimum": 1,
+        "type": "integer"
+      },
+      "id": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "path": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "pendingSave": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "author": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "change": {
+            "additionalProperties": false,
+            "properties": {
+              "changeId": {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              },
+              "expectedRevision": {
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "changeId",
+              "expectedRevision"
+            ],
+            "type": "object"
+          },
+          "contentDigest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "expectedDiskDigest": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestDigest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "requestDigest",
+          "author",
+          "expectedDiskDigest",
+          "contentDigest",
+          "at"
+        ],
+        "type": "object"
+      },
+      "receipt": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "author": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "changeId": {
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "edit",
+              "undo",
+              "save",
+              "abandon-save",
+              "undo-own",
+              "revert"
+            ]
+          },
+          "requestDigest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "revision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "changeId",
+          "requestDigest",
+          "kind",
+          "author",
+          "revision",
+          "version",
+          "at"
+        ],
+        "type": "object"
+      },
+      "receipts": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "author": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "changeId": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "edit",
+                "undo",
+                "save",
+                "abandon-save",
+                "undo-own",
+                "revert"
+              ]
+            },
+            "requestDigest": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "revision": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "version": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "changeId",
+            "requestDigest",
+            "kind",
+            "author",
+            "revision",
+            "version",
+            "at"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "retainedFromRevision": {
+        "minimum": 1,
+        "type": "integer"
+      },
+      "revision": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "undo": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "author": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "changeIds": {
+              "items": {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "content": {
+              "type": "string"
+            },
+            "group": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "content",
+            "group",
+            "author"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "version": {
+        "minimum": 1,
+        "type": "integer"
       }
     },
     "required": [
@@ -415,7 +414,8 @@
       "author",
       "acknowledgedAt",
       "undo"
-    ]
+    ],
+    "type": "object"
   },
   "description": null
 }

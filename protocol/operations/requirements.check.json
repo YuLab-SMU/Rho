@@ -1,7 +1,6 @@
 {
   "method": "requirements.check",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
@@ -9,75 +8,51 @@
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
       "requirements": {
-        "type": "array",
         "items": {
-          "type": "object",
           "additionalProperties": false,
           "properties": {
+            "minimumVersion": {
+              "pattern": "^[0-9]+([.-][0-9]+)*$",
+              "type": "string"
+            },
             "package": {
-              "type": "string",
-              "pattern": "^[A-Za-z][A-Za-z0-9.]*$"
+              "pattern": "^[A-Za-z][A-Za-z0-9.]*$",
+              "type": "string"
             },
             "source": {
               "enum": [
                 "cran",
                 "bioconductor"
               ]
-            },
-            "minimumVersion": {
-              "type": "string",
-              "pattern": "^[0-9]+([.-][0-9]+)*$"
             }
           },
           "required": [
             "package",
             "source"
-          ]
+          ],
+          "type": "object"
         },
         "maxItems": 64,
+        "type": "array",
         "uniqueItems": true
       }
     },
     "required": [
       "projectId",
       "requirements"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
-    "type": "object",
+    "additionalProperties": true,
     "properties": {
-      "requirements": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "package": {
-              "type": "string",
-              "pattern": "^[A-Za-z][A-Za-z0-9.]*$"
-            },
-            "source": {
-              "enum": [
-                "cran",
-                "bioconductor"
-              ]
-            },
-            "minimumVersion": {
-              "type": "string",
-              "pattern": "^[0-9]+([.-][0-9]+)*$"
-            }
-          },
-          "required": [
-            "package",
-            "source"
-          ]
-        },
-        "maxItems": 64,
-        "uniqueItems": true
+      "checkId": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
       },
       "checkedAt": {
-        "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "type": "string"
       },
       "environment": {
         "type": "object"
@@ -85,16 +60,41 @@
       "native": {
         "type": "object"
       },
+      "requirements": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "minimumVersion": {
+              "pattern": "^[0-9]+([.-][0-9]+)*$",
+              "type": "string"
+            },
+            "package": {
+              "pattern": "^[A-Za-z][A-Za-z0-9.]*$",
+              "type": "string"
+            },
+            "source": {
+              "enum": [
+                "cran",
+                "bioconductor"
+              ]
+            }
+          },
+          "required": [
+            "package",
+            "source"
+          ],
+          "type": "object"
+        },
+        "maxItems": 64,
+        "type": "array",
+        "uniqueItems": true
+      },
       "status": {
         "enum": [
           "present",
           "missing",
           "unknown"
         ]
-      },
-      "checkId": {
-        "type": "string",
-        "pattern": "^[a-f0-9]{64}$"
       }
     },
     "required": [
@@ -105,7 +105,7 @@
       "status",
       "checkId"
     ],
-    "additionalProperties": true
+    "type": "object"
   },
   "description": "Probe only the explicitly declared R packages with bounded base R; no Core Host or project script starts."
 }

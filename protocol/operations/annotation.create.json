@@ -1,48 +1,35 @@
 {
   "method": "annotation.create",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
         "type": "string",
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
-      "annotationId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-      },
-      "expectedVersion": {
-        "const": 0
-      },
-      "changeId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-      },
       "anchor": {
         "oneOf": [
           {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
+              "documentId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "from": {
+                "minimum": 0,
+                "type": "integer"
+              },
               "kind": {
                 "const": "document"
               },
-              "documentId": {
-                "type": "string",
-                "minLength": 1
+              "to": {
+                "minimum": 0,
+                "type": "integer"
               },
               "version": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "from": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "to": {
-                "type": "integer",
-                "minimum": 0
+                "minimum": 1,
+                "type": "integer"
               }
             },
             "required": [
@@ -51,69 +38,81 @@
               "version",
               "from",
               "to"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
+              "entities": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 1024,
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
               "kind": {
                 "const": "table"
               },
               "resource": {
-                "type": "object",
                 "additionalProperties": false,
                 "properties": {
                   "id": {
-                    "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "type": "string"
                   },
                   "version": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
                   }
                 },
                 "required": [
                   "id",
                   "version"
-                ]
-              },
-              "entities": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 1024,
-                "uniqueItems": true,
-                "items": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                ],
+                "type": "object"
               }
             },
             "required": [
               "kind",
               "resource",
               "entities"
-            ]
+            ],
+            "type": "object"
           }
         ]
       },
+      "annotationId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
+      },
+      "changeId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
+      },
       "draft": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "documentId": {
-            "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "type": "string"
           },
           "version": {
-            "type": "integer",
-            "minimum": 1
+            "minimum": 1,
+            "type": "integer"
           }
         },
         "required": [
           "documentId",
           "version"
-        ]
+        ],
+        "type": "object"
+      },
+      "expectedVersion": {
+        "const": 0
       }
     },
     "required": [
@@ -123,44 +122,35 @@
       "changeId",
       "anchor",
       "draft"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
-      "annotationId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-      },
-      "version": {
-        "type": "integer",
-        "minimum": 1
-      },
       "anchor": {
         "oneOf": [
           {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
+              "documentId": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "from": {
+                "minimum": 0,
+                "type": "integer"
+              },
               "kind": {
                 "const": "document"
               },
-              "documentId": {
-                "type": "string",
-                "minLength": 1
+              "to": {
+                "minimum": 0,
+                "type": "integer"
               },
               "version": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "from": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "to": {
-                "type": "integer",
-                "minimum": 0
+                "minimum": 1,
+                "type": "integer"
               }
             },
             "required": [
@@ -169,93 +159,255 @@
               "version",
               "from",
               "to"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
+              "entities": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "maxItems": 1024,
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
+              },
               "kind": {
                 "const": "table"
               },
               "resource": {
-                "type": "object",
                 "additionalProperties": false,
                 "properties": {
                   "id": {
-                    "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "type": "string"
                   },
                   "version": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
                   }
                 },
                 "required": [
                   "id",
                   "version"
-                ]
-              },
-              "entities": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 1024,
-                "uniqueItems": true,
-                "items": {
-                  "type": "string",
-                  "minLength": 1
-                }
+                ],
+                "type": "object"
               }
             },
             "required": [
               "kind",
               "resource",
               "entities"
-            ]
+            ],
+            "type": "object"
           }
         ]
+      },
+      "annotationId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
+      },
+      "messages": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "author": {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            "draft": {
+              "additionalProperties": false,
+              "properties": {
+                "sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "source": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "dirty": {
+                      "type": "boolean"
+                    },
+                    "documentId": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string"
+                    },
+                    "kind": {
+                      "const": "buffer"
+                    },
+                    "path": {
+                      "maxLength": 4096,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "version": {
+                      "minimum": 1,
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "documentId",
+                    "version",
+                    "path",
+                    "dirty"
+                  ],
+                  "type": "object"
+                },
+                "text": {
+                  "maxLength": 1048576,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "source",
+                "sha256",
+                "text"
+              ],
+              "type": "object"
+            },
+            "id": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "replyTo": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "author",
+            "at",
+            "draft"
+          ],
+          "type": "object"
+        },
+        "maxItems": 256,
+        "minItems": 1,
+        "type": "array"
+      },
+      "receipt": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "author": {
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
+          },
+          "changeId": {
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
+          },
+          "requestDigest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "changeId",
+          "requestDigest",
+          "author",
+          "version",
+          "at"
+        ],
+        "type": "object"
+      },
+      "receipts": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "author": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "changeId": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "requestDigest": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "version": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "changeId",
+            "requestDigest",
+            "author",
+            "version",
+            "at"
+          ],
+          "type": "object"
+        },
+        "maxItems": 256,
+        "minItems": 1,
+        "type": "array"
+      },
+      "retainedFromVersion": {
+        "minimum": 1,
+        "type": "integer"
       },
       "source": {
         "oneOf": [
           {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
+              "entityKey": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
               "kind": {
                 "const": "table"
               },
+              "namespace": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              },
               "resource": {
-                "type": "object",
                 "additionalProperties": false,
                 "properties": {
                   "id": {
-                    "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "type": "string"
                   },
                   "version": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
                   }
                 },
                 "required": [
                   "id",
                   "version"
-                ]
-              },
-              "namespace": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128
-              },
-              "entityKey": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 128
+                ],
+                "type": "object"
               },
               "rows": {
-                "type": "array",
                 "items": {
-                  "type": "object",
                   "additionalProperties": {
                     "type": [
                       "string",
@@ -263,10 +415,12 @@
                       "boolean",
                       "null"
                     ]
-                  }
+                  },
+                  "type": "object"
                 },
                 "maxItems": 1024,
-                "minItems": 1
+                "minItems": 1,
+                "type": "array"
               }
             },
             "required": [
@@ -275,37 +429,44 @@
               "namespace",
               "entityKey",
               "rows"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
+              "from": {
+                "minimum": 0,
+                "type": "integer"
+              },
               "kind": {
                 "const": "document"
               },
+              "sha256": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
               "source": {
-                "type": "object",
                 "additionalProperties": false,
                 "properties": {
+                  "dirty": {
+                    "type": "boolean"
+                  },
+                  "documentId": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
                   "kind": {
                     "const": "buffer"
                   },
-                  "documentId": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
+                  "path": {
+                    "maxLength": 4096,
+                    "minLength": 1,
+                    "type": "string"
                   },
                   "version": {
-                    "type": "integer",
-                    "minimum": 1
-                  },
-                  "path": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 4096
-                  },
-                  "dirty": {
-                    "type": "boolean"
+                    "minimum": 1,
+                    "type": "integer"
                   }
                 },
                 "required": [
@@ -314,23 +475,16 @@
                   "version",
                   "path",
                   "dirty"
-                ]
-              },
-              "sha256": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
-              },
-              "from": {
-                "type": "integer",
-                "minimum": 0
-              },
-              "to": {
-                "type": "integer",
-                "minimum": 0
+                ],
+                "type": "object"
               },
               "text": {
-                "type": "string",
-                "maxLength": 1048576
+                "maxLength": 1048576,
+                "type": "string"
+              },
+              "to": {
+                "minimum": 0,
+                "type": "integer"
               }
             },
             "required": [
@@ -340,199 +494,39 @@
               "from",
               "to",
               "text"
-            ]
+            ],
+            "type": "object"
           }
         ]
-      },
-      "messages": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "id": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
-            },
-            "author": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 128
-            },
-            "at": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "draft": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "source": {
-                  "type": "object",
-                  "additionalProperties": false,
-                  "properties": {
-                    "kind": {
-                      "const": "buffer"
-                    },
-                    "documentId": {
-                      "type": "string",
-                      "pattern": "^[a-f0-9]{64}$"
-                    },
-                    "version": {
-                      "type": "integer",
-                      "minimum": 1
-                    },
-                    "path": {
-                      "type": "string",
-                      "minLength": 1,
-                      "maxLength": 4096
-                    },
-                    "dirty": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": [
-                    "kind",
-                    "documentId",
-                    "version",
-                    "path",
-                    "dirty"
-                  ]
-                },
-                "sha256": {
-                  "type": "string",
-                  "pattern": "^[a-f0-9]{64}$"
-                },
-                "text": {
-                  "type": "string",
-                  "maxLength": 1048576
-                }
-              },
-              "required": [
-                "source",
-                "sha256",
-                "text"
-              ]
-            },
-            "replyTo": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
-            }
-          },
-          "required": [
-            "id",
-            "author",
-            "at",
-            "draft"
-          ]
-        },
-        "maxItems": 256,
-        "minItems": 1
-      },
-      "receipts": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "changeId": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-            },
-            "requestDigest": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
-            },
-            "author": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-            },
-            "version": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "at": {
-              "type": "string",
-              "format": "date-time"
-            }
-          },
-          "required": [
-            "changeId",
-            "requestDigest",
-            "author",
-            "version",
-            "at"
-          ]
-        },
-        "maxItems": 256,
-        "minItems": 1
-      },
-      "receipt": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "changeId": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-          },
-          "requestDigest": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
-          },
-          "author": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-          },
-          "version": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "at": {
-            "type": "string",
-            "format": "date-time"
-          }
-        },
-        "required": [
-          "changeId",
-          "requestDigest",
-          "author",
-          "version",
-          "at"
-        ]
-      },
-      "retainedFromVersion": {
-        "type": "integer",
-        "minimum": 1
       },
       "sourceStatus": {
         "oneOf": [
           {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
+              "anchoredVersion": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "currentVersion": {
+                "minimum": 1,
+                "type": "integer"
+              },
               "state": {
                 "enum": [
                   "same-version",
                   "version-differs"
                 ]
-              },
-              "currentVersion": {
-                "type": "integer",
-                "minimum": 1
-              },
-              "anchoredVersion": {
-                "type": "integer",
-                "minimum": 1
               }
             },
             "required": [
               "state",
               "currentVersion",
               "anchoredVersion"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
               "state": {
@@ -541,10 +535,10 @@
             },
             "required": [
               "state"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
               "state": {
@@ -553,25 +547,30 @@
             },
             "required": [
               "state"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
-              "state": {
-                "const": "source-unavailable"
-              },
               "snapshot": {
                 "const": "retained"
+              },
+              "state": {
+                "const": "source-unavailable"
               }
             },
             "required": [
               "state",
               "snapshot"
-            ]
+            ],
+            "type": "object"
           }
         ]
+      },
+      "version": {
+        "minimum": 1,
+        "type": "integer"
       }
     },
     "required": [
@@ -582,7 +581,8 @@
       "messages",
       "receipts",
       "retainedFromVersion"
-    ]
+    ],
+    "type": "object"
   },
   "description": null
 }

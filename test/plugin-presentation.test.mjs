@@ -5,7 +5,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { Plugins } from '../dist/plugins.js';
 import { RhoService } from '../dist/server.js';
-import { RhoClient } from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { BrowserClient } from '../dist/browser.js';
 import { pluginEntries, pluginGroups, pluginPresentation } from '../dist/plugin-presentation.js';
 

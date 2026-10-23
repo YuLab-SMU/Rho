@@ -8,7 +8,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {canonical,digest} from '@rho-workspace/plugin-contracts';
 import {LayeredMcp} from '@rho-workspace/plugin-agent/layered';
 import {RhoService} from '../dist/server.js';
-import {RhoClient} from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 const require=createRequire(import.meta.resolve('@rho-workspace/plugin-agent'));
 const {Client}=await import(pathToFileURL(require.resolve('@modelcontextprotocol/sdk/client/index.js')));
 const {StdioClientTransport}=await import(pathToFileURL(require.resolve('@modelcontextprotocol/sdk/client/stdio.js')));

@@ -1,40 +1,69 @@
 {
   "method": "binding.activity.append",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
         "type": "string",
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
-      "taskId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-      },
-      "bindingId": {
-        "type": "string",
-        "pattern": "^[a-f0-9]{64}$"
+      "adapterEpoch": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
       },
       "adapterId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
       },
-      "adapterEpoch": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      "bindingId": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
       },
       "events": {
-        "type": "array",
         "items": {
           "oneOf": [
             {
-              "type": "object",
               "additionalProperties": false,
               "properties": {
-                "sourceSeq": {
-                  "type": "integer",
-                  "minimum": 0
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "detailsRef": {
+                  "anyOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "fetchId": {
+                  "anyOf": [
+                    {
+                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
                 },
                 "kind": {
                   "enum": [
@@ -45,53 +74,8 @@
                   ]
                 },
                 "nativeToolUseId": {
-                  "type": "string",
-                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                },
-                "tool": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 80
-                },
-                "at": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "detailsRef": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "additionalProperties": false,
-                      "properties": {
-                        "id": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "version": {
-                          "type": "string",
-                          "pattern": "^[a-f0-9]{64}$"
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "version"
-                      ]
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
-                "fetchId": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                  "type": "string"
                 },
                 "outcome": {
                   "enum": [
@@ -101,6 +85,15 @@
                     "partial",
                     "unknown"
                   ]
+                },
+                "sourceSeq": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "tool": {
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string"
                 }
               },
               "required": [
@@ -111,94 +104,79 @@
                 "at",
                 "detailsRef",
                 "outcome"
-              ]
+              ],
+              "type": "object"
             },
             {
-              "type": "object",
               "additionalProperties": false,
               "properties": {
-                "sourceSeq": {
-                  "type": "integer",
-                  "minimum": 0
+                "at": {
+                  "format": "date-time",
+                  "type": "string"
                 },
                 "kind": {
                   "const": "artifact.ready"
                 },
                 "nativeToolUseId": {
-                  "type": "string",
-                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                },
-                "at": {
-                  "type": "string",
-                  "format": "date-time"
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                  "type": "string"
                 },
                 "output": {
-                  "type": "object",
                   "additionalProperties": false,
                   "properties": {
                     "declaration": {
                       "oneOf": [
                         {
-                          "type": "object",
                           "additionalProperties": false,
                           "properties": {
-                            "path": {
-                              "type": "string",
-                              "minLength": 1
-                            },
-                            "kind": {
-                              "const": "file"
-                            },
                             "format": {
-                              "type": "object",
                               "additionalProperties": false,
                               "properties": {
                                 "mimeType": {
-                                  "type": "string",
-                                  "minLength": 1
+                                  "minLength": 1,
+                                  "type": "string"
                                 }
                               },
                               "required": [
                                 "mimeType"
-                              ]
+                              ],
+                              "type": "object"
+                            },
+                            "kind": {
+                              "const": "file"
+                            },
+                            "path": {
+                              "minLength": 1,
+                              "type": "string"
                             }
                           },
                           "required": [
                             "path",
                             "kind",
                             "format"
-                          ]
+                          ],
+                          "type": "object"
                         },
                         {
-                          "type": "object",
                           "additionalProperties": false,
                           "properties": {
-                            "path": {
-                              "type": "string",
-                              "minLength": 1
-                            },
-                            "kind": {
-                              "const": "table"
-                            },
                             "format": {
-                              "type": "object",
                               "additionalProperties": false,
                               "properties": {
-                                "encoding": {
-                                  "enum": [
-                                    "csv",
-                                    "json-rows"
-                                  ]
-                                },
                                 "columns": {
-                                  "type": "array",
                                   "items": {
-                                    "type": "object",
                                     "additionalProperties": false,
                                     "properties": {
                                       "name": {
-                                        "type": "string",
-                                        "minLength": 1
+                                        "minLength": 1,
+                                        "type": "string"
+                                      },
+                                      "nullValues": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "maxItems": 16,
+                                        "type": "array"
                                       },
                                       "type": {
                                         "enum": [
@@ -206,43 +184,44 @@
                                           "number",
                                           "boolean"
                                         ]
-                                      },
-                                      "nullValues": {
-                                        "type": "array",
-                                        "items": {
-                                          "type": "string"
-                                        },
-                                        "maxItems": 16
                                       }
                                     },
                                     "required": [
                                       "name",
                                       "type",
                                       "nullValues"
-                                    ]
+                                    ],
+                                    "type": "object"
                                   },
+                                  "maxItems": 256,
                                   "minItems": 1,
-                                  "maxItems": 256
+                                  "type": "array"
+                                },
+                                "encoding": {
+                                  "enum": [
+                                    "csv",
+                                    "json-rows"
+                                  ]
                                 },
                                 "key": {
                                   "anyOf": [
                                     {
-                                      "type": "object",
                                       "additionalProperties": false,
                                       "properties": {
                                         "column": {
-                                          "type": "string",
-                                          "minLength": 1
+                                          "minLength": 1,
+                                          "type": "string"
                                         },
                                         "namespace": {
-                                          "type": "string",
-                                          "minLength": 1
+                                          "minLength": 1,
+                                          "type": "string"
                                         }
                                       },
                                       "required": [
                                         "column",
                                         "namespace"
-                                      ]
+                                      ],
+                                      "type": "object"
                                     },
                                     {
                                       "type": "null"
@@ -254,30 +233,34 @@
                                 "encoding",
                                 "columns",
                                 "key"
-                              ]
+                              ],
+                              "type": "object"
+                            },
+                            "kind": {
+                              "const": "table"
+                            },
+                            "path": {
+                              "minLength": 1,
+                              "type": "string"
                             }
                           },
                           "required": [
                             "path",
                             "kind",
                             "format"
-                          ]
+                          ],
+                          "type": "object"
                         },
                         {
-                          "type": "object",
                           "additionalProperties": false,
                           "properties": {
-                            "path": {
-                              "type": "string",
-                              "minLength": 1
-                            },
-                            "kind": {
-                              "const": "media"
-                            },
                             "format": {
-                              "type": "object",
                               "additionalProperties": false,
                               "properties": {
+                                "height": {
+                                  "exclusiveMinimum": 0,
+                                  "type": "number"
+                                },
                                 "mimeType": {
                                   "enum": [
                                     "image/png",
@@ -287,87 +270,92 @@
                                   ]
                                 },
                                 "pages": {
-                                  "type": "integer",
-                                  "minimum": 1
+                                  "minimum": 1,
+                                  "type": "integer"
                                 },
                                 "width": {
-                                  "type": "number",
-                                  "exclusiveMinimum": 0
-                                },
-                                "height": {
-                                  "type": "number",
-                                  "exclusiveMinimum": 0
+                                  "exclusiveMinimum": 0,
+                                  "type": "number"
                                 }
                               },
                               "required": [
                                 "mimeType"
-                              ]
+                              ],
+                              "type": "object"
+                            },
+                            "kind": {
+                              "const": "media"
+                            },
+                            "path": {
+                              "minLength": 1,
+                              "type": "string"
                             }
                           },
                           "required": [
                             "path",
                             "kind",
                             "format"
-                          ]
+                          ],
+                          "type": "object"
                         },
                         {
-                          "type": "object",
                           "additionalProperties": false,
                           "properties": {
-                            "path": {
-                              "type": "string",
-                              "minLength": 1
-                            },
-                            "kind": {
-                              "const": "object"
-                            },
                             "format": {
-                              "type": "object",
                               "additionalProperties": false,
                               "properties": {
+                                "classes": {
+                                  "items": {
+                                    "minLength": 1,
+                                    "type": "string"
+                                  },
+                                  "maxItems": 32,
+                                  "type": "array"
+                                },
                                 "encoding": {
                                   "const": "json"
                                 },
                                 "observation": {
                                   "const": "exported-snapshot"
-                                },
-                                "classes": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string",
-                                    "minLength": 1
-                                  },
-                                  "maxItems": 32
                                 }
                               },
                               "required": [
                                 "encoding",
                                 "observation",
                                 "classes"
-                              ]
+                              ],
+                              "type": "object"
+                            },
+                            "kind": {
+                              "const": "object"
+                            },
+                            "path": {
+                              "minLength": 1,
+                              "type": "string"
                             }
                           },
                           "required": [
                             "path",
                             "kind",
                             "format"
-                          ]
+                          ],
+                          "type": "object"
                         }
                       ]
                     },
                     "expectedDigest": {
-                      "type": "string",
-                      "pattern": "^[a-f0-9]{64}$"
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string"
+                    },
+                    "policyRef": {
+                      "pattern": "^[a-f0-9]{64}$",
+                      "type": "string"
                     },
                     "role": {
                       "enum": [
                         "candidate",
                         "result"
                       ]
-                    },
-                    "policyRef": {
-                      "type": "string",
-                      "pattern": "^[a-f0-9]{64}$"
                     }
                   },
                   "required": [
@@ -375,7 +363,12 @@
                     "expectedDigest",
                     "role",
                     "policyRef"
-                  ]
+                  ],
+                  "type": "object"
+                },
+                "sourceSeq": {
+                  "minimum": 0,
+                  "type": "integer"
                 }
               },
               "required": [
@@ -384,12 +377,18 @@
                 "nativeToolUseId",
                 "at",
                 "output"
-              ]
+              ],
+              "type": "object"
             }
           ]
         },
         "maxItems": 64,
-        "minItems": 1
+        "minItems": 1,
+        "type": "array"
+      },
+      "taskId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
       }
     },
     "required": [
@@ -399,49 +398,50 @@
       "adapterId",
       "adapterEpoch",
       "events"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "accepted": {
-        "type": "array",
         "items": {
-          "type": "object",
           "additionalProperties": false,
           "properties": {
-            "sourceSeq": {
-              "type": "integer",
-              "minimum": 0
-            },
             "cursor": {
-              "type": "integer",
-              "minimum": 0
+              "minimum": 0,
+              "type": "integer"
             },
             "eventId": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "sourceSeq": {
+              "minimum": 0,
+              "type": "integer"
             }
           },
           "required": [
             "sourceSeq",
             "cursor",
             "eventId"
-          ]
+          ],
+          "type": "object"
         },
         "maxItems": 64,
-        "minItems": 1
+        "minItems": 1,
+        "type": "array"
       },
       "serverObservedAt": {
-        "type": "string",
-        "format": "date-time"
+        "format": "date-time",
+        "type": "string"
       }
     },
     "required": [
       "accepted",
       "serverObservedAt"
-    ]
+    ],
+    "type": "object"
   },
   "description": "Registered native adapter only: retain original CLI tool and artifact-ready observations. This does not execute, validate, or present artifacts."
 }

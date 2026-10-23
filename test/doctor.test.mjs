@@ -4,7 +4,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { RhoService } from '../dist/server.js';
-import { RhoClient } from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 
 // "Nothing happened" is not a diagnosis. doctor answers whether this project can do
 // work at all, and names the next action for whatever is wrong.

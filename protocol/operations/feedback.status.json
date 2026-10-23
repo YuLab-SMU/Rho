@@ -1,34 +1,24 @@
 {
   "method": "feedback.status",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
         "type": "string",
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
-      "taskId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-      },
-      "submissionId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-      },
       "query": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "after": {
-            "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           },
           "cursor": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
               },
               {
                 "type": "null"
@@ -36,14 +26,14 @@
             ]
           },
           "limit": {
-            "type": "integer",
+            "maximum": 100,
             "minimum": 1,
-            "maximum": 100
+            "type": "integer"
           },
           "maxBytes": {
-            "type": "integer",
+            "maximum": 65536,
             "minimum": 1024,
-            "maximum": 65536
+            "type": "integer"
           }
         },
         "required": [
@@ -51,7 +41,16 @@
           "cursor",
           "limit",
           "maxBytes"
-        ]
+        ],
+        "type": "object"
+      },
+      "submissionId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
+      },
+      "taskId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
       }
     },
     "required": [
@@ -59,69 +58,412 @@
       "taskId",
       "submissionId",
       "query"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
-      "snapshot": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "deliveryStoreVersion": {
-            "type": "integer",
-            "minimum": 0
+      "complete": {
+        "type": "boolean"
+      },
+      "fetches": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "at": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "bindingId": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "contextId": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "deliveryId": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "fetchId": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "nativeToolUseId": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "observation": {
+              "enum": [
+                "owner-served",
+                "client-tool-returned"
+              ]
+            },
+            "principal": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "receiptId": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            }
           },
-          "annotationVersion": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "minimum": 1
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
+          "required": [
+            "receiptId",
+            "fetchId",
+            "deliveryId",
+            "contextId",
+            "bindingId",
+            "principal",
+            "observation",
+            "nativeToolUseId",
+            "at"
+          ],
+          "type": "object"
         },
-        "required": [
-          "deliveryStoreVersion",
-          "annotationVersion"
-        ]
+        "maxItems": 128,
+        "minItems": 0,
+        "type": "array"
       },
       "next": {
         "anyOf": [
           {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
           },
           {
             "type": "null"
           }
         ]
       },
-      "complete": {
-        "type": "boolean"
-      },
-      "submission": {
-        "type": "object",
+      "queue": {
         "additionalProperties": false,
         "properties": {
-          "submissionId": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          "attempts": {
+            "minimum": 0,
+            "type": "integer"
           },
-          "requestDigest": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
+          "enqueueAck": {
+            "enum": [
+              "not-observed",
+              "observed"
+            ]
+          },
+          "inboxReceipt": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "acceptedAt": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "deliveryId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "emission": {
+                    "enum": [
+                      "not-attempted",
+                      "attempt-recorded",
+                      "emitted",
+                      "unknown"
+                    ]
+                  },
+                  "inboxReceiptId": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "requestDigest": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "deliveryId",
+                  "requestDigest",
+                  "acceptedAt",
+                  "inboxReceiptId",
+                  "emission"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transport": {
+            "enum": [
+              "not-attempted",
+              "queued",
+              "attempt-recorded",
+              "accepted",
+              "unknown",
+              "blocked"
+            ]
+          }
+        },
+        "required": [
+          "attempts",
+          "transport",
+          "enqueueAck",
+          "inboxReceipt"
+        ],
+        "type": "object"
+      },
+      "responses": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "annotationId": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "author": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "fromAssignedBusiness": {
+              "type": "boolean"
+            },
+            "messageId": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "replyTo": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "annotationId",
+            "messageId",
+            "replyTo",
+            "author",
+            "fromAssignedBusiness"
+          ],
+          "type": "object"
+        },
+        "maxItems": 128,
+        "minItems": 0,
+        "type": "array"
+      },
+      "retention": {
+        "additionalProperties": false,
+        "properties": {
+          "originalTargetPreserved": {
+            "const": true
+          },
+          "receipts": {
+            "enum": [
+              "retained",
+              "expired",
+              "unavailable"
+            ]
+          }
+        },
+        "required": [
+          "receipts",
+          "originalTargetPreserved"
+        ],
+        "type": "object"
+      },
+      "snapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "annotationVersion": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deliveryStoreVersion": {
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "deliveryStoreVersion",
+          "annotationVersion"
+        ],
+        "type": "object"
+      },
+      "submission": {
+        "additionalProperties": false,
+        "properties": {
+          "annotation": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "annotationId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "messageId": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "submittedVersion": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "annotationId",
+                  "submittedVersion",
+                  "messageId"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "author": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
+          },
+          "contextId": {
+            "anyOf": [
+              {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "delivery": {
+            "anyOf": [
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "adapterRegistrationId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "contextId": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "deliveryId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "externalSessionId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "message": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "annotationId": {
+                        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                        "type": "string"
+                      },
+                      "messageId": {
+                        "pattern": "^[a-f0-9]{64}$",
+                        "type": "string"
+                      },
+                      "submittedVersion": {
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "annotationId",
+                      "submittedVersion",
+                      "messageId"
+                    ],
+                    "type": "object"
+                  },
+                  "mode": {
+                    "enum": [
+                      "post-tool-boundary",
+                      "queued-turn"
+                    ]
+                  },
+                  "projectId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "requestDigest": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "targetBindingId": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "taskId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "taskVersion": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "projectId",
+                  "taskId",
+                  "deliveryId",
+                  "requestDigest",
+                  "targetBindingId",
+                  "externalSessionId",
+                  "adapterRegistrationId",
+                  "contextId",
+                  "message",
+                  "taskVersion",
+                  "mode"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "queue-full",
+                  "source-unavailable",
+                  "route-conflict",
+                  "owner-unavailable",
+                  "needs-routing",
+                  "context-limit"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestDigest": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
           },
           "stages": {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
               "annotation": {
@@ -151,156 +493,12 @@
               "annotation",
               "context",
               "queue"
-            ]
+            ],
+            "type": "object"
           },
-          "annotation": {
-            "anyOf": [
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "annotationId": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                  },
-                  "submittedVersion": {
-                    "type": "integer",
-                    "minimum": 1
-                  },
-                  "messageId": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  }
-                },
-                "required": [
-                  "annotationId",
-                  "submittedVersion",
-                  "messageId"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "contextId": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "delivery": {
-            "anyOf": [
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "projectId": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                  },
-                  "taskId": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                  },
-                  "deliveryId": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                  },
-                  "requestDigest": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  },
-                  "targetBindingId": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  },
-                  "externalSessionId": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                  },
-                  "adapterRegistrationId": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                  },
-                  "contextId": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  },
-                  "message": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                      "annotationId": {
-                        "type": "string",
-                        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                      },
-                      "submittedVersion": {
-                        "type": "integer",
-                        "minimum": 1
-                      },
-                      "messageId": {
-                        "type": "string",
-                        "pattern": "^[a-f0-9]{64}$"
-                      }
-                    },
-                    "required": [
-                      "annotationId",
-                      "submittedVersion",
-                      "messageId"
-                    ]
-                  },
-                  "taskVersion": {
-                    "type": "integer",
-                    "minimum": 1
-                  },
-                  "mode": {
-                    "enum": [
-                      "post-tool-boundary",
-                      "queued-turn"
-                    ]
-                  }
-                },
-                "required": [
-                  "projectId",
-                  "taskId",
-                  "deliveryId",
-                  "requestDigest",
-                  "targetBindingId",
-                  "externalSessionId",
-                  "adapterRegistrationId",
-                  "contextId",
-                  "message",
-                  "taskVersion",
-                  "mode"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "reason": {
-            "anyOf": [
-              {
-                "enum": [
-                  "queue-full",
-                  "source-unavailable",
-                  "route-conflict",
-                  "owner-unavailable",
-                  "needs-routing",
-                  "context-limit"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "submissionId": {
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
           }
         },
         "required": [
@@ -312,207 +510,8 @@
           "contextId",
           "delivery",
           "reason"
-        ]
-      },
-      "queue": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "attempts": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "transport": {
-            "enum": [
-              "not-attempted",
-              "queued",
-              "attempt-recorded",
-              "accepted",
-              "unknown",
-              "blocked"
-            ]
-          },
-          "enqueueAck": {
-            "enum": [
-              "not-observed",
-              "observed"
-            ]
-          },
-          "inboxReceipt": {
-            "anyOf": [
-              {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "deliveryId": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                  },
-                  "requestDigest": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  },
-                  "acceptedAt": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "inboxReceiptId": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  },
-                  "emission": {
-                    "enum": [
-                      "not-attempted",
-                      "attempt-recorded",
-                      "emitted",
-                      "unknown"
-                    ]
-                  }
-                },
-                "required": [
-                  "deliveryId",
-                  "requestDigest",
-                  "acceptedAt",
-                  "inboxReceiptId",
-                  "emission"
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "attempts",
-          "transport",
-          "enqueueAck",
-          "inboxReceipt"
-        ]
-      },
-      "fetches": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "receiptId": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
-            },
-            "fetchId": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-            },
-            "deliveryId": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-            },
-            "contextId": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
-            },
-            "bindingId": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
-            },
-            "principal": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-            },
-            "observation": {
-              "enum": [
-                "owner-served",
-                "client-tool-returned"
-              ]
-            },
-            "nativeToolUseId": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "at": {
-              "type": "string",
-              "format": "date-time"
-            }
-          },
-          "required": [
-            "receiptId",
-            "fetchId",
-            "deliveryId",
-            "contextId",
-            "bindingId",
-            "principal",
-            "observation",
-            "nativeToolUseId",
-            "at"
-          ]
-        },
-        "maxItems": 128,
-        "minItems": 0
-      },
-      "responses": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "annotationId": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-            },
-            "messageId": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
-            },
-            "replyTo": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
-            },
-            "author": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-            },
-            "fromAssignedBusiness": {
-              "type": "boolean"
-            }
-          },
-          "required": [
-            "annotationId",
-            "messageId",
-            "replyTo",
-            "author",
-            "fromAssignedBusiness"
-          ]
-        },
-        "maxItems": 128,
-        "minItems": 0
-      },
-      "retention": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "receipts": {
-            "enum": [
-              "retained",
-              "expired",
-              "unavailable"
-            ]
-          },
-          "originalTargetPreserved": {
-            "const": true
-          }
-        },
-        "required": [
-          "receipts",
-          "originalTargetPreserved"
-        ]
+        ],
+        "type": "object"
       }
     },
     "required": [
@@ -524,7 +523,8 @@
       "fetches",
       "responses",
       "retention"
-    ]
+    ],
+    "type": "object"
   },
   "description": "Observe original delivery, exact-target fetches and explicitly linked replies. No send, session start or recovery. Keep original identities and unknown outcomes; continuation cursors pin their snapshot."
 }

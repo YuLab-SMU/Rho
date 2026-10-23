@@ -20,44 +20,265 @@
   },
   "outputSchema": {
     "type": "object",
+    "additionalProperties": true,
     "properties": {
       "sourceProjectId": {
         "type": "string",
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
+      "execution": {
+        "const": "not-replayed"
+      },
+      "retainedArchive": {
+        "type": "string",
+        "minLength": 1
+      },
       "documents": {
         "type": "array",
+        "maxItems": 64,
         "items": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "documentId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "state": {
+              "enum": [
+                "available",
+                "conflict",
+                "unavailable",
+                "missing"
+              ]
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "documentId",
+            "state"
+          ]
         }
       },
       "resources": {
         "type": "array",
+        "maxItems": 1024,
         "items": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "resource": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "version": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                }
+              },
+              "required": [
+                "id",
+                "version"
+              ]
+            },
+            "state": {
+              "enum": [
+                "available",
+                "conflict",
+                "unavailable",
+                "missing"
+              ]
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "state"
+          ]
         }
       },
       "compositions": {
         "type": "array",
+        "maxItems": 64,
         "items": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "compositionId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "state": {
+              "enum": [
+                "available",
+                "conflict",
+                "unavailable",
+                "missing"
+              ]
+            },
+            "views": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "compositionId",
+            "state"
+          ]
         }
       },
-      "execution": {
-        "const": "not-replayed"
-      },
       "selection": {
-        "type": "object"
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "available",
+              "conflict",
+              "unavailable",
+              "missing"
+            ]
+          },
+          "reference": {
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "capabilities": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "available",
+              "conflict",
+              "unavailable",
+              "missing"
+            ]
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "required": [
+          "state",
+          "missing"
+        ]
+      },
+      "interactions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "key": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "state": {
+              "enum": [
+                "available",
+                "conflict",
+                "unavailable",
+                "missing"
+              ]
+            }
+          },
+          "required": [
+            "key",
+            "state"
+          ]
+        }
+      },
+      "annotations": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "annotationId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "state": {
+              "enum": [
+                "available",
+                "conflict",
+                "unavailable",
+                "missing"
+              ]
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "annotationId",
+            "state"
+          ]
+        }
+      },
+      "contexts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "contextId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "state": {
+              "enum": [
+                "available",
+                "conflict",
+                "unavailable",
+                "missing"
+              ]
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "contextId",
+            "state"
+          ]
+        }
       }
     },
     "required": [
       "sourceProjectId",
+      "execution",
       "documents",
       "resources",
-      "compositions",
-      "execution"
-    ],
-    "additionalProperties": true
+      "compositions"
+    ]
   },
   "description": null
 }

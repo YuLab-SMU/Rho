@@ -1,7 +1,6 @@
 {
   "method": "media.describe",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
@@ -9,28 +8,29 @@
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
       "resource": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "type": "string"
           },
           "version": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
           }
         },
         "required": [
           "id",
           "version"
-        ]
+        ],
+        "type": "object"
       }
     },
     "required": [
       "projectId",
       "resource"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
     "type": "object",
@@ -130,8 +130,22 @@
         ]
       },
       "mimeType": {
-        "type": "string",
-        "minLength": 1
+        "enum": [
+          "image/png",
+          "image/jpeg",
+          "image/svg+xml",
+          "application/pdf"
+        ]
+      },
+      "pages": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "width": {
+        "type": "number"
+      },
+      "height": {
+        "type": "number"
       },
       "rendering": {
         "const": "unobserved"

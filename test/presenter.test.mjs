@@ -7,7 +7,7 @@ import os from 'node:os';
 import {Ajv} from 'ajv';
 import {digest,canonical} from '@rho-workspace/plugin-contracts';
 import {RhoService} from '../dist/server.js';
-import {RhoClient} from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 import {TaskRouting} from '../dist/task-routing.js';
 import {protocol} from '../dist/protocol.js';
 import {presentationFixture,query,caps} from './support/presentation.mjs';

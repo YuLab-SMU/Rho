@@ -1,7 +1,6 @@
 {
   "method": "binding.close",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
@@ -9,46 +8,47 @@
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
       "externalSessionId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
       }
     },
     "required": [
       "projectId",
       "externalSessionId"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
-    "type": "object",
+    "additionalProperties": true,
     "properties": {
-      "id": {
-        "type": "string",
-        "pattern": "^[a-f0-9]{64}$"
-      },
-      "projectId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-      },
-      "principal": {
-        "type": "string",
-        "minLength": 1
-      },
-      "externalSessionId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-      },
       "adapter": {
         "const": "claude-code-mcp"
+      },
+      "at": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "externalSessionId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
+      },
+      "id": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "principal": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "projectId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
       },
       "status": {
         "enum": [
           "connected",
           "disconnected"
         ]
-      },
-      "at": {
-        "type": "string",
-        "minLength": 1
       }
     },
     "required": [
@@ -60,7 +60,7 @@
       "status",
       "at"
     ],
-    "additionalProperties": true
+    "type": "object"
   },
   "description": null
 }

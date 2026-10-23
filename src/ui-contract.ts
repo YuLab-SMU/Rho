@@ -58,7 +58,9 @@ export interface UiViewProps {
   // Owner reports real cells, shell attaches exact layout/build/client identity.
   renderObservation?: (evidence: { evidence: 'dom-visible' | 'hidden' | 'unavailable' | 'unmounted'; coverage: any; time: { browserObservedAt: string; performanceNowMs: number; clockDomain: string } }) => Promise<void>;
   requestFeedback?: () => void;
-  feedbackConfiguration?: NonNullable<WorkspaceSnapshot['feedback']>;
+  // A rendered feedback view always has its draft document: the shell only mounts the
+  // entry when the routed configuration names one, and the entry re-checks the binding.
+  feedbackConfiguration?: Omit<NonNullable<WorkspaceSnapshot['feedback']>, 'draftDocumentId'> & { draftDocumentId: string };
   // Present when the task map is available; the same frame every plugin uses.
   frame?: FrameContext & { form: string; params: Record<string, unknown>; item?: TaskItem };
 }

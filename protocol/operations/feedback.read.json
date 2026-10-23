@@ -1,42 +1,36 @@
 {
   "method": "feedback.read",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
         "type": "string",
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
-      "taskId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      "contextId": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
       },
       "deliveryId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-      },
-      "contextId": {
-        "type": "string",
-        "pattern": "^[a-f0-9]{64}$"
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
       },
       "fetchId": {
-        "type": "string",
-        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
       },
       "query": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "after": {
-            "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "type": "integer"
           },
           "cursor": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
               },
               {
                 "type": "null"
@@ -44,14 +38,14 @@
             ]
           },
           "limit": {
-            "type": "integer",
+            "maximum": 100,
             "minimum": 1,
-            "maximum": 100
+            "type": "integer"
           },
           "maxBytes": {
-            "type": "integer",
+            "maximum": 65536,
             "minimum": 1024,
-            "maximum": 65536
+            "type": "integer"
           }
         },
         "required": [
@@ -59,7 +53,12 @@
           "cursor",
           "limit",
           "maxBytes"
-        ]
+        ],
+        "type": "object"
+      },
+      "taskId": {
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+        "type": "string"
       }
     },
     "required": [
@@ -69,39 +68,314 @@
       "contextId",
       "fetchId",
       "query"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
+      "complete": {
+        "type": "boolean"
+      },
+      "contextVersion": {
+        "const": 1
+      },
+      "feedback": {
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "anchor": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "documentId": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "from": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "kind": {
+                        "const": "document"
+                      },
+                      "to": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "version": {
+                        "minimum": 1,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "documentId",
+                      "version",
+                      "from",
+                      "to"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "entities": {
+                        "items": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "maxItems": 1024,
+                        "minItems": 1,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "kind": {
+                        "const": "table"
+                      },
+                      "resource": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "version": {
+                            "pattern": "^[a-f0-9]{64}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "resource",
+                      "entities"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              },
+              "annotation": {
+                "additionalProperties": false,
+                "properties": {
+                  "annotationId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "messageId": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  "submittedVersion": {
+                    "minimum": 1,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "annotationId",
+                  "submittedVersion",
+                  "messageId"
+                ],
+                "type": "object"
+              },
+              "author": {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              },
+              "messageDigest": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "messageText": {
+                "maxLength": 1048576,
+                "type": "string"
+              },
+              "source": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "entityKey": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "table"
+                      },
+                      "namespace": {
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "resource": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "version": {
+                            "pattern": "^[a-f0-9]{64}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version"
+                        ],
+                        "type": "object"
+                      },
+                      "rows": {
+                        "items": {
+                          "additionalProperties": {
+                            "type": [
+                              "string",
+                              "number",
+                              "boolean",
+                              "null"
+                            ]
+                          },
+                          "type": "object"
+                        },
+                        "maxItems": 1024,
+                        "minItems": 1,
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "resource",
+                      "namespace",
+                      "entityKey",
+                      "rows"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "from": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "kind": {
+                        "const": "document"
+                      },
+                      "sha256": {
+                        "pattern": "^[a-f0-9]{64}$",
+                        "type": "string"
+                      },
+                      "source": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "dirty": {
+                            "type": "boolean"
+                          },
+                          "documentId": {
+                            "pattern": "^[a-f0-9]{64}$",
+                            "type": "string"
+                          },
+                          "kind": {
+                            "const": "buffer"
+                          },
+                          "path": {
+                            "maxLength": 4096,
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "version": {
+                            "minimum": 1,
+                            "type": "integer"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "documentId",
+                          "version",
+                          "path",
+                          "dirty"
+                        ],
+                        "type": "object"
+                      },
+                      "text": {
+                        "maxLength": 1048576,
+                        "type": "string"
+                      },
+                      "to": {
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "source",
+                      "sha256",
+                      "from",
+                      "to",
+                      "text"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "annotation",
+              "anchor",
+              "source",
+              "messageText",
+              "messageDigest",
+              "author"
+            ],
+            "type": "object"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
       "fetchReceipt": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
-          "receiptId": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
-          },
-          "fetchId": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-          },
-          "deliveryId": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-          },
-          "contextId": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
+          "at": {
+            "format": "date-time",
+            "type": "string"
           },
           "bindingId": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
           },
-          "principal": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          "contextId": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "deliveryId": {
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
+          },
+          "fetchId": {
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
+          },
+          "nativeToolUseId": {
+            "anyOf": [
+              {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "observation": {
             "enum": [
@@ -109,20 +383,13 @@
               "client-tool-returned"
             ]
           },
-          "nativeToolUseId": {
-            "anyOf": [
-              {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "principal": {
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
           },
-          "at": {
-            "type": "string",
-            "format": "date-time"
+          "receiptId": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
           }
         },
         "required": [
@@ -135,268 +402,14 @@
           "observation",
           "nativeToolUseId",
           "at"
-        ]
+        ],
+        "type": "object"
       },
-      "contextVersion": {
-        "const": 1
-      },
-      "feedback": {
+      "next": {
         "anyOf": [
           {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "annotation": {
-                "type": "object",
-                "additionalProperties": false,
-                "properties": {
-                  "annotationId": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-                  },
-                  "submittedVersion": {
-                    "type": "integer",
-                    "minimum": 1
-                  },
-                  "messageId": {
-                    "type": "string",
-                    "pattern": "^[a-f0-9]{64}$"
-                  }
-                },
-                "required": [
-                  "annotationId",
-                  "submittedVersion",
-                  "messageId"
-                ]
-              },
-              "anchor": {
-                "oneOf": [
-                  {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                      "kind": {
-                        "const": "document"
-                      },
-                      "documentId": {
-                        "type": "string",
-                        "minLength": 1
-                      },
-                      "version": {
-                        "type": "integer",
-                        "minimum": 1
-                      },
-                      "from": {
-                        "type": "integer",
-                        "minimum": 0
-                      },
-                      "to": {
-                        "type": "integer",
-                        "minimum": 0
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "documentId",
-                      "version",
-                      "from",
-                      "to"
-                    ]
-                  },
-                  {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                      "kind": {
-                        "const": "table"
-                      },
-                      "resource": {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "properties": {
-                          "id": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "version": {
-                            "type": "string",
-                            "pattern": "^[a-f0-9]{64}$"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "version"
-                        ]
-                      },
-                      "entities": {
-                        "type": "array",
-                        "minItems": 1,
-                        "maxItems": 1024,
-                        "uniqueItems": true,
-                        "items": {
-                          "type": "string",
-                          "minLength": 1
-                        }
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "resource",
-                      "entities"
-                    ]
-                  }
-                ]
-              },
-              "source": {
-                "oneOf": [
-                  {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                      "kind": {
-                        "const": "table"
-                      },
-                      "resource": {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "properties": {
-                          "id": {
-                            "type": "string",
-                            "minLength": 1
-                          },
-                          "version": {
-                            "type": "string",
-                            "pattern": "^[a-f0-9]{64}$"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "version"
-                        ]
-                      },
-                      "namespace": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 128
-                      },
-                      "entityKey": {
-                        "type": "string",
-                        "minLength": 1,
-                        "maxLength": 128
-                      },
-                      "rows": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "additionalProperties": {
-                            "type": [
-                              "string",
-                              "number",
-                              "boolean",
-                              "null"
-                            ]
-                          }
-                        },
-                        "maxItems": 1024,
-                        "minItems": 1
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "resource",
-                      "namespace",
-                      "entityKey",
-                      "rows"
-                    ]
-                  },
-                  {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                      "kind": {
-                        "const": "document"
-                      },
-                      "source": {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "properties": {
-                          "kind": {
-                            "const": "buffer"
-                          },
-                          "documentId": {
-                            "type": "string",
-                            "pattern": "^[a-f0-9]{64}$"
-                          },
-                          "version": {
-                            "type": "integer",
-                            "minimum": 1
-                          },
-                          "path": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 4096
-                          },
-                          "dirty": {
-                            "type": "boolean"
-                          }
-                        },
-                        "required": [
-                          "kind",
-                          "documentId",
-                          "version",
-                          "path",
-                          "dirty"
-                        ]
-                      },
-                      "sha256": {
-                        "type": "string",
-                        "pattern": "^[a-f0-9]{64}$"
-                      },
-                      "from": {
-                        "type": "integer",
-                        "minimum": 0
-                      },
-                      "to": {
-                        "type": "integer",
-                        "minimum": 0
-                      },
-                      "text": {
-                        "type": "string",
-                        "maxLength": 1048576
-                      }
-                    },
-                    "required": [
-                      "kind",
-                      "source",
-                      "sha256",
-                      "from",
-                      "to",
-                      "text"
-                    ]
-                  }
-                ]
-              },
-              "messageText": {
-                "type": "string",
-                "maxLength": 1048576
-              },
-              "messageDigest": {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
-              },
-              "author": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-              }
-            },
-            "required": [
-              "annotation",
-              "anchor",
-              "source",
-              "messageText",
-              "messageDigest",
-              "author"
-            ]
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+            "type": "string"
           },
           {
             "type": "null"
@@ -406,27 +419,13 @@
       "relatedDocumentId": {
         "anyOf": [
           {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
           },
           {
             "type": "null"
           }
         ]
-      },
-      "next": {
-        "anyOf": [
-          {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
-      "complete": {
-        "type": "boolean"
       }
     },
     "required": [
@@ -436,7 +435,8 @@
       "relatedDocumentId",
       "next",
       "complete"
-    ]
+    ],
+    "type": "object"
   },
   "description": "Original business binding only: fetch one complete frozen feedback object using its original delivery/context and a stable fetchId. relatedDocumentId is a pointer: read its CURRENT version before conditional edit/save and preserve human changes. This owner-served receipt does not prove client return or understanding."
 }

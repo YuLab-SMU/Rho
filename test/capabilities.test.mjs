@@ -4,7 +4,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { RhoService } from '../dist/server.js';
-import { RhoClient } from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 
 test('project configuration, operation authorization and shipped Skills are independent facts', async () => {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-capabilities-'));
@@ -48,6 +48,17 @@ test('project configuration, operation authorization and shipped Skills are inde
   } finally { await s.close(); }
 });
 
+// Responses where Rho adds facts to an owner's declared output, and what it adds.
+// Every other owner response must be the owner's schema unchanged.
+// Property order is not part of a contract, so divergence is compared canonically.
+const canonical = value => Array.isArray(value) ? '[' + value.map(canonical).sort().join(',') + ']'
+  : value && typeof value === 'object' ? '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}' : JSON.stringify(value);
+const applicationExtensions = new Set([
+  'resource.list', 'resource.read', 'artifact.check', 'data.page', 'media.describe', // registered kinds, declared namespace/columns, optional media metadata
+  'action.submit', 'requirements.prepare', // the execution bridge's retained-run report
+  'context.create', 'context.read' // the application's context package shape
+]);
+
 test('all loaded operation declarations match v2 business schemas and dependency-disabled projects reject entry calls', async () => {
   const { operations, responses } = await import('../dist/protocol.js');
   const { Plugins } = await import('../dist/plugins.js');
@@ -56,7 +67,18 @@ test('all loaded operation declarations match v2 business schemas and dependency
     const wire = structuredClone(operations[declaration.method]);
     delete wire.properties.projectId; wire.required = wire.required.filter(p => p !== 'projectId');
     assert.deepEqual(declaration.inputSchema, wire, declaration.method);
-    assert.deepEqual(declaration.outputSchema, responses[declaration.method], declaration.method);
+    // A response keeps every fact its owner declares. The application may add its
+    // own facts (registered resource kinds, declared namespace/column metadata), and
+    // those additions are the only permitted difference: a dropped or renamed owner
+    // field would be a contract the owner no longer agrees with.
+    const owner = declaration.outputSchema, served = responses[declaration.method];
+    const ownerProperties = Object.keys(owner.properties ?? {});
+    const servedProperties = Object.keys(served.properties ?? {});
+    assert.deepEqual(ownerProperties.filter(name => !servedProperties.includes(name)), [], declaration.method + ' drops an owner field');
+    for (const name of owner.required ?? []) assert.ok((served.required ?? []).includes(name), declaration.method + ' stops requiring ' + name);
+    if (canonical(owner) !== canonical(served)) {
+      assert.ok(applicationExtensions.has(declaration.method), declaration.method + ' changes its owner response without a declared application extension');
+    }
   }
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-dependency-'));
   const s = await new RhoService({ root, stateDir: path.join(root, 'state'), coreBinary: '/missing', rscript: '/missing' }).start();

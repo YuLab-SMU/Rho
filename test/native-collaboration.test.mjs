@@ -6,7 +6,7 @@ import { once } from 'node:events';
 import { tmpdir } from 'node:os';
 import { setTimeout } from 'node:timers/promises';
 import { RhoService } from '../dist/server.js';
-import { RhoClient } from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { runtime } from '../dist/runtime.js';
 import { digest } from '@rho-workspace/plugin-contracts';
 

@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { Ajv } from 'ajv';
 import { canonical, digest } from '@rho-workspace/plugin-contracts';
 import { RhoService } from '../dist/server.js';
-import { RhoClient } from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { responseEnvelope } from '../dist/protocol.js';
 import { runtime } from '../dist/runtime.js';
 test('retained requests written under an older descriptor stay observable without replay or Host startup', async () => {

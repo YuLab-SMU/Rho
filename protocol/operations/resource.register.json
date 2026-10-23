@@ -1,7 +1,6 @@
 {
   "method": "resource.register",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
@@ -11,66 +10,56 @@
       "declaration": {
         "oneOf": [
           {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
-              "path": {
-                "type": "string",
-                "minLength": 1
-              },
-              "kind": {
-                "const": "file"
-              },
               "format": {
-                "type": "object",
                 "additionalProperties": false,
                 "properties": {
                   "mimeType": {
-                    "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "type": "string"
                   }
                 },
                 "required": [
                   "mimeType"
-                ]
+                ],
+                "type": "object"
+              },
+              "kind": {
+                "const": "file"
+              },
+              "path": {
+                "minLength": 1,
+                "type": "string"
               }
             },
             "required": [
               "path",
               "kind",
               "format"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
-              "path": {
-                "type": "string",
-                "minLength": 1
-              },
-              "kind": {
-                "const": "table"
-              },
               "format": {
-                "type": "object",
                 "additionalProperties": false,
                 "properties": {
-                  "encoding": {
-                    "enum": [
-                      "csv",
-                      "json-rows"
-                    ]
-                  },
                   "columns": {
-                    "type": "array",
                     "items": {
-                      "type": "object",
                       "additionalProperties": false,
                       "properties": {
                         "name": {
-                          "type": "string",
-                          "minLength": 1
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "nullValues": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 16,
+                          "type": "array"
                         },
                         "type": {
                           "enum": [
@@ -78,43 +67,44 @@
                             "number",
                             "boolean"
                           ]
-                        },
-                        "nullValues": {
-                          "type": "array",
-                          "items": {
-                            "type": "string"
-                          },
-                          "maxItems": 16
                         }
                       },
                       "required": [
                         "name",
                         "type",
                         "nullValues"
-                      ]
+                      ],
+                      "type": "object"
                     },
+                    "maxItems": 256,
                     "minItems": 1,
-                    "maxItems": 256
+                    "type": "array"
+                  },
+                  "encoding": {
+                    "enum": [
+                      "csv",
+                      "json-rows"
+                    ]
                   },
                   "key": {
                     "anyOf": [
                       {
-                        "type": "object",
                         "additionalProperties": false,
                         "properties": {
                           "column": {
-                            "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "type": "string"
                           },
                           "namespace": {
-                            "type": "string",
-                            "minLength": 1
+                            "minLength": 1,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "column",
                           "namespace"
-                        ]
+                        ],
+                        "type": "object"
                       },
                       {
                         "type": "null"
@@ -126,30 +116,34 @@
                   "encoding",
                   "columns",
                   "key"
-                ]
+                ],
+                "type": "object"
+              },
+              "kind": {
+                "const": "table"
+              },
+              "path": {
+                "minLength": 1,
+                "type": "string"
               }
             },
             "required": [
               "path",
               "kind",
               "format"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
-              "path": {
-                "type": "string",
-                "minLength": 1
-              },
-              "kind": {
-                "const": "media"
-              },
               "format": {
-                "type": "object",
                 "additionalProperties": false,
                 "properties": {
+                  "height": {
+                    "exclusiveMinimum": 0,
+                    "type": "number"
+                  },
                   "mimeType": {
                     "enum": [
                       "image/png",
@@ -159,84 +153,90 @@
                     ]
                   },
                   "pages": {
-                    "type": "integer",
-                    "minimum": 1
+                    "minimum": 1,
+                    "type": "integer"
                   },
                   "width": {
-                    "type": "number",
-                    "exclusiveMinimum": 0
-                  },
-                  "height": {
-                    "type": "number",
-                    "exclusiveMinimum": 0
+                    "exclusiveMinimum": 0,
+                    "type": "number"
                   }
                 },
                 "required": [
                   "mimeType"
-                ]
+                ],
+                "type": "object"
+              },
+              "kind": {
+                "const": "media"
+              },
+              "path": {
+                "minLength": 1,
+                "type": "string"
               }
             },
             "required": [
               "path",
               "kind",
               "format"
-            ]
+            ],
+            "type": "object"
           },
           {
-            "type": "object",
             "additionalProperties": false,
             "properties": {
-              "path": {
-                "type": "string",
-                "minLength": 1
-              },
-              "kind": {
-                "const": "object"
-              },
               "format": {
-                "type": "object",
                 "additionalProperties": false,
                 "properties": {
+                  "classes": {
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "maxItems": 32,
+                    "type": "array"
+                  },
                   "encoding": {
                     "const": "json"
                   },
                   "observation": {
                     "const": "exported-snapshot"
-                  },
-                  "classes": {
-                    "type": "array",
-                    "items": {
-                      "type": "string",
-                      "minLength": 1
-                    },
-                    "maxItems": 32
                   }
                 },
                 "required": [
                   "encoding",
                   "observation",
                   "classes"
-                ]
+                ],
+                "type": "object"
+              },
+              "kind": {
+                "const": "object"
+              },
+              "path": {
+                "minLength": 1,
+                "type": "string"
               }
             },
             "required": [
               "path",
               "kind",
               "format"
-            ]
+            ],
+            "type": "object"
           }
         ]
       },
       "expectedDigest": {
-        "type": "string",
-        "pattern": "^[a-f0-9]{64}$"
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
       }
     },
     "required": [
       "projectId",
       "declaration",
       "expectedDigest"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
     "type": "object",

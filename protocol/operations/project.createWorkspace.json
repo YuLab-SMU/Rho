@@ -33,6 +33,7 @@
   },
   "outputSchema": {
     "type": "object",
+    "additionalProperties": true,
     "properties": {
       "id": {
         "type": "string",
@@ -44,15 +45,51 @@
       },
       "openedAt": {
         "type": "string",
+        "format": "date-time"
+      },
+      "name": {
+        "type": "string",
         "minLength": 1
+      },
+      "sources": {
+        "type": "array",
+        "maxItems": 32,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "root": {
+              "type": "string",
+              "minLength": 1
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "id",
+            "root",
+            "name"
+          ]
+        }
+      },
+      "workspace": {
+        "type": "boolean"
+      },
+      "nativeSelected": {
+        "type": "boolean"
       }
     },
     "required": [
       "id",
       "root",
       "openedAt"
-    ],
-    "additionalProperties": true
+    ]
   },
   "description": null
 }

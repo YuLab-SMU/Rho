@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { RhoService } from '../dist/server.js';
-import { RhoClient } from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { connectMcp, mcpEnvelope, resolveOperation } from '../scripts/mcp-consumer.mjs';
 
 async function fixture(t) {

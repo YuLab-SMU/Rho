@@ -1,57 +1,26 @@
+import type { RhoOutput } from './contract.generated.js';
+
 // The item frame: Rho's shared interaction layer for the whole-task view.
 // DOM-free and dependency-free so the service, the shell and any plugin entry
 // read the same words. Rho fixes no list of item kinds or states: the Agent
 // declares them as vocabulary terms. Rho only interprets an optional term role,
 // which decides where an item is summarised ("now", "waiting for you", ...).
 
-export interface Term {
-  label: string;
-  // Visual hint; unknown tones render neutral.
-  tone?: string;
-  // Interpreted by Rho when present: working, waiting, done, planned, unknown,
-  // stopped. Any other value is kept and treated as neutral.
-  role?: string;
-  icon?: string;
-  description?: string;
-}
-export interface Vocabulary { kinds: Record<string, Term>; states: Record<string, Term> }
-export interface ItemLine { label?: string; text: string; tone?: string; judgment?: boolean }
-export interface TaskItem {
-  id: string; kind: string; state: string; title: string;
-  group?: string; summary?: string; lines?: ItemLine[];
-  // Counts the Agent reports from real receipts; Rho draws no other progress.
-  progress?: { done: number; total?: number; unit?: string };
-  // A view in the task's layout that draws this item's body.
-  view?: string;
-  from?: string[];
-  author: string; at: string;
-}
-export interface PresentationRecord {
-  form: string; params: Record<string, unknown>;
-  author: string; human: boolean; at: string; changeId: string;
-  reason?: string; suggestedBy?: string;
-  previous: { form: string; params: Record<string, unknown>; author: string; human: boolean } | null;
-  pinned?: { by: string; at: string };
-}
-export interface Suggestion {
-  id: string; target: string; form: string; params: Record<string, unknown>;
-  author: string; at: string; reason?: string; cause: 'pinned' | 'budget'; merged: number;
-}
-export interface TaskMapState {
-  format: 'rho.task-map/1'; version: number;
-  question: string | null; compositionId: string | null;
-  vocabulary: Vocabulary; items: TaskItem[]; next: string[];
-  presentation: Record<string, PresentationRecord>;
-  focus: { item: string; author: string; human: boolean; at: string } | null;
-  suggestions: Suggestion[];
-  lastAgentFormAt: string | null;
-  receipts: { changeId: string; requestDigest: string; kind: string; author: string; version: number; at: string; outcome: Record<string, unknown> }[];
-  retainedFromVersion: number;
-  limits?: { agentFormIntervalMs: number };
-}
+// The state the Agent declares is a wire contract (task.map.*). Every type below is
+// derived from that one contract, so the frame, the shell and the service cannot
+// disagree about a field. Only the interpretation helpers stay hand-written.
+export type TaskMapState = RhoOutput<'task.map.read'>;
+export type Term = TaskMapState['vocabulary']['kinds'][string];
+export type Vocabulary = TaskMapState['vocabulary'];
+export type ItemLine = NonNullable<TaskMapState['items'][number]['lines']>[number];
+export type TaskItem = TaskMapState['items'][number];
+export type PresentationRecord = TaskMapState['presentation'][string];
+export type Suggestion = TaskMapState['suggestions'][number];
 
 export const roles = ['working', 'waiting', 'done', 'planned', 'unknown', 'stopped'] as const;
-export const emptyTaskMap = (): TaskMapState => ({ format: 'rho.task-map/1', version: 0, question: null, compositionId: null, vocabulary: { kinds: {}, states: {} }, items: [], next: [], presentation: {}, focus: null, suggestions: [], lastAgentFormAt: null, receipts: [], retainedFromVersion: 1 });
+// A local placeholder is not a server response: it carries no receipt, no limits and
+// version 0, and it is never mistaken for an acknowledged declaration.
+export const emptyTaskMap = (): TaskMapState => ({ format: 'rho.task-map/1', version: 0, question: null, compositionId: null, vocabulary: { kinds: {}, states: {} }, items: [], next: [], presentation: {}, focus: null, suggestions: [], lastAgentFormAt: null, receipts: [], retainedFromVersion: 1, limits: { agentFormIntervalMs: 0 } });
 
 // Undeclared words still render: the identifier is the label.
 export function term(map: Pick<TaskMapState, 'vocabulary'>, group: keyof Vocabulary, id: string): Term {

@@ -38,70 +38,356 @@
     "type": "object",
     "properties": {
       "document": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
+          "acknowledgedAt": {
+            "minLength": 1,
+            "type": "string"
           },
-          "path": {
-            "type": "string",
-            "minLength": 1
-          },
-          "version": {
-            "type": "integer",
-            "minimum": 1
+          "author": {
+            "minLength": 1,
+            "type": "string"
           },
           "content": {
             "type": "string"
           },
+          "dirty": {
+            "type": "boolean"
+          },
           "diskDigest": {
             "anyOf": [
               {
-                "type": "string",
-                "pattern": "^[a-f0-9]{64}$"
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ]
           },
-          "dirty": {
-            "type": "boolean"
-          },
-          "author": {
-            "type": "string",
-            "minLength": 1
-          },
-          "acknowledgedAt": {
-            "type": "string",
-            "minLength": 1
-          },
-          "undo": {
-            "type": "array",
+          "history": {
             "items": {
-              "type": "object",
               "additionalProperties": false,
               "properties": {
+                "afterDigest": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "at": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "author": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "beforeDigest": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "changeId": {
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                  "type": "string"
+                },
+                "edits": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "from": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "insert": {
+                        "type": "string"
+                      },
+                      "removed": {
+                        "type": "string"
+                      },
+                      "to": {
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "from",
+                      "to",
+                      "insert",
+                      "removed"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "groupId": {
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "edit",
+                    "undo",
+                    "undo-own",
+                    "revert"
+                  ]
+                },
+                "requestDigest": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "reverts": {
+                  "items": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                "revision": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "undoGroup": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "version": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "changeId",
+                "requestDigest",
+                "author",
+                "kind",
+                "undoGroup",
+                "groupId",
+                "version",
+                "revision",
+                "at",
+                "beforeDigest",
+                "afterDigest",
+                "reverts",
+                "edits"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "historyRetainedFromVersion": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "id": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "path": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "pendingSave": {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "author": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "change": {
+                "additionalProperties": false,
+                "properties": {
+                  "changeId": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "expectedRevision": {
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "changeId",
+                  "expectedRevision"
+                ],
+                "type": "object"
+              },
+              "contentDigest": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "expectedDiskDigest": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "requestDigest": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              }
+            },
+            "required": [
+              "requestDigest",
+              "author",
+              "expectedDiskDigest",
+              "contentDigest",
+              "at"
+            ],
+            "type": "object"
+          },
+          "receipt": {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "author": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "changeId": {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "edit",
+                  "undo",
+                  "save",
+                  "abandon-save",
+                  "undo-own",
+                  "revert"
+                ]
+              },
+              "requestDigest": {
+                "pattern": "^[a-f0-9]{64}$",
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "version": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "changeId",
+              "requestDigest",
+              "kind",
+              "author",
+              "revision",
+              "version",
+              "at"
+            ],
+            "type": "object"
+          },
+          "receipts": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "at": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "author": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "changeId": {
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                  "type": "string"
+                },
+                "kind": {
+                  "enum": [
+                    "edit",
+                    "undo",
+                    "save",
+                    "abandon-save",
+                    "undo-own",
+                    "revert"
+                  ]
+                },
+                "requestDigest": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                "revision": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "version": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "changeId",
+                "requestDigest",
+                "kind",
+                "author",
+                "revision",
+                "version",
+                "at"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "retainedFromRevision": {
+            "minimum": 1,
+            "type": "integer"
+          },
+          "revision": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "undo": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "author": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "changeIds": {
+                  "items": {
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
                 "content": {
                   "type": "string"
                 },
                 "group": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "author": {
-                  "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "type": "string"
                 }
               },
               "required": [
                 "content",
                 "group",
                 "author"
-              ]
-            }
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "version": {
+            "minimum": 1,
+            "type": "integer"
           }
         },
         "required": [
@@ -114,7 +400,8 @@
           "author",
           "acknowledgedAt",
           "undo"
-        ]
+        ],
+        "type": "object"
       },
       "viewId": {
         "type": "string",
@@ -122,17 +409,18 @@
       },
       "composition": {
         "type": "object",
+        "additionalProperties": false,
         "properties": {
           "format": {
             "const": "rho.composition/1"
           },
           "compositionId": {
             "type": "string",
-            "minLength": 1
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
           },
-          "version": {
-            "type": "integer",
-            "minimum": 1
+          "rootId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
           },
           "nodes": {
             "type": "array",
@@ -155,53 +443,34 @@
                         "type": "string",
                         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
                       },
-                      "maxItems": 256,
-                      "uniqueItems": true
+                      "maxItems": 256
                     },
                     "presentation": {
-                      "oneOf": [
-                        {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "properties": {
-                            "mode": {
-                              "const": "tabs"
-                            }
-                          },
-                          "required": [
-                            "mode"
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "mode": {
+                          "enum": [
+                            "tabs",
+                            "split"
                           ]
                         },
-                        {
-                          "type": "object",
-                          "additionalProperties": false,
-                          "properties": {
-                            "mode": {
-                              "const": "split"
-                            },
-                            "axis": {
-                              "enum": [
-                                "horizontal",
-                                "vertical"
-                              ]
-                            },
-                            "weights": {
-                              "type": "array",
-                              "items": {
-                                "type": "number",
-                                "exclusiveMinimum": 0,
-                                "maximum": 100
-                              },
-                              "minItems": 2,
-                              "maxItems": 256
-                            }
-                          },
-                          "required": [
-                            "mode",
-                            "axis",
-                            "weights"
+                        "axis": {
+                          "enum": [
+                            "horizontal",
+                            "vertical"
                           ]
+                        },
+                        "weights": {
+                          "type": "array",
+                          "items": {
+                            "type": "number"
+                          },
+                          "maxItems": 32
                         }
+                      },
+                      "required": [
+                        "mode"
                       ]
                     }
                   },
@@ -233,7 +502,7 @@
                     "bindings": {
                       "type": "object",
                       "additionalProperties": {
-                        "oneOf": [
+                        "anyOf": [
                           {
                             "type": "object",
                             "additionalProperties": false,
@@ -313,11 +582,11 @@
                         "emphasis"
                       ]
                     },
-                    "kind": {
-                      "const": "view"
-                    },
                     "protected": {
                       "type": "boolean"
+                    },
+                    "kind": {
+                      "const": "view"
                     }
                   },
                   "required": [
@@ -330,18 +599,8 @@
                   ]
                 }
               ]
-            }
-          },
-          "rootId": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-          },
-          "receipt": {
-            "type": "object"
-          },
-          "author": {
-            "type": "string",
-            "minLength": 1
+            },
+            "maxItems": 256
           },
           "views": {
             "type": "array",
@@ -367,7 +626,7 @@
                 "bindings": {
                   "type": "object",
                   "additionalProperties": {
-                    "oneOf": [
+                    "anyOf": [
                       {
                         "type": "object",
                         "additionalProperties": false,
@@ -446,6 +705,9 @@
                   "required": [
                     "emphasis"
                   ]
+                },
+                "protected": {
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -455,29 +717,500 @@
                 "props",
                 "bindings"
               ]
-            }
+            },
+            "maxItems": 32
           },
           "availability": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "state": {
+                  "enum": [
+                    "entry-installed",
+                    "unavailable"
+                  ]
+                },
+                "visibility": {
+                  "const": "unobserved"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "state"
+              ]
+            }
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "author": {
+            "type": "string",
+            "minLength": 1
           },
           "acknowledgedAt": {
             "type": "string",
-            "minLength": 1
+            "format": "date-time"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "snapshot": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "rootId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                    },
+                    "nodes": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                              },
+                              "kind": {
+                                "const": "group"
+                              },
+                              "children": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                                },
+                                "maxItems": 256
+                              },
+                              "presentation": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "mode": {
+                                    "enum": [
+                                      "tabs",
+                                      "split"
+                                    ]
+                                  },
+                                  "axis": {
+                                    "enum": [
+                                      "horizontal",
+                                      "vertical"
+                                    ]
+                                  },
+                                  "weights": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "number"
+                                    },
+                                    "maxItems": 32
+                                  }
+                                },
+                                "required": [
+                                  "mode"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "kind",
+                              "children"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                              },
+                              "component": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "version": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "props": {
+                                "type": "object"
+                              },
+                              "bindings": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "anyOf": [
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "id": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        },
+                                        "version": {
+                                          "type": "string",
+                                          "pattern": "^[a-f0-9]{64}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "id",
+                                        "version"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "documentId": {
+                                          "type": "string",
+                                          "pattern": "^[a-f0-9]{64}$"
+                                        },
+                                        "version": {
+                                          "type": "integer",
+                                          "minimum": 1
+                                        }
+                                      },
+                                      "required": [
+                                        "documentId",
+                                        "version"
+                                      ]
+                                    },
+                                    {
+                                      "type": "object",
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "kind": {
+                                          "const": "live-document"
+                                        },
+                                        "documentId": {
+                                          "type": "string",
+                                          "pattern": "^[a-f0-9]{64}$"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "documentId"
+                                      ]
+                                    }
+                                  ]
+                                }
+                              },
+                              "selection": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "maxItems": 1000
+                              },
+                              "presentation": {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "properties": {
+                                  "emphasis": {
+                                    "enum": [
+                                      "normal",
+                                      "highlight"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "emphasis"
+                                ]
+                              },
+                              "protected": {
+                                "type": "boolean"
+                              },
+                              "kind": {
+                                "const": "view"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "component",
+                              "version",
+                              "props",
+                              "bindings",
+                              "kind"
+                            ]
+                          }
+                        ]
+                      },
+                      "maxItems": 256
+                    }
+                  },
+                  "required": [
+                    "rootId",
+                    "nodes"
+                  ]
+                }
+              },
+              "required": [
+                "version",
+                "snapshot"
+              ]
+            },
+            "maxItems": 256
+          },
+          "receipts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "changeId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                },
+                "requestDigest": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "version": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "author": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "kind": {
+                  "enum": [
+                    "apply",
+                    "undo",
+                    "protect",
+                    "close"
+                  ]
+                }
+              },
+              "required": [
+                "changeId",
+                "author",
+                "version",
+                "at"
+              ]
+            },
+            "maxItems": 256
+          },
+          "retainedFromVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "undoRetainedFromVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "changeId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "author": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "requestDigest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "kind": {
+                "enum": [
+                  "apply",
+                  "undo",
+                  "protect"
+                ]
+              }
+            },
+            "required": [
+              "changeId",
+              "author",
+              "version",
+              "requestDigest",
+              "at",
+              "kind"
+            ]
+          },
+          "witness": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "witnessId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "projectId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "taskId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "compositionId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "compositionVersion": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "sourceEvent": {
+                    "type": "object",
+                    "additionalProperties": true
+                  },
+                  "policyRef": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "views": {
+                    "type": "array",
+                    "maxItems": 32,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "viewId": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                        },
+                        "component": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "componentVersion": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "resource": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "viewId",
+                        "resource"
+                      ]
+                    }
+                  },
+                  "dataValidation": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "integrity": {
+                        "const": "hash-verified"
+                      },
+                      "shape": {
+                        "const": "typed-table-read"
+                      },
+                      "domain": {
+                        "const": "not-judged"
+                      }
+                    },
+                    "required": [
+                      "integrity",
+                      "shape",
+                      "domain"
+                    ]
+                  },
+                  "at": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                },
+                "required": [
+                  "witnessId",
+                  "projectId",
+                  "taskId",
+                  "compositionId",
+                  "compositionVersion",
+                  "views"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "witnessState": {
+            "enum": [
+              "retained",
+              "expired",
+              "pending"
+            ]
+          },
+          "commitVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "currentVersion": {
+            "type": "integer",
+            "minimum": 1
           }
         },
         "required": [
           "format",
           "compositionId",
-          "version",
-          "nodes",
           "rootId",
-          "receipt",
-          "author",
+          "nodes",
           "views",
           "availability",
-          "acknowledgedAt"
-        ],
-        "additionalProperties": true
+          "version",
+          "author",
+          "acknowledgedAt",
+          "history",
+          "receipts",
+          "retainedFromVersion",
+          "undoRetainedFromVersion",
+          "receipt"
+        ]
       }
     },
     "required": [

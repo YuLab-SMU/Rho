@@ -1,7 +1,6 @@
 {
   "method": "context.read",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
@@ -9,17 +8,332 @@
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
       "contextId": {
-        "type": "string",
-        "pattern": "^[a-f0-9]{64}$"
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
       }
     },
     "required": [
       "projectId",
       "contextId"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
-    "type": "object"
+    "type": "object",
+    "additionalProperties": true,
+    "properties": {
+      "contextId": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "principal": {
+        "type": "string",
+        "minLength": 1
+      },
+      "at": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "requestDigest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "delivery": {
+        "enum": [
+          "not-fetched",
+          "tool-fetched"
+        ]
+      },
+      "preparation": {
+        "enum": [
+          "prepared"
+        ]
+      },
+      "changeId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "version": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "fetchedBy": {
+        "type": "string",
+        "minLength": 1
+      },
+      "fetchedAt": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "feedbackTarget": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "principal": {
+            "type": "string",
+            "minLength": 1
+          },
+          "bindingId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "externalSessionId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          }
+        },
+        "required": [
+          "principal",
+          "bindingId",
+          "externalSessionId"
+        ]
+      },
+      "responses": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "annotationId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "state": {
+              "enum": [
+                "explicit-linked-response",
+                "no-linked-response",
+                "unavailable"
+              ]
+            },
+            "messageIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "maxItems": 128
+            }
+          },
+          "required": [
+            "annotationId",
+            "state",
+            "messageIds"
+          ]
+        },
+        "maxItems": 128
+      },
+      "annotations": {
+        "type": "array",
+        "maxItems": 128
+      },
+      "document": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "buffer"
+              },
+              "documentId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "dirty": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "documentId",
+              "version",
+              "path",
+              "dirty"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "from": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "to": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "sha256",
+          "from",
+          "to",
+          "text"
+        ]
+      },
+      "region": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "units": {
+            "enum": [
+              "pixels",
+              "points"
+            ]
+          },
+          "resource": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "id",
+              "version"
+            ]
+          },
+          "mapping": {
+            "const": "original-media-coordinates"
+          }
+        },
+        "required": [
+          "page",
+          "x",
+          "y",
+          "width",
+          "height",
+          "units",
+          "resource",
+          "mapping"
+        ]
+      },
+      "resource": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "reference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "id",
+              "version"
+            ]
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "null"
+                ]
+              }
+            },
+            "maxItems": 512
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "nextOffset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "more": {
+            "type": "boolean"
+          },
+          "encoding": {
+            "enum": [
+              "utf8",
+              "base64"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "data": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "metadata",
+          "rows",
+          "offset",
+          "nextOffset",
+          "more",
+          "encoding",
+          "text",
+          "data"
+        ]
+      }
+    },
+    "required": [
+      "contextId",
+      "projectId",
+      "principal",
+      "at",
+      "delivery",
+      "responses"
+    ]
   },
   "description": "Read an explicit versioned context package. Receipt establishes a tool fetch, not proactive delivery to a conversation."
 }

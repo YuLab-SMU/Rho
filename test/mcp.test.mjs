@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { setTimeout } from 'node:timers/promises';
 import { RhoService } from '../dist/server.js';
-import { RhoClient } from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { runtime } from '../dist/runtime.js';
 const pluginRequire = createRequire(import.meta.resolve('@rho-workspace/plugin-agent'));
 const { Client } = await import(pathToFileURL(pluginRequire.resolve('@modelcontextprotocol/sdk/client/index.js')));

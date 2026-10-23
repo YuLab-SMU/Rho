@@ -4,7 +4,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { RhoService } from '../dist/server.js';
-import { RhoClient } from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 
 test('conditional structured composition, protected ancestors, isolated selection and layout-only undo', async () => {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-collaboration-'));

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { RhoService } from '../dist/server.js';
-import { RhoClient } from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { ObservationClient } from '../dist/observation.js';
 
 test('format 3 retains collaboration, rejects lossy older exports and reports absent owners', async () => {

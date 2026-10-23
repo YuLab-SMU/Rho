@@ -1,49 +1,66 @@
 {
   "method": "resource.read",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
         "type": "string",
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
+      "maxBytes": {
+        "minimum": 1,
+        "type": "integer"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      },
       "resource": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "type": "string"
           },
           "version": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
           }
         },
         "required": [
           "id",
           "version"
-        ]
-      },
-      "offset": {
-        "type": "integer",
-        "minimum": 0
-      },
-      "maxBytes": {
-        "type": "integer",
-        "minimum": 1
+        ],
+        "type": "object"
       }
     },
     "required": [
       "projectId",
       "resource",
       "offset"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
-    "type": "object",
+    "additionalProperties": true,
     "properties": {
+      "data": {
+        "type": "string"
+      },
+      "encoding": {
+        "const": "base64"
+      },
+      "more": {
+        "type": "boolean"
+      },
+      "nextOffset": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      },
       "resource": {
         "type": "object",
         "additionalProperties": true,
@@ -120,22 +137,9 @@
           "availability"
         ]
       },
-      "encoding": {
-        "const": "base64"
-      },
-      "data": {
-        "type": "string"
-      },
-      "offset": {
+      "maxReadBytes": {
         "type": "integer",
         "minimum": 0
-      },
-      "nextOffset": {
-        "type": "integer",
-        "minimum": 0
-      },
-      "more": {
-        "type": "boolean"
       }
     },
     "required": [
@@ -146,7 +150,7 @@
       "nextOffset",
       "more"
     ],
-    "additionalProperties": true
+    "type": "object"
   },
   "description": null
 }

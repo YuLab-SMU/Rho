@@ -1,7 +1,6 @@
 {
   "method": "document.history",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
@@ -9,52 +8,58 @@
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
       "documentId": {
-        "type": "string",
-        "pattern": "^[a-f0-9]{64}$"
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
       }
     },
     "required": [
       "projectId",
       "documentId"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
-      "documentId": {
-        "type": "string",
-        "pattern": "^[a-f0-9]{64}$"
+      "currentRevision": {
+        "minimum": 0,
+        "type": "integer"
       },
       "currentVersion": {
-        "type": "integer",
-        "minimum": 1
+        "minimum": 1,
+        "type": "integer"
       },
-      "currentRevision": {
-        "type": "integer",
-        "minimum": 0
-      },
-      "retainedFromVersion": {
-        "type": "integer",
-        "minimum": 1
+      "documentId": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
       },
       "entries": {
-        "type": "array",
         "items": {
-          "type": "object",
           "additionalProperties": false,
           "properties": {
-            "changeId": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            "afterDigest": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
             },
-            "requestDigest": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
+            "at": {
+              "minLength": 1,
+              "type": "string"
             },
             "author": {
-              "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "type": "string"
+            },
+            "beforeDigest": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            "changeId": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
+            },
+            "groupId": {
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+              "type": "string"
             },
             "kind": {
               "enum": [
@@ -64,52 +69,40 @@
                 "revert"
               ]
             },
-            "undoGroup": {
-              "type": "string",
-              "minLength": 1
-            },
-            "groupId": {
-              "type": "string",
-              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-            },
-            "version": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "revision": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "at": {
-              "type": "string",
-              "minLength": 1
-            },
-            "beforeDigest": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
-            },
-            "afterDigest": {
-              "type": "string",
-              "pattern": "^[a-f0-9]{64}$"
-            },
-            "reverts": {
-              "type": "array",
-              "items": {
-                "type": "string",
-                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
-              },
-              "uniqueItems": true
+            "requestDigest": {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
             },
             "revertedBy": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                  "type": "string"
                 },
                 {
                   "type": "null"
                 }
               ]
+            },
+            "reverts": {
+              "items": {
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$",
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "revision": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "undoGroup": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "version": {
+              "minimum": 1,
+              "type": "integer"
             }
           },
           "required": [
@@ -126,8 +119,14 @@
             "afterDigest",
             "reverts",
             "revertedBy"
-          ]
-        }
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      },
+      "retainedFromVersion": {
+        "minimum": 1,
+        "type": "integer"
       }
     },
     "required": [
@@ -136,7 +135,8 @@
       "currentRevision",
       "retainedFromVersion",
       "entries"
-    ]
+    ],
+    "type": "object"
   },
   "description": null
 }

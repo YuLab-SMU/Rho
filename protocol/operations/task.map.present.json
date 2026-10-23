@@ -54,6 +54,7 @@
   },
   "outputSchema": {
     "type": "object",
+    "additionalProperties": true,
     "properties": {
       "format": {
         "const": "rho.task-map/1"
@@ -62,36 +63,548 @@
         "type": "integer",
         "minimum": 0
       },
+      "question": {
+        "anyOf": [
+          {
+            "type": "string",
+            "maxLength": 240
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "compositionId": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
       "vocabulary": {
-        "type": "object"
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kinds": {
+            "type": "object",
+            "maxProperties": 64,
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "tone": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "role": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "icon": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 240
+                }
+              },
+              "required": [
+                "label"
+              ]
+            }
+          },
+          "states": {
+            "type": "object",
+            "maxProperties": 64,
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "tone": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "role": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "icon": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": {
+                  "type": "string",
+                  "maxLength": 240
+                }
+              },
+              "required": [
+                "label"
+              ]
+            }
+          }
+        },
+        "required": [
+          "kinds",
+          "states"
+        ]
       },
       "items": {
         "type": "array",
+        "maxItems": 256,
         "items": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "kind": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "state": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "title": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "group": {
+              "type": "string",
+              "maxLength": 60
+            },
+            "summary": {
+              "type": "string",
+              "maxLength": 280
+            },
+            "lines": {
+              "type": "array",
+              "maxItems": 12,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "maxLength": 40
+                  },
+                  "text": {
+                    "type": "string",
+                    "maxLength": 280
+                  },
+                  "tone": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "judgment": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            },
+            "progress": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "done": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "total": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "unit": {
+                  "type": "string",
+                  "maxLength": 24
+                }
+              },
+              "required": [
+                "done"
+              ]
+            },
+            "view": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "from": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "maxItems": 16
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "state",
+            "title",
+            "author",
+            "at"
+          ]
         }
       },
       "next": {
         "type": "array",
         "items": {
           "type": "string",
-          "minLength": 1
-        }
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "maxItems": 256
+      },
+      "focus": {
+        "anyOf": [
+          {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "item": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "author": {
+                "type": "string",
+                "minLength": 1
+              },
+              "human": {
+                "type": "boolean"
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "item",
+              "author",
+              "human",
+              "at"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "lastAgentFormAt": {
+        "anyOf": [
+          {
+            "type": "string",
+            "format": "date-time"
+          },
+          {
+            "type": "null"
+          }
+        ]
       },
       "presentation": {
-        "type": "object"
+        "type": "object",
+        "maxProperties": 256,
+        "additionalProperties": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "form": {
+              "type": "string",
+              "minLength": 1
+            },
+            "params": {
+              "type": "object",
+              "maxProperties": 16
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "human": {
+              "type": "boolean"
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "changeId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "suggestedBy": {
+              "type": "string",
+              "minLength": 1
+            },
+            "previous": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "form": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "params": {
+                      "type": "object",
+                      "maxProperties": 16
+                    },
+                    "author": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "human": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "form",
+                    "params",
+                    "author",
+                    "human"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "pinned": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "by": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              },
+              "required": [
+                "by",
+                "at"
+              ]
+            }
+          },
+          "required": [
+            "form",
+            "params",
+            "author",
+            "human",
+            "at",
+            "changeId"
+          ]
+        }
       },
       "suggestions": {
         "type": "array",
+        "maxItems": 64,
         "items": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "target": {
+              "type": "string",
+              "minLength": 1
+            },
+            "form": {
+              "type": "string",
+              "minLength": 1
+            },
+            "params": {
+              "type": "object",
+              "maxProperties": 16
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            },
+            "cause": {
+              "enum": [
+                "pinned",
+                "budget"
+              ]
+            },
+            "merged": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "id",
+            "target",
+            "form",
+            "params",
+            "author",
+            "at",
+            "cause",
+            "merged"
+          ]
         }
       },
       "receipts": {
         "type": "array",
+        "maxItems": 256,
         "items": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "changeId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "requestDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "kind": {
+              "enum": [
+                "declare",
+                "present",
+                "respond"
+              ]
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "outcome": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "required": [
+            "changeId",
+            "requestDigest",
+            "kind",
+            "author",
+            "version",
+            "at"
+          ]
         }
+      },
+      "retainedFromVersion": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "limits": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "agentFormIntervalMs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "agentFormIntervalMs"
+        ]
+      },
+      "receipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "changeId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "requestDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "kind": {
+            "enum": [
+              "declare",
+              "present",
+              "respond"
+            ]
+          },
+          "author": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "outcome": {
+            "type": "object",
+            "maxProperties": 16,
+            "additionalProperties": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        "required": [
+          "changeId",
+          "kind",
+          "author",
+          "version",
+          "at"
+        ]
       }
     },
     "required": [
@@ -101,9 +614,14 @@
       "items",
       "next",
       "presentation",
-      "suggestions"
-    ],
-    "additionalProperties": true
+      "suggestions",
+      "receipts",
+      "retainedFromVersion",
+      "lastAgentFormAt",
+      "focus",
+      "question",
+      "compositionId"
+    ]
   },
   "description": "Change a map placement or item card form, its parameters (including a subset) or the focus. Shared by the Agent and people. An Agent change to a pinned target, or within agentFormIntervalMs of its last applied form change, is merged into one pending suggestion instead of applied; Agent changes stay attributed and revertible."
 }

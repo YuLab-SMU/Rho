@@ -2,6 +2,7 @@ import path from 'node:path';
 import { atomicJson, canonical, digest, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
 import type { Project } from './state.js';
 import { emptyTaskMap, type PresentationRecord, type TaskMapState } from './task-frame.js';
+import type { RhoInput } from './contract.generated.js';
 
 // Protected resource for agentFormIntervalMs: layout stability and the person's
 // attention. An Agent form change inside the interval is not applied; it is
@@ -20,7 +21,9 @@ export class TaskMap {
     requireThat(state.format === 'rho.task-map/1', 'condition', 'Task map state is not a supported version.');
     return { ...state, limits: { agentFormIntervalMs: this.limits.agentFormIntervalMs } };
   }
-  private async commit(kind: string, b: any, author: string, change: (s: TaskMapState, at: string) => Record<string, unknown>) {
+  // The three kinds are the contract's vocabulary: a map change is exactly one of
+  // declaring, presenting a form, or a person's response to one.
+  private async commit(kind: 'declare' | 'present' | 'respond', b: { changeId: string; expectedVersion: number }, author: string, change: (s: TaskMapState, at: string) => Record<string, unknown>) {
     const file = await this.file(), { limits: _, ...current } = await this.read();
     const requestDigest = digest(canonical({ kind, b, author }));
     const old = current.receipts.find(r => r.changeId === b.changeId);
@@ -46,7 +49,7 @@ export class TaskMap {
     return structuredClone(params ?? {}) as Record<string, unknown>;
   }
   // Agent only: items, their words and the declared next steps. Rho never infers them.
-  declare(b: any, author: string) {
+  declare(b: RhoInput<'task.map.declare'>, author: string) {
     return this.commit('declare', b, author, (s, at) => {
       if (b.question !== undefined) s.question = b.question;
       if (b.compositionId !== undefined) s.compositionId = b.compositionId;
@@ -74,7 +77,7 @@ export class TaskMap {
     });
   }
   // Shared by the Agent and people: form, parameters (including a subset) and focus.
-  present(b: any, author: string, human: boolean) {
+  present(b: RhoInput<'task.map.present'>, author: string, human: boolean) {
     return this.commit('present', b, author, (s, at) => {
       this.target(s, b.target);
       requireThat(b.form !== undefined || b.focus !== undefined, 'invalid', 'Change a form, its parameters or the focus.');
@@ -107,7 +110,7 @@ export class TaskMap {
   }
   // People only: pin, unpin, revert an Agent change, accept or dismiss a suggestion.
   // Reverting changes layout only; it never undoes work the Agent did.
-  respond(b: any, author: string) {
+  respond(b: RhoInput<'task.map.respond'>, author: string) {
     return this.commit('respond', b, author, (s, at) => {
       this.target(s, b.target);
       const current = s.presentation[b.target], base = { author, human: true, at, changeId: b.changeId };

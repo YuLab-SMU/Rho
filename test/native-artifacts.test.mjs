@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { digest, canonical } from '@rho-workspace/plugin-contracts';
 import { nativeSchemas as ownerSchemas } from '@rho-workspace/plugin-agent/contract';
 import { RhoService } from '../dist/server.js';
-import { RhoClient } from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { protocol } from '../dist/protocol.js';
 const caps = { inputMode: 'pull-tool-result', inboxLookup: false, inboxDeduplication: 'none', hookEmissionDeduplication: 'none', modelConsumptionAck: false, nativeExecutionDeduplication: false };
 const policyRef = digest('selected-test-policy');

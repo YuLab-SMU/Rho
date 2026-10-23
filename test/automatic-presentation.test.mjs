@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { digest, canonical } from '@rho-workspace/plugin-contracts';
 import { RhoService } from '../dist/server.js';
-import { RhoClient } from '../dist/client.js';
+import { CheckedClient as RhoClient } from './checked-client.mjs';
 import { Presentation } from '../dist/presentation.js';
 import { Workspace } from '../dist/workspace.js';
 import { TaskRouting } from '../dist/task-routing.js';

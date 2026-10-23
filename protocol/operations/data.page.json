@@ -1,66 +1,18 @@
 {
   "method": "data.page",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
         "type": "string",
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
-      "resource": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "version": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
-          }
-        },
-        "required": [
-          "id",
-          "version"
-        ]
-      },
-      "offset": {
-        "type": "integer",
-        "minimum": 0
-      },
-      "limit": {
-        "type": "integer",
-        "minimum": 1
-      },
-      "sort": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "column": {
-            "type": "string",
-            "minLength": 1
-          },
-          "direction": {
-            "enum": [
-              "asc",
-              "desc"
-            ]
-          }
-        },
-        "required": [
-          "column",
-          "direction"
-        ]
-      },
       "filter": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "column": {
-            "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "type": "string"
           },
           "op": {
             "enum": [
@@ -82,7 +34,54 @@
         "required": [
           "column",
           "op"
-        ]
+        ],
+        "type": "object"
+      },
+      "limit": {
+        "minimum": 1,
+        "type": "integer"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "resource": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "version": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ],
+        "type": "object"
+      },
+      "sort": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "direction": {
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          }
+        },
+        "required": [
+          "column",
+          "direction"
+        ],
+        "type": "object"
       }
     },
     "required": [
@@ -90,11 +89,71 @@
       "resource",
       "offset",
       "limit"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
-    "type": "object",
+    "additionalProperties": true,
     "properties": {
+      "columns": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": {
+              "enum": [
+                "string",
+                "number",
+                "boolean"
+              ]
+            },
+            "nullValues": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 16
+            }
+          },
+          "required": [
+            "name",
+            "type",
+            "nullValues"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "entityKey": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "filtered": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "more": {
+        "type": "boolean"
+      },
+      "namespace": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "nextOffset": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "offset": {
+        "minimum": 0,
+        "type": "integer"
+      },
       "resource": {
         "type": "object",
         "additionalProperties": true,
@@ -171,66 +230,23 @@
           "availability"
         ]
       },
-      "columns": {
-        "type": "array",
-        "items": {
-          "type": "object",
-          "properties": {
-            "name": {
-              "type": "string",
-              "minLength": 1
-            },
-            "type": {
-              "enum": [
-                "number",
-                "string",
-                "boolean"
-              ]
-            }
-          },
-          "required": [
-            "name",
-            "type"
-          ],
-          "additionalProperties": true
-        }
-      },
-      "total": {
-        "type": "integer",
-        "minimum": 0
-      },
-      "filtered": {
-        "type": "integer",
-        "minimum": 0
-      },
-      "offset": {
-        "type": "integer",
-        "minimum": 0
-      },
-      "nextOffset": {
-        "type": "integer",
-        "minimum": 0
-      },
-      "more": {
-        "type": "boolean"
-      },
       "rows": {
         "type": "array",
         "items": {
-          "type": "object"
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ]
+          }
         }
       },
-      "entityKey": {
-        "type": [
-          "string",
-          "null"
-        ]
-      },
-      "namespace": {
-        "type": [
-          "string",
-          "null"
-        ]
+      "total": {
+        "minimum": 0,
+        "type": "integer"
       }
     },
     "required": [
@@ -244,7 +260,7 @@
       "rows",
       "entityKey"
     ],
-    "additionalProperties": true
+    "type": "object"
   },
   "description": null
 }

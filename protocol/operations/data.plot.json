@@ -1,42 +1,41 @@
 {
   "method": "data.plot",
   "inputSchema": {
-    "type": "object",
     "additionalProperties": false,
     "properties": {
       "projectId": {
         "type": "string",
         "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
       },
+      "maxPoints": {
+        "minimum": 1,
+        "type": "integer"
+      },
       "resource": {
-        "type": "object",
         "additionalProperties": false,
         "properties": {
           "id": {
-            "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "type": "string"
           },
           "version": {
-            "type": "string",
-            "pattern": "^[a-f0-9]{64}$"
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
           }
         },
         "required": [
           "id",
           "version"
-        ]
+        ],
+        "type": "object"
       },
       "x": {
-        "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "type": "string"
       },
       "y": {
-        "type": "string",
-        "minLength": 1
-      },
-      "maxPoints": {
-        "type": "integer",
-        "minimum": 1
+        "minLength": 1,
+        "type": "string"
       }
     },
     "required": [
@@ -44,11 +43,29 @@
       "resource",
       "x",
       "y"
-    ]
+    ],
+    "type": "object"
   },
   "outputSchema": {
-    "type": "object",
+    "additionalProperties": true,
     "properties": {
+      "downsampled": {
+        "type": "boolean"
+      },
+      "method": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "originalPoints": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "points": {
+        "items": {
+          "type": "object"
+        },
+        "type": "array"
+      },
       "resource": {
         "type": "object",
         "additionalProperties": true,
@@ -127,23 +144,6 @@
       },
       "spec": {
         "type": "object"
-      },
-      "points": {
-        "type": "array",
-        "items": {
-          "type": "object"
-        }
-      },
-      "originalPoints": {
-        "type": "integer",
-        "minimum": 0
-      },
-      "downsampled": {
-        "type": "boolean"
-      },
-      "method": {
-        "type": "string",
-        "minLength": 1
       }
     },
     "required": [
@@ -154,7 +154,7 @@
       "downsampled",
       "method"
     ],
-    "additionalProperties": true
+    "type": "object"
   },
   "description": null
 }
