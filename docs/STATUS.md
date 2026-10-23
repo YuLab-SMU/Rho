@@ -17,7 +17,7 @@ a shipped script.
 Host, Rscript, unfinished runs, plugin selection — and the Overview asks it before
 listing content, so a silent failure has a place to be explained. Filesystem and
 lock refusals name their condition and remedy.
-Checks are recorded, not restated: Rho 99/99 and Plugins 55/55 from [docs/VERIFICATION.json](VERIFICATION.json), which holds the command, result and commit of each run.
+Checks are recorded, not restated: Rho 99/99 and Plugins 55/55 from [docs/VERIFICATION.json](VERIFICATION.json), which holds the command and result of each run.
 Open gaps are listed in [the upgrade plan](UPGRADE-PLAN.md) and [unverified and dead
 paths](UNVERIFIED.md); the largest is that
 an Agent-produced artifact has no route to a view (`artifact-not-presentable`),

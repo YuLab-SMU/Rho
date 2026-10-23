@@ -12,6 +12,8 @@ const ledger = JSON.parse(await fs.readFile(path.join(root, 'docs/VERIFICATION.j
 
 test('the ledger records a result for every check it claims', () => {
   assert.equal(ledger.schemaVersion, 1);
+  // No commit field: it would name its own parent and be stale by construction.
+  assert.equal(ledger.commit, undefined);
   for (const [id, result] of Object.entries(ledger.checks)) {
     assert.ok(result.command, `${id} names its command`);
     assert.ok(Number.isSafeInteger(result.tests) && result.tests > 0, `${id} recorded a test count`);

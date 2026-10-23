@@ -14,13 +14,7 @@ const checks = [
   { id: 'plugin-tests', command: 'node --test test/*.test.mjs', cwd: path.join(root, '..', 'Rho-plugins'), pattern: /^# tests (\d+)$/m, passing: /^# pass (\d+)$/m }
 ];
 
-const git = args => { try { return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim(); } catch { return null; } };
-// The guard test reads this file while the checks run, so it is replaced atomically and
-// never counted as a change of its own.
-const SELF = 'docs/VERIFICATION.json';
-const commit = git(['rev-parse', 'HEAD']) ?? 'unknown';
-const dirty = (git(['status', '--porcelain']) ?? '').split('\n')
-  .filter(line => line && !line.endsWith('web/theme.css') && !line.endsWith(SELF)).length > 0;
+
 
 const results = {};
 for (const check of checks) {
@@ -34,12 +28,14 @@ for (const check of checks) {
   }
   const total = Number(output.match(check.pattern)?.[1] ?? NaN);
   const passing = Number(output.match(check.passing)?.[1] ?? NaN);
-  results[check.id] = { command: check.command, checkedAt: new Date().toISOString(), commit, exitCode: code, tests: total, passing, passed: code === 0 && total === passing };
+  results[check.id] = { command: check.command, checkedAt: new Date().toISOString(), exitCode: code, tests: total, passing, passed: code === 0 && total === passing };
   process.stdout.write(`${check.id}: ${passing}/${total} exit ${code}\n`);
 }
 
-const ledger = { schemaVersion: 1, commit, workingTreeDirty: dirty, checks: results };
+// No commit field: a ledger committed alongside the work would name its own parent and
+// be stale by construction. History says which commit carried which numbers.
+const ledger = { schemaVersion: 1, checks: results };
 await fs.writeFile(out + '.tmp', JSON.stringify(ledger, null, 2) + '\n');
 await fs.rename(out + '.tmp', out);
-process.stdout.write(`wrote ${path.relative(root, out)} for ${commit}${dirty ? ' (dirty tree)' : ''}\n`);
+process.stdout.write(`wrote ${path.relative(root, out)}\n`);
 if (!Object.values(results).every(result => result.passed)) process.exit(1);
