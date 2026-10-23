@@ -46,7 +46,7 @@ export function ProjectNavigation({ project, location, snapshot, overview, compo
     <span className="section-label" id="nav-content">Content</span>
     <div role="group" aria-labelledby="nav-content" className="nav-group">
       <button className="nav-row" onClick={() => onSection('documents')}><Icon name="document" size={16} stroke={1.8} /><span className="nav-row-name">Documents</span><span className="nav-row-count">{snapshot?.documents.length ?? ''}</span></button>
-      <button className="nav-row" onClick={() => onSection('files')}><Icon name="folder" size={16} stroke={1.8} /><span className="nav-row-name">Files</span><span className="nav-row-count">{snapshot?.resources.length ?? ''}</span></button>
+      <button className="nav-row" onClick={() => onSection('files')} title="Files registered with Rho; the Overview lists everything in the folder"><Icon name="folder" size={16} stroke={1.8} /><span className="nav-row-name">Files<span style={{ color: 'var(--color-meta)', fontWeight: 400 }}> · registered</span></span><span className="nav-row-count">{snapshot?.resources.length ?? ''}</span></button>
       {operations > 0 && <div className="nav-row nav-fact"><span className="nav-row-name">Retained operations</span><span className="nav-row-count">{operations}</span></div>}
     </div>
   </>;

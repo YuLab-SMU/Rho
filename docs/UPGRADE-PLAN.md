@@ -50,7 +50,7 @@ that is prose cannot prevent that; a Skill that is checked can.
 | Create the declared output directory (and each artifact subdirectory) before the producer starts | Rho-plugins | done: `plugins/r/src/index.ts`, tests in `test/resources.test.mjs` |
 | Reconcile a non-terminal run when a read observes it, bounded, never starting a Host | Rho | done: `src/requests.ts`, `test/reconcile.test.mjs` |
 | Execution acceptance: real Host, real R, artifact, completion inventory, `artifact.check`, exactly one Host start | Rho | done: `scripts/execution-acceptance.mjs` |
-| Sidebar content counts match what the project shows | Rho | pending |
+| Sidebar content counts match what the project shows | Rho | done: the count is labelled "registered", and the Overview lists the folder |
 | Lock conflicts name the holder, not just "another service" | Rho | done |
 | Generic failures name their cause instead of "could not be confirmed" | Rho | done |
 
