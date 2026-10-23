@@ -68,6 +68,7 @@
     "test:feedback": "node --test test/feedback-delivery.test.mjs",
     "test:presenter": "node --test test/presenter.test.mjs",
     "acceptance:walkthrough": "node scripts/skill-walkthrough.mjs",
+    "verify": "node scripts/verification.mjs",
     "test:ui:u2": "npm run build && npm run acceptance:ui:u2"
   },
   "dependencies": {
