@@ -39,8 +39,8 @@ back into Documents. Reader signatures now accept the methods they actually use.
 Rho retains the selected v2 wire vocabulary locally, with parity tests against
 provider contracts. That compatibility snapshot describes the API when optional
 packages are physically absent; it contains no provider implementation or state.
-`protocol/v1.json`, `protocol/v2.json` and both fixture sets are unchanged.
-Historical v1 action names remain inert compatibility data for retained requests;
+`protocol/index.json`, its `operations/` files and the fixture set are unchanged.
+Historical action names remain inert compatibility data for retained requests;
 they do not register or execute a recipe.
 
 ## Further decoupling

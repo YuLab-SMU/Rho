@@ -6,8 +6,9 @@ Agent MCP exposes four fixed tools: `rho_index`, `rho_resolve`, `rho_call`,
 resolved only for selected operations. Large replies become scoped immutable
 references, with bounded JSON-pointer/container/text pages and explicit release.
 Reading a result never repeats its source operation. Protocol inspection is
-bounded and authorized; the offline v2 export is an index plus independently
-hashed operation files. The old full-protocol HTTP dump is unavailable.
+bounded and authorized; the offline export is one index plus independently
+hashed operation files. One versioned contract is served: a retired version path
+is not answered, and the old full-protocol HTTP dump stays unavailable.
 
 Local UI cleanup (2026-10-23) keeps the shell's muted colors and 48 px toolbar /
 68 px rail, and settles plugin heading/card focus before paint. Build, 14 browser
@@ -169,12 +170,14 @@ requirements and scoped MCP. Core remains unchanged at
 [plugin boundary review](PLUGIN-BOUNDARY-ACCEPTANCE.md) records the current responsibilities and dependency checks; [extraction acceptance](EXTRACTION-ACCEPTANCE.md)
 records actual source/package checks and failures.
 
-Frozen v1 schema/fixtures and an observation bridge preserve original accepted
-parameters, Core identity and resource bytes. New v1 scientific submissions are
-unavailable; reads, explicit retained retry/cancel and schema-1 workspace restore
-do not select a recipe or create a replacement execution.
-The [original v1 acceptance](BACKEND-ACCEPTANCE.md) and
-[immutable candidate record](backend-acceptance/v0.1.0.json) retain their scope.
+One contract serves both retained and new work: original accepted parameters, Core
+identity and resource bytes stay observable, while superseded scientific
+submissions are unavailable. Reads, explicit retained retry/cancel and schema-1
+workspace restore do not select a recipe or create a replacement execution.
+The [original 0.1 acceptance](BACKEND-ACCEPTANCE.md) and
+[immutable candidate record](backend-acceptance/v0.1.0.json) retain their scope;
+that run captured schema version 1.0 before the current contract replaced both
+earlier artifacts.
 
 Selected baseline: macOS arm64, Node 22.22.3/npm 10.9.8, Python 3, R 4.5.2,
 Claude Code 2.1.301 / MCP SDK 1.29.0. R is external; the ordinary project requires
@@ -220,7 +223,26 @@ Retained failed extraction trials exposed checker-wrapper variable collision,
 a generic completion sidecar placed inside the producer's immutable inventory,
 and an incorrect declared shrinkage column. New trials fixed those conditions;
 original failed requests remain failed. Historical scientific failures and the
-original installed v1 candidate remain recorded separately.
+original installed candidate remain recorded separately.
+
+## Single-contract cleanup verification
+
+The two coexisting protocol artifacts were collapsed on 2026-10-23, before any
+release: the earlier version had never been published, so keeping it as a second
+dialect charged a released product's compatibility cost against development work.
+Shared definitions now live in `protocol-base.ts` carrying no contract identity;
+the serve path, validators, envelope and artifacts describe one contract.
+
+Actually run in this checkout: `npm run build:service` and
+`RHO_CORE_BINARY=../Rho-core/target/debug/rho-core node --test test/*.test.mjs`
+→ 99/99 passed, including retained-operation observation, the repointed service
+and workspace tests, and the retired-path refusals. A local tarball built with the
+explicit `--allow-dirty` development override was inspected directly: it carries
+`protocol/index.json` plus 87 hashed operation files and `fixtures/states.json`,
+and contains no retired artifact, module name or fixture directory. Every file
+hash in that packaged index was recomputed and matched.
+Not run: the scientific `install-acceptance.mjs` flows, which require the two
+external example projects, and browser acceptance.
 
 ## Current focus and remaining work
 

@@ -72,14 +72,13 @@ try {
     report.checks.push('Installed ' + script + ' passed.');
     process.stdout.write(output);
   }
-  const fixtures = JSON.parse(await fs.readFile(path.join(pkg, 'fixtures/v2/states.json'), 'utf8'));
+  const fixtures = JSON.parse(await fs.readFile(path.join(pkg, 'fixtures/states.json'), 'utf8'));
   assert.equal(fixtures.readOnly, true); assert.ok(fixtures.cases.length >= 9);
   assert.equal(fixtures.apiVersion, '2.0');
-  await fs.access(path.join(pkg, 'protocol/v1.json'));
-  const index = JSON.parse(await fs.readFile(path.join(pkg, 'protocol/v2.json'), 'utf8'));
+  const index = JSON.parse(await fs.readFile(path.join(pkg, 'protocol/index.json'), 'utf8'));
   assert.equal(index.format, 'rho.protocol-index/1');
   for (const ref of [index.shared, ...Object.values(index.operations)]) {
-    assert.match(ref.path, /^v2\/[A-Za-z0-9.]+\.json$/);
+    assert.match(ref.path, /^operations\/[A-Za-z0-9.]+\.json$/);
     const bytes = await fs.readFile(path.join(pkg, 'protocol', ref.path));
     assert.equal(bytes.length, ref.bytes); assert.equal(createHash('sha256').update(bytes).digest('hex'), ref.sha256);
   }
@@ -90,7 +89,7 @@ try {
   }
   const source = await fs.readFile(path.join(pkg, 'node_modules/@rho-workspace/plugin-r/dist/index.js'), 'utf8');
   assert.equal(/airway|DESeq2|apeglm|shrink|recipePath/.test(source), false);
-  report.checks.push('Versioned v1/v2 contracts and inert v2 states shipped; every selected contract/plugin artifact contains no project recipe or scientific native script.');
+  report.checks.push('The single versioned contract, its hashed operation files and the inert states shipped; every selected contract/plugin artifact contains no project recipe or scientific native script.');
   report.status = 'passed';
 } catch (e) { report.status = 'failed'; report.failure = e.message; process.exitCode = 1; }
 finally {

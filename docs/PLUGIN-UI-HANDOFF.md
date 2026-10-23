@@ -23,7 +23,7 @@ does not supply a replacement functional implementation.
 
 The provider-owned [Node API reference](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PUBLIC-INTERFACES.md)
 lists every package entry, export, service port and capability limit. The selected
-application contract is [protocol/v2.json](../protocol/v2.json), also returned by
+application contract is [protocol/index.json](../protocol/index.json), also returned by
 `protocol.describe`. Its operation schemas are the authority for exact required
 fields, bounds and response envelopes. Existing headless acceptance is recorded
 in the [boundary review](PLUGIN-BOUNDARY-ACCEPTANCE.md).

@@ -6,9 +6,9 @@ import { requirementsSchema, executionInputSchema, declarationSchema } from './e
 import { objectSchema as obj, text, refSchema as ref } from '@rho-workspace/plugin-contracts';
 import { inputs as annotationInputs, outputs as annotationOutputs } from './annotation-contracts.js';
 import { nativeSchemas } from './native-contracts.js';
-import { protocol as v1 } from './legacy-protocol.js';
+import { baseProtocol } from './protocol-base.js';
 import { operationContracts as documentContracts, documentSchema, documentSummarySchema } from './document-contract.js';
-const base = structuredClone(v1);
+const base = structuredClone(baseProtocol);
 const project = { projectId: base.operations['capability.list'].properties.projectId };
 const op = { ...project, operationId: base.operations['action.lookup'].properties.operationId };
 const positive = { type: 'integer', minimum: 1 };
@@ -198,4 +198,4 @@ export const errorKinds = base.errorKinds;
 export const errorSchema = base.definitions.error;
 export const errorEnvelope = obj({ apiVersion: { const: '2.0' }, ok: { const: false }, error: errorSchema });
 export const responseEnvelope = (method: string) => obj({ apiVersion: { const: '2.0' }, ok: { const: true }, value: responses[method] });
-export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed'])], operations, responses, descriptions, definitions, errorEnvelope, legacy: 'v1 schemas and captured fixtures are frozen. Legacy reads and explicit retry/cancel of accepted requests remain available; new recipe submissions require an explicit v2 project script.' };
+export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed'])], operations, responses, descriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };

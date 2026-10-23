@@ -68,7 +68,7 @@ Rho 持有应用协调状态；插件持有文档与功能资源状态；Core �
 ## 公共接口交付范围
 
 先定义有限的首版 catalog 和操作，不建设动态插件市场、通用工作流引擎或所有 Agent 协议。
-下表操作族已落实为[版本 1 schema](../protocol/v1.json)。BP-01 交付 `/api/v1` 路由、JSON Schema、
+下表操作族已落实为[按操作发布的契约](../protocol/index.json)。BP-01 交付 `/api/v2` 路由、JSON Schema、
 事件类型、错误样例和兼容性规则；UI 与 Agent 均不得绕过它们的公共调用条件。
 
 | 操作族 | 最小语义与返回信息 |

@@ -1,7 +1,4 @@
 {
-  "apiVersion": "2.0",
-  "schemaVersion": 2,
-  "transport": "HTTP JSON POST /api/v2/{operation}; GET /api/v2/events",
   "errorKinds": [
     "invalid",
     "unauthorized",
@@ -17,63 +14,6 @@
     "storage",
     "native"
   ],
-  "errorEnvelope": {
-    "type": "object",
-    "additionalProperties": false,
-    "properties": {
-      "apiVersion": {
-        "const": "2.0"
-      },
-      "ok": {
-        "const": false
-      },
-      "error": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "kind": {
-            "enum": [
-              "invalid",
-              "unauthorized",
-              "origin",
-              "scope",
-              "stale",
-              "conflict",
-              "condition",
-              "unavailable",
-              "limit",
-              "not_found",
-              "event_gap",
-              "storage",
-              "native"
-            ]
-          },
-          "message": {
-            "type": "string",
-            "minLength": 1
-          },
-          "details": {
-            "type": "object"
-          },
-          "continuation": {
-            "type": "string",
-            "minLength": 1
-          }
-        },
-        "required": [
-          "kind",
-          "message",
-          "details",
-          "continuation"
-        ]
-      }
-    },
-    "required": [
-      "apiVersion",
-      "ok",
-      "error"
-    ]
-  },
   "definitions": {
     "error": {
       "type": "object",
@@ -1609,5 +1549,65 @@
     "task.map.changed"
   ],
   "compatibility": "Major API path changes for incompatible fields/semantics; additive optional fields allowed. Per-resource versions are independent.",
-  "legacy": "v1 schemas and captured fixtures are frozen. Legacy reads and explicit retry/cancel of accepted requests remain available; new recipe submissions require an explicit v2 project script."
+  "apiVersion": "2.0",
+  "schemaVersion": 2,
+  "transport": "HTTP JSON POST /api/v2/{operation}; GET /api/v2/events",
+  "errorEnvelope": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiVersion": {
+        "const": "2.0"
+      },
+      "ok": {
+        "const": false
+      },
+      "error": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "invalid",
+              "unauthorized",
+              "origin",
+              "scope",
+              "stale",
+              "conflict",
+              "condition",
+              "unavailable",
+              "limit",
+              "not_found",
+              "event_gap",
+              "storage",
+              "native"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "details": {
+            "type": "object"
+          },
+          "continuation": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "kind",
+          "message",
+          "details",
+          "continuation"
+        ]
+      }
+    },
+    "required": [
+      "apiVersion",
+      "ok",
+      "error"
+    ]
+  },
+  "status": "One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect."
 }

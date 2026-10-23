@@ -45,15 +45,15 @@ adds native window and system integration.
 ## Interaction model
 
 Four concepts connect components to the container. The finite 0.2 backend exposes
-their concrete [v2 schemas](../protocol/v2.json), HTTP/SSE service and client.
-Plugins supplies independently packaged headless owners. Rho selects a finite
-allowlisted package list, checks versions/service requirements and injects typed
-ports. Missing packages report unavailable; they are not installed implicitly.
-UI entries remain unavailable.
+their concrete [operation contracts](../protocol/index.json), HTTP/SSE service and
+client. Plugins supplies independently packaged headless owners. Rho selects a
+finite allowlisted package list, checks versions/service requirements and injects
+typed ports. Missing packages report unavailable; they are not installed
+implicitly. UI entries remain unavailable.
 [Headless backend](HEADLESS.md) records the actual boundary and persistence rules.
 Scripts, requirements, typed fields, keys, entity namespaces and two-input joins
-are explicit declarations. Frozen v1 schemas/fixtures and a retained observation
-bridge preserve earlier records without registering their workflow for new work.
+are explicit declarations. Retained records stay observable through the same
+contract, which does not register their earlier workflow for new work.
 
 | Concept | Meaning |
 | --- | --- |

@@ -1,3 +1,7 @@
+// Baseline definitions for the single versioned contract in protocol.ts.
+// This module declares no contract identity of its own: it is the substrate the
+// current protocol extends, and the required facts recorded here keep the meaning
+// they were first accepted with.
 import { scriptSchema } from './entry-contracts.js';
 import { objectSchema as obj, text, refSchema as ref, version } from '@rho-workspace/plugin-contracts';
 const id = { type: 'string', pattern: '^[A-Za-z0-9._:@-]{1,128}$' };
@@ -73,7 +77,7 @@ const definitions = { error: errorSchema, resource: resourceSchema, run: runSche
     selection: obj({ resource: ref, entities: { type: 'array', items: text }, at: text }),
     composition: obj({ compositionId: id, version: positive, views: { type: 'array', items: view, maxItems: 32 }, layout: { type: 'object' }, availability: { type: 'object' }, acknowledgedAt: text })
   };
-// Response objects admit additive fields; required facts keep their v1 meaning.
+// Response objects admit additive fields; required facts keep their original meaning.
 const record = { type: 'object' };
 const array = (items: any) => ({ type: 'array', items });
 const response = (properties: Record<string, any>, required = Object.keys(properties)) => ({ type: 'object', properties, required, additionalProperties: true });
@@ -86,7 +90,6 @@ const bindingResult = response({ id: version, projectId: id, principal: text, ex
 const activity = response({ cursor: integer, retainedFrom: positive, entries: array(response({ cursor: positive, principal: text, method: text, at: text, outcome: { enum: ['returned', 'rejected'] } })) });
 const workspace = response({ schemaVersion: { const: 1 }, sourceProjectId: id, acknowledgedAt: text, documents: array(definitions.document), resources: array(record), compositions: array(definitions.composition), selection: { anyOf: [definitions.selection, { type: 'null' }] } });
 export const responses: Record<string, any> = {
-  'protocol.describe': response({ apiVersion: { const: '1.0' }, schemaVersion: { const: 1 }, operations: record, definitions: record, responses: record }),
   'project.open': response({ ...projectResult.properties, host: cli }),
   'project.create': projectResult, 'project.list': array(projectResult),
   'session.grant': response({ connectionFile: text, projectId: id, methods: array(text), transport: { const: 'stdio-mcp' }, externalSessionId: id }),
@@ -109,8 +112,8 @@ export const responses: Record<string, any> = {
   'workspace.restore': response({ sourceProjectId: id, documents: array(record), resources: array(record), compositions: array(record), execution: { const: 'not-replayed' }, selection: record }, ['sourceProjectId', 'documents', 'resources', 'compositions', 'execution']),
   'observation.snapshot': response({ project: projectResult, catalog: record, documents: array(definitions.document), operations: array(runSchema), resources: array(resourceSchema), compositions: array(definitions.composition), selection: { anyOf: [definitions.selection, { type: 'null' }] }, bindings: array(bindingResult), cursor: integer, host: cli, limits: record })
 };
-export const errorEnvelope = obj({ apiVersion: { const: '1.0' }, ok: { const: false }, error: errorSchema });
-export const responseEnvelope = (method: string) => obj({ apiVersion: { const: '1.0' }, ok: { const: true }, value: responses[method] });
-export const protocol = { apiVersion: '1.0', schemaVersion: 1, transport: 'HTTP JSON POST /api/v1/{operation}; GET /api/v1/events', operations, responses, descriptions, errorKinds, errorEnvelope,
-  definitions, eventTypes: ['operation.accepted', 'operation.delivery', 'operation.cancel-requested', 'document.changed', 'selection.changed', 'composition.changed', 'binding.changed'],
+// Definitions only. The API version, transport and envelopes belong to the one
+// contract exported by protocol.ts, so nothing here names a second contract.
+export const baseProtocol = { operations, responses, descriptions, errorKinds, definitions,
+  eventTypes: ['operation.accepted', 'operation.delivery', 'operation.cancel-requested', 'document.changed', 'selection.changed', 'composition.changed', 'binding.changed'],
   compatibility: 'Major API path changes for incompatible fields/semantics; additive optional fields allowed. Per-resource versions are independent.' };

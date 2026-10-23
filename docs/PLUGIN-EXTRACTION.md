@@ -45,14 +45,15 @@ Core 继续通过公开 CLI 提供执行事实与 resident Host。
 
 ## 审计起点与实现结果
 
-下表保留 0.1 审计起点。0.2 已落实右列边界：旧 schema 移至
-[legacy-protocol.ts](../src/legacy-protocol.ts)，新工作使用 [v2 JSON](../protocol/v2.json)；
+下表保留 0.1 审计起点。0.2 已落实右列边界：旧操作定义收敛为
+[protocol-base.ts](../src/protocol-base.ts)（仅共用定义，不带契约身份），新工作使用
+[按操作发布的契约](../protocol/index.json)；
 `r.execute` 接收显式脚本、依赖与产物声明，表格和选区使用声明的类型、key、namespace。
 科学脚本和 checker 留在 Plugins examples，基础 tarball 不含它们。
 
 | 当前位置 | 耦合 | 解耦后的 owner / 契约 |
 | --- | --- | --- |
-| [公共 schema](../src/protocol.ts)及生成的 [v1 JSON](../protocol/v1.json) | 动作限于 `airway.analyze` / `airway.shrink`；比较入参固定 `baseline` / `shrinkage` | Rho 校验通用 envelope；所选插件提供动作/资源 schema 和版本 |
+| [公共 schema](../src/protocol.ts)及生成的分操作契约 [索引](../protocol/index.json) | 动作限于 `airway.analyze` / `airway.shrink`；比较入参固定 `baseline` / `shrinkage` | Rho 校验通用 envelope；所选插件提供动作/资源 schema 和版本 |
 | [请求协调](../src/requests.ts) | 直接调用 `planAnalysis`、科学产物收集与 checker | Rho 保留受理/身份/执行桥；通过所选 owner 的执行计划和产物/检查入口分派 |
 | [服务路由](../src/server.ts) | selection/context 硬编码 `gene_id` | reader 声明 key 与坐标；Rho 路由带资源版本的选区 |
 | [组合与恢复](../src/workspace.ts) | 比较视图检查 shrinkage/baseline 的科学关系；恢复选区要求基因 ID | 通用 entry/props/binding 校验；领域关系由领域 owner 检查 |
@@ -87,8 +88,9 @@ PX-03 的对象支持首先限定为 batch 的显式导出快照；不把实时 
 
 ## 协议与存量状态
 
-保留 `/api/v1` 已接受候选的定义与证据。不在原版本下静默删除动作、改写 comparison 字段，
-或给原请求补上另一种执行含义。涉及这些不兼容变化的新组合使用新的主版本路径和迁移说明；
+保留已接受候选的定义与证据，但只维护一个契约：已接受的操作保持可观测，退役的操作名
+不再成为提交通道。不在同一契约下静默删除动作、改写 comparison 字段，
+或给原请求补上另一种执行含义。涉及这些不兼容变化的新组合必须显式说明迁移；
 可兼容的新增能力也必须有明确 schema、实际客户端和检查。
 
 存量记录保留原 owner/版本、参数字节、调用方/项目、Core caller/request 和原生身份。

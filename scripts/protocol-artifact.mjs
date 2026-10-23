@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 
 // Each operation is independently readable and verifiable. The root artifact is
 // a directory of references, not an expanded copy of every request and response.
+// Paths name roles rather than releases: there is one contract, and its version
+// lives in the envelope and in this index, not in a second directory of files.
 export function protocolArtifacts(protocol) {
   const files = new Map();
   const put = (path, value) => {
@@ -10,11 +12,11 @@ export function protocolArtifacts(protocol) {
   };
   const { operations, responses, descriptions, ...shared } = protocol;
   const index = { format: 'rho.protocol-index/1', apiVersion: protocol.apiVersion, schemaVersion: protocol.schemaVersion,
-    shared: put('v2/shared.json', shared), operations: {} };
+    shared: put('operations/shared.json', shared), operations: {} };
   for (const method of Object.keys(operations).sort()) index.operations[method] = {
     summary: descriptions[method] ?? method,
-    ...put('v2/' + method + '.json', { method, inputSchema: operations[method], outputSchema: responses[method], description: descriptions[method] ?? null })
+    ...put('operations/' + method + '.json', { method, inputSchema: operations[method], outputSchema: responses[method], description: descriptions[method] ?? null })
   };
-  files.set('v2.json', JSON.stringify(index, null, 2) + '\n');
+  files.set('index.json', JSON.stringify(index, null, 2) + '\n');
   return files;
 }

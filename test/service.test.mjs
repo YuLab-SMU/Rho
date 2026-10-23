@@ -19,9 +19,9 @@ test('HTTP auth, origins, scope, project read has no Host, and two callers share
     assert.equal((await human.call('requirements.check', { projectId: project.id, requirements: [] })).status, 'unknown');
     await assert.rejects(human.call('action.submit', { projectId: project.id, operationId: 'missing-r', action: 'r.execute', actionVersion: '0.2.0', input: { args: [], requirements: [], artifacts: [], completion: null, script: { kind: 'disk', path: 'script.R', digest: 'a'.repeat(64) } } }), e => e.error.kind === 'condition');
     await assert.rejects(fs.stat(path.join(project.root, '.rho/host.sock')), { code: 'ENOENT' });
-    let response = await fetch(service.url + '/api/v1/project.list', { method: 'POST', headers: { authorization: 'Bearer ' + service.adminToken, 'content-type': 'application/json', origin: 'http://unrelated.invalid' }, body: '{}' });
+    let response = await fetch(service.url + '/api/v2/project.list', { method: 'POST', headers: { authorization: 'Bearer ' + service.adminToken, 'content-type': 'application/json', origin: 'http://unrelated.invalid' }, body: '{}' });
     assert.equal(response.status, 403);
-    response = await fetch(service.url + '/api/v1/project.list', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    response = await fetch(service.url + '/api/v2/project.list', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     assert.equal(response.status, 401);
     const descriptor = await service.agentConnection(project.id, 'external-a', path.join(root, 'agent.json'), ['protocol.describe', 'binding.activity', 'document.open', 'document.read', 'document.edit', 'action.lookup']);
     const agent = new RhoClient(descriptor);

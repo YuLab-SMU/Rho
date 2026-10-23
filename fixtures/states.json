@@ -1640,6 +1640,73 @@
           "continuation": "Inspect the stated condition; observe original operations without replaying actions."
         }
       }
+    },
+    {
+      "state": "partial-retained",
+      "operation": "resource.list",
+      "provenance": "Projection of the real 16,139-row first fit, without a completion declaration.",
+      "envelope": {
+        "apiVersion": "2.0",
+        "ok": true,
+        "value": {
+          "resources": [
+            {
+              "id": "87a471086597613a9159c0072b23bee000a8dad05b88fc1b2d6e512c44cdaa4b",
+              "version": "ce653ec00b6d604ffd4bc354dc755982d662de313407a81aa118c7e6153055a3",
+              "projectId": "f7820c9d1e4b0f50f8f3cd7839423d91",
+              "owner": "rho-plugins.airway",
+              "kind": "table",
+              "path": ".rho/plugins/runs/758861cf0a37ef50530b710b8d5eb8b13feea9b4d7ee2110a7e8de3ae77131f4/artifacts/results/full.csv",
+              "bytes": 2596572,
+              "provenance": {
+                "operationId": "9bacb89c-8c7c-4e02-b42f-791d6af46e45",
+                "core": {
+                  "caller": "rho:071fdf5c6e5e0cb005da7035a99491fddce6208b6ce99467",
+                  "requestId": "1ee0b53069695b5836edc569314116e2fb91b481970f48191c05167182391762"
+                },
+                "action": "airway.analyze",
+                "actionVersion": "0.1.0",
+                "codeDigest": "dba5bdc6e1de3104b273e9add722389e2d8b67bdea772e8ff9ea199a27366f97",
+                "source": {
+                  "kind": "buffer",
+                  "documentId": "165dd9579745f4205c9ddf82ec5ba8b0924fa5ae5348c7a3b499e9a657dab460",
+                  "version": 2,
+                  "path": "paused-analysis.R",
+                  "dirty": true,
+                  "sha256": "dfb43dd154f9f96d28c28ce39556f6340f57f6a66c849ea4f5826b3812f94b38",
+                  "dataset": "airway/GSE52778",
+                  "expectedGenes": 16139,
+                  "contrast": "dex:trt:untrt"
+                },
+                "kind": "buffer",
+                "documentId": "165dd9579745f4205c9ddf82ec5ba8b0924fa5ae5348c7a3b499e9a657dab460",
+                "version": 2,
+                "path": "paused-analysis.R",
+                "dirty": true,
+                "sha256": "dfb43dd154f9f96d28c28ce39556f6340f57f6a66c849ea4f5826b3812f94b38",
+                "dataset": "airway/GSE52778",
+                "expectedGenes": 16139,
+                "contrast": "dex:trt:untrt"
+              },
+              "coverage": {
+                "completionDeclaration": "absent",
+                "observedAt": "2026-10-15T13:43:40.004Z",
+                "observedRows": 16139,
+                "expectedGenes": 16139,
+                "finiteEffects": 16139
+              },
+              "availability": "partial"
+            }
+          ],
+          "integrity": {
+            "state": "incomplete",
+            "completionDeclaration": "absent"
+          },
+          "domain": {
+            "state": "unchecked"
+          }
+        }
+      }
     }
   ]
 }

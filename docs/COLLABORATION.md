@@ -1,7 +1,7 @@
 # Headless collaboration
 
-Rho's headless collaboration protocol is additive under `/api/v2`. The frozen
-v1 schemas and fixtures are unchanged. This is not browser or UI acceptance.
+Rho's headless collaboration protocol is additive under `/api/v2`, the one served
+contract. It is not browser or UI acceptance.
 [Headless installation](HEADLESS.md), [Status](STATUS.md) and the
 [execution boundary](EXECUTION.md) retain their separate scopes.
 

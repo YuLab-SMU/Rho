@@ -48,7 +48,7 @@
     "agent": "node scripts/agent-experiment.mjs",
     "acceptance:collaboration": "node scripts/collaboration-acceptance.mjs",
     "acceptance:collaboration:agent": "RHO_COLLAB_MODEL=1 node scripts/collaboration-acceptance.mjs",
-    "build:service": "tsc && node scripts/protocol.mjs && node scripts/plugin-inventory.mjs",
+    "build:service": "node -e \"const fs=require('fs');for(const e of fs.readdirSync('dist'))if(e!=='web')fs.rmSync('dist/'+e,{recursive:true,force:true})\" && tsc && node scripts/protocol.mjs && node scripts/plugin-inventory.mjs",
     "build:web": "tsc -p tsconfig.web.json && vite build && node scripts/web-manifest.mjs",
     "test:ui": "npm run build && node --test test/browser.test.mjs && node scripts/ui-acceptance.mjs",
     "acceptance:execution": "node scripts/execution-acceptance.mjs",

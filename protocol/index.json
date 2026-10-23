@@ -3,524 +3,524 @@
   "apiVersion": "2.0",
   "schemaVersion": 2,
   "shared": {
-    "path": "v2/shared.json",
-    "bytes": 41707,
-    "sha256": "ac63bda1b1e741b13a3241129d560ab6929032b650f18fb5128e9069e4ff0bed"
+    "path": "operations/shared.json",
+    "bytes": 41700,
+    "sha256": "ccffe89e516f19774aa1c9a3c0646e4195bff9ef713753b7747d5d5119827508"
   },
   "operations": {
     "action.cancel": {
       "summary": "action.cancel",
-      "path": "v2/action.cancel.json",
+      "path": "operations/action.cancel.json",
       "bytes": 3430,
       "sha256": "087d2c9614b81fffa130c1505d8c985884575b79934e2962b49a5a4bc7ee408e"
     },
     "action.list": {
       "summary": "action.list",
-      "path": "v2/action.list.json",
+      "path": "operations/action.list.json",
       "bytes": 3634,
       "sha256": "12d14a14210898b61c4a915989f104172f9464651671eb2c1b732b0562cb2a1f"
     },
     "action.lookup": {
       "summary": "Read the original accepted operation. Missing acknowledgement is not permission for a new identity.",
-      "path": "v2/action.lookup.json",
+      "path": "operations/action.lookup.json",
       "bytes": 3527,
       "sha256": "a6613adc217cdb92b430704eb410c3ba7b80412ec3f586cd24796911163d0ccd"
     },
     "action.observe": {
       "summary": "Observe original Core facts. Never starts or recovers a Host.",
-      "path": "v2/action.observe.json",
+      "path": "operations/action.observe.json",
       "bytes": 3490,
       "sha256": "4fc01995bec68b1c446caee39e5284588808891a86d6659b9d6fc29155411dea"
     },
     "action.output": {
       "summary": "action.output",
-      "path": "v2/action.output.json",
+      "path": "operations/action.output.json",
       "bytes": 1024,
       "sha256": "6c2dcae95622037bc543d8dd8eafc56a728cc04e4600d9a9acce95e0ec07c44b"
     },
     "action.retry": {
       "summary": "action.retry",
-      "path": "v2/action.retry.json",
+      "path": "operations/action.retry.json",
       "bytes": 3429,
       "sha256": "8da2dd27f34f0531d3fc6871a80f302fa0374530c526d331687830577c1999e1"
     },
     "action.submit": {
       "summary": "Execute the explicitly selected project R script snapshot and requirements. Persist operationId before delivery; identical retries retain the original Core identity. Output directory is the first R argument, followed by explicit args or frozen resource paths. Artifact paths are output-relative; completion is run-directory-relative, returned as plan.completion, so an inventory can remain beside immutable producer artifacts.",
-      "path": "v2/action.submit.json",
+      "path": "operations/action.submit.json",
       "bytes": 15590,
       "sha256": "7f41c5453f60945d1d483215339e4da9bd21cf21e0bed66d12e1bc8478a00815"
     },
     "annotation.create": {
       "summary": "annotation.create",
-      "path": "v2/annotation.create.json",
+      "path": "operations/annotation.create.json",
       "bytes": 14938,
       "sha256": "fa2880030df0ab14678fa1669bd38cd06fed203b059b842c8ac13edf8cda7e1d"
     },
     "annotation.list": {
       "summary": "annotation.list",
-      "path": "v2/annotation.list.json",
+      "path": "operations/annotation.list.json",
       "bytes": 13133,
       "sha256": "4cd04358727986ecb2e74aae684470b6ec76597e07649a6476c996d990e0c5ff"
     },
     "annotation.read": {
       "summary": "annotation.read",
-      "path": "v2/annotation.read.json",
+      "path": "operations/annotation.read.json",
       "bytes": 12305,
       "sha256": "ce504c6934a3566d990867c1d2b4993ea2265f9567621d25d7495af186e1e400"
     },
     "annotation.reply": {
       "summary": "annotation.reply",
-      "path": "v2/annotation.reply.json",
+      "path": "operations/annotation.reply.json",
       "bytes": 13033,
       "sha256": "bed577bf35371ceb42f6fc63153233c8dfb9c14f1bb2399c8dbf087df15f0591"
     },
     "artifact.check": {
       "summary": "Verify the selected completion inventory and file bytes only; domain check reports remain project resources.",
-      "path": "v2/artifact.check.json",
+      "path": "operations/artifact.check.json",
       "bytes": 2683,
       "sha256": "fa99db25fb0384f87ec9e1aecdd9859cf4f2afe892da0c4663dcebd28b7098ac"
     },
     "binding.activity": {
       "summary": "binding.activity",
-      "path": "v2/binding.activity.json",
+      "path": "operations/binding.activity.json",
       "bytes": 21855,
       "sha256": "139d73e151e45a46d7752515f79a69d052eeebf91694f5a4769de3a1e8bc34d6"
     },
     "binding.activity.append": {
       "summary": "Registered native adapter only: retain original CLI tool and artifact-ready observations. This does not execute, validate, or present artifacts.",
-      "path": "v2/binding.activity.append.json",
+      "path": "operations/binding.activity.append.json",
       "bytes": 15618,
       "sha256": "c27f66e3180e4fd1755830926bac94c76a5045855c3e856b426b587fe7f94348"
     },
     "binding.close": {
       "summary": "binding.close",
-      "path": "v2/binding.close.json",
+      "path": "operations/binding.close.json",
       "bytes": 1313,
       "sha256": "956b9774f064fc07f3ec5bc95b4f78d584e9126143616c6a748f0d3b550bdcd2"
     },
     "binding.list": {
       "summary": "binding.list",
-      "path": "v2/binding.list.json",
+      "path": "operations/binding.list.json",
       "bytes": 1300,
       "sha256": "e6af76591d074663ad02029ff2819dcc54dfa4712130057506600f36aa69eadf"
     },
     "binding.open": {
       "summary": "Bind this external session to the authenticated project scope. Conversation stays in Claude Code.",
-      "path": "v2/binding.open.json",
+      "path": "operations/binding.open.json",
       "bytes": 6868,
       "sha256": "b680338093f2c8a7e8d3250dad11ea2dca7cb77dfb7318730b125ec7e33c6133"
     },
     "capability.configure": {
       "summary": "Persist the selected project plugins with a conditional version and idempotent changeId. This changes routing only; it installs no package, starts no runtime and cancels no work.",
-      "path": "v2/capability.configure.json",
+      "path": "operations/capability.configure.json",
       "bytes": 2078,
       "sha256": "c44fddfa38f1d6938be29efc217d91cf2a2676e1098e195e02970cdae9e865ec"
     },
     "capability.index": {
       "summary": "Read a small role-narrowed index of currently authorized, enabled operations and immutable Skill/contract references.",
-      "path": "v2/capability.index.json",
+      "path": "operations/capability.index.json",
       "bytes": 5135,
       "sha256": "3e5a439bdb628fdfcb8514866574c71829a3992a5846b25ac967705534ccfc3f"
     },
     "capability.list": {
       "summary": "Read registered actions and components. Does not start R or a Core Host.",
-      "path": "v2/capability.list.json",
+      "path": "operations/capability.list.json",
       "bytes": 1343,
       "sha256": "86991afdb7a6ac3b5ef0b520d01e524b51147a8a8019e24f1817ef00f83f7105"
     },
     "capability.resolve": {
       "summary": "Fetch selected relevant Skills with complete owner contracts, whole objects only. Pages pin catalog/bundle/caller; knownRefs only reuse currently available immutable bodies.",
-      "path": "v2/capability.resolve.json",
+      "path": "operations/capability.resolve.json",
       "bytes": 3040,
       "sha256": "5dff2f12975f4827fcc70a17f615fb77cca27aefbb99468889478a4001347566"
     },
     "composition.apply": {
       "summary": "composition.apply",
-      "path": "v2/composition.apply.json",
+      "path": "operations/composition.apply.json",
       "bytes": 33110,
       "sha256": "ef33acb3247b74820e9d8e85146eed7f1e6bd9ee29eaae05bfe8145e01177d5e"
     },
     "composition.put": {
       "summary": "composition.put",
-      "path": "v2/composition.put.json",
+      "path": "operations/composition.put.json",
       "bytes": 7870,
       "sha256": "a434c39d0d6b437205d0a106adc6d6f052861bb7c79d380eec78b0d0bdbbeef4"
     },
     "composition.read": {
       "summary": "composition.read",
-      "path": "v2/composition.read.json",
+      "path": "operations/composition.read.json",
       "bytes": 16914,
       "sha256": "a7f0d8540edce2f2f6ad31426abfdd3292e29ea410c48990489462cd393c3bc0"
     },
     "composition.undo": {
       "summary": "composition.undo",
-      "path": "v2/composition.undo.json",
+      "path": "operations/composition.undo.json",
       "bytes": 11174,
       "sha256": "02084b170b9c208e42c97b85e3b0e48f52d61149c667e94be860c3af9de2e1ae"
     },
     "context.create": {
       "summary": "context.create",
-      "path": "v2/context.create.json",
+      "path": "operations/context.create.json",
       "bytes": 3037,
       "sha256": "93b26b97bffb518ade27f9fb47e8be5a58ae23f3c87e52776d8c0c2350b2eb04"
     },
     "context.read": {
       "summary": "Read an explicit versioned context package. Receipt establishes a tool fetch, not proactive delivery to a conversation.",
-      "path": "v2/context.read.json",
+      "path": "operations/context.read.json",
       "bytes": 580,
       "sha256": "c97f40ed6a5c3b0375f62173fd67cfece32a7b1f11a43f835bef587e0cc1a757"
     },
     "data.compare": {
       "summary": "Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.",
-      "path": "v2/data.compare.json",
+      "path": "operations/data.compare.json",
       "bytes": 3767,
       "sha256": "06981abfbee00c978af15da2c4a3a2a52e1146d82adec5cd3c75c66376998719"
     },
     "data.page": {
       "summary": "data.page",
-      "path": "v2/data.page.json",
+      "path": "operations/data.page.json",
       "bytes": 5013,
       "sha256": "7d944377bb0e85a46d4f0d691ccace8c6dc4dbf543add1564d8f9fd3f06f1985"
     },
     "data.plot": {
       "summary": "data.plot",
-      "path": "v2/data.plot.json",
+      "path": "operations/data.plot.json",
       "bytes": 3235,
       "sha256": "f794e63023af720ccc399f098a89abf6c836fde12e11a5d16674a7181bfaf937"
     },
     "document.abandonSave": {
       "summary": "document.abandonSave",
-      "path": "v2/document.abandonSave.json",
+      "path": "operations/document.abandonSave.json",
       "bytes": 9593,
       "sha256": "e16d3559c5c551502cd31981b5d3e6ff02c1ed246e89282141fa10708aea9064"
     },
     "document.change.read": {
       "summary": "document.change.read",
-      "path": "v2/document.change.read.json",
+      "path": "operations/document.change.read.json",
       "bytes": 3925,
       "sha256": "10cacb09f1c295c3a9d96dfb8d9df9b5877d0926db72f64da1e2313339a5a9ba"
     },
     "document.edit": {
       "summary": "Apply conditional UTF-16 text edits to the shared buffer; keep the returned version.",
-      "path": "v2/document.edit.json",
+      "path": "operations/document.edit.json",
       "bytes": 10361,
       "sha256": "62a2197a7dd7754ede7de8aef35461e7f6d26af4a9e01e36a43e81c633aa8b45"
     },
     "document.history": {
       "summary": "document.history",
-      "path": "v2/document.history.json",
+      "path": "operations/document.history.json",
       "bytes": 3358,
       "sha256": "52140035a0645c83a2e2c4baafa7766a9ed7a2000ed04ed47ae634d27fa1fb56"
     },
     "document.open": {
       "summary": "document.open",
-      "path": "v2/document.open.json",
+      "path": "operations/document.open.json",
       "bytes": 9088,
       "sha256": "25ae95d6e90019ed57e79a49ef86a01f3067b3aeba1327d094e44593941c6c2c"
     },
     "document.read": {
       "summary": "Read the shared acknowledged buffer, including unsaved text and its version.",
-      "path": "v2/document.read.json",
+      "path": "operations/document.read.json",
       "bytes": 9187,
       "sha256": "d5058fb588edde35c84978a9737bfd9d8646a68f9b60adc7f7d3b3491614006f"
     },
     "document.revert": {
       "summary": "document.revert",
-      "path": "v2/document.revert.json",
+      "path": "operations/document.revert.json",
       "bytes": 9587,
       "sha256": "d06f0aa78300959eaf746df025586432993ef6e4c4495c3b3bd2b2e1db56f464"
     },
     "document.save": {
       "summary": "document.save",
-      "path": "v2/document.save.json",
+      "path": "operations/document.save.json",
       "bytes": 9791,
       "sha256": "a63c6d464c2f748657d420d9f708e9e1c828ba0af7baa7d91616a767e8e0d5a5"
     },
     "document.undo": {
       "summary": "document.undo",
-      "path": "v2/document.undo.json",
+      "path": "operations/document.undo.json",
       "bytes": 9549,
       "sha256": "bb35e48d34a6aafbf319873a5ac92f483de9ad5747b5eb20f37d29cde8015cd7"
     },
     "document.undoOwn": {
       "summary": "document.undoOwn",
-      "path": "v2/document.undoOwn.json",
+      "path": "operations/document.undoOwn.json",
       "bytes": 9456,
       "sha256": "f5b9cd1324a2edcc33dc5c273fd76173f45a785d22e1c1b9206bf038380d1781"
     },
     "feedback.read": {
       "summary": "Original business binding only: fetch one complete frozen feedback object using its original delivery/context and a stable fetchId. relatedDocumentId is a pointer: read its CURRENT version before conditional edit/save and preserve human changes. This owner-served receipt does not prove client return or understanding.",
-      "path": "v2/feedback.read.json",
+      "path": "operations/feedback.read.json",
       "bytes": 13035,
       "sha256": "99f2bd7ae4fdff6ab2c33958cb3636790d7373c2c5c219cce6e284a54e2593cd"
     },
     "feedback.status": {
       "summary": "Observe original delivery, exact-target fetches and explicitly linked replies. No send, session start or recovery. Keep original identities and unknown outcomes; continuation cursors pin their snapshot.",
-      "path": "v2/feedback.status.json",
+      "path": "operations/feedback.status.json",
       "bytes": 14116,
       "sha256": "089d87972cc003a58730aeaf9d133f4d7f47bf9bb71282594466bd10c4cf8b18"
     },
     "feedback.submit": {
       "summary": "Teacher browser only: freeze the original draft/anchor, prepare the committed message and retain one original-session delivery. Preserve submissionId across missing acknowledgements; stages are separate durable facts.",
-      "path": "v2/feedback.submit.json",
+      "path": "operations/feedback.submit.json",
       "bytes": 9488,
       "sha256": "511fc29c1909e90f71abd5baf77be2077f09361c0e78f9c17a6fbd4a1ba364cf"
     },
     "interaction.selection.read": {
       "summary": "interaction.selection.read",
-      "path": "v2/interaction.selection.read.json",
+      "path": "operations/interaction.selection.read.json",
       "bytes": 1198,
       "sha256": "6f0b355af025c8f9a5ca7785fb237e27297231d08007b571280fe9c1dea40f96"
     },
     "interaction.selection.set": {
       "summary": "interaction.selection.set",
-      "path": "v2/interaction.selection.set.json",
+      "path": "operations/interaction.selection.set.json",
       "bytes": 3645,
       "sha256": "75b690d93795018f7c5c0986743bb51e9fecef4c097c46f526edba843313c351"
     },
     "media.describe": {
       "summary": "media.describe",
-      "path": "v2/media.describe.json",
+      "path": "operations/media.describe.json",
       "bytes": 3115,
       "sha256": "2c981b77ca08285429f4047ea94fb90bd31648be170b47d7f39e33f5daf4710f"
     },
     "object.read": {
       "summary": "Read a bounded exported JSON object snapshot, not live R memory.",
-      "path": "v2/object.read.json",
+      "path": "operations/object.read.json",
       "bytes": 2715,
       "sha256": "c561018f83cd5ac5f28472a82a01b2eee4ffa88e5d7c4af5cfc5ae63dc72336b"
     },
     "observation.snapshot": {
       "summary": "observation.snapshot",
-      "path": "v2/observation.snapshot.json",
+      "path": "operations/observation.snapshot.json",
       "bytes": 31010,
       "sha256": "cf5ae21175a6eb92144ff8adac99956a49831bea1e08a2ad554fe12b831c390e"
     },
     "project.create": {
       "summary": "project.create",
-      "path": "v2/project.create.json",
+      "path": "operations/project.create.json",
       "bytes": 889,
       "sha256": "53b84a3da6e4ebcf02ad733d3a0127acc396b31a9cdb06f3a258f28505bd2d38"
     },
     "project.createWorkspace": {
       "summary": "project.createWorkspace",
-      "path": "v2/project.createWorkspace.json",
+      "path": "operations/project.createWorkspace.json",
       "bytes": 1090,
       "sha256": "4d4d3f46684d1dd7e3d286ca542b5aeb6f177363935a6b6208b5aa34dd75c793"
     },
     "project.doctor": {
       "summary": "Report whether this project can actually do work right now: Core binary, Rscript, write access to the project and state folders, plugin selection, Host socket and unfinished runs. Each check carries the next action when it does not pass. It starts no Host and changes nothing.",
-      "path": "v2/project.doctor.json",
+      "path": "operations/project.doctor.json",
       "bytes": 2643,
       "sha256": "d875c1e0f9be805f393443cb36e259bb3105c2fd66fcb828609f00c9fcbbeba5"
     },
     "project.entries": {
       "summary": "List one level of the selected project folder for the person who opened it: ordinary files and folders, bounded and confined to the project root, excluding owner state. Listing reads no file contents and starts no runtime.",
-      "path": "v2/project.entries.json",
+      "path": "operations/project.entries.json",
       "bytes": 1994,
       "sha256": "c91500fc835a6b1241984678a3b388508e226eab91bbc1a56bdfb5382f5c3c85"
     },
     "project.list": {
       "summary": "project.list",
-      "path": "v2/project.list.json",
+      "path": "operations/project.list.json",
       "bytes": 682,
       "sha256": "2ca94a1176ddf2f56e2600422431e23a3a722b564f445e377a9c2b7d36550772"
     },
     "project.open": {
       "summary": "project.open",
-      "path": "v2/project.open.json",
+      "path": "operations/project.open.json",
       "bytes": 1085,
       "sha256": "bb78fa88ec2cee4797e11e6992bc6cab9df8834170417040750cbf376f086bae"
     },
     "project.openFile": {
       "summary": "Open one text file from the selected project as a document and place it in the person's own layout in one conditional step, so a person can see and edit their own source files without an Agent. Confined to the project root; it executes nothing.",
-      "path": "v2/project.openFile.json",
+      "path": "operations/project.openFile.json",
       "bytes": 15034,
       "sha256": "83a68dff302f0cc4be30196ae0cdec520fc5ebf264b2fdeb9c61739e97fe168c"
     },
     "project.pick": {
       "summary": "project.pick",
-      "path": "v2/project.pick.json",
+      "path": "operations/project.pick.json",
       "bytes": 1096,
       "sha256": "01d7bb050ec6471446c90fdc841018bc427765ee38b13150142fc9347029027a"
     },
     "project.runs": {
       "summary": "Report what this project has run and what it is running: one bounded summary per operation with its execution state, accepted time, author kind, declared artifact paths and whether output was retained. It carries no request body, no code and no output text, and starts nothing.",
-      "path": "v2/project.runs.json",
+      "path": "operations/project.runs.json",
       "bytes": 2269,
       "sha256": "9a7d59eec8d2c7cf47e778a946335357d3ca5826d09901632558f33d50481e35"
     },
     "project.source.add": {
       "summary": "project.source.add",
-      "path": "v2/project.source.add.json",
+      "path": "operations/project.source.add.json",
       "bytes": 1232,
       "sha256": "928f167680c7264a889e40ee5f267b0b2c6cdfd365daaf02fabfbb46c74ea2b3"
     },
     "project.source.pick": {
       "summary": "project.source.pick",
-      "path": "v2/project.source.pick.json",
+      "path": "operations/project.source.pick.json",
       "bytes": 1217,
       "sha256": "f63fe97f1b723bcbc78726ebe3e4ad4988ce677172bca0642364c74f3db6de43"
     },
     "protocol.describe": {
       "summary": "protocol.describe",
-      "path": "v2/protocol.describe.json",
+      "path": "operations/protocol.describe.json",
       "bytes": 2414,
       "sha256": "bd603b057836e1d3977dc1d161341f1db32cb4f9f0013a359e190fa5836532de"
     },
     "protocol.validate": {
       "summary": "Check one operation body against its versioned schema without executing it: the same checks the server applies, reported with the edit each problem needs. Use it before a write whose shape is uncertain; it changes nothing and starts nothing.",
-      "path": "v2/protocol.validate.json",
+      "path": "operations/protocol.validate.json",
       "bytes": 1751,
       "sha256": "62462798bd8f3e4bda6b810dab7b1362f68a1f3cd38eb83f2c42f3352c8d8634"
     },
     "requirements.check": {
       "summary": "Probe only the explicitly declared R packages with bounded base R; no Core Host or project script starts.",
-      "path": "v2/requirements.check.json",
+      "path": "operations/requirements.check.json",
       "bytes": 2497,
       "sha256": "91aaaedfb9ad63876348ea265f8be482bf46d213f25fc275c759cfc031a58a88"
     },
     "requirements.prepare": {
       "summary": "requirements.prepare",
-      "path": "v2/requirements.prepare.json",
+      "path": "operations/requirements.prepare.json",
       "bytes": 4171,
       "sha256": "c7d64c3071570e94b897fbb017b4c7016f8d6e6d8871c9be0207a23180890802"
     },
     "resource.list": {
       "summary": "resource.list",
-      "path": "v2/resource.list.json",
+      "path": "operations/resource.list.json",
       "bytes": 2576,
       "sha256": "7ae662a3df04f759169d1fbf0dbec44e220e97bee7057c8c94fbfbb379aebef9"
     },
     "resource.read": {
       "summary": "resource.read",
-      "path": "v2/resource.read.json",
+      "path": "operations/resource.read.json",
       "bytes": 3091,
       "sha256": "b8a6e95e2904b94984132ec322c5b7f0ec5eaecdc326329f4055cd814da20cdb"
     },
     "resource.register": {
       "summary": "Declare scoped existing bytes and their type/schema at the supplied digest. This read and registration starts no runtime.",
-      "path": "v2/resource.register.json",
+      "path": "operations/resource.register.json",
       "bytes": 8239,
       "sha256": "c121b4e0a818266855a694bf5167f649f273680d5dc54d28883a50a839bfdb18"
     },
     "selection.set": {
       "summary": "selection.set",
-      "path": "v2/selection.set.json",
+      "path": "operations/selection.set.json",
       "bytes": 1751,
       "sha256": "668f0747111a2a8cf9021017095cb50149732453f0b2d1280fd0c68abdd54c2e"
     },
     "session.browser.pair": {
       "summary": "session.browser.pair",
-      "path": "v2/session.browser.pair.json",
+      "path": "operations/session.browser.pair.json",
       "bytes": 578,
       "sha256": "357796489b6666de8d2d14f14692c3c01f3650afc3fe8feacd305f38743851d5"
     },
     "session.browser.revoke": {
       "summary": "session.browser.revoke",
-      "path": "v2/session.browser.revoke.json",
+      "path": "operations/session.browser.revoke.json",
       "bytes": 591,
       "sha256": "87d867bede7a77a4da3552ed3a94eae48b098e0d5355ec7109b9a0dca22bb1a6"
     },
     "session.grant": {
       "summary": "session.grant",
-      "path": "v2/session.grant.json",
+      "path": "operations/session.grant.json",
       "bytes": 3808,
       "sha256": "b312ca535e9efb8d93eca374fb70f8f3a454da8affa24052aa576b3d29bc2334"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",
-      "path": "v2/skill.list.json",
+      "path": "operations/skill.list.json",
       "bytes": 1039,
       "sha256": "57e0c7c6f673067be760711fe98eb473d7816ce3ee0c37eb7b405b3bbe80ed34"
     },
     "skill.read": {
       "summary": "Read one versioned shipped Skill after checking its digest. A stale digest requires rereading instead of applying cached instructions.",
-      "path": "v2/skill.read.json",
+      "path": "operations/skill.read.json",
       "bytes": 1247,
       "sha256": "bb85ee1e645ebbf5a77f1b00574c4f780fd902f5822763ffc9c79c36d2a29d4b"
     },
     "task.map.declare": {
       "summary": "Agent only: conditionally declare task items, your own kind/state vocabulary (label, tone, optional role) and the next steps you will take. Rho shows next only from this declaration and never infers it.",
-      "path": "v2/task.map.declare.json",
+      "path": "operations/task.map.declare.json",
       "bytes": 9471,
       "sha256": "24431cfc9bfbfa2e0e20db8a92ad1164c49a29724c3a911f33e63f16aa3ffd79"
     },
     "task.map.present": {
       "summary": "Change a map placement or item card form, its parameters (including a subset) or the focus. Shared by the Agent and people. An Agent change to a pinned target, or within agentFormIntervalMs of its last applied form change, is merged into one pending suggestion instead of applied; Agent changes stay attributed and revertible.",
-      "path": "v2/task.map.present.json",
+      "path": "operations/task.map.present.json",
       "bytes": 2464,
       "sha256": "c214140298b81b5bbff785a761749b1292098712a3d7d47b8f95929be633e0ad"
     },
     "task.map.read": {
       "summary": "Observe the task map: declared items, vocabulary, next steps, forms, pins and pending suggestions. Reading starts, resumes or reruns nothing.",
-      "path": "v2/task.map.read.json",
+      "path": "operations/task.map.read.json",
       "bytes": 1414,
       "sha256": "c3fe911ce24f23fbdb3156f8a439639dce590736abfda2c21c42e28000481a62"
     },
     "task.map.respond": {
       "summary": "Browser person only: pin or unpin what they see, revert an Agent form change (layout only, never the work), or accept/dismiss a pending suggestion.",
-      "path": "v2/task.map.respond.json",
+      "path": "operations/task.map.respond.json",
       "bytes": 2244,
       "sha256": "2989ae3e65006623c273611d7ade8211ab84fdac31b1b84ebc172820c7aded97"
     },
     "task.routing.put": {
       "summary": "Control plane only: conditionally assign one task and business binding to this project without starting a native session.",
-      "path": "v2/task.routing.put.json",
+      "path": "operations/task.routing.put.json",
       "bytes": 5591,
       "sha256": "62fc9ba2a92c4cf3809eb7ad429cf118aae2b92392225c344ddb8aadad169188"
     },
     "view.close": {
       "summary": "view.close",
-      "path": "v2/view.close.json",
+      "path": "operations/view.close.json",
       "bytes": 17235,
       "sha256": "b343d90106a8e5879bf4643211200f87ace6bfe3984f28f12bef40a1597a3f96"
     },
     "view.observations.read": {
       "summary": "view.observations.read",
-      "path": "v2/view.observations.read.json",
+      "path": "operations/view.observations.read.json",
       "bytes": 15432,
       "sha256": "3fbae9d8289456f23207ad48c25627805a5bd7f86f8a49f16f15b06bb151c869"
     },
     "view.observe": {
       "summary": "view.observe",
-      "path": "v2/view.observe.json",
+      "path": "operations/view.observe.json",
       "bytes": 9443,
       "sha256": "6bf52390e21890069dfb6d5b974f9151eaf91808048947ced137ba9ca1886b60"
     },
     "view.protection.set": {
       "summary": "view.protection.set",
-      "path": "v2/view.protection.set.json",
+      "path": "operations/view.protection.set.json",
       "bytes": 11368,
       "sha256": "3b1333e1e5aa9568fc8fe0c036077ccd38071896b4d6d0df92909feb5391f055"
     },
     "workspace.enhance": {
       "summary": "Assigned presenter only: conditional display emphasis/title/plain Agent note using exact current generation, witness and observation. Does not modify business resources, feedback or protection.",
-      "path": "v2/workspace.enhance.json",
+      "path": "operations/workspace.enhance.json",
       "bytes": 8073,
       "sha256": "deff53bb0bbd8503c592f0002e84c9ecc07b38fbb74c9fc6de1dd8a70a69134d"
     },
     "workspace.export": {
       "summary": "workspace.export",
-      "path": "v2/workspace.export.json",
+      "path": "operations/workspace.export.json",
       "bytes": 1108,
       "sha256": "b5b02094ae51af0826863ba95a238c17f01eb80f0d9685b9cce12d65da0c8710"
     },
     "workspace.observe": {
       "summary": "Assigned presenter only: bounded layout/basis/owner summary/visibility projection. No feedback, full documents or native trace. Reading starts no model or renderer.",
-      "path": "v2/workspace.observe.json",
+      "path": "operations/workspace.observe.json",
       "bytes": 9612,
       "sha256": "493d586f2fa42945a650bb8588ea39dcf70950e5aec795ea149283a0309c5063"
     },
     "workspace.restore": {
       "summary": "workspace.restore",
-      "path": "v2/workspace.restore.json",
+      "path": "operations/workspace.restore.json",
       "bytes": 1199,
       "sha256": "32b6092da79ec07d75c9bacb5ef6963c7628f5227de4463ec9ce644f71786baf"
     },
     "workspace.save": {
       "summary": "workspace.save",
-      "path": "v2/workspace.save.json",
+      "path": "operations/workspace.save.json",
       "bytes": 32908,
       "sha256": "b33ba63953fc2f5ce07c6db872847fca590a37609c4fc5551ae6addf1f9d6341"
     }

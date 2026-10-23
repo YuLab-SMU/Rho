@@ -35,8 +35,10 @@ test('runtime protocol inspection pages authorized summaries and selects just on
   await assert.rejects(agent.call('protocol.describe', { method: 'session.grant' }), e => e.error.kind === 'scope');
   await assert.rejects(agent.call('protocol.describe', { cursor: first.next }), e => e.error.kind === 'stale');
   await assert.rejects(operator.call('protocol.describe', { method: 'action.submit', maxBytes: 1024 }), e => e.error.kind === 'limit');
-  const legacy = await fetch(service.url + '/api/v1/protocol.describe', { method: 'POST', headers: { authorization: 'Bearer ' + operator.connection.token, 'content-type': 'application/json' }, body: '{}' }).then(r => r.json());
-  assert.equal(legacy.error.kind, 'unavailable'); assert.ok(JSON.stringify(legacy).length < 1024);
+  // The service publishes one contract. A retired version path is refused as an
+  // unknown operation rather than answered from a second schema set.
+  const retired = await fetch(service.url + '/api/v1/protocol.describe', { method: 'POST', headers: { authorization: 'Bearer ' + operator.connection.token, 'content-type': 'application/json' }, body: '{}' }).then(r => r.json());
+  assert.equal(retired.error.kind, 'not_found'); assert.ok(JSON.stringify(retired).length < 1024);
   assert.equal(service.bridge.owned.size, 0);
 });
 

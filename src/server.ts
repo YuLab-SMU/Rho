@@ -8,8 +8,6 @@ import { atomicJson, canonical, confined, digest, Fault, now, publicResource, re
 import { Plugins, type PluginConfig } from './plugins.js';
 import { protocol, operations } from './protocol.js';
 import { describeProtocol } from './protocol-discovery.js';
-import { protocol as legacyProtocol } from './legacy-protocol.js';
-import { legacyResponse } from './legacy-response.js';
 import { CoreBridge } from './bridge.js';
 import { State, type Principal, type Project } from './state.js';
 import { Requests, publicOperation, requestLimits } from './requests.js';
@@ -37,7 +35,6 @@ export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 6553
 export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
-const legacyValidators = Object.fromEntries(Object.entries(legacyProtocol.operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
 const validators = Object.fromEntries(Object.entries(operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
 // A schema path is not advice. Turn the common shapes of refusal into the edit the
 // caller should make, so fixing a request does not require reading the JSON Schema.
@@ -350,20 +347,16 @@ export class RhoService {
         requireThat((req.method === 'GET' || req.method === 'HEAD') && !url.search, 'not_found', 'Use the same-origin browser entry without query credentials.');
         await serveWeb(url.pathname, res, this.config.webRoot, req.method === 'HEAD'); return;
       }
-      const legacy = url.pathname.startsWith('/api/v1/');
-      apiVersion = legacy ? '1.0' : '2.0';
-      const method = legacy || url.pathname.startsWith('/api/v2/') ? url.pathname.slice(8) : '';
+      const method = url.pathname.startsWith('/api/v2/') ? url.pathname.slice(8) : '';
       requireThat(method === 'events' || !!operations[method], 'not_found', 'Unknown API operation.');
       const principal = this.authenticate(req, method);
       if (method === 'events') { requireThat(req.method === 'GET', 'invalid', 'Events use GET.'); await this.subscribe(url, principal, res); return; }
       requireThat(req.method === 'POST' && req.headers['content-type']?.split(';')[0] === 'application/json', 'invalid', 'Use POST with application/json.');
       const body = await this.readBody(req, this.config.maxRequestBytes ?? 1024 * 1024);
-      const valid = (legacy ? legacyValidators : validators)[method];
-      requireThat(valid, 'unavailable', 'This operation requires the v2 contract.');
+      const valid = validators[method];
+      requireThat(valid, 'unavailable', 'This operation is not part of the served contract.');
       const explained = valid(body) ? null : explainSchema(valid.errors);
       requireThat(valid(body), 'invalid', explained?.length ? `Request does not match the versioned schema: ${explained[0].fix}` : 'Request does not match the versioned schema.', { fields: valid.errors ?? [], problems: explained ?? [], remedy: 'Fix the named fields and resend the same request identity.' });
-      if (legacy && method === 'protocol.describe') throw new Fault('unavailable', 'Use /api/v2/protocol.describe for bounded discovery, or the offline versioned protocol export.');
-      if (legacy && !['action.lookup', 'action.observe', 'action.retry', 'action.cancel', 'action.output', 'action.list', 'resource.read', 'resource.list', 'document.open', 'document.read', 'context.read', 'binding.list', 'binding.activity', 'composition.read', 'observation.snapshot', 'project.list'].includes(method)) throw new Fault('unavailable', 'New writes use the explicit v2 project contract; accepted v1 operations remain observable.');
       let value;
       if (body.projectId && method !== 'project.source.add') {
         value = await this.serial(body.projectId, async () => {
@@ -375,7 +368,6 @@ export class RhoService {
           }
         });
       } else value = await this.dispatch(method, body, principal, typeof req.headers['x-rho-contract-ref'] === 'string' ? req.headers['x-rho-contract-ref'] : undefined);
-      if (legacy) value = legacyResponse(value);
       this.json(res, 200, { apiVersion, ok: true, value });
     } catch (e: any) {
       // A filesystem refusal used to arrive as "could not be confirmed" with no

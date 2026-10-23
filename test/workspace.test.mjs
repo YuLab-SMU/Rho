@@ -64,11 +64,11 @@ test('event gaps, subscription release, request/page/document budgets preserve a
     await assert.rejects(c.call('document.edit', { projectId: p.id, documentId: d.id, expectedVersion: d.version, edits: [{ from: 0, to: 0, insert: 'x'.repeat(1000) }], undoGroup: 'request-over' }), e => e.error.kind === 'limit' && e.error.details.limit === 'maxRequestBytes');
     assert.equal((await c.call('document.read', { projectId: p.id, documentId: d.id })).content, 'xxx');
     const headers = { authorization: 'Bearer ' + service.adminToken };
-    const gap = await fetch(service.url + '/api/v1/events?projectId=' + p.id + '&after=0', { headers });
+    const gap = await fetch(service.url + '/api/v2/events?projectId=' + p.id + '&after=0', { headers });
     assert.equal((await gap.json()).error.kind, 'event_gap');
     const snapshot = await c.call('observation.snapshot', { projectId: p.id }); assert.equal(snapshot.cursor, 3); assert.equal(snapshot.host.exitCode, 3);
-    const events = await fetch(service.url + '/api/v1/events?projectId=' + p.id + '&after=' + snapshot.cursor, { headers });
-    const rejected = await fetch(service.url + '/api/v1/events?projectId=' + p.id + '&after=' + snapshot.cursor, { headers }); assert.equal((await rejected.json()).error.kind, 'limit');
+    const events = await fetch(service.url + '/api/v2/events?projectId=' + p.id + '&after=' + snapshot.cursor, { headers });
+    const rejected = await fetch(service.url + '/api/v2/events?projectId=' + p.id + '&after=' + snapshot.cursor, { headers }); assert.equal((await rejected.json()).error.kind, 'limit');
     await events.body.cancel();
     await assert.rejects(fs.stat(path.join(p.root, '.rho/host.sock')), { code: 'ENOENT' });
   } finally { await service.close(); }

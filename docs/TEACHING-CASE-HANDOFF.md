@@ -161,7 +161,7 @@ Agent 回应必须通过 `annotation.reply` 的 `replyTo` 关联这条反馈，�
 ## 5. 现有能力与可复用实现
 
 “后端已有”只表示 headless 契约和既有证据；不表示本教学案例已有浏览器入口。
-精确字段以 [v2 协议](../protocol/v2.json) 和 [协作契约](COLLABORATION.md) 为准。
+精确字段以[契约索引](../protocol/index.json)和[协作契约](COLLABORATION.md)为准。
 
 | 能力 | 当前事实 | 本例缺口 / 负责方 |
 | --- | --- | --- |

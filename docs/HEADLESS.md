@@ -4,7 +4,7 @@ Rho selects nine independent capability packages: annotations plus documents, fi
 requirements, tables, media, charts and Agent. Shared contracts contain generic envelopes/service ports and ordinary-file
 primitives. Each resource/requirement/script schema belongs to its provider
 through a pure `./contract` entry; contracts has no format registry, capability
-state or catalog. Rho retains its selected v2 schema snapshot and checks provider
+state or catalog. Rho retains its selected schema snapshot and checks provider
 parity without importing absent implementations. The reusable backend exposes `/api/v2` to calling clients and the project-scoped
 stdio MCP adapter. Its sole registered execution action is `r.execute`: an
 explicit project script, requirements, arguments and output declarations.
@@ -23,8 +23,9 @@ operations and distinguishes implemented backend APIs from missing browser piece
 shipped Skills, live MCP filtering, conditional structured compositions and undo,
 explicit view protection, caller/view/shared selections, document/table-anchored
 feedback, explicit replies, context delivery facts, DOM-free snapshot/event
-coordination and explicit format-3 archives. These are additive v2 capabilities;
-v1 is frozen. Older exports reject collaboration state they cannot represent.
+coordination and explicit format-3 archives. These are additive capabilities of
+the single served contract. Workspace exports older than format 3 reject
+collaboration state they cannot represent.
 The new `annotations` owner requires Documents and optionally Tables for entities.
 Service `--plugins` remains a finite allowlist; project configuration cannot expand
 it. Missing browser renderers do not disable the headless protocol.
@@ -109,9 +110,10 @@ It has no generated method-specific types. Its event method returns a raw stream
 The separate `@rho-workspace/local/observation` transport entry provides DOM-free
 HTTP/SSE parsing and snapshot-first reconnect reconciliation without Node files. Browser consumers should use the versioned HTTP/SSE boundary.
 
-[protocol/v2.json](../protocol/v2.json) publishes requests, responses, typed
-errors, events and resource declarations. `protocol.describe` returns the same
-contract. Operations use authenticated `POST /api/v2/{operation}`, returning
+[protocol/index.json](../protocol/index.json) publishes requests, responses, typed
+errors, events and resource declarations, one hashed file per operation under
+`protocol/operations/`. `protocol.describe` returns the same contract. Operations
+use authenticated `POST /api/v2/{operation}`, returning
 `{apiVersion:"2.0",ok:true,value}` or `{apiVersion:"2.0",ok:false,error}`.
 Documents, resources, compositions and event cursors have independent versions.
 
@@ -232,11 +234,10 @@ preserves prior intents. The external client owns its model loop, provider and
 conversation. Explicit context fetch is a tool receipt; proactive external-chat
 delivery remains unsupported.
 
-The [v1 contract](../protocol/v1.json), [v1 fixtures](../fixtures/v1/states.json)
-and [accepted 0.1 candidate](https://github.com/YuLab-SMU/Rho/blob/main/docs/BACKEND-ACCEPTANCE.md)
-are unchanged. The `/api/v1` bridge supports retained-request observation,
-explicit retry/cancel and compatible raw-resource/document/context reads.
-New writes use v2. Historical typed readers/checkers needing a removed provider
+Retained operations stay observable through the one served contract: lookup,
+observation, explicit retry/cancel, retained resource bytes, documents and context
+reads all use the same authenticated operations as new work. A retired version
+path is not served. Historical typed readers/checkers needing a removed provider
 report unavailable; stored bytes, frozen plans and Core identities remain.
 Schema-1/2 workspace exports remain readable. Choose format 3 explicitly for
 collaboration state; format 2 remains the default and rejects lossy exports.
@@ -639,7 +640,7 @@ Capacity is checked before a new call; exhaustion preserves retained results and
 refuses dispatch. Process loss preserves results but requires refetching contracts.
 New descriptors use this entry by default; old per-operation MCP tools are removed.
 Runtime `protocol.describe` also pages summaries or selects one complete contract.
-The static `protocol/v2.json` is now an index of hashed operation files.
+The static `protocol/index.json` is an index of hashed operation files.
 
 | Protected knowledge resource | Limit / configuration | Exceeded or changed state |
 | --- | --- | --- |

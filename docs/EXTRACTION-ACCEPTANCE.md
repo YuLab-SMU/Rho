@@ -102,8 +102,8 @@ machine paths and executable request journals.
 
 ## Compatibility and retained failures
 
-The frozen `/api/v1` descriptor/schema remains available for retained observations;
-new scientific v1 submissions return unavailable. A seeded, explicitly labeled
+Retained observations use the one served contract; a superseded action name stays
+inert rather than becoming a submission path. A seeded, explicitly labeled
 transport fixture verifies the original frozen request/Core identity and retained
 resource bytes without starting a Host. It is not a rerun of historical science.
 Schema-1 workspace restore is supported. New resources requiring v2 return typed

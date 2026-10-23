@@ -50,6 +50,8 @@ const scrub = value => {
   if (typeof value === 'string') return value.startsWith('/') ? '/fixture/' + path.basename(value) : value.replaceAll(root, '/fixture/capture');
   return value;
 };
-await fs.mkdir('fixtures/v2', { recursive: true });
-await fs.writeFile('fixtures/v2/states.json', JSON.stringify(scrub({ apiVersion: '2.0', schemaVersion: 2, readOnly: true, replay: 'forbidden', capturedAt: new Date().toISOString(), scope: 'Actual response captures/projections. Native records, executable source, credentials and machine paths are omitted. UI rendering states require independent browser acceptance.', cases }), null, 2) + '\n');
+// A fresh capture replaces the whole set: re-select retained evidence explicitly,
+// because this file is the only fixture set the served contract publishes.
+await fs.mkdir('fixtures', { recursive: true });
+await fs.writeFile('fixtures/states.json', JSON.stringify(scrub({ apiVersion: '2.0', schemaVersion: 2, readOnly: true, replay: 'forbidden', capturedAt: new Date().toISOString(), scope: 'Actual response captures/projections. Native records, executable source, credentials and machine paths are omitted. UI rendering states require independent browser acceptance.', cases }), null, 2) + '\n');
 process.stdout.write(JSON.stringify({ fixtures: cases.map(x => x.state) }) + '\n');

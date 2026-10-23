@@ -93,10 +93,12 @@ test('live editor bindings follow a buffer without changing exact-version bindin
   assert.equal(retained.version, protectedLayout.version); assert.equal(retained.nodes.find(n => n.id === 'live-a').protected, true);
   assert.equal(retained.views.find(v => v.id === 'exact').bindings.document.version, 1);
   assert.deepEqual(retained.views.find(v => v.id === 'live-a').bindings.document, live);
-  const legacy = await fetch(f.s.url + '/api/v1/document.read', { method: 'POST', headers: { authorization: 'Bearer ' + f.s.adminToken, 'content-type': 'application/json' }, body: JSON.stringify({ projectId: f.p.id, documentId: d.id }) }).then(r => r.json());
-  assert.equal(legacy.ok, true); assert.equal('revision' in legacy.value, false);
-  const oldLayout = await fetch(f.s.url + '/api/v1/composition.read', { method: 'POST', headers: { authorization: 'Bearer ' + f.s.adminToken, 'content-type': 'application/json' }, body: JSON.stringify({ projectId: f.p.id, compositionId: 'work' }) }).then(r => r.json());
-  assert.equal(oldLayout.error.kind, 'unavailable');
+  // One contract: the document facts arrive complete, and the retired version path
+  // is not served as a reduced view of them.
+  const current = await f.call('document.read', { documentId: d.id });
+  assert.equal(current.id, d.id); assert.equal(typeof current.revision, 'number');
+  const retiredPath = await fetch(f.s.url + '/api/v1/document.read', { method: 'POST', headers: { authorization: 'Bearer ' + f.s.adminToken, 'content-type': 'application/json' }, body: JSON.stringify({ projectId: f.p.id, documentId: d.id }) }).then(r => r.json());
+  assert.equal(retiredPath.error.kind, 'not_found');
   await f.call('workspace.export', { destination: 'export', format: 3 });
   const q = await f.c.call('project.create', { name: 'restored' });
   await fs.cp(path.join(f.p.root, 'export'), path.join(q.root, 'import'), { recursive: true });

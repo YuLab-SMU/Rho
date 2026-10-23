@@ -1,7 +1,7 @@
 # Rho backend acceptance 0.1
 
 Updated: 2026-10-16; execution evidence: 2026-10-15.
-Scope: BP-01–BP-06, `/api/v1` 1.0.
+Scope: BP-01–BP-06, schema version 1.0 as served at the time.
 
 BP-01–BP-06 passed for the selected macOS arm64 composition. The local service,
 functional headless package, calling client and inert state fixtures are delivered.
@@ -39,7 +39,7 @@ and saved native objects remain in each actual run's artifacts.
 
 | Package | Implemented boundary and actual evidence |
 | --- | --- |
-| BP-01 | [Published v1 schemas](../protocol/v1.json), per-operation responses, typed errors, finite events/catalog, calling client, read-only fixtures; actual Claude MCP context fetch and shared Unicode edit |
+| BP-01 | Versioned schemas published per operation, per-operation responses, typed errors, finite events/catalog, calling client, read-only fixtures; actual Claude MCP context fetch and shared Unicode edit. This 0.1 run captured schema version 1.0; the served contract now publishes one version at [protocol/index.json](../protocol/index.json) and reads these fixtures through it |
 | BP-02 | npm launcher, private credentials, exact Host/Origin, project containment/symlinks, kernel writer leases, durable service intents and public Core CLI bridge; three actual SIGKILL boundaries retain one native identity/dispatch |
 | BP-03 | Selected-action dependency checks/preparation, saved-script snapshot, actual five DESeq2 fits and 33 script/table/model/PDF artifacts; byte declarations, 12 arithmetic checks and 121 saved-model observations separately reported |
 | BP-04 | Shared acknowledged buffer/version, UTF-16 edits, grouped undo, disk conflict and restart recovery; frozen unsaved-script execution; actual Claude handoff and bounded method receipts |
@@ -164,8 +164,9 @@ Reads and reconnects never start/recover Hosts. The service stops only Hosts it
 started; adopted Hosts retain ownership. Partial/unknown and lost acknowledgements
 never authorize a replacement identity. Each resource has its own version.
 
-UI developers receive `protocol/v1.json`, the exported client, the finite catalog,
-fixtures and the installed service. All four registered UI entries are currently
+UI developers receive [protocol/index.json](../protocol/index.json) with one hashed
+file per operation, the exported client, the finite catalog, fixtures and the
+installed service. All four registered UI entries are currently
 unavailable. CodeMirror/AG Grid/ECharts/json-render/Dockview mapping, browser
 refresh behavior, native Unicode IME, focus, keyboard/clipboard/accessibility,
 responsive widths and full product performance/install acceptance remain actual
