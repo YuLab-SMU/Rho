@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { atomicJson, canonical, digest, now, readJson, requireThat, stateDirectory, type PluginDescriptor } from '@rho-workspace/plugin-contracts';
+import { SkillDeclaration, atomicJson, canonical, digest, now, readJson, requireThat, stateDirectory, type PluginDescriptor } from '@rho-workspace/plugin-contracts';
 import { operations } from './protocol.js';
 import type { PluginId, Plugins } from './plugins.js';
 import type { Principal, Project } from './state.js';
@@ -22,10 +22,57 @@ export interface CapabilityState {
   receipts: CapabilityReceipt[];
 }
 
+// The umbrella Skill: what this application is, the order to work in, and the rules
+// that used to be discovered by failing. It names where the detail lives instead of
+// repeating every owner's contract.
+const applicationContent = [
+  'Rho holds one project open at a time: its folders, documents, resources, layout and',
+  'the record of what has been run. You work in it through versioned operations.',
+  '',
+  'Start with capability.list. It reports which operations are enabled for this project,',
+  'whether each is authorized for this session, and which owners are installed. Fetch an',
+  "owner's own guidance with skill.list and skill.read; a Skill grants no authority, installs",
+  'nothing and starts nothing. In layered mode use rho_index, rho_resolve and rho_call',
+  'instead, and keep only bodies you still hold.',
+  '',
+  'Work in this order, and skip a step only when you already hold its facts:',
+  '  1. Read: observation.snapshot gives the layout, documents, resources and runs;',
+  '     task.map.read gives what the person is being shown. Reads never start a runtime.',
+  '  2. Change one thing conditionally: every write carries expectedVersion and a',
+  '     changeId, and document writes also carry expectedRevision. Retain the exact',
+  '     original request before sending; after a lost reply, retry that same identity',
+  '     rather than inventing a new one.',
+  '  3. Execute only explicitly: action.submit is the single execution action and it',
+  '     names its script, arguments and declared artifacts. Nothing else starts a Host.',
+  '  4. Present: composition.apply changes layout with stable view IDs; task.map.declare',
+  '     says what the whole task is doing in your own words.',
+  '',
+  'If a request is not accepted, protocol.validate { method, body } answers with the edit',
+  'each problem needs before anything is sent. project.doctor answers why this project',
+  'cannot do work at all.',
+  '',
+  'What a person may do alone: open a folder, list it, open and edit a text file in the',
+  'buffer, steer what they see. What stays yours: registering resources, saving to disk,',
+  'executing, and declaring task items. Reading a folder is not permission to execute.',
+  '',
+  'A produced artifact under .rho is verified with artifact.check. It is not a project',
+  'resource, so it cannot be registered or shown in a view: do not claim it is presented.',
+  'Reconnect after an event gap by reading a fresh snapshot. Archive with',
+  'workspace.export format 3, which retains collaboration; older formats reject it.'
+].join('\n');
 const applicationSkill = {
-  id: 'rho.workspace',
-  version: '1.2',
-  content: 'In layered mode use rho_index → rho_resolve → rho_call. Resolve selected relevant Skills and the complete exact contract before execution. Only advertise knownRefs whose full bodies remain available; after context loss omit missing refs and refetch them. The adapter also retains bounded complete objects; immutable bodies never replace live resource/version/authorization checks. In compatibility mode, discover project-enabled, dependency-satisfied and authorized operations with capability.list; fetch shipped owner guidance with skill.list/read and verify its digest. Use composition.apply with stable group/view IDs, exact component versions, props/bindings, expectedVersion and changeId; composition.undo affects only layout. Keep protected views and their ancestors in place; protection never prevents authorized document edits. Keep personal/view selections in interaction.selection scopes; use an explicit shared channel to collaborate. Draft feedback and responses in Documents, submit annotation.create/reply against exact source/draft versions, and explicitly link replyTo. Prepare selected feedback with context.create and fetch context.read; prepared, fetched and explicitly replied are distinct facts. Reading is not understanding or task completion. CSV reading, scatter plotting, shared editing and feedback need no native execution. Keep original changeIds after lost acknowledgements, query the current owner and receipt retention boundaries, and never replay under a new identity. Describe the whole task with task.map.declare: stable item IDs, your own kind and state words (terms with label, tone and an optional role Rho understands: working, waiting, done, planned, unknown, stopped), titles you write, progress counted from real receipts, an optional layout view per item, and next only for steps you will take. Change forms, parameters (subsets) and focus with task.map.present; a pinned target or a change within agentFormIntervalMs becomes one merged suggestion, and every applied change is attributed and revertible by the person. task.map.read only observes. Reconnect via a fresh snapshot after event gaps; archive collaboration with workspace.export format 3. Skills grant no authority, install no software and do not start runtimes.',
+  id: 'rho.workspace', version: '1.3', content: applicationContent,
+  intent: 'Work in this project through versioned operations, in a safe order.',
+  requires: ['capability.list', 'observation.snapshot', 'action.submit', 'composition.apply'],
+  example: { method: 'observation.snapshot', input: { projectId: 'the-open-project' } },
+  failureRecipes: [
+    { kind: 'unauthorized', message: 'Session does not authorize this operation.', next: 'Ask project.doctor with an intent to see the methods that task needs, then use a session that has them.' },
+    { kind: 'invalid', message: 'Request does not match the versioned schema.', next: 'Call protocol.validate on the same body and apply the named fix.' },
+    { kind: 'stale', message: 'Version or revision changed.', next: 'Re-read the owner record and retry with its current numbers, keeping your original changeId for the same request only.' },
+    { kind: 'event_gap', message: 'Observation missed events.', next: 'Read a fresh snapshot; do not replay acknowledged writes.' },
+    { kind: 'conflict', message: 'Another service holds this state directory.', next: 'Stop the other service, or start this one with a different --state-dir.' }
+  ],
+  verify: { command: 'npm run test:workspace', description: 'Opens a project, reads a snapshot, applies one conditional composition change and observes it back.' }
 };
 const skillDigest = digest(applicationSkill.content);
 
@@ -218,7 +265,7 @@ export class Capabilities {
 
   async skills(principal: Principal) {
     const state = await this.state();
-    const result = [rhoWorkspaceSkill, personFilesSkill, taskMapSkill];
+    const result: SkillDeclaration[] = [rhoWorkspaceSkill, personFilesSkill, taskMapSkill];
     for (const descriptor of this.plugins.descriptors()) {
       const status = this.pluginStatus(descriptor.id as PluginId, state);
       for (const skill of descriptor.skills ?? []) {
