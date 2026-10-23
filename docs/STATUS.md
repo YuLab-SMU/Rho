@@ -18,6 +18,11 @@ Host, Rscript, unfinished runs, plugin selection — and the Overview asks it be
 listing content, so a silent failure has a place to be explained. Filesystem and
 lock refusals name their condition and remedy.
 Checks are recorded, not restated: Rho 99/99 and Plugins 55/55 from [docs/VERIFICATION.json](VERIFICATION.json), which holds the command and result of each run.
+The upgrade loop is closed and self-checking: `npm run verify` records every count
+with the command that produced it, guard tests reject a Status number the ledger
+never recorded and a dead path that stops naming its reproducing check, and
+`npm run acceptance:matrix -- --install DIR` runs four journeys against a source
+build and a packed install (8 of 8).
 Open gaps are listed in [the upgrade plan](UPGRADE-PLAN.md) and [unverified and dead
 paths](UNVERIFIED.md); the largest is that
 an Agent-produced artifact has no route to a view (`artifact-not-presentable`),
