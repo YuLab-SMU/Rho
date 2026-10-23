@@ -143,7 +143,7 @@ principals. See [Security](../SECURITY.md) and [Product design](DESIGN.md).
 
 Rho bounds the resources it actually owns and names the exceeded-limit behavior.
 The headless owners expose the selected defaults and exceeded-limit behavior in
-[backend budgets](HEADLESS.md#observation-budgets-and-recovery). Browser drawing
+[backend budgets](HEADLESS.md#budgets-verification-and-assembly). Browser drawing
 and rendering budgets still need their actual UI implementation; the application
 does not invent a global quota for the user's environment.
 

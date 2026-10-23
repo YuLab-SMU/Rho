@@ -1,5 +1,19 @@
 # Rho status
 
+Updated: 2026-10-23. **Execution path measured, not assumed:** a real attempt on
+this host (a person opened a folder, an Agent submitted `r.execute`) found
+defects that read-only checks had been unable to see, and both are now fixed
+with checks that fail without them. The declared output directory is created
+before the producer starts (Rho-plugins); a run that finishes while nobody asks
+is reconciled on the next read, bounded and without starting a Host (Rho).
+[Execution acceptance](UPGRADE-PLAN.md#p0--close-the-observed-defects) now
+asserts a real Host start (`1`, not `0`), the produced artifact, a completion
+inventory and `artifact.check`. Checks: Rho 78/78, Plugins 54/54, U1 browser 23.
+Open gaps are listed in [the upgrade plan](UPGRADE-PLAN.md); the largest is that
+an Agent-produced artifact has no route to a view (`artifact-not-presentable`),
+because registration refuses owner state and presentation accepts only native
+`artifact.ready` events.
+
 Updated: 2026-10-22. **Phases 1–5 selected grades flow:** [installed native acceptance](HEADLESS.md#installed-native-grades-acceptance-phase-5) now covers two actual Claude Code / Westlake HPC DeepSeek business sessions and two restricted presentation sessions. Base tables appear before presenters start; original-session feedback, human edits, versioned outputs and explicit replies survive the selected faults. The external offline candidate passed 32 installed checks, 34 real-model assertions, 14 browser/restart checks and 95 domain/identity assertions against AC01–AC21. Success: 77 model tool calls, 1,098,713 input tokens including cache and 29,705 output tokens; failed-trial calls and observed usage lower bounds are retained separately. Source checks remain Rho 63/63, Plugins 45/45; Agent 0.4.3, Documents/Tables/Annotations 0.4.1/0.4.2/0.4.1; Core unchanged. This bounded acceptance excludes same-project multi-task, full teaching-design acceptance and official distribution. Phase 1–5 source is committed; no registry publication or signing has been performed.
 
 ## Item frame and Agent map

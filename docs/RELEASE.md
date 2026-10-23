@@ -31,7 +31,7 @@ The first product delivery uses an npm package and local WebUI. The backend
 assembly uses `@rho-workspace/local` 0.1.0 and bundles the exact selected Core
 binary, Plugins package and production dependencies. The packer emits immutable
 source/tree, input, lock and artifact digests; installed acceptance runs outside
-the source checkouts. See [assembly instructions](HEADLESS.md#development-and-assembly)
+the source checkouts. See [assembly instructions](HEADLESS.md#budgets-verification-and-assembly)
 and [accepted scope](BACKEND-ACCEPTANCE.md).
 
 This delivery is an unsigned local tarball on macOS arm64 with external Node,

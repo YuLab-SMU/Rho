@@ -28,6 +28,7 @@ implementation and verification summary.
 | [Product design](DESIGN.md) | Workspace behavior, Agent interfaces and usability acceptance |
 | [Roadmap](ROADMAP.md) | First integrated flow, completion criteria and subsequent milestones |
 | [Development](DEVELOPMENT.md) | Owner workflow, checks and composition evidence |
+| [Upgrade plan](UPGRADE-PLAN.md) | Observed defects, the mechanisms that hid them, and the phased work that closes the loop |
 | [Status](STATUS.md) | Implemented capabilities, pending work and verification limits |
 | [Execution bridge](EXECUTION.md) | Application side of the Core boundary: request identity, exit codes and Host lifetime |
 | [Release](RELEASE.md) | Source publication and official distribution |

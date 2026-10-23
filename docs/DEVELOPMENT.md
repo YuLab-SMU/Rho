@@ -2,7 +2,7 @@
 
 Start with [Status](STATUS.md), [Architecture](ARCHITECTURE.md),
 [Roadmap](ROADMAP.md) and [Technology stack](TECHSTACK.md). The local backend is
-implemented; its [build, check and assembly commands](HEADLESS.md#development-and-assembly)
+implemented; its [build, check and assembly commands](HEADLESS.md#budgets-verification-and-assembly)
 exercise the actual headless composition. Browser implementation is pending.
 
 ## Work in the source owner

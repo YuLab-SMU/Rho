@@ -12,7 +12,7 @@ export interface Operation {
   core: { caller: string; requestId: string }; delivery: string; execution: string; native: any; integrity: any; domain: any; interpretation: any; plan: ActionPlan; lastCli?: CliResult; checks?: any; cancellation?: any;
 }
 export const publicOperation = (run: Operation) => ({ ...run, request: run.request, plan: { ...run.plan, code: undefined, codeDigest: digest(run.plan.code) } });
-export const requestLimits = { maxConcurrentActions: 2, maxOperations: 256, maxLogPageBytes: 65536, maxCodeBytes: 1024 * 1024 };
+export const requestLimits = { maxConcurrentActions: 2, maxOperations: 256, maxLogPageBytes: 65536, maxCodeBytes: 1024 * 1024, maxReconciled: 8 };
 export class Requests {
   limits: typeof requestLimits;
   constructor(public project: Project, public bridge: CoreBridge, public emit: (type: string, subject: string) => Promise<void>, limits: Partial<typeof requestLimits>, public owners: ProjectPlugins) { this.limits = { ...requestLimits, ...Object.fromEntries(Object.entries(limits).filter(([k, v]) => k in requestLimits && v !== undefined)) }; }
@@ -23,9 +23,36 @@ export class Requests {
   async list(principal: Principal) {
     const d = await this.directory();
     const runs = await Promise.all((await fs.readdir(d)).filter(f => /^[a-f0-9]{64}\.json$/.test(f)).map(f => readJson<Operation>(path.join(d, f))));
-    return runs.filter(r => r.principal === principal.id);
+    const mine = runs.filter(r => r.principal === principal.id).sort((a, b) => b.acceptedAt.localeCompare(a.acceptedAt));
+    // Only the runs that can still change are re-read, newest first and bounded, so a
+    // long history never turns one observation into many Host round trips.
+    let budget = this.limits.maxReconciled;
+    return Promise.all(mine.map(run => {
+      const pending = ['active', 'unobserved'].includes(run.execution) && run.delivery === 'answered';
+      if (!pending || budget <= 0) return run;
+      budget--;
+      return this.reconcile(run);
+    }));
   }
-  async lookup(principal: Principal, operationId: string) { return readJson<Operation>(await this.file(principal, operationId)); }
+  // A read reports what the owner already knows, so a run that finished while nobody
+  // asked must not be shown as still running. Observation never starts a Host: when
+  // none answers, the stored facts stay exactly as they were.
+  private async reconcile(run: Operation) {
+    if (!['active', 'unobserved'].includes(run.execution) || run.delivery !== 'answered') return run;
+    let result: CliResult;
+    try { result = await this.bridge.call(this.project.root, 'lookup', run.core.caller, run.core.requestId, ['--record']); }
+    catch { return run; }
+    // Not delivered, no reply or an owner error: the outcome stays genuinely unknown
+    // rather than being guessed from an absent answer.
+    if (result.exitCode !== 0 || !result.reply?.ok) return run;
+    const before = run.execution;
+    this.apply(run, result, false);
+    if (run.execution !== before) { await this.persist(run); await this.emit('operation.observed', run.operationId); }
+    return run;
+  }
+  // A single lookup reports the same reconciled facts as a listing: a caller that asks
+  // about one run must not be told a different story than the one who lists them all.
+  async lookup(principal: Principal, operationId: string) { return this.reconcile(await readJson<Operation>(await this.file(principal, operationId))); }
   async submit(principal: Principal, body: any, preparationAction = false) {
     const file = await this.file(principal, body.operationId);
     const request = { kind: preparationAction ? 'requirements.prepare' : 'action.submit', ...body };
