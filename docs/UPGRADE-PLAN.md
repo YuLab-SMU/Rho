@@ -51,8 +51,8 @@ that is prose cannot prevent that; a Skill that is checked can.
 | Reconcile a non-terminal run when a read observes it, bounded, never starting a Host | Rho | done: `src/requests.ts`, `test/reconcile.test.mjs` |
 | Execution acceptance: real Host, real R, artifact, completion inventory, `artifact.check`, exactly one Host start | Rho | done: `scripts/execution-acceptance.mjs` |
 | Sidebar content counts match what the project shows | Rho | pending |
-| Lock conflicts name the holder, not just "another service" | Rho | pending |
-| Generic failures name their cause instead of "could not be confirmed" | Rho | pending |
+| Lock conflicts name the holder, not just "another service" | Rho | done |
+| Generic failures name their cause instead of "could not be confirmed" | Rho | done |
 
 Done in this row so far: the output directory, run reconciliation and the
 execution acceptance. The three remaining items above are the rest of P0.
@@ -82,7 +82,10 @@ events, so an Agent-run plot has no route to a view. Recorded as
 ### P2 — A service that diagnoses itself
 
 - A `doctor` operation: Core present, Rscript, write access to the project root,
-  lock holder, plugins needed by an intent.
+  lock holder, plugins needed by an intent. **Started:** `project.doctor` reports
+  write access to the project and state folders, Host state, Rscript, unfinished
+  runs and plugin selection, each with its next action. The Overview asks it
+  before listing content, so "nothing happened" is answered in the product.
 - `capability.index` accepts an intent and answers with the required session
   methods and any missing prerequisite.
 - Startup prints the narrow conclusion a person needs, not only a URL.

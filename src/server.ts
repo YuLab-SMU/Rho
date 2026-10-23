@@ -38,6 +38,22 @@ const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
 const legacyValidators = Object.fromEntries(Object.entries(legacyProtocol.operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
 const validators = Object.fromEntries(Object.entries(operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
+// Filesystem and platform refusals say what to change; anything else keeps the
+// conservative "inspect its state" wording, because the effect is genuinely unknown.
+function explainFailure(e: any): [string, string, Record<string, unknown>] {
+  const code = e?.code as string | undefined, target = e?.path as string | undefined;
+  const where = target ? ` ${target}` : '';
+  switch (code) {
+    case 'ENOENT': return ['not_found', `Nothing exists at${where || ' the requested path'}.`, { code, path: target }];
+    case 'EACCES':
+    case 'EPERM': return ['scope', `Rho may not write${where}. Check the folder's permissions, or run Rho outside a restricting sandbox.`, { code, path: target, remedy: 'Grant the process write access to that folder, or select a folder it already owns.' }];
+    case 'ENOSPC': return ['limit', 'The disk has no space left for this write.', { code, limit: 'disk' }];
+    case 'EROFS': return ['scope', `The volume holding${where} is read-only.`, { code, path: target }];
+    case 'EMFILE':
+    case 'ENFILE': return ['limit', 'Too many files are open for this process.', { code }];
+    default: return ['storage', 'The operation could not be confirmed; retain the original identity and inspect its state.', { code }];
+  }
+}
 export class RhoService {
   plugins: Plugins; state: State; bridge: CoreBridge; url = ''; adminToken = ''; server: http.Server;
   private queues = new Map<string, Promise<any>>();
@@ -339,7 +355,10 @@ export class RhoService {
       else if (legacy) value = legacyResponse(value);
       this.json(res, 200, { apiVersion, ok: true, value });
     } catch (e: any) {
-      const fault = e instanceof Fault ? e : new Fault(e.code === 'ENOENT' ? 'not_found' : 'storage', e.code === 'ENOENT' ? 'Requested owner record or file is missing.' : 'The operation could not be confirmed; retain the original identity and inspect its state.');
+      // A filesystem refusal used to arrive as "could not be confirmed" with no
+      // details, which reads as a bug in the application rather than as a folder the
+      // process may not write. Name the condition and the next action instead.
+      const fault = e instanceof Fault ? e : new Fault(...explainFailure(e));
       const status = fault.kind === 'unauthorized' ? 401 : ['origin', 'scope'].includes(fault.kind) ? 403 : fault.kind === 'not_found' ? 404 : fault.kind === 'invalid' ? 400 : fault.kind === 'limit' ? 413 : fault.status;
       this.json(res, status, { apiVersion, ok: false, error: { kind: fault.kind, message: fault.message, details: fault.details, continuation: ['stale', 'conflict', 'event_gap'].includes(fault.kind) ? 'Read the current owner snapshot and reconcile before another write.' : 'Inspect the stated condition; observe original operations without replaying actions.' } });
     }
@@ -421,6 +440,42 @@ export class RhoService {
     // A person's own view of the folder they selected. The tab is confined to this one
     // project, so it may list that folder and open a text file from it; registering
     // resources, saving and execution stay Agent/operator work.
+    // One call answers "why does nothing work here", before any work is attempted,
+    // and it changes nothing: no Host is started and no run is resumed.
+    if (method === 'project.doctor') {
+      const checks: Array<{ id: string; state: 'ok' | 'warn' | 'fail'; detail: string; remedy: string }> = [];
+      const add = (id: string, state: 'ok' | 'warn' | 'fail', detail: string, remedy = '') => checks.push({ id, state, detail, remedy });
+      // Write access is the check that a restricted sandbox fails, silently, at the
+      // first picker instead of here.
+      for (const [id, directory] of [['project-write', p.root], ['state-write', this.state.directory]] as const) {
+        const probe = path.join(directory, '.rho-doctor-' + randomBytes(6).toString('hex'));
+        try { await fs.writeFile(probe, 'probe', { mode: 0o600 }); await fs.unlink(probe); add(id, 'ok', `Rho can write in ${directory}.`); }
+        catch (e: any) { add(id, 'fail', `Rho cannot write in ${directory} (${e.code ?? e.message}).`, 'Grant this process write access to that folder, or start Rho outside a restricting sandbox.'); }
+      }
+      const core = await this.bridge.capability(p.root);
+      const socket = path.join(p.root, '.rho/host.sock');
+      if (core.exitCode === 0) {
+        const executors: any[] = core.reply.value.executors ?? [];
+        const r = executors.find(x => x.name === 'r');
+        add('core', 'ok', `A Core Host is serving this project (${r?.program ?? 'no R executor'}).`);
+        if (!r || r.program !== this.bridge.rscript) add('core-executor', 'warn', `The running Host's R executor is ${r?.program ?? 'absent'}, not ${this.bridge.rscript}.`, 'Stop that Host or start Rho with the same --rscript it was given.');
+      } else if (await fs.lstat(socket).then(() => true, () => false)) {
+        add('core', 'warn', `A socket remains at ${socket} but no Host answers.`, 'Stop the service that owned it, or remove the stale socket after inspecting the original requests.');
+      } else add('core', 'ok', 'No Host is running; the first execution starts one.');
+      const rscriptAvailable = await fs.access(this.bridge.rscript, fs.constants.X_OK).then(() => true, () => false);
+      add('rscript', rscriptAvailable ? 'ok' : 'fail', rscriptAvailable ? `R is available at ${this.bridge.rscript}.` : `R is unavailable at ${this.bridge.rscript}.`, rscriptAvailable ? '' : 'Select an existing Rscript with --rscript or RHO_RSCRIPT.');
+      const runs = await requests.list(principal).catch(() => []);
+      const unfinished = runs.filter(run => ['active', 'unobserved', 'unknown'].includes(run.execution));
+      add('runs', unfinished.length ? 'warn' : 'ok', unfinished.length ? `${unfinished.length} run(s) have no settled outcome: ${unfinished.slice(0, 3).map(run => run.operationId).join(', ')}.` : 'No run needs attention.', unfinished.length ? 'Read each run with action.lookup before submitting anything again.' : '');
+      const catalog: any = await new Capabilities(this.plugins, p).catalog(principal).catch(() => null);
+      const owners: any[] = catalog?.plugins ?? [];
+      const absent = owners.filter(entry => entry.packagePresent === false).map(entry => entry.id);
+      const disabled = owners.filter(entry => entry.projectEnabled === false).map(entry => entry.id);
+      add('plugins', absent.length ? 'fail' : 'ok',
+        absent.length ? `Selected owners are not installed: ${absent.join(', ')}.` : disabled.length ? `Installed owners are disabled for this project: ${disabled.join(', ')}.` : 'Every selected owner is installed and enabled.',
+        absent.length ? 'Install the missing owner packages, or select fewer with --plugins.' : disabled.length ? 'Enable them with capability.configure if this project needs them.' : '');
+      return { ok: checks.every(check => check.state !== 'fail'), checks };
+    }
     if (method === 'project.entries') {
       const limit = this.config.nativeFolders?.maxEntries ?? 500;
       // Confined to the project root: a requested subfolder is resolved, never escaped.

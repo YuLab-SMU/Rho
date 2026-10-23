@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { atomicJson, confined, digest, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
@@ -9,6 +9,14 @@ export interface FolderSelection extends SourceFolder { principalId: string; exp
 export interface Project { id: string; root: string; openedAt: string; nativeSelected?: true; name?: string; sources?: SourceFolder[]; workspace?: true; visibilityRoot?: string; creation?: { id: string; digest: string; author: string } }
 export interface Principal { id: string; tokenHash: string; projectId?: string; methods: string[]; kind?: 'browser'; profile?: 'layered-business' | 'layered-presentation'; pluginFilter?: string[]; projectRoot?: string; selectedProjects?: string[]; expiresAt?: string }
 export async function lease(directory: string) {
+  // Best effort: say who holds it when the platform can tell us. Never a failure.
+  const holder = (file: string) => {
+    try {
+      const out = spawnSync('lsof', ['-nP', '-t', file], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000 });
+      const pid = out.stdout?.trim().split('\n').filter(Boolean)[0];
+      return pid ? { pid: Number(pid) } : null;
+    } catch { return null; }
+  };
   const file = path.join(directory, 'service.lock');
   // Kernel advisory lock on a stable inode, held by an owned helper until pipe
   // EOF. A service crash closes the pipe; no PID-reuse or stale-unlink race.
@@ -25,7 +33,16 @@ os.close(fd)
     const timer = setTimeout(() => { helper.kill(); reject(new Error('Local writer lock timed out.')); }, 5000);
     helper.stdout.once('data', () => { clearTimeout(timer); resolve(); });
     helper.once('error', () => { clearTimeout(timer); reject(new Error('Python 3 is required for local writer locking.')); });
-    helper.once('exit', code => { clearTimeout(timer); if (code === 9) { try { requireThat(false, 'conflict', 'Another local service holds this state directory.'); } catch (e) { reject(e); } } else if (code !== 0) reject(new Error('Local writer lock is unavailable.')); });
+    helper.once('exit', code => {
+      clearTimeout(timer);
+      if (code === 9) {
+        // Name what is held and how to find the holder: "another service" told an
+        // operator nothing, and a second state directory looked like a broken service.
+        try { requireThat(false, 'conflict', `Another Rho service holds ${directory}. Stop it, or select a different --state-dir. Its writer lock is ${file}.`, { stateDirectory: directory, lockFile: file, remedy: 'Stop the service that owns this state directory, or start this one with a different --state-dir.', holder: holder(file) }); }
+        catch (e) { reject(e); }
+      }
+      else if (code !== 0) reject(new Error('Local writer lock is unavailable.'));
+    });
   });
   return async () => { const exited = once(helper, 'exit'); helper.stdin.end(); await exited; };
 }

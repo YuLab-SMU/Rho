@@ -55,6 +55,16 @@ export function ProjectNavigation({ project, location, snapshot, overview, compo
 export function ProjectOverview({ project, location, snapshot, onLayout, client, onProjectChanged, onOpened }: { project: ProjectSummary; location: string; snapshot: WorkspaceSnapshot; onLayout: (id: string) => void; client: BrowserClient; onProjectChanged: (p: ProjectSummary) => void; onOpened?: (compositionId: string) => void }) {
   const [adding, setAdding] = useState(false), [error, setError] = useState('');
   const [folder, setFolder] = useState<{ entries: Entry[]; total: number; truncated: boolean; path: string } | null>(null), [reading, setReading] = useState(false), [openProblem, setOpenProblem] = useState('');
+  // "Nothing happened" is not an answer: this asks the service what is wrong and
+  // shows the next action beside each finding.
+  const [doctor, setDoctor] = useState<Array<{ id: string; state: 'ok' | 'warn' | 'fail'; detail: string; remedy: string }> | null>(null);
+  const [diagnosing, setDiagnosing] = useState(false);
+  async function diagnose() {
+    setDiagnosing(true); setError('');
+    try { setDoctor((await client.call('project.doctor', { projectId: project.id }, new AbortController().signal)).checks); }
+    catch (e) { setError(e instanceof Error ? e.message : 'The project could not be checked.'); }
+    finally { setDiagnosing(false); }
+  }
   async function listFolder(at = '') {
     setReading(true); setError('');
     try {
@@ -85,6 +95,16 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
       <h1 id="overview-title">{projectName(project)}</h1>
       <p><span>{location}</span>{added.text && <> · <span title={added.full}>added {added.text.replace(/^[TY]/, c => c.toLowerCase())}</span></>}</p>
     </header>
+    <section className="overview-section" aria-labelledby="overview-doctor">
+      <h2 id="overview-doctor">Can this project do work?</h2>
+      {doctor ? <>
+        {doctor.map(check => <p key={check.id} className={'field-hint ' + (check.state === 'fail' ? 'project-problem' : '')}>
+          <span className={'state ' + (check.state === 'ok' ? 'good' : check.state === 'warn' ? 'pending' : 'failed')}>{check.state === 'ok' ? 'Ready' : check.state === 'warn' ? 'Check' : 'Blocked'}</span>{' '}
+          {check.detail}{check.remedy && <> — {check.remedy}</>}
+        </p>)}
+        <p className="field-hint"><button className="link" onClick={() => setDoctor(null)}>Hide the checks</button></p>
+      </> : <p className="field-hint"><button disabled={diagnosing} onClick={() => void diagnose()}>{diagnosing ? 'Checking…' : 'Check this project…'}</button> What Rho can and cannot do here, with the next action for anything wrong.</p>}
+    </section>
     <section className="overview-section" aria-labelledby="overview-sources">
       <h2 id="overview-sources">Source folders</h2>
       <SourceFolders folders={project.sources ?? [{ id: project.id, root: project.root, name: projectName(project) }]} busy={adding} onAdd={() => void add()} />

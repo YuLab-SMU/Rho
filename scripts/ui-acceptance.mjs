@@ -183,7 +183,13 @@ try {
   assert.equal(await sidebar.getByRole('button', { name: 'Overview', exact: true }).getAttribute('aria-current'), 'page');
   assert.equal(await sidebar.getByRole('group', { name: 'Layouts', exact: true }).textContent(), 'None saved yet');
   assert.equal(await sidebar.getByText('Retained operations').count(), 0);
-  assert.deepEqual(await page.locator('main h2').allTextContents(), ['Source folders', 'Documents 0', 'Files 0']);
+  // The overview states what it can do before it lists content: a person who sees
+  // nothing happen needs an answer in the product, not in a terminal.
+  assert.deepEqual(await page.locator('main h2').allTextContents(), ['Can this project do work?', 'Source folders', 'Documents 0', 'Files 0']);
+  // The product answers "nothing happened" itself, and the answer names a real folder.
+  await page.getByRole('button', { name: 'Check this project…', exact: true }).click();
+  await page.getByText(/Rho can write in /).first().waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Check this project…', exact: true }).count(), 0);
   const noJson = async () => { assert.equal(await page.locator('main pre, main code').count(), 0); assert.doesNotMatch(await page.locator('main').innerText(), /[{[]\s*"/); };
   await noJson();
   await widths('overview', noJson);
@@ -200,7 +206,7 @@ try {
   let composition = await admin.call('composition.apply', { projectId: p.id, compositionId: 'workspace', expectedVersion: 0, changeId: 'initial', operations: [{ op: 'replace', rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: ['notes'] }, { id: 'notes', kind: 'view', component: 'rho.scatter', version: '0.2.0', props: { title: 'Shared notes', x: 'x', y: 'y' }, bindings: { data: { id: table.id, version: table.version } } }] }] });
   // A layout saved elsewhere appears in the overview without moving the reader; choosing it opens it.
   await page.locator('#overview-layouts').waitFor();
-  assert.deepEqual(await page.locator('main h2').allTextContents(), ['Source folders', 'Layouts 1', 'Documents 1', 'Files 1']);
+  assert.deepEqual(await page.locator('main h2').allTextContents(), ['Can this project do work?', 'Source folders', 'Layouts 1', 'Documents 1', 'Files 1']);
   assert.equal(await sidebar.getByRole('button', { name: 'Overview', exact: true }).getAttribute('aria-current'), 'page');
   await sidebar.getByRole('button', { name: /^workspace/ }).click();
   await page.getByRole('heading', { name: "This view can't be shown here yet", exact: true }).waitFor();
