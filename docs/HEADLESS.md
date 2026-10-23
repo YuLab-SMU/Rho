@@ -50,6 +50,9 @@ Startup prints the loopback URL and private connection-file location, never the
 credential. `--port`, `--rscript`, `--core`, `--plugins` and `--limits` are explicit
 operator selections; `RHO_RSCRIPT`, `RHO_CORE_BINARY` and `RHO_PYTHON` select
 equivalent runtimes. A Core override is outside bundled digest verification.
+A source checkout has no `vendor/rho-core`: packaging supplies it, so source
+checks and the browser acceptance need the same `--core`/`RHO_CORE_BINARY`
+selection, and say so when it is missing.
 Core uses the canonical project path plus `/.rho/host.sock`; macOS permits at
 most 103 UTF-8 bytes. A longer path fails before Host startup.
 

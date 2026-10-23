@@ -30,6 +30,19 @@ export function located(project: ProjectSummary, folder: Folder) {
   return folder.root && folder.label && beneath(project.root, folder.root) ? folder.label + project.root.slice(folder.root.length) : project.root;
 }
 interface Problem { text: string; next?: { label: string; run: () => void }; blocks?: boolean }
+// A disabled control cannot take focus, and React commits the enabled state after the
+// handler returns. Restore focus from an effect so it lands on a usable node: focusing
+// the still-disabled button silently dropped focus to the page.
+function useRefocus<T extends HTMLElement>(blocked: boolean) {
+  const pending = useRef<T | null>(null);
+  useEffect(() => {
+    const target = pending.current;
+    if (blocked || !target) return;
+    pending.current = null;
+    if (target.isConnected) target.focus();
+  }, [blocked]);
+  return pending;
+}
 export function Home({ client, projects, folder, focusRequest, onFocused, onOpened, onChoose, onAccessEnded }: {
   client: BrowserClient; projects: ProjectSummary[]; folder: Folder; focusRequest: boolean; onFocused: () => void;
   onOpened: (project: ProjectSummary) => void; onChoose: (project: ProjectSummary) => void; onAccessEnded: () => void;
@@ -37,6 +50,7 @@ export function Home({ client, projects, folder, focusRequest, onFocused, onOpen
   const [sheet, setSheet] = useState(false), [picking, setPicking] = useState(false), [failure, setFailure] = useState('');
   const trigger = useRef<HTMLElement | null>(null), openButton = useRef<HTMLButtonElement>(null), firstRow = useRef<HTMLButtonElement>(null);
   const sorted = [...projects].sort((a, b) => b.openedAt.localeCompare(a.openedAt));
+  const refocus = useRefocus<HTMLElement>(picking);
   // "Open a project…" lands on the most recent project, or on Open folder when there is none.
   useEffect(() => { if (focusRequest) { (firstRow.current ?? openButton.current)?.focus(); onFocused(); } }, [focusRequest]);
   async function pickFolder(from: HTMLElement | null) {
@@ -53,7 +67,7 @@ export function Home({ client, projects, folder, focusRequest, onFocused, onOpen
       if (error?.kind === 'unauthorized') onAccessEnded();
       else setFailure(error?.message ?? 'The folder could not be confirmed. Check the system folder window, then try again.');
       from?.focus();
-    } finally { setPicking(false); requestAnimationFrame(() => from?.focus()); }
+    } finally { refocus.current = from; setPicking(false); }
   }
   const entries = <>
     <button ref={openButton} disabled={picking} onClick={e => void pickFolder(e.currentTarget)}>Open folder…</button>
@@ -101,6 +115,7 @@ function ProjectSheet({ client, onClose, onOpened, onAccessEnded }: {
   // A problem names the next step: an alternative action, or what to change before trying again.
   const [failure, setFailure] = useState<Problem | null>(null);
   const [busy, setBusy] = useState(false);
+  const refocus = useRefocus<HTMLButtonElement>(busy);
   useEffect(() => { dialog.current?.showModal(); input.current?.focus(); }, []);
   const name = value.trim();
   const check: Problem | null = name.length > 80 ? { text: 'Use a name of 80 characters or fewer.', blocks: true } : null;
@@ -123,7 +138,7 @@ function ProjectSheet({ client, onClose, onOpened, onAccessEnded }: {
     } catch (e) {
       const error = (e as { error?: { kind?: string; message?: string } }).error;
       if (error?.kind === 'unauthorized') onAccessEnded(); else setFailure({ text: error?.message ?? 'The folder could not be selected. Try Add folder again.' });
-    } finally { setBusy(false); requestAnimationFrame(() => from.focus()); }
+    } finally { refocus.current = from; setBusy(false); }
   }
   function submit(event: FormEvent) {
     event.preventDefault();
