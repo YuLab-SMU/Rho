@@ -14,7 +14,7 @@ A dead path is confirmed not to work. It is kept here rather than silently ignor
 
 | Path | What happens | What would fix it |
 | --- | --- | --- |
-| An Agent-produced artifact reaching a view | `r.execute` writes artifacts under `.rho/plugins/runs/...`; `resource.register` refuses owner state by design, and presentation accepts only native `artifact.ready` events, so a plot can be produced, verified with `artifact.check`, and still never shown. Recorded as `artifact-not-presentable` by `acceptance:execution`. | Decide whether an executed artifact may be presented directly (a run-bound view) or must be copied out of owner state first. Either is a permission change and needs a decision. |
+| An artifact declared by `r.execute` reaching a view directly | Artifacts land under `.rho/plugins/runs/...`, `resource.register` refuses owner state by design, and presentation accepts only native `artifact.ready` events. Recorded as `artifact-not-presentable` by `acceptance:execution`. **Workable route now demonstrated:** a script may write a figure beside the project (R's working directory is the project root), where it registers and renders — done for `cars.png` in Rho-Playground. | No change needed for the working route. Presenting the owner-state copy directly would be a permission change and still needs a decision. |
 | A person saving a document to disk | A tab may edit the buffer and never write it. `document.save` is not in the browser grant. The editor says so. | Grant `document.save` to the browser with the same conditional identity edits already use. This widens a reviewed boundary and needs a decision. |
 
 ## Unverified paths

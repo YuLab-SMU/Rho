@@ -299,7 +299,7 @@ export class RhoService {
   private async handle(req: http.IncomingMessage, res: http.ServerResponse) {
     res.setHeader('cache-control', 'no-store'); res.setHeader('x-content-type-options', 'nosniff');
     res.setHeader('referrer-policy', 'no-referrer');
-    res.setHeader('content-security-policy', "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
+    res.setHeader('content-security-policy', "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'");
     res.setHeader('cross-origin-opener-policy', 'same-origin');
     res.setHeader('cross-origin-resource-policy', 'same-origin');
     let apiVersion = '2.0';

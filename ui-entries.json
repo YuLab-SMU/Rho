@@ -16,6 +16,14 @@
     "source": "web/entries/tables.tsx"
   },
   {
+    "plugin": "media",
+    "package": "@rho-workspace/plugin-media",
+    "entry": "./ui",
+    "component": "rho.media",
+    "version": "0.2.0",
+    "source": "web/entries/media.tsx"
+  },
+  {
     "plugin": "annotations",
     "package": "@rho-workspace/plugin-annotations",
     "entry": "./ui",
