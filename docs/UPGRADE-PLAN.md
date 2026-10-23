@@ -133,12 +133,17 @@ events, so an Agent-run plot has no route to a view. Recorded as
 ## Definition of done
 
 1. An Agent who has read only the Skills completes open → edit → execute →
-   present with no failed calls.
+   present with no refused call. **Measured:** `npm run acceptance:walkthrough`
+   reads the Skills from the service, follows them, and proves its refusal
+   recorder works by feeding it one deliberately wrong call first.
 2. An environment problem is located within one round trip after `doctor`.
    **Measured:** one call reports three simultaneous faults (a stale Host socket, a
    read-only project folder, a missing Rscript) with a remedy for each, and a
    dead-Host socket is reported as stale rather than as an idle project.
-3. Every execution check asserts the Host start it depends on.
+3. Every execution check asserts the Host start it depends on. **Measured:**
+   `acceptance:execution` asserts exactly one Host start and the artifact, and
+   fails if either is missing; `acceptance:walkthrough` drives the same
+   submission through the Skills.
 4. No claim in Status lacks a report, and every gap is either scheduled here or
    stated as accepted work. **Measured:** `npm run verify` writes
    `docs/VERIFICATION.json` with each command, exit code, count and commit, Status
