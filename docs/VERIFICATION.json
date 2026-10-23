@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "commit": "c84164fdcd920e50f3c79d73096ab0bd6e3c2a43",
-  "workingTreeDirty": true,
+  "commit": "fa49c3ceeae281052272a36b965e7a265514fc2f",
+  "workingTreeDirty": false,
   "checks": {
     "rho-tests": {
       "command": "node --test test/*.test.mjs",
-      "checkedAt": "2026-10-23T17:22:58.384Z",
-      "commit": "c84164fdcd920e50f3c79d73096ab0bd6e3c2a43",
+      "checkedAt": "2026-10-23T17:23:57.027Z",
+      "commit": "fa49c3ceeae281052272a36b965e7a265514fc2f",
       "exitCode": 0,
       "tests": 94,
       "passing": 94,
@@ -14,8 +14,8 @@
     },
     "plugin-tests": {
       "command": "node --test test/*.test.mjs",
-      "checkedAt": "2026-10-23T17:23:00.052Z",
-      "commit": "c84164fdcd920e50f3c79d73096ab0bd6e3c2a43",
+      "checkedAt": "2026-10-23T17:23:58.728Z",
+      "commit": "fa49c3ceeae281052272a36b965e7a265514fc2f",
       "exitCode": 0,
       "tests": 55,
       "passing": 55,
