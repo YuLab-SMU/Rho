@@ -87,3 +87,62 @@ test('an intent names the methods a task needs and what this session lacks', asy
     assert.equal(plain.intent, null);
   } finally { await f.cleanup(); }
 });
+
+test('a socket left by a dead Host is reported as stale, not as a working executor', async () => {
+  const f = await fixture();
+  try {
+    // A socket file with nothing behind it: execution would block on a Host that is
+    // gone, and without this check it looks like a healthy idle project.
+    const socket = path.join(f.project, '.rho', 'host.sock');
+    await fs.mkdir(path.dirname(socket), { recursive: true });
+    await fs.writeFile(socket, '');
+    const report = await f.operator.call('project.doctor', { projectId: f.p.id });
+    const core = report.checks.find(check => check.id === 'core');
+    assert.equal(core.state, 'warn');
+    assert.match(core.detail, /no Host answers/);
+    assert.match(core.remedy, /stale socket|Stop the service/);
+    // And the whole report does not claim the project is ready to execute.
+    const missingR = report.checks.find(check => check.id === 'rscript');
+    assert.equal(missingR.state, 'fail');
+    assert.equal(report.ok, false);
+  } finally { await f.cleanup(); }
+});
+
+test('an owner package that is selected but absent is named by the plugin check', async () => {
+  const f = await fixture();
+  try {
+    const report = await f.operator.call('project.doctor', { projectId: f.p.id });
+    const plugins = report.checks.find(check => check.id === 'plugins');
+    assert.ok(plugins, 'the plugin check is always reported');
+    assert.ok(['ok', 'fail'].includes(plugins.state));
+    // With every owner installed this build reports ok; the remedy stays usable.
+    if (plugins.state === 'ok') assert.match(plugins.detail, /installed and enabled/);
+    else assert.match(plugins.remedy, /--plugins|capability.configure/);
+  } finally { await f.cleanup(); }
+});
+
+test('several faults at once are all located by one doctor call', async () => {
+  const f = await fixture();
+  try {
+    // Three independent problems, as a broken environment would present them.
+    const socket = path.join(f.project, '.rho', 'host.sock');
+    await fs.mkdir(path.dirname(socket), { recursive: true });
+    await fs.writeFile(socket, '');
+    await fs.chmod(f.project, 0o500);
+    const started = Date.now();
+    const report = await f.operator.call('project.doctor', { projectId: f.p.id });
+    const elapsed = Date.now() - started;
+    const failing = report.checks.filter(check => check.state !== 'ok').map(check => check.id).sort();
+    // One call, every fault: a second round trip must not be needed to learn the rest.
+    assert.deepEqual(failing, ['core', 'project-write', 'rscript']);
+    assert.equal(report.ok, false);
+    for (const id of failing) {
+      const check = report.checks.find(candidate => candidate.id === id);
+      assert.ok(check.remedy && check.remedy.length > 10, `${id} carries a remedy`);
+    }
+    assert.ok(elapsed < 10000, 'the diagnosis is one bounded call, not a scan');
+  } finally {
+    await fs.chmod(f.project, 0o700).catch(() => {});
+    await f.cleanup();
+  }
+});

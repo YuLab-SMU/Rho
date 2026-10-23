@@ -15,8 +15,12 @@ const checks = [
 ];
 
 const git = args => { try { return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim(); } catch { return null; } };
+// The guard test reads this file while the checks run, so it is replaced atomically and
+// never counted as a change of its own.
+const SELF = 'docs/VERIFICATION.json';
 const commit = git(['rev-parse', 'HEAD']) ?? 'unknown';
-const dirty = (git(['status', '--porcelain']) ?? '').split('\n').filter(line => line && !line.endsWith('web/theme.css')).length > 0;
+const dirty = (git(['status', '--porcelain']) ?? '').split('\n')
+  .filter(line => line && !line.endsWith('web/theme.css') && !line.endsWith(SELF)).length > 0;
 
 const results = {};
 for (const check of checks) {
@@ -35,6 +39,7 @@ for (const check of checks) {
 }
 
 const ledger = { schemaVersion: 1, commit, workingTreeDirty: dirty, checks: results };
-await fs.writeFile(out, JSON.stringify(ledger, null, 2) + '\n');
+await fs.writeFile(out + '.tmp', JSON.stringify(ledger, null, 2) + '\n');
+await fs.rename(out + '.tmp', out);
 process.stdout.write(`wrote ${path.relative(root, out)} for ${commit}${dirty ? ' (dirty tree)' : ''}\n`);
 if (!Object.values(results).every(result => result.passed)) process.exit(1);
