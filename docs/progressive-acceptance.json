@@ -1,0 +1,179 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-10-23T19:53:44.073Z",
+  "status": "passed",
+  "scope": "Progressive discovery, bounded result and file reads, conditional browser save, real R artifact rendering; local macOS installation.",
+  "platform": "darwin-arm64",
+  "node": "v22.22.3",
+  "source": {
+    "application": {
+      "repository": "https://github.com/YuLab-SMU/Rho",
+      "commit": "4014a745d22ca253961b47a1fa483e79ab30b227",
+      "tree": "f2ec44ac61036f2db43ea6e62a0f8ac242e0b75c",
+      "buildInputsSha256": "533dad94d67bb929ded12abeb0e373df4c6ea19feba4cae4112fff86f15dc314",
+      "localOverride": null
+    },
+    "plugins": {
+      "commit": "0dee79556fbf1e7bf3663c078a0788aa7122ab8a",
+      "tree": "e1a571b629cca0e7a09e3c5c3cfc75b6b3626a2f",
+      "buildInputsSha256": "b20b0c9c8cac809a5b3dc63840476aec400928533d34b3938850bfdcfac1bf79",
+      "localOverride": null
+    },
+    "core": {
+      "repository": "https://github.com/YuLab-SMU/Rho-core",
+      "commit": "d0159da6feb01d1be9e3b4b34b67953241fedfcb",
+      "tree": "d76820b39b24df9e7b222efc3626f39915022181",
+      "buildInputsSha256": "584b7ebee58f2f2051cecf03eddb6c1013d66cc2781b0c7f0fe75afecb23443b",
+      "localOverride": null,
+      "artifactSha256": "eee223026f7e0b4dd1ee14a409c023919626c4175be5728048a02af739af4ce1",
+      "bytes": 7399128,
+      "buildAssociation": "Digest-verified accepted public Core binary reused; no local Core source changes selected."
+    }
+  },
+  "artifact": {
+    "filename": "rho-workspace-local-0.4.0.tgz",
+    "bytes": 7267818,
+    "sha256": "bd4a517af7a8b5487ede36b2c2e9d60ae72f03af3b1d0010bd69d1cec8844708",
+    "integrity": "sha512-2KtmsVPzXs1q/6xdsI5+JAYCe0vUl+p75djf/RRBJ35JjxS4apPPj1er8/qmEcorD1yVtIvxHpmKQa6j2xPXzA==",
+    "files": 4048
+  },
+  "installation": {
+    "checks": [
+      "Offline npm install outside all source checkouts",
+      "Committed source identities without local overrides",
+      "Bundled public Core binary selected and digest checked",
+      "Every selected plugin is an ordinary installed package with exact version and tarball digest",
+      "Every exported protocol shard has its recorded byte length and SHA-256"
+    ],
+    "protocolOperations": 86,
+    "pluginPackages": 10
+  },
+  "sourceChecks": {
+    "rho-tests": {
+      "command": "node --test test/*.test.mjs",
+      "checkedAt": "2026-10-23T19:46:58.127Z",
+      "exitCode": 0,
+      "tests": 99,
+      "passing": 99,
+      "passed": true
+    },
+    "plugin-tests": {
+      "command": "node --test test/*.test.mjs",
+      "checkedAt": "2026-10-23T19:45:57.985Z",
+      "exitCode": 0,
+      "tests": 65,
+      "passing": 65,
+      "passed": true
+    }
+  },
+  "mcp": {
+    "toolNames": [
+      "rho_index",
+      "rho_resolve",
+      "rho_call",
+      "rho_read"
+    ],
+    "toolsListBytes": 2347,
+    "ownerIndexBytes": 414,
+    "duplicatedStructuredContent": false,
+    "maxMeasuredToolReplyBytes": 12946,
+    "modelTrial": {
+      "experiment": "real-claude-code-mcp",
+      "clientVersion": "2.1.308 (Claude Code)",
+      "sdkVersion": "1.29.0",
+      "exitCode": 0,
+      "projectBound": true,
+      "contextFetched": true,
+      "bufferChangedByAgent": true,
+      "finalVersion": 3,
+      "unsaved": true,
+      "nativeHostStarted": false,
+      "externalConversationOwner": "Claude Code"
+    },
+    "defaultBudgets": {
+      "visibleReplyBytes": 16384,
+      "resultBytes": 16777216,
+      "retainedResultBytes": 67108864,
+      "retainedResults": 64
+    }
+  },
+  "installedJourneys": {
+    "person": {
+      "browser": "156.0.8078.4",
+      "widths": [
+        1440,
+        768,
+        390
+      ],
+      "checks": [
+        "the shell loads at 1440, 768 and 390 without horizontal overflow",
+        "the Files section lists the real folder",
+        "a subfolder can be opened from the list",
+        "button and keyboard save real Unicode bytes at all three widths",
+        "a refreshed tab reads the saved document",
+        "another writer saving the same text version updates the tab through the owner revision",
+        "an external disk write refuses save and preserves both disk and buffer",
+        "the tab is still refused parent paths, registration and execution",
+        "no page errors"
+      ]
+    },
+    "execution": {
+      "browser": "156.0.8078.4",
+      "widths": [
+        1440,
+        768,
+        390
+      ],
+      "checks": [
+        "four-tool discovery resolves, edits and conditionally saves through stdio MCP",
+        "the original request completes through observation, with no resubmission",
+        "artifact.check returns a verified owner-state reference that binds directly",
+        "browser decodes the real 640×420 PNG with owner-sized 4096-byte pages at three widths",
+        "refresh renders the same version without CSP errors or new native execution"
+      ],
+      "counts": {
+        "hostStarts": 1,
+        "nativeDispatches": 1,
+        "modelCalls": 0
+      },
+      "resource": {
+        "version": "49d92727aa4cfcfdf99e986f9d7478f1ba24622e263939baca60c03d861f06da",
+        "bytes": 25456,
+        "kind": "media"
+      },
+      "runner": "scripts/execution-acceptance.mjs",
+      "runnerSha256": "5409a80215cf16f584ce7da7096d43c10c7cc85668f7ed997f7404f5c582894f",
+      "mediaLimits": {
+        "ownerPageBytes": 4096,
+        "defaultDisplayBytes": 8388608
+      }
+    },
+    "shell": {
+      "browser": "155.0.8059.84",
+      "widths": [
+        1600,
+        1280,
+        1024,
+        768,
+        390
+      ],
+      "checks": 23,
+      "counts": {
+        "hostStarts": 0,
+        "nativeDispatches": 0
+      }
+    }
+  },
+  "limits": [
+    "The execution runner was strengthened after packaging to wait for the actual responsive renderer mount; installed runtime files were unchanged.",
+    "The real-model trial covers context and shared-document editing, not an autonomous scientific task.",
+    "Windows, Linux, person-driven native folder dialogs, all UI/domain flows and official distribution remain unaccepted."
+  ],
+  "localEvidence": {
+    "installation": "work/progressive-package/installed.json",
+    "person": "work/progressive-installed-person/report.json",
+    "execution": "work/progressive-installed-execution-checked/report.json",
+    "shell": "work/progressive-installed-ui/report.json",
+    "model": "work/progressive-agent/report.json"
+  }
+}

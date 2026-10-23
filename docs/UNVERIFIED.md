@@ -17,6 +17,11 @@ their own scope; they do not automatically accept this changed MCP boundary.
   not establish that a model inferred the workflow from guidance. `npm run agent`
   separately passed a real Claude Code context/edit/confirmation trial.
 
+The [local installed combination](progressive-acceptance.json) passed outside all
+three checkouts: person (9 checks), execution/MCP (5) and U1 (23), with exact
+artifact and protocol-shard hashes. The strengthened execution runner waits for
+the actual responsive renderer before checking image decoding at each width.
+
 ## Remaining scope
 
 | Path | Evidence still needed |
@@ -24,7 +29,6 @@ their own scope; they do not automatically accept this changed MCP boundary.
 | Windows and Linux | Platform runs; the native folder picker currently targets macOS. |
 | Operating-system folder dialog | A person-driven native dialog trial; automated UI checks replace the picker. |
 | Autonomous scientific work through the new default MCP entry | A real model performing the scientific task and presentation; the current model trial covers context and document collaboration. |
-| Installed combination after these changes | Rebuild from checked source identities and repeat the browser/execution journeys outside the checkouts. |
 | Full product and domain acceptance | The selected bounded journeys do not establish every scientific method or UI flow. |
 
 ## Journeys

@@ -102,9 +102,15 @@ try {
   await page.goto(service.url + '/#pair=' + pair.code);
   await page.locator('.project-row').first().click();
   const visible = async () => {
-    await page.getByRole('img', { name: 'cars.png', exact: true }).waitFor();
-    await page.waitForFunction(() => { const i = document.querySelector('img[alt="cars.png"]'); return i?.complete && i.naturalWidth === 640 && i.naturalHeight === 420; });
-    assert.equal(await page.getByRole('img', { name: 'cars.png', exact: true }).isVisible(), true);
+    // Resizing crosses two distinct renderer mounts. Wait for the selected
+    // surface, so an image in the departing wide mount cannot satisfy this check.
+    const selector = page.viewportSize().width < 768 ? '.mobile-view' : '.dock-container';
+    const surface = page.locator(selector);
+    await surface.waitFor({ state: 'visible' });
+    const image = surface.getByRole('img', { name: 'cars.png', exact: true });
+    await image.waitFor();
+    await page.waitForFunction(selector => { const i = document.querySelector(selector + ' img[alt="cars.png"]'); return i?.complete && i.naturalWidth === 640 && i.naturalHeight === 420; }, selector);
+    assert.equal(await image.isVisible(), true);
   };
   for (const width of [1440, 768, 390]) {
     await page.setViewportSize({ width, height: 900 }); await visible();

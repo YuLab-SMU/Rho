@@ -36,7 +36,7 @@ try {
     assert.equal(installed.version, item.version);
     assert.equal(createHash('sha256').update(await fs.readFile(path.join(pkg, 'vendor', item.filename))).digest('hex'), item.sha256);
   }
-  assert.equal(manifest.plugins.packages.length, 9);
+  assert.deepEqual(manifest.plugins.packages.map(item => item.id).sort(), ['contracts', ...manifest.plugins.selected].sort());
   const projects = path.join(root, 'projects'); await fs.mkdir(projects);
   const state = path.join(root, 'service');
   cli = spawn(path.join(install, 'node_modules/.bin/rho'), ['--root', projects, '--state-dir', state, '--rscript', path.join(root, 'missing-Rscript')], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -79,7 +79,7 @@ try {
   const index = JSON.parse(await fs.readFile(path.join(pkg, 'protocol/v2.json'), 'utf8'));
   assert.equal(index.format, 'rho.protocol-index/1');
   for (const ref of [index.shared, ...Object.values(index.operations)]) {
-    assert.match(ref.path, /^v2\/[a-z.]+\.json$/);
+    assert.match(ref.path, /^v2\/[A-Za-z0-9.]+\.json$/);
     const bytes = await fs.readFile(path.join(pkg, 'protocol', ref.path));
     assert.equal(bytes.length, ref.bytes); assert.equal(createHash('sha256').update(bytes).digest('hex'), ref.sha256);
   }
@@ -90,7 +90,7 @@ try {
   }
   const source = await fs.readFile(path.join(pkg, 'node_modules/@rho-workspace/plugin-r/dist/index.js'), 'utf8');
   assert.equal(/airway|DESeq2|apeglm|shrink|recipePath/.test(source), false);
-  report.checks.push('Versioned v1/v2 contracts and inert v2 states shipped; nine selected contract/plugin artifacts contain no project recipe or scientific native script.');
+  report.checks.push('Versioned v1/v2 contracts and inert v2 states shipped; every selected contract/plugin artifact contains no project recipe or scientific native script.');
   report.status = 'passed';
 } catch (e) { report.status = 'failed'; report.failure = e.message; process.exitCode = 1; }
 finally {
