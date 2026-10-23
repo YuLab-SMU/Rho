@@ -12,7 +12,11 @@ inventory and `artifact.check`. Skills now carry machine-readable parts
 (`requires`, `example`, `failureRecipes`, `verify`); `r.workspace` was rewritten
 from that attempt, and a check validates every declared example against the
 operation it illustrates and every `verify` command against a shipped script.
-Checks: Rho 80/80, Plugins 54/54, U1 browser 23.
+`project.doctor` now answers whether a project can do work at all — write access,
+Host, Rscript, unfinished runs, plugin selection — and the Overview asks it before
+listing content, so a silent failure has a place to be explained. Filesystem and
+lock refusals name their condition and remedy.
+Checks: Rho 83/83, Plugins 54/54, U1 browser 23.
 Open gaps are listed in [the upgrade plan](UPGRADE-PLAN.md); the largest is that
 an Agent-produced artifact has no route to a view (`artifact-not-presentable`),
 because registration refuses owner state and presentation accepts only native
