@@ -60,6 +60,13 @@
     "test:charts": "node --test --test-name-pattern='a plot binds one immutable' ../Rho-plugins/test/resources.test.mjs",
     "test:task-map": "node --test test/task-map.test.mjs",
     "acceptance:person": "node scripts/person-files-acceptance.mjs",
+    "test:workspace": "node --test test/workspace.test.mjs",
+    "test:annotations": "node --test ../Rho-plugins/test/annotations.test.mjs",
+    "test:media": "node --test ../Rho-plugins/test/owners.test.mjs",
+    "test:requirements": "node --test --test-name-pattern='base-R requirements' ../Rho-plugins/test/resources.test.mjs",
+    "test:native": "node --test test/native-artifacts.test.mjs",
+    "test:feedback": "node --test test/feedback-delivery.test.mjs",
+    "test:presenter": "node --test test/presenter.test.mjs",
     "test:ui:u2": "npm run build && npm run acceptance:ui:u2"
   },
   "dependencies": {

@@ -9,9 +9,10 @@ is reconciled on the next read, bounded and without starting a Host (Rho).
 [Execution acceptance](UPGRADE-PLAN.md#p0--close-the-observed-defects) now
 asserts a real Host start (`1`, not `0`), the produced artifact, a completion
 inventory and `artifact.check`. Skills now carry machine-readable parts
-(`requires`, `example`, `failureRecipes`, `verify`); `r.workspace` was rewritten
-from that attempt, and a check validates every declared example against the
-operation it illustrates and every `verify` command against a shipped script.
+(`requires`, `example`, `failureRecipes`, `verify`) on all 14 shipped Skills;
+each was rewritten from a real attempt, and a check validates every declared
+example against the operation it illustrates and every `verify` command against
+a shipped script.
 `project.doctor` now answers whether a project can do work at all — write access,
 Host, Rscript, unfinished runs, plugin selection — and the Overview asks it before
 listing content, so a silent failure has a place to be explained. Filesystem and

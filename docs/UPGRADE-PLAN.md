@@ -80,10 +80,9 @@ events, so an Agent-run plot has no route to a view. Recorded as
   command that runs (`acceptance:execution`, `acceptance:person`,
   `test:task-map`). Two remain by the plan's own list: `artifact-and-view`,
   which needs the presentation gap decided, and `feedback`.
-- The debt is measured, not assumed: the Skills check prints how many shipped
-  Skills still have no verify command (7 of 14 now, was 11). Converted:
-  `r.workspace`, `rho.person-files`, `rho.task-map`, `documents.workspace`,
-  `tables.workspace`, `files.workspace`, `charts.workspace`.
+- **Done:** all 14 shipped Skills carry `intent`, `requires`, a schema-valid
+  `example`, `failureRecipes` and a `verify` command that runs. The check keeps
+  printing the count so a new prose-only Skill cannot appear unnoticed.
 
 ### P2 — A service that diagnoses itself
 
