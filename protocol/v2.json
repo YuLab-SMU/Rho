@@ -2095,6 +2095,14 @@
         "projectId": {
           "type": "string",
           "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "intent": {
+          "enum": [
+            "run-r",
+            "edit-documents",
+            "inspect-tables",
+            "present"
+          ]
         }
       },
       "required": [
@@ -13896,11 +13904,52 @@
             ],
             "additionalProperties": true
           }
+        },
+        "intent": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "methods": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "missing": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "ready": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "id",
+                "methods",
+                "missing",
+                "ready"
+              ],
+              "additionalProperties": true
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
         "ok",
-        "checks"
+        "checks",
+        "intent"
       ],
       "additionalProperties": true
     },

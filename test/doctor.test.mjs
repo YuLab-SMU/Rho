@@ -68,3 +68,22 @@ test('doctor is available to the person in the tab, and changes nothing', async 
     assert.deepEqual(after.operations, before.operations);
   } finally { await f.cleanup(); }
 });
+
+test('an intent names the methods a task needs and what this session lacks', async () => {
+  const f = await fixture();
+  try {
+    // A tab is granted a narrower set than an Agent session, so the same project
+    // answers differently: this is the grant decided from the contract, not guessed.
+    const { code } = await f.operator.call('session.browser.pair', {});
+    const grant = (await (await fetch(f.service.url + '/api/browser/pair', { method: 'POST', headers: { 'content-type': 'application/json', origin: f.service.url }, body: JSON.stringify({ code }) })).json()).value;
+    const { BrowserClient } = await import('../dist/browser.js');
+    const tab = new BrowserClient({ url: f.service.url, ...grant });
+    const report = await tab.call('project.doctor', { projectId: f.p.id, intent: 'run-r' });
+    assert.equal(report.intent.id, 'run-r');
+    assert.ok(report.intent.methods.includes('action.submit'));
+    assert.ok(report.intent.missing.includes('action.submit'), 'a tab cannot run R, and is told so');
+    // Without an intent the answer stays exactly as before.
+    const plain = await tab.call('project.doctor', { projectId: f.p.id });
+    assert.equal(plain.intent, null);
+  } finally { await f.cleanup(); }
+});

@@ -505,7 +505,22 @@ export class RhoService {
       add('plugins', absent.length ? 'fail' : 'ok',
         absent.length ? `Selected owners are not installed: ${absent.join(', ')}.` : disabled.length ? `Installed owners are disabled for this project: ${disabled.join(', ')}.` : 'Every selected owner is installed and enabled.',
         absent.length ? 'Install the missing owner packages, or select fewer with --plugins.' : disabled.length ? 'Enable them with capability.configure if this project needs them.' : '');
-      return { ok: checks.every(check => check.state !== 'fail'), checks };
+      // An intent answers "what do I need to do this here", so a session grant is
+      // chosen from the contract instead of assembled by trial and error.
+      const needs: Record<string, string[]> = {
+        'run-r': ['action.submit', 'action.lookup', 'artifact.check', 'document.open', 'document.save', 'resource.register'],
+        'edit-documents': ['document.open', 'document.read', 'document.edit', 'document.save', 'document.undoOwn'],
+        'inspect-tables': ['resource.register', 'data.page', 'data.plot'],
+        'present': ['composition.apply', 'capability.list']
+      };
+      const intent = b.intent ? needs[b.intent] : undefined;
+      const answer = !b.intent ? null : {
+        id: b.intent,
+        methods: intent ?? [],
+        missing: (intent ?? []).filter(method => !(principal.methods ?? []).includes(method)),
+        ready: checks.every(check => check.state !== 'fail')
+      };
+      return { ok: checks.every(check => check.state !== 'fail'), checks, intent: answer };
     }
     if (method === 'project.entries') {
       const limit = this.config.nativeFolders?.maxEntries ?? 500;

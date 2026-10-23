@@ -87,7 +87,10 @@ events, so an Agent-run plot has no route to a view. Recorded as
   runs and plugin selection, each with its next action. The Overview asks it
   before listing content, so "nothing happened" is answered in the product.
 - `capability.index` accepts an intent and answers with the required session
-  methods and any missing prerequisite.
+  methods and any missing prerequisite. **Done in `project.doctor` instead of
+  the layered index**, which is a security-sensitive pager: `intent: 'run-r'`
+  answers with the methods the task needs, which of them this session lacks, and
+  whether the environment allows it.
 - Startup prints the narrow conclusion a person needs, not only a URL.
 
 ### P3 — Protocol ergonomics
