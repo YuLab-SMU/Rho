@@ -9,7 +9,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const packageRoot = path.resolve(process.env.RHO_PACKAGE_ROOT ?? fileURLToPath(new URL('..', import.meta.url)));
 let driver;
-try { driver = process.env.RHO_UI_PLAYWRIGHT_MODULE ? pathToFileURL(process.env.RHO_UI_PLAYWRIGHT_MODULE).href : import.meta.resolve('@playwright/test'); }
+try {
+  // Accept either an absolute path or an already-resolved file URL.
+  const selected = process.env.RHO_UI_PLAYWRIGHT_MODULE;
+  driver = selected ? (selected.startsWith('file:') ? selected : pathToFileURL(selected).href) : import.meta.resolve('@playwright/test');
+}
 catch { console.error('This acceptance needs the external browser driver (@playwright/test).'); process.exit(2); }
 const { chromium } = await import(driver);
 const { RhoService } = await import(pathToFileURL(path.join(packageRoot, 'dist/server.js')).href);

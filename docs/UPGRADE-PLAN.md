@@ -128,7 +128,12 @@ events, so an Agent-run plot has no route to a view. Recorded as
 
 ### P5 — Verification that cannot overstate
 
-- Matrix: journey × (source build / packed install) × width.
+- Matrix: journey × (source build / packed install) × width. **Done:**
+  `npm run acceptance:matrix -- --install DIR` runs the person, execution and
+  Skills journeys against both columns; 6 of 6 pass, the installed column using
+  the Core vendored in the artifact. The packed candidate is built from a clean
+  worktree of HEAD, because packing the working tree would have baked a local
+  CSS override into the artifact.
 - Zero Host starts is a constraint for read-only flows only; execution flows
   assert the starts and artifacts they need.
 - Every claim in [Status](STATUS.md) links to a machine-readable report.
