@@ -342,7 +342,8 @@
             },
             "params": {
               "type": "object",
-              "maxProperties": 16
+              "maxProperties": 16,
+              "additionalProperties": {}
             },
             "author": {
               "type": "string",
@@ -379,7 +380,8 @@
                     },
                     "params": {
                       "type": "object",
-                      "maxProperties": 16
+                      "maxProperties": 16,
+                      "additionalProperties": {}
                     },
                     "author": {
                       "type": "string",
@@ -451,7 +453,8 @@
             },
             "params": {
               "type": "object",
-              "maxProperties": 16
+              "maxProperties": 16,
+              "additionalProperties": {}
             },
             "author": {
               "type": "string",

@@ -21,10 +21,13 @@ import { homedir } from 'node:os';
 import { serveWeb, webRoot, installedWebEntries } from './web-assets.js';
 import { Presentation, presentationWitnessLimits, visibilityLimits } from './presentation.js';
 import { presentationSchemas } from './presentation-contracts.js';
-import { isNativeTime } from './native-contracts.js';
+import { isNativeTime } from './native-time.js';
+import { readOperation, type OperationRequest } from './operation-request.js';
+import { isRhoMethod } from './contract-runtime.js';
+import type { RhoMethod, RhoOutput } from './contract.generated.js';
 import { TaskRouting } from './task-routing.js';
 import type { nativeActivityLimits, agentDeliveryLimits } from '@rho-workspace/plugin-agent';
-import { feedbackSchemas } from './feedback-contracts.js';
+import { ownerContracts } from './contracts/owners.generated.js';
 export interface FeedbackTransport { accept(envelope: any): Promise<any>; lookup(envelope: any): Promise<any> }
 export interface NativeAdapterRegistration {
   projectId: string; taskId: string; registrationId: string; principal: string; adapterPrincipal: string;
@@ -118,13 +121,13 @@ export class RhoService {
     return project;
   }
   async acceptFeedback(envelope: any) {
-    requireThat(ajv.validate<any>(feedbackSchemas.DeliveryEnvelope, envelope), 'invalid', 'Malformed original delivery envelope.');
+    requireThat(ajv.validate<any>((ownerContracts.selected['agent-feedback'].feedbackSchemas as Record<string, any>).DeliveryEnvelope, envelope), 'invalid', 'Malformed original delivery envelope.');
     const project = await this.feedbackProject(envelope.projectId);
     return this.serial(project.id, async () => { const receipt = await this.feedback(project).accept(envelope); await this.emit(project, 'feedback.changed', envelope.deliveryId); return receipt; });
   }
   async lookupFeedback(envelope: any) {
     const input = Object.fromEntries(['projectId', 'taskId', 'deliveryId', 'requestDigest', 'targetBindingId', 'externalSessionId'].map(k => [k, envelope[k]]));
-    requireThat(ajv.validate<any>(feedbackSchemas.InboxLookupInput, input), 'invalid', 'Malformed original inbox lookup.');
+    requireThat(ajv.validate<any>((ownerContracts.selected['agent-feedback'].feedbackSchemas as Record<string, any>).InboxLookupInput, input), 'invalid', 'Malformed original inbox lookup.');
     const project = await this.feedbackProject(input.projectId);
     return this.serial(project.id, () => this.feedback(project).lookup(input));
   }
@@ -352,22 +355,25 @@ export class RhoService {
       const principal = this.authenticate(req, method);
       if (method === 'events') { requireThat(req.method === 'GET', 'invalid', 'Events use GET.'); await this.subscribe(url, principal, res); return; }
       requireThat(req.method === 'POST' && req.headers['content-type']?.split(';')[0] === 'application/json', 'invalid', 'Use POST with application/json.');
+      requireThat(method === 'events' || isRhoMethod(method), 'not_found', 'Unknown API operation.');
       const body = await this.readBody(req, this.config.maxRequestBytes ?? 1024 * 1024);
-      const valid = validators[method];
-      requireThat(valid, 'unavailable', 'This operation is not part of the served contract.');
-      const explained = valid(body) ? null : explainSchema(valid.errors);
-      requireThat(valid(body), 'invalid', explained?.length ? `Request does not match the versioned schema: ${explained[0].fix}` : 'Request does not match the versioned schema.', { fields: valid.errors ?? [], problems: explained ?? [], remedy: 'Fix the named fields and resend the same request identity.' });
+      // The one place untrusted JSON becomes a typed operation request. The value is
+      // not reserialized, defaulted or coerced: what the caller sent is what the
+      // handler receives, so a request digest and a duplicate delivery keep meaning.
+      const read = readOperation(method, body);
+      requireThat(read.ok, read.ok ? 'invalid' : read.kind, read.ok ? '' : (read.problems[0]?.fix ? `Request does not match the versioned schema: ${read.problems[0].fix}` : 'Request does not match the versioned schema.'), read.ok ? {} : { problems: read.problems, remedy: 'Fix the named fields and resend the same request identity.' });
+      const request = read.request, contractRef = typeof req.headers['x-rho-contract-ref'] === 'string' ? req.headers['x-rho-contract-ref'] : undefined;
       let value;
       if (body.projectId && method !== 'project.source.add') {
         value = await this.serial(body.projectId, async () => {
           try {
-            const result = await this.dispatch(method, body, principal, typeof req.headers['x-rho-contract-ref'] === 'string' ? req.headers['x-rho-contract-ref'] : undefined);
+            const result = await this.dispatch(request, principal, contractRef);
             await this.recordActivity(principal, method, body, result); return result;
           } catch (e) {
             await this.recordActivity(principal, method, body, undefined, e instanceof Fault ? e.kind : 'storage'); throw e;
           }
         });
-      } else value = await this.dispatch(method, body, principal, typeof req.headers['x-rho-contract-ref'] === 'string' ? req.headers['x-rho-contract-ref'] : undefined);
+      } else value = await this.dispatch(request, principal, contractRef);
       this.json(res, 200, { apiVersion, ok: true, value });
     } catch (e: any) {
       // A filesystem refusal used to arrive as "could not be confirmed" with no
@@ -399,7 +405,19 @@ export class RhoService {
     await this.plugins.project(p.root, p.id).agent?.recordActivity(principal.id, method, body, result, errorKind);
   }
   private async dataDir(p: Project) { return stateDirectory(p.root, '.rho/rho'); }
-  async dispatch(method: string, b: any, principal: Principal, contractRef?: string): Promise<any> {
+  // The discriminated union is what gives every branch below a typed body: after the
+  // `method` comparison TypeScript narrows `request`, so `b` is that operation's own
+  // input type. `RhoOutput<RhoMethod>` is the published response union; the concrete
+  // response type is checked by the contract test that validates real replies.
+  // `request` is the discriminated union of every published operation, so each branch
+  // below sees that operation's own input type. What a branch returns is validated
+  // against the published response schema by the contract tests that drive real
+  // traffic; the service does not restate the owner's value types as its own.
+  async dispatch(request: OperationRequest, principal: Principal, contractRef?: string): Promise<unknown> {
+    const { method } = request;
+    // Narrowed per branch; see the comment above for why the response side is checked
+    // by contract validation rather than by this signature.
+    const b: any = request.body;
     requireThat(this.state.principals.some(current => current.id === principal.id && current.tokenHash === principal.tokenHash && current.methods.includes(method) && (!current.expiresAt || Date.parse(current.expiresAt) > Date.now())), 'unauthorized', 'Session authorization expired or was revoked before this operation.');
     if (method === 'protocol.describe') return describeProtocol(protocol, principal.methods, b);
     // A dry run of any operation body: the same schema the server enforces, with the

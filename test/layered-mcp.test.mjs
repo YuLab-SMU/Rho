@@ -21,7 +21,7 @@ test('default progressive MCP pages whole contracts, reuses knownRefs, refetches
  const admin=new RhoClient({url:service.url,token:service.adminToken}),p=await admin.call('project.create',{name:'project'}),doc=await admin.call('document.open',{projectId:p.id,path:'notes.md'});
  await admin.call('document.edit',{projectId:p.id,documentId:doc.id,expectedVersion:doc.version,edits:[{from:0,to:0,insert:'共享的原始说明 🧬'}],undoGroup:'seed'});
  const file=path.join(root,'business.private.json');await service.agentConnection(p.id,'business',file,['document.read'],undefined);
- const calls=[],dispatch=service.dispatch.bind(service);service.dispatch=async(method,body,principal,ref)=>{if(principal.profile)calls.push({method,bodyBytes:Buffer.byteLength(JSON.stringify(body)),contractRef:ref??null});return dispatch(method,body,principal,ref);};
+ const calls=[],dispatch=service.dispatch.bind(service);service.dispatch=async(request,principal,ref)=>{if(principal.profile)calls.push({method:request.method,bodyBytes:Buffer.byteLength(JSON.stringify(request.body)),contractRef:ref??null});return dispatch(request,principal,ref);};
  client=await connect(file,measures);const tools=await client.listTools();assert.deepEqual(tools.tools.map(t=>t.name),['rho_index','rho_resolve','rho_call','rho_read']);assert.ok(JSON.stringify(tools).length<8000);assert.equal(calls.length,0);
  const groups=await call(client,'rho_index',{});assert.deepEqual(groups.value.groups,[{owner:'documents',operations:1}]);assert.deepEqual(groups.value.entries,[]);
  let index=await call(client,'rho_index',{owner:'documents',cursor:null,maxBytes:16384});assert.equal(index.ok,true);assert.deepEqual(index.value.entries.map(e=>e.id),['document.read']);

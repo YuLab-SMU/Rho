@@ -2284,7 +2284,55 @@
             "format": {
               "anyOf": [
                 {
-                  "type": "object"
+                  "type": "object",
+                  "properties": {
+                    "mimeType": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "encoding": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "observation": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "columns": {
+                      "type": "array",
+                      "items": {
+                        "type": "object"
+                      }
+                    },
+                    "key": {
+                      "anyOf": [
+                        {
+                          "type": "object"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "classes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "pages": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "width": {
+                      "type": "number"
+                    },
+                    "height": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": true
                 },
                 {
                   "type": "string"
@@ -4024,7 +4072,8 @@
                 },
                 "params": {
                   "type": "object",
-                  "maxProperties": 16
+                  "maxProperties": 16,
+                  "additionalProperties": {}
                 },
                 "author": {
                   "type": "string",
@@ -4061,7 +4110,8 @@
                         },
                         "params": {
                           "type": "object",
-                          "maxProperties": 16
+                          "maxProperties": 16,
+                          "additionalProperties": {}
                         },
                         "author": {
                           "type": "string",
@@ -4133,7 +4183,8 @@
                 },
                 "params": {
                   "type": "object",
-                  "maxProperties": 16
+                  "maxProperties": 16,
+                  "additionalProperties": {}
                 },
                 "author": {
                   "type": "string",

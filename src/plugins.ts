@@ -7,7 +7,8 @@ import type { Files, fileLimits, DeclarationValidator } from '@rho-workspace/plu
 import type { Tables, tableLimits } from '@rho-workspace/plugin-tables';
 import type { Charts, chartLimits } from '@rho-workspace/plugin-charts';
 import type { Media } from '@rho-workspace/plugin-media';
-import { executionInputSchema } from './entry-contracts.js';
+import { ownerContracts } from './contracts/owners.generated.js';
+const executionInputSchema = ownerContracts.selected.execution.input as Record<string, unknown>;
 import type { executionLimits, Objects } from '@rho-workspace/plugin-r';
 import type { Annotations, annotationLimits } from '@rho-workspace/plugin-annotations';
 import type { AgentContext } from '@rho-workspace/plugin-agent';

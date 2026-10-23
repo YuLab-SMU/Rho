@@ -15,16 +15,39 @@ const shared = JSON.parse(await readFile(new URL('protocol/' + index.shared.path
 const pascal = method => method.split('.').map(part => part.replace(/[^A-Za-z0-9]+/g, ' ').trim().split(/\s+/).map(word => word[0].toUpperCase() + word.slice(1)).join('')).join('');
 const identifier = name => /^[A-Za-z_$]/.test(name) ? name : '_' + name;
 
+// A schema that allows any additional field says "this payload is open". That is a
+// runtime fact and Ajv enforces it; expressing it as a `[k: string]: unknown` index
+// signature would also reject every ordinary application object, so the generated
+// type lists the declared fields instead. Typed maps (`additionalProperties` with a
+// schema, such as a vocabulary) keep their index signature: those are real maps.
+const declaredFieldsOnly = value => {
+  if (Array.isArray(value)) return value.map(declaredFieldsOnly);
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  for (const [key, inner] of Object.entries(value)) {
+    // A payload with declared fields keeps those fields; an open bag with none stays a
+    // map of unknown values, which is what a caller actually needs to index.
+    if (key === 'additionalProperties' && inner === true && value.properties && Object.keys(value.properties).length > 0) continue;
+    out[key] = declaredFieldsOnly(inner);
+  }
+  return out;
+};
+
 async function compileSchema(schema, name) {
   // `ignoreMinAndMaxItems` keeps arrays as arrays: the runtime enforces minItems and
   // maxItems, while a generated tuple would make ordinary arrays unassignable for no
   // safety gain. Everything else (required, enums, const, additionalProperties,
   // oneOf/anyOf, dependencies) keeps its published meaning.
-  return await compile(schema, name, {
+  return await compile(declaredFieldsOnly(schema), name, {
     bannerComment: '',
     style: { singleQuote: true, semi: true, tabWidth: 2 },
     ignoreMinAndMaxItems: true,
     enableConstEnums: false,
+    // Declared fields only. The published schemas allow additive fields in many
+    // replies; enforcing that openness at compile time would make every ordinary
+    // application object unassignable, so it stays where it belongs: Ajv validates
+    // the real schema, including whether additional fields are allowed.
+    additionalProperties: false,
     unknownAny: true,
     declareExternallyReferenced: true,
     strictIndexSignatures: false,

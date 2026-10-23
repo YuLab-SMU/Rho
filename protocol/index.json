@@ -4,8 +4,8 @@
   "schemaVersion": 2,
   "shared": {
     "path": "operations/shared.json",
-    "bytes": 73651,
-    "sha256": "8debb79693dd53f227707f1e2a106acd78901fe570505b43a2020edf8e93d4b0"
+    "bytes": 75007,
+    "sha256": "eaad766a02d2eda666d1ef5fa40e7a3070d76a4e15521e83d1d6d18e49b36591"
   },
   "operations": {
     "action.cancel": {
@@ -77,8 +77,8 @@
     "artifact.check": {
       "summary": "Verify the selected completion inventory and file bytes only; domain check reports remain project resources.",
       "path": "operations/artifact.check.json",
-      "bytes": 4763,
-      "sha256": "4cf61740840e0828e90451e1a01a36aabb9d369da3cb8c6d47387cee581bf284"
+      "bytes": 6311,
+      "sha256": "478e874c85983ef450fe728fd007962266a017186eda53020f059b67645bf892"
     },
     "binding.activity": {
       "summary": "binding.activity",
@@ -173,20 +173,20 @@
     "data.compare": {
       "summary": "Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.",
       "path": "operations/data.compare.json",
-      "bytes": 3767,
-      "sha256": "9eb38f074b4ea957bc20f430544ce057bca4396cdd3d4e16cb7c96ff8969840e"
+      "bytes": 5027,
+      "sha256": "8dbcf547e663f81c5c89d43b5f0670f7beb4e36747439843de06adac88623720"
     },
     "data.page": {
       "summary": "data.page",
       "path": "operations/data.page.json",
-      "bytes": 5396,
-      "sha256": "05bbf33cd61d0f1c3f786d66082bf0e6dee4c58fb85de1544c5554724494e90e"
+      "bytes": 6848,
+      "sha256": "d8a3688484ee64ac6b55aee7a82b506f3300b99af676484ff8b67d9d309bb853"
     },
     "data.plot": {
       "summary": "data.plot",
       "path": "operations/data.plot.json",
-      "bytes": 3235,
-      "sha256": "2404c1efb18b2de68efdf7ef5d1652f995fa3f9f1c7baaa98a24b1733317fcd3"
+      "bytes": 4687,
+      "sha256": "c4f2782e80d8653c671aa6ea6a3b1ab9b0426812064fb71e2268c8115e6a9a41"
     },
     "document.abandonSave": {
       "summary": "document.abandonSave",
@@ -281,20 +281,20 @@
     "media.describe": {
       "summary": "media.describe",
       "path": "operations/media.describe.json",
-      "bytes": 3373,
-      "sha256": "e8a6a98d5a5b44a34ce248ac55f5f90a62f62b91ecb14047787313e209d74c24"
+      "bytes": 4825,
+      "sha256": "eac3124491c300816c5b43cb13369f3f77ce3fc5f4d81a8ed849290f58b96ec2"
     },
     "object.read": {
       "summary": "Read a bounded exported JSON object snapshot, not live R memory.",
       "path": "operations/object.read.json",
-      "bytes": 2715,
-      "sha256": "370651b44f1b39c7af9df935d56347b2f46e4ae223a41702460cb965ce6380df"
+      "bytes": 4167,
+      "sha256": "e33b2625556684a6605a047e53059a73513e90c06feb275be82b477dca1748e1"
     },
     "observation.snapshot": {
       "summary": "observation.snapshot",
       "path": "operations/observation.snapshot.json",
-      "bytes": 150888,
-      "sha256": "d65b94a59d0b7aa279ffab4cde226d5f8f485b88b2a1998b971327f4b872619e"
+      "bytes": 152582,
+      "sha256": "a0b8843184087b69e2c90c382346c050b8798aa925613696997d5cb0a5d5497f"
     },
     "project.create": {
       "summary": "project.create",
@@ -389,20 +389,20 @@
     "resource.list": {
       "summary": "resource.list",
       "path": "operations/resource.list.json",
-      "bytes": 4656,
-      "sha256": "6a023c7be4f3c1e08ecd65d7eb3efc3e017dc6e5afcc37678912ede258273085"
+      "bytes": 6204,
+      "sha256": "3223084d9b4fecd1c8cc0d340c2d3e5986c769ac7a45e4b73b97e8791ae27be8"
     },
     "resource.read": {
       "summary": "resource.read",
       "path": "operations/resource.read.json",
-      "bytes": 3172,
-      "sha256": "c153a92fc447def7849eb3f668a44964836d56934be6f7114dce9358ce9e1d2a"
+      "bytes": 4624,
+      "sha256": "b9512ff634048fee804f198b0cc4177d31e84f5be200022468829687c7b5eeee"
     },
     "resource.register": {
       "summary": "Declare scoped existing bytes and their type/schema at the supplied digest. This read and registration starts no runtime.",
       "path": "operations/resource.register.json",
-      "bytes": 8239,
-      "sha256": "abb1e882a4f18a550d96482f8257278cfec4d649d509edeef5e4d58308aba77e"
+      "bytes": 9499,
+      "sha256": "55b96d0727e3f8035a8672f2b8718bdd58967046ea9ac7979511aaced9575e55"
     },
     "selection.set": {
       "summary": "selection.set",
@@ -443,26 +443,26 @@
     "task.map.declare": {
       "summary": "Agent only: conditionally declare task items, your own kind/state vocabulary (label, tone, optional role) and the next steps you will take. Rho shows next only from this declaration and never infers it.",
       "path": "operations/task.map.declare.json",
-      "bytes": 22549,
-      "sha256": "b8e8a6d426511d31f05b6ce9df54963fa8c46a87de2b187f9f69642d9c1ec8d0"
+      "bytes": 22683,
+      "sha256": "4d2cf8bc61ef63f1b27cdd53b32adc6a02908325fd0c088df14c29fcc67c96d6"
     },
     "task.map.present": {
       "summary": "Change a map placement or item card form, its parameters (including a subset) or the focus. Shared by the Agent and people. An Agent change to a pinned target, or within agentFormIntervalMs of its last applied form change, is merged into one pending suggestion instead of applied; Agent changes stay attributed and revertible.",
       "path": "operations/task.map.present.json",
-      "bytes": 15542,
-      "sha256": "e00a3cd5df901bc2d24997fe3e164f63991bd7879ea47fc648645f291c4e3969"
+      "bytes": 15676,
+      "sha256": "937cc403025228fbe0641f6ca636455322940aca8dcb9c36265273f0e7e878af"
     },
     "task.map.read": {
       "summary": "Observe the task map: declared items, vocabulary, next steps, forms, pins and pending suggestions. Reading starts, resumes or reruns nothing.",
       "path": "operations/task.map.read.json",
-      "bytes": 14492,
-      "sha256": "94cb6cdcf418d9456823963182275a95593e4f2119e139dfaeb65377d6023879"
+      "bytes": 14626,
+      "sha256": "8ec1f3043cae8705b2ef1919305562018b98285395c968da57c2d4b140834b36"
     },
     "task.map.respond": {
       "summary": "Browser person only: pin or unpin what they see, revert an Agent form change (layout only, never the work), or accept/dismiss a pending suggestion.",
       "path": "operations/task.map.respond.json",
-      "bytes": 15322,
-      "sha256": "a3e211e14397a5bdf2f65afbdbdc6820668971d29f3048efccf08d66513eed4f"
+      "bytes": 15456,
+      "sha256": "89bae62bea0435462a625546d4cf7ce5e3cadfb7e1c4148072225b234c32cba1"
     },
     "task.routing.put": {
       "summary": "Control plane only: conditionally assign one task and business binding to this project without starting a native session.",

@@ -54,9 +54,12 @@ test('project configuration, operation authorization and shipped Skills are inde
 const canonical = value => Array.isArray(value) ? '[' + value.map(canonical).sort().join(',') + ']'
   : value && typeof value === 'object' ? '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + canonical(value[key])).join(',') + '}' : JSON.stringify(value);
 const applicationExtensions = new Set([
-  'resource.list', 'resource.read', 'artifact.check', 'data.page', 'media.describe', // registered kinds, declared namespace/columns, optional media metadata
-  'action.submit', 'requirements.prepare', // the execution bridge's retained-run report
-  'context.create', 'context.read' // the application's context package shape
+  // The application's resource view accepts every registered declaration kind and
+  // names the format fields a declaration may carry; the owner's schema stops at the
+  // fields its own operation returns.
+  'resource.list', 'resource.read', 'resource.register', 'artifact.check', 'data.page', 'data.compare', 'data.plot', 'media.describe', 'object.read',
+  // The execution bridge's retained-run report and the application's context package.
+  'action.submit', 'requirements.prepare', 'context.create', 'context.read'
 ]);
 
 test('all loaded operation declarations match v2 business schemas and dependency-disabled projects reject entry calls', async () => {

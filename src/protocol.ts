@@ -134,7 +134,11 @@ operations['session.grant'].properties.methods.items = { enum: Object.keys(opera
 
 const documentSchema = ownerSchema('documents', 'documentSchema');
 const documentSummarySchema = ownerSchema('documents', 'documentSummarySchema');
-export const resourceSchema = { ...base.definitions.resource, additionalProperties: true, properties: { ...base.definitions.resource.properties, kind: { enum: ['file', 'table', 'media', 'object', 'plot', 'model'] }, format: { anyOf: [record, { type: 'string' }] } } };
+// A registered resource's format is the declaration's format: owner-specific and
+// therefore open by key, but every declared media field is named so a consumer can
+// read it without guessing.
+const resourceFormat = { type: 'object', properties: { mimeType: text, encoding: text, observation: text, columns: array(record), key: { anyOf: [record, { type: 'null' }] }, classes: array(text), pages: positive, width: { type: 'number' }, height: { type: 'number' } }, additionalProperties: true };
+export const resourceSchema = { ...base.definitions.resource, additionalProperties: true, properties: { ...base.definitions.resource.properties, kind: { enum: ['file', 'table', 'media', 'object', 'plot', 'model'] }, format: { anyOf: [resourceFormat, { type: 'string' }] } } };
 const retainedPlan: any = base.definitions.run.properties.plan;
 // A retained run reports exactly what the execution bridge keeps: the original
 // request digest and body, the Core identity, distinct delivery/execution facts and

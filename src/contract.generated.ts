@@ -22,9 +22,7 @@ export interface RhoOperationError {
     | 'storage'
     | 'native';
   message: string;
-  details: {
-    [k: string]: unknown;
-  };
+  details: {};
   continuation: string;
 }
 
@@ -34,7 +32,6 @@ export interface RhoEvent {
   at: string;
   projectId: string;
   subject: string;
-  [k: string]: unknown;
 }
 
 export interface ActionCancelInput {
@@ -144,10 +141,7 @@ export interface ActionCancelOutput {
       code_sha256: string;
       code_bytes: number;
     };
-    record?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    record?: {};
   } | null;
   integrity: {
     state: 'unchecked' | 'declared' | 'incomplete' | 'verified' | 'not-applicable';
@@ -167,15 +161,11 @@ export interface ActionCancelOutput {
     files?: number;
     checkedAt?: string;
     manifestDigest?: string;
-    [k: string]: unknown;
   };
   domain: {
     state: 'unchecked' | 'checked';
     scope?: string;
-    detail?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    detail?: {};
   };
   interpretation: {
     [k: string]: unknown;
@@ -453,10 +443,7 @@ export type ActionListOutput = {
       code_sha256: string;
       code_bytes: number;
     };
-    record?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    record?: {};
   } | null;
   integrity: {
     state: 'unchecked' | 'declared' | 'incomplete' | 'verified' | 'not-applicable';
@@ -476,15 +463,11 @@ export type ActionListOutput = {
     files?: number;
     checkedAt?: string;
     manifestDigest?: string;
-    [k: string]: unknown;
   };
   domain: {
     state: 'unchecked' | 'checked';
     scope?: string;
-    detail?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    detail?: {};
   };
   interpretation: {
     [k: string]: unknown;
@@ -763,10 +746,7 @@ export interface ActionLookupOutput {
       code_sha256: string;
       code_bytes: number;
     };
-    record?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    record?: {};
   } | null;
   integrity: {
     state: 'unchecked' | 'declared' | 'incomplete' | 'verified' | 'not-applicable';
@@ -786,15 +766,11 @@ export interface ActionLookupOutput {
     files?: number;
     checkedAt?: string;
     manifestDigest?: string;
-    [k: string]: unknown;
   };
   domain: {
     state: 'unchecked' | 'checked';
     scope?: string;
-    detail?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    detail?: {};
   };
   interpretation: {
     [k: string]: unknown;
@@ -1073,10 +1049,7 @@ export interface ActionObserveOutput {
       code_sha256: string;
       code_bytes: number;
     };
-    record?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    record?: {};
   } | null;
   integrity: {
     state: 'unchecked' | 'declared' | 'incomplete' | 'verified' | 'not-applicable';
@@ -1096,15 +1069,11 @@ export interface ActionObserveOutput {
     files?: number;
     checkedAt?: string;
     manifestDigest?: string;
-    [k: string]: unknown;
   };
   domain: {
     state: 'unchecked' | 'checked';
     scope?: string;
-    detail?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    detail?: {};
   };
   interpretation: {
     [k: string]: unknown;
@@ -1286,10 +1255,7 @@ export interface ActionOutputInput {
 
 export interface ActionOutputOutput {
   exitCode: number;
-  reply: {
-    [k: string]: unknown;
-  };
-  [k: string]: unknown;
+  reply: {};
 }
 
 export interface ActionRetryInput {
@@ -1399,10 +1365,7 @@ export interface ActionRetryOutput {
       code_sha256: string;
       code_bytes: number;
     };
-    record?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    record?: {};
   } | null;
   integrity: {
     state: 'unchecked' | 'declared' | 'incomplete' | 'verified' | 'not-applicable';
@@ -1422,15 +1385,11 @@ export interface ActionRetryOutput {
     files?: number;
     checkedAt?: string;
     manifestDigest?: string;
-    [k: string]: unknown;
   };
   domain: {
     state: 'unchecked' | 'checked';
     scope?: string;
-    detail?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    detail?: {};
   };
   interpretation: {
     [k: string]: unknown;
@@ -1802,10 +1761,7 @@ export interface ActionSubmitOutput {
       code_sha256: string;
       code_bytes: number;
     };
-    record?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    record?: {};
   } | null;
   integrity: {
     state: 'unchecked' | 'declared' | 'incomplete' | 'verified' | 'not-applicable';
@@ -1825,15 +1781,11 @@ export interface ActionSubmitOutput {
     files?: number;
     checkedAt?: string;
     manifestDigest?: string;
-    [k: string]: unknown;
   };
   domain: {
     state: 'unchecked' | 'checked';
     scope?: string;
-    detail?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    detail?: {};
   };
   interpretation: {
     [k: string]: unknown;
@@ -2529,15 +2481,11 @@ export interface ArtifactCheckOutput {
     files?: number;
     checkedAt?: string;
     manifestDigest?: string;
-    [k: string]: unknown;
   };
   domain: {
     state: 'unchecked' | 'checked';
     scope?: string;
-    detail?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    detail?: {};
   };
   resources?: {
     id: string;
@@ -2547,21 +2495,23 @@ export interface ArtifactCheckOutput {
     kind: 'file' | 'table' | 'media' | 'object' | 'plot' | 'model';
     path: string;
     bytes: number;
-    provenance: {
-      [k: string]: unknown;
-    };
-    coverage: {
-      [k: string]: unknown;
-    };
+    provenance: {};
+    coverage: {};
     availability: 'available' | 'partial' | 'missing' | 'unknown';
     format?:
       | {
-          [k: string]: unknown;
+          mimeType?: string;
+          encoding?: string;
+          observation?: string;
+          columns?: {}[];
+          key?: {} | null;
+          classes?: string[];
+          pages?: number;
+          width?: number;
+          height?: number;
         }
       | string;
-    [k: string]: unknown;
   }[];
-  [k: string]: unknown;
 }
 
 export type BindingActivityInput = {
@@ -2585,10 +2535,8 @@ export type BindingActivityOutput =
         method: string;
         outcome: 'returned' | 'rejected';
         principal: string;
-        [k: string]: unknown;
       }[];
       retainedFrom: number;
-      [k: string]: unknown;
     }
   | {
       complete: boolean;
@@ -2804,7 +2752,6 @@ export interface BindingCloseOutput {
   principal: string;
   projectId: string;
   status: 'connected' | 'disconnected';
-  [k: string]: unknown;
 }
 
 export interface BindingListInput {
@@ -2819,7 +2766,6 @@ export type BindingListOutput = {
   principal: string;
   projectId: string;
   status: 'connected' | 'disconnected';
-  [k: string]: unknown;
 }[];
 
 export interface BindingOpenInput {
@@ -2850,7 +2796,6 @@ export type BindingOpenOutput =
       principal: string;
       projectId: string;
       status: 'connected' | 'disconnected';
-      [k: string]: unknown;
     }
   | {
       adapter: 'claude-code-mcp';
@@ -2894,9 +2839,7 @@ export interface CapabilityConfigureOutput {
     version: number;
     enabled: string[];
     at: string;
-    [k: string]: unknown;
   };
-  [k: string]: unknown;
 }
 
 export interface CapabilityIndexInput {
@@ -2993,9 +2936,7 @@ export interface CapabilityListOutput {
           order?: number;
           readOnly?: boolean;
           runsCode?: boolean;
-          [k: string]: unknown;
         };
-        [k: string]: unknown;
       }[];
       /**
        * @maxItems 64
@@ -3007,9 +2948,7 @@ export interface CapabilityListOutput {
           order?: number;
           readOnly?: boolean;
           runsCode?: boolean;
-          [k: string]: unknown;
         };
-        [k: string]: unknown;
       }[];
       /**
        * @maxItems 64
@@ -3024,9 +2963,7 @@ export interface CapabilityListOutput {
           order?: number;
           readOnly?: boolean;
           runsCode?: boolean;
-          [k: string]: unknown;
         };
-        [k: string]: unknown;
       }[];
     };
     presentation?: {
@@ -3073,7 +3010,6 @@ export interface CapabilityListOutput {
         purpose: string;
       }[];
       uses?: string;
-      [k: string]: unknown;
     };
     nativeAvailability?: {
       state: 'present' | 'missing' | 'unknown';
@@ -3086,9 +3022,7 @@ export interface CapabilityListOutput {
       methods: string[];
       title?: string;
       body?: string;
-      [k: string]: unknown;
     };
-    [k: string]: unknown;
   }[];
   /**
    * @maxItems 256
@@ -3107,9 +3041,7 @@ export interface CapabilityListOutput {
       order?: number;
       readOnly?: boolean;
       runsCode?: boolean;
-      [k: string]: unknown;
     };
-    [k: string]: unknown;
   }[];
   /**
    * @maxItems 64
@@ -3120,18 +3052,14 @@ export interface CapabilityListOutput {
     owner?: string;
     pluginId?: string;
     requires?: string[];
-    inputSchema?: {
-      [k: string]: unknown;
-    };
+    inputSchema?: {};
     presentation?: {
       displayName?: string;
       description?: string;
       order?: number;
       readOnly?: boolean;
       runsCode?: boolean;
-      [k: string]: unknown;
     };
-    [k: string]: unknown;
   }[];
   /**
    * @maxItems 64
@@ -3142,20 +3070,16 @@ export interface CapabilityListOutput {
     owner?: string;
     pluginId?: string;
     requires?: string[];
-    inputSchema?: {
-      [k: string]: unknown;
-    };
+    inputSchema?: {};
     presentation?: {
       displayName?: string;
       description?: string;
       order?: number;
       readOnly?: boolean;
       runsCode?: boolean;
-      [k: string]: unknown;
     };
     state?: 'unavailable';
     missing: string[];
-    [k: string]: unknown;
   }[];
   /**
    * @maxItems 64
@@ -3169,18 +3093,14 @@ export interface CapabilityListOutput {
     bindings: {
       [k: string]: string;
     };
-    propsSchema?: {
-      [k: string]: unknown;
-    };
+    propsSchema?: {};
     presentation?: {
       displayName?: string;
       description?: string;
       order?: number;
       readOnly?: boolean;
       runsCode?: boolean;
-      [k: string]: unknown;
     };
-    [k: string]: unknown;
   }[];
   capabilities?: string[];
   /**
@@ -3197,20 +3117,15 @@ export interface CapabilityListOutput {
       order?: number;
       readOnly?: boolean;
       runsCode?: boolean;
-      [k: string]: unknown;
     };
-    [k: string]: unknown;
   }[];
-  agent?: {
-    [k: string]: unknown;
-  };
+  agent?: {};
   host: {
     exitCode: number;
     reply: {
       [k: string]: unknown;
     };
   };
-  [k: string]: unknown;
 }
 
 export interface CapabilityResolveInput {
@@ -3239,9 +3154,7 @@ export interface CapabilityResolveOutput {
   items: {
     ref: string;
     kind: 'skill' | 'contract';
-    content: {
-      [k: string]: unknown;
-    };
+    content: {};
   }[];
   /**
    * @minItems 0
@@ -3296,9 +3209,7 @@ export interface CompositionApplyInput {
               id: string;
               component: string;
               version: string;
-              props: {
-                [k: string]: unknown;
-              };
+              props: {};
               bindings: {
                 [k: string]:
                   | {
@@ -3356,9 +3267,7 @@ export interface CompositionApplyInput {
               id: string;
               component: string;
               version: string;
-              props: {
-                [k: string]: unknown;
-              };
+              props: {};
               bindings: {
                 [k: string]:
                   | {
@@ -3398,9 +3307,7 @@ export interface CompositionApplyInput {
     | {
         op: 'props';
         id: string;
-        props: {
-          [k: string]: unknown;
-        };
+        props: {};
       }
     | {
         op: 'bind';
@@ -3452,9 +3359,7 @@ export interface CompositionApplyOutput {
         id: string;
         component: string;
         version: string;
-        props: {
-          [k: string]: unknown;
-        };
+        props: {};
         bindings: {
           [k: string]:
             | {
@@ -3488,9 +3393,7 @@ export interface CompositionApplyOutput {
     id: string;
     component: string;
     version: string;
-    props: {
-      [k: string]: unknown;
-    };
+    props: {};
     bindings: {
       [k: string]:
         | {
@@ -3556,9 +3459,7 @@ export interface CompositionApplyOutput {
             id: string;
             component: string;
             version: string;
-            props: {
-              [k: string]: unknown;
-            };
+            props: {};
             bindings: {
               [k: string]:
                 | {
@@ -3653,9 +3554,7 @@ export interface CompositionPutInput {
     id: string;
     component: string;
     version: string;
-    props: {
-      [k: string]: unknown;
-    };
+    props: {};
     bindings: {
       [k: string]:
         | {
@@ -3679,9 +3578,7 @@ export interface CompositionPutInput {
       emphasis: 'normal' | 'highlight';
     };
   }[];
-  layout: {
-    [k: string]: unknown;
-  };
+  layout: {};
 }
 
 export interface CompositionPutOutput {
@@ -3694,9 +3591,7 @@ export interface CompositionPutOutput {
     id: string;
     component: string;
     version: string;
-    props: {
-      [k: string]: unknown;
-    };
+    props: {};
     bindings: {
       [k: string]:
         | {
@@ -3720,12 +3615,8 @@ export interface CompositionPutOutput {
       emphasis: 'normal' | 'highlight';
     };
   }[];
-  layout: {
-    [k: string]: unknown;
-  };
-  availability: {
-    [k: string]: unknown;
-  };
+  layout: {};
+  availability: {};
   acknowledgedAt: string;
 }
 
@@ -3745,9 +3636,7 @@ export type CompositionReadOutput =
         id: string;
         component: string;
         version: string;
-        props: {
-          [k: string]: unknown;
-        };
+        props: {};
         bindings: {
           [k: string]:
             | {
@@ -3772,12 +3661,8 @@ export type CompositionReadOutput =
         };
         protected?: boolean;
       }[];
-      layout?: {
-        [k: string]: unknown;
-      };
-      availability?: {
-        [k: string]: unknown;
-      };
+      layout?: {};
+      availability?: {};
       acknowledgedAt?: string;
     }
   | {
@@ -3808,9 +3693,7 @@ export type CompositionReadOutput =
             id: string;
             component: string;
             version: string;
-            props: {
-              [k: string]: unknown;
-            };
+            props: {};
             bindings: {
               [k: string]:
                 | {
@@ -3844,9 +3727,7 @@ export type CompositionReadOutput =
         id: string;
         component: string;
         version: string;
-        props: {
-          [k: string]: unknown;
-        };
+        props: {};
         bindings: {
           [k: string]:
             | {
@@ -3912,9 +3793,7 @@ export type CompositionReadOutput =
                 id: string;
                 component: string;
                 version: string;
-                props: {
-                  [k: string]: unknown;
-                };
+                props: {};
                 bindings: {
                   [k: string]:
                     | {
@@ -4033,9 +3912,7 @@ export interface CompositionUndoOutput {
         id: string;
         component: string;
         version: string;
-        props: {
-          [k: string]: unknown;
-        };
+        props: {};
         bindings: {
           [k: string]:
             | {
@@ -4069,9 +3946,7 @@ export interface CompositionUndoOutput {
     id: string;
     component: string;
     version: string;
-    props: {
-      [k: string]: unknown;
-    };
+    props: {};
     bindings: {
       [k: string]:
         | {
@@ -4137,9 +4012,7 @@ export interface CompositionUndoOutput {
             id: string;
             component: string;
             version: string;
-            props: {
-              [k: string]: unknown;
-            };
+            props: {};
             bindings: {
               [k: string]:
                 | {
@@ -4338,7 +4211,6 @@ export interface ContextCreateOutput {
     text: string;
     data: string;
   };
-  [k: string]: unknown;
 }
 
 export interface ContextReadInput {
@@ -4425,7 +4297,6 @@ export interface ContextReadOutput {
     text: string;
     data: string;
   };
-  [k: string]: unknown;
 }
 
 export interface DataCompareInput {
@@ -4458,19 +4329,22 @@ export interface DataCompareOutput {
   kind: 'file' | 'table' | 'media' | 'object' | 'plot' | 'model';
   path: string;
   bytes: number;
-  provenance: {
-    [k: string]: unknown;
-  };
-  coverage: {
-    [k: string]: unknown;
-  };
+  provenance: {};
+  coverage: {};
   availability: 'available' | 'partial' | 'missing' | 'unknown';
   format?:
     | {
-        [k: string]: unknown;
+        mimeType?: string;
+        encoding?: string;
+        observation?: string;
+        columns?: {}[];
+        key?: {} | null;
+        classes?: string[];
+        pages?: number;
+        width?: number;
+        height?: number;
       }
     | string;
-  [k: string]: unknown;
 }
 
 export interface DataPageInput {
@@ -4500,7 +4374,6 @@ export interface DataPageOutput {
      * @maxItems 16
      */
     nullValues: string[];
-    [k: string]: unknown;
   }[];
   entityKey: string | null;
   filtered: number;
@@ -4516,25 +4389,27 @@ export interface DataPageOutput {
     kind: 'file' | 'table' | 'media' | 'object' | 'plot' | 'model';
     path: string;
     bytes: number;
-    provenance: {
-      [k: string]: unknown;
-    };
-    coverage: {
-      [k: string]: unknown;
-    };
+    provenance: {};
+    coverage: {};
     availability: 'available' | 'partial' | 'missing' | 'unknown';
     format?:
       | {
-          [k: string]: unknown;
+          mimeType?: string;
+          encoding?: string;
+          observation?: string;
+          columns?: {}[];
+          key?: {} | null;
+          classes?: string[];
+          pages?: number;
+          width?: number;
+          height?: number;
         }
       | string;
-    [k: string]: unknown;
   };
   rows: {
     [k: string]: string | number | boolean | null;
   }[];
   total: number;
-  [k: string]: unknown;
 }
 
 export interface DataPlotInput {
@@ -4552,9 +4427,7 @@ export interface DataPlotOutput {
   downsampled: boolean;
   method: string;
   originalPoints: number;
-  points: {
-    [k: string]: unknown;
-  }[];
+  points: {}[];
   resource: {
     id: string;
     version: string;
@@ -4563,24 +4436,24 @@ export interface DataPlotOutput {
     kind: 'file' | 'table' | 'media' | 'object' | 'plot' | 'model';
     path: string;
     bytes: number;
-    provenance: {
-      [k: string]: unknown;
-    };
-    coverage: {
-      [k: string]: unknown;
-    };
+    provenance: {};
+    coverage: {};
     availability: 'available' | 'partial' | 'missing' | 'unknown';
     format?:
       | {
-          [k: string]: unknown;
+          mimeType?: string;
+          encoding?: string;
+          observation?: string;
+          columns?: {}[];
+          key?: {} | null;
+          classes?: string[];
+          pages?: number;
+          width?: number;
+          height?: number;
         }
       | string;
-    [k: string]: unknown;
   };
-  spec: {
-    [k: string]: unknown;
-  };
-  [k: string]: unknown;
+  spec: {};
 }
 
 export interface DocumentAbandonSaveInput {
@@ -5710,19 +5583,22 @@ export interface MediaDescribeOutput {
     kind: 'file' | 'table' | 'media' | 'object' | 'plot' | 'model';
     path: string;
     bytes: number;
-    provenance: {
-      [k: string]: unknown;
-    };
-    coverage: {
-      [k: string]: unknown;
-    };
+    provenance: {};
+    coverage: {};
     availability: 'available' | 'partial' | 'missing' | 'unknown';
     format?:
       | {
-          [k: string]: unknown;
+          mimeType?: string;
+          encoding?: string;
+          observation?: string;
+          columns?: {}[];
+          key?: {} | null;
+          classes?: string[];
+          pages?: number;
+          width?: number;
+          height?: number;
         }
       | string;
-    [k: string]: unknown;
   };
   original: {
     id: string;
@@ -5733,7 +5609,6 @@ export interface MediaDescribeOutput {
   width?: number;
   height?: number;
   rendering: 'unobserved';
-  [k: string]: unknown;
 }
 
 export interface ObjectReadInput {
@@ -5753,23 +5628,25 @@ export interface ObjectReadOutput {
     kind: 'file' | 'table' | 'media' | 'object' | 'plot' | 'model';
     path: string;
     bytes: number;
-    provenance: {
-      [k: string]: unknown;
-    };
-    coverage: {
-      [k: string]: unknown;
-    };
+    provenance: {};
+    coverage: {};
     availability: 'available' | 'partial' | 'missing' | 'unknown';
     format?:
       | {
-          [k: string]: unknown;
+          mimeType?: string;
+          encoding?: string;
+          observation?: string;
+          columns?: {}[];
+          key?: {} | null;
+          classes?: string[];
+          pages?: number;
+          width?: number;
+          height?: number;
         }
       | string;
-    [k: string]: unknown;
   };
   observation: 'exported-snapshot';
   value: unknown;
-  [k: string]: unknown;
 }
 
 export interface ObservationSnapshotInput {
@@ -5798,7 +5675,6 @@ export interface ObservationSnapshotOutput {
       digest: string;
       author: string;
     };
-    [k: string]: unknown;
   };
   catalog: {
     version: string;
@@ -5842,9 +5718,7 @@ export interface ObservationSnapshotOutput {
             order?: number;
             readOnly?: boolean;
             runsCode?: boolean;
-            [k: string]: unknown;
           };
-          [k: string]: unknown;
         }[];
         /**
          * @maxItems 64
@@ -5856,9 +5730,7 @@ export interface ObservationSnapshotOutput {
             order?: number;
             readOnly?: boolean;
             runsCode?: boolean;
-            [k: string]: unknown;
           };
-          [k: string]: unknown;
         }[];
         /**
          * @maxItems 64
@@ -5873,9 +5745,7 @@ export interface ObservationSnapshotOutput {
             order?: number;
             readOnly?: boolean;
             runsCode?: boolean;
-            [k: string]: unknown;
           };
-          [k: string]: unknown;
         }[];
       };
       presentation?: {
@@ -5922,7 +5792,6 @@ export interface ObservationSnapshotOutput {
           purpose: string;
         }[];
         uses?: string;
-        [k: string]: unknown;
       };
       nativeAvailability?: {
         state: 'present' | 'missing' | 'unknown';
@@ -5935,9 +5804,7 @@ export interface ObservationSnapshotOutput {
         methods: string[];
         title?: string;
         body?: string;
-        [k: string]: unknown;
       };
-      [k: string]: unknown;
     }[];
     /**
      * @maxItems 256
@@ -5956,9 +5823,7 @@ export interface ObservationSnapshotOutput {
         order?: number;
         readOnly?: boolean;
         runsCode?: boolean;
-        [k: string]: unknown;
       };
-      [k: string]: unknown;
     }[];
     /**
      * @maxItems 64
@@ -5969,18 +5834,14 @@ export interface ObservationSnapshotOutput {
       owner?: string;
       pluginId?: string;
       requires?: string[];
-      inputSchema?: {
-        [k: string]: unknown;
-      };
+      inputSchema?: {};
       presentation?: {
         displayName?: string;
         description?: string;
         order?: number;
         readOnly?: boolean;
         runsCode?: boolean;
-        [k: string]: unknown;
       };
-      [k: string]: unknown;
     }[];
     /**
      * @maxItems 64
@@ -5991,20 +5852,16 @@ export interface ObservationSnapshotOutput {
       owner?: string;
       pluginId?: string;
       requires?: string[];
-      inputSchema?: {
-        [k: string]: unknown;
-      };
+      inputSchema?: {};
       presentation?: {
         displayName?: string;
         description?: string;
         order?: number;
         readOnly?: boolean;
         runsCode?: boolean;
-        [k: string]: unknown;
       };
       state?: 'unavailable';
       missing: string[];
-      [k: string]: unknown;
     }[];
     /**
      * @maxItems 64
@@ -6018,18 +5875,14 @@ export interface ObservationSnapshotOutput {
       bindings: {
         [k: string]: string;
       };
-      propsSchema?: {
-        [k: string]: unknown;
-      };
+      propsSchema?: {};
       presentation?: {
         displayName?: string;
         description?: string;
         order?: number;
         readOnly?: boolean;
         runsCode?: boolean;
-        [k: string]: unknown;
       };
-      [k: string]: unknown;
     }[];
     capabilities?: string[];
     /**
@@ -6046,14 +5899,9 @@ export interface ObservationSnapshotOutput {
         order?: number;
         readOnly?: boolean;
         runsCode?: boolean;
-        [k: string]: unknown;
       };
-      [k: string]: unknown;
     }[];
-    agent?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    agent?: {};
   };
   documents: {
     acknowledgedAt: string;
@@ -6065,7 +5913,6 @@ export interface ObservationSnapshotOutput {
     path: string;
     revision?: number;
     version: number;
-    [k: string]: unknown;
   }[];
   operations: {
     operationId: string;
@@ -6169,10 +6016,7 @@ export interface ObservationSnapshotOutput {
         code_sha256: string;
         code_bytes: number;
       };
-      record?: {
-        [k: string]: unknown;
-      };
-      [k: string]: unknown;
+      record?: {};
     } | null;
     integrity: {
       state: 'unchecked' | 'declared' | 'incomplete' | 'verified' | 'not-applicable';
@@ -6192,15 +6036,11 @@ export interface ObservationSnapshotOutput {
       files?: number;
       checkedAt?: string;
       manifestDigest?: string;
-      [k: string]: unknown;
     };
     domain: {
       state: 'unchecked' | 'checked';
       scope?: string;
-      detail?: {
-        [k: string]: unknown;
-      };
-      [k: string]: unknown;
+      detail?: {};
     };
     interpretation: {
       [k: string]: unknown;
@@ -6379,19 +6219,22 @@ export interface ObservationSnapshotOutput {
     kind: 'file' | 'table' | 'media' | 'object' | 'plot' | 'model';
     path: string;
     bytes: number;
-    provenance: {
-      [k: string]: unknown;
-    };
-    coverage: {
-      [k: string]: unknown;
-    };
+    provenance: {};
+    coverage: {};
     availability: 'available' | 'partial' | 'missing' | 'unknown';
     format?:
       | {
-          [k: string]: unknown;
+          mimeType?: string;
+          encoding?: string;
+          observation?: string;
+          columns?: {}[];
+          key?: {} | null;
+          classes?: string[];
+          pages?: number;
+          width?: number;
+          height?: number;
         }
       | string;
-    [k: string]: unknown;
   }[];
   compositions: (
     | {
@@ -6404,9 +6247,7 @@ export interface ObservationSnapshotOutput {
           id: string;
           component: string;
           version: string;
-          props: {
-            [k: string]: unknown;
-          };
+          props: {};
           bindings: {
             [k: string]:
               | {
@@ -6431,12 +6272,8 @@ export interface ObservationSnapshotOutput {
           };
           protected?: boolean;
         }[];
-        layout?: {
-          [k: string]: unknown;
-        };
-        availability?: {
-          [k: string]: unknown;
-        };
+        layout?: {};
+        availability?: {};
         acknowledgedAt?: string;
       }
     | {
@@ -6467,9 +6304,7 @@ export interface ObservationSnapshotOutput {
               id: string;
               component: string;
               version: string;
-              props: {
-                [k: string]: unknown;
-              };
+              props: {};
               bindings: {
                 [k: string]:
                   | {
@@ -6503,9 +6338,7 @@ export interface ObservationSnapshotOutput {
           id: string;
           component: string;
           version: string;
-          props: {
-            [k: string]: unknown;
-          };
+          props: {};
           bindings: {
             [k: string]:
               | {
@@ -6571,9 +6404,7 @@ export interface ObservationSnapshotOutput {
                   id: string;
                   component: string;
                   version: string;
-                  props: {
-                    [k: string]: unknown;
-                  };
+                  props: {};
                   bindings: {
                     [k: string]:
                       | {
@@ -6830,7 +6661,6 @@ export interface ObservationSnapshotOutput {
       author: string;
       human: boolean;
       at: string;
-      [k: string]: unknown;
     } | null;
     lastAgentFormAt: string | null;
     presentation: {
@@ -6893,7 +6723,6 @@ export interface ObservationSnapshotOutput {
     limits?: {
       agentFormIntervalMs: number;
     };
-    [k: string]: unknown;
   };
   /**
    * @maxItems 128
@@ -6928,11 +6757,8 @@ export interface ObservationSnapshotOutput {
       adapterRegistrationId: string;
       taskId: string;
       role: 'business' | 'presentation';
-      transportCapabilities: {
-        [k: string]: unknown;
-      };
+      transportCapabilities: {};
     };
-    [k: string]: unknown;
   }[];
   cursor: number;
   host: {
@@ -6948,7 +6774,6 @@ export interface ObservationSnapshotOutput {
           [k: string]: number;
         };
   };
-  [k: string]: unknown;
 }
 
 export interface ProjectCreateInput {
@@ -6970,7 +6795,6 @@ export interface ProjectCreateOutput {
   }[];
   workspace?: boolean;
   nativeSelected?: boolean;
-  [k: string]: unknown;
 }
 
 export interface ProjectCreateWorkspaceInput {
@@ -6998,7 +6822,6 @@ export interface ProjectCreateWorkspaceOutput {
   }[];
   workspace?: boolean;
   nativeSelected?: boolean;
-  [k: string]: unknown;
 }
 
 export interface ProjectDoctorInput {
@@ -7013,16 +6836,13 @@ export interface ProjectDoctorOutput {
     state: 'ok' | 'warn' | 'fail';
     detail: string;
     remedy: string;
-    [k: string]: unknown;
   }[];
   intent: {
     id: string;
     methods: string[];
     missing: string[];
     ready: boolean;
-    [k: string]: unknown;
   } | null;
-  [k: string]: unknown;
 }
 
 export interface ProjectEntriesInput {
@@ -7037,13 +6857,11 @@ export interface ProjectEntriesOutput {
     kind: 'file' | 'folder';
     bytes: number;
     hidden: boolean;
-    [k: string]: unknown;
   }[];
   total: number;
   truncated: boolean;
   roots: string[];
   path: string;
-  [k: string]: unknown;
 }
 
 export interface ProjectListInput {}
@@ -7063,7 +6881,6 @@ export type ProjectListOutput = {
   }[];
   workspace?: boolean;
   nativeSelected?: boolean;
-  [k: string]: unknown;
 }[];
 
 export interface ProjectOpenInput {
@@ -7097,7 +6914,6 @@ export interface ProjectOpenOutput {
       [k: string]: unknown;
     };
   };
-  [k: string]: unknown;
 }
 
 export interface ProjectOpenFileInput {
@@ -7206,9 +7022,7 @@ export interface ProjectOpenFileOutput {
           id: string;
           component: string;
           version: string;
-          props: {
-            [k: string]: unknown;
-          };
+          props: {};
           bindings: {
             [k: string]:
               | {
@@ -7242,9 +7056,7 @@ export interface ProjectOpenFileOutput {
       id: string;
       component: string;
       version: string;
-      props: {
-        [k: string]: unknown;
-      };
+      props: {};
       bindings: {
         [k: string]:
           | {
@@ -7310,9 +7122,7 @@ export interface ProjectOpenFileOutput {
               id: string;
               component: string;
               version: string;
-              props: {
-                [k: string]: unknown;
-              };
+              props: {};
               bindings: {
                 [k: string]:
                   | {
@@ -7395,7 +7205,6 @@ export interface ProjectOpenFileOutput {
     commitVersion?: number;
     currentVersion?: number;
   };
-  [k: string]: unknown;
 }
 
 export interface ProjectPickInput {}
@@ -7417,9 +7226,7 @@ export interface ProjectPickOutput {
     }[];
     workspace?: boolean;
     nativeSelected?: boolean;
-    [k: string]: unknown;
   } | null;
-  [k: string]: unknown;
 }
 
 export interface ProjectRunsInput {
@@ -7437,11 +7244,9 @@ export interface ProjectRunsOutput {
     author: string;
     artifacts: string[];
     hasStderr: boolean;
-    [k: string]: unknown;
   }[];
   total: number;
   truncated: boolean;
-  [k: string]: unknown;
 }
 
 export interface ProjectSourceAddInput {
@@ -7465,9 +7270,7 @@ export interface ProjectSourceAddOutput {
     }[];
     workspace?: boolean;
     nativeSelected?: boolean;
-    [k: string]: unknown;
   } | null;
-  [k: string]: unknown;
 }
 
 export interface ProjectSourcePickInput {}
@@ -7479,9 +7282,7 @@ export interface ProjectSourcePickOutput {
     id: string;
     root: string;
     name: string;
-    [k: string]: unknown;
   } | null;
-  [k: string]: unknown;
 }
 
 export interface ProtocolDescribeInput {
@@ -7499,32 +7300,21 @@ export interface ProtocolDescribeOutput {
   entries: {
     method: string;
     summary: string;
-    [k: string]: unknown;
   }[];
   next: string | null;
   complete: boolean;
   contract?: {
     method: string;
-    inputSchema: {
-      [k: string]: unknown;
-    };
-    outputSchema: {
-      [k: string]: unknown;
-    };
-    definitions: {
-      [k: string]: unknown;
-    };
+    inputSchema: {};
+    outputSchema: {};
+    definitions: {};
     description: string;
-    [k: string]: unknown;
   };
-  [k: string]: unknown;
 }
 
 export interface ProtocolValidateInput {
   method: string;
-  body: {
-    [k: string]: unknown;
-  };
+  body: {};
 }
 
 export interface ProtocolValidateOutput {
@@ -7535,10 +7325,8 @@ export interface ProtocolValidateOutput {
     keyword: string;
     message: string;
     fix: string;
-    [k: string]: unknown;
   }[];
   requires: string[];
-  [k: string]: unknown;
 }
 
 export interface RequirementsCheckInput {
@@ -7556,12 +7344,8 @@ export interface RequirementsCheckInput {
 export interface RequirementsCheckOutput {
   checkId: string;
   checkedAt: string;
-  environment: {
-    [k: string]: unknown;
-  };
-  native: {
-    [k: string]: unknown;
-  };
+  environment: {};
+  native: {};
   /**
    * @maxItems 64
    */
@@ -7571,7 +7355,6 @@ export interface RequirementsCheckOutput {
     source: 'cran' | 'bioconductor';
   }[];
   status: 'present' | 'missing' | 'unknown';
-  [k: string]: unknown;
 }
 
 export interface RequirementsPrepareInput {
@@ -7689,10 +7472,7 @@ export interface RequirementsPrepareOutput {
       code_sha256: string;
       code_bytes: number;
     };
-    record?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    record?: {};
   } | null;
   integrity: {
     state: 'unchecked' | 'declared' | 'incomplete' | 'verified' | 'not-applicable';
@@ -7712,15 +7492,11 @@ export interface RequirementsPrepareOutput {
     files?: number;
     checkedAt?: string;
     manifestDigest?: string;
-    [k: string]: unknown;
   };
   domain: {
     state: 'unchecked' | 'checked';
     scope?: string;
-    detail?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    detail?: {};
   };
   interpretation: {
     [k: string]: unknown;
@@ -7916,15 +7692,11 @@ export interface ResourceListOutput {
     files?: number;
     checkedAt?: string;
     manifestDigest?: string;
-    [k: string]: unknown;
   };
   domain: {
     state: 'unchecked' | 'checked';
     scope?: string;
-    detail?: {
-      [k: string]: unknown;
-    };
-    [k: string]: unknown;
+    detail?: {};
   };
   resources?: {
     id: string;
@@ -7934,21 +7706,23 @@ export interface ResourceListOutput {
     kind: 'file' | 'table' | 'media' | 'object' | 'plot' | 'model';
     path: string;
     bytes: number;
-    provenance: {
-      [k: string]: unknown;
-    };
-    coverage: {
-      [k: string]: unknown;
-    };
+    provenance: {};
+    coverage: {};
     availability: 'available' | 'partial' | 'missing' | 'unknown';
     format?:
       | {
-          [k: string]: unknown;
+          mimeType?: string;
+          encoding?: string;
+          observation?: string;
+          columns?: {}[];
+          key?: {} | null;
+          classes?: string[];
+          pages?: number;
+          width?: number;
+          height?: number;
         }
       | string;
-    [k: string]: unknown;
   }[];
-  [k: string]: unknown;
 }
 
 export interface ResourceReadInput {
@@ -7975,22 +7749,24 @@ export interface ResourceReadOutput {
     kind: 'file' | 'table' | 'media' | 'object' | 'plot' | 'model';
     path: string;
     bytes: number;
-    provenance: {
-      [k: string]: unknown;
-    };
-    coverage: {
-      [k: string]: unknown;
-    };
+    provenance: {};
+    coverage: {};
     availability: 'available' | 'partial' | 'missing' | 'unknown';
     format?:
       | {
-          [k: string]: unknown;
+          mimeType?: string;
+          encoding?: string;
+          observation?: string;
+          columns?: {}[];
+          key?: {} | null;
+          classes?: string[];
+          pages?: number;
+          width?: number;
+          height?: number;
         }
       | string;
-    [k: string]: unknown;
   };
   maxReadBytes?: number;
-  [k: string]: unknown;
 }
 
 export interface ResourceRegisterInput {
@@ -8059,19 +7835,22 @@ export interface ResourceRegisterOutput {
   kind: 'file' | 'table' | 'media' | 'object' | 'plot' | 'model';
   path: string;
   bytes: number;
-  provenance: {
-    [k: string]: unknown;
-  };
-  coverage: {
-    [k: string]: unknown;
-  };
+  provenance: {};
+  coverage: {};
   availability: 'available' | 'partial' | 'missing' | 'unknown';
   format?:
     | {
-        [k: string]: unknown;
+        mimeType?: string;
+        encoding?: string;
+        observation?: string;
+        columns?: {}[];
+        key?: {} | null;
+        classes?: string[];
+        pages?: number;
+        width?: number;
+        height?: number;
       }
     | string;
-  [k: string]: unknown;
 }
 
 export interface SelectionSetInput {
@@ -8103,7 +7882,6 @@ export interface SessionBrowserPairInput {
 export interface SessionBrowserPairOutput {
   code: string;
   expiresAt: string;
-  [k: string]: unknown;
 }
 
 export interface SessionBrowserRevokeInput {
@@ -8113,7 +7891,6 @@ export interface SessionBrowserRevokeInput {
 export interface SessionBrowserRevokeOutput {
   sessionId: string;
   revoked: boolean;
-  [k: string]: unknown;
 }
 
 export interface SessionGrantInput {
@@ -8206,7 +7983,6 @@ export interface SessionGrantOutput {
   transport: 'stdio-mcp';
   externalSessionId: string;
   profile?: 'layered-business' | 'layered-presentation';
-  [k: string]: unknown;
 }
 
 export interface SkillListInput {
@@ -8218,7 +7994,6 @@ export type SkillListOutput = {
   version: string;
   digest: string;
   content: string;
-  [k: string]: unknown;
 }[];
 
 export interface SkillReadInput {
@@ -8232,7 +8007,6 @@ export interface SkillReadOutput {
   version: string;
   digest: string;
   content: string;
-  [k: string]: unknown;
 }
 
 export interface TaskMapDeclareInput {
@@ -8367,7 +8141,6 @@ export interface TaskMapDeclareOutput {
     author: string;
     human: boolean;
     at: string;
-    [k: string]: unknown;
   } | null;
   lastAgentFormAt: string | null;
   presentation: {
@@ -8441,7 +8214,6 @@ export interface TaskMapDeclareOutput {
       [k: string]: string | number | boolean | null;
     };
   };
-  [k: string]: unknown;
 }
 
 export interface TaskMapPresentInput {
@@ -8450,9 +8222,7 @@ export interface TaskMapPresentInput {
   changeId: string;
   target: string;
   form?: string;
-  params?: {
-    [k: string]: unknown;
-  };
+  params?: {};
   focus?: string | null;
   reason?: string;
 }
@@ -8523,7 +8293,6 @@ export interface TaskMapPresentOutput {
     author: string;
     human: boolean;
     at: string;
-    [k: string]: unknown;
   } | null;
   lastAgentFormAt: string | null;
   presentation: {
@@ -8597,7 +8366,6 @@ export interface TaskMapPresentOutput {
       [k: string]: string | number | boolean | null;
     };
   };
-  [k: string]: unknown;
 }
 
 export interface TaskMapReadInput {
@@ -8670,7 +8438,6 @@ export interface TaskMapReadOutput {
     author: string;
     human: boolean;
     at: string;
-    [k: string]: unknown;
   } | null;
   lastAgentFormAt: string | null;
   presentation: {
@@ -8744,7 +8511,6 @@ export interface TaskMapReadOutput {
       [k: string]: string | number | boolean | null;
     };
   };
-  [k: string]: unknown;
 }
 
 export interface TaskMapRespondInput {
@@ -8754,9 +8520,7 @@ export interface TaskMapRespondInput {
   target: string;
   action: 'pin' | 'unpin' | 'revert' | 'accept' | 'dismiss';
   form?: string;
-  params?: {
-    [k: string]: unknown;
-  };
+  params?: {};
   suggestionId?: string;
 }
 
@@ -8826,7 +8590,6 @@ export interface TaskMapRespondOutput {
     author: string;
     human: boolean;
     at: string;
-    [k: string]: unknown;
   } | null;
   lastAgentFormAt: string | null;
   presentation: {
@@ -8900,7 +8663,6 @@ export interface TaskMapRespondOutput {
       [k: string]: string | number | boolean | null;
     };
   };
-  [k: string]: unknown;
 }
 
 export interface TaskRoutingPutInput {
@@ -8971,9 +8733,7 @@ export type ViewCloseOutput =
         id: string;
         component: string;
         version: string;
-        props: {
-          [k: string]: unknown;
-        };
+        props: {};
         bindings: {
           [k: string]:
             | {
@@ -8998,12 +8758,8 @@ export type ViewCloseOutput =
         };
         protected?: boolean;
       }[];
-      layout?: {
-        [k: string]: unknown;
-      };
-      availability?: {
-        [k: string]: unknown;
-      };
+      layout?: {};
+      availability?: {};
       acknowledgedAt?: string;
     }
   | {
@@ -9034,9 +8790,7 @@ export type ViewCloseOutput =
             id: string;
             component: string;
             version: string;
-            props: {
-              [k: string]: unknown;
-            };
+            props: {};
             bindings: {
               [k: string]:
                 | {
@@ -9070,9 +8824,7 @@ export type ViewCloseOutput =
         id: string;
         component: string;
         version: string;
-        props: {
-          [k: string]: unknown;
-        };
+        props: {};
         bindings: {
           [k: string]:
             | {
@@ -9138,9 +8890,7 @@ export type ViewCloseOutput =
                 id: string;
                 component: string;
                 version: string;
-                props: {
-                  [k: string]: unknown;
-                };
+                props: {};
                 bindings: {
                   [k: string]:
                     | {
@@ -9424,9 +9174,7 @@ export interface ViewProtectionSetOutput {
         id: string;
         component: string;
         version: string;
-        props: {
-          [k: string]: unknown;
-        };
+        props: {};
         bindings: {
           [k: string]:
             | {
@@ -9460,9 +9208,7 @@ export interface ViewProtectionSetOutput {
     id: string;
     component: string;
     version: string;
-    props: {
-      [k: string]: unknown;
-    };
+    props: {};
     bindings: {
       [k: string]:
         | {
@@ -9528,9 +9274,7 @@ export interface ViewProtectionSetOutput {
             id: string;
             component: string;
             version: string;
-            props: {
-              [k: string]: unknown;
-            };
+            props: {};
             bindings: {
               [k: string]:
                 | {
@@ -9690,7 +9434,6 @@ export interface WorkspaceExportOutput {
   files: number;
   writeCondition: 'new-directory';
   manifestDigest: string;
-  [k: string]: unknown;
 }
 
 export interface WorkspaceObserveInput {
@@ -9780,7 +9523,6 @@ export interface WorkspaceRestoreOutput {
     documentId: string;
     state: 'available' | 'conflict' | 'unavailable' | 'missing';
     owner?: string;
-    [k: string]: unknown;
   }[];
   /**
    * @maxItems 1024
@@ -9792,7 +9534,6 @@ export interface WorkspaceRestoreOutput {
     };
     state: 'available' | 'conflict' | 'unavailable' | 'missing';
     owner?: string;
-    [k: string]: unknown;
   }[];
   /**
    * @maxItems 64
@@ -9801,13 +9542,10 @@ export interface WorkspaceRestoreOutput {
     compositionId: string;
     state: 'available' | 'conflict' | 'unavailable' | 'missing';
     views?: number;
-    [k: string]: unknown;
   }[];
   selection?: {
     state: 'available' | 'conflict' | 'unavailable' | 'missing';
-    reference?: {
-      [k: string]: unknown;
-    } | null;
+    reference?: {} | null;
     reason?: string;
   };
   capabilities?: {
@@ -9828,7 +9566,6 @@ export interface WorkspaceRestoreOutput {
     state: 'available' | 'conflict' | 'unavailable' | 'missing';
     owner?: string;
   }[];
-  [k: string]: unknown;
 }
 
 export interface WorkspaceSaveInput {
@@ -9852,16 +9589,12 @@ export interface WorkspaceSaveOutput {
    * @maxItems 64
    */
   compositions: unknown[];
-  selection: {
-    [k: string]: unknown;
-  } | null;
+  selection: {} | null;
   capabilities?: {
     schemaVersion: 1;
     version: number;
     enabled: string[];
-    receipts: {
-      [k: string]: unknown;
-    }[];
+    receipts: {}[];
   };
   /**
    * @maxItems 128
@@ -9927,11 +9660,8 @@ export interface WorkspaceSaveOutput {
    */
   contexts?: {
     contextId: string;
-    context: {
-      [k: string]: unknown;
-    };
+    context: {};
   }[];
-  [k: string]: unknown;
 }
 
 /** Every public operation, its accepted input and its response value. */

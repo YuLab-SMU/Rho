@@ -56,7 +56,7 @@ test('snapshot omits document bodies; default MCP pages an exact large reply wit
   await service.agentConnection(project.id, 'reader', connection, ['document.read']);
   let reads = 0;
   const dispatch = service.dispatch.bind(service);
-  service.dispatch = (method, ...args) => { if (method === 'document.read') reads++; return dispatch(method, ...args); };
+  service.dispatch = (request, ...args) => { if (request.method === 'document.read') reads++; return dispatch(request, ...args); };
   const client = await connectMcp(fileURLToPath(new URL('..', import.meta.url)), connection);
   t.after(() => client.close());
   const resolved = await resolveOperation(client, 'document.read');

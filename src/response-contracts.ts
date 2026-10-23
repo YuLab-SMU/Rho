@@ -132,8 +132,12 @@ export const contextSchema = { ...obj({
 // --- Task map ---------------------------------------------------------------
 const word = { type: 'string', minLength: 1, maxLength: 64 };
 const term = obj({ label: { type: 'string', minLength: 1, maxLength: 80 }, tone: text, role: text, icon: text, description: { type: 'string', maxLength: 240 } }, ['label']);
-// A presentation record and the earlier record it replaced share this summary.
-const presentationRecordSummarySchema = obj({ form: text, params: { type: 'object', maxProperties: 16 }, author: text, human: { type: 'boolean' } }, ['form', 'params', 'author', 'human']);
+// A presentation record and the earlier record it replaced share this summary. The
+// parameters are the form's own vocabulary, so they are open values bounded by count.
+// Form parameters are the Agent's or a person's own vocabulary (a subset, a filter,
+// a scale). Any JSON value is allowed; the bound is on how many keys there are.
+const formParams = { type: 'object', maxProperties: 16, additionalProperties: {} };
+const presentationRecordSummarySchema = obj({ form: text, params: formParams, author: text, human: { type: 'boolean' } }, ['form', 'params', 'author', 'human']);
 export const taskMapStateSchema = { ...obj({
   format: { const: 'rho.task-map/1' },
   version: integer,
@@ -148,8 +152,8 @@ export const taskMapStateSchema = { ...obj({
   lastAgentFormAt: { anyOf: [timestamp, { type: 'null' }] },
   // Every applied or suggested form change names the change that produced it, so the
 // receipt and the record can be matched by a person or the Agent.
-  presentation: { type: 'object', maxProperties: 256, additionalProperties: obj({ form: text, params: { type: 'object', maxProperties: 16 }, author: text, human: { type: 'boolean' }, at: timestamp, changeId: identity, reason: text, suggestedBy: text, previous: { anyOf: [presentationRecordSummarySchema, { type: 'null' }] }, pinned: obj({ by: text, at: timestamp }) }, ['form', 'params', 'author', 'human', 'at', 'changeId']) },
-  suggestions: { type: 'array', maxItems: 64, items: obj({ id: identity, target: text, form: text, params: { type: 'object', maxProperties: 16 }, author: text, at: timestamp, reason: text, cause: { enum: ['pinned', 'budget'] }, merged: integer }, ['id', 'target', 'form', 'params', 'author', 'at', 'cause', 'merged']) },
+  presentation: { type: 'object', maxProperties: 256, additionalProperties: obj({ form: text, params: formParams, author: text, human: { type: 'boolean' }, at: timestamp, changeId: identity, reason: text, suggestedBy: text, previous: { anyOf: [presentationRecordSummarySchema, { type: 'null' }] }, pinned: obj({ by: text, at: timestamp }) }, ['form', 'params', 'author', 'human', 'at', 'changeId']) },
+  suggestions: { type: 'array', maxItems: 64, items: obj({ id: identity, target: text, form: text, params: formParams, author: text, at: timestamp, reason: text, cause: { enum: ['pinned', 'budget'] }, merged: integer }, ['id', 'target', 'form', 'params', 'author', 'at', 'cause', 'merged']) },
   receipts: { type: 'array', maxItems: 256, items: { ...obj({ changeId: identity, requestDigest: digest, kind: { enum: ['declare', 'present', 'respond'] }, author: text, version: positive, at: timestamp, outcome: { type: 'object', additionalProperties: true } }, ['changeId', 'requestDigest', 'kind', 'author', 'version', 'at']) } },
   retainedFromVersion: positive,
   limits: obj({ agentFormIntervalMs: integer }, ['agentFormIntervalMs'])
