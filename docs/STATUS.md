@@ -8,7 +8,11 @@ before the producer starts (Rho-plugins); a run that finishes while nobody asks
 is reconciled on the next read, bounded and without starting a Host (Rho).
 [Execution acceptance](UPGRADE-PLAN.md#p0--close-the-observed-defects) now
 asserts a real Host start (`1`, not `0`), the produced artifact, a completion
-inventory and `artifact.check`. Checks: Rho 78/78, Plugins 54/54, U1 browser 23.
+inventory and `artifact.check`. Skills now carry machine-readable parts
+(`requires`, `example`, `failureRecipes`, `verify`); `r.workspace` was rewritten
+from that attempt, and a check validates every declared example against the
+operation it illustrates and every `verify` command against a shipped script.
+Checks: Rho 80/80, Plugins 54/54, U1 browser 23.
 Open gaps are listed in [the upgrade plan](UPGRADE-PLAN.md); the largest is that
 an Agent-produced artifact has no route to a view (`artifact-not-presentable`),
 because registration refuses owner state and presentation accepts only native
