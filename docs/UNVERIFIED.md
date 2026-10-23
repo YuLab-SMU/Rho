@@ -23,7 +23,6 @@ These are believed to work but nothing here demonstrates it.
 
 | Path | Why unverified | What would verify it |
 | --- | --- | --- |
-| Installed (packed) build | Every browser and execution check in this repository runs from a source build with a selected Core binary. `scripts/pack-local.mjs` requires an explicit Core artifact and no packed candidate was built in this cycle. | Run `acceptance:person`, `acceptance:execution` and `acceptance:walkthrough` against a packed install with `RHO_PACKAGE_ROOT` set to it. |
 | Windows and Linux | `project.entries`, the folder picker and socket path limits are checked on macOS only. `native-folders.ts` refuses the picker off macOS by design. | Platform runs; the folder picker needs a native path per platform. |
 | The operating-system folder dialog | Every acceptance replaces the picker with a stand-in; the real `osascript` dialog is clicked by a person. | A manual step, recorded as such. |
 | Real Claude Code sessions | `test:native`, `test:feedback` and `test:presenter` drive the real adapter entries without a model. The model conversation itself is out of scope here. | The credential-gated `native-artifact-acceptance.mjs` with `RHO_NATIVE_MODEL=1`. |
@@ -31,10 +30,10 @@ These are believed to work but nothing here demonstrates it.
 
 ## Widths and journeys
 
-`acceptance:person` covers 1440, 768 and 390. `ui-acceptance.mjs` covers
-1600/1280/1024/768/390. Nothing covers an installed build at any width, and no check
-runs the same journey twice against both a source build and a packed one — that matrix
-is the remaining part of P5.
+`acceptance:person` covers 1440, 768 and 390 in both columns of
+`acceptance:matrix`; `ui-acceptance.mjs` covers 1600/1280/1024/768/390 on the source
+build only. An installed build has not been run at 1600/1280/1024, and no check has
+run the U1 shell journeys against an installed build.
 
 ## Keeping this honest
 
