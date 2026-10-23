@@ -93,6 +93,9 @@ try {
   await assert.rejects(tab.call('action.submit', { projectId: p.id, operationId: 'x', action: 'r.execute', actionVersion: '0.2.0', input: {} }), error => error.error.kind !== undefined);
   check('the tab is still refused parent paths, registration and execution');
 
+  // What the project is running is visible to the person who owns it.
+  const runs = await page.evaluate(() => document.body.innerText.includes('Work in this project') ? 'shown' : 'absent');
+  report.runsSection = runs;
   assert.deepEqual(errors, [], 'no page errors');
   check('no page errors');
   report.passed = true;

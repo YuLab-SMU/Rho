@@ -120,6 +120,11 @@ events, so an Agent-run plot has no route to a view. Recorded as
   conditional identity it already uses for edits.
 - Show runs in the browser: what was submitted, what it is doing, where its
   artifacts are. "Nothing happened" must stop being a possible observation.
+  **Done:** `project.runs` gives a person a bounded summary of every run in their
+  project — action, execution state, author kind, declared artifacts — with no
+  request body, no code and no output text, reconciled on read. The Overview
+  lists it. Checking it exposed that a project opened at the service root could
+  not be granted a session, because its relative path is empty.
 
 ### P5 — Verification that cannot overstate
 

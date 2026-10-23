@@ -50,6 +50,19 @@ export class Requests {
     if (run.execution !== before) { await this.persist(run); await this.emit('operation.observed', run.operationId); }
     return run;
   }
+  // Every run in the project, whoever submitted it, reconciled the same way so a person
+  // watching the project sees the same outcome the owner reports.
+  async all() {
+    const d = await this.directory();
+    const runs = await Promise.all((await fs.readdir(d)).filter(f => /^[a-f0-9]{64}\.json$/.test(f)).map(f => readJson<Operation>(path.join(d, f))));
+    let budget = this.limits.maxReconciled;
+    return Promise.all(runs.sort((a, b) => b.acceptedAt.localeCompare(a.acceptedAt)).map(run => {
+      const pending = ['active', 'unobserved'].includes(run.execution) && run.delivery === 'answered';
+      if (!pending || budget <= 0) return run;
+      budget--;
+      return this.reconcile(run);
+    }));
+  }
   // A single lookup reports the same reconciled facts as a listing: a caller that asks
   // about one run must not be told a different story than the one who lists them all.
   async lookup(principal: Principal, operationId: string) { return this.reconcile(await readJson<Operation>(await this.file(principal, operationId))); }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { BrowserClient, CapabilityCatalog, CompositionSummary, ProjectSummary, ResourceSummary, WorkspaceSnapshot } from '../src/browser.js';
 import { projectName, SourceFolders, when } from './home.js';
 import { Icon, type IconName } from './icons.js';
@@ -59,6 +59,14 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
   // shows the next action beside each finding.
   const [doctor, setDoctor] = useState<Array<{ id: string; state: 'ok' | 'warn' | 'fail'; detail: string; remedy: string }> | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
+  // What this project is running, whoever submitted it. Reads only; no code, no output.
+  const [runs, setRuns] = useState<Array<{ operationId: string; action: string; execution: string; acceptedAt: string; author: string; artifacts: string[] }> | null>(null);
+  useEffect(() => {
+    let live = true;
+    client.call('project.runs', { projectId: project.id, limit: 10 }, new AbortController().signal)
+      .then(result => { if (live) setRuns(result.runs); }, () => {});
+    return () => { live = false; };
+  }, [client, project.id]);
   async function diagnose() {
     setDiagnosing(true); setError('');
     try { setDoctor((await client.call('project.doctor', { projectId: project.id }, new AbortController().signal)).checks); }
@@ -105,6 +113,16 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
         <p className="field-hint"><button className="link" onClick={() => setDoctor(null)}>Hide the checks</button></p>
       </> : <p className="field-hint"><button disabled={diagnosing} onClick={() => void diagnose()}>{diagnosing ? 'Checking…' : 'Check this project…'}</button> What Rho can and cannot do here, with the next action for anything wrong.</p>}
     </section>
+    {runs && runs.length ? <section className="overview-section" aria-labelledby="overview-runs">
+      <h2 id="overview-runs">Work in this project <span>{runs.length}</span></h2>
+      <table><thead><tr><th>Action</th><th className="column-state">State</th><th className="column-short optional">By</th><th className="column-wide optional">Produced</th></tr></thead>
+        <tbody>{runs.map(run => <tr key={run.operationId}>
+          <td><span className="overview-name">{run.action}</span></td>
+          <td className="column-state"><span className={'state ' + (run.execution === 'completed' ? 'good' : ['failed', 'unknown'].includes(run.execution) ? 'failed' : 'pending')}>{run.execution}</span></td>
+          <td className="column-short optional meta">{run.author}</td>
+          <td className="column-wide optional meta">{run.artifacts.length ? run.artifacts.join(', ') : '—'}</td>
+        </tr>)}</tbody></table>
+    </section> : null}
     <section className="overview-section" aria-labelledby="overview-sources">
       <h2 id="overview-sources">Source folders</h2>
       <SourceFolders folders={project.sources ?? [{ id: project.id, root: project.root, name: projectName(project) }]} busy={adding} onAdd={() => void add()} />

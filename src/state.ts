@@ -178,7 +178,8 @@ export class State {
     requireThat(this.visible(project, principal), 'scope', 'Project is outside this credential’s selected folders.');
     if (principal.projectRoot && !principal.selectedProjects?.includes(project.id)) await confined(principal.projectRoot, path.relative(principal.projectRoot, project.root) || '.');
     if (project.nativeSelected || project.workspace) requireThat(await fs.realpath(project.root) === project.root, 'scope', 'The selected project folder changed. Select it again in the system dialog.');
-    else await confined(this.root, path.relative(this.root, project.root));
+    // A project opened at the service root has no relative path; '.' is that same place.
+    else await confined(this.root, path.relative(this.root, project.root) || '.');
     await this.acquire(project); return project;
   }
   async close() { for (const release of this.releases.splice(0).reverse()) await release(); this.acquired.clear(); }

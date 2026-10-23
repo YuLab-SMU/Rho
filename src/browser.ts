@@ -97,6 +97,7 @@ export interface BrowserApi {
   'project.source.add': { input: { projectId: string }; output: { cancelled: boolean; project: ProjectSummary | null } };
   'project.createWorkspace': { input: { name: string; selectionIds: string[]; changeId: string }; output: ProjectSummary };
   'project.create': { input: { name: string }; output: ProjectSummary };
+  'project.runs': { input: { projectId: string; limit?: number }; output: { runs: Array<{ operationId: string; action: string; execution: string; delivery: string; acceptedAt: string; author: string; artifacts: string[]; hasStderr: boolean }>; total: number; truncated: boolean } };
   'protocol.validate': { input: { method: string; body: Record<string, unknown> }; output: { method: string; valid: boolean; problems: Array<{ path: string; keyword: string; message: string; fix: string }>; requires: string[] } };
   'project.doctor': { input: { projectId: string; intent?: 'run-r' | 'edit-documents' | 'inspect-tables' | 'present' }; output: { ok: boolean; checks: Array<{ id: string; state: 'ok' | 'warn' | 'fail'; detail: string; remedy: string }>; intent: { id: string; methods: string[]; missing: string[]; ready: boolean } | null } };
   'project.entries': { input: { projectId: string; path?: string }; output: { entries: Array<{ path: string; name: string; kind: 'file' | 'folder'; bytes: number; hidden: boolean }>; total: number; truncated: boolean; roots: string[]; path: string } };

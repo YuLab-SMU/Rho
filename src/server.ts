@@ -473,6 +473,27 @@ export class RhoService {
     // resources, saving and execution stay Agent/operator work.
     // One call answers "why does nothing work here", before any work is attempted,
     // and it changes nothing: no Host is started and no run is resumed.
+    // The person owns the project, so they may see what it is running. The summary is
+    // deliberately narrow: no request body, no code, no output text.
+    if (method === 'project.runs') {
+      const limit = Number(b.limit ?? 20);
+      const all = await requests.all();
+      const runs = [...all].sort((l, r) => r.acceptedAt.localeCompare(l.acceptedAt));
+      return {
+        runs: runs.slice(0, limit).map(run => ({
+          operationId: run.operationId,
+          action: run.action,
+          execution: run.execution,
+          delivery: run.delivery,
+          acceptedAt: run.acceptedAt,
+          author: run.principal.startsWith('agent:') ? 'Agent' : run.principal === 'operator' ? 'Operator' : run.principal.startsWith('browser:') ? 'Person' : run.principal,
+          artifacts: (run.plan?.source?.artifacts ?? []).map((artifact: any) => artifact.path),
+          hasStderr: Number(run.native?.stderr?.retained_bytes ?? 0) > 0
+        })),
+        total: runs.length,
+        truncated: runs.length > limit
+      };
+    }
     if (method === 'project.doctor') {
       const checks: Array<{ id: string; state: 'ok' | 'warn' | 'fail'; detail: string; remedy: string }> = [];
       const add = (id: string, state: 'ok' | 'warn' | 'fail', detail: string, remedy = '') => checks.push({ id, state, detail, remedy });
