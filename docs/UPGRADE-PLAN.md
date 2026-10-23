@@ -54,6 +54,9 @@ that is prose cannot prevent that; a Skill that is checked can.
 | Lock conflicts name the holder, not just "another service" | Rho | pending |
 | Generic failures name their cause instead of "could not be confirmed" | Rho | pending |
 
+Done in this row so far: the output directory, run reconciliation and the
+execution acceptance. The three remaining items above are the rest of P0.
+
 The execution acceptance records one gap rather than hiding it: an artifact
 produced by `r.execute` lives under owner state, `resource.register` refuses
 owner state by design, and presentation accepts only native `artifact.ready`
@@ -63,15 +66,18 @@ events, so an Agent-run plot has no route to a view. Recorded as
 ### P1 — Skills become contracts
 
 - Skill format v2: `preconditions`, `inputs`, `example`, `output`, `verify`,
-  `failureRecipes`.
+  `failureRecipes`. **Started:** `SkillDeclaration` carries `intent`,
+  `requires`, `example`, `failureRecipes` and `verify`.
 - Build-time validation: every example payload is checked against the operation
   schema it claims to illustrate, so prose cannot drift from the contract.
+  **Started:** `test/skills.test.mjs` checks every declared example, every named
+  operation and every `verify` command; it caught a placeholder digest in the
+  first draft of the rewritten Skill.
 - Every Skill ships a check that runs on a disposable project.
 - First Skills: `person-open-file`, `agent-run-r`, `artifact-and-view`,
-  `task-map`, `feedback`.
-
-`agent-run-r` is written first and its check is the P0 execution acceptance:
-the documented path and the verified path are the same script, by construction.
+  `task-map`, `feedback`. `r.workspace` is rewritten as the model: its content
+  is the verified path, its `verify` is the P0 execution acceptance, and its
+  failure recipes are the ones this attempt actually hit. Four Skills remain.
 
 ### P2 — A service that diagnoses itself
 
