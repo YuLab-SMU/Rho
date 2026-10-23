@@ -1,9 +1,9 @@
 :root {
-  --color-canvas: #f7f7f5;
+  --color-canvas: #f1f3f2;
   --color-surface: #fff;
-  --color-hairline: #e6e8eb;
-  --color-divider: #eef0f2;
-  --color-control-border: #dde0e4;
+  --color-hairline: #dbdfdd;
+  --color-divider: #e8ebe9;
+  --color-control-border: #c3c9c6;
   --color-hairline-strong: var(--color-control-border);
   --color-ink: #15191b;
   --color-muted: #545e63;
@@ -22,10 +22,10 @@
   --color-tab-active: #f1f3f5;
   --color-well: #f7f8f9;
   --focus-ring: 0 0 0 3px #3a68f029;
-  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-ui: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
-  --toolbar-height: 44px;
-  --rail-width: 64px;
+  --toolbar-height: 48px;
+  --rail-width: 68px;
   --navigation-width: 232px;
   --context-width: 330px;
   --radius-control: 8px;

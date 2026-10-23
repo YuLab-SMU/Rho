@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { CapabilityCatalog, CapabilityPlugin, EntryPresentation } from '../src/browser.js';
 import { pluginEntries, pluginGroups, pluginPresentation } from '../src/plugin-presentation.js';
 import { Icon } from './icons.js';
@@ -74,7 +74,7 @@ export function PluginCatalog({ catalog, project, pluginId, onSelect: setPluginI
   const cards = useRef(new Map<string, HTMLButtonElement>()), shown = useRef(pluginId);
   const selected = catalog.plugins.find(p => p.id === pluginId);
   // Opening a plugin focuses its title; returning to the catalog, by any route, focuses the card it came from.
-  useEffect(() => {
+  useLayoutEffect(() => {
     setCopied(null); setCopyError('');
     if (pluginId) heading.current?.focus();
     else if (shown.current) cards.current.get(shown.current)?.focus();

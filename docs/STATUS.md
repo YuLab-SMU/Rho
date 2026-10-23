@@ -9,6 +9,12 @@ Reading a result never repeats its source operation. Protocol inspection is
 bounded and authorized; the offline v2 export is an index plus independently
 hashed operation files. The old full-protocol HTTP dump is unavailable.
 
+Local UI cleanup (2026-10-23) keeps the shell's muted colors and 48 px toolbar /
+68 px rail, and settles plugin heading/card focus before paint. Build, 14 browser
+tests, U1's 23 checks and five plugin-page checks passed on Chrome 155 at
+1600/1280/1024/768/390; no Host or native submission started. Product acceptance
+remains pending; obsolete unused status helpers were not added to current main.
+
 Files streams hashes/snapshots through bounded buffers and reads only each requested
 range. Media negotiates the actual owner page size, caps retained image bytes and
 cancels on view release. Snapshots contain document metadata, not all text and
