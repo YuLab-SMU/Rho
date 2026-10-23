@@ -54,6 +54,12 @@
     "test:ui:plugins": "npm run build && node scripts/plugin-ui-acceptance.mjs",
     "acceptance:ui:u2": "node scripts/u2-ui-acceptance.mjs",
     "test:task-map": "node --test test/task-map.test.mjs",
+    "test:documents": "node --test test/document-authors.test.mjs test/document-u2.test.mjs",
+    "test:tables": "node --test ../Rho-plugins/test/resources.test.mjs",
+    "test:files": "node --test --test-name-pattern='completion sidecar|output directory' ../Rho-plugins/test/resources.test.mjs",
+    "test:charts": "node --test --test-name-pattern='a plot binds one immutable' ../Rho-plugins/test/resources.test.mjs",
+    "test:task-map": "node --test test/task-map.test.mjs",
+    "acceptance:person": "node scripts/person-files-acceptance.mjs",
     "test:ui:u2": "npm run build && npm run acceptance:ui:u2"
   },
   "dependencies": {
