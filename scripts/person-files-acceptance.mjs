@@ -75,8 +75,15 @@ try {
   await page.waitForTimeout(2000);
   const editor = (await page.locator('.cm-content:visible').innerText().catch(() => '')) || await page.evaluate(() => document.body.innerText);
   assert.match(editor, /datasets::cars/);
+  // A tab may type into the buffer but never write it, and the product says so
+  // instead of letting the person discover it after typing.
+  // Visible, not merely present in the DOM: a note below the editor is never read.
+  const note = page.locator('.rho-tab-buffer-note');
+  assert.equal(await note.count(), 1);
+  assert.equal(await note.isVisible(), true);
+  assert.match(await note.innerText(), /Saving to disk is an Agent step/);
   await page.screenshot({ path: path.join(evidence, 'opened.png') });
-  check('the opened file shows its real bytes in the editor');
+  check('the opened file shows its real bytes, and says saving is an Agent step');
 
   // The boundary a tab still has: refused by the service, not by the interface.
   const { BrowserClient } = await import(pathToFileURL(path.join(packageRoot, 'dist/browser.js')).href);

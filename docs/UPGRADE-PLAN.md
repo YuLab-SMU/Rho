@@ -112,6 +112,9 @@ events, so an Agent-run plot has no route to a view. Recorded as
 - State what a person can do without an Agent: open a folder, list it, open and
   edit a text file in the buffer. Saving, registering and executing stay Agent
   or operator work; that boundary is stated in the Skill, not discovered.
+  **Done:** `rho.person-files` states it, and the editor shows it before the
+  person types: a first version rendered below the editor, invisible, which the
+  person acceptance now rejects by asserting visibility rather than presence.
 - Decide and, if accepted, grant `document.save` to a tab with the same
   conditional identity it already uses for edits.
 - Show runs in the browser: what was submitted, what it is doing, where its
