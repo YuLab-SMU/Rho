@@ -1,0 +1,63 @@
+{
+  "method": "workspace.restore",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "source": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "required": [
+      "projectId",
+      "source"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "sourceProjectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "documents": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "resources": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "compositions": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "execution": {
+        "const": "not-replayed"
+      },
+      "selection": {
+        "type": "object"
+      }
+    },
+    "required": [
+      "sourceProjectId",
+      "documents",
+      "resources",
+      "compositions",
+      "execution"
+    ],
+    "additionalProperties": true
+  },
+  "description": null
+}

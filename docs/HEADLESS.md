@@ -620,7 +620,7 @@ objects and pins the catalog/bundle/caller/query; each page rechecks availabilit
 and authorization. Immutable content cannot substitute for current task, resource
 or permission state. A stale catalog requires a fresh small index.
 
-The selected MCP entry exposes only `rho_index`, `rho_resolve`, `rho_call`.
+The default MCP entry exposes `rho_index`, `rho_resolve`, `rho_call`, `rho_read`.
 Its tools/list has small fixed input schemas and no initial full protocol/catalog
 fetch. Resolve returns one JSON text body without a structuredContent mirror.
 `rho_call` requires a complete cached contract and relevant guidance, checks its
@@ -628,7 +628,18 @@ closed input schema, preserves existing managed intents, and sends a contract
 precondition on the ordinary operation request. Rho rechecks that precondition
 under the same project serializer immediately before dispatch. Missing/partial
 schemas, changed contracts, revoked scope and unavailable providers do not run.
-Legacy MCP behavior remains explicit compatibility, not silently migrated.
+`rho_index` starts with owner summaries. Select an owner or search before fetching
+operation contracts. `rho_call` returns replies up to 16 KiB by default (64 KiB
+maximum); larger replies carry a scoped immutable reference. `rho_read` selects
+JSON-pointer fields, container pages or Unicode-safe UTF-16 text ranges and can
+explicitly release the retained result. It never invokes the original operation.
+Result retention defaults to 16 MiB per reply, 64 MiB total and 64 replies, set by
+`RHO_MAX_RESULT_BYTES`, `RHO_MAX_RETAINED_RESULT_BYTES`, `RHO_MAX_RESULTS`.
+Capacity is checked before a new call; exhaustion preserves retained results and
+refuses dispatch. Process loss preserves results but requires refetching contracts.
+New descriptors use this entry by default; old per-operation MCP tools are removed.
+Runtime `protocol.describe` also pages summaries or selects one complete contract.
+The static `protocol/v2.json` is now an index of hashed operation files.
 
 | Protected knowledge resource | Limit / configuration | Exceeded or changed state |
 | --- | --- | --- |

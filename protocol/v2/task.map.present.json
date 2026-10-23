@@ -1,0 +1,109 @@
+{
+  "method": "task.map.present",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "expectedVersion": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "changeId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "target": {
+        "type": "string",
+        "pattern": "^(map:[a-z0-9-]{1,32}|item:[A-Za-z0-9._:@-]{1,128})$"
+      },
+      "form": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{0,31}$"
+      },
+      "params": {
+        "type": "object",
+        "maxProperties": 16
+      },
+      "focus": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "reason": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 160
+      }
+    },
+    "required": [
+      "projectId",
+      "expectedVersion",
+      "changeId",
+      "target"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "format": {
+        "const": "rho.task-map/1"
+      },
+      "version": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "vocabulary": {
+        "type": "object"
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "next": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "presentation": {
+        "type": "object"
+      },
+      "suggestions": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "receipts": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      }
+    },
+    "required": [
+      "format",
+      "version",
+      "vocabulary",
+      "items",
+      "next",
+      "presentation",
+      "suggestions"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Change a map placement or item card form, its parameters (including a subset) or the focus. Shared by the Agent and people. An Agent change to a pinned target, or within agentFormIntervalMs of its last applied form change, is merged into one pending suggestion instead of applied; Agent changes stay attributed and revertible."
+}

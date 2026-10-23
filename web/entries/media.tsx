@@ -4,7 +4,11 @@ import type { UiContribution, UiViewProps } from '../../src/ui-contract.js';
 // The full form of registered media: the bytes of this exact version, read in bounded
 // chunks and shown. A produced figure becomes visible here; nothing is written.
 function Media(props: UiViewProps) {
-  return <MediaView view={props.view} projectId={props.projectId} client={props.client} active={props.active} />;
+  const ref = props.view.bindings.data as { id?: string; version?: string } | undefined;
+  const resource = props.snapshot.resources.find(r => r.id === ref?.id && r.version === ref?.version);
+  const mimeType = typeof resource?.format === 'object' && typeof resource.format.mimeType === 'string' ? resource.format.mimeType : undefined;
+  return <MediaView view={props.view} projectId={props.projectId} client={props.client} active={props.active}
+    maxReadBytes={(props.snapshot.limits.resources as { maxReadBytes?: number } | undefined)?.maxReadBytes} mimeType={mimeType} />;
 }
 
 export const entry: UiContribution = {

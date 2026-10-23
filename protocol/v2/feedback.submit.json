@@ -1,0 +1,378 @@
+{
+  "method": "feedback.submit",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "taskId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "compositionId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "submissionId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "draft": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "documentId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "documentId",
+          "version"
+        ]
+      },
+      "anchor": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "document"
+              },
+              "documentId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "from": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "to": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "documentId",
+              "version",
+              "from",
+              "to"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "table"
+              },
+              "resource": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ]
+              },
+              "entities": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 1024,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "resource",
+              "entities"
+            ]
+          }
+        ]
+      },
+      "relatedDocumentId": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "routeExpectation": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "taskVersion": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "targetBindingId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "taskVersion",
+          "targetBindingId"
+        ]
+      }
+    },
+    "required": [
+      "projectId",
+      "taskId",
+      "compositionId",
+      "submissionId",
+      "draft",
+      "anchor",
+      "relatedDocumentId",
+      "routeExpectation"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "submissionId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "requestDigest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "author": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "stages": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "annotation": {
+            "enum": [
+              "pending",
+              "committed",
+              "needs-reconcile"
+            ]
+          },
+          "context": {
+            "enum": [
+              "pending",
+              "prepared",
+              "needs-reconcile"
+            ]
+          },
+          "queue": {
+            "enum": [
+              "pending",
+              "queued",
+              "blocked",
+              "needs-routing"
+            ]
+          }
+        },
+        "required": [
+          "annotation",
+          "context",
+          "queue"
+        ]
+      },
+      "annotation": {
+        "anyOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "annotationId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "submittedVersion": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "messageId": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "annotationId",
+              "submittedVersion",
+              "messageId"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "contextId": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "delivery": {
+        "anyOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "projectId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "taskId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "deliveryId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "requestDigest": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "targetBindingId": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "externalSessionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "adapterRegistrationId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "contextId": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "message": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "annotationId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "submittedVersion": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "messageId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "annotationId",
+                  "submittedVersion",
+                  "messageId"
+                ]
+              },
+              "taskVersion": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "mode": {
+                "enum": [
+                  "post-tool-boundary",
+                  "queued-turn"
+                ]
+              }
+            },
+            "required": [
+              "projectId",
+              "taskId",
+              "deliveryId",
+              "requestDigest",
+              "targetBindingId",
+              "externalSessionId",
+              "adapterRegistrationId",
+              "contextId",
+              "message",
+              "taskVersion",
+              "mode"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "reason": {
+        "anyOf": [
+          {
+            "enum": [
+              "queue-full",
+              "source-unavailable",
+              "route-conflict",
+              "owner-unavailable",
+              "needs-routing",
+              "context-limit"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "submissionId",
+      "requestDigest",
+      "author",
+      "stages",
+      "annotation",
+      "contextId",
+      "delivery",
+      "reason"
+    ]
+  },
+  "description": "Teacher browser only: freeze the original draft/anchor, prepare the committed message and retain one original-session delivery. Preserve submissionId across missing acknowledgements; stages are separate durable facts."
+}

@@ -14,7 +14,7 @@ import {presentationFixture,query,caps} from './support/presentation.mjs';
 async function fixture(){const root=await fs.mkdtemp(path.join(os.tmpdir(),'rho-presenter-')),service=await new RhoService({root,stateDir:path.join(root,'state'),coreBinary:'/missing',rscript:'/missing',plugins:['agent','files','tables']}).start();return{root,service,close:async()=>{await service.close();await fs.rm(root,{recursive:true,force:true});}};}
 test('assigned presentation role indexes only display operations and cannot read feedback, documents, full snapshots or raw layout',async()=>{
  const f=await fixture();try{const a=await presentationFixture(f.root,f.service),p=await assign(f,a);await a.publish();
- const index=await p.presenter.call('capability.index',{role:'presentation',query});assert.deepEqual(index.entries.map(e=>e.id).sort(),['workspace.enhance','workspace.observe']);
+ const index=await p.presenter.call('capability.index',{role:'presentation',query:{...query,owner:'rho'}});assert.deepEqual(index.entries.map(e=>e.id).sort(),['workspace.enhance','workspace.observe']);
  assert.equal(index.scopeHint.callerBindingId,p.binding.id);assert.equal(p.connection.methods.includes('protocol.describe'),false);assert.equal(p.connection.methods.includes('capability.list'),false);
  for(const method of ['observation.snapshot','document.read','feedback.read','composition.apply','binding.activity'])await assert.rejects(p.presenter.call(method,{}),e=>e.error.kind==='unauthorized');
  await assert.rejects(p.presenter.call('capability.index',{role:'business',query}),e=>e.error.kind==='scope');

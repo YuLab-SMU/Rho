@@ -1,0 +1,34 @@
+{
+  "method": "session.browser.revoke",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "sessionId": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "required": [
+      "sessionId"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "sessionId": {
+        "type": "string",
+        "minLength": 1
+      },
+      "revoked": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "sessionId",
+      "revoked"
+    ],
+    "additionalProperties": true
+  },
+  "description": null
+}

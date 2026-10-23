@@ -1,0 +1,403 @@
+{
+  "method": "document.undoOwn",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "documentId": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "expectedVersion": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "changeId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "expectedRevision": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "required": [
+      "projectId",
+      "documentId",
+      "expectedVersion",
+      "changeId",
+      "expectedRevision"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1
+      },
+      "version": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "content": {
+        "type": "string"
+      },
+      "diskDigest": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "dirty": {
+        "type": "boolean"
+      },
+      "author": {
+        "type": "string",
+        "minLength": 1
+      },
+      "acknowledgedAt": {
+        "type": "string",
+        "minLength": 1
+      },
+      "undo": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "content": {
+              "type": "string"
+            },
+            "group": {
+              "type": "string",
+              "minLength": 1
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "changeIds": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              }
+            }
+          },
+          "required": [
+            "content",
+            "group",
+            "author"
+          ]
+        }
+      },
+      "revision": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "receipts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "changeId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "requestDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "kind": {
+              "enum": [
+                "edit",
+                "undo",
+                "save",
+                "abandon-save",
+                "undo-own",
+                "revert"
+              ]
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "at": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "changeId",
+            "requestDigest",
+            "kind",
+            "author",
+            "revision",
+            "version",
+            "at"
+          ]
+        }
+      },
+      "retainedFromRevision": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "pendingSave": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "requestDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "author": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expectedDiskDigest": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contentDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "at": {
+            "type": "string",
+            "minLength": 1
+          },
+          "change": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "changeId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "expectedRevision": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "changeId",
+              "expectedRevision"
+            ]
+          }
+        },
+        "required": [
+          "requestDigest",
+          "author",
+          "expectedDiskDigest",
+          "contentDigest",
+          "at"
+        ]
+      },
+      "receipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "changeId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "requestDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "kind": {
+            "enum": [
+              "edit",
+              "undo",
+              "save",
+              "abandon-save",
+              "undo-own",
+              "revert"
+            ]
+          },
+          "author": {
+            "type": "string",
+            "minLength": 1
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "at": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "changeId",
+          "requestDigest",
+          "kind",
+          "author",
+          "revision",
+          "version",
+          "at"
+        ]
+      },
+      "history": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "changeId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "requestDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "enum": [
+                "edit",
+                "undo",
+                "undo-own",
+                "revert"
+              ]
+            },
+            "undoGroup": {
+              "type": "string",
+              "minLength": 1
+            },
+            "groupId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "at": {
+              "type": "string",
+              "minLength": 1
+            },
+            "beforeDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "afterDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "reverts": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "uniqueItems": true
+            },
+            "edits": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "from": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "to": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "insert": {
+                    "type": "string"
+                  },
+                  "removed": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "from",
+                  "to",
+                  "insert",
+                  "removed"
+                ]
+              }
+            }
+          },
+          "required": [
+            "changeId",
+            "requestDigest",
+            "author",
+            "kind",
+            "undoGroup",
+            "groupId",
+            "version",
+            "revision",
+            "at",
+            "beforeDigest",
+            "afterDigest",
+            "reverts",
+            "edits"
+          ]
+        }
+      },
+      "historyRetainedFromVersion": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "required": [
+      "id",
+      "path",
+      "version",
+      "content",
+      "diskDigest",
+      "dirty",
+      "author",
+      "acknowledgedAt",
+      "undo"
+    ]
+  },
+  "description": null
+}

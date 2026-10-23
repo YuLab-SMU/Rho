@@ -1,3 +1,4 @@
+import { callOperation, mcpToolNames } from '../scripts/mcp-consumer.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
@@ -29,11 +30,11 @@ test('authenticated HTTP and real stdio MCP share author undo, targeted revert a
     const grant = await call('session.grant', { externalSessionId: 'actual-agent', methods: ['capability.list', 'document.read', 'document.edit', 'document.undoOwn', 'document.revert', 'document.history', 'document.change.read'] });
     const transport = new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(import.meta.resolve('@rho-workspace/plugin-agent/mcp'))], env: { PATH: process.env.PATH, RHO_AGENT_CONNECTION: grant.connectionFile }, stderr: 'pipe' });
     transport.stderr.resume(); await agent.connect(transport);
-    assert.ok((await agent.listTools()).tools.some(t => t.name === 'rho_document_undoOwn'));
+    assert.deepEqual((await agent.listTools()).tools.map(t => t.name), mcpToolNames);
     const tool = async (name, input) => {
-      const response = await agent.callTool({ name: 'rho_' + name.replaceAll('.', '_'), arguments: input });
-      assert.notEqual(response.isError, true, JSON.stringify(response.content));
-      return JSON.parse(response.content[0].text).value;
+      const response = await callOperation(agent, name, input);
+      assert.equal(response.ok, true, JSON.stringify(response));
+      return response.value;
     };
     d = await call('document.edit', { documentId: d.id, expectedVersion: 1, expectedRevision: 0, changeId: 'human', undoGroup: 'human', edits: [{ from: 0, to: 0, insert: 'human 中文\n' }] });
     d = await tool('document.edit', { documentId: d.id, expectedVersion: d.version, expectedRevision: d.revision, changeId: 'agent', undoGroup: 'agent', edits: [{ from: d.content.length, to: d.content.length, insert: 'agent 🧬\n' }] });
@@ -50,8 +51,8 @@ test('authenticated HTTP and real stdio MCP share author undo, targeted revert a
     await assert.rejects(sdk.call('document.undoOwn', own), /lost acknowledgement/);
     d = await c.call('document.undoOwn', own);
     assert.equal(d.content, 'agent 🧬\n');
-    const forged = await agent.callTool({ name: 'rho_document_undoOwn', arguments: { documentId: d.id, expectedVersion: d.version, expectedRevision: d.revision, changeId: 'forged', author: 'operator' } });
-    assert.equal(forged.isError, true);
+    const forged = await callOperation(agent, 'document.undoOwn', { documentId: d.id, expectedVersion: d.version, expectedRevision: d.revision, changeId: 'forged', author: 'operator' });
+    assert.equal(forged.ok, false);
     d = await tool('document.undoOwn', { documentId: d.id, expectedVersion: d.version, expectedRevision: d.revision, changeId: 'agent-undo' });
     assert.equal(d.content, '');
     // An explicit per-change revert may also reverse a compensation record.

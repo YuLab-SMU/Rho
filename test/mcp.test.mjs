@@ -1,3 +1,4 @@
+import { callOperation, mcpEnvelope, mcpToolNames } from '../scripts/mcp-consumer.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
@@ -26,25 +27,26 @@ test('real stdio MCP v2 tools share the unsaved buffer, scope and retained nativ
     const transport = new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(import.meta.resolve('@rho-workspace/plugin-agent/mcp'))], env: { PATH: process.env.PATH, RHO_AGENT_CONNECTION: grant.connectionFile }, stderr: 'pipe' });
     transport.stderr.resume(); await client.connect(transport);
     const tools = await client.listTools();
-    assert.deepEqual(tools.tools.map(t => t.name).sort(), methods.map(m => 'rho_' + m.replaceAll('.', '_')).sort());
+    assert.deepEqual(tools.tools.map(t => t.name).sort(), [...mcpToolNames].sort());
     assert.equal('projectId' in tools.tools[0].inputSchema.properties, false);
     async function call(method, args = {}) {
-      const reply = await client.callTool({ name: 'rho_' + method.replaceAll('.', '_'), arguments: args });
-      assert.equal(reply.isError, false, JSON.stringify(reply.structuredContent));
-      assert.equal(reply.structuredContent.apiVersion, '2.0'); return reply.structuredContent.value;
+      const reply = await callOperation(client, method, args);
+      assert.equal(reply.ok, true, JSON.stringify(reply));
+      assert.equal(reply.apiVersion, '2.0'); return reply.value;
     }
     assert.deepEqual((await call('capability.list')).actions.map(a => a.id), ['r.execute']);
     assert.equal((await human.call('capability.list', { projectId: p.id })).host.exitCode, 3);
     const code = 'args <- commandArgs(TRUE)\ncat("entry\\n",file=paste0(args[[1]],".entries.jsonl"),append=TRUE)\ncat("shared 中文 🧬")\n';
-    const edited = await call('document.edit', { projectId: other.id, documentId: d.id, expectedVersion: d.version, edits: [{ from: 0, to: 0, insert: code }], undoGroup: 'external-agent' });
+    assert.equal((await callOperation(client, 'document.edit', { projectId: other.id })).error.kind, 'invalid');
+    const edited = await call('document.edit', { documentId: d.id, expectedVersion: d.version, edits: [{ from: 0, to: 0, insert: code }], undoGroup: 'external-agent' });
     assert.equal(edited.content, code); assert.equal(edited.dirty, true);
     assert.equal((await human.call('document.read', { projectId: p.id, documentId: d.id })).content, code);
     assert.equal((await human.call('observation.snapshot', { projectId: other.id })).documents.length, 0);
     const intent = { operationId: 'mcp-native-once', action: 'r.execute', actionVersion: '0.2.0', input: { script: { kind: 'buffer', documentId: d.id, version: edited.version }, args: [], requirements: [], artifacts: [], completion: null } };
     const accepted = await call('action.submit', intent);
     assert.equal((await call('action.submit', intent)).native.run_id, accepted.native.run_id);
-    const conflict = await client.callTool({ name: 'rho_action_submit', arguments: { ...intent, input: { ...intent.input, args: ['changed'] } } });
-    assert.equal(conflict.isError, true); assert.equal(conflict.structuredContent.apiVersion, '2.0'); assert.equal(conflict.structuredContent.error.kind, 'conflict');
+    const conflict = await callOperation(client, 'action.submit', { ...intent, input: { ...intent.input, args: ['changed'] } });
+    assert.equal(conflict.ok, false); assert.equal(conflict.apiVersion, '2.0'); assert.equal(conflict.error.kind, 'conflict');
     let final;
     for (let n = 0; n < 100; n++) { final = await call('action.observe', { operationId: intent.operationId }); if (final.execution === 'completed') break; await setTimeout(50); }
     assert.equal(final.execution, 'completed'); assert.deepEqual(final.core, accepted.core);
@@ -65,12 +67,13 @@ test('MCP plugin filter only narrows grants and cached tools cannot bypass proje
     await service.agentConnection(p.id, 'filtered', descriptor, ['capability.list', 'document.read', 'data.page'], ['documents']);
     const transport = new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(import.meta.resolve('@rho-workspace/plugin-agent/mcp'))], env: { PATH: process.env.PATH, RHO_AGENT_CONNECTION: descriptor }, stderr: 'pipe' });
     transport.stderr.resume(); await client.connect(transport);
-    assert.deepEqual((await client.listTools()).tools.map(t => t.name).sort(), ['rho_capability_list', 'rho_document_read']);
-    const denied = await client.callTool({ name: 'rho_data_page', arguments: { resource: { id: 'absent', version: '0'.repeat(64) }, offset: 0, limit: 1 } });
-    assert.equal(denied.isError, true);
+    assert.deepEqual((await client.listTools()).tools.map(t => t.name), mcpToolNames);
+    assert.deepEqual((await mcpEnvelope(client, 'rho_index', { owner: 'documents' })).value.entries.map(e => e.id), ['document.read']);
+    const denied = await callOperation(client, 'data.page', { resource: { id: 'absent', version: '0'.repeat(64) }, offset: 0, limit: 1 });
+    assert.equal(denied.ok, false);
     await human.call('capability.configure', { projectId: p.id, expectedVersion: 0, changeId: 'disable', enabled: ['agent'] });
-    assert.deepEqual((await client.listTools()).tools.map(t => t.name), ['rho_capability_list']);
-    assert.equal((await client.callTool({ name: 'rho_document_read', arguments: { documentId: '0'.repeat(64) } })).isError, true);
+    assert.deepEqual((await mcpEnvelope(client, 'rho_index', { owner: 'documents' })).value.entries, []);
+    assert.equal((await callOperation(client, 'document.read', { documentId: '0'.repeat(64) })).ok, false);
     await assert.rejects(human.call('document.read', { projectId: p.id, documentId: '0'.repeat(64) }), e => e.error.kind === 'unavailable');
   } finally { await client.close(); await service.close(); await fs.rm(root, { recursive: true, force: true }); }
 });

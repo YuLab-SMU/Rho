@@ -1,0 +1,58 @@
+{
+  "method": "project.source.pick",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {},
+    "required": []
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "cancelled": {
+        "type": "boolean"
+      },
+      "selection": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "selectionId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "root": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "selectionId",
+              "id",
+              "root",
+              "name"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "cancelled",
+      "selection"
+    ],
+    "additionalProperties": true
+  },
+  "description": null
+}

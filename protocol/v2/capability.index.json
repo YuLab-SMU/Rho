@@ -1,0 +1,226 @@
+{
+  "method": "capability.index",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "role": {
+        "enum": [
+          "business",
+          "presentation",
+          "adapter",
+          "browser"
+        ]
+      },
+      "query": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "maxBytes": {
+            "type": "integer",
+            "minimum": 1024,
+            "maximum": 65536
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "search": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "after",
+          "cursor",
+          "limit",
+          "maxBytes"
+        ]
+      }
+    },
+    "required": [
+      "projectId",
+      "role",
+      "query"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "catalogRef": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "authorizationRef": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "scopeHint": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "compositionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "callerBindingId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "projectId",
+          "taskId",
+          "compositionId",
+          "callerBindingId"
+        ]
+      },
+      "entries": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 240
+            },
+            "contractRef": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "skillRefs": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "maxItems": 8,
+              "minItems": 0
+            }
+          },
+          "required": [
+            "id",
+            "owner",
+            "summary",
+            "contractRef",
+            "skillRefs"
+          ]
+        },
+        "maxItems": 100,
+        "minItems": 0
+      },
+      "next": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "complete": {
+        "type": "boolean"
+      },
+      "groups": {
+        "type": "array",
+        "maxItems": 32,
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "owner": {
+              "type": "string"
+            },
+            "operations": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "owner",
+            "operations"
+          ]
+        }
+      }
+    },
+    "required": [
+      "catalogRef",
+      "authorizationRef",
+      "scopeHint",
+      "entries",
+      "next",
+      "complete"
+    ]
+  },
+  "description": "Read a small role-narrowed index of currently authorized, enabled operations and immutable Skill/contract references."
+}

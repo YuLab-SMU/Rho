@@ -1,0 +1,61 @@
+{
+  "method": "skill.read",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "skillId": {
+        "type": "string",
+        "minLength": 1
+      },
+      "expectedDigest": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "projectId",
+      "skillId"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "version": {
+        "type": "string",
+        "minLength": 1
+      },
+      "digest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "content": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "required": [
+      "id",
+      "version",
+      "digest",
+      "content"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Read one versioned shipped Skill after checking its digest. A stale digest requires rereading instead of applying cached instructions."
+}

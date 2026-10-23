@@ -1,0 +1,530 @@
+{
+  "method": "feedback.status",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "taskId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "submissionId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "query": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "maxBytes": {
+            "type": "integer",
+            "minimum": 1024,
+            "maximum": 65536
+          }
+        },
+        "required": [
+          "after",
+          "cursor",
+          "limit",
+          "maxBytes"
+        ]
+      }
+    },
+    "required": [
+      "projectId",
+      "taskId",
+      "submissionId",
+      "query"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "snapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "deliveryStoreVersion": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "annotationVersion": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "deliveryStoreVersion",
+          "annotationVersion"
+        ]
+      },
+      "next": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "complete": {
+        "type": "boolean"
+      },
+      "submission": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "submissionId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "requestDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "author": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "stages": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "annotation": {
+                "enum": [
+                  "pending",
+                  "committed",
+                  "needs-reconcile"
+                ]
+              },
+              "context": {
+                "enum": [
+                  "pending",
+                  "prepared",
+                  "needs-reconcile"
+                ]
+              },
+              "queue": {
+                "enum": [
+                  "pending",
+                  "queued",
+                  "blocked",
+                  "needs-routing"
+                ]
+              }
+            },
+            "required": [
+              "annotation",
+              "context",
+              "queue"
+            ]
+          },
+          "annotation": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "annotationId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "submittedVersion": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "messageId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "annotationId",
+                  "submittedVersion",
+                  "messageId"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "contextId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "delivery": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "projectId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "taskId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "deliveryId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "requestDigest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "targetBindingId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "externalSessionId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "adapterRegistrationId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "contextId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "message": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "annotationId": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                      },
+                      "submittedVersion": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "messageId": {
+                        "type": "string",
+                        "pattern": "^[a-f0-9]{64}$"
+                      }
+                    },
+                    "required": [
+                      "annotationId",
+                      "submittedVersion",
+                      "messageId"
+                    ]
+                  },
+                  "taskVersion": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "mode": {
+                    "enum": [
+                      "post-tool-boundary",
+                      "queued-turn"
+                    ]
+                  }
+                },
+                "required": [
+                  "projectId",
+                  "taskId",
+                  "deliveryId",
+                  "requestDigest",
+                  "targetBindingId",
+                  "externalSessionId",
+                  "adapterRegistrationId",
+                  "contextId",
+                  "message",
+                  "taskVersion",
+                  "mode"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "queue-full",
+                  "source-unavailable",
+                  "route-conflict",
+                  "owner-unavailable",
+                  "needs-routing",
+                  "context-limit"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "submissionId",
+          "requestDigest",
+          "author",
+          "stages",
+          "annotation",
+          "contextId",
+          "delivery",
+          "reason"
+        ]
+      },
+      "queue": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "transport": {
+            "enum": [
+              "not-attempted",
+              "queued",
+              "attempt-recorded",
+              "accepted",
+              "unknown",
+              "blocked"
+            ]
+          },
+          "enqueueAck": {
+            "enum": [
+              "not-observed",
+              "observed"
+            ]
+          },
+          "inboxReceipt": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "deliveryId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "requestDigest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "acceptedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "inboxReceiptId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "emission": {
+                    "enum": [
+                      "not-attempted",
+                      "attempt-recorded",
+                      "emitted",
+                      "unknown"
+                    ]
+                  }
+                },
+                "required": [
+                  "deliveryId",
+                  "requestDigest",
+                  "acceptedAt",
+                  "inboxReceiptId",
+                  "emission"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "attempts",
+          "transport",
+          "enqueueAck",
+          "inboxReceipt"
+        ]
+      },
+      "fetches": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "receiptId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "fetchId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "deliveryId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "contextId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "bindingId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "principal": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "observation": {
+              "enum": [
+                "owner-served",
+                "client-tool-returned"
+              ]
+            },
+            "nativeToolUseId": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "receiptId",
+            "fetchId",
+            "deliveryId",
+            "contextId",
+            "bindingId",
+            "principal",
+            "observation",
+            "nativeToolUseId",
+            "at"
+          ]
+        },
+        "maxItems": 128,
+        "minItems": 0
+      },
+      "responses": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "annotationId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "messageId": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "replyTo": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "author": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "fromAssignedBusiness": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "annotationId",
+            "messageId",
+            "replyTo",
+            "author",
+            "fromAssignedBusiness"
+          ]
+        },
+        "maxItems": 128,
+        "minItems": 0
+      },
+      "retention": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "receipts": {
+            "enum": [
+              "retained",
+              "expired",
+              "unavailable"
+            ]
+          },
+          "originalTargetPreserved": {
+            "const": true
+          }
+        },
+        "required": [
+          "receipts",
+          "originalTargetPreserved"
+        ]
+      }
+    },
+    "required": [
+      "snapshot",
+      "next",
+      "complete",
+      "submission",
+      "queue",
+      "fetches",
+      "responses",
+      "retention"
+    ]
+  },
+  "description": "Observe original delivery, exact-target fetches and explicitly linked replies. No send, session start or recovery. Keep original identities and unknown outcomes; continuation cursors pin their snapshot."
+}

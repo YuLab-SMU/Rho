@@ -1,0 +1,150 @@
+{
+  "method": "session.grant",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "externalSessionId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "methods": {
+        "type": "array",
+        "items": {
+          "enum": [
+            "protocol.describe",
+            "capability.list",
+            "requirements.check",
+            "requirements.prepare",
+            "action.submit",
+            "action.lookup",
+            "action.observe",
+            "action.retry",
+            "action.cancel",
+            "action.output",
+            "action.list",
+            "document.open",
+            "document.read",
+            "document.edit",
+            "document.undo",
+            "document.save",
+            "resource.list",
+            "artifact.check",
+            "resource.read",
+            "data.page",
+            "data.plot",
+            "data.compare",
+            "selection.set",
+            "context.create",
+            "context.read",
+            "binding.open",
+            "binding.close",
+            "binding.list",
+            "binding.activity",
+            "composition.put",
+            "composition.read",
+            "view.close",
+            "workspace.save",
+            "workspace.export",
+            "workspace.restore",
+            "observation.snapshot",
+            "protocol.validate",
+            "capability.configure",
+            "skill.list",
+            "skill.read",
+            "resource.register",
+            "object.read",
+            "media.describe",
+            "document.undoOwn",
+            "document.revert",
+            "document.history",
+            "document.change.read",
+            "document.abandonSave",
+            "composition.apply",
+            "composition.undo",
+            "view.protection.set",
+            "interaction.selection.read",
+            "interaction.selection.set",
+            "task.map.read",
+            "task.map.declare",
+            "task.map.present",
+            "task.map.respond",
+            "annotation.create",
+            "annotation.reply",
+            "annotation.read",
+            "annotation.list",
+            "feedback.submit",
+            "feedback.read",
+            "feedback.status",
+            "view.observe",
+            "view.observations.read",
+            "task.routing.put",
+            "binding.activity.append",
+            "workspace.observe",
+            "workspace.enhance",
+            "capability.index",
+            "capability.resolve"
+          ]
+        },
+        "maxItems": 64
+      },
+      "profile": {
+        "enum": [
+          "layered-business",
+          "layered-presentation"
+        ]
+      }
+    },
+    "required": [
+      "projectId",
+      "externalSessionId",
+      "methods"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "connectionFile": {
+        "type": "string",
+        "minLength": 1
+      },
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "methods": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "transport": {
+        "const": "stdio-mcp"
+      },
+      "externalSessionId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "profile": {
+        "enum": [
+          "layered-business",
+          "layered-presentation"
+        ]
+      }
+    },
+    "required": [
+      "connectionFile",
+      "projectId",
+      "methods",
+      "transport",
+      "externalSessionId"
+    ],
+    "additionalProperties": true
+  },
+  "description": null
+}

@@ -1,0 +1,93 @@
+{
+  "method": "project.runs",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 50
+      }
+    },
+    "required": [
+      "projectId"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "runs": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "operationId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "action": {
+              "type": "string",
+              "minLength": 1
+            },
+            "execution": {
+              "type": "string",
+              "minLength": 1
+            },
+            "delivery": {
+              "type": "string",
+              "minLength": 1
+            },
+            "acceptedAt": {
+              "type": "string",
+              "minLength": 1
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "artifacts": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "hasStderr": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "operationId",
+            "action",
+            "execution",
+            "delivery",
+            "acceptedAt",
+            "author",
+            "artifacts",
+            "hasStderr"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "total": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "truncated": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "runs",
+      "total",
+      "truncated"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Report what this project has run and what it is running: one bounded summary per operation with its execution state, accepted time, author kind, declared artifact paths and whether output was retained. It carries no request body, no code and no output text, and starts nothing."
+}

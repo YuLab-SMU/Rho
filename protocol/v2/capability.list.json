@@ -1,0 +1,68 @@
+{
+  "method": "capability.list",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      }
+    },
+    "required": [
+      "projectId"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "version": {
+        "type": "string",
+        "minLength": 1
+      },
+      "actions": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "components": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "agents": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "host": {
+        "type": "object",
+        "properties": {
+          "exitCode": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "reply": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "exitCode",
+          "reply"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "required": [
+      "actions",
+      "components",
+      "host"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Read registered actions and components. Does not start R or a Core Host."
+}

@@ -1,0 +1,120 @@
+{
+  "method": "protocol.describe",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "method": {
+        "type": "string",
+        "minLength": 1
+      },
+      "cursor": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "maxLength": 128
+      },
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      "maxBytes": {
+        "type": "integer",
+        "minimum": 1024,
+        "maximum": 65536
+      }
+    },
+    "required": []
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "apiVersion": {
+        "const": "2.0"
+      },
+      "schemaVersion": {
+        "const": 2
+      },
+      "revision": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "entries": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string",
+              "minLength": 1
+            },
+            "summary": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "method",
+            "summary"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "next": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "complete": {
+        "type": "boolean"
+      },
+      "contract": {
+        "type": "object",
+        "properties": {
+          "method": {
+            "type": "string",
+            "minLength": 1
+          },
+          "inputSchema": {
+            "type": "object"
+          },
+          "outputSchema": {
+            "type": "object"
+          },
+          "definitions": {
+            "type": "object"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "method",
+          "inputSchema",
+          "outputSchema",
+          "definitions",
+          "description"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "required": [
+      "apiVersion",
+      "schemaVersion",
+      "revision",
+      "entries",
+      "next",
+      "complete"
+    ],
+    "additionalProperties": true
+  },
+  "description": null
+}

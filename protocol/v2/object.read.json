@@ -1,0 +1,127 @@
+{
+  "method": "object.read",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "resource": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ]
+      }
+    },
+    "required": [
+      "projectId",
+      "resource"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "resource": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "projectId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "owner": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "file",
+              "table",
+              "media",
+              "object",
+              "plot",
+              "model"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "provenance": {
+            "type": "object"
+          },
+          "coverage": {
+            "type": "object"
+          },
+          "availability": {
+            "enum": [
+              "available",
+              "partial",
+              "missing",
+              "unknown"
+            ]
+          },
+          "format": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "projectId",
+          "owner",
+          "kind",
+          "path",
+          "bytes",
+          "provenance",
+          "coverage",
+          "availability"
+        ]
+      },
+      "observation": {
+        "const": "exported-snapshot"
+      },
+      "value": {}
+    },
+    "required": [
+      "resource",
+      "observation",
+      "value"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Read a bounded exported JSON object snapshot, not live R memory."
+}

@@ -1,0 +1,58 @@
+{
+  "method": "project.createWorkspace",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80,
+        "pattern": "\\S"
+      },
+      "selectionIds": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        },
+        "minItems": 1,
+        "maxItems": 32,
+        "uniqueItems": true
+      },
+      "changeId": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "required": [
+      "name",
+      "selectionIds",
+      "changeId"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "root": {
+        "type": "string",
+        "minLength": 1
+      },
+      "openedAt": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "required": [
+      "id",
+      "root",
+      "openedAt"
+    ],
+    "additionalProperties": true
+  },
+  "description": null
+}

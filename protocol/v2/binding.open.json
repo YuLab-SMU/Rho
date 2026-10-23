@@ -1,0 +1,257 @@
+{
+  "method": "binding.open",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "externalSessionId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "adapter": {
+        "const": "claude-code-mcp"
+      },
+      "attachment": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "taskId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "role": {
+            "enum": [
+              "business",
+              "presentation"
+            ]
+          },
+          "adapterRegistrationId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "transportCapabilities": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "inputMode": {
+                "enum": [
+                  "pull-tool-result",
+                  "post-tool-boundary",
+                  "queued-turn",
+                  "unsupported"
+                ]
+              },
+              "inboxLookup": {
+                "type": "boolean"
+              },
+              "inboxDeduplication": {
+                "enum": [
+                  "none",
+                  "retained-original-delivery"
+                ]
+              },
+              "hookEmissionDeduplication": {
+                "enum": [
+                  "none",
+                  "no-reemit-after-attempt"
+                ]
+              },
+              "modelConsumptionAck": {
+                "const": false
+              },
+              "nativeExecutionDeduplication": {
+                "const": false
+              }
+            },
+            "required": [
+              "inputMode",
+              "inboxLookup",
+              "inboxDeduplication",
+              "hookEmissionDeduplication",
+              "modelConsumptionAck",
+              "nativeExecutionDeduplication"
+            ]
+          }
+        },
+        "required": [
+          "taskId",
+          "role",
+          "adapterRegistrationId",
+          "transportCapabilities"
+        ]
+      }
+    },
+    "required": [
+      "projectId",
+      "externalSessionId",
+      "adapter"
+    ]
+  },
+  "outputSchema": {
+    "anyOf": [
+      {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "projectId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "principal": {
+            "type": "string",
+            "minLength": 1
+          },
+          "externalSessionId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "adapter": {
+            "const": "claude-code-mcp"
+          },
+          "status": {
+            "enum": [
+              "connected",
+              "disconnected"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "principal",
+          "externalSessionId",
+          "adapter",
+          "status",
+          "at"
+        ],
+        "additionalProperties": true
+      },
+      {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "projectId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "principal": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "externalSessionId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "adapter": {
+            "const": "claude-code-mcp"
+          },
+          "status": {
+            "enum": [
+              "connected",
+              "disconnected"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "attachment": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "taskId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "role": {
+                "enum": [
+                  "business",
+                  "presentation"
+                ]
+              },
+              "adapterRegistrationId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "transportCapabilities": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "inputMode": {
+                    "enum": [
+                      "pull-tool-result",
+                      "post-tool-boundary",
+                      "queued-turn",
+                      "unsupported"
+                    ]
+                  },
+                  "inboxLookup": {
+                    "type": "boolean"
+                  },
+                  "inboxDeduplication": {
+                    "enum": [
+                      "none",
+                      "retained-original-delivery"
+                    ]
+                  },
+                  "hookEmissionDeduplication": {
+                    "enum": [
+                      "none",
+                      "no-reemit-after-attempt"
+                    ]
+                  },
+                  "modelConsumptionAck": {
+                    "const": false
+                  },
+                  "nativeExecutionDeduplication": {
+                    "const": false
+                  }
+                },
+                "required": [
+                  "inputMode",
+                  "inboxLookup",
+                  "inboxDeduplication",
+                  "hookEmissionDeduplication",
+                  "modelConsumptionAck",
+                  "nativeExecutionDeduplication"
+                ]
+              }
+            },
+            "required": [
+              "taskId",
+              "role",
+              "adapterRegistrationId",
+              "transportCapabilities"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "projectId",
+          "principal",
+          "externalSessionId",
+          "adapter",
+          "status",
+          "at",
+          "attachment"
+        ]
+      }
+    ]
+  },
+  "description": "Bind this external session to the authenticated project scope. Conversation stays in Claude Code."
+}

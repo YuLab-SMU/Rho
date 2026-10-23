@@ -1,0 +1,25 @@
+{
+  "method": "context.read",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "contextId": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "required": [
+      "projectId",
+      "contextId"
+    ]
+  },
+  "outputSchema": {
+    "type": "object"
+  },
+  "description": "Read an explicit versioned context package. Receipt establishes a tool fetch, not proactive delivery to a conversation."
+}

@@ -1,0 +1,296 @@
+{
+  "method": "workspace.enhance",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "taskId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "compositionId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "presenterBindingId": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "presenterGeneration": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "expectedVersion": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "changeId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "basisWitnessId": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "basisObservationId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "enhancement": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "emphasisViewId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 600
+          }
+        },
+        "required": [
+          "emphasisViewId"
+        ]
+      }
+    },
+    "required": [
+      "projectId",
+      "taskId",
+      "compositionId",
+      "presenterBindingId",
+      "presenterGeneration",
+      "expectedVersion",
+      "changeId",
+      "basisWitnessId",
+      "basisObservationId",
+      "enhancement"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "compositionId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "commitVersion": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "currentVersion": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "receipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "changeId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "requestDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "author": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "changeId",
+          "requestDigest",
+          "author",
+          "version",
+          "at"
+        ]
+      },
+      "witness": {
+        "anyOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "witnessId": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "projectId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "taskId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "compositionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "compositionVersion": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "sourceEvent": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "adapterId": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "adapterEpoch": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "sourceSeq": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "adapterId",
+                  "adapterEpoch",
+                  "sourceSeq"
+                ]
+              },
+              "policyRef": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "views": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "viewId": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                    },
+                    "component": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "componentVersion": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    },
+                    "resource": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "version": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "viewId",
+                    "component",
+                    "componentVersion",
+                    "resource"
+                  ]
+                },
+                "maxItems": 8,
+                "minItems": 1
+              },
+              "dataValidation": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "integrity": {
+                    "const": "hash-verified"
+                  },
+                  "shape": {
+                    "const": "typed-table-read"
+                  },
+                  "domain": {
+                    "const": "not-judged"
+                  }
+                },
+                "required": [
+                  "integrity",
+                  "shape",
+                  "domain"
+                ]
+              },
+              "at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "witnessId",
+              "projectId",
+              "taskId",
+              "compositionId",
+              "compositionVersion",
+              "sourceEvent",
+              "policyRef",
+              "views",
+              "dataValidation",
+              "at"
+            ]
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "witnessState": {
+        "enum": [
+          "retained",
+          "pending",
+          "expired"
+        ]
+      },
+      "visibility": {
+        "const": "not-observed-by-this-write"
+      }
+    },
+    "required": [
+      "compositionId",
+      "commitVersion",
+      "currentVersion",
+      "receipt",
+      "witness",
+      "witnessState",
+      "visibility"
+    ]
+  },
+  "description": "Assigned presenter only: conditional display emphasis/title/plain Agent note using exact current generation, witness and observation. Does not modify business resources, feedback or protection."
+}

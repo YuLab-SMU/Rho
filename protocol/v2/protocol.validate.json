@@ -1,0 +1,78 @@
+{
+  "method": "protocol.validate",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "method": {
+        "type": "string",
+        "minLength": 1
+      },
+      "body": {
+        "type": "object"
+      }
+    },
+    "required": [
+      "method",
+      "body"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "method": {
+        "type": "string",
+        "minLength": 1
+      },
+      "valid": {
+        "type": "boolean"
+      },
+      "problems": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "keyword": {
+              "type": "string",
+              "minLength": 1
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fix": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "path",
+            "keyword",
+            "message",
+            "fix"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "requires": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "required": [
+      "method",
+      "valid",
+      "problems",
+      "requires"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Check one operation body against its versioned schema without executing it: the same checks the server applies, reported with the edit each problem needs. Use it before a write whose shape is uncertain; it changes nothing and starts nothing."
+}

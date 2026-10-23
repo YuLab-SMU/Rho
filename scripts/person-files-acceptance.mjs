@@ -1,6 +1,5 @@
 // The person's own path, checked in a real browser at three widths: list the folder
-// they selected, open a text file from it, read the bytes, and confirm the boundary
-// the tab still has. This is the check behind rho.person-files.
+// they selected, open, edit and conditionally save a text file without an Agent.
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
@@ -79,15 +78,52 @@ try {
   await page.waitForTimeout(2000);
   const editor = (await page.locator('.cm-content:visible').innerText().catch(() => '')) || await page.evaluate(() => document.body.innerText);
   assert.match(editor, /datasets::cars/);
-  // A tab may type into the buffer but never write it, and the product says so
-  // instead of letting the person discover it after typing.
-  // Visible, not merely present in the DOM: a note below the editor is never read.
-  const note = page.locator('.rho-tab-buffer-note');
-  assert.equal(await note.count(), 1);
-  assert.equal(await note.isVisible(), true);
-  assert.match(await note.innerText(), /Saving to disk is an Agent step/);
-  await page.screenshot({ path: path.join(evidence, 'opened.png') });
-  check('the opened file shows its real bytes, and says saving is an Agent step');
+  const editorInput = page.locator('.cm-content:visible');
+  const save = page.getByRole('button', { name: 'Save document', exact: true });
+  const disk = path.join(project, 'R', 'plot.R');
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await editorInput.click();
+    await page.keyboard.press('ControlOrMeta+End');
+    await page.keyboard.insertText(`# saved at ${width} · 中文 🧬\n`);
+    await save.waitFor();
+    await page.waitForFunction(() => !document.querySelector('[aria-label="Save document"]')?.disabled);
+    if (width === 768) await page.keyboard.press('ControlOrMeta+s');
+    else await save.click();
+    for (let n = 0; n < 100 && !(await fs.readFile(disk, 'utf8')).includes(`saved at ${width}`); n++) await page.waitForTimeout(50);
+    assert.match(await fs.readFile(disk, 'utf8'), new RegExp(`saved at ${width} · 中文 🧬`));
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `editor fits ${width}`);
+    await page.screenshot({ path: path.join(evidence, 'saved-' + width + '.png') });
+  }
+  check('button and keyboard save real Unicode bytes at all three widths');
+  await page.reload();
+  await editorInput.waitFor();
+  assert.match(await editorInput.innerText(), /saved at 390/);
+  check('a refreshed tab reads the saved document');
+
+  await editorInput.click(); await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.insertText('# collaborator save\n');
+  const documentId = (await operator.call('observation.snapshot', { projectId: p.id })).documents[0].id;
+  let shared;
+  for (let n = 0; n < 100; n++) {
+    shared = await operator.call('document.read', { projectId: p.id, documentId });
+    if (shared.content.includes('collaborator save')) break;
+    await page.waitForTimeout(50);
+  }
+  await operator.call('document.save', { projectId: p.id, documentId, expectedVersion: shared.version, expectedRevision: shared.revision, expectedDiskDigest: shared.diskDigest, changeId: 'collaborator-save' });
+  await page.waitForFunction(() => document.querySelector('[aria-label="Save document"]')?.disabled === true);
+  check('another writer saving the same text version updates the tab through the owner revision');
+
+  await fs.writeFile(disk, 'External writer preserved.\n');
+  await editorInput.click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.insertText('# unsaved local edit\n');
+  await page.waitForFunction(() => !document.querySelector('[aria-label="Save document"]')?.disabled);
+  await save.click();
+  await page.getByRole('status').filter({ hasText: /file changed on disk/i }).waitFor();
+  assert.equal(await fs.readFile(disk, 'utf8'), 'External writer preserved.\n');
+  assert.match(await editorInput.innerText(), /unsaved local edit/);
+  check('an external disk write refuses save and preserves both disk and buffer');
 
   // The boundary a tab still has: refused by the service, not by the interface.
   const { BrowserClient } = await import(pathToFileURL(path.join(packageRoot, 'dist/browser.js')).href);

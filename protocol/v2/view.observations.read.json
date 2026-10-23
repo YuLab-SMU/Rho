@@ -1,0 +1,470 @@
+{
+  "method": "view.observations.read",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "taskId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "compositionId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "viewId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "clientId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "query": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "maxBytes": {
+            "type": "integer",
+            "minimum": 1024,
+            "maximum": 65536
+          }
+        },
+        "required": [
+          "after",
+          "cursor",
+          "limit",
+          "maxBytes"
+        ]
+      }
+    },
+    "required": [
+      "projectId",
+      "taskId",
+      "compositionId",
+      "viewId",
+      "clientId",
+      "query"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "observations": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "request": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "projectId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                },
+                "taskId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                },
+                "compositionId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                },
+                "compositionVersion": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "witnessId": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "viewId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                },
+                "observationId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                },
+                "clientId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                },
+                "clientEpoch": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                },
+                "rendererBuild": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "evidence": {
+                  "enum": [
+                    "dom-visible",
+                    "hidden",
+                    "unmounted",
+                    "unavailable"
+                  ]
+                },
+                "coverage": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "const": "table-dom"
+                        },
+                        "resource": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version"
+                          ]
+                        },
+                        "query": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "offset": {
+                              "type": "integer",
+                              "minimum": 0
+                            },
+                            "limit": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 1000
+                            },
+                            "sort": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "column": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128
+                                    },
+                                    "direction": {
+                                      "enum": [
+                                        "asc",
+                                        "desc"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "column",
+                                    "direction"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            },
+                            "filter": {
+                              "anyOf": [
+                                {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "column": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 128
+                                    },
+                                    "op": {
+                                      "enum": [
+                                        "eq",
+                                        "lt",
+                                        "gt",
+                                        "isNull"
+                                      ]
+                                    },
+                                    "value": {
+                                      "type": [
+                                        "string",
+                                        "number",
+                                        "boolean",
+                                        "null"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "column",
+                                    "op"
+                                  ]
+                                },
+                                {
+                                  "type": "null"
+                                }
+                              ]
+                            }
+                          },
+                          "required": [
+                            "offset",
+                            "limit",
+                            "sort",
+                            "filter"
+                          ]
+                        },
+                        "loadedRows": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "visibleRows": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "entityKey": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 128
+                              },
+                              "columns": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                },
+                                "maxItems": 256,
+                                "minItems": 1
+                              }
+                            },
+                            "required": [
+                              "entityKey",
+                              "columns"
+                            ]
+                          },
+                          "maxItems": 1000,
+                          "minItems": 0
+                        },
+                        "namespace": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 128
+                        },
+                        "rowValuesDigest": {
+                          "type": "string",
+                          "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "documentVisible": {
+                          "type": "boolean"
+                        },
+                        "panelWithinViewport": {
+                          "type": "boolean"
+                        },
+                        "keyCellsWithinViewport": {
+                          "type": "boolean"
+                        },
+                        "framesAfterData": {
+                          "type": "integer",
+                          "minimum": 2,
+                          "maximum": 10
+                        },
+                        "occlusion": {
+                          "enum": [
+                            "not-verified",
+                            "element-hit-tested"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "resource",
+                        "query",
+                        "loadedRows",
+                        "visibleRows",
+                        "namespace",
+                        "rowValuesDigest",
+                        "documentVisible",
+                        "panelWithinViewport",
+                        "keyCellsWithinViewport",
+                        "framesAfterData",
+                        "occlusion"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "time": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "browserObservedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "performanceNowMs": {
+                      "type": "number",
+                      "minimum": 0
+                    },
+                    "clockDomain": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                    }
+                  },
+                  "required": [
+                    "browserObservedAt",
+                    "performanceNowMs",
+                    "clockDomain"
+                  ]
+                }
+              },
+              "required": [
+                "projectId",
+                "taskId",
+                "compositionId",
+                "compositionVersion",
+                "witnessId",
+                "viewId",
+                "observationId",
+                "clientId",
+                "clientEpoch",
+                "rendererBuild",
+                "evidence",
+                "coverage",
+                "time"
+              ]
+            },
+            "receipt": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "observationId": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                },
+                "requestDigest": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "serverReceivedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "cursor": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "historicalAtReceipt": {
+                  "type": "boolean"
+                },
+                "firstResourceObservationId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "firstLayoutObservationId": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "observationId",
+                "requestDigest",
+                "serverReceivedAt",
+                "cursor",
+                "historicalAtReceipt",
+                "firstResourceObservationId",
+                "firstLayoutObservationId"
+              ]
+            }
+          },
+          "required": [
+            "request",
+            "receipt"
+          ]
+        },
+        "maxItems": 100,
+        "minItems": 0
+      },
+      "next": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "complete": {
+        "type": "boolean"
+      },
+      "retainedFromCursor": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "gap": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "observations",
+      "next",
+      "complete",
+      "retainedFromCursor",
+      "gap"
+    ]
+  },
+  "description": null
+}

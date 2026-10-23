@@ -83,6 +83,7 @@ test('failed event publication interrupts observers without undoing acknowledged
     assert.equal(edited.content, 'acknowledged');
     assert.ok((await stream.text()).includes('event: gap'));
     s.events = original; await fs.rmdir(eventFile);
-    assert.equal((await c.call('observation.snapshot', { projectId: p.id })).documents[0].content, 'acknowledged');
+    assert.equal((await c.call('observation.snapshot', { projectId: p.id })).documents[0].bytes, Buffer.byteLength('acknowledged'));
+    assert.equal((await c.call('document.read', { projectId: p.id, documentId: d.id })).content, 'acknowledged');
   } finally { await s.close(); await fs.rm(root, { recursive: true, force: true }); }
 });

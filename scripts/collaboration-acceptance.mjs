@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { RhoService, RhoClient, native, packageRoot } from './support.mjs';
 import { runClaude } from './claude-consumer.mjs';
+import { callOperation, mcpToolNames } from './mcp-consumer.mjs';
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const root = path.resolve(process.argv[2] ?? 'work/collaboration-' + Date.now());
 await fs.mkdir(root, { recursive: true, mode: 0o700 });
@@ -50,14 +51,14 @@ try {
   const transport = new StdioClientTransport({ command: process.execPath, args: [path.join(packageRoot, 'node_modules/@rho-workspace/plugin-agent/dist/mcp.js')], env: { PATH: process.env.PATH, RHO_AGENT_CONNECTION: descriptor }, stderr: 'pipe' });
   transport.stderr.resume(); await mcp.connect(transport);
   const agentCall = async (method, input = {}) => {
-    const result = await mcp.callTool({ name: 'rho_' + method.replaceAll('.', '_'), arguments: input });
-    assert.equal(result.isError, false, JSON.stringify(result.structuredContent)); return result.structuredContent.value;
+    const result = await callOperation(mcp, method, input);
+    assert.equal(result.ok, true, JSON.stringify(result)); return result.value;
   };
   const runModel = async (phase, prompt) => {
     const directory = path.join(root, phase); await fs.mkdir(directory, { mode: 0o700 });
     const file = path.join(directory, 'mcp.json');
     await fs.writeFile(file, JSON.stringify({ mcpServers: { rho: { command: process.execPath, args: [path.join(packageRoot, 'node_modules/@rho-workspace/plugin-agent/dist/mcp.js')], env: { RHO_AGENT_CONNECTION: descriptor } } } }), { mode: 0o600 });
-    const result = await runClaude(['--print', '--output-format', 'json', '--no-session-persistence', '--strict-mcp-config', '--mcp-config', file, '--tools', '', '--allowedTools', ...methods.map(m => 'mcp__rho__rho_' + m.replaceAll('.', '_')), '--permission-mode', 'dontAsk', '--setting-sources', '', '--max-turns', '24', prompt + '\nUse only rho MCP tools. No shell/filesystem/native execution. Report facts, not claims of completion.'], p.root, directory);
+    const result = await runClaude(['--print', '--output-format', 'json', '--no-session-persistence', '--strict-mcp-config', '--mcp-config', file, '--tools', '', '--allowedTools', ...mcpToolNames.map(name => 'mcp__rho__' + name), '--permission-mode', 'dontAsk', '--setting-sources', '', '--max-turns', '48', prompt + '\nUse rho_index to select an owner or search; rho_resolve only needed operations and Skills, rho_call with contractRef, and rho_read for selected large result fields. No shell/filesystem/native execution. Report facts, not claims of completion.'], p.root, directory);
     report.modelRuns.push({ phase, ...result }); assert.equal(result.exitCode, 0, 'Real Agent failed or timed out; this is not replaced by deterministic output.');
   };
   const initial = { compositionId: 'workspace', expectedVersion: 0, changeId: 'initial-composition', operations: [{ op: 'replace', rootId: 'root', nodes }] };

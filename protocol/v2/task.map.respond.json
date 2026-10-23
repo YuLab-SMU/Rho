@@ -1,0 +1,107 @@
+{
+  "method": "task.map.respond",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "expectedVersion": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "changeId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "target": {
+        "type": "string",
+        "pattern": "^(map:[a-z0-9-]{1,32}|item:[A-Za-z0-9._:@-]{1,128})$"
+      },
+      "action": {
+        "enum": [
+          "pin",
+          "unpin",
+          "revert",
+          "accept",
+          "dismiss"
+        ]
+      },
+      "form": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{0,31}$"
+      },
+      "params": {
+        "type": "object",
+        "maxProperties": 16
+      },
+      "suggestionId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      }
+    },
+    "required": [
+      "projectId",
+      "expectedVersion",
+      "changeId",
+      "target",
+      "action"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "format": {
+        "const": "rho.task-map/1"
+      },
+      "version": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "vocabulary": {
+        "type": "object"
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "next": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "presentation": {
+        "type": "object"
+      },
+      "suggestions": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "receipts": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      }
+    },
+    "required": [
+      "format",
+      "version",
+      "vocabulary",
+      "items",
+      "next",
+      "presentation",
+      "suggestions"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Browser person only: pin or unpin what they see, revert an Agent form change (layout only, never the work), or accept/dismiss a pending suggestion."
+}

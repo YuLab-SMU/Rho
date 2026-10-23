@@ -1,0 +1,95 @@
+{
+  "method": "capability.configure",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "expectedVersion": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "changeId": {
+        "type": "string",
+        "minLength": 1
+      },
+      "enabled": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        },
+        "maxItems": 32,
+        "uniqueItems": true
+      }
+    },
+    "required": [
+      "projectId",
+      "expectedVersion",
+      "changeId",
+      "enabled"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "version": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "enabled": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "receipt": {
+        "type": "object",
+        "properties": {
+          "changeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "author": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "enabled": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "at": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "changeId",
+          "author",
+          "version",
+          "enabled",
+          "at"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "required": [
+      "version",
+      "enabled",
+      "receipt"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Persist the selected project plugins with a conditional version and idempotent changeId. This changes routing only; it installs no package, starts no runtime and cancels no work."
+}

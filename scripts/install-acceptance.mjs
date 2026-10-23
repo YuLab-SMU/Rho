@@ -75,7 +75,14 @@ try {
   const fixtures = JSON.parse(await fs.readFile(path.join(pkg, 'fixtures/v2/states.json'), 'utf8'));
   assert.equal(fixtures.readOnly, true); assert.ok(fixtures.cases.length >= 9);
   assert.equal(fixtures.apiVersion, '2.0');
-  await fs.access(path.join(pkg, 'protocol/v1.json')); await fs.access(path.join(pkg, 'protocol/v2.json'));
+  await fs.access(path.join(pkg, 'protocol/v1.json'));
+  const index = JSON.parse(await fs.readFile(path.join(pkg, 'protocol/v2.json'), 'utf8'));
+  assert.equal(index.format, 'rho.protocol-index/1');
+  for (const ref of [index.shared, ...Object.values(index.operations)]) {
+    assert.match(ref.path, /^v2\/[a-z.]+\.json$/);
+    const bytes = await fs.readFile(path.join(pkg, 'protocol', ref.path));
+    assert.equal(bytes.length, ref.bytes); assert.equal(createHash('sha256').update(bytes).digest('hex'), ref.sha256);
+  }
   for (const item of manifest.plugins.packages) {
     const plugin = path.join(pkg, 'node_modules', item.package);
     const pluginFiles = await fs.readdir(plugin);

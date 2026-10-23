@@ -1,0 +1,59 @@
+{
+  "method": "project.open",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "path": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "required": [
+      "path"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "root": {
+        "type": "string",
+        "minLength": 1
+      },
+      "openedAt": {
+        "type": "string",
+        "minLength": 1
+      },
+      "host": {
+        "type": "object",
+        "properties": {
+          "exitCode": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 4
+          },
+          "reply": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "exitCode",
+          "reply"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "required": [
+      "id",
+      "root",
+      "openedAt",
+      "host"
+    ],
+    "additionalProperties": true
+  },
+  "description": null
+}

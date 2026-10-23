@@ -1,0 +1,60 @@
+{
+  "method": "workspace.export",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "destination": {
+        "type": "string",
+        "minLength": 1
+      },
+      "format": {
+        "enum": [
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    "required": [
+      "projectId",
+      "destination"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "destination": {
+        "type": "string",
+        "minLength": 1
+      },
+      "state": {
+        "const": "complete"
+      },
+      "files": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "writeCondition": {
+        "const": "new-directory"
+      },
+      "manifestDigest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "required": [
+      "destination",
+      "state",
+      "files",
+      "writeCondition",
+      "manifestDigest"
+    ],
+    "additionalProperties": true
+  },
+  "description": null
+}

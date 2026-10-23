@@ -1,33 +1,22 @@
 import { canonical, digest, requireThat } from '@rho-workspace/plugin-contracts';
 import { Capabilities, rhoWorkspaceSkill } from './capabilities.js';
 import { protocol } from './protocol.js';
+import { schemaClosure } from './protocol-discovery.js';
 import type { Principal, Project } from './state.js';
 import type { Plugins } from './plugins.js';
 const size = (v: any) => Buffer.byteLength(JSON.stringify(v)) + 64;
 const applicationEffects: Record<string, string> = Object.fromEntries([
-  ...['action.lookup', 'action.observe', 'action.output', 'action.list', 'composition.read', 'observation.snapshot', 'interaction.selection.read', 'workspace.observe', 'task.map.read'].map(m => [m, 'read']),
+  ...['protocol.describe', 'protocol.validate', 'capability.list', 'skill.list', 'skill.read', 'action.lookup', 'action.observe', 'action.output', 'action.list', 'composition.read', 'observation.snapshot', 'interaction.selection.read', 'workspace.observe', 'task.map.read'].map(m => [m, 'read']),
   ...['composition.put', 'view.close', 'capability.configure', 'composition.apply', 'composition.undo', 'view.protection.set', 'interaction.selection.set', 'workspace.enhance', 'task.map.declare', 'task.map.present', 'task.map.respond'].map(m => [m, 'metadata']),
   ...['workspace.save', 'workspace.export', 'workspace.restore'].map(m => [m, 'file']),
   ...['action.retry', 'action.cancel'].map(m => [m, 'native']),
 ]);
-const metadata = new Set(['protocol.describe', 'capability.list', 'capability.index', 'capability.resolve', 'skill.list', 'skill.read', 'binding.activity.append', 'task.routing.put', 'feedback.submit', 'view.observe', 'view.observations.read']);
+const metadata = new Set(['capability.index', 'capability.resolve', 'binding.activity.append', 'task.routing.put', 'feedback.submit', 'view.observe', 'view.observations.read']);
 // A projection of the existing selected descriptors and public contracts. No
 // second capability registry, persisted cache or invalidation daemon is created.
 export class Discovery {
   constructor(public plugins: Plugins, public project: Project, public principal: Principal, public route: any, public bindings: any[]) {}
   role() { return this.principal.kind === 'browser' ? 'browser' : this.principal.profile === 'layered-presentation' ? 'presentation' : this.principal.methods.includes('binding.activity.append') ? 'adapter' : 'business'; }
-  private closed(schema: any, definitions: Record<string, any>) {
-    const visit = (v: any): void => {
-      if (!v || typeof v !== 'object') return;
-      if (v.$ref) {
-        requireThat(/^#\/definitions\/[^/]+$/.test(v.$ref), 'condition', 'Contract needs an unsupported external schema reference.');
-        const name = v.$ref.split('/').at(-1);
-        if (!(name in definitions)) { const source = (protocol.definitions as any)[name]; requireThat(source, 'condition', 'Contract schema dependency is unavailable.'); definitions[name] = structuredClone(source); visit(source); }
-      }
-      Object.values(v).forEach(visit);
-    };
-    visit(schema); return schema;
-  }
   async snapshot() {
     const capabilities = new Capabilities(this.plugins, this.project), state = await capabilities.state(), role = this.role();
     const caller = this.bindings.find(b => b.principal === this.principal.id && b.attachment?.taskId === this.route?.taskId && b.attachment?.role === role);
@@ -46,11 +35,11 @@ export class Discovery {
       if (role === 'presentation') skills = this.plugins.descriptor('agent')?.skills.filter(s => s.id === 'agent.presentation') ?? [];
       else if (owner === 'agent') skills = skills.filter(s => s.id === (operation.method.startsWith('feedback.') ? 'agent.feedback' : 'agent.workspace'));
       if (role !== 'presentation' && !skills.some(s => s.id === rhoWorkspaceSkill.id)) skills = [rhoWorkspaceSkill, ...skills];
-      const skillRefs = skills.slice(0, 8).map(s => make('skill', { id: s.id, version: s.version, digest: s.digest, content: s.content }));
+      const skillRefs = skills.slice(0, 8).map(s => make('skill', { id: s.id, version: s.version, digest: s.digest, content: s.content, requires: s.requires, example: s.example, failureRecipes: s.failureRecipes }));
       const inputSchema = structuredClone(protocol.operations[operation.method]);
       delete inputSchema.properties.projectId; inputSchema.required = inputSchema.required.filter((k: string) => k !== 'projectId');
-      const outputSchema = structuredClone(protocol.responses[operation.method]), definitions: Record<string, any> = {};
-      this.closed(inputSchema, definitions); this.closed(outputSchema, definitions);
+      if (operation.method === 'resource.read') inputSchema.properties.maxBytes = { ...inputSchema.properties.maxBytes, maximum: this.plugins.config.resources?.maxReadBytes ?? this.plugins.need('files').fileLimits.maxReadBytes };
+      const outputSchema = structuredClone(protocol.responses[operation.method]), definitions = schemaClosure([inputSchema, outputSchema], protocol.definitions);
       const effect = operation.effect ?? applicationEffects[operation.method];
       requireThat(effect, 'condition', 'The selected application operation needs an explicit effect contract.');
       const content = { method: operation.method, owner, contractVersion: operation.version ?? '2.0', providerVersion: descriptor?.version ?? '0.4.0', consumer: 'layered-mcp', injectedFields: { projectId: 'authenticated private connection descriptor' }, inputSchema, outputSchema, definitions, requiredSkillRefs: skillRefs, effect, conditions: [protocol.descriptions[operation.method as keyof typeof protocol.descriptions] ?? operation.method] };
@@ -63,19 +52,27 @@ export class Discovery {
   async index(input: any) {
     requireThat(input.role === this.role(), 'scope', 'Requested role cannot expand the authenticated role.');
     const catalog = await this.snapshot(), q = input.query;
+    const entries = catalog.entries.filter(e => (!q.owner || e.owner === q.owner) && (!q.search || (e.id + ' ' + e.summary).toLowerCase().includes(q.search.toLowerCase())));
+    if (!q.owner && !q.search) {
+      const groups = [...new Set<string>(entries.map(e => e.owner))].sort().map(owner => ({ owner, operations: entries.filter(e => e.owner === owner).length }));
+      const result = { catalogRef: catalog.catalogRef, authorizationRef: catalog.authorizationRef, scopeHint: catalog.scopeHint, groups, entries: [], next: null, complete: true };
+      requireThat(!q.cursor && q.after === 0, 'invalid', 'Owner discovery has no continuation. Select an owner.');
+      requireThat(size(result) <= q.maxBytes, 'limit', 'Owner index exceeds this page budget.', { requiredBytes: size(result) });
+      return result;
+    }
     const pin = digest(canonical([catalog.catalogRef, { ...input, query: { ...q, cursor: null } }]));
     let offset = q.after;
     if (q.cursor) { const [position, identity] = q.cursor.split(':'); requireThat(identity === pin, 'stale', 'Catalog, authorization, scope or query changed.'); offset = Number(position); }
-    requireThat(Number.isSafeInteger(offset) && offset >= q.after && offset <= catalog.entries.length, 'invalid', 'Catalog page position is invalid.');
+    requireThat(Number.isSafeInteger(offset) && offset >= q.after && offset <= entries.length, 'invalid', 'Catalog page position is invalid.');
     const result: any = { catalogRef: catalog.catalogRef, authorizationRef: catalog.authorizationRef, scopeHint: catalog.scopeHint, entries: [], next: null, complete: true };
-    for (const entry of catalog.entries.slice(offset)) {
+    for (const entry of entries.slice(offset)) {
       const trial = { ...result, entries: [...result.entries, entry], next: (offset + result.entries.length + 1) + ':' + pin, complete: false };
       if (result.entries.length >= q.limit || size(trial) > q.maxBytes) break;
       result.entries.push(entry);
     }
-    result.complete = offset + result.entries.length === catalog.entries.length;
+    result.complete = offset + result.entries.length === entries.length;
     if (!result.complete) result.next = (offset + result.entries.length) + ':' + pin;
-    requireThat(size(result) <= q.maxBytes && (result.complete || result.entries.length), 'limit', 'A complete catalog entry does not fit this page.', { requiredBytes: size({ ...result, entries: catalog.entries.slice(offset, offset + 1) }) });
+    requireThat(size(result) <= q.maxBytes && (result.complete || result.entries.length), 'limit', 'A complete catalog entry does not fit this page.', { requiredBytes: size({ ...result, entries: entries.slice(offset, offset + 1) }) });
     return result;
   }
   async resolve(input: any) {

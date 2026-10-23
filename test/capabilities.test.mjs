@@ -17,7 +17,7 @@ test('project configuration, operation authorization and shipped Skills are inde
     const call = (m, input = {}) => c.call(m, { projectId: a.id, ...input });
     const catalog = await call('capability.list');
     assert.equal(catalog.plugins.find(p => p.id === 'documents').packagePresent, true);
-    assert.equal(catalog.plugins.find(p => p.id === 'documents').uiRenderable, false);
+    assert.equal(catalog.plugins.find(p => p.id === 'documents').uiRenderable, true);
     const cfg = await call('capability.configure', { expectedVersion: 0, changeId: 'documents-only', enabled: ['documents', 'agent'] });
     assert.equal(cfg.version, 1); assert.equal(cfg.receipt.author, 'operator');
     assert.deepEqual(await call('capability.configure', { expectedVersion: 0, changeId: 'documents-only', enabled: ['documents', 'agent'] }), cfg);

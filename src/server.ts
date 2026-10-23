@@ -7,6 +7,7 @@ import { Ajv } from 'ajv';
 import { atomicJson, canonical, confined, digest, Fault, now, publicResource, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
 import { Plugins, type PluginConfig } from './plugins.js';
 import { protocol, operations } from './protocol.js';
+import { describeProtocol } from './protocol-discovery.js';
 import { protocol as legacyProtocol } from './legacy-protocol.js';
 import { legacyResponse } from './legacy-response.js';
 import { CoreBridge } from './bridge.js';
@@ -19,7 +20,7 @@ import { Capabilities } from './capabilities.js';
 import { BrowserAccess, browserLimits } from './browser-access.js';
 import { NativeFolderPicker, nativeFolderLimits } from './native-folders.js';
 import { homedir } from 'node:os';
-import { serveWeb, webRoot } from './web-assets.js';
+import { serveWeb, webRoot, installedWebEntries } from './web-assets.js';
 import { Presentation, presentationWitnessLimits, visibilityLimits } from './presentation.js';
 import { presentationSchemas } from './presentation-contracts.js';
 import { isNativeTime } from './native-contracts.js';
@@ -251,6 +252,7 @@ export class RhoService {
   async start() {
     try {
     await this.plugins.load();
+    this.plugins.installedUi = await installedWebEntries(this.config.webRoot);
     await this.state.init();
     for (const project of this.state.projects) if (project.sources) this.plugins.sourceFolders.set(project.id, project.sources);
     this.adminToken = randomBytes(32).toString('hex');
@@ -265,7 +267,7 @@ export class RhoService {
       await this.state.close(); throw e;
     }
   }
-  async agentConnection(projectId: string, externalSessionId: string, file: string, methods?: string[], pluginFilter?: string[], profile?: 'layered-business' | 'layered-presentation') {
+  async agentConnection(projectId: string, externalSessionId: string, file: string, methods?: string[], pluginFilter?: string[], profile: 'layered-business' | 'layered-presentation' = 'layered-business') {
     requireThat(profile === undefined || ['layered-business', 'layered-presentation'].includes(profile), 'invalid', 'Choose an explicitly supported layered profile.');
     const project = await this.state.project(projectId, this.state.principals.find(p => p.id === 'operator')!);
     this.plugins.need('agent');
@@ -274,7 +276,7 @@ export class RhoService {
     const available = Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('project.') && !m.startsWith('requirements.prepare') && !m.startsWith('workspace.restore') && !['task.routing.put', 'binding.activity.append', 'feedback.submit', 'view.observe', 'view.observations.read', 'task.map.respond'].includes(m));
     const profileMethods = profile === 'layered-presentation' ? ['binding.open', 'capability.index', 'capability.resolve', 'workspace.observe', 'workspace.enhance'] : available.filter(m => !['workspace.observe', 'workspace.enhance'].includes(m));
     const selected = methods ?? (profile === 'layered-presentation' ? profileMethods : (await Promise.all(profileMethods.map(async method => [method, await capabilities.isAvailable(method, state)] as const))).filter(([, enabled]) => enabled).map(([method]) => method));
-    requireThat(!profile || selected.every(m => profileMethods.includes(m)), 'scope', 'The selected role cannot receive broader methods.');
+    requireThat(profile !== 'layered-presentation' || selected.every(m => profileMethods.includes(m)), 'scope', 'The selected role cannot receive broader methods.');
     requireThat(selected.every(m => !!operations[m] && !m.startsWith('session.') && !m.startsWith('project.') && m !== 'task.routing.put'), 'invalid', 'Unknown or operator-only Agent capability.');
     requireThat(await Promise.all(selected.map(method => capabilities.isAvailable(method, state))).then(values => values.every(Boolean)), 'unavailable', 'A requested Agent operation has no selected provider.');
     requireThat(!profile || new Set(['capability.index', 'capability.resolve', ...selected]).size <= 64, 'limit', 'Layered connection methods exceed the selected 64-method profile; choose an explicit narrower grant.');
@@ -360,7 +362,8 @@ export class RhoService {
       requireThat(valid, 'unavailable', 'This operation requires the v2 contract.');
       const explained = valid(body) ? null : explainSchema(valid.errors);
       requireThat(valid(body), 'invalid', explained?.length ? `Request does not match the versioned schema: ${explained[0].fix}` : 'Request does not match the versioned schema.', { fields: valid.errors ?? [], problems: explained ?? [], remedy: 'Fix the named fields and resend the same request identity.' });
-      if (legacy && !['protocol.describe', 'action.lookup', 'action.observe', 'action.retry', 'action.cancel', 'action.output', 'action.list', 'resource.read', 'resource.list', 'document.open', 'document.read', 'context.read', 'binding.list', 'binding.activity', 'composition.read', 'observation.snapshot', 'project.list'].includes(method)) throw new Fault('unavailable', 'New writes use the explicit v2 project contract; accepted v1 operations remain observable.');
+      if (legacy && method === 'protocol.describe') throw new Fault('unavailable', 'Use /api/v2/protocol.describe for bounded discovery, or the offline versioned protocol export.');
+      if (legacy && !['action.lookup', 'action.observe', 'action.retry', 'action.cancel', 'action.output', 'action.list', 'resource.read', 'resource.list', 'document.open', 'document.read', 'context.read', 'binding.list', 'binding.activity', 'composition.read', 'observation.snapshot', 'project.list'].includes(method)) throw new Fault('unavailable', 'New writes use the explicit v2 project contract; accepted v1 operations remain observable.');
       let value;
       if (body.projectId && method !== 'project.source.add') {
         value = await this.serial(body.projectId, async () => {
@@ -371,9 +374,8 @@ export class RhoService {
             await this.recordActivity(principal, method, body, undefined, e instanceof Fault ? e.kind : 'storage'); throw e;
           }
         });
-      } else value = method === 'protocol.describe' && legacy ? legacyProtocol : await this.dispatch(method, body, principal, typeof req.headers['x-rho-contract-ref'] === 'string' ? req.headers['x-rho-contract-ref'] : undefined);
-      if (legacy && method === 'protocol.describe') value = legacyProtocol;
-      else if (legacy) value = legacyResponse(value);
+      } else value = await this.dispatch(method, body, principal, typeof req.headers['x-rho-contract-ref'] === 'string' ? req.headers['x-rho-contract-ref'] : undefined);
+      if (legacy) value = legacyResponse(value);
       this.json(res, 200, { apiVersion, ok: true, value });
     } catch (e: any) {
       // A filesystem refusal used to arrive as "could not be confirmed" with no
@@ -407,7 +409,7 @@ export class RhoService {
   private async dataDir(p: Project) { return stateDirectory(p.root, '.rho/rho'); }
   async dispatch(method: string, b: any, principal: Principal, contractRef?: string): Promise<any> {
     requireThat(this.state.principals.some(current => current.id === principal.id && current.tokenHash === principal.tokenHash && current.methods.includes(method) && (!current.expiresAt || Date.parse(current.expiresAt) > Date.now())), 'unauthorized', 'Session authorization expired or was revoked before this operation.');
-    if (method === 'protocol.describe') return protocol;
+    if (method === 'protocol.describe') return describeProtocol(protocol, principal.methods, b);
     // A dry run of any operation body: the same schema the server enforces, with the
     // edit each problem needs. Nothing is executed and no project is touched.
     if (method === 'protocol.validate') {
@@ -470,7 +472,7 @@ export class RhoService {
     const routing = new TaskRouting(p, this.config.capabilityLimits?.maxReceipts, this.config.maxRetainedMetadataBytes);
     // A person's own view of the folder they selected. The tab is confined to this one
     // project, so it may list that folder and open a text file from it; registering
-    // resources, saving and execution stay Agent/operator work.
+    // resources and execution stay Agent/operator work.
     // One call answers "why does nothing work here", before any work is attempted,
     // and it changes nothing: no Host is started and no run is resumed.
     // The person owns the project, so they may see what it is running. The summary is
@@ -600,8 +602,8 @@ export class RhoService {
     if (method === 'session.grant') {
       requireThat(principal.id === 'operator', 'unauthorized', 'Only the local operator may provision a project-scoped session.');
       const file = path.join(this.state.directory, 'agent-' + digest(p.id + ':' + b.externalSessionId) + '.json');
-      await this.agentConnection(p.id, b.externalSessionId, file, b.methods, undefined, b.profile);
-      return { ...(b.profile ? { profile: b.profile } : {}), connectionFile: file, projectId: p.id, methods: b.methods, transport: 'stdio-mcp', externalSessionId: b.externalSessionId };
+      const connection = await this.agentConnection(p.id, b.externalSessionId, file, b.methods, undefined, b.profile);
+      return { profile: connection.profile, connectionFile: file, projectId: p.id, methods: connection.methods, transport: 'stdio-mcp', externalSessionId: b.externalSessionId };
     }
     const capabilities = new Capabilities(this.plugins, p);
     if (method === 'capability.index' || method === 'capability.resolve' || contractRef) {
@@ -800,7 +802,7 @@ export class RhoService {
       }
       const result = await owners.need('agent').readContext(b.contextId, principal.id); await this.emit(p, 'context.changed', result.contextId, principal.id); if (result.principal !== principal.id) await this.emit(p, 'context.changed', result.contextId, result.principal); return result;
     }
-    if (method === 'observation.snapshot') return { project: p, catalog: await capabilities.catalog(principal), documents: await owners.retainedDocuments(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), feedback: await routing.feedbackConfiguration().then(async configuration => { const route = await routing.read(); return configuration ? { taskId: route.taskId, compositionId: route.compositionId, taskVersion: route.version, targetBindingId: route.feedbackOwnerBindingId, draftDocumentId: configuration.draftDocumentId, relatedDocumentId: configuration.relatedDocumentId } : null; }), presentation: await routing.read().then(async route => route ? { taskId: route.taskId, pending: (await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).state()).pending ?? null, witnesses: await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).witnesses() } : null), interactions: await interactions.list(principal.id), taskMap: await new TaskMap(p, this.config.taskMap).read(), annotations: await owners.retainedAnnotations(), contexts: await owners.agent?.contextStates(principal.id) ?? [], selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: owners.documents?.limits ?? {}, r: this.plugins.optional('r') ? { ...this.plugins.need('r').executionLimits, ...this.config.r } : {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
+    if (method === 'observation.snapshot') return { project: p, catalog: await capabilities.catalog(principal), documents: await owners.documentSummaries(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), feedback: await routing.feedbackConfiguration().then(async configuration => { const route = await routing.read(); return configuration ? { taskId: route.taskId, compositionId: route.compositionId, taskVersion: route.version, targetBindingId: route.feedbackOwnerBindingId, draftDocumentId: configuration.draftDocumentId, relatedDocumentId: configuration.relatedDocumentId } : null; }), presentation: await routing.read().then(async route => route ? { taskId: route.taskId, pending: (await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).state()).pending ?? null, witnesses: await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).witnesses() } : null), interactions: await interactions.list(principal.id), taskMap: await new TaskMap(p, this.config.taskMap).read(), annotations: await owners.retainedAnnotations(), contexts: await owners.agent?.contextStates(principal.id) ?? [], selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: owners.documents?.limits ?? {}, r: this.plugins.optional('r') ? { ...this.plugins.need('r').executionLimits, ...this.config.r } : {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
     throw new Fault('unavailable', 'This catalog operation has not been installed.', { operation: method });
   }
   private async events(p: Project) { return readJson<any>(path.join(await this.dataDir(p), 'events.json'), { cursor: 0, events: [] }); }

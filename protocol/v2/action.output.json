@@ -1,0 +1,56 @@
+{
+  "method": "action.output",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "operationId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "stream": {
+        "enum": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "offset": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "maxBytes": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "required": [
+      "projectId",
+      "operationId",
+      "stream",
+      "offset"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "exitCode": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 4
+      },
+      "reply": {
+        "type": "object"
+      }
+    },
+    "required": [
+      "exitCode",
+      "reply"
+    ],
+    "additionalProperties": true
+  },
+  "description": null
+}

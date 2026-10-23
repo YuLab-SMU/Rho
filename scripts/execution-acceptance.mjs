@@ -1,57 +1,34 @@
-// Executes R through a real Host and checks the whole execution loop, which the
-// read-only browser checks deliberately never touch: one Host start, an artifact
-// written where the plan said, a run that reads as finished without an explicit
-// observe, and a registered artifact that can be shown in a view.
-//
-// Needs a Core binary and Rscript: RHO_CORE_BINARY (or --core) and RHO_RSCRIPT.
+// A deterministic consumer of the real stdio MCP boundary, real R execution and
+// real browser renderer. This proves the route, not model reasoning quality.
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { connectMcp, callOperation, mcpEnvelope, mcpToolNames } from './mcp-consumer.mjs';
 
 const packageRoot = path.resolve(process.env.RHO_PACKAGE_ROOT ?? fileURLToPath(new URL('..', import.meta.url)));
 const { RhoService } = await import(pathToFileURL(path.join(packageRoot, 'dist/server.js')).href);
 const { RhoClient } = await import(pathToFileURL(path.join(packageRoot, 'dist/client.js')).href);
-const { runtime } = await import(pathToFileURL(path.join(packageRoot, 'dist/runtime.js')).href);
-const core = process.env.RHO_CORE_BINARY;
-const rscript = process.env.RHO_RSCRIPT;
-if (!core || !rscript) {
-  console.error('Execution acceptance needs RHO_CORE_BINARY and RHO_RSCRIPT: it runs a real Host and R.');
-  process.exit(2);
-}
-
+const selected = process.env.RHO_UI_PLAYWRIGHT_MODULE;
+const { chromium } = await import(selected ? (selected.startsWith('file:') ? selected : pathToFileURL(selected).href) : import.meta.resolve('@playwright/test'));
+const core = process.env.RHO_CORE_BINARY, rscript = process.env.RHO_RSCRIPT;
+if (!core || !rscript) { console.error('Execution acceptance needs RHO_CORE_BINARY and RHO_RSCRIPT.'); process.exit(2); }
 const evidence = path.resolve(process.env.RHO_EXECUTION_EVIDENCE ?? 'work/execution-' + Date.now());
 await fs.mkdir(evidence, { recursive: true, mode: 0o700 });
 const root = await fs.mkdtemp(path.join(os.tmpdir(), 'rho-exec-'));
-const state = path.join(root, '.service'), project = path.join(root, 'work');
-await fs.mkdir(project);
-const counts = { hostStarts: 0 };
-const report = { passed: false, core, rscript, counts, checks: [], project: project };
-const check = (name) => { report.checks.push(name); process.stdout.write('- ' + name + '\n'); };
-
-// Count what the plan claims: a real start, and nothing else.
-const instrument = path.join(root, 'instrument.mjs');
-await fs.writeFile(instrument, `import { appendFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
-const { CoreBridge } = await import(${JSON.stringify(pathToFileURL(path.join(packageRoot, 'dist/bridge.js')).href)});
-const start = CoreBridge.prototype.ensureOwnedHost;
-CoreBridge.prototype.ensureOwnedHost = function (...args) { appendFileSync(${JSON.stringify(path.join(root, 'starts.jsonl'))}, '{}\\n'); return start.apply(this, args); };
-`);
-
-let service;
+const project = path.join(root, 'work'); await fs.mkdir(project);
+const counts = { hostStarts: 0, nativeDispatches: 0, modelCalls: 0 };
+const report = { scenario: 'progressive-mcp-execution-browser', passed: false, counts, checks: [], widths: [], toolReplies: [] };
+const check = name => { report.checks.push(name); process.stdout.write('- ' + name + '\n'); };
+let service, mcp, browser;
 try {
-  // Importing the instrument patches the bridge in this process before the service
-  // uses it, so the count is of this service's own starts.
-  await import(pathToFileURL(instrument).href);
-  service = await new RhoService({ root, stateDir: state, coreBinary: core, rscript }).start();
+  service = await new RhoService({ root, stateDir: path.join(root, '.service'), coreBinary: core, rscript, resources: { maxReadBytes: 4096 } }).start();
+  const start = service.bridge.ensureOwnedHost.bind(service.bridge), native = service.bridge.call.bind(service.bridge);
+  service.bridge.ensureOwnedHost = (...args) => { counts.hostStarts++; return start(...args); };
+  service.bridge.call = (...args) => { if (args[1] === 'submit') counts.nativeDispatches++; return native(...args); };
   const operator = new RhoClient({ url: service.url, token: service.adminToken });
   const p = await operator.call('project.open', { path: 'work' });
-
-  // The script writes into the directory it is given as its first argument and
-  // creates nothing: the producer may not have to build Rho's own output tree.
   const script = [
     'out <- commandArgs(trailingOnly = TRUE)[1]',
     'png(file.path(out, "cars.png"), width = 640, height = 420)',
@@ -62,75 +39,91 @@ try {
     '  path = "cars.png", bytes = unname(file.size(produced)),',
     '  sha256 = digest::digest(produced, algo = "sha256", file = TRUE))))',
     'writeLines(jsonlite::toJSON(manifest, auto_unbox = TRUE), file.path(dirname(out), "inventory.json"))',
-    'cat("rows:", nrow(datasets::cars), "\\n")',
-    'invisible(NULL)',
-    ''
+    'cat("rows:", nrow(datasets::cars), "\\n")', ''
   ].join('\n');
   await fs.writeFile(path.join(project, 'plot.R'), script);
-
-  const grant = await operator.call('session.grant', { projectId: p.id, externalSessionId: 'execution-acceptance', methods: ['action.submit', 'action.observe', 'action.lookup', 'artifact.check', 'resource.register', 'composition.apply', 'capability.list'] });
-  const agent = await RhoClient.fromFile(grant.connectionFile);
-  const operationId = 'acceptance-run-1';
-  const submitted = await agent.call('action.submit', {
-    projectId: p.id, operationId, action: 'r.execute', actionVersion: '0.2.0',
-    input: {
-      script: { kind: 'disk', path: 'plot.R', digest: createHash('sha256').update(await fs.readFile(path.join(project, 'plot.R'))).digest('hex') },
-      args: [], requirements: [{ package: 'digest', source: 'cran' }, { package: 'jsonlite', source: 'cran' }],
-      artifacts: [{ path: 'cars.png', kind: 'file', format: { mimeType: 'image/png' } }],
-      completion: 'inventory.json'
-    }
+  const methods = ['document.open', 'document.edit', 'document.save', 'action.submit', 'action.lookup', 'artifact.check', 'composition.apply'];
+  const grant = await operator.call('session.grant', { projectId: p.id, externalSessionId: 'execution-acceptance', methods });
+  mcp = await connectMcp(packageRoot, grant.connectionFile, (input, reply) => {
+    const bytes = Buffer.byteLength(reply.content[0].text);
+    assert.ok(bytes <= 65536, input.name + ' exceeds the requested context budget');
+    report.toolReplies.push({ tool: input.name, bytes });
   });
-  assert.ok(['active', 'unobserved'].includes(submitted.execution), 'a submitted run starts as an active run: ' + submitted.execution);
-  check('a submitted run is accepted and starts active');
-
-  // Deliberately no observe: the read itself must report the finished run.
-  let run = null;
+  assert.deepEqual((await mcp.listTools()).tools.map(t => t.name), mcpToolNames);
+  const index = await mcpEnvelope(mcp, 'rho_index');
+  assert.ok(index.value.groups.length > 0); assert.deepEqual(index.value.entries, []);
+  const call = async (method, body) => {
+    const result = await callOperation(mcp, method, body);
+    assert.equal(result.ok, true, JSON.stringify(result)); return result.value;
+  };
+  const doc = await call('document.open', { path: 'plot.R' });
+  const edited = await call('document.edit', { documentId: doc.id, expectedVersion: doc.version, expectedRevision: doc.revision, changeId: 'edit-1', undoGroup: 'acceptance', edits: [{ from: 0, to: 0, insert: '# Saved through progressive MCP · 中文 🧬\n' }] });
+  const saved = await call('document.save', { documentId: doc.id, expectedVersion: edited.version, expectedRevision: edited.revision, expectedDiskDigest: edited.diskDigest, changeId: 'save-1' });
+  assert.equal(saved.dirty, false);
+  check('four-tool discovery resolves, edits and conditionally saves through stdio MCP');
+  const operationId = 'acceptance-run-1';
+  const submitted = await call('action.submit', { operationId, action: 'r.execute', actionVersion: '0.2.0', input: {
+    script: { kind: 'disk', path: 'plot.R', digest: saved.diskDigest }, args: [], requirements: [{ package: 'digest', source: 'cran' }, { package: 'jsonlite', source: 'cran' }],
+    artifacts: [{ path: 'cars.png', kind: 'media', format: { mimeType: 'image/png' } }], completion: 'inventory.json'
+  } });
+  assert.ok(['active', 'unobserved'].includes(submitted.execution));
+  let run;
   for (let i = 0; i < 120; i++) {
-    run = await agent.call('action.lookup', { projectId: p.id, operationId });
+    run = await call('action.lookup', { operationId });
     if (!['active', 'unobserved'].includes(run.execution)) break;
     await new Promise(resolve => setTimeout(resolve, 500));
   }
-  assert.equal(run.execution, 'completed', 'without an explicit observe the run reads as completed: ' + run.execution);
-  check('a finished run reads as completed without an explicit observe');
+  assert.equal(run.execution, 'completed', JSON.stringify(run));
+  check('the original request completes through observation, with no resubmission');
+  const facts = await call('artifact.check', { operationId });
+  assert.equal(facts.integrity.state, 'verified', JSON.stringify(facts.integrity));
+  const resource = facts.resources.find(r => r.path.endsWith('cars.png'));
+  assert.ok(resource?.path.startsWith('.rho/')); assert.equal(resource.kind, 'media');
+  const ref = { id: resource.id, version: resource.version };
+  // The owner supplies this reference. Manual internal-path registration is still refused.
+  await assert.rejects(operator.call('resource.register', { projectId: p.id, expectedDigest: resource.version, declaration: { path: resource.path, kind: 'media', format: { mimeType: 'image/png' } } }), e => e.error.kind === 'scope');
+  const composition = await call('composition.apply', { compositionId: 'workspace', expectedVersion: 0, changeId: 'show-produced', operations: [{ op: 'replace', rootId: 'root', nodes: [
+    { id: 'root', kind: 'group', children: ['figure'] },
+    { id: 'figure', kind: 'view', component: 'rho.media', version: '0.2.0', props: { title: 'cars.png' }, bindings: { data: ref } }
+  ] }] });
+  assert.equal(composition.availability.figure.state, 'entry-installed');
+  assert.equal(composition.availability.figure.visibility, 'unobserved');
+  check('artifact.check returns a verified owner-state reference that binds directly');
 
-  // The plan names the directory it handed to R; the check follows that, not a guess.
-  process.stdout.write('plan.output: ' + run.plan?.output + '\n');
-  const artifacts = path.join(project, run.plan.output);
-  const bytes = await fs.readFile(path.join(artifacts, 'cars.png'));
-  assert.ok(bytes.length > 1000 && bytes.subarray(1, 4).toString() === 'PNG', 'the declared artifact exists as a PNG');
-  check('the declared artifact exists at the planned output path');
-
-  // The owner's own integrity check is the supported way to confirm produced bytes.
-  // Artifact facts are keyed by the principal that submitted the run, so the
-  // producer checks its own artifacts; a different session sees not_found.
-  const facts = await agent.call('artifact.check', { projectId: p.id, operationId });
-  assert.equal(facts.integrity.state, 'verified', 'produced bytes verify against the declaration: ' + JSON.stringify(facts.integrity));
-  check('artifact.check verifies the produced bytes');
-
-  // Known gap, asserted rather than hidden: an executed artifact lives under owner
-  // state, registration refuses it, and presentation only accepts native
-  // artifact.ready events, so an Agent-run plot cannot be shown without that path.
-  let presentable = true;
-  try {
-    await agent.call('resource.register', {
-      projectId: p.id, expectedDigest: createHash('sha256').update(bytes).digest('hex'),
-      declaration: { path: path.relative(project, path.join(artifacts, 'cars.png')), kind: 'file', format: { mimeType: 'image/png' } }
-    });
-  } catch (error) { presentable = false; report.gaps = [{ id: 'artifact-not-presentable', message: error?.error?.message ?? error?.message }]; }
-  report.gapPresentable = presentable;
-
-  const starts = (await fs.readFile(path.join(root, 'starts.jsonl'), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean).length;
-  counts.hostStarts = starts;
-  assert.equal(starts, 1, 'exactly one Host start for one execution: ' + starts);
-  check('exactly one Host start for the execution');
-
+  const pages = [], failures = [], errors = [];
+  browser = await chromium.launch(process.env.RHO_UI_CHROME ? { executablePath: process.env.RHO_UI_CHROME } : {});
+  report.browser = browser.version();
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  page.on('pageerror', e => errors.push(e.message));
+  page.on('console', m => { if (m.type() === 'error' && !m.location().url.endsWith('/favicon.ico')) errors.push(m.text()); });
+  page.on('request', req => { if (req.url().endsWith('/resource.read')) pages.push(req.postDataJSON()); });
+  page.on('response', res => { if (res.status() >= 400 && new URL(res.url()).pathname !== '/favicon.ico') failures.push({ status: res.status(), path: new URL(res.url()).pathname }); });
+  const pair = await operator.call('session.browser.pair', {});
+  await page.goto(service.url + '/#pair=' + pair.code);
+  await page.locator('.project-row').first().click();
+  const visible = async () => {
+    await page.getByRole('img', { name: 'cars.png', exact: true }).waitFor();
+    await page.waitForFunction(() => { const i = document.querySelector('img[alt="cars.png"]'); return i?.complete && i.naturalWidth === 640 && i.naturalHeight === 420; });
+    assert.equal(await page.getByRole('img', { name: 'cars.png', exact: true }).isVisible(), true);
+  };
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 900 }); await visible();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({ path: path.join(evidence, 'figure-' + width + '.png') }); report.widths.push(width);
+  }
+  assert.ok(pages.length > 1); assert.ok(pages.every(p => p.maxBytes === 4096 && p.resource.version === ref.version));
+  check('browser decodes the real 640×420 PNG with owner-sized 4096-byte pages at three widths');
+  await page.reload(); await visible();
+  assert.deepEqual(failures, []); assert.deepEqual(errors, []);
+  assert.equal(counts.hostStarts, 1); assert.equal(counts.nativeDispatches, 1);
+  check('refresh renders the same version without CSP errors or new native execution');
+  report.resource = { version: resource.version, bytes: resource.bytes, kind: resource.kind };
   report.passed = true;
 } catch (error) {
-  report.failure = { message: error?.message, kind: error?.error?.kind, detail: error?.error ?? undefined };
-  throw error;
+  report.failure = { message: error?.message, kind: error?.error?.kind }; throw error;
 } finally {
-  await service?.close().catch(() => {});
+  await browser?.close().catch(() => {}); await mcp?.close().catch(() => {}); await service?.close().catch(() => {});
   await fs.writeFile(path.join(evidence, 'report.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
   await fs.rm(root, { recursive: true, force: true }).catch(() => {});
-  process.stdout.write(JSON.stringify(report) + '\n');
+  process.stdout.write(JSON.stringify({ passed: report.passed, counts, checks: report.checks.length, report: path.join(evidence, 'report.json') }) + '\n');
 }

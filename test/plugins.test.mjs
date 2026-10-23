@@ -36,7 +36,7 @@ test('removing providers preserves drafts, native identity, table bytes and comp
     assert.deepEqual(catalog.actions, []); assert.deepEqual(catalog.capabilities, ['documents', 'files']);
     assert.equal(catalog.plugins.filter(p => p.state === 'available').length, 2);
     const snapshot = await c.call('observation.snapshot', { projectId: p.id });
-    assert.equal(snapshot.documents[0].content, d.content); assert.equal(snapshot.documents[0].undo.length, 1);
+    assert.equal(snapshot.documents[0].bytes, Buffer.byteLength(d.content)); assert.equal('content' in snapshot.documents[0], false); assert.equal('undo' in snapshot.documents[0], false);
     assert.deepEqual(snapshot.operations[0].core, accepted.core); assert.deepEqual(snapshot.selection.entities, ['001']);
     assert.equal(snapshot.resources[0].version, ref.version); assert.equal(snapshot.host.exitCode, 3);
     assert.equal(Buffer.from((await c.call('resource.read', { projectId: p.id, resource: ref, offset: 0 })).data, 'base64').toString(), bytes);
@@ -61,7 +61,7 @@ test('removing providers preserves drafts, native identity, table bytes and comp
     await service.close();
     service = await new RhoService({ ...config, plugins: [] }).start(); c = client();
     const absent = await c.call('observation.snapshot', { projectId: p.id });
-    assert.equal(absent.documents[0].content, d.content); assert.equal(absent.resources[0].version, ref.version);
+    assert.equal(absent.documents[0].bytes, Buffer.byteLength(d.content)); assert.equal('content' in absent.documents[0], false); assert.equal(absent.resources[0].version, ref.version);
     assert.deepEqual((await c.call('workspace.save', { projectId: p.id })).documents[0].undo, d.undo);
     await assert.rejects(c.call('document.edit', { projectId: p.id, documentId: d.id, expectedVersion: d.version, edits: [{ from: 0, to: 0, insert: '?' }], undoGroup: 'absent' }), e => e.error.kind === 'unavailable');
     await service.close();

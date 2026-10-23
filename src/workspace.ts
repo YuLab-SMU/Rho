@@ -71,7 +71,7 @@ export class Workspace {
         requireThat(Object.keys(component.bindings).every(k => k in view.bindings) && Object.keys(view.bindings).every(k => k in component.bindings), 'invalid', 'Component resource bindings do not match its registration.');
         this.owners.assembly.validateComponentBindings(component.id, view.props, boundResources);
       }
-      availability[view.id] = { state: 'unavailable', reason: component ? 'UI entry is not installed in this headless composition.' : 'Component or requested version is not registered.' };
+      availability[view.id] = this.owners.assembly.viewAvailability(view.component, view.version);
     }
     return availability;
   }
@@ -197,7 +197,7 @@ export class Workspace {
       requireThat(current || (await this.compositions()).length < this.limits.maxCompositions, 'limit', 'Composition retention limit reached during restore.', { limit: 'maxCompositions' });
       // Restore references even if a UI entry is missing. Reading or restoring
       // this intent never submits scientific work.
-      const availability = Object.fromEntries(composition.views.map((v: any) => [v.id, { state: 'unavailable', reason: 'UI entry requires independent installation and browser acceptance.' }]));
+      const availability = Object.fromEntries(composition.views.map((v: any) => [v.id, this.owners.assembly.viewAvailability(v.component, v.version)]));
       await atomicJson(await this.file(composition.compositionId), { ...composition, availability });
       report.compositions.push({ compositionId: composition.compositionId, state: 'unavailable', views: composition.views.length });
     }

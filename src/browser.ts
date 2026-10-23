@@ -29,7 +29,7 @@ export interface CapabilityCatalog {
   operations: CapabilityOperation[];
   configuration: { version: number; enabled: string[] };
 }
-export interface DocumentSummary { id: string; path: string; version: number; content: string; dirty: boolean; diskDigest: string | null; acknowledgedAt: string }
+export interface DocumentSummary { id: string; path: string; version: number; revision?: number; bytes?: number; dirty: boolean; diskDigest: string | null; acknowledgedAt: string }
 export interface DocumentChange { changeId: string; expectedRevision: number }
 export interface DocumentReceipt { changeId: string; requestDigest: string; kind: 'edit' | 'undo' | 'save' | 'abandon-save' | 'undo-own' | 'revert'; author: string; revision: number; version: number; at: string }
 export interface DocumentHistoryEntry {
@@ -39,6 +39,7 @@ export interface DocumentHistoryEntry {
 }
 export interface DocumentHistory { documentId: string; currentVersion: number; currentRevision: number; retainedFromVersion: number; entries: (DocumentHistoryEntry & { revertedBy: string | null })[] }
 export interface DocumentBuffer extends DocumentSummary {
+  content: string;
   author: string; undo: { content: string; group: string; author: string; changeIds?: string[] }[];
   revision: number; receipts: DocumentReceipt[]; retainedFromRevision: number;
   receipt?: DocumentReceipt;
@@ -48,7 +49,7 @@ export interface DocumentBuffer extends DocumentSummary {
 }
 export type DocumentBinding = { documentId: string; version: number } | { kind: 'live-document'; documentId: string };
 interface DocumentWrite extends DocumentChange { projectId: string; documentId: string; expectedVersion: number }
-export interface ResourceSummary { id: string; version: string; kind: string; path: string; bytes: number; owner: string; availability: string; provenance: Record<string, unknown> }
+export interface ResourceSummary { id: string; version: string; kind: string; path: string; bytes: number; owner: string; availability: string; provenance: Record<string, unknown>; format?: Record<string, unknown> | string }
 export interface ViewDescription { id: string; component: string; version: string; props: Record<string, unknown>; bindings: Record<string, unknown>; protected?: boolean; presentation?: { emphasis: 'normal' | 'highlight' } }
 export interface GroupPresentation { mode: 'tabs' | 'split'; axis?: 'horizontal' | 'vertical'; weights?: number[] }
 // Owner paths carry the host separator, so a Windows root arrives as C:\work\atlas.

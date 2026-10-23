@@ -1,0 +1,142 @@
+{
+  "method": "document.history",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "documentId": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "required": [
+      "projectId",
+      "documentId"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "documentId": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "currentVersion": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "currentRevision": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "retainedFromVersion": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "entries": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "changeId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "requestDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "enum": [
+                "edit",
+                "undo",
+                "undo-own",
+                "revert"
+              ]
+            },
+            "undoGroup": {
+              "type": "string",
+              "minLength": 1
+            },
+            "groupId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "at": {
+              "type": "string",
+              "minLength": 1
+            },
+            "beforeDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "afterDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "reverts": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "uniqueItems": true
+            },
+            "revertedBy": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "changeId",
+            "requestDigest",
+            "author",
+            "kind",
+            "undoGroup",
+            "groupId",
+            "version",
+            "revision",
+            "at",
+            "beforeDigest",
+            "afterDigest",
+            "reverts",
+            "revertedBy"
+          ]
+        }
+      }
+    },
+    "required": [
+      "documentId",
+      "currentVersion",
+      "currentRevision",
+      "retainedFromVersion",
+      "entries"
+    ]
+  },
+  "description": null
+}

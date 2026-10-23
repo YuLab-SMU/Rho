@@ -1,0 +1,70 @@
+{
+  "method": "task.map.read",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      }
+    },
+    "required": [
+      "projectId"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "format": {
+        "const": "rho.task-map/1"
+      },
+      "version": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "vocabulary": {
+        "type": "object"
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "next": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "presentation": {
+        "type": "object"
+      },
+      "suggestions": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      },
+      "receipts": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      }
+    },
+    "required": [
+      "format",
+      "version",
+      "vocabulary",
+      "items",
+      "next",
+      "presentation",
+      "suggestions"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Observe the task map: declared items, vocabulary, next steps, forms, pins and pending suggestions. Reading starts, resumes or reruns nothing."
+}

@@ -390,3 +390,13 @@ export const discoverySchemas: Record<string, any> = {
     ]
   }
 };
+
+// Discovery filters narrow an existing grant; omitted owner starts at the owner index.
+Object.assign(discoverySchemas.IndexInput.properties.query.properties, {
+  owner: { type: 'string', minLength: 1, maxLength: 128 },
+  search: { type: 'string', minLength: 1, maxLength: 128 }
+});
+discoverySchemas.IndexOutput.properties.groups = {
+  type: 'array', maxItems: 32, items: { type: 'object', additionalProperties: false,
+    properties: { owner: { type: 'string' }, operations: { type: 'integer', minimum: 1 } }, required: ['owner', 'operations'] }
+};

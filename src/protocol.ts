@@ -7,7 +7,7 @@ import { objectSchema as obj, text, refSchema as ref } from '@rho-workspace/plug
 import { inputs as annotationInputs, outputs as annotationOutputs } from './annotation-contracts.js';
 import { nativeSchemas } from './native-contracts.js';
 import { protocol as v1 } from './legacy-protocol.js';
-import { operationContracts as documentContracts, documentSchema } from './document-contract.js';
+import { operationContracts as documentContracts, documentSchema, documentSummarySchema } from './document-contract.js';
 const base = structuredClone(v1);
 const project = { projectId: base.operations['capability.list'].properties.projectId };
 const op = { ...project, operationId: base.operations['action.lookup'].properties.operationId };
@@ -17,6 +17,7 @@ const record = { type: 'object' };
 const array = (items: any) => ({ type: 'array', items });
 const response = (properties: Record<string, any>, required = Object.keys(properties)) => ({ type: 'object', properties, required, additionalProperties: true });
 export const operations: Record<string, any> = { ...base.operations,
+  'protocol.describe': obj({ ...project, method: text, cursor: { type: ['string', 'null'], maxLength: 128 }, limit: { type: 'integer', minimum: 1, maximum: 100 }, maxBytes: { type: 'integer', minimum: 1024, maximum: 65536 } }, []),
   'project.pick': obj({}),
   'project.source.pick': obj({}),
   'project.source.add': obj(project),
@@ -117,7 +118,7 @@ export const responses: Record<string, any> = { ...base.responses,
   'project.entries': response({ entries: array(response({ path: text, name: text, kind: { enum: ['file', 'folder'] }, bytes: integer, hidden: { type: 'boolean' } })), total: integer, truncated: { type: 'boolean' }, roots: array(text), path: text }),
   'session.browser.pair': response({ code: text, expiresAt: text }),
   'session.browser.revoke': response({ sessionId: text, revoked: { type: 'boolean' } }),
-  'protocol.describe': response({ apiVersion: { const: '2.0' }, schemaVersion: { const: 2 }, operations: record, definitions: record, responses: record }),
+  'protocol.describe': response({ apiVersion: { const: '2.0' }, schemaVersion: { const: 2 }, revision: ref.properties.version, entries: array(response({ method: text, summary: text })), next: { type: ['string', 'null'] }, complete: { type: 'boolean' }, contract: response({ method: text, inputSchema: record, outputSchema: record, definitions: record, description: text }) }, ['apiVersion', 'schemaVersion', 'revision', 'entries', 'next', 'complete']),
   'capability.configure': response({ version: positive, enabled: array(text), receipt: response({ changeId: text, author: text, version: positive, enabled: array(text), at: text }) }),
   'skill.list': array(response({ id: text, version: text, digest: ref.properties.version, content: text })),
   'skill.read': response({ id: text, version: text, digest: ref.properties.version, content: text }),
@@ -129,13 +130,13 @@ export const responses: Record<string, any> = { ...base.responses,
   'data.compare': resourceSchema,
   'selection.set': selection,
   'object.read': response({ resource: resourceSchema, observation: { const: 'exported-snapshot' }, value: {} }),
-  'media.describe': response({ resource: resourceSchema, original: ref, mimeType: text, rendering: { const: 'unavailable' } }),
+  'media.describe': response({ resource: resourceSchema, original: ref, mimeType: text, rendering: { const: 'unobserved' } }),
   'workspace.save': { ...base.responses['workspace.save'], properties: { ...base.responses['workspace.save'].properties, schemaVersion: { enum: [1, 2, 3] }, selection: { anyOf: [selection, { type: 'null' }] } } },
   'observation.snapshot': { ...base.responses['observation.snapshot'], properties: { ...base.responses['observation.snapshot'].properties, resources: array(resourceSchema), operations: array(runSchema), selection: { anyOf: [selection, { type: 'null' }] } } }
 };
 const structuredComposition = response({ format: { const: 'rho.composition/1' }, compositionId: text, version: positive, nodes: array(node), rootId: changeId, receipt: record, author: text, views: array(view), availability: record, acknowledgedAt: text });
 for (const [method, contract] of Object.entries(documentContracts)) responses[method] = contract.outputSchema;
-responses['observation.snapshot'].properties.documents = array(documentSchema);
+responses['observation.snapshot'].properties.documents = array(documentSummarySchema);
 responses['workspace.save'].properties.documents = array(documentSchema);
 for (const method of ['composition.apply', 'composition.undo', 'view.protection.set']) responses[method] = structuredComposition;
 responses['project.openFile'] = response({ document: base.responses['document.open'], viewId: text, composition: structuredComposition });

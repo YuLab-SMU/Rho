@@ -1,0 +1,318 @@
+{
+  "method": "resource.register",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "declaration": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "const": "file"
+              },
+              "format": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "mimeType": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "mimeType"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "kind",
+              "format"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "const": "table"
+              },
+              "format": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "encoding": {
+                    "enum": [
+                      "csv",
+                      "json-rows"
+                    ]
+                  },
+                  "columns": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "type": {
+                          "enum": [
+                            "string",
+                            "number",
+                            "boolean"
+                          ]
+                        },
+                        "nullValues": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          },
+                          "maxItems": 16
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "type",
+                        "nullValues"
+                      ]
+                    },
+                    "minItems": 1,
+                    "maxItems": 256
+                  },
+                  "key": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "column": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "namespace": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "required": [
+                          "column",
+                          "namespace"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "encoding",
+                  "columns",
+                  "key"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "kind",
+              "format"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "const": "media"
+              },
+              "format": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "mimeType": {
+                    "enum": [
+                      "image/png",
+                      "image/jpeg",
+                      "image/svg+xml",
+                      "application/pdf"
+                    ]
+                  },
+                  "pages": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "width": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "height": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "mimeType"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "kind",
+              "format"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "const": "object"
+              },
+              "format": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "encoding": {
+                    "const": "json"
+                  },
+                  "observation": {
+                    "const": "exported-snapshot"
+                  },
+                  "classes": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "maxItems": 32
+                  }
+                },
+                "required": [
+                  "encoding",
+                  "observation",
+                  "classes"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "kind",
+              "format"
+            ]
+          }
+        ]
+      },
+      "expectedDigest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "required": [
+      "projectId",
+      "declaration",
+      "expectedDigest"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": true,
+    "properties": {
+      "id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "version": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "owner": {
+        "type": "string",
+        "minLength": 1
+      },
+      "kind": {
+        "enum": [
+          "file",
+          "table",
+          "media",
+          "object",
+          "plot",
+          "model"
+        ]
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1
+      },
+      "bytes": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "provenance": {
+        "type": "object"
+      },
+      "coverage": {
+        "type": "object"
+      },
+      "availability": {
+        "enum": [
+          "available",
+          "partial",
+          "missing",
+          "unknown"
+        ]
+      },
+      "format": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "required": [
+      "id",
+      "version",
+      "projectId",
+      "owner",
+      "kind",
+      "path",
+      "bytes",
+      "provenance",
+      "coverage",
+      "availability"
+    ]
+  },
+  "description": "Declare scoped existing bytes and their type/schema at the supplied digest. This read and registration starts no runtime."
+}

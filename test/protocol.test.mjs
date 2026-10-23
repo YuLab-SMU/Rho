@@ -4,10 +4,11 @@ import * as fs from 'node:fs/promises';
 import { Ajv } from 'ajv';
 import { protocol as legacyProtocol, responseEnvelope as legacyResponse, errorEnvelope as legacyError } from '../dist/legacy-protocol.js';
 import { protocol, operations, responses, errorEnvelope, responseEnvelope } from '../dist/protocol.js';
+import { protocolArtifacts } from '../scripts/protocol-artifact.mjs';
 test('published protocol and captured read-only states conform to the same v1 consumer contract', async () => {
   const published = JSON.parse(await fs.readFile(new URL('../protocol/v1.json', import.meta.url), 'utf8'));
   assert.deepEqual(published, legacyProtocol);
-  assert.deepEqual(JSON.parse(await fs.readFile(new URL('../protocol/v2.json', import.meta.url), 'utf8')), protocol);
+  for (const [name, content] of protocolArtifacts(protocol)) assert.equal(await fs.readFile(new URL('../protocol/' + name, import.meta.url), 'utf8'), content, name);
   assert.deepEqual(Object.keys(operations).sort(), Object.keys(responses).sort());
   const fixtures = JSON.parse(await fs.readFile(new URL('../fixtures/v1/states.json', import.meta.url), 'utf8'));
   assert.equal(fixtures.readOnly, true); assert.equal(fixtures.replay, 'forbidden');

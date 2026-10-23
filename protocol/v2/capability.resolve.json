@@ -1,0 +1,142 @@
+{
+  "method": "capability.resolve",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "catalogRef": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "selected": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "maxItems": 16,
+        "minItems": 1
+      },
+      "knownRefs": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "maxItems": 128,
+        "minItems": 0
+      },
+      "cursor": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "maxBytes": {
+        "type": "integer",
+        "minimum": 1024,
+        "maximum": 65536
+      }
+    },
+    "required": [
+      "projectId",
+      "catalogRef",
+      "selected",
+      "knownRefs",
+      "cursor",
+      "maxBytes"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "bundleRef": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ref": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "kind": {
+              "enum": [
+                "skill",
+                "contract"
+              ]
+            },
+            "content": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "ref",
+            "kind",
+            "content"
+          ]
+        },
+        "maxItems": 32,
+        "minItems": 0
+      },
+      "omittedKnownRefs": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "maxItems": 128,
+        "minItems": 0
+      },
+      "next": {
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "complete": {
+        "type": "boolean"
+      },
+      "requiredBytes": {
+        "anyOf": [
+          {
+            "type": "integer",
+            "minimum": 1
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "bundleRef",
+      "items",
+      "omittedKnownRefs",
+      "next",
+      "complete",
+      "requiredBytes"
+    ]
+  },
+  "description": "Fetch selected relevant Skills with complete owner contracts, whole objects only. Pages pin catalog/bundle/caller; knownRefs only reuse currently available immutable bodies."
+}

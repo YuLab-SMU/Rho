@@ -1,0 +1,53 @@
+{
+  "method": "project.pick",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {},
+    "required": []
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "cancelled": {
+        "type": "boolean"
+      },
+      "project": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+              },
+              "root": {
+                "type": "string",
+                "minLength": 1
+              },
+              "openedAt": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "id",
+              "root",
+              "openedAt"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "cancelled",
+      "project"
+    ],
+    "additionalProperties": true
+  },
+  "description": null
+}

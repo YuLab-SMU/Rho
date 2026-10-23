@@ -41,6 +41,7 @@ export interface PluginConfig {
 }
 const only = (defaults: object, values: object = {}) => Object.fromEntries(Object.entries(values).filter(([k, v]) => k in defaults && v !== undefined));
 export class Plugins {
+  installedUi: { plugin: string; component: string; version: string; packageVersion: string }[] = [];
   private modules: Partial<Modules> = {};
   private availability: any[] = [];
   constructor(public config: PluginConfig) {}
@@ -110,8 +111,14 @@ export class Plugins {
       ...p,
       packagePresent: p.packagePresent === true,
       dependenciesSatisfied: p.packagePresent === true && p.state === 'available' && !(p.missing?.length),
-      uiRenderable: false
+      uiRenderable: p.state === 'available' && this.installedUi.some(entry => entry.plugin === p.id && entry.packageVersion === p.version)
     })), operations: this.operationDeclarations(), actions, unavailableActions, components: descriptors.flatMap(p => (p.components ?? []).map(component => ({ ...component, pluginId: p.id }))), capabilities: [...descriptors.flatMap(p => p.capabilities), ...actions.flatMap(a => a.capabilities ?? [])], skills: descriptors.flatMap(p => p.skills ?? []), ...(this.modules.agent ? { agent: this.modules.agent.plugin.agent } : {}) };
+  }
+  viewAvailability(component: string, version: string) {
+    const declared = this.catalog.components.find(c => c.id === component && c.version === version);
+    if (!declared) return { state: 'unavailable', reason: 'Component or requested version is not registered.' };
+    const installed = this.installedUi.some(entry => entry.component === component && entry.version === version && entry.packageVersion === this.descriptor(declared.pluginId)?.version);
+    return installed ? { state: 'entry-installed', visibility: 'unobserved' } : { state: 'unavailable', reason: 'UI entry is not installed in this browser build.' };
   }
   descriptors() { return Object.values(this.modules).map(m => m.plugin as PluginDescriptor); }
   availableIds() { return this.descriptors().map(p => p.id as PluginId); }
@@ -163,6 +170,10 @@ export class ProjectPlugins {
   }
   // Bounded observations of persisted metadata when its provider is absent.
   // No write, parsing of native content, installation or runtime recovery occurs.
+  async documentSummaries() {
+    if (this.documents) return this.documents.summaries();
+    return (await this.retainedDocuments()).map(({ id, path, version, revision, diskDigest, dirty, author, acknowledgedAt, content }) => ({ id, path, version, revision, diskDigest, dirty, author, acknowledgedAt, bytes: Buffer.byteLength(content) }));
+  }
   async retainedDocuments() {
     if (this.documents) return this.documents.list();
     const dir = await confined(this.root, '.rho/plugins/documents', true);

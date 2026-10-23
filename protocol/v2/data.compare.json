@@ -1,0 +1,182 @@
+{
+  "method": "data.compare",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "left": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ]
+      },
+      "right": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "id",
+          "version"
+        ]
+      },
+      "options": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "leftKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rightKey": {
+            "type": "string",
+            "minLength": 1
+          },
+          "leftNamespace": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rightNamespace": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mapping": {
+            "const": "equal-string"
+          },
+          "leftField": {
+            "type": "string",
+            "minLength": 1
+          },
+          "rightField": {
+            "type": "string",
+            "minLength": 1
+          },
+          "join": {
+            "enum": [
+              "left",
+              "inner",
+              "full"
+            ]
+          }
+        },
+        "required": [
+          "leftKey",
+          "rightKey",
+          "leftNamespace",
+          "rightNamespace",
+          "mapping",
+          "leftField",
+          "rightField",
+          "join"
+        ]
+      }
+    },
+    "required": [
+      "projectId",
+      "left",
+      "right",
+      "options"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "additionalProperties": true,
+    "properties": {
+      "id": {
+        "type": "string",
+        "minLength": 1
+      },
+      "version": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "owner": {
+        "type": "string",
+        "minLength": 1
+      },
+      "kind": {
+        "enum": [
+          "file",
+          "table",
+          "media",
+          "object",
+          "plot",
+          "model"
+        ]
+      },
+      "path": {
+        "type": "string",
+        "minLength": 1
+      },
+      "bytes": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "provenance": {
+        "type": "object"
+      },
+      "coverage": {
+        "type": "object"
+      },
+      "availability": {
+        "enum": [
+          "available",
+          "partial",
+          "missing",
+          "unknown"
+        ]
+      },
+      "format": {
+        "anyOf": [
+          {
+            "type": "object"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "required": [
+      "id",
+      "version",
+      "projectId",
+      "owner",
+      "kind",
+      "path",
+      "bytes",
+      "provenance",
+      "coverage",
+      "availability"
+    ]
+  },
+  "description": "Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility."
+}

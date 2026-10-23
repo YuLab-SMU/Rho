@@ -54,14 +54,10 @@ that is prose cannot prevent that; a Skill that is checked can.
 | Lock conflicts name the holder, not just "another service" | Rho | done |
 | Generic failures name their cause instead of "could not be confirmed" | Rho | done |
 
-Done in this row so far: the output directory, run reconciliation and the
-execution acceptance. The three remaining items above are the rest of P0.
-
-The execution acceptance records one gap rather than hiding it: an artifact
-produced by `r.execute` lives under owner state, `resource.register` refuses
-owner state by design, and presentation accepts only native `artifact.ready`
-events, so an Agent-run plot has no route to a view. Recorded as
-`artifact-not-presentable` in the report.
+The execution/browser journey now checks the registered reference returned by
+`artifact.check`, binds it directly and requires a decoded image in Chrome.
+The earlier claim that owner-state artifacts were not presentable was caused by
+an incorrect test that attempted to register the same internal path again.
 
 ### P1 — Skills become contracts
 
@@ -79,7 +75,7 @@ events, so an Agent-run plot has no route to a view. Recorded as
   `rho.task-map` carry intent, requires, example, failure recipes and a verify
   command that runs (`acceptance:execution`, `acceptance:person`,
   `test:task-map`). Two remain by the plan's own list: `artifact-and-view`,
-  which needs the presentation gap decided, and `feedback`.
+  and `feedback`. The artifact route is now covered by the execution/browser journey.
 - **Done:** all 14 shipped Skills carry `intent`, `requires`, a schema-valid
   `example`, `failureRecipes` and a `verify` command that runs. The check keeps
   printing the count so a new prose-only Skill cannot appear unnoticed.
@@ -117,14 +113,10 @@ events, so an Agent-run plot has no route to a view. Recorded as
 
 ### P4 — The person's journey, made explicit
 
-- State what a person can do without an Agent: open a folder, list it, open and
-  edit a text file in the buffer. Saving, registering and executing stay Agent
-  or operator work; that boundary is stated in the Skill, not discovered.
-  **Done:** `rho.person-files` states it, and the editor shows it before the
-  person types: a first version rendered below the editor, invisible, which the
-  person acceptance now rejects by asserting visibility rather than presence.
-- Decide and, if accepted, grant `document.save` to a tab with the same
-  conditional identity it already uses for edits.
+- People can open, edit and conditionally save a shared document. The browser
+  uses the owner revision, disk digest and original change identity; button and
+  keyboard saves, refresh and external-write conflicts are exercised in Chrome.
+  Registration and native execution remain separately scoped.
 - Show runs in the browser: what was submitted, what it is doing, where its
   artifacts are. "Nothing happened" must stop being a possible observation.
   **Done:** `project.runs` gives a person a bounded summary of every run in their
@@ -135,34 +127,24 @@ events, so an Agent-run plot has no route to a view. Recorded as
 
 ### P5 — Verification that cannot overstate
 
-- Matrix: journey × (source build / packed install) × width. **Done:**
-  `npm run acceptance:matrix -- --install DIR` runs the person, execution,
-  Skills and U1 shell journeys against both columns; 8 of 8 pass, the installed
-  column using the Core vendored in the artifact. The packed candidate is built from a clean
-  worktree of HEAD, because packing the working tree would have baked a local
-  CSS override into the artifact.
+- Matrix: journey × source/installed composition × width. The current runner
+  has three distinct journeys: person, execution/MCP and U1. The old Skills
+  walkthrough is an alias of execution/MCP and is not independent evidence.
+  [Status](STATUS.md) records which current columns have actually run.
 - Zero Host starts is a constraint for read-only flows only; execution flows
   assert the starts and artifacts they need.
 - Every claim in [Status](STATUS.md) links to a machine-readable report.
 - A standing "unverified and dead paths" list, so a gap is never mistaken for
   a decision.
 
-## Definition of done
+## Current completion evidence
 
-1. An Agent who has read only the Skills completes open → edit → execute →
-   present with no refused call. **Measured:** `npm run acceptance:walkthrough`
-   reads the Skills from the service, follows them, and proves its refusal
-   recorder works by feeding it one deliberately wrong call first.
-2. An environment problem is located within one round trip after `doctor`.
-   **Measured:** one call reports three simultaneous faults (a stale Host socket, a
-   read-only project folder, a missing Rscript) with a remedy for each, and a
-   dead-Host socket is reported as stale rather than as an idle project.
-3. Every execution check asserts the Host start it depends on. **Measured:**
-   `acceptance:execution` asserts exactly one Host start and the artifact, and
-   fails if either is missing; `acceptance:walkthrough` drives the same
-   submission through the Skills.
-4. No claim in Status lacks a report, and every gap is either scheduled here or
-   stated as accepted work. **Measured:** `npm run verify` writes
-   `docs/VERIFICATION.json` with each command, exit code, count and commit, Status
-   cites it, and a guard test rejects a cited count the ledger never recorded
-   (checked by feeding it a wrong number).
+The implementation enforces owner-first discovery, complete selected contracts,
+bounded retained replies, streamed file pages, conditional browser saves and
+real artifact rendering. The deterministic stdio execution/browser journey and
+the actual Claude Code context/edit trial have different scopes. Neither passing
+prose checks nor declaring a layout counts as successful image rendering.
+
+[Status](STATUS.md) records executed checks and [verification scope](UNVERIFIED.md)
+keeps platform, autonomous scientific and full-product work explicit. These
+replace the earlier claim that a scripted Skill walkthrough proved model use.
