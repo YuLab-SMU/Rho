@@ -49,9 +49,11 @@
     "build:web": "tsc -p tsconfig.web.json && vite build && node scripts/web-manifest.mjs",
     "test:ui": "npm run build && node --test test/browser.test.mjs && node scripts/ui-acceptance.mjs",
     "acceptance:execution": "node scripts/execution-acceptance.mjs",
+    "acceptance:person": "node scripts/person-files-acceptance.mjs",
     "acceptance:ui": "node scripts/ui-acceptance.mjs",
     "test:ui:plugins": "npm run build && node scripts/plugin-ui-acceptance.mjs",
     "acceptance:ui:u2": "node scripts/u2-ui-acceptance.mjs",
+    "test:task-map": "node --test test/task-map.test.mjs",
     "test:ui:u2": "npm run build && npm run acceptance:ui:u2"
   },
   "dependencies": {

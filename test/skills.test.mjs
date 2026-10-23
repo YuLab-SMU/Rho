@@ -69,3 +69,14 @@ test('a declared example validates against the operation it illustrates', async 
     }
   } finally { await f.cleanup(); }
 });
+
+test('prose-only Skills are reported, so the remaining debt stays visible', async () => {
+  const f = await skillsFor();
+  try {
+    const bare = f.skills.filter(skill => !skill.verify).map(skill => skill.id);
+    // Not a failure: converting every Skill is planned work. It is printed so the
+    // count cannot quietly grow while the plan claims Skills are contracts.
+    process.stdout.write(`skills without a verify command: ${bare.length}/${f.skills.length} (${bare.join(', ')})\n`);
+    assert.ok(f.skills.length - bare.length >= 3, 'the converted Skills stay converted');
+  } finally { await f.cleanup(); }
+});

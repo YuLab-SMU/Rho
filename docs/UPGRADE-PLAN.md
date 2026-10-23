@@ -75,9 +75,13 @@ events, so an Agent-run plot has no route to a view. Recorded as
   first draft of the rewritten Skill.
 - Every Skill ships a check that runs on a disposable project.
 - First Skills: `person-open-file`, `agent-run-r`, `artifact-and-view`,
-  `task-map`, `feedback`. `r.workspace` is rewritten as the model: its content
-  is the verified path, its `verify` is the P0 execution acceptance, and its
-  failure recipes are the ones this attempt actually hit. Four Skills remain.
+  `task-map`, `feedback`. **Done:** `r.workspace`, `rho.person-files` and
+  `rho.task-map` carry intent, requires, example, failure recipes and a verify
+  command that runs (`acceptance:execution`, `acceptance:person`,
+  `test:task-map`). Two remain by the plan's own list: `artifact-and-view`,
+  which needs the presentation gap decided, and `feedback`.
+- The debt is measured, not assumed: the Skills check prints how many shipped
+  Skills still have no verify command (11 of 14 at this commit).
 
 ### P2 — A service that diagnoses itself
 
