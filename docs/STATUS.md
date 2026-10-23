@@ -233,14 +233,21 @@ dialect charged a released product's compatibility cost against development work
 Shared definitions now live in `protocol-base.ts` carrying no contract identity;
 the serve path, validators, envelope and artifacts describe one contract.
 
-Actually run in this checkout: `npm run build:service` and
+Actually run in this checkout: `npm run build` and
 `RHO_CORE_BINARY=../Rho-core/target/debug/rho-core node --test test/*.test.mjs`
-→ 99/99 passed, including retained-operation observation, the repointed service
-and workspace tests, and the retired-path refusals. A local tarball built with the
-explicit `--allow-dirty` development override was inspected directly: it carries
-`protocol/index.json` plus 87 hashed operation files and `fixtures/states.json`,
-and contains no retired artifact, module name or fixture directory. Every file
-hash in that packaged index was recomputed and matched.
+→ 100/100 passed, including retained-operation observation, the repointed service
+and workspace tests, the retired-path refusals and the compiled-tree check. A local
+tarball built with the explicit `--allow-dirty` development override was inspected
+directly: it carries `protocol/index.json` plus 87 hashed operation files and
+`fixtures/states.json`, and contains no retired artifact, module name or fixture
+directory. Every file hash in that packaged index was recomputed and matched.
+
+A later pass removed what the collapse left behind: the three operations the base
+module still declared in an earlier action vocabulary, and its own copy of the
+grantable-method enum, which `protocol.ts` always recomputed. Those base copies
+never reached the served contract; comparing every leaf of the contract before and
+after showed no difference. The enum and the description map are now sorted, so the
+content-addressed artifact depends on the contract rather than on editing order.
 Not run: the scientific `install-acceptance.mjs` flows, which require the two
 external example projects, and browser acceptance.
 

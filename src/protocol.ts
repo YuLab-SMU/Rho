@@ -100,7 +100,7 @@ operations['binding.activity.append'] = nativeSchemas.ActivityAppendInput;
 operations['binding.activity'] = { ...nativeSchemas.NativeActivityReadInput, required: ['projectId'], allOf: [{ if: { required: ['source'] }, then: { required: ['source', 'taskId', 'query'] }, else: { not: { anyOf: [{ required: ['taskId'] }, { required: ['query'] }] } } }] };
 for (const [method, schema] of Object.entries({ 'workspace.observe': enhancementSchemas.PresentationReadInput, 'workspace.enhance': enhancementSchemas.EnhanceInput, 'capability.index': discoverySchemas.IndexInput, 'capability.resolve': discoverySchemas.ResolveInput })) operations[method] = schema;
 operations['session.grant'].properties.profile = { enum: ['layered-business', 'layered-presentation'] };
-operations['session.grant'].properties.methods.items = { enum: Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('project.')) };
+operations['session.grant'].properties.methods.items = { enum: Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('project.')).sort() };
 export const resourceSchema = { ...base.definitions.resource, additionalProperties: true, properties: { ...base.definitions.resource.properties, kind: { enum: ['file', 'table', 'media', 'object', 'plot', 'model'] }, format: { anyOf: [record, { type: 'string' }] } } };
 const retainedPlan: any = base.definitions.run.properties.plan;
 export const runSchema = { ...base.definitions.run, properties: { ...base.definitions.run.properties, plan: { ...retainedPlan, properties: { ...retainedPlan.properties, completion: { type: ['string', 'null'] } } } } };
@@ -194,8 +194,12 @@ export const descriptions = {
   'object.read': 'Read a bounded exported JSON object snapshot, not live R memory.',
   'artifact.check': 'Verify the selected completion inventory and file bytes only; domain check reports remain project resources.'
 };
+// The published artifact is content-addressed, so its bytes must not move when a
+// description is added or an operation is inserted. Sorting both derived maps keeps
+// the artifact a function of the contract rather than of editing order.
+const orderedDescriptions = Object.fromEntries(Object.entries(descriptions).sort(([a], [b]) => a.localeCompare(b)));
 export const errorKinds = base.errorKinds;
 export const errorSchema = base.definitions.error;
 export const errorEnvelope = obj({ apiVersion: { const: '2.0' }, ok: { const: false }, error: errorSchema });
 export const responseEnvelope = (method: string) => obj({ apiVersion: { const: '2.0' }, ok: { const: true }, value: responses[method] });
-export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed'])], operations, responses, descriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };
+export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed'])], operations, responses, descriptions: orderedDescriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };

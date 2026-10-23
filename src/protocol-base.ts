@@ -21,9 +21,6 @@ export const operations: Record<string, any> = {
   'project.list': obj({}),
   'session.grant': obj({ ...project, externalSessionId: id, methods: { type: 'array', items: text, maxItems: 64 } }, ['projectId', 'externalSessionId', 'methods']),
   'capability.list': obj(project),
-  'requirements.check': obj({ ...project, action: { enum: ['airway.analyze', 'airway.shrink'] } }),
-  'requirements.prepare': obj({ ...op, action: { enum: ['airway.analyze', 'airway.shrink'] } }),
-  'action.submit': obj({ ...op, action: { enum: ['airway.analyze', 'airway.shrink'] }, actionVersion: { const: '0.1.0' }, input: { type: 'object' } }),
   'action.lookup': obj(op),
   'action.observe': obj(op),
   'action.retry': obj(op),
@@ -60,7 +57,6 @@ export const descriptions: Record<string, string> = {
   'capability.list': 'Read registered actions and components. Does not start R or a Core Host.',
   'document.read': 'Read the shared acknowledged buffer, including unsaved text and its version.',
   'document.edit': 'Apply conditional UTF-16 text edits to the shared buffer; keep the returned version.',
-  'action.submit': 'Submit explicitly authorized scientific work. Persist operationId before first delivery. Reuse it only for identical content.',
   'action.lookup': 'Read the original accepted operation. Missing acknowledgement is not permission for a new identity.',
   'action.observe': 'Observe original Core facts. Never starts or recovers a Host.',
   'context.read': 'Read an explicit versioned context package. Receipt establishes a tool fetch, not proactive delivery to a conversation.',
@@ -69,7 +65,9 @@ export const descriptions: Record<string, string> = {
 export const errorKinds = ['invalid', 'unauthorized', 'origin', 'scope', 'stale', 'conflict', 'condition', 'unavailable', 'limit', 'not_found', 'event_gap', 'storage', 'native'];
 export const errorSchema = obj({ kind: { enum: errorKinds }, message: text, details: { type: 'object' }, continuation: text });
 export const resourceSchema = obj({ id: text, version, projectId: id, owner: text, kind: { enum: ['file', 'table', 'plot', 'model'] }, path: text, bytes: integer, provenance: { type: 'object' }, coverage: { type: 'object' }, availability: { enum: ['available', 'partial', 'missing', 'unknown'] } });
-operations['session.grant'].properties.methods.items = { enum: Object.keys(operations).filter(m => !m.startsWith('session.') && !m.startsWith('project.')) };
+// The grantable-method enum is derived from the assembled contract in protocol.ts:
+// this module no longer sees every operation it is extended with, so computing the
+// enum here would publish a list that silently omits them.
 export const runSchema = obj({ operationId: id, principal: text, projectId: id, requestDigest: version, request: { type: 'object' }, action: text, actionVersion: text, acceptedAt: text, core: obj({ caller: id, requestId: id }), delivery: { enum: ['not-sent', 'sending', 'answered', 'not-delivered', 'unknown'] }, execution: { enum: ['unobserved', 'active', 'completed', 'failed', 'unknown'] }, native: {}, integrity: { type: 'object' }, domain: { type: 'object' }, interpretation: { type: 'object' }, plan: obj({ args: { type: 'array', items: { type: 'string' } }, source: { type: 'object' }, output: { type: ['string', 'null'] }, codeDigest: version }), lastCli: { type: 'object' }, checks: { type: 'object' }, cancellation: { type: 'object' } }, ['operationId', 'principal', 'projectId', 'requestDigest', 'action', 'actionVersion', 'acceptedAt', 'core', 'delivery', 'execution', 'native', 'integrity', 'domain', 'interpretation', 'request', 'plan']);
 const definitions = { error: errorSchema, resource: resourceSchema, run: runSchema, script: scriptSchema,
     document: obj({ id: version, path: text, version: positive, content: { type: 'string' }, diskDigest: nullableDigest, dirty: { type: 'boolean' }, author: text, acknowledgedAt: text, undo: { type: 'array', items: obj({ content: { type: 'string' }, group: text, author: text }) } }),

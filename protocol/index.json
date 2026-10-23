@@ -426,7 +426,7 @@
       "summary": "session.grant",
       "path": "operations/session.grant.json",
       "bytes": 3808,
-      "sha256": "b312ca535e9efb8d93eca374fb70f8f3a454da8affa24052aa576b3d29bc2334"
+      "sha256": "41dd054839c0a5070c55f4d3187712fb1192796dbf5f7c334f1cc8efac7753b1"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",
