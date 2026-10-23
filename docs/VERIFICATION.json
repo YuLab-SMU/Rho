@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "commit": "63da1bedd46d32b82729137cdcc0898cedf8db56",
+  "workingTreeDirty": true,
+  "checks": {
+    "rho-tests": {
+      "command": "node --test test/*.test.mjs",
+      "checkedAt": "2026-10-23T17:20:40.729Z",
+      "commit": "63da1bedd46d32b82729137cdcc0898cedf8db56",
+      "exitCode": 0,
+      "tests": 94,
+      "passing": 94,
+      "passed": true
+    },
+    "plugin-tests": {
+      "command": "node --test test/*.test.mjs",
+      "checkedAt": "2026-10-23T17:20:42.367Z",
+      "commit": "63da1bedd46d32b82729137cdcc0898cedf8db56",
+      "exitCode": 0,
+      "tests": 55,
+      "passing": 55,
+      "passed": true
+    }
+  }
+}
