@@ -135,6 +135,12 @@ events, so an Agent-run plot has no route to a view. Recorded as
 1. An Agent who has read only the Skills completes open → edit → execute →
    present with no failed calls.
 2. An environment problem is located within one round trip after `doctor`.
+   **Measured:** one call reports three simultaneous faults (a stale Host socket, a
+   read-only project folder, a missing Rscript) with a remedy for each, and a
+   dead-Host socket is reported as stale rather than as an idle project.
 3. Every execution check asserts the Host start it depends on.
 4. No claim in Status lacks a report, and every gap is either scheduled here or
-   stated as accepted work.
+   stated as accepted work. **Measured:** `npm run verify` writes
+   `docs/VERIFICATION.json` with each command, exit code, count and commit, Status
+   cites it, and a guard test rejects a cited count the ledger never recorded
+   (checked by feeding it a wrong number).
