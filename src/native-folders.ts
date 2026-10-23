@@ -1,7 +1,7 @@
 import { execFile, type ChildProcess } from 'node:child_process';
 import { Fault, requireThat } from '@rho-workspace/plugin-contracts';
 
-export const nativeFolderLimits = { timeoutMs: 120000, maxOutputBytes: 16384, maxProjects: 128, maxSources: 32, maxSelections: 64, selectionTtlMs: 600000 };
+export const nativeFolderLimits = { timeoutMs: 120000, maxOutputBytes: 16384, maxProjects: 128, maxSources: 32, maxSelections: 64, selectionTtlMs: 600000, maxEntries: 500 };
 // Only the trusted local process supplies this script. HTTP callers supply no
 // path or script: the person selects the folder in the operating system dialog.
 const script = `on run argv

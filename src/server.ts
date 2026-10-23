@@ -418,6 +418,63 @@ export class RhoService {
     const workspace = new Workspace(p, owners, this.config.workspace, this.config.interactions);
     const interactions = new Interactions(p, owners, this.config.interactions);
     const routing = new TaskRouting(p, this.config.capabilityLimits?.maxReceipts, this.config.maxRetainedMetadataBytes);
+    // A person's own view of the folder they selected. The tab is confined to this one
+    // project, so it may list that folder and open a text file from it; registering
+    // resources, saving and execution stay Agent/operator work.
+    if (method === 'project.entries') {
+      const limit = this.config.nativeFolders?.maxEntries ?? 500;
+      // Confined to the project root: a requested subfolder is resolved, never escaped.
+      const requested: string = b.path ?? '.';
+      let directory: string;
+      try { directory = await confined(p.root, requested); }
+      catch { requireThat(false, 'scope', 'Only folders inside this project can be listed.'); }
+      const canonical = await fs.realpath(directory);
+      requireThat(canonical === p.root || canonical.startsWith(p.root + path.sep), 'scope', 'Only folders inside this project can be listed.');
+      requireThat((await fs.lstat(canonical)).isDirectory(), 'invalid', 'That entry is a file, not a folder.');
+      const relative = path.relative(p.root, canonical).split(path.sep).join('/');
+      let names: string[] = [];
+      try { names = await fs.readdir(canonical); } catch (e: any) { if (e.code !== 'ENOENT') throw e; }
+      const entries: Array<{ path: string; name: string; kind: 'file' | 'folder'; bytes: number; hidden: boolean }> = [];
+      for (const name of names.sort((a, c) => a.localeCompare(c))) {
+        if (['.rho', '.git', '.DS_Store'].includes(name)) continue;
+        const stat = await fs.lstat(path.join(canonical, name)).catch(() => null);
+        if (!stat || stat.isSymbolicLink()) continue;
+        const kind = stat.isDirectory() ? 'folder' as const : stat.isFile() ? 'file' as const : null;
+        if (!kind) continue;
+        const entryPath = (relative ? relative + '/' : '') + name;
+        entries.push({ path: entryPath, name, kind, bytes: kind === 'file' ? stat.size : 0, hidden: name.startsWith('.') });
+      }
+      return { entries: entries.slice(0, limit), total: entries.length, truncated: entries.length > limit, roots: [relative || '.'], path: relative };
+    }
+    if (method === 'project.openFile') {
+      const document = await owners.need('documents').open(b.path, principal.id);
+      const components: any[] = (owners as any).assembly?.catalog?.components ?? [];
+      const editor = components.filter(component => component.id === 'rho.editor').sort((a, c) => c.version.localeCompare(a.version))[0];
+      requireThat(editor, 'unavailable', 'This build selects no document editor, so the file was opened but cannot be shown.');
+      // One editor per document: every view already bound to this document is folded into
+      // a single one, so opening the same file twice never stacks duplicate tabs.
+      // No layout yet is the first open, not a missing record: start one. A missing
+      // layout arrives as a bare ENOENT, so the code is checked structurally rather
+      // than by class or kind.
+      const current = await workspace.read(b.compositionId).catch(error => {
+        const { kind, code } = (error ?? {}) as any;
+        if (kind === 'not_found' || code === 'ENOENT') return null;
+        throw error;
+      });
+      const rootId: string = current?.rootId ?? 'root';
+      const existing: any[] = current?.nodes ?? [];
+      const sameDocument = existing.filter(node => node.kind === 'view' && node.bindings?.document?.documentId === document.id
+        && (node.bindings.document.kind === 'live-document' || node.bindings.document.version === document.version));
+      const viewId = sameDocument[0]?.id ?? 'doc-' + document.id.slice(0, 12);
+      const folded = new Set(sameDocument.map(node => node.id as string));
+      const group = existing.find(node => node.id === rootId && node.kind === 'group') ?? { id: rootId, kind: 'group', children: [] };
+      const kept = existing.filter(node => node.id !== rootId && !folded.has(node.id));
+      const children = [...(group.children as string[]).filter((id: string) => !folded.has(id) && id !== viewId), viewId];
+      const view = { id: viewId, kind: 'view' as const, component: editor.id as string, version: editor.version as string, props: { title: path.basename(document.path) }, bindings: { document: { kind: 'live-document' as const, documentId: document.id } } };
+      const composition = await workspace.apply({ compositionId: b.compositionId, expectedVersion: b.expectedVersion, changeId: b.changeId, operations: [{ op: 'replace', rootId, nodes: [{ ...group, children }, ...kept, view] }] }, principal.id);
+      await this.emit(p, 'composition.changed', b.compositionId);
+      return { document, viewId, composition };
+    }
     if (method === 'session.grant') {
       requireThat(principal.id === 'operator', 'unauthorized', 'Only the local operator may provision a project-scoped session.');
       const file = path.join(this.state.directory, 'agent-' + digest(p.id + ':' + b.externalSessionId) + '.json');

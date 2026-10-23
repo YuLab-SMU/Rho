@@ -2018,6 +2018,58 @@
         "changeId"
       ]
     },
+    "project.entries": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        }
+      },
+      "required": [
+        "projectId"
+      ]
+    },
+    "project.openFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "compositionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "expectedVersion": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "changeId": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "projectId",
+        "path",
+        "compositionId",
+        "expectedVersion",
+        "changeId"
+      ]
+    },
     "session.browser.pair": {
       "type": "object",
       "additionalProperties": false,
@@ -13717,6 +13769,74 @@
       ],
       "additionalProperties": true
     },
+    "project.entries": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "enum": [
+                  "file",
+                  "folder"
+                ]
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "hidden": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "path",
+              "name",
+              "kind",
+              "bytes",
+              "hidden"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "roots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "entries",
+        "total",
+        "truncated",
+        "roots",
+        "path"
+      ],
+      "additionalProperties": true
+    },
     "session.browser.pair": {
       "type": "object",
       "properties": {
@@ -16589,6 +16709,459 @@
         "views",
         "availability",
         "acknowledgedAt"
+      ],
+      "additionalProperties": true
+    },
+    "project.openFile": {
+      "type": "object",
+      "properties": {
+        "document": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "content": {
+              "type": "string"
+            },
+            "diskDigest": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "dirty": {
+              "type": "boolean"
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "acknowledgedAt": {
+              "type": "string",
+              "minLength": 1
+            },
+            "undo": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "content": {
+                    "type": "string"
+                  },
+                  "group": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "author": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "content",
+                  "group",
+                  "author"
+                ]
+              }
+            }
+          },
+          "required": [
+            "id",
+            "path",
+            "version",
+            "content",
+            "diskDigest",
+            "dirty",
+            "author",
+            "acknowledgedAt",
+            "undo"
+          ]
+        },
+        "viewId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "composition": {
+          "type": "object",
+          "properties": {
+            "format": {
+              "const": "rho.composition/1"
+            },
+            "compositionId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "nodes": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                      },
+                      "kind": {
+                        "const": "group"
+                      },
+                      "children": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                        },
+                        "maxItems": 256,
+                        "uniqueItems": true
+                      },
+                      "presentation": {
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "mode": {
+                                "const": "tabs"
+                              }
+                            },
+                            "required": [
+                              "mode"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "mode": {
+                                "const": "split"
+                              },
+                              "axis": {
+                                "enum": [
+                                  "horizontal",
+                                  "vertical"
+                                ]
+                              },
+                              "weights": {
+                                "type": "array",
+                                "items": {
+                                  "type": "number",
+                                  "exclusiveMinimum": 0,
+                                  "maximum": 100
+                                },
+                                "minItems": 2,
+                                "maxItems": 256
+                              }
+                            },
+                            "required": [
+                              "mode",
+                              "axis",
+                              "weights"
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "kind",
+                      "children"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                      },
+                      "component": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "version": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "props": {
+                        "type": "object"
+                      },
+                      "bindings": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "version": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "version"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "documentId": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                },
+                                "version": {
+                                  "type": "integer",
+                                  "minimum": 1
+                                }
+                              },
+                              "required": [
+                                "documentId",
+                                "version"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "live-document"
+                                },
+                                "documentId": {
+                                  "type": "string",
+                                  "pattern": "^[a-f0-9]{64}$"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "documentId"
+                              ]
+                            }
+                          ]
+                        }
+                      },
+                      "selection": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "maxItems": 1000
+                      },
+                      "presentation": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "emphasis": {
+                            "enum": [
+                              "normal",
+                              "highlight"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "emphasis"
+                        ]
+                      },
+                      "kind": {
+                        "const": "view"
+                      },
+                      "protected": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "component",
+                      "version",
+                      "props",
+                      "bindings",
+                      "kind"
+                    ]
+                  }
+                ]
+              }
+            },
+            "rootId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "receipt": {
+              "type": "object"
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1
+            },
+            "views": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+                  },
+                  "component": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "props": {
+                    "type": "object"
+                  },
+                  "bindings": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "version": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "version"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            },
+                            "version": {
+                              "type": "integer",
+                              "minimum": 1
+                            }
+                          },
+                          "required": [
+                            "documentId",
+                            "version"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "live-document"
+                            },
+                            "documentId": {
+                              "type": "string",
+                              "pattern": "^[a-f0-9]{64}$"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "documentId"
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  "selection": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "maxItems": 1000
+                  },
+                  "presentation": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "emphasis": {
+                        "enum": [
+                          "normal",
+                          "highlight"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "emphasis"
+                    ]
+                  }
+                },
+                "required": [
+                  "id",
+                  "component",
+                  "version",
+                  "props",
+                  "bindings"
+                ]
+              }
+            },
+            "availability": {
+              "type": "object"
+            },
+            "acknowledgedAt": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "format",
+            "compositionId",
+            "version",
+            "nodes",
+            "rootId",
+            "receipt",
+            "author",
+            "views",
+            "availability",
+            "acknowledgedAt"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "document",
+        "viewId",
+        "composition"
       ],
       "additionalProperties": true
     },
@@ -21073,6 +21646,8 @@
     "binding.activity.append": "Registered native adapter only: retain original CLI tool and artifact-ready observations. This does not execute, validate, or present artifacts.",
     "task.routing.put": "Control plane only: conditionally assign one task and business binding to this project without starting a native session.",
     "resource.register": "Declare scoped existing bytes and their type/schema at the supplied digest. This read and registration starts no runtime.",
+    "project.entries": "List one level of the selected project folder for the person who opened it: ordinary files and folders, bounded and confined to the project root, excluding owner state. Listing reads no file contents and starts no runtime.",
+    "project.openFile": "Open one text file from the selected project as a document and place it in the person's own layout in one conditional step, so a person can see and edit their own source files without an Agent. Confined to the project root; it executes nothing.",
     "requirements.check": "Probe only the explicitly declared R packages with bounded base R; no Core Host or project script starts.",
     "data.compare": "Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.",
     "object.read": "Read a bounded exported JSON object snapshot, not live R memory.",

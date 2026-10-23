@@ -5,6 +5,7 @@ import { Icon, type IconName } from './icons.js';
 import { renders } from './rendered.js';
 
 export type Section = 'documents' | 'files';
+export interface Entry { path: string; name: string; kind: 'file' | 'folder'; bytes: number; hidden: boolean }
 export function size(bytes: number) {
   if (bytes < 1024) return bytes + ' B';
   const units = ['KB', 'MB', 'GB', 'TB'];
@@ -51,8 +52,27 @@ export function ProjectNavigation({ project, location, snapshot, overview, compo
   </>;
 }
 
-export function ProjectOverview({ project, location, snapshot, onLayout, client, onProjectChanged }: { project: ProjectSummary; location: string; snapshot: WorkspaceSnapshot; onLayout: (id: string) => void; client: BrowserClient; onProjectChanged: (p: ProjectSummary) => void }) {
+export function ProjectOverview({ project, location, snapshot, onLayout, client, onProjectChanged, onOpened }: { project: ProjectSummary; location: string; snapshot: WorkspaceSnapshot; onLayout: (id: string) => void; client: BrowserClient; onProjectChanged: (p: ProjectSummary) => void; onOpened?: (compositionId: string) => void }) {
   const [adding, setAdding] = useState(false), [error, setError] = useState('');
+  const [folder, setFolder] = useState<{ entries: Entry[]; total: number; truncated: boolean; path: string } | null>(null), [reading, setReading] = useState(false), [openProblem, setOpenProblem] = useState('');
+  async function listFolder(at = '') {
+    setReading(true); setError('');
+    try {
+      const result = await client.call('project.entries', at ? { projectId: project.id, path: at } : { projectId: project.id }, new AbortController().signal);
+      setFolder({ entries: result.entries, total: result.total, truncated: result.truncated, path: result.path });
+    }
+    catch (e) { setError(e instanceof Error ? e.message : 'The folder could not be listed.'); }
+    finally { setReading(false); }
+  }
+  async function open(entry: Entry) {
+    setOpenProblem('');
+    const current = snapshot.compositions.find(c => c.compositionId === 'workspace');
+    try {
+      // One conditional step: the server opens the document and places it in the tab's layout.
+      const result = await client.call('project.openFile', { projectId: project.id, path: entry.path, compositionId: 'workspace', expectedVersion: current?.version ?? 0, changeId: 'open-' + entry.path.replace(/[^A-Za-z0-9._:@-]/g, '-').slice(0, 90) + '-' + Date.now() });
+      if (onOpened) onOpened(result.composition.compositionId);
+    } catch (e) { setOpenProblem(e instanceof Error ? e.message : 'The file could not be opened.'); }
+  }
   async function add() {
     setAdding(true); setError('');
     try { const result = await client.call('project.source.add', { projectId: project.id }, new AbortController().signal); if (result.project) onProjectChanged(result.project); }
@@ -79,7 +99,7 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
         </tr>)}</tbody></table>
     </section> : <div className="layout-empty">
       <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeDasharray="3 2.4" /></svg>
-      <div><strong>No saved layout yet</strong><p>A layout appears here once you or an Agent saves one for this project. Your documents and files are listed below.</p></div>
+      <div><strong>No saved layout yet</strong><p>A layout appears here once you or an Agent saves one for this project. What you have open and the folder's files are listed below.</p></div>
     </div>}
     <section className="overview-section" aria-labelledby="overview-documents">
       <h2 id="overview-documents" tabIndex={-1}>Documents <span>{docs.length}</span></h2>
@@ -92,14 +112,32 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
         </tr>)}</tbody></table> : <p className="overview-none">No documents are open in this project.</p>}
     </section>
     <section className="overview-section" aria-labelledby="overview-files">
-      <h2 id="overview-files" tabIndex={-1}>Files <span>{files.length}</span></h2>
-      {files.length ? <table><thead><tr><th>Name</th><th className="column-short optional">Kind</th><th className="column-state">State</th><th className="column-wide">Size</th></tr></thead>
+      <h2 id="overview-files" tabIndex={-1}>Files <span>{folder ? folder.total : files.length}</span></h2>
+      {folder ? <>
+        <p className="field-hint">
+          <span className="overview-name">{folder.path || projectName(project)}</span>
+          {folder.path ? <button className="link" onClick={() => void listFolder(folder.path.split('/').slice(0, -1).join('/'))}>Up one folder</button> : null}
+        </p>
+        {folder.entries.length ? <table><thead><tr><th>Name</th><th className="column-short optional">Kind</th><th className="column-wide">Size</th></tr></thead>
+          <tbody>{folder.entries.map(entry => <tr key={entry.path}>
+            <td><button className="overview-link" onClick={() => void (entry.kind === 'folder' ? listFolder(entry.path) : open(entry))}><Icon name={entry.kind === 'folder' ? 'folder' : 'file'} size={16} stroke={1.8} />{entry.name}</button></td>
+            <td className="column-short optional">{entry.kind === 'folder' ? 'Folder' : 'File'}</td>
+            <td className="column-wide muted">{entry.kind === 'folder' ? '' : size(entry.bytes)}</td>
+          </tr>)}</tbody></table> : <p className="overview-none">This folder has no files yet.</p>}
+        {folder.truncated && <p className="field-hint">Showing the first {folder.entries.length} of {folder.total} entries.</p>}
+        {openProblem && <p className="field-hint project-problem" role="alert">{openProblem}</p>}
+        <p className="field-hint"><button className="link" onClick={() => setFolder(null)}>Hide folder contents</button></p>
+      </> : <>
+        <p className="overview-none">Open a file from this folder to read and edit it here.</p>
+        <p className="field-hint"><button className="primary" disabled={reading} onClick={() => void listFolder()}>{reading ? 'Reading…' : 'Browse this folder…'}</button></p>
+      </>}
+      {files.length ? <table><thead><tr><th>Registered</th><th className="column-short optional">Kind</th><th className="column-state">State</th><th className="column-wide">Size</th></tr></thead>
         <tbody>{files.map(r => <tr key={r.id}>
           <td><span className="overview-name"><Icon name={resourceIcon(r.kind)} size={16} stroke={1.8} />{sourcePath(project, r.path)}</span></td>
           <td className="column-short optional">{r.kind.charAt(0).toUpperCase() + r.kind.slice(1)}</td>
           <td className="column-state"><span className={'state ' + (r.availability === 'available' ? 'good' : 'unknown')}>{availability(r)}</span></td>
           <td className="column-wide muted">{(r.availability === 'available' ? '' : 'Last seen ') + size(r.bytes)}</td>
-        </tr>)}</tbody></table> : <p className="overview-none">No files are registered in this project.</p>}
+        </tr>)}</tbody></table> : null}
     </section>
   </section>;
 }

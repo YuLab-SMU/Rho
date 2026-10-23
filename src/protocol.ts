@@ -22,6 +22,10 @@ export const operations: Record<string, any> = { ...base.operations,
   'project.source.add': obj(project),
   'project.createWorkspace': obj({ name: { type: 'string', minLength: 1, maxLength: 80, pattern: '\\S' }, selectionIds: { type: 'array', items: text, minItems: 1, maxItems: 32, uniqueItems: true }, changeId: text }),
   'project.create': obj({ name: { type: 'string', minLength: 1, maxLength: 80, pattern: '^[^/\\\\]+$', not: { enum: ['.', '..', '.rho', '.git'] } } }),
+  // The person's own view of their selected folders: bounded one-level entries and
+  // opening one text file as a document in front of them.
+  'project.entries': obj({ ...project, path: { type: 'string', minLength: 1, maxLength: 1024 } }, ['projectId']),
+  'project.openFile': obj({ ...project, path: { type: 'string', minLength: 1, maxLength: 1024 }, compositionId: text, expectedVersion: integer, changeId: text }),
   'session.browser.pair': obj({ path: text }, []),
   'session.browser.revoke': obj({ sessionId: text }),
   'capability.configure': obj({ ...project, expectedVersion: integer, changeId: text, enabled: { type: 'array', items: text, maxItems: 32, uniqueItems: true } }),
@@ -102,6 +106,7 @@ export const responses: Record<string, any> = { ...base.responses,
   'project.source.pick': response({ cancelled: { type: 'boolean' }, selection: { anyOf: [response({ selectionId: text, id: text, root: text, name: text }), { type: 'null' }] } }),
   'project.source.add': response({ cancelled: { type: 'boolean' }, project: { anyOf: [base.responses['project.create'], { type: 'null' }] } }),
   'project.createWorkspace': base.responses['project.create'],
+  'project.entries': response({ entries: array(response({ path: text, name: text, kind: { enum: ['file', 'folder'] }, bytes: integer, hidden: { type: 'boolean' } })), total: integer, truncated: { type: 'boolean' }, roots: array(text), path: text }),
   'session.browser.pair': response({ code: text, expiresAt: text }),
   'session.browser.revoke': response({ sessionId: text, revoked: { type: 'boolean' } }),
   'protocol.describe': response({ apiVersion: { const: '2.0' }, schemaVersion: { const: 2 }, operations: record, definitions: record, responses: record }),
@@ -125,6 +130,7 @@ for (const [method, contract] of Object.entries(documentContracts)) responses[me
 responses['observation.snapshot'].properties.documents = array(documentSchema);
 responses['workspace.save'].properties.documents = array(documentSchema);
 for (const method of ['composition.apply', 'composition.undo', 'view.protection.set']) responses[method] = structuredComposition;
+responses['project.openFile'] = response({ document: base.responses['document.open'], viewId: text, composition: structuredComposition });
 const composition = { anyOf: [base.definitions.composition, structuredComposition] };
 responses['composition.read'] = composition;
 responses['view.close'] = composition;
@@ -169,6 +175,8 @@ export const descriptions = {
   'binding.activity.append': 'Registered native adapter only: retain original CLI tool and artifact-ready observations. This does not execute, validate, or present artifacts.',
   'task.routing.put': 'Control plane only: conditionally assign one task and business binding to this project without starting a native session.',
   'resource.register': 'Declare scoped existing bytes and their type/schema at the supplied digest. This read and registration starts no runtime.',
+  'project.entries': 'List one level of the selected project folder for the person who opened it: ordinary files and folders, bounded and confined to the project root, excluding owner state. Listing reads no file contents and starts no runtime.',
+  'project.openFile': 'Open one text file from the selected project as a document and place it in the person\'s own layout in one conditional step, so a person can see and edit their own source files without an Agent. Confined to the project root; it executes nothing.',
   'requirements.check': 'Probe only the explicitly declared R packages with bounded base R; no Core Host or project script starts.',
   'data.compare': 'Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.',
   'object.read': 'Read a bounded exported JSON object snapshot, not live R memory.',
