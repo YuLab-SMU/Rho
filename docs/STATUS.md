@@ -17,7 +17,7 @@ a shipped script.
 Host, Rscript, unfinished runs, plugin selection — and the Overview asks it before
 listing content, so a silent failure has a place to be explained. Filesystem and
 lock refusals name their condition and remedy.
-Checks are recorded, not restated: Rho 99/99 and Plugins 55/55 from [docs/VERIFICATION.json](VERIFICATION.json), which holds the command and result of each run.
+Checks are recorded, not restated: Rho 99/99 and Plugins 58/58 from [docs/VERIFICATION.json](VERIFICATION.json), which holds the command and result of each run.
 The upgrade loop is closed and self-checking: `npm run verify` records every count
 with the command that produced it, guard tests reject a Status number the ledger
 never recorded and a dead path that stops naming its reproducing check, and
