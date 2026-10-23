@@ -38,6 +38,26 @@ const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
 const legacyValidators = Object.fromEntries(Object.entries(legacyProtocol.operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
 const validators = Object.fromEntries(Object.entries(operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
+// A schema path is not advice. Turn the common shapes of refusal into the edit the
+// caller should make, so fixing a request does not require reading the JSON Schema.
+function fixFor(error: any): string {
+  const field = String(error.instancePath ?? '').replace(/^\//, '').split('/').filter(Boolean).join('.') || 'the request';
+  const at = error.params ?? {};
+  switch (error.keyword) {
+    case 'required': return `Add "${at.missingProperty}"; ${field === 'the request' ? 'the request' : field} requires it.`;
+    case 'dependencies': return `Adding "${at.property}" also requires "${at.missingProperty}".`;
+    case 'enum': return `Use one of: ${(at.allowedValues ?? []).join(', ')}.`;
+    case 'const': return `This value must be ${JSON.stringify(at.allowedValue)}.`;
+    case 'additionalProperties': return `Remove "${at.additionalProperty}"; it is not part of this body.`;
+    case 'pattern': return `"${field}" must match ${at.pattern}.`;
+    case 'type': return `"${field}" must be ${at.type}.`;
+    case 'oneOf': return `"${field}" must match exactly one accepted shape; each variant may need different fields.`;
+    default: return error.message ?? 'The request does not match the schema.';
+  }
+}
+function explainSchema(errors: any[] | null | undefined) {
+  return (errors ?? []).slice(0, 8).map(error => ({ path: error.instancePath || '/', keyword: error.keyword, message: error.message, fix: fixFor(error) }));
+}
 // Filesystem and platform refusals say what to change; anything else keeps the
 // conservative "inspect its state" wording, because the effect is genuinely unknown.
 function explainFailure(e: any): [string, string, Record<string, unknown>] {
@@ -338,7 +358,8 @@ export class RhoService {
       const body = await this.readBody(req, this.config.maxRequestBytes ?? 1024 * 1024);
       const valid = (legacy ? legacyValidators : validators)[method];
       requireThat(valid, 'unavailable', 'This operation requires the v2 contract.');
-      requireThat(valid(body), 'invalid', 'Request does not match the versioned schema.', { fields: valid.errors ?? [] });
+      const explained = valid(body) ? null : explainSchema(valid.errors);
+      requireThat(valid(body), 'invalid', explained?.length ? `Request does not match the versioned schema: ${explained[0].fix}` : 'Request does not match the versioned schema.', { fields: valid.errors ?? [], problems: explained ?? [], remedy: 'Fix the named fields and resend the same request identity.' });
       if (legacy && !['protocol.describe', 'action.lookup', 'action.observe', 'action.retry', 'action.cancel', 'action.output', 'action.list', 'resource.read', 'resource.list', 'document.open', 'document.read', 'context.read', 'binding.list', 'binding.activity', 'composition.read', 'observation.snapshot', 'project.list'].includes(method)) throw new Fault('unavailable', 'New writes use the explicit v2 project contract; accepted v1 operations remain observable.');
       let value;
       if (body.projectId && method !== 'project.source.add') {
@@ -387,6 +408,16 @@ export class RhoService {
   async dispatch(method: string, b: any, principal: Principal, contractRef?: string): Promise<any> {
     requireThat(this.state.principals.some(current => current.id === principal.id && current.tokenHash === principal.tokenHash && current.methods.includes(method) && (!current.expiresAt || Date.parse(current.expiresAt) > Date.now())), 'unauthorized', 'Session authorization expired or was revoked before this operation.');
     if (method === 'protocol.describe') return protocol;
+    // A dry run of any operation body: the same schema the server enforces, with the
+    // edit each problem needs. Nothing is executed and no project is touched.
+    if (method === 'protocol.validate') {
+      const target = String(b.method ?? '');
+      requireThat(target !== 'protocol.validate', 'invalid', 'Validate another operation, not this one.');
+      const validator = validators[target];
+      requireThat(validator, 'not_found', `Unknown API operation "${target}".`, { remedy: 'Call protocol.describe for the accepted method names.' });
+      const problems = validator(b.body) ? [] : explainSchema(validator.errors);
+      return { method: target, valid: problems.length === 0, problems, requires: operations[target].required ?? [] };
+    }
     if (method.startsWith('session.browser.')) {
       requireThat(principal.id === 'operator', 'unauthorized', 'Only the local operator may pair or revoke browser sessions.');
       if (method === 'session.browser.pair') return this.serial('browser:sessions', async () => this.browser.createPairing(await confined(this.state.root, b.path ?? '.')));

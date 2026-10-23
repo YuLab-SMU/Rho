@@ -94,7 +94,9 @@ events, so an Agent-run plot has no route to a view. Recorded as
 
 - `protocol.describe` gains `example` and `dependencies` per operation.
 - `protocol.validate { method, body }`: a dry run that answers with the exact
-  missing field instead of a schema path.
+  missing field instead of a schema path. **Done:** it returns one `fix` per
+  problem ("Adding \"changeId\" also requires \"expectedRevision\"."), and every
+  schema refusal now carries the same explanation plus a remedy.
 - `session.grant` accepts `profile` (`agent-r`, `agent-business`,
   `agent-presentation`) rather than a hand-written method list.
 

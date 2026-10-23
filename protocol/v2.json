@@ -108,6 +108,7 @@
               "workspace.export",
               "workspace.restore",
               "observation.snapshot",
+              "protocol.validate",
               "capability.configure",
               "skill.list",
               "skill.read",
@@ -2068,6 +2069,23 @@
         "compositionId",
         "expectedVersion",
         "changeId"
+      ]
+    },
+    "protocol.validate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "body": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "method",
+        "body"
       ]
     },
     "project.doctor": {
@@ -13782,6 +13800,63 @@
       ],
       "additionalProperties": true
     },
+    "protocol.validate": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": "string",
+          "minLength": 1
+        },
+        "valid": {
+          "type": "boolean"
+        },
+        "problems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "minLength": 1
+              },
+              "keyword": {
+                "type": "string",
+                "minLength": 1
+              },
+              "message": {
+                "type": "string",
+                "minLength": 1
+              },
+              "fix": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "path",
+              "keyword",
+              "message",
+              "fix"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "method",
+        "valid",
+        "problems",
+        "requires"
+      ],
+      "additionalProperties": true
+    },
     "project.doctor": {
       "type": "object",
       "properties": {
@@ -21706,6 +21781,7 @@
     "binding.activity.append": "Registered native adapter only: retain original CLI tool and artifact-ready observations. This does not execute, validate, or present artifacts.",
     "task.routing.put": "Control plane only: conditionally assign one task and business binding to this project without starting a native session.",
     "resource.register": "Declare scoped existing bytes and their type/schema at the supplied digest. This read and registration starts no runtime.",
+    "protocol.validate": "Check one operation body against its versioned schema without executing it: the same checks the server applies, reported with the edit each problem needs. Use it before a write whose shape is uncertain; it changes nothing and starts nothing.",
     "project.doctor": "Report whether this project can actually do work right now: Core binary, Rscript, write access to the project and state folders, plugin selection, Host socket and unfinished runs. Each check carries the next action when it does not pass. It starts no Host and changes nothing.",
     "project.entries": "List one level of the selected project folder for the person who opened it: ordinary files and folders, bounded and confined to the project root, excluding owner state. Listing reads no file contents and starts no runtime.",
     "project.openFile": "Open one text file from the selected project as a document and place it in the person's own layout in one conditional step, so a person can see and edit their own source files without an Agent. Confined to the project root; it executes nothing.",
