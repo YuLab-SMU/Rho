@@ -3,7 +3,7 @@
   "checks": {
     "rho-tests": {
       "command": "node --test test/*.test.mjs",
-      "checkedAt": "2026-10-23T17:49:05.645Z",
+      "checkedAt": "2026-10-23T17:53:49.810Z",
       "exitCode": 0,
       "tests": 99,
       "passing": 99,
@@ -11,7 +11,7 @@
     },
     "plugin-tests": {
       "command": "node --test test/*.test.mjs",
-      "checkedAt": "2026-10-23T17:49:07.284Z",
+      "checkedAt": "2026-10-23T17:53:51.412Z",
       "exitCode": 0,
       "tests": 55,
       "passing": 55,

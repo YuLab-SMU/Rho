@@ -30,10 +30,10 @@ These are believed to work but nothing here demonstrates it.
 
 ## Widths and journeys
 
-`acceptance:person` covers 1440, 768 and 390 in both columns of
-`acceptance:matrix`; `ui-acceptance.mjs` covers 1600/1280/1024/768/390 on the source
-build only. An installed build has not been run at 1600/1280/1024, and no check has
-run the U1 shell journeys against an installed build.
+`acceptance:matrix` runs four journeys — person, execution, walkthrough and the U1
+shell — against both a source build and a packed install. The person journey covers
+1440, 768 and 390; the U1 shell covers 1600/1280/1024/768/390. Both columns pass all
+four; the installed column uses the Core vendored in the artifact.
 
 ## Keeping this honest
 

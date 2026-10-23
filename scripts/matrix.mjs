@@ -27,7 +27,8 @@ if (install) {
 const journeys = [
   { id: 'person', script: 'scripts/person-files-acceptance.mjs', needsR: false },
   { id: 'execution', script: 'scripts/execution-acceptance.mjs', needsR: true },
-  { id: 'walkthrough', script: 'scripts/skill-walkthrough.mjs', needsR: true }
+  { id: 'walkthrough', script: 'scripts/skill-walkthrough.mjs', needsR: true },
+  { id: 'ui', script: 'scripts/ui-acceptance.mjs', needsR: false }
 ];
 
 const report = { startedAt: new Date().toISOString(), columns: {}, passed: false };
