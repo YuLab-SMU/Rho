@@ -30,7 +30,19 @@ const allowed = new Set(['maxRequestBytes', 'maxEventBytes', 'eventRetention', '
 if (Object.keys(limits).some(k => !allowed.has(k))) throw new Error('Unknown service budget in --limits file.');
 const service = await new RhoService({ ...limits, root: path.resolve(values.root), stateDir: path.resolve(values['state-dir']), ...await runtime(values.core, values.rscript), port: Number(values.port ?? 0), ...(values.plugins !== undefined ? { plugins: values.plugins ? values.plugins.split(',') as PluginId[] : [] } : {}) }).start();
 const pairing = await service.browser.createPairing();
-process.stdout.write(JSON.stringify({ ready: { url: service.url, connectionFile: path.join(service.state.directory, 'connection.json'), apiVersion: '2.0', openUrl: link(service.url, pairing.code), pairingCode: pairing.code, pairingExpiresAt: pairing.expiresAt } }) + '\n');
+// The narrow conclusion a person needs on one line: what was selected, where state
+// lives, and how to open it. It stays inside `ready` so a parser reading line one is
+// unaffected.
+const rscript = values.rscript ?? process.env.RHO_RSCRIPT ?? 'Rscript';
+process.stdout.write(JSON.stringify({ ready: {
+  url: service.url, connectionFile: path.join(service.state.directory, 'connection.json'), apiVersion: '2.0',
+  openUrl: link(service.url, pairing.code), pairingCode: pairing.code, pairingExpiresAt: pairing.expiresAt,
+  startup: {
+    projects: path.resolve(values.root), state: path.resolve(values['state-dir']),
+    core: service.bridge.binary, rscript: service.bridge.rscript,
+    note: 'Open openUrl to connect this browser tab. Execution stays off until an Agent submits a run; project.doctor answers what is missing.'
+  }
+} }) + '\n');
 if (values.open) openBrowser(link(service.url, pairing.code));
 let closing = false;
 for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, async () => { if (closing) return; closing = true; const reports = await service.close(); process.stdout.write(JSON.stringify({ shutdown: reports }) + '\n'); });

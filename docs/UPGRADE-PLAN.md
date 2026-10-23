@@ -97,10 +97,17 @@ events, so an Agent-run plot has no route to a view. Recorded as
   answers with the methods the task needs, which of them this session lacks, and
   whether the environment allows it.
 - Startup prints the narrow conclusion a person needs, not only a URL.
+  **Done:** the ready line carries `startup` with the selected projects and state
+  folders, the Core binary and the resolved Rscript, plus how to open the tab. It
+  stays inside `ready` so a parser reading line one is unaffected.
 
 ### P3 — Protocol ergonomics
 
 - `protocol.describe` gains `example` and `dependencies` per operation.
+  **Partially done, deliberately:** field dependencies are in the schema and
+  `protocol.validate` explains them. Examples are not duplicated into the static
+  protocol — that would make protocol generation depend on loaded plugins — so the
+  umbrella Skill points at each Skill's validated example instead.
 - `protocol.validate { method, body }`: a dry run that answers with the exact
   missing field instead of a schema path. **Done:** it returns one `fix` per
   problem ("Adding \"changeId\" also requires \"expectedRevision\"."), and every
