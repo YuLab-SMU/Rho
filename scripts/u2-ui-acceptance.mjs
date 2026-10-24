@@ -67,7 +67,7 @@ const poll = async (read, predicate, label) => {
 };
 const text = () => page.locator('.cm-content:visible').evaluate(e => [...e.querySelectorAll('.cm-line')].map(line => line.textContent).join('\n'));
 async function tab(name) {
-  if (page.viewportSize().width < 768) await page.getByRole('tab', { name, exact: true }).click();
+  if (page.viewportSize().width < 768) await page.getByRole('tab').filter({ hasText: name }).first().click();
   else await page.locator('.dv-tab').filter({ hasText: name }).first().click();
 }
 try {
@@ -102,6 +102,7 @@ try {
   });
   await page.goto(ready.openUrl);
   await page.locator('.project-row').filter({ hasText: 'U2 中文' }).click();
+  await page.locator('.nav-row').filter({ hasText: 'workspace' }).click();
   await page.locator('.cm-content:visible').waitFor();
   assert.equal(await text(), 'base <- 1\n');
   const current = () => call('document.read', { documentId: d.id });

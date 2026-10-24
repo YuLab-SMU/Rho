@@ -86,6 +86,11 @@ export interface UiContribution {
   selection: ('document-utf16' | 'table-entities')[];
   // The full form inside a layout.
   View: ComponentType<UiViewProps>;
+  // Optional object feedback supplied only by the selected Annotations entry.
+  TableQuestion?: ComponentType<Pick<UiViewProps, 'projectId' | 'viewId' | 'snapshot' | 'client' | 'principalId' | 'requestFeedback'> & {
+    resource: { id: string; version: string };
+    onOpenResource?: (ref: { id: string; version: string }) => void;
+  }>;
   // Forms this entry can draw, ordered by scale. Without a declaration an entry
   // draws only "full"; Rho's generic body stands in for smaller forms.
   forms?: FormDeclarations;

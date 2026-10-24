@@ -5,7 +5,8 @@ Read [Status](docs/STATUS.md), [Architecture](docs/ARCHITECTURE.md),
 [documentation index](docs/README.md) first.
 Rho contains a versioned local backend, client and headless acceptance scripts.
 Read [Headless backend](docs/HEADLESS.md) and its
-[acceptance record](docs/BACKEND-ACCEPTANCE.md); browser UI and full product
+[acceptance record](docs/BACKEND-ACCEPTANCE.md). Scoped browser checks are recorded
+in [S7 acceptance](docs/INTERACTION-ACCEPTANCE.md); full product and human usability
 acceptance remain pending.
 
 ## Source ownership
@@ -70,6 +71,17 @@ Read [Product design](docs/DESIGN.md) before UI work. Product-authored UI is Eng
 and preserves Unicode user content. Substantial layout/component design uses Paper
 and user review, reusing approval within its scope. Verify real behavior and
 representative widths, including applicable native input and accessibility.
+
+The user authorized the S7 scope on 2026-10-24: the six behaviors on Paper's
+"07 · 回放原型 · 行为（S7 评审）" — following, working without interruption,
+retaining a person's opened version, returning from away, asking about an object,
+and revealing recorded evidence — plus the complete table-question feedback loop.
+Within that scope, Agents implement, verify, revise and commit autonomously; do not
+request approval for each step or revision. Keep Paper as the behavior reference
+and retain browser evidence. A materially different product direction or interaction
+scope needs a new decision. S6 remains **human usability unverified** until an actual
+participant completes it; it does not block implementation or checked source
+publication. Automated or model-driven checks cannot stand in for human evidence.
 
 Use disposable projects and owned Hosts for execution checks. Inspect existing
 work before starting another Host on the same project. Do not restart a user Host

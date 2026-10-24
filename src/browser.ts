@@ -43,7 +43,7 @@ export type GroupPresentation = NonNullable<Extract<RhoOutput<'composition.apply
 // shell reads only the facts both carry, so this is a rendering projection of the
 // contract value rather than a second definition of it.
 export type CompositionSummary = {
-  compositionId: string; version: number; availability?: Record<string, unknown>;
+  compositionId: string; version: number; availability?: Record<string, unknown>; author?: string; acknowledgedAt?: string;
   views: ViewDescription[];
   rootId?: string;
   nodes?: Extract<RhoOutput<'composition.apply'>['nodes'][number], { kind: 'group' | 'view' }>[];

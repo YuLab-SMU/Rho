@@ -17,8 +17,8 @@ function originLine(run: RunFacts | undefined, integrity: RunFacts['integrity'] 
   return parts.join(' · ');
 }
 
-export function ArtifactSource({ resource, viewId, snapshot, client, onOpenView }: { resource: ResourceSummary; viewId: string; snapshot: WorkspaceSnapshot; client: BrowserClient; onOpenView?: (viewId: string) => void }) {
-  const { runs, problem, readAgain } = useRuns(client, snapshot.project.id);
+export function ArtifactSource({ resource, viewId, snapshot, client, onOpenView, hideQuestion }: { resource: ResourceSummary; viewId: string; snapshot: WorkspaceSnapshot; client: BrowserClient; onOpenView?: (viewId: string) => void; hideQuestion?: boolean }) {
+  const { runs, problem, readAgain } = useRuns(client, snapshot.project.id, snapshot.cursor);
   const origin = runs ? runs.find(run => (resource.provenance as { operationId?: string } | undefined)?.operationId === run.operationId) : undefined;
   // "I pointed the Agent at this version" is a fact about this tab; the delivery
   // state behind it is the owner's. Keeping the identity (not the state) in tab
@@ -36,7 +36,7 @@ export function ArtifactSource({ resource, viewId, snapshot, client, onOpenView 
   // or on another version are never attached to this object.
   type Channel = { scope?: { kind?: string; id?: string }; selection?: { resource?: { id: string; version: string }; entities?: string[] } | null };
   const channels = (snapshot.interactions ?? []) as Channel[];
-  const mine = channels.find(channel => channel.scope?.id === resource.id && channel.scope?.kind === 'shared') ?? channels.find(channel => channel.scope?.id === viewId);
+  const mine = channels.find(channel => channel.scope?.id === viewId && channel.scope?.kind === 'shared');
   const chosen = mine?.selection;
   const selected = chosen?.resource?.id === resource.id && chosen.resource.version === resource.version ? chosen.entities ?? [] : [];
   const fetched = asked ? snapshot.contexts?.find(context => (context as { contextId?: string }).contextId === asked) as { delivery?: string; fetchedAt?: string } | undefined : undefined;
@@ -104,20 +104,20 @@ export function ArtifactSource({ resource, viewId, snapshot, client, onOpenView 
             : <span key={other.id} className="artifact-sibling-plain">{label}</span>;
         })}
       </span>}
-      <span className="artifact-source-right">
+      {!hideQuestion && <span className="artifact-source-right">
         {asked ? <span className="artifact-receipt" role="status">{fetched?.delivery === 'tool-fetched'
           ? `Fetched by the Agent${fetched.fetchedAt ? ' at ' + new Date(fetched.fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : ''}${since.length ? ` · ${since.length} run${since.length === 1 ? '' : 's'} accepted since` : ''}`
           : 'Prepared · the Agent has not fetched it yet'}</span>
           : canWrite ? <button className="artifact-ask" disabled={asking} onClick={() => setComposing(true)}>{selected.length ? `Ask about ${selected.length} selected row${selected.length === 1 ? '' : 's'}` : 'Ask about this'}</button>
           : canAsk ? <button className="artifact-ask" disabled={asking} onClick={() => void ask()}>{asking ? 'Preparing…' : 'Point the Agent here'}</button>
           : null}
-      </span>
+      </span>}
     </div>
     {composing && <div className="artifact-composer">
       <label className="visually-hidden" htmlFor={'ask-' + viewId}>Your question about this version</label>
       <input id={'ask-' + viewId} autoFocus value={question} maxLength={280} placeholder={`Ask about ${shortPath(resource.path)} at this version…`}
         onChange={event => setQuestion(event.target.value)}
-        onKeyDown={event => { if (event.key === 'Enter') void send(); if (event.key === 'Escape') { setComposing(false); setQuestion(''); } }} />
+        onKeyDown={event => { if (event.nativeEvent.isComposing) return; if (event.key === 'Enter') void send(); if (event.key === 'Escape') { setComposing(false); setQuestion(''); } }} />
       <button className="artifact-send" disabled={asking || !question.trim()} onClick={() => void send()}>{asking ? 'Sending…' : 'Send'}</button>
       <button className="artifact-cancel" disabled={asking} onClick={() => { setComposing(false); setQuestion(''); }}>Cancel</button>
       <span className="artifact-composer-note">{selected.length

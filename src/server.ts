@@ -451,7 +451,9 @@ export class RhoService {
     if (!agent) return;
     await agent.recordActivity(principal.id, method, body, result, errorKind);
     // Reads change no owner state, so this is the only event a browser gets for them.
-    await this.emit(p, 'activity.changed', method, principal.id);
+    // The same project-scoped metadata is public in observation.snapshot. A
+    // principal-only invalidation would hide reads from every browser subscriber.
+    await this.emit(p, 'activity.changed', method);
   }
   // What the project's Agents did, for the person's screen (docs/INTERACTION-PLAN.md S7):
   // only principals whose grant names this project, only the fields the activity record

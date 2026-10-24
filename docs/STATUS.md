@@ -1,55 +1,37 @@
 # Rho status
 
-Updated: 2026-10-24. Contract, type and call-boundary ownership.
+Updated: 2026-10-24. S7 live expression and complete table-question feedback.
 
-One public contract is served, and it is derived rather than restated. Each
-component owns its operation schemas in a pure package entry (`./operations`);
-`scripts/contract-owners.mjs` snapshots those entries with the selected package
-version and entry digest, so an absent owner is still describable without
-importing, activating or installing it. The application adds only what it owns
-(the project every request is scoped to, and its own operations). Rho keeps no
-second copy of a component contract: the five hand-maintained copies that used to
-exist had already drifted from their owners.
+The six Paper behaviors and this feedback loop have explicit user authorization
+for autonomous implementation, verification, revision, commits and checked main
+publication. `src/expression.ts` now drives the replay and real browser through
+`live-trace.ts` / `live-workspace.ts`. Project-scoped SSE invalidations reach the
+browser for Agent reads. Working preserves input and exact resource bindings;
+new versions get separate views/selection scopes, layout changes become proposals,
+and return/reload gives a digest without replaying focus or native execution.
 
-Public types are generated from that contract with `json-schema-to-typescript` (the
-Node client, browser client and service request boundary all use them), and
-`npm run check:contracts` fails on a stale owner snapshot, a stale published artifact,
-an operation present in only one of them, or stale generated types. It writes nothing.
-`--check` was verified to fail on an edited artifact and on an orphan operation file.
+Annotations 0.4.3 uses the existing Documents draft, exact table anchor and context
+receipt, then an explicit Agent `replyTo` and optional owner-validated output refs.
+Agent 0.4.4 retains exact object metadata without storing tool inputs/content.
+Assigned tasks keep the existing original-session delivery; unassigned layouts
+prepare a context and name that limit. Reading a question does not answer it.
 
-Runtime guarantees are unchanged: Ajv validates every request and the one place an
-untrusted value becomes typed is `src/contract-runtime.ts`; requests are handed on
-unaltered (no default, coercion or reserialization), so request digests and
-duplicate delivery keep their meaning. Authorization, version, disk and native
-checks stay at each operation. `test/contract-coverage.test.mjs` calls every
-published operation and fails if any is answered by the "not installed" fallback.
-`test/types/contract-usage.ts` is compiled, not run: it asserts that unknown
-methods, wrong fields, wrong value types and invented return types are rejected for
-both clients, and that a rejected request cannot be read as accepted.
+[S7 engineering acceptance](INTERACTION-ACCEPTANCE.md) records real Chrome at
+1440/1024/768/390, browser IME, lost acknowledgement/reload/original retry, no Task
+Map, immutable old/new tables, linked replies, and failure followed by recovery.
+Actual Claude Code 2.1.310 completed the continuation in 28 turns / 132 seconds.
+Four intended R dispatches cover setup, the model's answer, an injected failure and
+recovery; browser refresh adds none. Earlier failed trials are retained separately.
+S6 remains **human usability unverified** and does not block engineering or source
+publication. Automation is not a participant record or a high-fidelity UX verdict.
+Final source checks: Rho 149/149 (test concurrency 4), owners 67/67, replay 26/26,
+build and generated-contract checks pass. U2's six browser checks also pass with no
+Host starts or native dispatches. The default-concurrency MCP timeout is retained.
 
-Responses that used to be a bare object now name their real fields: runs (request,
-Core identity, native view, plan source, checks, cancellation), selections,
-contexts, task-map state and receipts, the capability catalog, composition records,
-workspace save/restore, observation snapshot, artifact facts, table pages and media
-metadata. Genuinely open payloads stay open with a stated boundary: Core's native
-view, table rows, provenance/coverage, resource format, and the Agent's own
-vocabulary and form parameters. Every service-facing test validates the real
-responses and SSE events it receives against the contract.
-
-Checks run on the published commits (`480ac6f5` application, `18252d2` owners):
-Rho 103/103, Plugins 65/65, `npm run check:contracts` clean, service and web builds
-clean. `mcp` calls are validated against the resolved owner contract and then enter
-the same service operation: the accepted `rho_call` value is asserted to equal the
-direct reply and to satisfy the published response schema.
-
-[Contract acceptance](CONTRACT-ACCEPTANCE.md) records what was actually executed on
-these commits: the person, execution/MCP and U1 journeys against both the source build
-and an installed copy of the packed artifact, recovery acceptance's seven checks, and
-collaboration acceptance over real stdio MCP and HTTP.
-
-Still not executed: the scientific `install-acceptance.mjs` flows (two external
-example projects are absent here) and the model-driven collaboration variant. No npm
-registry publication or signing was performed.
+The public contract remains generated from its owners and validated at the request
+boundary. [Contract acceptance](CONTRACT-ACCEPTANCE.md) retains the earlier installed
+candidate evidence. This change's source/browser checks do not certify a newly
+installed npm package, external scientific examples or signed distribution.
 
 ## Task-first project page, truthful execution facts
 
@@ -66,7 +48,8 @@ and `declared` now name themselves, and the Agent's own "done" is neutral becaus
 green is reserved for owner-verified facts. `web/execution-facts.ts` is the single
 reading of runs, artifacts and checks (DOM-free, used by both pages).
 
-A project opens on its own question rather than on the last-used layout, then gives
+Choosing a project opens its overview; reloading an already selected workspace
+restores that workspace and its return checkpoint. The overview gives
 one tally of runs, declared items and the absence of a domain check, the runs needing
 attention, the results (newest version of each artifact name, earlier versions
 counted), and what the Agent declared, with records, documents, files, layout and
@@ -287,12 +270,18 @@ Execution, artifact integrity, domain checks and model judgment remain separate.
 The bounded paired trial uses one simulation; Plugins' earlier 200-simulation and
 Agent-evaluation records retain their own scope. Batch object snapshots do not
 provide live variables or R-memory recovery. Media bytes/metadata are available;
-PDF rendering, image decoding and browser interaction are not implemented.
+PDF rendering remains unimplemented; image, table and document browser checks
+retain their recorded scope.
 Native execution retains OS authority. Saving checks actual disk conditions but
-does not provide CAS against outside writers. MCP supports explicit tool-fetched
-context; proactive external-chat delivery remains unavailable.
+does not provide CAS against outside writers. Unassigned MCP contexts require explicit
+handoff; configured feedback routes retain the original business session.
 
-[Interaction model](INTERACTION-MODEL.md) draft, replayed over agent-exp-2215 and a second real Claude Code run (`?trace=check`) by `npm run prototype:replay` (person simulated, not the WebUI); `src/expression.ts` holds its rules, `test/expression.test.mjs` checks them. [Its plan](INTERACTION-PLAN.md) sequences S0–S7 before any high-fidelity design; S0 is in: a view the person opened keeps its version while following (B, decided). S1 is in: the 18:19 questions and their fetch receipt are facts with principals; a question stays on the version it was asked about, and a receipt changes nothing else. S2 is in: `src/trace.ts` folds Rho's own records into the same trace and the ledger's five projections; Rho holds 3 of the run's 7 refusals, the other 4 never left the agent adapter. S3 is in: items connect to objects only through explicit references (two do, from the 18:19 redeclaration), and the task-map guidance asks for them; Agent notes wait for a recorded one. S4 is in: a run of another kind, folded from Rho's records alone, keeps the same rules once a run ends at Rho's observed exit and names its script; neither real run declared a task map, even with the guidance on every contract, so the screen rests on objects and calls. S5 is in: a source's runs fold behind the latest without hiding the shown, the Agent's or an escalated run, the away digest merges a chain into one line, and only escalations and layout suggestions take the space above the main area; retiring idle objects waits for a trace that needs it. S6 is ready, not run: the replay's `?session` mode and [a moderator script](VALIDATION-S6.md) await one real person. S7's service half is in: the snapshot carries the calls of Agents granted on the project, and each recorded call is an `activity.changed` event; the shell's layout change waits for a Paper review.
+[Interaction model](INTERACTION-MODEL.md) and [its plan](INTERACTION-PLAN.md) retain
+S0–S5 evidence and two real historical Agent trajectories. `npm run prototype:replay`
+still opens them, with simulated person actions clearly identified. S7's live
+browser now shares those rules and records explicit replies; historical missing
+calls are not backfilled. [S6's moderator script](VALIDATION-S6.md) remains ready
+for an actual participant; no human validation has been claimed.
 
 Source, accepted composition, npm installation and future signed distribution
 have separate identities/evidence. Local ignored evidence stays at the selected

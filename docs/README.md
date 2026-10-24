@@ -25,6 +25,7 @@ implementation and verification summary.
 | [Agent 行为账本](AGENT-LEDGER.md) | What facts Rho has about the Agent's behavior, what it has none of, and the five projections that follow |
 | [交互模型](INTERACTION-MODEL.md) | Draft: how person and Agent jointly drive the screen, attention rules and the six primitives |
 | [交互模型实施计划](INTERACTION-PLAN.md) | Invariants that keep each step consistent, eight phases S0–S7 with owners and completion criteria, open decisions, the gate before high-fidelity design |
+| [S7 interaction acceptance](INTERACTION-ACCEPTANCE.md) | Live expression rules, exact table-question replies, browser/owner checks and separate human-usability limits |
 | [S6 真人验证：主持稿](VALIDATION-S6.md) | Moderator script for one person answering the model's five questions in the replay's session mode, with pauses, expected answers and the record sheet |
 | [Design priorities](DESIGN-PRIORITIES.md) | Required interaction designs, Paper review scope and design acceptance |
 | [Architecture](ARCHITECTURE.md) | Source ownership, component interaction, state and lifecycle boundaries |

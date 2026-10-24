@@ -14074,6 +14074,29 @@ export const ownerContracts: OwnerContractSnapshot = {
             "replyTo": {
               "minLength": 1,
               "type": "string"
+            },
+            "resources": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "version": {
+                    "pattern": "^[a-f0-9]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ],
+                "type": "object"
+              },
+              "maxItems": 16,
+              "type": "array",
+              "uniqueItems": true
             }
           },
           "required": [
@@ -14243,6 +14266,29 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "replyTo": {
                     "pattern": "^[a-f0-9]{64}$",
                     "type": "string"
+                  },
+                  "resources": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array",
+                    "uniqueItems": true
                   }
                 },
                 "required": [
@@ -14703,6 +14749,29 @@ export const ownerContracts: OwnerContractSnapshot = {
                     "replyTo": {
                       "pattern": "^[a-f0-9]{64}$",
                       "type": "string"
+                    },
+                    "resources": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "id": {
+                            "minLength": 1,
+                            "type": "string"
+                          },
+                          "version": {
+                            "pattern": "^[a-f0-9]{64}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "version"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 16,
+                      "type": "array",
+                      "uniqueItems": true
                     }
                   },
                   "required": [
@@ -15164,6 +15233,29 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "replyTo": {
                     "pattern": "^[a-f0-9]{64}$",
                     "type": "string"
+                  },
+                  "resources": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array",
+                    "uniqueItems": true
                   }
                 },
                 "required": [
@@ -15623,6 +15715,29 @@ export const ownerContracts: OwnerContractSnapshot = {
                   "replyTo": {
                     "pattern": "^[a-f0-9]{64}$",
                     "type": "string"
+                  },
+                  "resources": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "version": {
+                          "pattern": "^[a-f0-9]{64}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "version"
+                      ],
+                      "type": "object"
+                    },
+                    "maxItems": 16,
+                    "type": "array",
+                    "uniqueItems": true
                   }
                 },
                 "required": [
@@ -16803,7 +16918,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.3",
+      "packageVersion": "0.4.4",
       "entry": "./operations",
       "entryPath": "Projects/Rho-plugins/plugins/agent/dist/operations.js",
       "entrySha256": "4003a223274d9ba44680b600584f4a03ffc4480785b6df6392dfe66b85b4e134",
@@ -16813,7 +16928,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-feedback": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.3",
+      "packageVersion": "0.4.4",
       "entry": "./feedback-contract",
       "entryPath": "Projects/Rho-plugins/plugins/agent/dist/feedback-contract.js",
       "entrySha256": "ecb1561d92b5953d2b786d29cfb57f6f8085d214dc1dec76f6e7bd7a5257cb75",
@@ -16823,7 +16938,7 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "agent-native": {
       "package": "@rho-workspace/plugin-agent",
-      "packageVersion": "0.4.3",
+      "packageVersion": "0.4.4",
       "entry": "./contract",
       "entryPath": "Projects/Rho-plugins/plugins/agent/dist/contract.js",
       "entrySha256": "9e926081cb755a98d2b00d2a8488d8f4c6d25b3d5f1ec526d334ade633fe8a65",
@@ -16833,13 +16948,13 @@ export const ownerContracts: OwnerContractSnapshot = {
     },
     "annotations": {
       "package": "@rho-workspace/plugin-annotations",
-      "packageVersion": "0.4.2",
+      "packageVersion": "0.4.3",
       "entry": "./contract",
       "entryPath": "Projects/Rho-plugins/plugins/annotations/dist/contract.js",
-      "entrySha256": "8643b117de4f5edc32582899a2939839877e829a641e87a95626b49b29ba9c28",
+      "entrySha256": "20f5e9d2d610b0ae9345087cd34395725e58a1921bd9fad8de6a81230d514db4",
       "exports": {
-        "inputs": "5f24f2093a3cea36f99b25d3b7b154844ff7c015623d6aef2efed1b335f8e011",
-        "outputs": "b6f0ccb035b1d6cab5e1d8bfe7d06f8b9159ae54f69fc9e7b9ce113b5934fd2f"
+        "inputs": "220bb12a4a0b19428bae0a4129a9a2835a48305081872c5702f1f167caf68be2",
+        "outputs": "9f7166ecd84ca2e7c82ea7d2e39737f650a2867bd16d95ba8352ebf10b0be669"
       }
     },
     "entry-files": {

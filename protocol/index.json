@@ -53,26 +53,26 @@
     "annotation.create": {
       "summary": "annotation.create",
       "path": "operations/annotation.create.json",
-      "bytes": 14938,
-      "sha256": "2750d4c893e2b59ab5e37cbfc283b3b887e6daa26de59dde1f24772cf6fb6168"
+      "bytes": 15606,
+      "sha256": "fd90fb4a0570e65f07bfd719855beaec589d43bc3a829823615fd270a4e24691"
     },
     "annotation.list": {
       "summary": "annotation.list",
       "path": "operations/annotation.list.json",
-      "bytes": 13133,
-      "sha256": "7f095cab731053654ab077bb078594a3ec35519f841f531fa9090ef39d8faa4c"
+      "bytes": 13847,
+      "sha256": "75f902cfcae8be1c9a9c4964135dc0bb17cbad25f5dfbcafb02a6a29d4eb9fc7"
     },
     "annotation.read": {
       "summary": "annotation.read",
       "path": "operations/annotation.read.json",
-      "bytes": 12305,
-      "sha256": "f625061167c0fcc2d06eaf374078c09c0884284d636dac375bc6a62e34b6b3e3"
+      "bytes": 12973,
+      "sha256": "f8bd049d144782f0f08e2fc6be99437432b47ccbce9bca81b9061a7f53cf0bf2"
     },
     "annotation.reply": {
       "summary": "annotation.reply",
       "path": "operations/annotation.reply.json",
-      "bytes": 13033,
-      "sha256": "7907874874c73aed58dbd4d5ab66411881b97db708f842f295a594e6a1369dbc"
+      "bytes": 14231,
+      "sha256": "a6ee560eb3cc6a1d4545bfd77678c99e59a7b4e4ed8386b639e1a4dd597dc132"
     },
     "artifact.check": {
       "summary": "Verify the selected completion inventory and file bytes only; domain check reports remain project resources.",

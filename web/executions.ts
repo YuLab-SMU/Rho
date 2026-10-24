@@ -24,7 +24,7 @@ async function read(client: BrowserClient, projectId: string): Promise<RunFacts[
   return work;
 }
 
-export function useRuns(client: BrowserClient, projectId: string | undefined) {
+export function useRuns(client: BrowserClient, projectId: string | undefined, observationCursor?: number) {
   const [runs, setRuns] = useState<RunFacts[] | null>(() => projectId ? cache.get(projectId)?.runs ?? null : null);
   const [problem, setProblem] = useState('');
   const [nonce, setNonce] = useState(0);
@@ -32,22 +32,22 @@ export function useRuns(client: BrowserClient, projectId: string | undefined) {
     if (!projectId) return;
     let live = true;
     const held = cache.get(projectId);
-    if (held && Date.now() - held.at < maxAgeMs) { setRuns(held.runs); return; }
+    if (held && observationCursor === undefined && Date.now() - held.at < maxAgeMs) { setRuns(held.runs); return; }
     read(client, projectId).then(next => { if (live) { setRuns(next); setProblem(''); } }, (error: unknown) => {
       // The last read stays on screen; the failure is named instead of hidden.
       if (live) setProblem(error instanceof Error ? error.message : 'The executions could not be read.');
     });
     return () => { live = false; };
-  }, [client, projectId, nonce]);
+  }, [client, projectId, nonce, observationCursor]);
   return { runs, problem, readAgain: () => { if (projectId) forgetRuns(projectId); setNonce(value => value + 1); } };
 }
 
 // The resource a view is bound to, when it is bound to exactly one.
 export function boundResource(view: { bindings?: Record<string, unknown> }, resources: ResourceSummary[]) {
   for (const binding of Object.values(view.bindings ?? {})) {
-    const id = (binding as { id?: string })?.id;
+    const { id, version } = binding as { id?: string; version?: string };
     if (!id) continue;
-    const resource = resources.find(entry => entry.id === id);
+    const resource = resources.find(entry => entry.id === id && entry.version === version);
     if (resource) return resource;
   }
   return undefined;

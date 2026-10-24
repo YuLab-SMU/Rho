@@ -27,18 +27,22 @@ export type Effect =
   | { kind: 'open'; source: string | null; version: number }
   | { kind: 'edit'; source: string; version: number }
   | { kind: 'save'; source: string; version: number }
-  | { kind: 'submit'; run: number; source: string; sourceVersion: number | null }
+  | { kind: 'source-state'; source: string; version: number; savedVersion: number | null }
+  | { kind: 'submit'; run: number; source: string; sourceVersion: number | null; state?: RunState }
+  | { kind: 'run-state'; run: number; state: RunState }
   | { kind: 'retry'; run: number }
-  | { kind: 'ended'; run: number; exit: number | null }
+  | { kind: 'ended'; run: number; exit: number | null; state?: RunState }
+  | { kind: 'registered'; artifact: string; name: string; version: string; run: number | null }
   | { kind: 'observe'; run: number }
   | { kind: 'output'; run: number; stream: 'stdout' | 'stderr' | null }
   | { kind: 'verified'; run: number; artifacts: string[] }
   | { kind: 'read'; artifact: string | null; run: number | null }
   | { kind: 'layout'; replace: boolean; views: ArtifactRef[] }
   | { kind: 'items'; question: string | null; items: DeclaredItem[] | null }
-  | { kind: 'ask'; question: string; text: string; target: string; version: string; run: number; rows: string[]; document: { source: string; version: number } | null }
-  | { kind: 'fetched'; question: string };
-export interface ArtifactRef { artifact: string; run: number }
+  | { kind: 'ask'; question: string; text: string; target: string; version: string; run: number | null; rows: string[]; document: { source: string; version: number } | null }
+  | { kind: 'fetched'; question: string }
+  | { kind: 'responded'; question: string };
+export interface ArtifactRef { artifact: string; run: number | null; object?: string; version?: string }
 // What the Agent declared, in its own words. Only its explicit references connect it to
 // objects: an artifact (that file, those bytes, that run), a view, earlier items it
 // branches from. A title that names an object connects nothing. Lines marked judgment
@@ -81,7 +85,7 @@ export interface Trace {
 export type Attention = 'following' | 'working' | 'away';
 export type PersonIntent =
   | { kind: 'follow' } | { kind: 'unfollow' }
-  | { kind: 'open'; target: string }
+  | { kind: 'open'; target: string; run?: number | null; version?: string }
   | { kind: 'select'; target: string; rows: string[] }
   | { kind: 'type'; target: string }
   | { kind: 'close'; target: string }
@@ -98,7 +102,7 @@ export type PersonIntent =
 // before the first fact.
 export type PersonAction = PersonIntent & { at: number };
 
-export type RunState = 'running' | 'completed' | 'failed' | 'unknown';
+export type RunState = 'unobserved' | 'running' | 'completed' | 'failed' | 'unknown';
 export interface SourceState { id: string; kind: 'source'; name: string; version: number; savedVersion: number | null; changedAt: number; touchedAt: number; hidden: number }
 export interface RunObject {
   id: string; kind: 'run'; name: string; run: number; source: string; sourceVersion: number | null; state: RunState;
@@ -112,9 +116,9 @@ export interface ArtifactState {
 }
 // A question about one version of an object. It stays on that version when newer ones
 // appear. `fetched` is the context's receipt; `responded` needs an explicit link back
-// from the Agent, which no record has yet. A null author is the person at this screen.
+// from the Agent. A null author is the person at this screen in a simulated replay.
 export interface QuestionState {
-  id: string; kind: 'question'; name: string; author: string | null; target: string; version: string; run: number; rows: string[];
+  id: string; kind: 'question'; name: string; author: string | null; target: string; version: string; run: number | null; rows: string[];
   document: { source: string; version: number } | null;
   state: 'prepared' | 'fetched' | 'responded'; fetchedBy: string | null; fetchedAt: number | null;
   changedAt: number; touchedAt: number; hidden: number;
@@ -125,7 +129,7 @@ export type ObjectState = SourceState | RunObject | ArtifactState | QuestionStat
 // theirs keeps the version it shows until they update it; `newer` is the latest run whose
 // bytes differ, when there is one. Two views may show two versions of one object.
 export interface View {
-  id: string; object: string; run: number | null; openedBy: 'agent' | 'person'; pinned: boolean; preview: boolean; selection: string[];
+  id: string; object: string; run: number | null; version?: string; openedBy: 'agent' | 'person'; pinned: boolean; preview: boolean; selection: string[];
   newer: number | null;
 }
 export interface Suggestion { id: string; views: ArtifactRef[]; cause: 'working' | 'away' | 'pinned'; from: number; merged: number }
@@ -161,11 +165,13 @@ export interface Screen {
   moves: Move[];
 }
 
-interface Work extends Screen {
+export interface ExpressionState extends Screen {
+  presentationClock?: number;
   lastMove: number | null;
   pending: { kind: 'focus'; object: string; run: number | null } | { kind: 'layout'; views: ArtifactRef[]; replace: boolean } | null;
   away: { from: number; prior: Exclude<Attention, 'away'>; baseline: Record<string, ObjectState>; suggestions: string[]; items: string } | null;
 }
+type Work = ExpressionState;
 
 // A fact with no recorded time is placed at the last recorded time before it, so the
 // pace never assumes more time passed than was recorded.
@@ -173,19 +179,35 @@ export function timeOf(fact: Fact): string | null { return fact.at ?? fact.after
 const ms = (time: string | null) => time === null ? null : Date.parse(time);
 
 export function express(trace: Trace, actions: PersonAction[], step: number, start: Exclude<Attention, 'away'> = 'following'): Screen {
-  const s: Work = {
-    step: -1, time: null, attention: start, question: null, objects: {}, order: [], views: [], active: null, agent: null,
-    suggestions: [], escalations: [], digest: null, items: [], hidden: { catalog: 0, rejected: 0, retries: 0 }, revealed: null,
-    expanded: [], moves: [], lastMove: null, pending: null, away: null,
-  };
+  const s = startExpression(start);
   const last = Math.min(step, trace.facts.length - 1);
   for (const a of actions) if (a.at < 0) person(s, trace, a);
   for (let i = 0; i <= last; i++) {
     agent(s, trace, trace.facts[i]);
     for (const a of actions) if (a.at === i) person(s, trace, a);
   }
+  return expressionScreen(s);
+}
+
+// The live shell advances the same reducer once per newly observed fact. It retains
+// presentation state, not a second execution journal or copies of document buffers.
+export function startExpression(start: Exclude<Attention, 'away'> = 'following'): ExpressionState {
+  return {
+    step: -1, time: null, attention: start, question: null, objects: {}, order: [], views: [], active: null, agent: null,
+    suggestions: [], escalations: [], digest: null, items: [], hidden: { catalog: 0, rejected: 0, retries: 0 }, revealed: null,
+    expanded: [], moves: [], lastMove: null, pending: null, away: null,
+  };
+}
+export function observeExpression(s: ExpressionState, trace: Trace, fact: Fact, observedAt?: number) { s.presentationClock = observedAt; agent(s, trace, { ...fact, seq: s.step + 1 }); }
+export function actExpression(s: ExpressionState, trace: Trace, intent: PersonIntent) { person(s, trace, { ...intent, at: s.step }); }
+// Wall time only releases a paced presentation; it never creates an execution fact.
+export function settleExpression(s: ExpressionState, now: number) {
+  const recordedTime = s.time;
+  s.presentationClock = now; s.time = new Date(now).toISOString(); settle(s); s.time = recordedTime;
+}
+export function expressionScreen(s: ExpressionState): Screen {
   for (const v of s.views) v.newer = newer(s, v);
-  const { lastMove, pending, away, ...screen } = s;
+  const { lastMove, pending, away, presentationClock, ...screen } = s;
   return structuredClone(screen);
 }
 
@@ -226,17 +248,22 @@ function agent(s: Work, trace: Trace, f: Fact) {
     case 'open': { if (e.source === null) return settle(s); const seen = !!s.objects['source:' + e.source], o = source(s, e.source, f.seq); o.version = e.version; if (!seen) o.savedVersion = e.version; return at(o.id, null); }
     case 'edit': { const o = source(s, e.source, f.seq); o.version = e.version; o.changedAt = f.seq; return at(o.id, null); }
     case 'save': { const o = source(s, e.source, f.seq); o.savedVersion = e.version; o.changedAt = f.seq; return at(o.id, null); }
+    case 'source-state': { const o = source(s, e.source, f.seq); o.version = e.version; o.savedVersion = e.savedVersion; o.changedAt = f.seq; return settle(s); }
     case 'submit': {
       // A run names the script it ran; that script is an object even if nothing opened it.
       if (e.sourceVersion !== null && !s.objects['source:' + e.source]) { const o = source(s, e.source, f.seq); o.version = o.savedVersion = e.sourceVersion; }
-      add<RunObject>(s, { id: 'run:' + e.run, kind: 'run', name: 'Run ' + e.run, run: e.run, source: e.source, sourceVersion: e.sourceVersion, state: 'running', exit: null, firstLine: null, verified: [], changedAt: f.seq, touchedAt: f.seq, hidden: 0 });
+      add<RunObject>(s, { id: 'run:' + e.run, kind: 'run', name: 'Run ' + e.run, run: e.run, source: e.source, sourceVersion: e.sourceVersion, state: e.state ?? 'running', exit: null, firstLine: null, verified: [], changedAt: f.seq, touchedAt: f.seq, hidden: 0 });
       return at('run:' + e.run, null);
     }
     case 'retry': { const run = s.objects['run:' + e.run]; if (run) run.hidden++; s.hidden.retries++; return settle(s); }
+    case 'run-state':
     case 'ended': {
       const run = s.objects['run:' + e.run] as RunObject;
-      run.exit = e.exit; run.state = e.exit === 0 ? 'completed' : e.exit === null ? 'unknown' : 'failed'; run.changedAt = f.seq;
-      if (run.state !== 'completed') escalate(s, run, f.seq);
+      if (!run) return settle(s);
+      if (e.kind === 'ended') { run.exit = e.exit; run.state = e.state ?? (e.exit === 0 ? 'completed' : e.exit === null ? 'unknown' : 'failed'); }
+      else run.state = e.state;
+      run.changedAt = f.seq;
+      if (run.state === 'failed' || run.state === 'unknown') escalate(s, run, f.seq);
       return at(run.id, null);
     }
     case 'observe': return at('run:' + e.run, null);
@@ -249,6 +276,7 @@ function agent(s: Work, trace: Trace, f: Fact) {
     }
     case 'verified': {
       const run = s.objects['run:' + e.run] as RunObject, recorded = trace.runs[e.run]?.verified ?? [];
+      if (!run) return settle(s);
       run.verified = [...e.artifacts]; run.changedAt = f.seq;
       for (const name of e.artifacts) {
         const a = artifact(s, name, f.seq), digest = recorded.find(r => r.name === name)?.digest ?? 'unknown';
@@ -257,6 +285,13 @@ function agent(s: Work, trace: Trace, f: Fact) {
         else { a.versions.push({ digest, runs: [e.run] }); a.changedAt = f.seq; }
       }
       return at(run.id, null);
+    }
+    case 'registered': {
+      const a = artifact(s, e.artifact, f.seq); a.name = e.name;
+      const known = a.versions.find(v => v.digest === e.version);
+      if (known) { if (e.run !== null && !known.runs.includes(e.run)) known.runs.push(e.run); }
+      else { a.versions.push({ digest: e.version, runs: e.run === null ? [] : [e.run] }); a.changedAt = f.seq; }
+      return settle(s);
     }
     case 'read': {
       if (e.artifact === null) return settle(s);
@@ -273,7 +308,12 @@ function agent(s: Work, trace: Trace, f: Fact) {
     // the Agent's marker stay, and nothing after the fetch is claimed.
     case 'fetched': {
       const q = s.objects[e.question];
-      if (q?.kind === 'question') { q.state = 'fetched'; q.fetchedBy = f.actor; q.fetchedAt = f.seq; q.changedAt = f.seq; }
+      if (q?.kind === 'question') { if (q.state !== 'responded') q.state = 'fetched'; q.fetchedBy = f.actor; q.fetchedAt = f.seq; q.changedAt = f.seq; }
+      return settle(s);
+    }
+    case 'responded': {
+      const q = s.objects[e.question];
+      if (q?.kind === 'question') { q.state = 'responded'; q.changedAt = f.seq; }
       return settle(s);
     }
   }
@@ -302,20 +342,20 @@ function settle(s: Work) {
 }
 
 function paced(s: Work, f: Fact) {
-  const now = ms(timeOf(f)) ?? ms(s.time);
+  const now = s.presentationClock ?? ms(timeOf(f)) ?? ms(s.time);
   return s.lastMove !== null && now !== null && now - s.lastMove < agentPaceMs;
 }
 function moved(s: Work, f: Pick<Fact, 'seq' | 'at'>, by: Move['by'], rule: Move['rule']) {
-  if (by === 'agent') s.lastMove = ms(timeOf(f as Fact)) ?? ms(s.time) ?? s.lastMove;
+  if (by === 'agent') s.lastMove = s.presentationClock ?? ms(timeOf(f as Fact)) ?? ms(s.time) ?? s.lastMove;
   s.moves.push({ seq: f.seq, by, view: s.active, rule });
 }
 
 // The person goes to the view they hold of the object. The Agent goes to a view already
 // showing that version, else re-versions one of its own, else takes the preview slot.
-function show(s: Work, object: string, run: number | null, by: View['openedBy']) {
+function show(s: Work, object: string, run: number | null, by: View['openedBy'], version?: string) {
   const of = s.views.filter(v => v.object === object);
   let v = by === 'person' ? named(s, object)
-    : of.find(x => run === null || x.run === run) ?? of.find(x => !theirs(x));
+    : of.find(x => (run === null || x.run === run) && (!version || x.version === version)) ?? of.find(x => !theirs(x));
   if (v && by === 'agent' && run !== null) v.run = run;
   if (!v) {
     v = fresh(s, object, run, by, by === 'agent');
@@ -323,6 +363,7 @@ function show(s: Work, object: string, run: number | null, by: View['openedBy'])
     if (slot >= 0) s.views[slot] = v; else s.views.push(v);
   }
   if (by === 'person') { v.preview = false; v.openedBy = 'person'; }
+  if (version) v.version = version;
   s.active = v.id;
 }
 
@@ -345,9 +386,10 @@ function arrange(s: Work, f: Pick<Fact, 'seq' | 'at'>, views: ArtifactRef[], rep
   if (replace) s.views = s.views.filter(theirs);
   let first: string | null = null;
   for (const r of views) {
-    const object = 'artifact:' + r.artifact, of = s.views.filter(v => v.object === object);
-    let v = of.find(x => x.run === r.run) ?? of.find(x => !x.pinned && (by === 'person' || !theirs(x)));
+    const object = r.object ?? 'artifact:' + r.artifact, of = s.views.filter(v => v.object === object);
+    let v = of.find(x => x.run === r.run && (!r.version || x.version === r.version)) ?? of.find(x => !theirs(x));
     if (v) { v.run = r.run; v.preview = false; } else s.views.push(v = fresh(s, object, r.run, by, false));
+    if (r.version) v.version = r.version;
     first ??= v.id;
   }
   s.active = first ?? s.active;
@@ -363,7 +405,7 @@ function escalate(s: Work, run: RunObject, seq: number) {
   const related = shown && (shown.id === run.id || shown.id === 'source:' + run.source
     || (shown.kind === 'run' && shown.source === run.source)
     || (shown.kind === 'artifact' && shown.versions.some(v => v.runs.some(n => (s.objects['run:' + n] as RunObject | undefined)?.source === run.source))));
-  if (related && !s.escalations.some(x => x.object === run.id)) s.escalations.push({ object: run.id, reason: run.exit === null ? 'Outcome unknown' : 'Exit ' + run.exit, from: seq });
+  if (related && !s.escalations.some(x => x.object === run.id)) s.escalations.push({ object: run.id, reason: run.state === 'unknown' ? 'Outcome unknown' : run.exit === null ? 'Execution failed' : 'Exit ' + run.exit, from: seq });
 }
 
 function person(s: Work, trace: Trace, a: PersonAction) {
@@ -379,13 +421,21 @@ function person(s: Work, trace: Trace, a: PersonAction) {
     case 'unfollow': s.attention = 'working'; return;
     case 'open': {
       working();
+      if (a.version !== undefined || a.run !== undefined) {
+        let v = s.views.find(x => x.object === a.target && x.run === (a.run ?? null) && (!a.version || x.version === a.version));
+        if (!v) { v = fresh(s, a.target, a.run ?? null, 'person', false); s.views.push(v); }
+        if (a.version) v.version = a.version;
+        v.openedBy = 'person'; v.preview = false; s.active = v.id;
+        s.escalations = s.escalations.filter(x => x.object !== a.target);
+        s.moves.push({ seq: f.seq, by: 'person', view: s.active, rule: 'person' }); return;
+      }
       // A question opens on the version it was asked about, an item on the version it
       // names, beside any other version of the same object.
       const q = s.objects[a.target], item = s.items.find(x => 'item:' + x.id === a.target);
       const anchor = q?.kind === 'question' ? { object: q.target, version: q.version, run: q.run } : item?.artifact;
       if (anchor) {
-        const v = s.views.find(x => x.object === anchor.object && versionOf(s, anchor.object, x.run) === anchor.version);
-        if (v) { v.preview = false; v.openedBy = 'person'; s.active = v.id; } else { const n = fresh(s, anchor.object, anchor.run, 'person', false); s.views.push(n); s.active = n.id; }
+        const v = s.views.find(x => x.object === anchor.object && (x.version ?? versionOf(s, anchor.object, x.run)) === anchor.version);
+        if (v) { v.preview = false; v.openedBy = 'person'; s.active = v.id; } else { const n = fresh(s, anchor.object, anchor.run, 'person', false); n.version = anchor.version; s.views.push(n); s.active = n.id; }
         s.moves.push({ seq: f.seq, by: 'person', view: s.active, rule: 'person' });
         return;
       }
@@ -412,6 +462,7 @@ function person(s: Work, trace: Trace, a: PersonAction) {
       const v = named(s, a.target), run = v ? newer(s, v) : null;
       if (!v || run === null) return;
       v.run = run;
+      if (v.version) v.version = versionOf(s, v.object, run) ?? undefined;
       s.views = s.views.filter(x => x === v || x.pinned || x.object !== v.object || x.run !== run);
       s.active = v.id;
       s.moves.push({ seq: f.seq, by: 'person', view: s.active, rule: 'person' });
@@ -419,6 +470,7 @@ function person(s: Work, trace: Trace, a: PersonAction) {
     }
     case 'leave':
       if (s.attention === 'away') return;
+      s.pending = null;
       s.away = { from: s.step, prior: s.attention, baseline: structuredClone(s.objects), suggestions: s.suggestions.map(x => x.id), items: JSON.stringify(s.items) };
       s.attention = 'away';
       return;
@@ -505,7 +557,7 @@ export function itemsOn(screen: Pick<Screen, 'objects' | 'items'>, view: View): 
 }
 // A question appears on a view only while the view shows the version it was asked about.
 export function questionsOn(screen: Pick<Screen, 'objects' | 'order'>, view: View): QuestionState[] {
-  const version = versionOf(screen, view.object, view.run);
+  const version = view.version ?? versionOf(screen, view.object, view.run);
   return screen.order.map(id => screen.objects[id]!).filter((q): q is QuestionState => q.kind === 'question' && q.target === view.object && q.version === version);
 }
 const latest = (s: Work, object: string) => (s.objects[object] as ArtifactState | undefined)?.versions.at(-1)?.runs.at(-1) ?? null;

@@ -11,6 +11,15 @@ npm run prototype:replay      # http://localhost:5173
 npm run check:replay          # types, then the rule tests (test/expression.test.mjs)
 ```
 
+## Live browser counterpart
+
+The same reducer now drives the local WebUI through `src/live-trace.ts` and
+`src/live-workspace.ts`. Historical fixtures keep their original missing facts;
+new observations do not backfill old records. [S7 acceptance](../../docs/INTERACTION-ACCEPTANCE.md)
+records the browser, exact table-question replies, failure recovery and real Agent
+continuation separately. S6 human usability remains unverified and does not block
+engineering. `npm run prototype:replay` still opens these historical recordings.
+
 ## What is real
 
 - **The Agent's work.** All 61 calls of `work/agent-exp-2215`, in order, with their

@@ -36,7 +36,8 @@
     "scripts/u2-ui-acceptance.mjs",
     "scripts/mcp-consumer.mjs",
     "scripts/execution-acceptance.mjs",
-    "scripts/person-files-acceptance.mjs"
+    "scripts/person-files-acceptance.mjs",
+    "scripts/interaction-acceptance.mjs"
   ],
   "scripts": {
     "build": "npm run build:service && npm run build:web",
@@ -77,7 +78,9 @@
     "build:contracts": "node scripts/contract-owners.mjs && npm run build:protocol-artifact && node scripts/contract-types.mjs",
     "build:protocol-artifact": "tsc -p tsconfig.protocol.json --noCheck && node scripts/protocol.mjs",
     "check:contracts": "node scripts/contract-owners.mjs --check && tsc -p tsconfig.protocol.json --noCheck && node scripts/protocol.mjs --check && node scripts/contract-types.mjs --check && tsc --noEmit && tsc -p tsconfig.types.json && tsc -p tsconfig.web.json",
-    "test:contracts": "node --test test/entry-contracts.test.mjs test/contract-coverage.test.mjs test/protocol.test.mjs test/validate.test.mjs"
+    "test:contracts": "node --test test/entry-contracts.test.mjs test/contract-coverage.test.mjs test/protocol.test.mjs test/validate.test.mjs",
+    "acceptance:interaction": "node scripts/interaction-acceptance.mjs",
+    "acceptance:interaction:agent": "RHO_INTERACTION_MODEL=1 node scripts/interaction-acceptance.mjs"
   },
   "dependencies": {
     "@rho-workspace/plugin-agent": "file:../Rho-plugins/plugins/agent",

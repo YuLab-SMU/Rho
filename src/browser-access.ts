@@ -16,7 +16,7 @@ export const browserMethods = ['protocol.describe', 'protocol.validate', 'projec
   // A person may prepare a context naming one exact object and version: that is how
   // they point the Agent at the thing they are asking about. It writes only that
   // reference, starts nothing, and the Agent's fetch stays a separate fact.
-  'context.create',
+  'context.create', 'document.open', 'annotation.create',
   // People see and steer the task map; only the Agent declares its items.
   'task.map.read', 'task.map.present', 'task.map.respond'];
 interface Pairing { hash: string; root: string; methods: string[]; expires: number; selectedProjects: string[] }

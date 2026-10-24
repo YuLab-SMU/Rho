@@ -46,8 +46,8 @@ test('one-use pairing grants a narrowed root, never operator/native/session auth
     const direct = new RhoClient({ url: f.service.url, token: grant.token });
     // U2 grants identity-bearing edits and saves, without global undo or execution.
     assert.ok(grant.principalId.startsWith('browser:'));
-    for (const method of ['document.edit', 'document.save', 'document.undoOwn', 'document.revert', 'data.page', 'interaction.selection.set', 'context.create']) assert.ok(grant.methods.includes(method), method);
-    for (const method of ['session.grant', 'session.browser.pair', 'session.browser.revoke', 'action.submit', 'capability.configure', 'document.abandonSave', 'document.undo', 'document.open', 'composition.put', 'view.close']) await assert.rejects(direct.call(method, {}), e => e.error.kind === 'unauthorized', method);
+    for (const method of ['document.edit', 'document.save', 'document.undoOwn', 'document.revert', 'data.page', 'interaction.selection.set', 'context.create', 'document.open', 'annotation.create']) assert.ok(grant.methods.includes(method), method);
+    for (const method of ['session.grant', 'session.browser.pair', 'session.browser.revoke', 'action.submit', 'capability.configure', 'document.abandonSave', 'document.undo', 'annotation.reply', 'composition.put', 'view.close']) await assert.rejects(direct.call(method, {}), e => e.error.kind === 'unauthorized', method);
     assert.equal((await browser.call('observation.snapshot', { projectId: p.id })).host.exitCode, 3);
     assert.equal(f.service.bridge.owned.size, 0);
     await assert.rejects(fs.stat(path.join(p.root, '.rho/host.sock')), { code: 'ENOENT' });
@@ -362,5 +362,15 @@ test("a browser sees what the project's own Agents did, and is told each time th
     assert.ok(after.cursor > before.cursor);
     const events = JSON.parse(await fs.readFile(path.join(p.root, '.rho/rho/events.json'), 'utf8')).events.filter(e => e.type === 'activity.changed');
     assert.deepEqual(events.map(e => e.subject), ['document.open', 'document.edit']);
+    // Verify the actual browser transport, not just the on-disk event journal.
+    const abort = new AbortController(), observed = browser.observe(p.id).observe(abort.signal);
+    try {
+      await observed.next();
+      const pending = observed.next();
+      await agent.call('document.read', { documentId: d.id });
+      const next = await Promise.race([pending, new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error('Browser did not receive the Agent read invalidation')), 5000); timer.unref(); })]);
+      assert.equal(next.value.activity.entries.at(-1).method, 'document.read');
+      assert.equal(next.value.activity.entries.at(-1).documentId, d.id);
+    } finally { abort.abort(); await observed.return(); }
   } finally { await f.cleanup(); }
 });

@@ -78,11 +78,13 @@ function App() {
     if (accessEnded(e)) { end('ended'); return; }
     setPhase('offline'); setOfflineAt(at => at ?? new Date()); setError(humanError(e));
   }
-  function chooseProject(next: ProjectSummary) {
+  function chooseProject(next: ProjectSummary, restoreLayout = false) {
     if (next.id !== project?.id) { setSnapshot(null); setCompositionId(''); setPluginId(''); }
     // The project opens on its own question, not on whichever layout was last open:
     // a person arriving should see what the work is and where it stands.
-    setOverview(true); setPluginReturn(false);
+    if (!restoreLayout) sessionStorage.removeItem('rho.layout.v1:' + connection?.principalId + ':' + next.id);
+    const retainedLayout = restoreLayout ? sessionStorage.getItem('rho.layout.v1:' + connection?.principalId + ':' + next.id) : null;
+    setOverview(!retainedLayout); if (retainedLayout) setCompositionId(retainedLayout); setPluginReturn(false);
     sessionStorage.setItem(projectKey, next.id); setProject(next); setScreen('project');
     if (matchMedia('(max-width: 767px)').matches) setNavigation(false);
   }
@@ -103,7 +105,7 @@ function App() {
       setProjects(list);
       const retained = list.find(p => p.id === sessionStorage.getItem(projectKey));
       // An open project's observation reports the connection; otherwise this read does.
-      if (retained && !current.current) chooseProject(retained);
+      if (retained && !current.current) chooseProject(retained, true);
       else if (!current.current) live();
     }).catch(e => { if (!abort.signal.aborted) lost(e); });
     return () => abort.abort();
@@ -166,8 +168,9 @@ function App() {
   }
   // Opening a layout may name the view to bring forward: from the project page a
   // person picks an artifact, not a tab.
-  function layout(id: string, view?: string) { setCompositionId(id); setOpenView(view ?? ''); setOverview(false); setScreen('project'); }
-  function showSection(next: Section) { setOverview(true); setScreen('project'); setSection(next); }
+  function layout(id: string, view?: string) { if (project) sessionStorage.setItem('rho.layout.v1:' + connection?.principalId + ':' + project.id, id); setCompositionId(id); setOpenView(view ?? ''); setOverview(false); setScreen('project'); }
+  function showOverview() { if (project) sessionStorage.removeItem('rho.layout.v1:' + connection?.principalId + ':' + project.id); setOverview(true); setScreen('project'); }
+  function showSection(next: Section) { showOverview(); setScreen('project'); setSection(next); }
   function plugins() { setPluginId(''); setPluginReturn(false); setScreen('plugins'); }
   function about(id: string) { setPluginId(id); setPluginReturn(true); setScreen('plugins'); }
   function goHome() { setScreen('home'); setHomeFocus(true); }
@@ -175,6 +178,7 @@ function App() {
   const pick = (run: () => void) => () => { run(); setNavigation(false); };
   function end(reason: Away) {
     sessionStorage.removeItem(sessionKey); sessionStorage.removeItem(projectKey); confirmReturn.current = null;
+    for (const key of Object.keys(sessionStorage)) if (['rho.layout.v1:', 'rho-expression/1:', 'rho-table-question/1:'].some(prefix => key.startsWith(prefix))) sessionStorage.removeItem(key);
     setConnection(null); setClient(null); setProject(null); setSnapshot(null); setProjects([]); setError(''); setReadAt(null); setOfflineAt(null);
     setContext(false); setCommands(false); setConfirming(false); setScreen('home'); setAway(reason); setAwayDetail('');
   }
@@ -206,7 +210,7 @@ function App() {
     { label: 'Go to', commands: [
       { id: 'home', label: 'Home', icon: 'home', run: () => setScreen('home') },
       ...(project ? [
-        { id: 'overview', label: 'Overview', icon: 'overview', meta: name(project), run: () => { setOverview(true); setScreen('project'); } },
+        { id: 'overview', label: 'Overview', icon: 'overview', meta: name(project), run: showOverview },
         { id: 'plugins', label: 'Plugins', icon: 'plugins', run: plugins },
       ] satisfies Command[] : []),
       { id: 'open', label: project ? 'Open another project…' : 'Open a project…', icon: 'folder', run: () => { afterCommands.current = () => setHomeFocus(true); setScreen('home'); } },
@@ -277,7 +281,7 @@ function App() {
       </nav>
       {!narrow && projectVisible && navigation && <aside id="project-navigation" className="project-nav" aria-label={sidebarName}>
         {screen === 'plugins' ? <PluginNavigation catalog={snapshot?.catalog} pluginId={pluginId} onSelect={choosePlugin} /> : <ProjectNavigation project={project} location={located(project, folder)} snapshot={snapshot} overview={screen === 'project' && !composition} compositionId={screen === 'project' ? composition?.compositionId ?? '' : ''}
-          onOverview={() => { setOverview(true); setScreen('project'); }} onLayout={layout} onSection={showSection} />}
+          onOverview={showOverview} onLayout={layout} onSection={showSection} />}
       </aside>}
       <main id="main" tabIndex={-1} className={projectVisible ? 'main project-main' : 'main'}>
         {screen === 'project' && snapshot?.presentation?.pending && <div className="offline-bar" role="status">
@@ -294,7 +298,7 @@ function App() {
           : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div>
           : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin}
             back={pluginReturn ? { label: 'Back to ' + name(project), run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
-          : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); }} mapChipTarget={mapChip} openView={openView} /></Suspense>
+          : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); }} mapChipTarget={mapChip} openView={openView} /></Suspense>
           : <ProjectOverview client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} onOpened={id => { layout(id); reread(); }} />}
       </main>
       {context && !narrow && <aside id="project-context" className="context-drawer" aria-label={feedbackContext ? 'Your question' : 'Context and access'}>
@@ -311,7 +315,7 @@ function App() {
         <Rail name="Plugins" icon="plugins" active={screen === 'plugins'} onClick={pick(() => project ? plugins() : setScreen('home'))} />
       </nav>
       {projectVisible && <div className="drawer-project">{screen === 'plugins' ? <PluginNavigation catalog={snapshot?.catalog} pluginId={pluginId} onSelect={id => pick(() => choosePlugin(id))()} /> : <ProjectNavigation project={project} location={located(project, folder)} snapshot={snapshot} overview={screen === 'project' && !composition} compositionId={screen === 'project' ? composition?.compositionId ?? '' : ''}
-        onOverview={pick(() => { setOverview(true); setScreen('project'); })} onLayout={id => pick(() => layout(id))()} onSection={next => pick(() => showSection(next))()} />}</div>}
+        onOverview={pick(showOverview)} onLayout={id => pick(() => layout(id))()} onSection={next => pick(() => showSection(next))()} />}</div>}
       <div className="drawer-foot"><button className="nav-row" onClick={() => { setNavigation(false); setCommands(true); }}><Icon name="prompt" size={16} stroke={1.8} /><span className="nav-row-name">Commands</span></button></div>
     </Overlay>}
     {narrow && context && <Overlay className="context-sheet" label={feedbackContext ? 'Your question' : 'Context and access'} returnFocus={contextTrigger} onClose={() => setContext(false)}>

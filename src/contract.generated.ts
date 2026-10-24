@@ -2030,6 +2030,13 @@ export interface AnnotationCreateOutput {
     };
     id: string;
     replyTo?: string;
+    /**
+     * @maxItems 16
+     */
+    resources?: {
+      id: string;
+      version: string;
+    }[];
   }[];
   receipt?: {
     at: string;
@@ -2146,6 +2153,13 @@ export type AnnotationListOutput = {
     };
     id: string;
     replyTo?: string;
+    /**
+     * @maxItems 16
+     */
+    resources?: {
+      id: string;
+      version: string;
+    }[];
   }[];
   receipt?: {
     at: string;
@@ -2263,6 +2277,13 @@ export interface AnnotationReadOutput {
     };
     id: string;
     replyTo?: string;
+    /**
+     * @maxItems 16
+     */
+    resources?: {
+      id: string;
+      version: string;
+    }[];
   }[];
   receipt?: {
     at: string;
@@ -2343,6 +2364,13 @@ export interface AnnotationReplyInput {
   };
   expectedVersion: number;
   replyTo: string;
+  /**
+   * @maxItems 16
+   */
+  resources?: {
+    id: string;
+    version: string;
+  }[];
 }
 
 export interface AnnotationReplyOutput {
@@ -2387,6 +2415,13 @@ export interface AnnotationReplyOutput {
     };
     id: string;
     replyTo?: string;
+    /**
+     * @maxItems 16
+     */
+    resources?: {
+      id: string;
+      version: string;
+    }[];
   }[];
   receipt?: {
     at: string;
