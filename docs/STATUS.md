@@ -87,28 +87,28 @@ registered resources and links it in the item's footer and on the project page; 
 stale version draws nothing rather than a guess.
 
 Asking a question carries the person's own words and their selection. "Ask about
-this" opens a one-line composer; sending opens the project's `questions.md` through
-the document owner, appends the text conditionally, and creates a `context.create`
-referencing that text range, the exact artifact version, and — when rows of that
-version are selected — those entities, read from the view-scoped channel so rows
-picked elsewhere never attach. The view reports "Prepared" until the owner records a
-fetch, then "Fetched by the Agent" with the time. Work accepted after that moment is
-counted beside the receipt as a time fact, never as a claim that it answers the
-question; every run here predates the fetch, so acceptance covers the negative case.
+this" opens a one-line composer; sending appends the text to the project's
+`questions.md` through the document owner and creates a `context.create` naming that
+text range, the exact artifact version, and — when rows of that version are selected —
+those entities, read from the view-scoped channel so rows picked elsewhere never
+attach. The view reports "Prepared" until the owner records a fetch, then "Fetched by
+the Agent" with the time; work accepted after that is counted as a time fact, never as
+a claim that it answers the question; every run here predates the fetch, so only that
+case is covered.
 
 Checks: Rho 114/114 with `RHO_CORE_BINARY` set (the ten new unit tests cover the
 reading of runs, artifacts and checks: declared vs present vs verified, an unknown
 outcome never read as done, one row per artifact name with earlier versions counted,
-one file's submissions chained); the eight failures without that variable are the
-missing Core binary, not the change; `npm run check:contracts` is clean. One earlier
+one file's submissions chained). Without that variable eight tests fail on the missing
+Core binary, not on the change; `npm run check:contracts` is clean. One earlier
 run failed a single test and did not reproduce in five attempts, recorded rather than
-waved away. Browser acceptance ran 48 checks on a byte-identical copy of the real
-`work/agent-exp-2215` project (its writer lock is held by an earlier service) at 1440
-and 768, including restart: question, both failed runs, artifact
-provenance, the sibling jump, the written question and its fetch receipt, a question narrowed to two selected rows,
-and an
-Agent-declared map naming real artifact versions that open, all come back from owner
-state. Evidence: `work/acceptance-v3-*/evidence-v3`.
+waved away. Browser acceptance runs on `work/agent-exp-2215` itself — the service left
+from the earlier experiment was stopped, and an orphaned lock-holder child with it, so
+the Agent's own items carry exact artifact versions. 49 checks at 1440 and 768
+including restart: question, both failed runs, provenance, the sibling jump, the
+written question and its fetch receipt, a question narrowed to two selected rows, and
+a map naming real artifact versions that open, all from owner state. Evidence:
+`work/agent-exp-2215/evidence-v3`.
 
 Not done: no `from` edges are declared here, so the map still cannot show a branch;
 no figure region can be anchored; the notes document is one fixed path; and the
@@ -243,11 +243,10 @@ declared column) stay failed.
 
 ## Single-contract cleanup verification
 
-The two coexisting protocol artifacts were collapsed on 2026-10-23, before any release:
-the earlier version had never been published, so keeping it charged a released
-product's compatibility cost against development work. Shared definitions live in
-`protocol-base.ts` with no contract identity, and a `--allow-dirty` build produced a
-tarball whose every packaged hash was recomputed and matched.
+The two coexisting protocol artifacts were collapsed on 2026-10-23, before any
+release, because keeping an unpublished second dialect charged a compatibility cost
+against development work. Shared definitions live in `protocol-base.ts` with no
+contract identity.
 
 ## Current focus and remaining work
 
@@ -279,8 +278,8 @@ traceback, anchored feedback) and W1a–W5a continuation/error states, with the
 [version/feedback ledger](DESIGN-PRIORITIES.md#w-系列资源版本与反馈台账); C9
 presentation/animation and C10 annotations remain proposals.
 
-The design keeps distinct: feedback draft, context available but unfetched, a
-tool-fetch receipt, observed work and an explicitly linked response. The earlier
+The design keeps distinct: draft, context available but unfetched, a tool-fetch
+receipt, observed work and an explicitly linked response. The earlier
 ["v2 (inquiry)"](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-7-0) and
 ["npm WebUI"](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-5-0) pages
 stay as flow/state reference. Their 1440/1280-wide boards do not prove live layout,
