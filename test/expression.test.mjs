@@ -111,6 +111,11 @@ test("a view the person opened keeps its version; the Agent's newer one opens be
   assert.equal(read.active, 'artifact:temp-effect.png@5');
 });
 
+test('a document first seen when it is opened is the copy on disk; only an edit makes it unsaved', () => {
+  const saved = step => { const o = express(trace, [], step).objects['source:analysis.R']; return [o.version, o.savedVersion]; };
+  assert.deepEqual([8, 9, 10].map(saved), [[1, 1], [2, 1], [2, 2]]);
+});
+
 test('the Agent declares its items at the end, and they stay its account, unlinked to objects', () => {
   assert.equal(express(trace, [], 58).question, null);
   const screen = express(trace, [], runEnd);

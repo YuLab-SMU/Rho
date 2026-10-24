@@ -218,10 +218,13 @@ function agent(s: Work, trace: Trace, f: Fact) {
   const at = (id: string, run: number | null) => byAgent ? focus(s, f, id, run) : settle(s);
   switch (e.kind) {
     case 'catalog': s.hidden.catalog++; return settle(s);
-    case 'open': if (e.source === null) return settle(s); source(s, e.source, f.seq).version = e.version; return at('source:' + e.source, null);
+    // A document first seen when it is opened or run is the copy on disk: saved, until an edit says otherwise.
+    case 'open': { if (e.source === null) return settle(s); const seen = !!s.objects['source:' + e.source], o = source(s, e.source, f.seq); o.version = e.version; if (!seen) o.savedVersion = e.version; return at(o.id, null); }
     case 'edit': { const o = source(s, e.source, f.seq); o.version = e.version; o.changedAt = f.seq; return at(o.id, null); }
     case 'save': { const o = source(s, e.source, f.seq); o.savedVersion = e.version; o.changedAt = f.seq; return at(o.id, null); }
     case 'submit': {
+      // A run names the script it ran; that script is an object even if nothing opened it.
+      if (e.sourceVersion !== null && !s.objects['source:' + e.source]) { const o = source(s, e.source, f.seq); o.version = o.savedVersion = e.sourceVersion; }
       add<RunObject>(s, { id: 'run:' + e.run, kind: 'run', name: 'Run ' + e.run, run: e.run, source: e.source, sourceVersion: e.sourceVersion, state: 'running', exit: null, firstLine: null, verified: [], changedAt: f.seq, touchedAt: f.seq, hidden: 0 });
       return at('run:' + e.run, null);
     }

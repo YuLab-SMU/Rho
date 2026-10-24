@@ -4,6 +4,7 @@ import '../../web/theme.css';
 import './replay.css';
 import traceJson from './trace/airquality.json';
 import recordsJson from './trace/records.json';
+import checkRecordsJson from './trace/check.records.json';
 import figureUrl from './trace/temp-effect.run-5.png';
 import {
   express, itemsOn, questionsOn, when,
@@ -13,24 +14,29 @@ import { authorLabel } from '../../src/task-frame.js';
 import { align, fold, ledger, type LedgerEntry, type OwnerRecords } from '../../src/trace.js';
 
 // A behavior prototype, not a product page: the shell above the dock is drawn only
-// from express(trace, actions, step). The dock replays the recorded Agent run and
-// records what the person does, at the step where they do it.
-const trace = traceJson as unknown as Trace;
+// from express(trace, actions, step). The dock replays a recorded Agent run and records
+// what the person does, at the step where they do it. Two runs: the first experiment,
+// replayed from its transcript, and (?trace=check) a run known only from Rho's records.
+const which = new URLSearchParams(location.search).get('trace') === 'check' ? 'check' : 'airquality';
+const rho = fold((which === 'check' ? checkRecordsJson : recordsJson) as unknown as OwnerRecords);
+const trace = which === 'check' ? rho : traceJson as unknown as Trace;
 const last = trace.facts.length - 1;
 // The person at this screen stands where the recorded browser stood, so its edits and
 // questions read as "You"; the run's Agent is whoever made the first call.
 const viewer = Object.keys(trace.principals).find(id => trace.principals[id]!.kind === 'browser');
 const runAgent = trace.facts[0]!.actor;
 const who = (principal: string | null) => principal === null ? 'You' : authorLabel(principal, viewer);
-// What Rho itself recorded, folded from its own records, and which of those facts each
-// replayed step is (-1: Rho has no record of that call).
-const rho = fold(recordsJson as unknown as OwnerRecords);
+// Which fact of Rho's own records each replayed step is (-1: Rho has no record of it).
 const recorded = align(trace, rho);
 const rhoStep = (step: number) => recorded.slice(0, step + 1).findLast(i => i >= 0) ?? -1;
 const replayed = (seq: number) => recorded.indexOf(seq);
 
 type Scenario = { id: string; label: string; start: Exclude<Attention, 'away'>; actions: PersonAction[] };
-const scenarios: Scenario[] = [
+const scenarios: Scenario[] = which === 'check' ? [
+  { id: 'follow', label: 'Follow throughout', start: 'following', actions: [] },
+  { id: 'work', label: 'Read check.R from #10', start: 'following', actions: [{ at: 9, kind: 'open', target: 'source:check.R' }] },
+  { id: 'away', label: 'Leave at #11, return at the end', start: 'following', actions: [{ at: 10, kind: 'leave' }, { at: last, kind: 'return' }] },
+] : [
   { id: 'follow', label: 'Follow throughout', start: 'following', actions: [] },
   { id: 'work', label: 'Work in effects.csv from #20', start: 'following', actions: [{ at: 19, kind: 'open', target: 'artifact:effects.csv' }, { at: 19, kind: 'select', target: 'artifact:effects.csv', rows: ['B', 'C'] }] },
   { id: 'away', label: 'Leave at #30, return at #57', start: 'following', actions: [{ at: 29, kind: 'leave' }, { at: 57, kind: 'return' }] },
@@ -312,7 +318,7 @@ function digestLine(line: DigestLine, screen: Screen, act: Act): ReactNode {
   const open = (target: string, text: ReactNode) => <button type="button" className="link" onClick={() => act({ kind: 'open', target })}>{text}</button>;
   switch (line.kind) {
     case 'source': return <>{open(line.object, label(screen.objects[line.object]))} {line.from === null ? 'v' + line.to : `v${line.from} → v${line.to}`}</>;
-    case 'run': return <>{open(line.object, label(screen.objects[line.object]))} <span className={'state ' + line.state}>{line.state}</span> {line.firstLine ? <code>{line.firstLine}</code> : line.verified ? `${line.verified} files verified` : null}</>;
+    case 'run': return <>{open(line.object, label(screen.objects[line.object]))} <span className={'state ' + line.state}>{line.state}</span> {line.firstLine ? <code>{line.firstLine}</code> : line.verified ? `${line.verified} ${line.verified === 1 ? 'file' : 'files'} verified` : null}</>;
     case 'artifact': return <>{open(line.object, label(screen.objects[line.object]))} +{line.versions} version</>;
     case 'question': return <>{open(line.object, <span className="quoted">{label(screen.objects[line.object])}</span>)} <span className="fact">{line.state === 'fetched' ? 'fetched' : 'not fetched'}</span></>;
     case 'suggestion': return <>Layout suggestion waiting</>;
@@ -390,6 +396,7 @@ function Dock({ step, setStep, playing, setPlaying, screen, actions, scenario, p
       {scenarios.map(s => <button key={s.id} type="button" role="radio" aria-checked={scenario === s.id} onClick={() => pick(s.id)}>{s.label}</button>)}
       <span className="spacer" />
       <span className="source">{trace.recorded.experiment} · {trace.facts.length} facts · {trace.recorded.from.slice(11, 19)}–{trace.recorded.to.slice(11, 19)}</span>
+      <a className="trace" href={which === 'check' ? '?' : '?trace=check'}>{which === 'check' ? 'airquality · transcript' : 'check · Rho records'}</a>
     </div>
   </footer>;
 }
@@ -411,7 +418,7 @@ function Scrubber({ step, setStep, actions, screen }: { step: number; setStep: (
 }
 
 function tickKind(f: Fact) {
-  if (trace.principals[f.actor]?.kind !== 'agent') return 'person';
+  if (trace.principals[f.actor]?.kind === 'browser') return 'person';
   if (f.outcome === 'rejected') return 'rejected';
   const k = f.effect?.kind;
   if (k === 'catalog') return 'catalog';
@@ -430,7 +437,7 @@ function target(f: Fact) {
   if (e.kind === 'items') return e.items ? e.items.length + ' items' : 'items not recorded';
   if (e.kind === 'ask') return `${e.target.replace(/^\w+:/, '')} · run ${e.run}${e.rows.length ? ' · rows ' + e.rows.join(', ') : ''}`;
   if (e.kind === 'fetched') return 'question ' + e.question.replace(/^\w+:/, '');
-  if ('run' in e) return 'run ' + e.run + (e.kind === 'ended' ? ` · exit ${e.exit}` : e.kind === 'output' ? ' · ' + e.stream : '');
+  if ('run' in e) return 'run ' + e.run + (e.kind === 'ended' ? ` · exit ${e.exit}` : e.kind === 'output' && e.stream ? ' · ' + e.stream : '');
   return '';
 }
 

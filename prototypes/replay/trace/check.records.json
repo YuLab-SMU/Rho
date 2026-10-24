@@ -1,0 +1,243 @@
+{
+ "format": "rho.owner-records/1",
+ "experiment": "agent-check-s4",
+ "project": "check",
+ "principals": {
+  "agent:d5381afb147921c5065e3cd3caafbba1": {
+   "kind": "agent",
+   "name": "check-1792877956408"
+  }
+ },
+ "activity": [
+  {
+   "cursor": 1,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "capability.index",
+   "at": "2026-10-24T21:39:21.289Z",
+   "outcome": "returned"
+  },
+  {
+   "cursor": 2,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "capability.index",
+   "at": "2026-10-24T21:39:25.566Z",
+   "outcome": "returned"
+  },
+  {
+   "cursor": 3,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "capability.index",
+   "at": "2026-10-24T21:39:25.588Z",
+   "outcome": "returned"
+  },
+  {
+   "cursor": 4,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "capability.index",
+   "at": "2026-10-24T21:39:25.609Z",
+   "outcome": "returned"
+  },
+  {
+   "cursor": 5,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "capability.resolve",
+   "at": "2026-10-24T21:39:30.159Z",
+   "outcome": "returned"
+  },
+  {
+   "cursor": 6,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "capability.resolve",
+   "at": "2026-10-24T21:39:38.023Z",
+   "outcome": "rejected",
+   "errorKind": "stale"
+  },
+  {
+   "cursor": 7,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "capability.resolve",
+   "at": "2026-10-24T21:39:42.300Z",
+   "outcome": "rejected",
+   "errorKind": "stale"
+  },
+  {
+   "cursor": 8,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "capability.resolve",
+   "at": "2026-10-24T21:39:53.750Z",
+   "outcome": "returned"
+  },
+  {
+   "cursor": 9,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "document.open",
+   "at": "2026-10-24T21:40:06.639Z",
+   "outcome": "returned",
+   "returnedVersion": 1
+  },
+  {
+   "cursor": 10,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "document.open",
+   "at": "2026-10-24T21:40:09.361Z",
+   "outcome": "returned",
+   "returnedVersion": 1
+  },
+  {
+   "cursor": 11,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "document.edit",
+   "at": "2026-10-24T21:40:33.135Z",
+   "outcome": "returned",
+   "returnedVersion": 2,
+   "documentId": "ae9bbf5f7bad1a930f0493ecdcfaf0b70197c9d5b38e92374092d8cc22a3de11"
+  },
+  {
+   "cursor": 12,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "document.save",
+   "at": "2026-10-24T21:40:44.494Z",
+   "outcome": "returned",
+   "returnedVersion": 2,
+   "documentId": "ae9bbf5f7bad1a930f0493ecdcfaf0b70197c9d5b38e92374092d8cc22a3de11"
+  },
+  {
+   "cursor": 13,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "action.submit",
+   "at": "2026-10-24T21:40:56.673Z",
+   "outcome": "returned",
+   "operationId": "check-stats-fix-1"
+  },
+  {
+   "cursor": 14,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "capability.index",
+   "at": "2026-10-24T21:41:05.051Z",
+   "outcome": "returned"
+  },
+  {
+   "cursor": 15,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "capability.resolve",
+   "at": "2026-10-24T21:41:16.421Z",
+   "outcome": "returned"
+  },
+  {
+   "cursor": 16,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "action.output",
+   "at": "2026-10-24T21:41:24.249Z",
+   "outcome": "returned",
+   "operationId": "check-stats-fix-1"
+  },
+  {
+   "cursor": 17,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "artifact.check",
+   "at": "2026-10-24T21:41:25.788Z",
+   "outcome": "returned",
+   "operationId": "check-stats-fix-1"
+  },
+  {
+   "cursor": 18,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "action.lookup",
+   "at": "2026-10-24T21:41:28.487Z",
+   "outcome": "returned",
+   "operationId": "check-stats-fix-1"
+  },
+  {
+   "cursor": 19,
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "method": "capability.index",
+   "at": "2026-10-24T21:41:37.670Z",
+   "outcome": "returned"
+  }
+ ],
+ "documents": [
+  {
+   "id": "ae9bbf5f7bad1a930f0493ecdcfaf0b70197c9d5b38e92374092d8cc22a3de11",
+   "path": "stats.R",
+   "initial": "# Summary statistics that check.R relies on.\nweighted_mean <- function(x, w) sum(x * w) / length(x)\n\ntrimmed_mean <- function(x, trim) {\n  x <- sort(x)\n  n <- length(x)\n  k <- floor(n * trim)\n  mean(x[k:(n - k)])\n}\n\nzscore <- function(x) (x - mean(x)) / sqrt(mean((x - mean(x))^2))\n",
+   "initialDigest": "9465f4f6f7665aab88a175938d1dc1c142c8843f9ca3cc282c2315de1d9517a9",
+   "history": [
+    {
+     "version": 2,
+     "at": "2026-10-24T21:40:33.112Z",
+     "author": "agent:d5381afb147921c5065e3cd3caafbba1",
+     "afterDigest": "fb76582aa182d9ae3f00f9cd16550a9d2a27eac62e60b7b68de7cde4d92f66b1",
+     "edits": [
+      {
+       "from": 90,
+       "to": 99,
+       "insert": "sum(w)"
+      },
+      {
+       "from": 201,
+       "to": 202,
+       "insert": "(k + 1)"
+      },
+      {
+       "from": 254,
+       "to": 281,
+       "insert": "sd(x)"
+      }
+     ]
+    }
+   ],
+   "receipts": [
+    {
+     "kind": "edit",
+     "version": 2,
+     "at": "2026-10-24T21:40:33.112Z",
+     "author": "agent:d5381afb147921c5065e3cd3caafbba1"
+    },
+    {
+     "kind": "save",
+     "version": 2,
+     "at": "2026-10-24T21:40:44.471Z",
+     "author": "agent:d5381afb147921c5065e3cd3caafbba1"
+    }
+   ]
+  },
+  {
+   "id": "b359368ac39652256592ca7e8f8040305ca40047e5a2249341c14d5356c9ed40",
+   "path": "check.R",
+   "initial": "# Checks for stats.R. Leave this file as it is: fix stats.R until every check passes.\n# The run's output directory is the first argument; results.csv records every check.\nout <- commandArgs(trailingOnly = TRUE)[1]\nsource(\"stats.R\")\n\nchecks <- list(\n  list(name = \"weighted_mean\", expected = 6.5, actual = function() weighted_mean(c(2, 4, 6, 8), c(1, 1, 1, 5))),\n  list(name = \"trimmed_mean\", expected = 2.5, actual = function() trimmed_mean(c(1, 2, 3, 100), 0.25)),\n  list(name = \"zscore\", expected = 1, actual = function() zscore(c(2, 4, 6))[3])\n)\nresults <- do.call(rbind, lapply(checks, function(k) {\n  got <- tryCatch(k$actual(), error = function(e) NA_real_)\n  data.frame(check = k$name, expected = k$expected, actual = got,\n             passed = isTRUE(abs(got - k$expected) < 1e-9))\n}))\n\nif (!is.na(out)) {\n  path <- file.path(out, \"results.csv\")\n  write.csv(results, path, row.names = FALSE)\n  manifest <- list(schemaVersion = 1L, complete = TRUE, artifacts = list(list(\n    path = \"results.csv\", bytes = unname(file.size(path)),\n    sha256 = digest::digest(path, algo = \"sha256\", file = TRUE))))\n  writeLines(jsonlite::toJSON(manifest, auto_unbox = TRUE), file.path(dirname(out), \"inventory.json\"))\n}\n\nprint(results, row.names = FALSE)\nfailed <- results$check[!results$passed]\nif (length(failed)) stop(\"checks failed: \", paste(failed, collapse = \", \"))\ncat(\"all checks passed\\n\")\n",
+   "initialDigest": "83ef5bc35519c474068d183c8f91c969fcb75a40489573b0b331af1b18e73d47",
+   "history": [],
+   "receipts": []
+  }
+ ],
+ "operations": [
+  {
+   "operationId": "check-stats-fix-1",
+   "principal": "agent:d5381afb147921c5065e3cd3caafbba1",
+   "acceptedAt": "2026-10-24T21:40:56.541Z",
+   "script": {
+    "path": "check.R",
+    "digest": "83ef5bc35519c474068d183c8f91c969fcb75a40489573b0b331af1b18e73d47"
+   },
+   "declared": [
+    "results.csv"
+   ],
+   "exit": 0,
+   "exitObservedAt": "2026-10-24T21:40:56.776Z"
+  }
+ ],
+ "resources": [
+  {
+   "id": "051d5d41553ea5795247c96264ef38b697fc1952a828ac455aa315aa2c6c0e23",
+   "name": "results.csv",
+   "version": "9ba6afe976d90e17945739257974cda7a4bfe32315b366918746bfb3150af657",
+   "kind": "table",
+   "bytes": 112,
+   "operationId": "check-stats-fix-1",
+   "text": "\"check\",\"expected\",\"actual\",\"passed\"\n\"weighted_mean\",6.5,6.5,TRUE\n\"trimmed_mean\",2.5,2.5,TRUE\n\"zscore\",1,1,TRUE\n"
+  }
+ ],
+ "contexts": [],
+ "composition": null,
+ "taskMap": null
+}

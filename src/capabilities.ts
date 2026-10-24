@@ -122,7 +122,7 @@ const taskMapContent = [
   'lands on the summary, not on compare.'
 ].join('\n');
 const taskMap = {
-  id: 'rho.task-map', version: '1.0', content: taskMapContent, digest: digest(taskMapContent),
+  id: 'rho.task-map', version: '1.1', content: taskMapContent, digest: digest(taskMapContent),
   intent: 'Tell a person what the whole task is doing, with your own words.',
   requires: ['task.map.declare', 'task.map.present', 'task.map.read'],
   example: {

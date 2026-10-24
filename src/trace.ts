@@ -7,6 +7,8 @@
 // Nothing is filled in. An identity the records do not hold stays null and the screen
 // says "Not recorded"; every time is a recorded one. A call refused before it reached
 // Rho (the agent adapter checks contracts itself) is not in these records at all.
+// A run's exit is Rho's own observation, made when the host saw it, not when the Agent
+// asked: it is a fact of the operator principal, and the Agent's lookups are reads.
 import type { DeclaredItem, Fact, Trace } from './expression.js';
 
 // A task map item as the owner keeps it; its artifact reference names a resource.
@@ -17,7 +19,9 @@ export interface ActivityEntry {
   returnedVersion?: number; operationId?: string; documentId?: string; contextId?: string;
 }
 export interface DocumentRecord {
-  id: string; path: string;
+  // A document that was on disk before its first recorded edit starts from that text;
+  // initialDigest is the recorded digest of its first version.
+  id: string; path: string; initial?: string; initialDigest?: string;
   history: { version: number; at: string; author: string; afterDigest: string; edits: { from: number; to: number; insert: string }[] }[];
   receipts: { kind: string; version: number; at: string; author: string }[];
 }
@@ -25,7 +29,7 @@ export interface OperationRecord {
   operationId: string; principal: string; acceptedAt: string; script: { path: string; digest: string }; declared: string[];
   exit: number | null; exitObservedAt: string | null;
 }
-export interface ResourceRecord { id: string; name: string; version: string; kind: string; bytes: number; operationId: string }
+export interface ResourceRecord { id: string; name: string; version: string; kind: string; bytes: number; operationId: string; text?: string }
 export interface ContextRecord {
   id: string; principal: string; at: string; changeId: string; text: string; document: { source: string; version: number };
   resource: { id: string; version: string }; rows: string[]; fetchedBy: string | null; fetchedAt: string | null;
@@ -58,21 +62,25 @@ export function fold(records: OwnerRecords): Trace {
 
   const sources: Trace['sources'] = {};
   for (const d of records.documents) {
-    const s = sources[d.path] = { versions: { 1: '' } as Record<string, string>, edited: {} as Record<string, string>, saved: {} as Record<string, string>, authors: {} as Record<string, string> };
-    let text = '';
+    let text = d.initial ?? '';
+    const s = sources[d.path] = { versions: { 1: text } as Record<string, string>, edited: {} as Record<string, string>, saved: {} as Record<string, string>, authors: {} as Record<string, string> };
     for (const h of d.history) {
-      for (const e of h.edits) text = text.slice(0, e.from) + e.insert + text.slice(e.to);
+      // A change's edits are offsets into the text before it, so they apply from the end.
+      for (const e of [...h.edits].sort((a, b) => b.from - a.from)) text = text.slice(0, e.from) + e.insert + text.slice(e.to);
       s.versions[h.version] = text; s.edited[h.version] = h.at; s.authors[h.version] = h.author;
     }
     for (const r of d.receipts) if (r.kind === 'save') s.saved[r.version] = r.at;
   }
   // A run names its script by content digest; the document history says which version that is.
-  const sourceVersion = (path: string, digest: string) => records.documents.find(d => d.path === path)?.history.find(h => h.afterDigest === digest)?.version ?? null;
+  const sourceVersion = (path: string, digest: string) => {
+    const d = records.documents.find(x => x.path === path);
+    return d?.history.find(h => h.afterDigest === digest)?.version ?? (d?.initialDigest === digest ? 1 : null);
+  };
 
   const runs: Trace['runs'] = {}, artifacts: Trace['artifacts'] = {};
   for (const r of records.resources) {
     const a = artifacts[r.name] ??= { kind: r.kind, versions: {} };
-    const v = a.versions[short(r.version)] ??= { runs: [], bytes: r.bytes };
+    const v = a.versions[short(r.version)] ??= { runs: [], bytes: r.bytes, ...(r.text !== undefined ? { text: r.text } : {}) };
     const n = runOf(r.operationId);
     if (n !== null && !v.runs.includes(n)) v.runs.push(n);
   }
@@ -86,7 +94,7 @@ export function fold(records: OwnerRecords): Trace {
   };
   type Timed = { fact: Omit<Fact, 'seq'>; order: number };
   const timed: Timed[] = [];
-  const submitted = new Set<string>(), ended = new Set<string>();
+  const submitted = new Set<string>();
   const latestDeclared = records.taskMap?.declared.at(-1)?.version ?? null;
   for (const e of [...records.activity].sort((a, b) => a.cursor - b.cursor)) {
     const fact: Omit<Fact, 'seq'> = { label: 'activity ' + e.cursor, actor: e.principal, op: e.method, outcome: e.outcome, at: e.at };
@@ -111,12 +119,7 @@ export function fold(records: OwnerRecords): Trace {
         fact.effect = { kind: 'submit', run, source: op.script.path, sourceVersion: version };
         break;
       }
-      // A lookup after the exit was observed is when the Agent learned how the run ended.
-      case 'action.lookup':
-        if (!op || run === null) break;
-        if (!ended.has(op.operationId) && op.exitObservedAt && op.exitObservedAt <= e.at) { ended.add(op.operationId); fact.effect = { kind: 'ended', run, exit: op.exit }; }
-        else fact.effect = { kind: 'observe', run };
-        break;
+      case 'action.lookup': if (run !== null) fact.effect = { kind: 'observe', run }; break;
       case 'action.output': if (run !== null) fact.effect = { kind: 'output', run, stream: null }; break;
       case 'artifact.check': {
         if (!op || run === null) break;
@@ -146,6 +149,14 @@ export function fold(records: OwnerRecords): Trace {
     }
     timed.push({ fact, order: e.cursor });
   }
+  // Rho can see a quick script exit before it records the call that started it; the exit
+  // still follows that call, at the call's time.
+  for (const op of operations) {
+    const run = runOf(op.operationId), start = records.activity.filter(e => e.method === 'action.submit' && e.operationId === op.operationId).sort((a, b) => a.cursor - b.cursor)[0];
+    if (run === null || !op.exitObservedAt) continue;
+    const at = start && start.at > op.exitObservedAt ? start.at : op.exitObservedAt;
+    timed.push({ fact: { label: op.operationId, actor: 'operator', op: 'operation.observed', outcome: 'returned', at, object: 'run:' + run, effect: { kind: 'ended', run, exit: op.exit } }, order: start ? start.cursor + 0.5 : -1 });
+  }
   // What a person did reaches Rho through the browser, which has no activity record: its
   // edits come from the document histories and its questions from the contexts.
   const agent = (principal: string) => records.principals[principal]?.kind === 'agent';
@@ -163,7 +174,7 @@ export function fold(records: OwnerRecords): Trace {
   return {
     format: 'rho.replay-trace/1',
     recorded: { experiment: records.experiment, project: records.project, from: facts[0]?.at ?? '', to: facts.at(-1)?.at ?? '' },
-    facts, principals: records.principals, sources, runs, artifacts,
+    facts, principals: { ...records.principals, operator: { kind: 'operator', name: null } }, sources, runs, artifacts,
   };
 }
 // Which records fact each transcript fact is: per principal, in order, the same operation
@@ -194,6 +205,8 @@ export interface Ledger {
 export function ledger(trace: Trace, step: number, principal: string): Ledger {
   const out: Ledger = { given: { catalog: [], questions: [] }, did: [], read: [], produced: { runs: [], documents: [] }, refused: [] };
   for (const f of trace.facts.slice(0, step + 1)) {
+    // How the Agent's runs ended is Rho's observation, whoever made it.
+    if (f.effect?.kind === 'ended') { const r = out.produced.runs.find(x => x.object === 'run:' + (f.effect as { run: number }).run); if (r) { r.ended = true; r.exit = f.effect.exit; } }
     if (f.actor !== principal) continue;
     const e = f.effect, entry = (object: string | null, version: number | null = null): LedgerEntry => ({ seq: f.seq, op: f.op, object, version });
     if (f.outcome === 'rejected') {
@@ -213,12 +226,7 @@ export function ledger(trace: Trace, step: number, principal: string): Ledger {
       case 'open': out.read.push(entry(e.source === null ? null : 'source:' + e.source, e.version)); break;
       case 'read': out.read.push(entry(e.artifact === null ? null : 'artifact:' + e.artifact, e.run)); break;
       case 'observe': case 'output': out.read.push(entry('run:' + e.run)); break;
-      case 'ended': {
-        out.read.push(entry('run:' + e.run));
-        const r = out.produced.runs.find(x => x.object === 'run:' + e.run);
-        if (r) { r.ended = true; r.exit = e.exit; }
-        break;
-      }
+      case 'ended': out.read.push(entry('run:' + e.run)); break;
       case 'verified': {
         out.read.push(entry('run:' + e.run));
         const r = out.produced.runs.find(x => x.object === 'run:' + e.run);
