@@ -22,6 +22,8 @@ implementation and verification summary.
 | [Installed native grades acceptance](HEADLESS.md#installed-native-grades-acceptance-phase-5) | Two real business/presentation pairs, immutable offline candidate, original feedback recovery, calls/tokens/latency and AC01–AC21 evidence |
 | [Backend acceptance](BACKEND-ACCEPTANCE.md) | Actual component/integration evidence, selected composition, failures and unsupported scope |
 | [Extraction acceptance](EXTRACTION-ACCEPTANCE.md) | v2 reusable backend, two explicit R projects, compatibility, failures and actual npm installation |
+| [Agent 行为账本](AGENT-LEDGER.md) | What facts Rho has about the Agent's behavior, what it has none of, and the five projections that follow |
+| [交互模型](INTERACTION-MODEL.md) | Draft: how person and Agent jointly drive the screen, attention rules and the six primitives |
 | [交互模型实施计划](INTERACTION-PLAN.md) | Invariants that keep each step consistent, eight phases S0–S7 with owners and completion criteria, open decisions, the gate before high-fidelity design |
 | [Design priorities](DESIGN-PRIORITIES.md) | Required interaction designs, Paper review scope and design acceptance |
 | [Architecture](ARCHITECTURE.md) | Source ownership, component interaction, state and lifecycle boundaries |
