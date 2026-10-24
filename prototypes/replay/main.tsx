@@ -6,8 +6,8 @@ import traceJson from './trace/airquality.json';
 import recordsJson from './trace/records.json';
 import figureUrl from './trace/temp-effect.run-5.png';
 import {
-  express, questionsOn, when,
-  type ArtifactState, type Attention, type DigestLine, type Fact, type ObjectState, type PersonAction, type PersonIntent, type QuestionState, type RunObject, type Screen, type SourceState, type Trace, type View,
+  express, itemsOn, questionsOn, when,
+  type ArtifactState, type Attention, type DeclaredItem, type DigestLine, type Fact, type ObjectState, type PersonAction, type PersonIntent, type QuestionState, type RunObject, type Screen, type SourceState, type Trace, type View,
 } from '../../src/expression.js';
 import { authorLabel } from '../../src/task-frame.js';
 import { align, fold, ledger, type LedgerEntry, type OwnerRecords } from '../../src/trace.js';
@@ -140,7 +140,11 @@ function Objects({ screen, act }: { screen: Screen; act: Act }) {
       {questionsOf(o.id).length > 0 && <ul className="runs">{questionsOf(o.id).map(q => <li key={q.id}>{row(q)}</li>)}</ul>}
     </li>)}</ul>}
     {screen.items.length > 0 && <ol className="account">
-      {screen.items.map(item => <li key={item.id}><Glyph /><span>{item.title}</span></li>)}
+      {screen.items.map(item => <li key={item.id}>
+        <Glyph />
+        {/* Only an explicit artifact reference makes an item lead somewhere. */}
+        {item.artifact ? <button type="button" className="link" onClick={() => act({ kind: 'open', target: 'item:' + item.id })}>{item.title}<Mark object={screen.objects[item.artifact.object]} /></button> : <span>{item.title}</span>}
+      </li>)}
     </ol>}
     <span className="spacer" />
     <button type="button" className="unseen" onClick={() => act({ kind: 'reveal', target: 'ledger' })}>
@@ -237,11 +241,24 @@ function Artifact({ artifact, view, screen, tools, act }: { artifact: ArtifactSt
       {view.newer !== null && <button type="button" className="newer" onClick={() => act({ kind: 'update', target: view.id })}>New version · Run {view.newer}</button>}
       {tools}
     </header>
+    <Statements items={itemsOn(screen, view)} />
     <Questions asked={asked} view={view} act={act} />
     {recorded?.text ? <Table text={recorded.text} selection={view.selection} asked={asked.flatMap(q => q.rows)} onSelect={rows => act({ kind: 'select', target: view.id, rows })} />
       : recorded?.file ? <img className="figure" src={figureUrl} alt={artifact.name + ' from run ' + run} />
       : <div className="empty"><span className="fact">Only run 5's image is kept in this trace</span></div>}
   </section>;
+}
+
+// The Agent's account of this version, where an item names it: its words, set apart from
+// the facts above, with its judgments labelled as such.
+function Statements({ items }: { items: DeclaredItem[] }) {
+  if (!items.length) return null;
+  return <div className="statements">{items.map(item => <div key={item.id} className="statement">
+    <Glyph />
+    <span className="text"><b>{item.title}</b>{item.summary ? ' — ' + item.summary : ''}</span>
+    <span className="fact">{item.author ? who(item.author) : ''}</span>
+    {item.lines?.map((line, i) => <span key={i} className={'line' + (line.judgment ? ' judgment' : '')}>{line.judgment ? <small>{line.label ?? 'Agent judgment'}</small> : line.label ? <small>{line.label}</small> : null}{line.text}</span>)}
+  </div>)}</div>;
 }
 
 // Questions on the version this view shows, each with its receipt, and the place to ask

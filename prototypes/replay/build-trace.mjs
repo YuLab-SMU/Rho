@@ -11,6 +11,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { fold } from '../../dist/trace.js';
 
 const here = path.dirname(new URL(import.meta.url).pathname);
 const dir = path.resolve(process.argv[2] ?? 'work/agent-exp-2215');
@@ -19,6 +20,7 @@ const out = path.join(here, 'trace');
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const sha = text => createHash('sha256').update(text).digest('hex');
 const short = digest => digest.slice(0, 8);
+const pick = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, o[k]]));
 
 const calls = fs.readFileSync(path.join(dir, 'calls.jsonl'), 'utf8').trim().split('\n').map(line => JSON.parse(line));
 const events = json(path.join(rho, 'rho/events.json')).events;
@@ -72,6 +74,12 @@ const resourceById = id => {
   return r && { name: path.basename(r.path), operationId: r.provenance.operationId, digest: r.version, kind: r.kind };
 };
 const runNumber = operationId => Number(operationId.split('-').pop());
+// A declared item keeps only what the Agent wrote, and an artifact reference resolves to
+// the exact resource it names: that file, those bytes, that run.
+const declared = (item, author) => {
+  const r = item.artifact && resources.find(x => x.id === item.artifact.id && x.version === item.artifact.version);
+  return pick({ ...item, author, artifact: r ? { object: 'artifact:' + path.basename(r.path), version: short(r.version), run: runNumber(r.provenance.operationId) } : undefined }, ['id', 'kind', 'state', 'title', 'summary', 'artifact', 'view', 'from', 'lines', 'author']);
+};
 const opRecord = id => operations.find(o => o.operationId === id);
 const observedAt = id => events.find(e => e.type === 'operation.observed' && e.subject === id)?.at ?? null;
 
@@ -183,7 +191,7 @@ calls.forEach((call, seq) => {
       fact.object = 'map';
       if (ok) {
         fact.at = mapEvents.shift()?.at ?? null;
-        fact.effect = { kind: 'items', question: input.question, items: input.items.map(({ id, kind, state, title, summary }) => ({ id, kind, state, title, summary })), vocabulary: input.vocabulary ?? null };
+        fact.effect = { kind: 'items', question: input.question, items: input.items.map(item => declared(item, runAgent)) };
       }
       break;
     }
@@ -192,62 +200,8 @@ calls.forEach((call, seq) => {
   facts.push(fact);
 });
 
-// After the run: the person's questions about its results, and their receipts. Each ask
-// is a context the browser prepared (its document edit lands first); a fetch is the
-// context's own receipt, which Rho's activity must also hold for the same principal.
-const later = [];
-for (const h of questionsDoc.history) later.push({ at: h.at, fact: { label: h.changeId, actor: h.author, op: 'document.edit', outcome: 'returned', at: h.at, object: 'source:questions.md', effect: { kind: 'edit', source: 'questions.md', version: h.version } } });
-for (const c of contexts) {
-  // The context names the exact resource version it was asked about, and its own run.
-  const question = 'question:' + short(c.id), meta = c.resource.metadata, key = meta.format?.key?.column;
-  later.push({ at: c.at, fact: { label: c.changeId, actor: c.principal, op: 'context.create', outcome: 'returned', at: c.at, object: question, effect: {
-    kind: 'ask', question, text: c.document.text, target: 'artifact:' + path.basename(meta.path), version: short(c.resource.reference.version), run: runNumber(meta.provenance.operationId),
-    rows: key && c.resource.rows ? c.resource.rows.map(row => String(row[key])) : [],
-    document: { source: c.document.source.path, version: c.document.source.version },
-  } } });
-  if (c.fetchedAt) {
-    if (!activity.some(e => e.method === 'context.read' && e.contextId === c.id && e.principal === c.fetchedBy && e.outcome === 'returned')) throw new Error(`context ${short(c.id)}: no recorded read by ${c.fetchedBy}`);
-    later.push({ at: c.fetchedAt, fact: { label: c.changeId, actor: c.fetchedBy, op: 'context.read', outcome: 'returned', at: c.fetchedAt, object: question, effect: { kind: 'fetched', question } } });
-  }
-}
-for (const { fact } of later.sort((a, b) => a.at.localeCompare(b.at))) facts.push({ seq: facts.length, ...fact });
-
-// Calls with no recorded time keep the recorded times on either side.
-facts.forEach((fact, i) => {
-  if (fact.at) return;
-  fact.after = facts.slice(0, i).findLast(f => f.at)?.at ?? null;
-  fact.before = facts.slice(i + 1).find(f => f.at)?.at ?? null;
-});
-
-// Artifacts: one entry per file name, one version per distinct content.
-fs.mkdirSync(out, { recursive: true });
-const artifacts = {};
-for (const r of resources) {
-  const name = path.basename(r.path), n = runNumber(r.provenance.operationId);
-  const a = artifacts[name] ??= { kind: r.kind, versions: {} };
-  const key = short(r.version);
-  const version = a.versions[key] ??= { runs: [], bytes: r.bytes };
-  version.runs.push(n);
-  const file = path.join(rho, '..', r.path);
-  if (r.kind === 'table') version.text ??= fs.readFileSync(file, 'utf8');
-  else if (n === 5) { version.file = 'temp-effect.run-5.png'; fs.copyFileSync(file, path.join(out, version.file)); }
-}
-for (const a of Object.values(artifacts)) for (const v of Object.values(a.versions)) v.runs.sort((x, y) => x - y);
-
-const trace = {
-  format: 'rho.replay-trace/1',
-  recorded: { experiment: path.basename(dir), project: 'airquality', from: facts.find(f => f.at).at, to: facts.findLast(f => f.at).at },
-  facts,
-  principals: Object.fromEntries([...new Set(facts.map(f => f.actor))].map(id => [id, { kind: id.split(':')[0], name: bindingName(id) }])),
-  sources: Object.fromEntries(Object.entries(sources).map(([name, s]) => [name, { versions: s.versions, edited: Object.fromEntries(Object.entries(s.edited).map(([k, e]) => [k, e.at])), saved: s.saved, authors: s.authors ?? {} }])),
-  runs,
-  artifacts,
-};
-fs.writeFileSync(path.join(out, 'airquality.json'), JSON.stringify(trace, null, 1) + '\n');
-
 // Rho's own records, cut to what src/trace.ts folds: no image data, no local paths, no
 // connection secrets. The replay and the tests fold this instead of calls.jsonl.
-const pick = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, o[k]]));
 const composition = json(path.join(rho, 'rho/compositions', fs.readdirSync(path.join(rho, 'rho/compositions'))[0]));
 const taskMap = json(path.join(rho, 'rho/task-map.json'));
 const principalIds = new Set([...activity.map(e => e.principal), ...Object.values(documents).flatMap(d => d.history.map(h => h.author)), ...contexts.flatMap(c => [c.principal, c.fetchedBy].filter(Boolean))]);
@@ -284,9 +238,50 @@ const records = {
   composition: { history: composition.history.map(h => ({ version: h.version, views: h.snapshot.nodes.filter(n => n.kind === 'view' && n.bindings?.data?.version).map(n => ({ id: n.bindings.data.id, version: n.bindings.data.version })) })) },
   taskMap: {
     question: taskMap.question,
-    items: taskMap.items.map(({ id, kind, state, title, summary }) => ({ id, kind, state, title, summary })),
+    items: taskMap.items.map(item => pick(item, ['id', 'kind', 'state', 'title', 'summary', 'artifact', 'view', 'from', 'lines', 'author'])),
     declared: taskMap.receipts.filter(r => r.kind === 'declare').map(r => pick(r, ['version', 'at', 'author'])),
   },
 };
 fs.writeFileSync(path.join(out, 'records.json'), JSON.stringify(records, null, 1) + '\n');
+
+// After the run, the trace continues with what Rho's records hold and the transcript
+// cannot: the acceptance script's Agent redeclaring the task map, the person's questions
+// (each written into questions.md first) and their receipt. They come from the same
+// fold the ledger uses (src/trace.ts; run `npm run build` first).
+const lastCall = facts.findLast(f => f.at).at;
+for (const fact of fold(records).facts.filter(f => f.actor !== runAgent && f.at > lastCall)) facts.push({ ...fact, seq: facts.length });
+
+// Calls with no recorded time keep the recorded times on either side.
+facts.forEach((fact, i) => {
+  if (fact.at) return;
+  fact.after = facts.slice(0, i).findLast(f => f.at)?.at ?? null;
+  fact.before = facts.slice(i + 1).find(f => f.at)?.at ?? null;
+});
+
+// Artifacts: one entry per file name, one version per distinct content.
+fs.mkdirSync(out, { recursive: true });
+const artifacts = {};
+for (const r of resources) {
+  const name = path.basename(r.path), n = runNumber(r.provenance.operationId);
+  const a = artifacts[name] ??= { kind: r.kind, versions: {} };
+  const key = short(r.version);
+  const version = a.versions[key] ??= { runs: [], bytes: r.bytes };
+  version.runs.push(n);
+  const file = path.join(rho, '..', r.path);
+  if (r.kind === 'table') version.text ??= fs.readFileSync(file, 'utf8');
+  else if (n === 5) { version.file = 'temp-effect.run-5.png'; fs.copyFileSync(file, path.join(out, version.file)); }
+}
+for (const a of Object.values(artifacts)) for (const v of Object.values(a.versions)) v.runs.sort((x, y) => x - y);
+
+const trace = {
+  format: 'rho.replay-trace/1',
+  recorded: { experiment: path.basename(dir), project: 'airquality', from: facts.find(f => f.at).at, to: facts.findLast(f => f.at).at },
+  facts,
+  principals: Object.fromEntries([...new Set(facts.map(f => f.actor))].map(id => [id, { kind: id.split(':')[0], name: bindingName(id) }])),
+  sources: Object.fromEntries(Object.entries(sources).map(([name, s]) => [name, { versions: s.versions, edited: Object.fromEntries(Object.entries(s.edited).map(([k, e]) => [k, e.at])), saved: s.saved, authors: s.authors ?? {} }])),
+  runs,
+  artifacts,
+};
+fs.writeFileSync(path.join(out, 'airquality.json'), JSON.stringify(trace, null, 1) + '\n');
+
 console.log(`${facts.length} facts, ${Object.keys(runs).length} runs, ${Object.keys(artifacts).length} artifacts; ${records.activity.length} activity entries → ${path.relative(process.cwd(), out)}`);

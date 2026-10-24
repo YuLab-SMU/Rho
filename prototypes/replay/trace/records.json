@@ -1053,35 +1053,48 @@
     "kind": "step",
     "state": "done",
     "title": "Frame the question",
-    "summary": "How much of the temperature-ozone association is wind and sunlight rather than temperature?"
+    "summary": "How much of the temperature-ozone association is wind and sunlight rather than temperature?",
+    "author": "agent:0f654f9e88c62c451307903584692e5b"
    },
    {
     "id": "script",
     "kind": "step",
     "state": "done",
     "title": "Write analysis.R in the project",
-    "summary": "Authored through document.edit and document.save; digest 1f6dd06c, final version 9 revision 12."
+    "summary": "Authored through document.edit and document.save; digest 1f6dd06c, final version 9 revision 12.",
+    "author": "agent:0f654f9e88c62c451307903584692e5b"
    },
    {
     "id": "run",
     "kind": "step",
     "state": "done",
     "title": "Run the R analysis",
-    "summary": "airquality-temp-5 exited 0; four artifacts verified by artifact.check with integrity verified."
+    "summary": "airquality-temp-5 exited 0; four artifacts verified by artifact.check with integrity verified.",
+    "artifact": {
+     "id": "a2064e68d5c4f4b6a0bd561fd234dd69bec413bdfe51dd620a0646f29c1a49ac",
+     "version": "1f305e10a68f9eaaea57c3e5d6556274c820bce1bec5963165c9eecd79e78728"
+    },
+    "author": "agent:0f654f9e88c62c451307903584692e5b"
    },
    {
     "id": "figure",
     "kind": "result",
     "state": "done",
     "title": "Show temp-effect.png",
-    "summary": "Built from the run own PNG, 1040x620, version 985b7955, decoded in Chrome at 1440/768/390."
+    "summary": "Built from the run own PNG, 1040x620, version 985b7955, decoded in Chrome at 1440/768/390.",
+    "artifact": {
+     "id": "4677aabb1fd47bca49aeabadd196a3bfee0ecaa99a4368f69d30cc9d18c8055f",
+     "version": "985b79559092adbd00e30fc9a0ebdf1ca2f1d9aa589f50b37b151eaa2c501a86"
+    },
+    "author": "agent:0f654f9e88c62c451307903584692e5b"
    },
    {
     "id": "limits",
     "kind": "note",
     "state": "done",
     "title": "State the limits",
-    "summary": "Observational data, missing-at-random assumed. Three earlier submissions failed on my own script edits, not on the tool."
+    "summary": "Observational data, missing-at-random assumed. Three earlier submissions failed on my own script edits, not on the tool.",
+    "author": "agent:0f654f9e88c62c451307903584692e5b"
    }
   ],
   "declared": [

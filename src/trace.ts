@@ -9,6 +9,9 @@
 // Rho (the agent adapter checks contracts itself) is not in these records at all.
 import type { DeclaredItem, Fact, Trace } from './expression.js';
 
+// A task map item as the owner keeps it; its artifact reference names a resource.
+export type RecordedItem = Omit<DeclaredItem, 'artifact'> & { artifact?: { id: string; version: string } };
+
 export interface ActivityEntry {
   cursor: number; principal: string; method: string; at: string; outcome: 'returned' | 'rejected'; errorKind?: string;
   returnedVersion?: number; operationId?: string; documentId?: string; contextId?: string;
@@ -41,7 +44,7 @@ export interface OwnerRecords {
   contexts: ContextRecord[];
   composition: { history: { version: number; views: { id: string; version: string }[] }[] } | null;
   // Only the latest declaration's items are retained; earlier ones are not recorded.
-  taskMap: { question: string | null; items: DeclaredItem[]; declared: { version: number; at: string; author: string }[] } | null;
+  taskMap: { question: string | null; items: RecordedItem[]; declared: { version: number; at: string; author: string }[] } | null;
 }
 
 const short = (digest: string) => digest.slice(0, 8);
@@ -75,6 +78,12 @@ export function fold(records: OwnerRecords): Trace {
   }
   for (const a of Object.values(artifacts)) for (const v of Object.values(a.versions)) v.runs.sort((x, y) => x - y);
 
+  // An item's artifact reference resolves to the exact resource it names: that file,
+  // those bytes, that run. A reference to nothing Rho registered is dropped, not guessed.
+  const declared = ({ artifact, ...item }: RecordedItem): DeclaredItem => {
+    const r = artifact && records.resources.find(x => x.id === artifact.id && x.version === artifact.version), n = r ? runOf(r.operationId) : null;
+    return r && n !== null ? { ...item, artifact: { object: 'artifact:' + r.name, version: short(r.version), run: n } } : item;
+  };
   type Timed = { fact: Omit<Fact, 'seq'>; order: number };
   const timed: Timed[] = [];
   const submitted = new Set<string>(), ended = new Set<string>();
@@ -130,7 +139,7 @@ export function fold(records: OwnerRecords): Trace {
       case 'task.map.declare': {
         fact.object = 'map';
         const kept = e.returnedVersion === latestDeclared && records.taskMap;
-        fact.effect = { kind: 'items', question: kept ? records.taskMap!.question : null, items: kept ? records.taskMap!.items : null };
+        fact.effect = { kind: 'items', question: kept ? records.taskMap!.question : null, items: kept ? records.taskMap!.items.map(declared) : null };
         break;
       }
       case 'context.read': if (e.contextId) { fact.object = 'question:' + short(e.contextId); fact.effect = { kind: 'fetched', question: fact.object }; } break;

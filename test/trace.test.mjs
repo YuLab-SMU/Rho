@@ -38,11 +38,9 @@ test("Rho's records hold 3 of the transcript's 7 refusals; the 4 the agent adapt
   assert.deepEqual(refused(transcript), ['stale', 'invalid', 'invalid', 'invalid', 'condition', 'stale', 'condition']);
   assert.deepEqual(refused(folded), ['stale', 'condition', 'stale']);
   assert.deepEqual(at.flatMap((j, i) => j < 0 ? [`#${i} ${transcript.facts[i].reason?.kind}`] : []), ['#20 invalid', '#21 invalid', '#25 invalid', '#38 condition']);
-  // Rho also holds calls the transcript never saw: an earlier probe and the acceptance script's Agent.
+  // Rho also holds a call the transcript never saw: a probe before the run.
   const seen = new Set(at);
-  assert.deepEqual(folded.facts.filter(f => !seen.has(f.seq)).map(f => `${records.principals[f.actor].name ?? f.actor.slice(0, 14)} ${f.op}`), [
-    'agent:44957f6e capability.index', 'acceptance-declare task.map.read', 'acceptance-declare task.map.read', 'acceptance-declare task.map.declare',
-  ]);
+  assert.deepEqual(folded.facts.filter(f => !seen.has(f.seq)).map(f => `${f.actor.slice(0, 14)} ${f.op} ${f.outcome} ${f.at.slice(11, 19)}`), ['agent:44957f6e capability.index rejected 14:33:03']);
 });
 
 test('the ledger at #44 says what the Agent was given, did, read, produced and had refused, and names nothing the records do not', () => {

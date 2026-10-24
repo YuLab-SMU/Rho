@@ -44,6 +44,8 @@ body { background: var(--color-canvas); }
 .account { padding: 10px 8px 0 !important; border-top: 1px solid var(--color-divider); animation: arrive .6s ease-out; }
 .account li { display: grid; grid-template-columns: 14px 1fr; gap: 8px; align-items: center; color: var(--color-muted); font-size: 12px; line-height: 22px; }
 .account .glyph { opacity: .55; }
+.account button.link { display: inline-flex; align-items: center; gap: 6px; color: var(--color-ink); font-size: 12px; line-height: 22px; min-width: 0; }
+.account button.link .mark { transform: scale(.8); opacity: .7; }
 .unseen { font: 11.5px/16px var(--font-ui) !important; color: var(--color-meta) !important; padding: 6px 8px !important; }
 .unseen:hover { color: var(--color-ink) !important; }
 
@@ -124,6 +126,14 @@ pre.output.failed { background: #fbeceb; color: #7e2522; }
 .table tbody tr:hover { background: var(--color-row-hover); }
 .table tr[aria-selected='true'] { background: var(--color-accent-soft); box-shadow: inset 2px 0 var(--color-accent); }
 .table tr[data-asked] td:first-child { box-shadow: inset 2px 0 var(--color-muted); }
+.statements { flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; padding: 0 20px 10px; }
+.statement { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; color: var(--color-muted); font-size: 13px; animation: arrive .35s ease-out; }
+.statement .glyph { align-self: center; opacity: .6; }
+.statement .text { flex: 1; min-width: 0; }
+.statement .text b { color: var(--color-ink); font-weight: 600; }
+.statement .line { flex-basis: 100%; padding-left: 24px; }
+.statement .line small { margin-right: 8px; font: 11px/16px var(--font-mono); color: var(--color-meta); }
+.statement .line.judgment { font-style: italic; }
 .questions { flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; padding: 0 20px 12px; }
 .question { display: flex; align-items: baseline; gap: 10px; min-width: 0; animation: arrive .35s ease-out; }
 .question .mark { align-self: center; }

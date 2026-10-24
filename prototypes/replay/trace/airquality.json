@@ -892,38 +892,42 @@
       "kind": "step",
       "state": "done",
       "title": "Frame the question",
-      "summary": "How much of the temperature-ozone association is wind and sunlight rather than temperature?"
+      "summary": "How much of the temperature-ozone association is wind and sunlight rather than temperature?",
+      "author": "agent:98032e9878600a62c3fea6b35d7c5ee2"
      },
      {
       "id": "script",
       "kind": "step",
       "state": "done",
       "title": "Write analysis.R in the project",
-      "summary": "Authored through document.edit and document.save; digest 1f6dd06c, final version 9 revision 12."
+      "summary": "Authored through document.edit and document.save; digest 1f6dd06c, final version 9 revision 12.",
+      "author": "agent:98032e9878600a62c3fea6b35d7c5ee2"
      },
      {
       "id": "run",
       "kind": "step",
       "state": "done",
       "title": "Run the R analysis",
-      "summary": "airquality-temp-5 exited 0; four artifacts verified by artifact.check with integrity verified."
+      "summary": "airquality-temp-5 exited 0; four artifacts verified by artifact.check with integrity verified.",
+      "author": "agent:98032e9878600a62c3fea6b35d7c5ee2"
      },
      {
       "id": "figure",
       "kind": "result",
       "state": "done",
       "title": "Show temp-effect.png",
-      "summary": "Built from the run own PNG, 1040x620, version 985b7955, decoded in Chrome at 1440/768/390."
+      "summary": "Built from the run own PNG, 1040x620, version 985b7955, decoded in Chrome at 1440/768/390.",
+      "author": "agent:98032e9878600a62c3fea6b35d7c5ee2"
      },
      {
       "id": "limits",
       "kind": "note",
       "state": "done",
       "title": "State the limits",
-      "summary": "Observational data, missing-at-random assumed. Three earlier submissions failed on my own script edits, not on the tool."
+      "summary": "Observational data, missing-at-random assumed. Three earlier submissions failed on my own script edits, not on the tool.",
+      "author": "agent:98032e9878600a62c3fea6b35d7c5ee2"
      }
-    ],
-    "vocabulary": null
+    ]
    }
   },
   {
@@ -943,65 +947,128 @@
       "kind": "step",
       "state": "done",
       "title": "Frame the question",
-      "summary": "How much of the temperature-ozone association is wind and sunlight rather than temperature?"
+      "summary": "How much of the temperature-ozone association is wind and sunlight rather than temperature?",
+      "author": "agent:98032e9878600a62c3fea6b35d7c5ee2"
      },
      {
       "id": "script",
       "kind": "step",
       "state": "done",
       "title": "Write analysis.R in the project",
-      "summary": "Authored through document.edit and document.save; digest 1f6dd06c, final version 9 revision 12."
+      "summary": "Authored through document.edit and document.save; digest 1f6dd06c, final version 9 revision 12.",
+      "author": "agent:98032e9878600a62c3fea6b35d7c5ee2"
      },
      {
       "id": "run",
       "kind": "step",
       "state": "done",
       "title": "Run the R analysis",
-      "summary": "airquality-temp-5 exited 0; four artifacts verified by artifact.check with integrity verified."
+      "summary": "airquality-temp-5 exited 0; four artifacts verified by artifact.check with integrity verified.",
+      "author": "agent:98032e9878600a62c3fea6b35d7c5ee2"
      },
      {
       "id": "figure",
       "kind": "result",
       "state": "done",
       "title": "Show temp-effect.png",
-      "summary": "Built from the run own PNG, 1040x620, version 985b7955, decoded in Chrome at 1440/768/390."
+      "summary": "Built from the run own PNG, 1040x620, version 985b7955, decoded in Chrome at 1440/768/390.",
+      "author": "agent:98032e9878600a62c3fea6b35d7c5ee2"
      },
      {
       "id": "limits",
       "kind": "note",
       "state": "done",
       "title": "State the limits",
-      "summary": "Observational data, missing-at-random assumed. Three earlier submissions failed on my own script edits, not on the tool."
+      "summary": "Observational data, missing-at-random assumed. Three earlier submissions failed on my own script edits, not on the tool.",
+      "author": "agent:98032e9878600a62c3fea6b35d7c5ee2"
      }
-    ],
-    "vocabulary": {
-     "kinds": {
-      "step": {
-       "label": "Step",
-       "icon": "play"
-      },
-      "result": {
-       "label": "Result",
-       "icon": "image"
-      },
-      "note": {
-       "label": "Limit",
-       "icon": "info"
-      }
-     },
-     "states": {
-      "done": {
-       "label": "Done",
-       "role": "done",
-       "tone": "verified"
-      }
-     }
-    }
+    ]
    }
   },
   {
    "seq": 61,
-   "label": "ask-figure-1792865962842-edit",
+   "label": "activity 59",
+   "actor": "agent:0f654f9e88c62c451307903584692e5b",
+   "op": "task.map.read",
+   "outcome": "returned",
+   "at": "2026-10-24T18:18:48.075Z"
+  },
+  {
+   "seq": 62,
+   "label": "activity 60",
+   "actor": "agent:0f654f9e88c62c451307903584692e5b",
+   "op": "task.map.read",
+   "outcome": "returned",
+   "at": "2026-10-24T18:19:12.372Z"
+  },
+  {
+   "seq": 63,
+   "label": "activity 61",
+   "actor": "agent:0f654f9e88c62c451307903584692e5b",
+   "op": "task.map.declare",
+   "outcome": "returned",
+   "at": "2026-10-24T18:19:12.414Z",
+   "object": "map",
+   "effect": {
+    "kind": "items",
+    "question": "How much of the temperature effect on ozone is wind and sunlight?",
+    "items": [
+     {
+      "id": "question",
+      "kind": "step",
+      "state": "done",
+      "title": "Frame the question",
+      "summary": "How much of the temperature-ozone association is wind and sunlight rather than temperature?",
+      "author": "agent:0f654f9e88c62c451307903584692e5b"
+     },
+     {
+      "id": "script",
+      "kind": "step",
+      "state": "done",
+      "title": "Write analysis.R in the project",
+      "summary": "Authored through document.edit and document.save; digest 1f6dd06c, final version 9 revision 12.",
+      "author": "agent:0f654f9e88c62c451307903584692e5b"
+     },
+     {
+      "id": "run",
+      "kind": "step",
+      "state": "done",
+      "title": "Run the R analysis",
+      "summary": "airquality-temp-5 exited 0; four artifacts verified by artifact.check with integrity verified.",
+      "author": "agent:0f654f9e88c62c451307903584692e5b",
+      "artifact": {
+       "object": "artifact:effects.csv",
+       "version": "1f305e10",
+       "run": 5
+      }
+     },
+     {
+      "id": "figure",
+      "kind": "result",
+      "state": "done",
+      "title": "Show temp-effect.png",
+      "summary": "Built from the run own PNG, 1040x620, version 985b7955, decoded in Chrome at 1440/768/390.",
+      "author": "agent:0f654f9e88c62c451307903584692e5b",
+      "artifact": {
+       "object": "artifact:temp-effect.png",
+       "version": "985b7955",
+       "run": 5
+      }
+     },
+     {
+      "id": "limits",
+      "kind": "note",
+      "state": "done",
+      "title": "State the limits",
+      "summary": "Observational data, missing-at-random assumed. Three earlier submissions failed on my own script edits, not on the tool.",
+      "author": "agent:0f654f9e88c62c451307903584692e5b"
+     }
+    ]
+   }
+  },
+  {
+   "seq": 64,
+   "label": "questions.md v2",
    "actor": "browser:3e0b3876ca1890fca9920ce0805846ec",
    "op": "document.edit",
    "outcome": "returned",
@@ -1014,8 +1081,8 @@
    }
   },
   {
-   "seq": 62,
-   "label": "ask-figure-1792865962842",
+   "seq": 65,
+   "label": "context 70d07e4a",
    "actor": "browser:3e0b3876ca1890fca9920ce0805846ec",
    "op": "context.create",
    "outcome": "returned",
@@ -1036,12 +1103,12 @@
    }
   },
   {
-   "seq": 63,
-   "label": "ask-figure-1792865962842",
+   "seq": 66,
+   "label": "activity 62",
    "actor": "agent:a5818da2a9d924963d91f0d2ddd9ca5c",
    "op": "context.read",
    "outcome": "returned",
-   "at": "2026-10-24T18:19:25.129Z",
+   "at": "2026-10-24T18:19:25.160Z",
    "object": "question:70d07e4a",
    "effect": {
     "kind": "fetched",
@@ -1049,8 +1116,8 @@
    }
   },
   {
-   "seq": 64,
-   "label": "ask-effects-1792865976458-edit",
+   "seq": 67,
+   "label": "questions.md v3",
    "actor": "browser:3e0b3876ca1890fca9920ce0805846ec",
    "op": "document.edit",
    "outcome": "returned",
@@ -1063,8 +1130,8 @@
    }
   },
   {
-   "seq": 65,
-   "label": "ask-effects-1792865976458",
+   "seq": 68,
+   "label": "context 7d3dbf6a",
    "actor": "browser:3e0b3876ca1890fca9920ce0805846ec",
    "op": "context.create",
    "outcome": "returned",
@@ -1092,6 +1159,10 @@
   "agent:98032e9878600a62c3fea6b35d7c5ee2": {
    "kind": "agent",
    "name": "experience-1792852510294"
+  },
+  "agent:0f654f9e88c62c451307903584692e5b": {
+   "kind": "agent",
+   "name": "acceptance-declare"
   },
   "browser:3e0b3876ca1890fca9920ce0805846ec": {
    "kind": "browser",

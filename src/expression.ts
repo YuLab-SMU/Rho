@@ -39,7 +39,15 @@ export type Effect =
   | { kind: 'ask'; question: string; text: string; target: string; version: string; run: number; rows: string[]; document: { source: string; version: number } | null }
   | { kind: 'fetched'; question: string };
 export interface ArtifactRef { artifact: string; run: number }
-export interface DeclaredItem { id: string; kind: string; state: string; title: string; summary?: string }
+// What the Agent declared, in its own words. Only its explicit references connect it to
+// objects: an artifact (that file, those bytes, that run), a view, earlier items it
+// branches from. A title that names an object connects nothing. Lines marked judgment
+// are the Agent's reading, the others what it reports; neither is a fact Rho observed.
+export interface DeclaredItem {
+  id: string; kind: string; state: string; title: string; summary?: string; author?: string;
+  artifact?: { object: string; version: string; run: number }; view?: string; from?: string[];
+  lines?: { text: string; label?: string; tone?: string; judgment?: boolean }[];
+}
 export interface Fact {
   seq: number;
   label: string;
@@ -152,7 +160,7 @@ export interface Screen {
 interface Work extends Screen {
   lastMove: number | null;
   pending: { kind: 'focus'; object: string; run: number | null } | { kind: 'layout'; views: ArtifactRef[]; replace: boolean } | null;
-  away: { from: number; prior: Exclude<Attention, 'away'>; baseline: Record<string, ObjectState>; suggestions: string[]; items: number } | null;
+  away: { from: number; prior: Exclude<Attention, 'away'>; baseline: Record<string, ObjectState>; suggestions: string[]; items: string } | null;
 }
 
 // A fact with no recorded time is placed at the last recorded time before it, so the
@@ -364,11 +372,13 @@ function person(s: Work, trace: Trace, a: PersonAction) {
     case 'unfollow': s.attention = 'working'; return;
     case 'open': {
       working();
-      const q = s.objects[a.target];
-      // A question opens on the version it was asked about, beside any other version.
-      if (q?.kind === 'question') {
-        const v = s.views.find(x => x.object === q.target && versionOf(s, q.target, x.run) === q.version);
-        if (v) { v.preview = false; v.openedBy = 'person'; s.active = v.id; } else { const n = fresh(s, q.target, q.run, 'person', false); s.views.push(n); s.active = n.id; }
+      // A question opens on the version it was asked about, an item on the version it
+      // names, beside any other version of the same object.
+      const q = s.objects[a.target], item = s.items.find(x => 'item:' + x.id === a.target);
+      const anchor = q?.kind === 'question' ? { object: q.target, version: q.version, run: q.run } : item?.artifact;
+      if (anchor) {
+        const v = s.views.find(x => x.object === anchor.object && versionOf(s, anchor.object, x.run) === anchor.version);
+        if (v) { v.preview = false; v.openedBy = 'person'; s.active = v.id; } else { const n = fresh(s, anchor.object, anchor.run, 'person', false); s.views.push(n); s.active = n.id; }
         s.moves.push({ seq: f.seq, by: 'person', view: s.active, rule: 'person' });
         return;
       }
@@ -402,7 +412,7 @@ function person(s: Work, trace: Trace, a: PersonAction) {
     }
     case 'leave':
       if (s.attention === 'away') return;
-      s.away = { from: s.step, prior: s.attention, baseline: structuredClone(s.objects), suggestions: s.suggestions.map(x => x.id), items: s.items.length };
+      s.away = { from: s.step, prior: s.attention, baseline: structuredClone(s.objects), suggestions: s.suggestions.map(x => x.id), items: JSON.stringify(s.items) };
       s.attention = 'away';
       return;
     case 'return': {
@@ -446,7 +456,7 @@ function digest(s: Work, away: NonNullable<Work['away']>): DigestLine[] {
     if (now.kind === 'question' && (!then || (then as QuestionState).state !== now.state)) lines.push({ kind: 'question', object: id, state: now.state });
   }
   for (const x of s.suggestions) if (!away.suggestions.includes(x.id)) lines.push({ kind: 'suggestion', id: x.id });
-  if (s.items.length !== away.items) lines.push({ kind: 'items', count: s.items.length });
+  if (JSON.stringify(s.items) !== away.items) lines.push({ kind: 'items', count: s.items.length });
   return lines;
 }
 
@@ -454,6 +464,18 @@ const versionOf = (s: Pick<Screen, 'objects'>, object: string, run: number | nul
   const o = s.objects[object];
   return o?.kind === 'artifact' && run !== null ? o.versions.find(x => x.runs.includes(run))?.digest ?? null : null;
 };
+// What an item gathers, only through its artifact reference: the version it names and the
+// run that made it, whose source version is one more step. Null without a reference, or
+// before the screen knows that version.
+export function collect(screen: Pick<Screen, 'objects'>, item: DeclaredItem): { artifact: ArtifactState; version: string; run: RunObject } | null {
+  const ref = item.artifact, o = ref && screen.objects[ref.object], run = ref && screen.objects['run:' + ref.run];
+  return ref && o?.kind === 'artifact' && run?.kind === 'run' && o.versions.some(v => v.digest === ref.version) ? { artifact: o, version: ref.version, run } : null;
+}
+// An item's account appears on views of the version it names, as the Agent's statement.
+export function itemsOn(screen: Pick<Screen, 'objects' | 'items'>, view: View): DeclaredItem[] {
+  const version = versionOf(screen, view.object, view.run);
+  return screen.items.filter(item => item.artifact?.object === view.object && item.artifact.version === version);
+}
 // A question appears on a view only while the view shows the version it was asked about.
 export function questionsOn(screen: Pick<Screen, 'objects' | 'order'>, view: View): QuestionState[] {
   const version = versionOf(screen, view.object, view.run);

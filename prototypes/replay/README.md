@@ -21,17 +21,19 @@ npm run check:replay          # types, then the rule tests (test/expression.test
 - **Content.** All nine versions of `analysis.R` (each checked against its recorded
   digest), the two `findings.md` versions, the R stderr and stdout, the three CSVs,
   and run 5's figure. Runs 1 and 2 also produced figures; only run 5's image is kept.
-- **Questions, after the run.** Facts #61–65, 3.5 hours later: two questions a browser
-  asked about run 5's results (the figure, and rows A and D of effects.csv), each
-  written into `questions.md` first, and the one fetch of the first question. They
-  come from the project's contexts, document history and Rho's activity record.
-  Both principals were scripts (`acceptance-v3.mjs` driving a real browser, and an
-  Agent session it granted as `acceptance-fetch`), not a person or a model.
+- **After the run.** Facts #61–68, 3.5 hours later, from Rho's own records through
+  `src/trace.ts`: an Agent session (`acceptance-declare`) redeclaring the task map with
+  exact artifact versions on two items (#61–63), then two questions a browser asked
+  about run 5's results (the figure, and rows A and D of effects.csv), each written into
+  `questions.md` first, and the one fetch of the first question (#64–68). All three
+  principals were scripts (`acceptance-v3.mjs` driving a real browser, and the Agent
+  sessions it granted), not a person or a model.
 - **Who.** Every fact carries the principal that made it. The run's Agent is the one
   granted exactly the methods its connection lists.
 
 `build-trace.mjs` regenerates `trace/` from that directory, which is ignored by
-Git and present only on the machine that recorded it. It writes two files: the
+Git and present only on the machine that recorded it; run `npm run build` first, since
+it folds the records with `dist/trace.js`. It writes two files: the
 transcript trace (`airquality.json`, which drives the screen) and Rho's own records
 cut down to what `src/trace.ts` folds (`records.json`: activity, document histories,
 operations, resources, contexts, composition and task map; no image data or local

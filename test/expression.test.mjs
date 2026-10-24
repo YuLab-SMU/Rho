@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { agentPaceMs, express, questionsOn, timeOf } from '../dist/expression.js';
+import { agentPaceMs, collect, express, itemsOn, questionsOn, timeOf } from '../dist/expression.js';
 import { taskMapLimits } from '../dist/task-map.js';
 
 // The expression rules replayed over one recorded Agent run (agent-exp-2215: 61 calls,
@@ -119,10 +119,11 @@ test('the Agent declares its items at the end, and they stay its account, unlink
   assert.deepEqual(Object.keys(screen.objects), Object.keys(express(trace, [], 58).objects));
 });
 
-test('what a person records changes its objects in place; only the Agent moves the screen', () => {
+test('what a person or another session records changes its objects in place; only Agent work moves the screen', () => {
   const end = express(trace, [], last), run = express(trace, [], runEnd);
-  assert.deepEqual(trace.facts.slice(runEnd + 1).map(f => trace.principals[f.actor].kind + ' ' + f.op), [
-    'browser document.edit', 'browser context.create', 'agent context.read', 'browser document.edit', 'browser context.create',
+  assert.deepEqual(trace.facts.slice(runEnd + 1).map(f => (trace.principals[f.actor].name ?? trace.principals[f.actor].kind) + ' ' + f.op), [
+    'acceptance-declare task.map.read', 'acceptance-declare task.map.read', 'acceptance-declare task.map.declare',
+    'browser document.edit', 'browser context.create', 'acceptance-fetch context.read', 'browser document.edit', 'browser context.create',
   ]);
   assert.equal(end.objects['source:questions.md'].version, 3);
   assert.deepEqual([end.active, end.views, end.agent, end.moves], [run.active, run.views, run.agent, run.moves]);
@@ -151,7 +152,7 @@ test('a fetch is a receipt: only the question changes, and nothing after it is c
   const fetch = trace.facts.findIndex(f => f.effect?.kind === 'fetched');
   const before = express(trace, [], fetch - 1), after = express(trace, [], fetch);
   const q = after.objects['question:70d07e4a'];
-  assert.deepEqual([before.objects[q.id].state, q.state, trace.principals[q.fetchedBy].name, trace.facts[q.fetchedAt].at], ['prepared', 'fetched', 'acceptance-fetch', '2026-10-24T18:19:25.129Z']);
+  assert.deepEqual([before.objects[q.id].state, q.state, trace.principals[q.fetchedBy].name, trace.facts[q.fetchedAt].at], ['prepared', 'fetched', 'acceptance-fetch', '2026-10-24T18:19:25.160Z']);
   assert.deepEqual([after.active, after.views, after.agent, after.moves, after.escalations, after.suggestions], [before.active, before.views, before.agent, before.moves, before.escalations, before.suggestions]);
   // The second question was never fetched, and no record makes either one responded.
   const end = express(trace, [], last);
@@ -159,7 +160,29 @@ test('a fetch is a receipt: only the question changes, and nothing after it is c
   assert.ok(!Object.values(end.objects).some(o => o.kind === 'question' && o.state === 'responded'));
   // Someone away meets the receipt in the digest, by object.
   const back = express(trace, [{ at: runEnd, kind: 'leave' }, { at: last, kind: 'return' }], last);
-  assert.deepEqual(back.digest.lines.map(l => l.kind + ' ' + l.object + ' ' + (l.state ?? l.to)), ['source source:questions.md 3', 'question question:70d07e4a fetched', 'question question:7d3dbf6a prepared']);
+  assert.deepEqual(back.digest.lines.map(l => l.kind === 'items' ? `items ${l.count}` : l.kind + ' ' + l.object + ' ' + (l.state ?? l.to)), [
+    'source source:questions.md 3', 'question question:70d07e4a fetched', 'question question:7d3dbf6a prepared', 'items 5',
+  ]);
+});
+
+test('only an item that names an artifact gathers its facts; a title that names one links nothing', () => {
+  // The run's own items name no object, though one is titled after the figure.
+  const run = express(trace, [], runEnd);
+  assert.ok(run.items.some(item => /temp-effect\.png/.test(item.title)));
+  assert.ok(run.items.every(item => collect(run, item) === null));
+  // #63: the acceptance script's Agent redeclares them, two with an exact resource version.
+  const end = express(trace, [], last);
+  assert.deepEqual(end.items.map(item => { const c = collect(end, item); return [item.id, c && `${c.artifact.name} ${c.version} · ${c.run.name} · ${c.run.source} v${c.run.sourceVersion}`]; }), [
+    ['question', null], ['script', null],
+    ['run', 'effects.csv 1f305e10 · Run 5 · analysis.R v9'], ['figure', 'temp-effect.png 985b7955 · Run 5 · analysis.R v9'],
+    ['limits', null],
+  ]);
+  // Opening an item lands on the version it names, where its account sits beside the facts.
+  const opened = express(trace, [{ at: last, kind: 'open', target: 'item:figure' }], last), v = opened.views.find(x => x.id === opened.active);
+  assert.deepEqual([v.object, v.run, itemsOn(opened, v).map(i => i.id)], ['artifact:temp-effect.png', 5, ['figure']]);
+  // effects.csv from runs 1, 2 and 5 is one version, so the item shows on any of them.
+  const csv = express(trace, [{ at: last, kind: 'open', target: 'item:run' }], last);
+  assert.deepEqual(itemsOn(csv, csv.views.find(x => x.id === csv.active)).map(i => i.id), ['run']);
 });
 
 test('the same facts and actions always give the same screen', () => {
