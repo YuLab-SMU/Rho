@@ -67,38 +67,37 @@ and `declared` now name themselves, and the Agent's own "done" is neutral becaus
 green is reserved for owner-verified facts. `web/execution-facts.ts` is the single
 reading of runs, artifacts and checks (DOM-free, used by both pages).
 
-A project opens on its own question rather than on whichever layout was last used.
-The page then gives one tally of runs, declared items and the absence of a domain
-check, the runs that need attention, the results (newest version of each artifact
-name, earlier versions counted), and what the Agent declared, with execution records,
-documents, files, layout and diagnosis behind disclosures. A failure is a row that
-opens the same execution panel an artifact does.
+A project opens on its own question rather than on the last-used layout, then gives
+one tally of runs, declared items and the absence of a domain check, the runs needing
+attention, the results (newest version of each artifact name, earlier versions
+counted), and what the Agent declared, with records, documents, files, layout and
+diagnosis behind disclosures. A failure is a row that opens the execution panel.
 
 A framed view bound to a registered resource carries one achromatic line naming the
 execution that produced that version and whether its bytes were verified, plus the
-other files of that same execution as links, so a figure and its table are one
-click apart instead of two unrelated tabs. The panel separates declared / on disk /
-verified / domain, lists what the run registered, shows the submission chain of the
-analysis file with each attempt's code digest, and states that no execution
-establishes a statistical result. The whole-task form is a band above the work, so a
-person reads the map and still acts on the artifact under it.
+other files of that same execution as links, so a figure and its table are one click
+apart instead of two unrelated tabs. The panel separates declared / on disk /
+verified / domain, lists what the run registered, shows the submission chain with
+each attempt's code digest, and states that no execution establishes a statistical
+result. The whole-task form is a band above the work.
 
-Asking a question now carries the person's own words. "Ask about this" opens a
-one-line composer; sending opens the project's own `questions.md` through the
-document owner, appends the text conditionally, and creates a `context.create` that
-references both that exact text range and the exact artifact version. The view
-reports "Prepared" until the owner records a fetch, then "Fetched by the Agent" with
-the time; the words stay in the project as an ordinary document.
+Asking a question carries the person's own words. "Ask about this" opens a one-line
+composer; sending opens the project's `questions.md` through the document owner,
+appends the text conditionally, and creates a `context.create` referencing both that
+text range and the exact artifact version. The view reports "Prepared" until the
+owner records a fetch, then "Fetched by the Agent" with the time.
 
-Checks: Rho 104/104 (`RHO_CORE_BINARY` set; the eight failures without it are the
-missing Core binary, not the change) and `npm run check:contracts` clean. Browser
-acceptance ran 41 checks on a byte-identical copy of the real `work/agent-exp-2215`
-project (its writer lock is held by an earlier service) at 1440 and 768, including
-restart: question, both failed runs, artifact provenance, the sibling jump, the
+Checks: Rho 104/104 over five consecutive runs (`RHO_CORE_BINARY` set; the eight
+failures without it are the missing Core binary, not the change) and
+`npm run check:contracts` clean. One earlier run of the same suite failed one test
+and did not reproduce in five attempts; the count is recorded rather than the
+failure waved away. Browser acceptance ran 41 checks on a byte-identical copy of the
+real `work/agent-exp-2215` project (its writer lock is held by an earlier service) at
+1440 and 768, including restart; question, both failed runs, artifact provenance, the sibling jump, the
 written question and its fetch receipt all return from owner state. Evidence:
-`work/acceptance-v3-*/evidence-v3`. Not done: the task map still holds one flat
-declared list with no `view` links or `from` edges, so the map cannot yet show a
-branch; no figure region can be anchored; the notes document is one fixed path.
+`work/acceptance-v3-*/evidence-v3`. Not done: the task map holds one flat declared
+list with no `view` links or `from` edges, so it cannot show a branch; no figure
+region can be anchored; the notes document is one fixed path.
 
 The earlier `artifact-not-presentable` diagnosis was wrong: `artifact.check` already
 returns registered owner-state references. Execution acceptance binds that reference
@@ -197,15 +196,15 @@ not UI. The earlier eight-owner candidate below retains its historical identity.
 ## Historical application baseline
 
 Version 0.4 provides documents, files, R, requirements, tables, media, charts and
-Agent through independent npm plugins. Each owns its descriptor, behavior and entry
+Agent through independent npm plugins, each owning its descriptor, behavior and entry
 contracts; Rho selects reviewed versions, injects service ports, and a thin contracts
 package supplies generic references/envelopes/ports and file primitives. Format,
-requirement and script schemas belong to pure owner contract entries; Contracts has
+requirement and script schemas belong to pure owner contract entries; Contracts keeps
 no format registry, native plan or document budget, and R owns its script snapshot
-budget. Only `action.submit` requires Requirements; exported objects work with
-Files/R alone. Only Tables brings csv-parse and only Agent brings the MCP SDK. Rho owns
-authentication/projects, durable caller intents, the public Core CLI bridge and
-composition. [HEADLESS](HEADLESS.md) documents the API and plugin selection, the
+budget. Only `action.submit` requires Requirements, and only Tables brings csv-parse
+while only Agent brings the MCP SDK. Rho owns authentication/projects, durable
+caller intents, the public Core CLI bridge and composition.
+[HEADLESS](HEADLESS.md) documents the API and plugin selection, the
 [plugin boundary review](PLUGIN-BOUNDARY-ACCEPTANCE.md) the responsibilities and
 dependency checks, and [extraction acceptance](EXTRACTION-ACCEPTANCE.md) the actual
 source/package checks. One contract serves retained and new work: original accepted
