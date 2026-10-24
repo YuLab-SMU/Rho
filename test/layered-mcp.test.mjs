@@ -61,6 +61,17 @@ test('default progressive MCP pages whole contracts, reuses knownRefs, refetches
  console.log('PHASE4_MCP_METRICS '+JSON.stringify({toolsListBytes:Buffer.byteLength(JSON.stringify(tools)),toolCalls:measures.length,modelCalls:0,inputTokens:0,outputTokens:0,requests:calls,measures}));
  }finally{if(client)await client.close();await service.close();await fs.rm(root,{recursive:true,force:true});}
 });
+// One granted operation without an effect contract used to refuse the whole index, so the
+// default grant (which includes selection.set) left an Agent unable to discover anything.
+test('the default Agent grant can discover what it was granted: every operation carries an effect contract',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'rho-layered-default-')),service=await new RhoService({root,stateDir:path.join(root,'state'),coreBinary:'/missing',rscript:'/missing',plugins:['documents','files','tables','agent']}).start();let client;
+ try{
+ const admin=new RhoClient({url:service.url,token:service.adminToken}),p=await admin.call('project.create',{name:'project'});
+ const file=path.join(root,'default.private.json'),grant=await service.agentConnection(p.id,'default',file);assert.ok(grant.methods.includes('selection.set'));
+ client=await connect(file);const groups=await call(client,'rho_index',{});assert.equal(groups.ok,true,JSON.stringify(groups.error));
+ for(const {owner} of groups.value.groups){const page=await call(client,'rho_index',{owner,cursor:null,maxBytes:65536});assert.equal(page.ok,true,owner+' '+JSON.stringify(page.error));}
+ }finally{await client?.close();await service.close();await fs.rm(root,{recursive:true,force:true});}
+});
 test('incomplete schema closure and forged immutable bodies never become executable cache proofs',async()=>{
  let executions=0;const make=content=>({ref:digest(canonical(content)),kind:'contract',content});
  const partial=make({method:'document.read',requiredSkillRefs:[],inputSchema:{$ref:'#/definitions/Missing'},outputSchema:{type:'object'},definitions:{}});
