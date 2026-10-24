@@ -17,6 +17,7 @@ to be selected with their owner entries; see [Browser UI](UI.md).
 | --- | --- | --- |
 | Distribution and launcher | npm package and CLI | `@rho-workspace/local` 0.4.0, Node >=22.22.0 <23; assembled local tarball bundles the selected Core binary |
 | Local application service | Node.js/TypeScript, built-in HTTP, Ajv 8.20.0; versioned JSON and SSE | Authenticated browser/application boundary, scoped component routing, bounded observation and Core CLI access |
+| Public contract and types | JSON Schema (draft-07 keywords), Ajv 8.20.0 at runtime, `json-schema-to-typescript` 16.0.0 at build time | One schema per operation is the wire truth; the method/input/output map is generated from it, so clients and the request boundary cannot name a method or field the contract does not publish |
 | UI and build | React, TypeScript, Vite | Application assembly and trusted component presentation |
 | Workspace layout | Dockview core | Docking, tabs, split views and layout persistence within one browser window |
 | Editing component | Headless document service; CodeMirror 6 view | The service owns content, versions, undo and write conditions; the view adapts editing and input |

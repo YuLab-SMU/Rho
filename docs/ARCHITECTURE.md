@@ -31,6 +31,15 @@ the gates before plugin UI integration. The 0.4 application selects eight indepe
 0.2 action/view contracts;
 [extraction acceptance](EXTRACTION-ACCEPTANCE.md) records their actual consumers.
 
+Each component declares the schemas of the operations it owns in a pure package
+entry (`./operations`), which carries no implementation. Rho snapshots those entries
+with the selected package version and entry digest, and its served contract is
+assembled from that snapshot plus the operations Rho itself owns. An absent component
+stays describable from the snapshot; it is never imported, activated or installed to
+answer a question about its contract. Public request/response types and the method
+map are generated from the served contract, so both clients and the service request
+boundary are checked against one definition.
+
 A headless caller uses the component's supported entry. Rho assembles its views
 and actions; selected native execution uses Core's public capability. An Agent
 component owns its model loop and context. Core remains independent of UI bundles

@@ -1,23 +1,47 @@
 # Rho status
 
-Updated: 2026-10-23. Progressive disclosure is the default executable boundary.
-Agent MCP exposes four fixed tools: `rho_index`, `rho_resolve`, `rho_call`,
-`rho_read`. Discovery starts with owners; contracts and relevant Skills are
-resolved only for selected operations. Large replies become scoped immutable
-references, with bounded JSON-pointer/container/text pages and explicit release.
-Reading a result never repeats its source operation. Protocol inspection is
-bounded and authorized; the offline export is one index plus independently
-hashed operation files. One versioned contract is served: a retired version path
-is not answered, and the old full-protocol HTTP dump stays unavailable.
+Updated: 2026-10-24. Contract, type and call-boundary ownership.
 
-Local UI cleanup (2026-10-23) keeps the shell's muted colors and 48 px toolbar /
-68 px rail, and settles plugin heading/card focus before paint. Build, 14 browser
-tests, U1's 23 checks and five plugin-page checks passed on Chrome 155 at
-1600/1280/1024/768/390; no Host or native submission started. Product acceptance
-remains pending; obsolete unused status helpers were not added to current main.
+One public contract is served, and it is derived rather than restated. Each
+component owns its operation schemas in a pure package entry (`./operations`);
+`scripts/contract-owners.mjs` snapshots those entries with the selected package
+version and entry digest, so an absent owner is still describable without
+importing, activating or installing it. The application adds only what it owns
+(the project every request is scoped to, and its own operations). Rho keeps no
+second copy of a component contract: the five hand-maintained copies that used to
+exist had already drifted from their owners.
 
-Files streams hashes/snapshots through bounded buffers and reads only each requested
-range. Media negotiates the actual owner page size, caps retained image bytes and
+Public types are generated from that contract with `json-schema-to-typescript`
+(the Node client, browser client and service request boundary all use them), and
+`npm run check:contracts` fails on a stale owner snapshot, a stale published
+artifact, an operation present in only one of them, or stale generated types. It
+writes nothing. `--check` was verified to fail on an edited artifact and on an
+orphan operation file.
+
+Runtime guarantees are unchanged: Ajv validates every request and the one place an
+untrusted value becomes typed is `src/contract-runtime.ts`; requests are handed on
+unaltered (no default, coercion or reserialization), so request digests and
+duplicate delivery keep their meaning. Authorization, version, disk and native
+checks stay at each operation. `test/contract-coverage.test.mjs` calls every
+published operation and fails if any is answered by the "not installed" fallback.
+`test/types/contract-usage.ts` is compiled, not run: it asserts that unknown
+methods, wrong fields, wrong value types and invented return types are rejected for
+both clients, and that a rejected request cannot be read as accepted.
+
+Responses that used to be a bare object now name their real fields: runs (request,
+Core identity, native view, plan source, checks, cancellation), selections,
+contexts, task-map state and receipts, the capability catalog, composition records,
+workspace save/restore, observation snapshot, artifact facts, table pages and media
+metadata. Genuinely open payloads stay open with a stated boundary: Core's native
+view, table rows, provenance/coverage, resource format, and the Agent's own
+vocabulary and form parameters. Every service-facing test validates the real
+responses and SSE events it receives against the contract.
+
+Checks: Rho 103/103 and Plugins 65/65, `npm run check:contracts` clean, service and
+web builds clean. `mcp` calls are validated against the resolved owner contract and
+then enter the same service operation: the accepted `rho_call` value is asserted to
+equal the direct reply and to satisfy the published response schema.
+
 cancels on view release. Snapshots contain document metadata, not all text and
 undo. Document record/aggregate budgets reject before replacing retained state.
 The browser now uses the same conditional `document.save` as the owner, including
@@ -47,40 +71,28 @@ Updated: 2026-10-22. **Phases 1–5 selected grades flow:** [installed native ac
 
 ## Item frame and Agent map
 
-Source now follows the whole-task design on the Paper page
+Source follows the whole-task design on the Paper page
 [03c · 任务全景](https://app.paper.design/file/01M5HG6R8RBC33N84S245J0YXT/p-7-0);
-see [Item frame and Agent map](UI.md#item-frame-and-agent-map). The Agent
-declares items with its own kind/state vocabulary (`task.map.declare`); Rho fixes
-no closed list and interprets only an optional term role. Every entry draws its
-body inside Rho's frame, with forms ordered by scale, subsets as parameters and a
-hidden-note footer. The Agent map is a Rho-owned registry entry importing only the
-frame contract; its reference, strip, trail, whole-task and compare forms share
-`task.map.present` with people. Pins win, Agent changes are attributed and
-revertible, and Agent form changes within `agentFormIntervalMs` (8 s) merge into
-one suggestion. Reads only observe.
+see [Item frame and Agent map](UI.md#item-frame-and-agent-map). The Agent declares
+items with its own kind/state vocabulary (`task.map.declare`) and Rho interprets
+only an optional term role; every entry draws its body inside Rho's frame, with
+forms ordered by scale, subsets as parameters and a hidden-note footer. The Agent
+map is a Rho-owned registry entry importing only the frame contract; its reference,
+strip, trail, whole-task and compare forms share `task.map.present` with people.
+Pins win, Agent changes are attributed and revertible, and Agent form changes within
+`agentFormIntervalMs` merge into one suggestion. Reads only observe.
 
-Tables and Documents now draw their own bodies in this frame, following
+Tables and Documents draw their own bodies in this frame following
 [04 · 插件形态](https://app.paper.design/file/01M5HG6R8RBC33N84S245J0YXT/p-8-0)
-with the four recommended answers accepted. Tables shows a count, keyed rows, a
-cell, a summary or a recorded comparison. Documents shows a passage, a change, the
-outline, a section summary or one change compared. Compare is declared
-`zoom: false`. Bodies read through the item's bound view and report their hidden
-note. See [Item frame and Agent map](UI.md#item-frame-and-agent-map).
-
-Checks: Rho 73/73 (including `zoom: false`); Plugins 53/53 (seven card-model tests).
-Browser tests 14/14, U1 23 checks, U2 6 checks and plugin pages pass on Chrome 155
-with zero Host starts and native dispatches. A scripted Chrome pass at 1440/768/390
-drew all 12 Tables/Documents forms on real tables, a recorded comparison and
-Agent-edited text. In that pass:
-- zooming up from a card reached the summary, not compare;
-- a person's `show` switch was recorded as human;
-- a card revert updated every form of the document;
-- no card overflowed at any width;
-- the only failed request was `/favicon.ico`, and no Host started.
-
-Limits: one map per project, not archived by `workspace.export`; item boundaries
-are whatever the Agent declares (Q1). A keyed subset makes one page read per key,
-at most 50. Paper boards remain pending user review.
+with the four recommended answers accepted; compare is declared `zoom: false`.
+Checks: Rho 73/73 (then), Plugins 53/53, 14 browser tests, U1 23 checks, U2 6 checks
+and plugin pages on Chrome 155 with zero Host starts. A scripted 1440/768/390 pass
+drew all 12 Tables/Documents forms on real tables and Agent-edited text: zooming up
+reached the summary, a person's show switch was recorded as human, a card revert
+updated every form, no card overflowed and the only failed request was
+`/favicon.ico`. Limits: one map per project, not archived by `workspace.export`;
+item boundaries are whatever the Agent declares (Q1); a keyed subset costs one page
+read per key, at most 50. Paper boards remain pending user review.
 
 ## Teaching case handoff
 
@@ -94,31 +106,22 @@ not accept the teaching experience. The UI contract remains `0.1-draft`.
 
 ## U1 browser shell candidate
 
-First-use review rejected typed paths and the temporary preview root. The current
-correction uses the macOS folder window and separates a project name from its
-source folders. Create project adds one or more existing folders without making
-same-name directories; Overview can add further folders. Named workspaces keep
-owner state separately. Existing projects and managed requests are preserved.
-Files/Documents resolve selected source references with distinct file identities,
-shared alias buffers, conditional saves and source-containment checks. Saved R
-script planning can read selected sources without changing execution identities.
-
-Source checks: Rho 66/66; Plugins 46/46. Chrome 155 passes 23 shell checks at 1600/1280/1024/768/390 with zero Host
-starts/native submissions. The clean offline candidate also passes the same installed browser flow and
-installed multi-source reads/addition/restart checks. [Fixed candidate](ui-acceptance/u1-source-folders.json)
-records its identities; user design acceptance remains pending. The
-[U1 record](UI-ACCEPTANCE.md) retains historical five-width, Full/minimal installed
-checks and the seven alignment batches. Those checks did not accept first-use
-usability. The [new Paper review draft](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-C-0)
-uses the user-provided name-and-source-folders reference; earlier path-entry
-boards remain historical and have not been overwritten.
-
-The shell retains Agent-opened one-time links, same-origin assets, scoped tab
-credentials, observation after refresh/disconnection/restart, grouped commands,
-plugin discovery and unavailable retained views. Native selection adds only the
-chosen folder/project scope. Browser actions never start a Host or native task.
-The UI contract remains `0.1-draft`; full input/accessibility, product acceptance,
-other-platform folder dialogs and signed/registry distribution remain pending.
+First-use review rejected typed paths and the temporary preview root; the correction
+uses the macOS folder window and separates a project name from its source folders.
+Create project adds existing folders without making same-name directories, Overview
+can add further folders, and named workspaces keep owner state separately. Files and
+Documents resolve selected source references with distinct identities, shared alias
+buffers, conditional saves and source-containment checks; saved R script planning can
+read selected sources without changing execution identities. Then-current checks:
+Rho 66/66, Plugins 46/46, and 23 shell checks at 1600/1280/1024/768/390 on Chrome 155
+with zero Host starts or native submissions, plus the same installed browser flow and
+multi-source reads. [Fixed candidate](ui-acceptance/u1-source-folders.json) records
+identities; user design acceptance remains pending, as do full input/accessibility,
+other-platform folder dialogs and signed distribution. The
+[U1 record](UI-ACCEPTANCE.md) keeps the historical five-width and alignment batches.
+The shell keeps Agent-opened links, same-origin assets, scoped tab credentials,
+observation after refresh/restart, grouped commands, plugin discovery and unavailable
+retained views; native selection adds only the chosen folder/project scope.
 
 ## Headless collaboration extension
 
@@ -148,76 +151,59 @@ The earlier eight-owner candidate below retains its historical identity.
 ## Historical application baseline
 
 Version 0.4 provides documents, files, R, requirements, tables, media, charts and
-Agent through eight independent npm plugins. Each owns its descriptor, behavior and
-entry contracts. Rho selects reviewed versions and injects service ports; a thin
-contracts package supplies generic references/envelopes/ports and file primitives.
-Format, requirement and script schemas belong to pure owner contract entries;
-Contracts has no format registry, native plan or document budget. R owns its
-script snapshot budget. Only its execution action requires Requirements; exported
-objects work with Files/R alone, without Documents, Requirements, R or a Host.
-Only Tables brings csv-parse; only Agent brings the MCP SDK.
-The earlier extraction removed scientific workflows from the base dependencies. `/api/v2` HTTP/SSE schemas, client and inert fixtures expose explicit
+Agent through independent npm plugins. Each owns its descriptor, behavior and entry
+contracts; Rho selects reviewed versions, injects service ports, and a thin contracts
+package supplies generic references/envelopes/ports and file primitives. Format,
+requirement and script schemas belong to pure owner contract entries; Contracts has
+no format registry, native plan or document budget, and R owns its script snapshot
+budget. Only `action.submit` requires Requirements; exported objects work with
+Files/R alone. Only Tables brings csv-parse and only Agent brings the MCP SDK.
+`/api/v2` HTTP/SSE, client and inert fixtures expose explicit
 scripts/requirements/artifacts, typed tables and entity namespaces, media and
-exported object snapshots. The base npm package contains no project recipe or R
-script. The ordinary base-R project and original paired analysis use the same
-`r.execute`, readers, keyed comparison and composition validation.
+exported object snapshots; the base npm package contains no project recipe or R
+script.
 
-Rho owns authentication/projects, durable caller intents, the public Core CLI
-bridge and composition. Plugins owns document/resource semantics, R plans,
-requirements and scoped MCP. Core remains unchanged at
-`d0159da6feb01d1be9e3b4b34b67953241fedfcb`.
-[HEADLESS](HEADLESS.md) documents the current API and plugin selection;
-[plugin boundary review](PLUGIN-BOUNDARY-ACCEPTANCE.md) records the current responsibilities and dependency checks; [extraction acceptance](EXTRACTION-ACCEPTANCE.md)
-records actual source/package checks and failures.
-
-One contract serves both retained and new work: original accepted parameters, Core
-identity and resource bytes stay observable, while superseded scientific
-submissions are unavailable. Reads, explicit retained retry/cancel and schema-1
-workspace restore do not select a recipe or create a replacement execution.
-The [original 0.1 acceptance](BACKEND-ACCEPTANCE.md) and
-[immutable candidate record](backend-acceptance/v0.1.0.json) retain their scope;
-that run captured schema version 1.0 before the current contract replaced both
-earlier artifacts.
-
-Selected baseline: macOS arm64, Node 22.22.3/npm 10.9.8, Python 3, R 4.5.2,
-Claude Code 2.1.301 / MCP SDK 1.29.0. R is external; the ordinary project requires
-no add-on R package. Scientific dependencies are explicitly requested by the
-paired project. Other platforms, registry publication and signing remain
-unverified/unselected.
+Rho owns authentication/projects, durable caller intents, the public Core CLI bridge
+and composition. Plugins owns document/resource semantics, R plans, requirements and
+scoped MCP. Core remains unchanged at
+`d0159da6feb01d1be9e3b4b34b67953241fedfcb`. [HEADLESS](HEADLESS.md) documents the
+API and plugin selection, [plugin boundary review](PLUGIN-BOUNDARY-ACCEPTANCE.md)
+the responsibilities and dependency checks, and
+[extraction acceptance](EXTRACTION-ACCEPTANCE.md) the actual source/package checks.
+One contract serves retained and new work: original accepted parameters, Core
+identity and resource bytes stay observable, while superseded scientific submissions
+are unavailable. Reads, explicit retained retry/cancel and schema-1 workspace restore
+do not select a recipe or create a replacement execution. Selected baseline: macOS
+arm64, Node 22.22.3/npm 10.9.8, Python 3, R 4.5.2, Claude Code 2.1.301 / MCP SDK
+1.29.0; R is external and the ordinary project needs no add-on R package. Other
+platforms, registry publication and signing remain unverified/unselected.
 
 ## Historical baseline verification
 
-- Rho: 15/15 protocol, real stdio MCP, retained v1, service, crash/continuity,
-  workspace and budget tests passed. Three SIGKILL boundaries retain the original
-  operation/Core identity and one dispatch after a missing first acknowledgement.
-- Plugin removal/reselection preserves drafts, undo, bytes, layout references,
-  selection intent and original Core identity without replay. Unavailable providers
-  reject new work; retained requests stay observable.
-- Plugins: 12/12 capability tests and 2/2 separate native example tests passed.
-  The additional pure-contract import guard also passed its focused boundary test.
-  Explicit types preserve `001` and literal `NA`; unkeyed tables remain readable,
-  stale/mismatched inputs fail, and comparisons record both versions/provenance.
-- All eight capability tarballs pass independent installation/import with no
-  sibling implementation. Source root packing is rejected.
-- Ordinary R project: real linear model, four rows, typed two-input join, PNG/PDF,
-  original bytes and an exported object snapshot pass through the generic runner.
-- Original paired project: five DESeq2 fits, 16,139 genes, 33 baseline artifacts,
-  121/121 saved-model observations and 12/12 independent checks; explicit apeglm
-  preparation/shrinkage and two-input comparison pass through the same runner.
-- Actual Claude MCP v2 handoff fetched explicit context and changed the same
-  unsaved Chinese/emoji buffer without starting a Host.
-- Actual base-R recovery: four partial rows survive owned Host loss; the original
-  request becomes unknown without replay. Observer/view closure preserves work;
-  separate cancellation confirms native process-group release. Export/restore
-  preserves bytes, drafts, undo, selections and unavailable entries without a Host.
-- Actual 0.4 npm installations outside the checkouts passed: the full eight-plugin
-  candidate runs both explicit consumers and recovery. Two reduced candidates
-  physically contain only Contracts/Documents/Files or Contracts/Files/R, and
-  work without R/Host. Unavailable execution retains or dispatches no new request.
-  No recipe or R script is bundled. The [candidate record](backend-acceptance/v0.4.0.json)
-  freezes all three source/package/lock compositions, all nine owner package
-  hashes, example inputs and observed request/resource identities. The
-  [0.3 record](backend-acceptance/v0.3.0.json) remains historical evidence.
+Earlier baselines, retained with their own scope: Rho 15/15 protocol, real stdio
+MCP, retained v1, service, crash/continuity, workspace and budget tests, with three
+SIGKILL boundaries keeping the original operation/Core identity and one dispatch
+after a missing first acknowledgement. Plugin removal/reselection preserves drafts,
+undo, bytes, layout references, selection intent and original Core identity without
+replay; unavailable providers reject new work while retained requests stay
+observable. Plugins passed 12/12 capability and 2/2 native example tests plus a
+pure-contract import guard; explicit types preserve `001` and literal `NA`, unkeyed
+tables stay readable, and comparisons record both versions and provenance. All eight
+capability tarballs pass independent installation/import with no sibling
+implementation.
+
+Real flows recorded then: an ordinary R project (linear model, four rows, typed
+two-input join, PNG/PDF, original bytes, exported object snapshot) and the original
+paired project (five DESeq2 fits, 16,139 genes, 33 baseline artifacts, 121/121
+saved-model observations, 12/12 independent checks) through the generic runner. An
+actual Claude MCP v2 handoff fetched explicit context and changed the same unsaved
+Chinese/emoji buffer without starting a Host. Actual base-R recovery keeps four
+partial rows across owned Host loss, turns the original request unknown without
+replay, releases the native process group on confirmed cancel and restores bytes,
+drafts, undo, selections and unavailable entries without a Host. Actual 0.4 npm
+installations outside the checkouts passed for the full eight-plugin candidate and
+two reduced candidates containing only Contracts/Documents/Files or
+Contracts/Files/R without R/Host.
 
 Retained failed extraction trials exposed checker-wrapper variable collision,
 a generic completion sidecar placed inside the producer's immutable inventory,
@@ -235,21 +221,17 @@ the serve path, validators, envelope and artifacts describe one contract.
 
 Actually run in this checkout: `npm run build` and
 `RHO_CORE_BINARY=../Rho-core/target/debug/rho-core node --test test/*.test.mjs`
-→ 100/100 passed, including retained-operation observation, the repointed service
-and workspace tests, the retired-path refusals and the compiled-tree check. A local
-tarball built with the explicit `--allow-dirty` development override was inspected
-directly: it carries `protocol/index.json` plus 87 hashed operation files and
-`fixtures/states.json`, and contains no retired artifact, module name or fixture
-directory. Every file hash in that packaged index was recomputed and matched.
+passed, including retained-operation observation, the repointed service and
+workspace tests and the retired-path refusals. A local tarball built with the
+explicit `--allow-dirty` development override was inspected: it carries
+`protocol/index.json` plus hashed operation files and `fixtures/states.json`, no
+retired artifact or fixture directory, and every packaged hash was recomputed.
 
-A later pass removed what the collapse left behind: the three operations the base
-module still declared in an earlier action vocabulary, and its own copy of the
-grantable-method enum, which `protocol.ts` always recomputed. Those base copies
-never reached the served contract; comparing every leaf of the contract before and
-after showed no difference. The enum and the description map are now sorted, so the
-content-addressed artifact depends on the contract rather than on editing order.
-Not run: the scientific `install-acceptance.mjs` flows, which require the two
-external example projects, and browser acceptance.
+A later pass removed what the collapse left behind: three operations the base module
+still declared in an earlier action vocabulary and its own copy of the
+grantable-method enum. Those copies never reached the served contract; comparing
+every leaf before and after showed no difference. The enum and description map are
+sorted, so the content-addressed artifact depends on the contract, not editing order.
 
 ## Current focus and remaining work
 
@@ -276,41 +258,33 @@ choices. Electron and cross-window movement follow later.
 ## Design evidence and limits
 
 The Paper ["Release 1 · v3 (capabilities)" page](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-8-0)
-contains W1–W5 — the inquiry map, live finding composition, an editable-spec
-explainer, traceback and anchored feedback — and W1a–W5a continuation/error
-states. Panels map to target entries of the Plugins
-[capability catalog](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-CATALOG.md),
-pending user review, with the
-[flow index](DESIGN-PRIORITIES.md#w1w5-能力组合动线索引),
-[state index](DESIGN-PRIORITIES.md#w1aw5a-续接与异常状态索引) and
-[version/feedback ledger](DESIGN-PRIORITIES.md#w-系列资源版本与反馈台账).
-UI entries are unimplemented; C9 presentation/animation and C10 annotations
-remain proposals. Rho owns selection, assembly and routing; a capability label
-does not establish registration, installation or product acceptance.
+holds W1–W5 (inquiry map, live finding composition, editable-spec explainer,
+traceback, anchored feedback) and W1a–W5a continuation/error states. Panels map to
+Plugins [capability catalog](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-CATALOG.md)
+targets, pending user review, with the
+[flow index](DESIGN-PRIORITIES.md#w1w5-能力组合动线索引), the
+[state index](DESIGN-PRIORITIES.md#w1aw5a-续接与异常状态索引) and the
+[version/feedback ledger](DESIGN-PRIORITIES.md#w-系列资源版本与反馈台账). UI entries
+are unimplemented; C9 presentation/animation and C10 annotations remain proposals.
+Rho owns selection, assembly and routing; a capability label does not establish
+registration, installation or product acceptance.
 
-The design distinguishes feedback draft, context available but not fetched,
-tool-fetch receipt, observed work and an explicitly linked response. F-12's
-later explanation v2 retains the same data sources with no new execution
-observed; old v1 frame anchors remain on v1. Candidate snapshot s3 requires
-bounded inspection, owner field/key/binding validation and explicit switching;
-it has no claimed contents, coverage or checks. Source loss retains s2 rows and
-read time, missing charts retain a table alternative, and spec conflicts retain
-the draft. Unknown q-0004/run 004 observations keep the original request and
-partial outputs; cancellation requested, confirmed native stop and observer
-closure have distinct states. Binding loss keeps the note/context; unavailable
-original frames keep anchor metadata. These are design scenarios.
-
-The earlier
+The design keeps distinct: feedback draft, context available but unfetched, a
+tool-fetch receipt, observed work and an explicitly linked response. F-12's later
+explanation v2 keeps the same sources with no new execution, and old v1 frame
+anchors stay on v1. Candidate snapshot s3 needs bounded inspection, owner
+field/key/binding validation and explicit switching; it claims no contents,
+coverage or checks. Source loss keeps s2 rows and read time, missing charts keep a
+table alternative, and spec conflicts keep the draft. Unknown q-0004/run 004
+observations keep the original request and partial outputs; cancellation requested,
+confirmed native stop and observer closure are separate states. The earlier
 ["Release 1 · v2 (inquiry)" page](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-7-0)
-(I1–I4) is retained as reference. R1–R14 on the
+(I1–I4) and R1–R14 on the
 ["Release 1 · npm WebUI" page](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-5-0)
-are retained as flow/state coverage under that direction. W1–W5 and W1a–W4a
-use 1440-wide reference artboards; W5a uses a 1280 × 900 design. These widths
-do not prove live browser layout, native input or accessibility; those checks
-remain pending. Existing S-series and superseded pages are historical.
-The designed run numbers and 8,204-row example are not substituted for actual
-backend evidence. The historical v1 partial experiment observed 16,139 rows;
-the new ordinary-R recovery experiment observes four rows without completion.
+stay as flow/state reference under that direction. W1–W5/W1a–W4a use 1440-wide
+boards and W5a a 1280 × 900 design; those widths do not prove live layout, native
+input or accessibility. Designed run numbers and the 8,204-row example are not
+substituted for backend evidence.
 
 Execution, artifact integrity, domain checks and model judgment remain separate.
 The bounded paired trial uses one simulation; Plugins' earlier 200-simulation and

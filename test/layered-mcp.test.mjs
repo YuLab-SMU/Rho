@@ -9,6 +9,7 @@ import {canonical,digest} from '@rho-workspace/plugin-contracts';
 import {LayeredMcp} from '@rho-workspace/plugin-agent/layered';
 import {RhoService} from '../dist/server.js';
 import { CheckedClient as RhoClient } from './checked-client.mjs';
+import { validateResponse, responseProblems } from '../dist/contract-runtime.js';
 const require=createRequire(import.meta.resolve('@rho-workspace/plugin-agent'));
 const {Client}=await import(pathToFileURL(require.resolve('@modelcontextprotocol/sdk/client/index.js')));
 const {StdioClientTransport}=await import(pathToFileURL(require.resolve('@modelcontextprotocol/sdk/client/stdio.js')));
@@ -37,7 +38,13 @@ test('default progressive MCP pages whole contracts, reuses knownRefs, refetches
    if(page.value.complete)break;
  }
  assert.equal(page.value.complete,true);assert.ok(pages>1);assert.ok(objects.has(entry.contractRef));
- assert.equal((await call(client,'rho_call',invoke)).value.content,'共享的原始说明 🧬');
+ // The dynamic MCP call is validated against the resolved owner contract and then
+ // enters the same service operation as a direct HTTP call: the accepted value must
+ // conform to that operation's published response, and equal the direct reply.
+ const viaMcp=await call(client,'rho_call',invoke);
+ assert.equal(viaMcp.value.content,'共享的原始说明 🧬');
+ assert.ok(validateResponse('document.read',viaMcp.value),'rho_call response: '+JSON.stringify(responseProblems('document.read')));
+ assert.deepEqual(viaMcp.value,await admin.call('document.read',{projectId:p.id,documentId:doc.id}));
  const known=await call(client,'rho_resolve',{catalogRef:index.value.catalogRef,selected:['document.read'],knownRefs:[...objects.keys()],cursor:null,maxBytes:1024});assert.equal(known.value.items.length,0);assert.equal(known.value.omittedKnownRefs.length,objects.size);
  const refetched=await call(client,'rho_resolve',{catalogRef:index.value.catalogRef,selected:['document.read'],knownRefs:[],cursor:null,maxBytes:65536});assert.equal(refetched.value.items.length,objects.size);
  const count=calls.length;assert.equal((await call(client,'rho_resolve',{catalogRef:index.value.catalogRef,selected:Array(17).fill('document.read'),knownRefs:[],cursor:null,maxBytes:65536})).error.kind,'invalid');assert.equal(calls.length,count);
