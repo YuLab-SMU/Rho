@@ -293,8 +293,8 @@
     "observation.snapshot": {
       "summary": "observation.snapshot",
       "path": "operations/observation.snapshot.json",
-      "bytes": 152582,
-      "sha256": "a0b8843184087b69e2c90c382346c050b8798aa925613696997d5cb0a5d5497f"
+      "bytes": 153152,
+      "sha256": "3385ffbd8b52ae690e8d3c21d265a48c569272a60593f0e9c908bcb2565facd2"
     },
     "project.create": {
       "summary": "project.create",
@@ -443,26 +443,26 @@
     "task.map.declare": {
       "summary": "Agent only: conditionally declare task items, your own kind/state vocabulary (label, tone, optional role) and the next steps you will take. Rho shows next only from this declaration and never infers it.",
       "path": "operations/task.map.declare.json",
-      "bytes": 22683,
-      "sha256": "4d2cf8bc61ef63f1b27cdd53b32adc6a02908325fd0c088df14c29fcc67c96d6"
+      "bytes": 23679,
+      "sha256": "6016e7b6c3161f190ecea6f4a5bc4d455f596437398039c2fcf865c6a9db6583"
     },
     "task.map.present": {
       "summary": "Change a map placement or item card form, its parameters (including a subset) or the focus. Shared by the Agent and people. An Agent change to a pinned target, or within agentFormIntervalMs of its last applied form change, is merged into one pending suggestion instead of applied; Agent changes stay attributed and revertible.",
       "path": "operations/task.map.present.json",
-      "bytes": 15676,
-      "sha256": "937cc403025228fbe0641f6ca636455322940aca8dcb9c36265273f0e7e878af"
+      "bytes": 16174,
+      "sha256": "12bc074ac7b72834b621a72bb039bc47c33d6cde9d39f7a8e9f7f783e6e2946c"
     },
     "task.map.read": {
       "summary": "Observe the task map: declared items, vocabulary, next steps, forms, pins and pending suggestions. Reading starts, resumes or reruns nothing.",
       "path": "operations/task.map.read.json",
-      "bytes": 14626,
-      "sha256": "8ec1f3043cae8705b2ef1919305562018b98285395c968da57c2d4b140834b36"
+      "bytes": 15124,
+      "sha256": "437dbe43f70d482bf07871339901b6b7e41440a89e0fab4dfbb2cf6f0d1541c9"
     },
     "task.map.respond": {
       "summary": "Browser person only: pin or unpin what they see, revert an Agent form change (layout only, never the work), or accept/dismiss a pending suggestion.",
       "path": "operations/task.map.respond.json",
-      "bytes": 15456,
-      "sha256": "89bae62bea0435462a625546d4cf7ce5e3cadfb7e1c4148072225b234c32cba1"
+      "bytes": 15954,
+      "sha256": "95b08f848f48a9d528f825cab6e1d6d06888e5d5831463cae267a78302f46e14"
     },
     "task.routing.put": {
       "summary": "Control plane only: conditionally assign one task and business binding to this project without starting a native session.",

@@ -186,7 +186,7 @@ export function Workspace({ composition, snapshot, client, onAbout, contextTarge
     api?.getPanel(openView)?.api.setActive();
   }, [openView, composition, api]);
   function onReady(event: DockviewReadyEvent) { arranged.current = ''; setApi(event.api); }
-  const frame = useTaskFrame({ snapshot, client, principalId, composition, activeViewId: active });
+  const frame = useTaskFrame({ snapshot, client, principalId, composition, activeViewId: active, onOpenView: showView });
   // A person opening an item brings its view forward; the Agent's focus only highlights.
   const opened = useRef('');
   useEffect(() => {

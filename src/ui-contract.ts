@@ -13,9 +13,15 @@ export interface FrameControls {
   revert(target: string): Promise<void>;
   accept(target: string, suggestionId: string): Promise<void>;
   dismiss(target: string, suggestionId: string): Promise<void>;
+  // Open the view that already shows one exact artifact version. The shell decides
+  // where that is; an entry never guesses or creates a view.
+  openArtifact(id: string, version: string): Promise<void>;
   // Observation only.
   observe(): TaskMapState;
 }
+// What an item names as its artifact, resolved by the shell from registered
+// resources. An entry reads this instead of the project itself.
+export interface NamedArtifact { id: string; version: string; name: string }
 export interface FrameContext {
   map: TaskMapState;
   controls: FrameControls;
@@ -24,6 +30,8 @@ export interface FrameContext {
   Card: ComponentType<{ itemId: string; form?: string }>;
   principalId?: string;
   activeViewId?: string;
+  // Resolves an item's declared artifact against what is registered right now.
+  artifacts?: { of(item: TaskItem): NamedArtifact | null };
 }
 // Body of one form. Rho draws the header (kind, state, Agent-written title) and
 // footer (what is hidden, the declared next step, plugin name) around it.

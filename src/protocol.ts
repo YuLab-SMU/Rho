@@ -114,7 +114,12 @@ const mapTarget = { type: 'string', pattern: '^(map:[a-z0-9-]{1,32}|item:[A-Za-z
 const formParams = { type: 'object', maxProperties: 16 };
 const taskItem = obj({ id: changeId, kind: word, state: word, title: phrase(160), group: phrase(60), summary: phrase(280),
   lines: { ...array(obj({ label: phrase(40), text: phrase(280), tone: hint, judgment: { type: 'boolean' } }, ['text'])), maxItems: 12 },
-  progress: obj({ done: integer, total: positive, unit: phrase(24) }, ['done']), view: changeId, from: { ...array(changeId), maxItems: 16, uniqueItems: true } }, ['id', 'kind', 'state', 'title']);
+  progress: obj({ done: integer, total: positive, unit: phrase(24) }, ['done']), view: changeId,
+  // The exact artifact version this item produced or works on. An item may name an
+  // artifact that is registered later; the shell resolves it before drawing a link
+  // and never guesses which artifact an item meant.
+  artifact: obj({ id: text, version: digest }, ['id', 'version']),
+  from: { ...array(changeId), maxItems: 16, uniqueItems: true } }, ['id', 'kind', 'state', 'title']);
 operations['task.map.read'] = obj(project);
 operations['task.map.declare'] = obj({ ...project, expectedVersion: integer, changeId, question: { anyOf: [phrase(240), { type: 'null' }] }, compositionId: { anyOf: [changeId, { type: 'null' }] }, vocabulary: obj({ kinds: terms, states: terms }, []), items: { ...array(taskItem), maxItems: 256 }, remove: { ...array(changeId), maxItems: 256, uniqueItems: true }, next: { ...array(changeId), maxItems: 16, uniqueItems: true } }, ['projectId', 'expectedVersion', 'changeId']);
 operations['task.map.present'] = obj({ ...project, expectedVersion: integer, changeId, target: mapTarget, form: hint, params: formParams, focus: { anyOf: [changeId, { type: 'null' }] }, reason: phrase(160) }, ['projectId', 'expectedVersion', 'changeId', 'target']);

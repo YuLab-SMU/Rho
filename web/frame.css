@@ -91,3 +91,6 @@
 .rho-view-item .rho-attribution { margin: 0; flex-basis: 100%; }
 .framed-view { display: flex; flex-direction: column; height: 100%; min-height: 0; }
 .framed-view-body { flex: 1; min-height: 0; }
+/* An item may name the exact artifact version it produced. */
+.rho-artifact-link { flex: 0 1 auto; min-width: 0; max-width: 45%; padding: 0; border: 0; background: transparent; color: var(--color-ink); font-family: var(--font-mono); font-size: 10.5px; line-height: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rho-artifact-link:hover { text-decoration: underline; }

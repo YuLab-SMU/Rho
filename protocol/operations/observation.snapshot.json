@@ -3979,6 +3979,24 @@
                   "type": "string",
                   "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
                 },
+                "artifact": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "version": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "version"
+                  ]
+                },
                 "from": {
                   "type": "array",
                   "items": {

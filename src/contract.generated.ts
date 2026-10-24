@@ -6645,6 +6645,10 @@ export interface ObservationSnapshotOutput {
         unit?: string;
       };
       view?: string;
+      artifact?: {
+        id: string;
+        version: string;
+      };
       /**
        * @maxItems 16
        */
@@ -8070,6 +8074,10 @@ export interface TaskMapDeclareInput {
       unit?: string;
     };
     view?: string;
+    artifact?: {
+      id: string;
+      version: string;
+    };
     /**
      * @maxItems 16
      */
@@ -8135,6 +8143,10 @@ export interface TaskMapDeclareOutput {
       unit?: string;
     };
     view?: string;
+    artifact?: {
+      id: string;
+      version: string;
+    };
     /**
      * @maxItems 16
      */
@@ -8287,6 +8299,10 @@ export interface TaskMapPresentOutput {
       unit?: string;
     };
     view?: string;
+    artifact?: {
+      id: string;
+      version: string;
+    };
     /**
      * @maxItems 16
      */
@@ -8432,6 +8448,10 @@ export interface TaskMapReadOutput {
       unit?: string;
     };
     view?: string;
+    artifact?: {
+      id: string;
+      version: string;
+    };
     /**
      * @maxItems 16
      */
@@ -8584,6 +8604,10 @@ export interface TaskMapRespondOutput {
       unit?: string;
     };
     view?: string;
+    artifact?: {
+      id: string;
+      version: string;
+    };
     /**
      * @maxItems 16
      */

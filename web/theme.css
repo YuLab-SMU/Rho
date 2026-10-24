@@ -525,3 +525,4 @@ dialog.context-sheet .danger-link { min-height: 40px; margin-top: 0; font-size: 
 .artifact-send:disabled { opacity: .5; }
 .artifact-cancel { min-height: 30px; padding: 0 8px; border: 0; background: transparent; color: var(--color-muted); font-size: 12.5px; }
 .artifact-composer-note { flex: 1 1 100%; color: var(--color-meta); font-size: 11px; line-height: 15px; }
+.overview-item-artifact { flex: 0 0 auto; color: var(--color-muted); font-family: var(--font-mono); font-size: 11px; }

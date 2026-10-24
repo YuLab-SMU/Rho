@@ -29,7 +29,7 @@ const vocabulary = {
 };
 const items = [
   { id: 'filter', kind: '计算', state: '核对过', title: '只留 p_adj < 0.05 的基因', group: '准备' },
-  { id: 'shrink', kind: '计算', state: '在算', title: '对剩下的基因做收缩估计', group: '估计', progress: { done: 3, total: 1620, unit: 'genes' }, from: ['filter'], view: 'table' },
+  { id: 'shrink', kind: '计算', state: '在算', title: '对剩下的基因做收缩估计', group: '估计', progress: { done: 3, total: 1620, unit: 'genes' }, from: ['filter'], view: 'table', artifact: { id: 'res:effects', version: 'b'.repeat(64) } },
   { id: 'batch', kind: '检查', state: 'pending-review', title: '两个下调是不是批次造成的', group: '检查', lines: [{ label: '核对过', text: '3 个批次里都是下调' }, { text: '不像批次效应', judgment: true }] },
   { id: 'foxp3', kind: '结论', state: '等你回话', title: '结论里要单独提 FOXP3 吗？', group: '结论' },
   { id: 'volcano', kind: 'plot', state: 'queued', title: 'Volcano plot', group: '呈现' },
@@ -45,10 +45,16 @@ test('the Agent declares its own kinds and states; people observe them without s
     await assert.rejects(f.agent.call('task.map.declare', { expectedVersion: 0, changeId: 'declare-2', items: [] }), e => e.error.kind === 'stale');
     await assert.rejects(f.agent.call('task.map.declare', { expectedVersion: 1, changeId: 'bad-next', next: ['missing'] }), e => e.error.kind === 'invalid');
     await assert.rejects(f.agent.call('task.map.declare', { expectedVersion: 1, changeId: 'bad-from', items: [{ ...items[0], from: ['filter'] }] }), e => e.error.kind === 'invalid');
+    // A version is an exact artifact identity, not a label.
+    await assert.rejects(f.agent.call('task.map.declare', { expectedVersion: 1, changeId: 'bad-artifact', items: [{ ...items[0], artifact: { id: 'res:effects', version: 'v3' } }] }), e => e.error.kind === 'invalid');
     const snapshot = await f.person('observation.snapshot', {});
     const map = snapshot.taskMap;
     assert.equal(map.version, 1); assert.equal(map.limits.agentFormIntervalMs, 8000);
     assert.equal(roleOf(map, map.items[1]), 'working'); assert.equal(roleOf(map, map.items[3]), 'waiting');
+    // An item may name the exact artifact version it works on; Rho stores it as given
+    // and never fills in a version the Agent did not state.
+    assert.deepEqual(map.items[1].artifact, { id: 'res:effects', version: 'b'.repeat(64) });
+    assert.equal(map.items[0].artifact, undefined);
     // Undeclared words still render as themselves; unknown tones fall back to neutral drawing.
     assert.equal(term(map, 'kinds', 'plot').label, 'plot'); assert.equal(term(map, 'states', 'queued').label, 'queued');
     assert.equal(toneOf(map, map.items[2]), 'lilac', 'the Agent keeps its own word for tone');

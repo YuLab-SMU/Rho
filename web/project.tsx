@@ -154,9 +154,13 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
       <ol className="overview-items">
         {map.items.map(item => {
           const state = term(map, 'states', item.state), next = map.next.includes(item.id);
-          const view = item.view ? places.get(item.view) ?? { compositionId: map.compositionId ?? 'workspace', viewId: item.view } : undefined;
+          // An item may name the exact artifact version it produced; that link wins
+          // over a layout view because it opens the object itself.
+          const named = item.artifact ? files.find(resource => resource.id === item.artifact!.id && resource.version === item.artifact!.version) : undefined;
+          const view = named ? places.get(named.id) : item.view ? places.get(item.view) ?? { compositionId: map.compositionId ?? 'workspace', viewId: item.view } : undefined;
           const body = <>
             <span className="overview-item-title">{item.title}</span>
+            {named && <span className="overview-item-artifact">{shortPath(named.path)}</span>}
             {/* The Agent's own state, so it gets a neutral mark: green is for facts an
                 owner verified, and a declared "done" is not one of those. */}
             <span className={'overview-item-state state ' + (state.role === 'waiting' || state.role === 'working' ? 'pending' : 'declared')}>{state.label}</span>

@@ -19,12 +19,12 @@ const formLabel = (forms: FormDeclarations, form: string) => forms[form]?.label 
 const kept = new Set<string>();
 
 interface Runtime extends Omit<FrameContext, 'Card'> {
-  snapshot: WorkspaceSnapshot; client: BrowserClient; composition?: CompositionSummary; canSteer: boolean;
+  snapshot: WorkspaceSnapshot; client: BrowserClient; composition?: CompositionSummary; canSteer: boolean; artifacts: NonNullable<FrameContext['artifacts']>;
   failure: string; run: (work: Promise<void>) => void; open: (item: TaskItem) => void;
 }
 const Frame = createContext<Runtime | null>(null);
 
-export function useTaskFrame({ snapshot, client, principalId, composition, activeViewId }: { snapshot: WorkspaceSnapshot; client: BrowserClient; principalId?: string; composition?: CompositionSummary; activeViewId?: string }) {
+export function useTaskFrame({ snapshot, client, principalId, composition, activeViewId, onOpenView }: { snapshot: WorkspaceSnapshot; client: BrowserClient; principalId?: string; composition?: CompositionSummary; activeViewId?: string; onOpenView?: (viewId: string) => void }) {
   const [local, setLocal] = useState<TaskMapState | null>(null), [failure, setFailure] = useState('');
   const served = snapshot.taskMap ?? null, projectId = snapshot.project.id;
   const localFor = useRef<Record<string, TaskMapState>>({});
@@ -46,6 +46,22 @@ export function useTaskFrame({ snapshot, client, principalId, composition, activ
     // Chained actions (focus, then form) must use this version, not wait for a render.
     latest.current = result; localFor.current[projectId] = result; setLocal(result); setFailure('');
   }, [client, projectId]);
+  const artifacts = useMemo(() => ({
+    of: (item: TaskItem) => {
+      const named = item.artifact;
+      if (!named) return null;
+      const resource = snapshot.resources.find(entry => entry.id === named.id && entry.version === named.version);
+      return resource ? { id: resource.id, version: resource.version, name: resource.path.split(/[\\/]/).filter(Boolean).at(-1) ?? resource.path } : null;
+    }
+  }), [snapshot.resources]);
+  const openArtifact = useCallback(async (id: string, version: string) => {
+    for (const view of composition?.views ?? []) {
+      for (const binding of Object.values(view.bindings ?? {})) {
+        const bound = (binding as { id?: string; version?: string });
+        if (bound?.id === id) { onOpenView?.(view.id); return; }
+      }
+    }
+  }, [composition, onOpenView]);
   const controls = useMemo<FrameControls>(() => {
     const params = (target: string) => latest.current?.presentation[target]?.params ?? {};
     return {
@@ -57,21 +73,22 @@ export function useTaskFrame({ snapshot, client, principalId, composition, activ
       revert: target => call('task.map.respond', { target, action: 'revert' }),
       accept: (target, suggestionId) => call('task.map.respond', { target, action: 'accept', suggestionId }),
       dismiss: (target, suggestionId) => call('task.map.respond', { target, action: 'dismiss', suggestionId }),
+      openArtifact,
       observe: () => latest.current ?? emptyTaskMap(),
     };
-  }, [call]);
+  }, [call, openArtifact]);
   const run = useCallback((work: Promise<void>) => { work.catch(error => setFailure(error instanceof Error ? error.message : 'The change could not be confirmed. The map is shown as last read.')); }, []);
   const open = useCallback((item: TaskItem) => run((async () => {
     await controls.focus(item.id);
     if (latest.current?.presentation['map:top']?.form === 'full') await controls.setForm('map:top', 'summary', mapDefaults.top.params);
   })()), [controls, run]);
   if (!map || !allowed('task.map.read')) return null;
-  return { map, controls, principalId, activeViewId, snapshot, client, composition, canSteer: allowed('task.map.present') && allowed('task.map.respond'), failure, run, open } satisfies Runtime;
+  return { map, controls, principalId, activeViewId, snapshot, client, composition, artifacts, canSteer: allowed('task.map.present') && allowed('task.map.respond'), failure, run, open } satisfies Runtime;
 }
 export function FrameProvider({ value, children }: { value: Runtime | null; children: ReactNode }) { return <Frame.Provider value={value}>{children}</Frame.Provider>; }
 export function useFrameContext(): (FrameContext & { item?: TaskItem }) | null {
   const r = useContext(Frame);
-  return r ? { map: r.map, controls: r.controls, Card, principalId: r.principalId, activeViewId: r.activeViewId } : null;
+  return r ? { map: r.map, controls: r.controls, Card, principalId: r.principalId, activeViewId: r.activeViewId, artifacts: r.artifacts } : null;
 }
 export function itemForView(map: TaskMapState | undefined | null, viewId: string) { return map?.items.find(i => i.view === viewId); }
 
@@ -131,6 +148,8 @@ function Card({ itemId, form: requested }: { itemId: string; form?: string }) {
   drawn.current = form + '\0' + JSON.stringify(shown.params);
   const hidden = plugin ? (reported?.key === drawn.current ? reported.note : entry!.hiddenNote?.(form, shown.params, { item, map: r.map }) ?? '') : genericHidden(item, form);
   const tone = toneOf(r.map, item), state = term(r.map, 'states', item.state), smaller = zoom(forms, form, -1), larger = zoom(forms, form, 1);
+  // The artifact this item names, resolved against registered versions.
+  const named = r.artifacts.of(item);
   const bound = view ? { viewId: view.id, view, projectId: r.snapshot.project.id, snapshot: r.snapshot, client: r.client, active: false, contextTarget: null, principalId: r.principalId } : undefined;
   const present = r.canSteer ? (params: Record<string, unknown>, next = form) => r.run(r.controls.setForm(target, next, params)) : undefined;
   const body = <Body form={form} params={shown.params} item={item} map={r.map} controls={r.controls} Card={Card} principalId={r.principalId} activeViewId={r.activeViewId}
@@ -159,6 +178,7 @@ function Card({ itemId, form: requested }: { itemId: string; form?: string }) {
     <div className="rho-item-body">{body}</div>
     <footer className="rho-item-foot">
       <span>{hidden || (r.map.next.includes(item.id) ? 'Declared next step' : '')}</span>
+      {named && <button className="rho-artifact-link" onClick={() => { void r.controls.openArtifact(named.id, named.version); }} title={`${item.title} names this artifact version`}>{named.name}</button>}
       {view && <button className="rho-link" onClick={() => r.open(item)}>Open</button>}
       <span className="rho-item-source">{sourceName(r, entry, view?.component)}</span>
     </footer>

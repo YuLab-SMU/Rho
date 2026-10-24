@@ -81,23 +81,35 @@ verified / domain, lists what the run registered, shows the submission chain wit
 each attempt's code digest, and states that no execution establishes a statistical
 result. The whole-task form is a band above the work.
 
+A task-map item may name the exact artifact version it produced (`item.artifact
+{id, version}` in Rho-owned `task.map.declare`). The shell resolves it against
+registered resources and draws a link in the item's footer and on the project page; a
+stale version draws nothing rather than a guess. That is the map's route into the
+work, and it comes from the Agent's statement.
+
 Asking a question carries the person's own words. "Ask about this" opens a one-line
 composer; sending opens the project's `questions.md` through the document owner,
 appends the text conditionally, and creates a `context.create` referencing both that
 text range and the exact artifact version. The view reports "Prepared" until the
 owner records a fetch, then "Fetched by the Agent" with the time.
 
-Checks: Rho 104/104 over five consecutive runs (`RHO_CORE_BINARY` set; the eight
-failures without it are the missing Core binary, not the change) and
-`npm run check:contracts` clean. One earlier run of the same suite failed one test
-and did not reproduce in five attempts; the count is recorded rather than the
-failure waved away. Browser acceptance ran 41 checks on a byte-identical copy of the
-real `work/agent-exp-2215` project (its writer lock is held by an earlier service) at
-1440 and 768, including restart; question, both failed runs, artifact provenance, the sibling jump, the
-written question and its fetch receipt all return from owner state. Evidence:
-`work/acceptance-v3-*/evidence-v3`. Not done: the task map holds one flat declared
-list with no `view` links or `from` edges, so it cannot show a branch; no figure
-region can be anchored; the notes document is one fixed path.
+Checks: Rho 114/114 with `RHO_CORE_BINARY` set (the ten new unit tests cover the
+reading of runs, artifacts and checks: declared vs present vs verified, an unknown
+outcome never read as done, one row per artifact name with earlier versions counted,
+one file's submissions chained); the eight failures without that variable are the
+missing Core binary, not the change; `npm run check:contracts` is clean. One earlier
+run failed a single test and did not reproduce in five attempts, recorded rather than
+waved away. Browser acceptance ran 45 checks on a byte-identical copy of the real
+`work/agent-exp-2215` project (its writer lock is held by an earlier service) at 1440
+and 768, including restart: question, both failed runs, artifact
+provenance, the sibling jump, the written question and its fetch receipt, and an
+Agent-declared map naming real artifact versions that open, all come back from owner
+state. Evidence: `work/acceptance-v3-*/evidence-v3`.
+
+Not done: no `from` edges are declared here, so the map still cannot show a branch;
+no figure region can be anchored; the notes document is one fixed path; and the
+Agent's reply to a question has no channel in this project — a context records the
+fetch, but responses exist only for annotation-backed feedback.
 
 The earlier `artifact-not-presentable` diagnosis was wrong: `artifact.check` already
 returns registered owner-state references. Execution acceptance binds that reference
@@ -167,9 +179,8 @@ read selected sources without changing execution identities. Then-current checks
 1600/1280/1024/768/390 on Chrome 155 with zero Host starts or native submissions, plus
 the installed browser flow and multi-source reads. [Fixed candidate](ui-acceptance/u1-source-folders.json)
 records identities; user design acceptance, full input/accessibility, other-platform
-folder dialogs and signed distribution remain pending. The shell keeps Agent-opened
-links, same-origin assets, scoped tab credentials, observation after refresh/restart,
-grouped commands, plugin discovery and unavailable retained views.
+folder dialogs and signed distribution remain pending. The shell keeps Agent-opened links, same-origin assets, scoped tab credentials,
+observation after refresh/restart, grouped commands and plugin discovery.
 
 ## Headless collaboration extension
 
@@ -216,52 +227,44 @@ registry publication and signing remain unverified/unselected.
 
 ## Historical baseline verification
 
-Earlier baselines, retained with their own scope: protocol, real stdio MCP, retained
-v1, service, crash/continuity, workspace and budget tests; three SIGKILL boundaries
+Earlier baselines, retained with their own scope: protocol, stdio MCP, retained v1,
+service, crash/continuity, workspace and budget tests, and three SIGKILL boundaries
 keeping the original operation/Core identity and one dispatch after a missing first
 acknowledgement. Plugin removal/reselection preserves drafts, undo, bytes, layout
-references, selection intent and original Core identity without replay, while
-unavailable providers reject new work and retained requests stay observable. Real
-flows then: an ordinary R project (linear model, typed join, PNG/PDF, exported object
-snapshot) and the original paired DESeq2 project (16,139 genes, 33 artifacts, 121/121
-saved-model observations) through the generic runner; a Claude MCP v2 handoff that
-fetched explicit context and changed the same unsaved Chinese/emoji buffer without a
-Host; base-R recovery keeping four partial rows across owned Host loss and turning the
-original request unknown without replay. Retained extraction failures (a completion
-sidecar inside the producer's inventory, a wrong declared column) stay failed.
+references, selection intent and Core identity without replay. Real flows then: an
+ordinary R project and the paired DESeq2 project (16,139 genes, 33 artifacts) through
+the generic runner; a Claude MCP v2 handoff that changed the same unsaved Chinese/emoji
+buffer without a Host; base-R recovery keeping four partial rows across owned Host
+loss. Retained extraction failures (a sidecar inside the producer's inventory, a wrong
+declared column) stay failed.
 
 ## Single-contract cleanup verification
 
 The two coexisting protocol artifacts were collapsed on 2026-10-23, before any release:
-the earlier version had never been published, so keeping it as a second dialect charged
-a released product's compatibility cost against development work. Shared definitions
-live in `protocol-base.ts` with no contract identity; the serve path, validators,
-envelope and artifact describe one contract. A build with the explicit `--allow-dirty`
-development override produced a tarball carrying `protocol/index.json`, hashed operation
-files and `fixtures/states.json`, with no retired artifact or fixture directory, and
-every packaged hash was recomputed and matched.
+the earlier version had never been published, so keeping it charged a released
+product's compatibility cost against development work. Shared definitions live in
+`protocol-base.ts` with no contract identity, and a `--allow-dirty` build produced a
+tarball whose every packaged hash was recomputed and matched.
 
 ## Current focus and remaining work
 
-[PX-01–PX-05](PLUGIN-EXTRACTION.md) have passed their backend scope, including
-both installed consumers. The 0.4 boundary review removed central format schemas,
-package-wide execution dependencies and a borrowed script budget. Full and two
-reduced installations passed, with removal/reselection and recovery acceptance. The versioned
-HTTP schema and inert fixtures form the backend boundary for independent UI work.
-The [plugin interface handoff](PLUGIN-UI-HANDOFF.md) records selected owners,
-dependencies and routes. The separate DOM-free browser SDK now reuses the
-snapshot/event transport and scoped bootstrap. The original U1 registry selected
-no owner renderer. The current grades candidate adds conditional layouts and
-selected owner entries; this does not accept the entire U2-U4 product journey.
-[The six backend work packages](BACKEND-FIRST.md) retain their original
-scope; [first-release tasks](WEBUI-FIRST.md) retain all product gates.
+[PX-01–PX-05](PLUGIN-EXTRACTION.md) passed their backend scope, including both
+installed consumers. The 0.4 boundary review removed central format schemas,
+package-wide execution dependencies and a borrowed script budget, and Full plus two
+reduced installations passed with removal/reselection and recovery acceptance. The
+versioned HTTP schema and inert fixtures form the backend boundary for independent UI
+work; the [plugin interface handoff](PLUGIN-UI-HANDOFF.md) records selected owners,
+dependencies and routes. The current grades candidate adds conditional layouts and
+selected owner entries, which does not accept the whole U2–U4 product journey.
+[The six backend work packages](BACKEND-FIRST.md) and [first-release
+tasks](WEBUI-FIRST.md) retain their scopes and product gates.
 
-Full editor IME/clipboard, accessibility and broad product performance/installation
-acceptance remain pending. Grades-flow widths, shared Unicode input and installed
-recovery checks have their recorded scope; they do not accept every editor/grid
-or Agent interaction. React/TypeScript, Vite, Dockview, CodeMirror 6,
-AG Grid Community, ECharts and a typed json-render catalog remain selected UI
-choices. Electron and cross-window movement follow later.
+Full editor IME/clipboard, accessibility and broad performance acceptance remain
+pending; grades-flow widths, shared Unicode input and installed recovery checks have
+their recorded scope and do not accept every editor, grid or Agent interaction.
+React/TypeScript, Vite, Dockview, CodeMirror 6, AG Grid Community, ECharts and a typed
+json-render catalog remain selected UI choices; Electron and cross-window movement
+follow later.
 
 ## Design evidence and limits
 
@@ -274,12 +277,9 @@ traceback, anchored feedback) and W1a–W5a continuation/error states, with the
 are unimplemented; C9 presentation/animation and C10 annotations remain proposals.
 
 The design keeps distinct: feedback draft, context available but unfetched, a
-tool-fetch receipt, observed work and an explicitly linked response. F-12's later
-explanation v2 keeps the same sources with no new execution; candidate snapshot s3
-needs bounded inspection, owner field/key/binding validation and explicit switching and
-claims no contents or checks. Source loss keeps s2 rows and read time, missing charts
-keep a table alternative, spec conflicts keep the draft, and unknown q-0004/run 004
-observations keep the original request and partial outputs. The earlier
+tool-fetch receipt, observed work and an explicitly linked response. Source loss keeps
+the s2 rows and read time, missing charts keep a table alternative, spec conflicts keep
+the draft, and unknown observations keep the original request and partial outputs. The earlier
 ["v2 (inquiry)"](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-7-0) and
 ["npm WebUI"](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-5-0) pages
 stay as flow/state reference. Their 1440/1280-wide boards do not prove live layout,
