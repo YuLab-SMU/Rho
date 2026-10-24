@@ -8,7 +8,7 @@
 //   Focus    the Agent's attention is read from what it last opened, wrote, ran or read;
 //   Compose  an Agent layout change applies only while the person follows;
 //   Connect  source version, run and artifact version are linked by the facts alone;
-//   Reveal   catalog reads, rejected calls and retries wait behind their object;
+//   Reveal   catalog reads, rejected calls, retries and earlier runs wait behind their object;
 //   Revisit  a person coming back gets a digest of what changed, never a replay.
 // Only the Agent's work moves its attention. What a person or another principal records
 // (an edit, a question, a receipt) updates its objects in place.
@@ -91,7 +91,8 @@ export type PersonIntent =
   | { kind: 'dismiss-digest' }
   | { kind: 'reveal'; target: string | null }
   | { kind: 'update'; target: string }
-  | { kind: 'ask'; target: string; rows: string[]; text: string };
+  | { kind: 'ask'; target: string; rows: string[]; text: string }
+  | { kind: 'expand'; target: string } | { kind: 'collapse'; target: string };
 // A target names a view by its id. The first view of an object takes the object's id,
 // so naming an object reaches its view. The person acts after seeing fact `at`; -1 is
 // before the first fact.
@@ -131,7 +132,8 @@ export interface Suggestion { id: string; views: ArtifactRef[]; cause: 'working'
 export interface Escalation { object: string; reason: string; from: number }
 export type DigestLine =
   | { kind: 'source'; object: string; from: number | null; to: number }
-  | { kind: 'run'; object: string; state: RunState; firstLine: string | null; verified: number }
+  // One line per source: its latest run that changed, and the others that changed, in order.
+  | { kind: 'run'; object: string; state: RunState; firstLine: string | null; verified: number; earlier: string[] }
   | { kind: 'artifact'; object: string; versions: number }
   | { kind: 'question'; object: string; state: QuestionState['state'] }
   | { kind: 'suggestion'; id: string }
@@ -154,6 +156,8 @@ export interface Screen {
   items: DeclaredItem[];
   hidden: { catalog: number; rejected: number; retries: number };
   revealed: string | null;
+  // Sources whose earlier runs the person unfolded.
+  expanded: string[];
   moves: Move[];
 }
 
@@ -172,7 +176,7 @@ export function express(trace: Trace, actions: PersonAction[], step: number, sta
   const s: Work = {
     step: -1, time: null, attention: start, question: null, objects: {}, order: [], views: [], active: null, agent: null,
     suggestions: [], escalations: [], digest: null, items: [], hidden: { catalog: 0, rejected: 0, retries: 0 }, revealed: null,
-    moves: [], lastMove: null, pending: null, away: null,
+    expanded: [], moves: [], lastMove: null, pending: null, away: null,
   };
   const last = Math.min(step, trace.facts.length - 1);
   for (const a of actions) if (a.at < 0) person(s, trace, a);
@@ -444,6 +448,8 @@ function person(s: Work, trace: Trace, a: PersonAction) {
     case 'dismiss': s.suggestions = s.suggestions.filter(y => y.id !== a.suggestion); return;
     case 'dismiss-digest': s.digest = null; return;
     case 'reveal': s.revealed = a.target; return;
+    case 'expand': if (!s.expanded.includes(a.target)) s.expanded.push(a.target); return;
+    case 'collapse': s.expanded = s.expanded.filter(x => x !== a.target); return;
   }
 }
 
@@ -454,13 +460,29 @@ function digest(s: Work, away: NonNullable<Work['away']>): DigestLine[] {
   for (const id of [...s.order].sort((a, b) => rank[s.objects[a]!.kind] - rank[s.objects[b]!.kind])) {
     const now = s.objects[id]!, then = away.baseline[id];
     if (now.kind === 'source' && (!then || (then as SourceState).version !== now.version)) lines.push({ kind: 'source', object: id, from: then ? (then as SourceState).version : null, to: now.version });
-    if (now.kind === 'run' && (!then || (then as RunObject).state !== now.state || (then as RunObject).verified.length !== now.verified.length)) lines.push({ kind: 'run', object: id, state: now.state, firstLine: now.state === 'completed' ? null : now.firstLine, verified: now.verified.length });
+    // Runs of one source make one line, led by the latest: the chain counts its last run.
+    if (now.kind === 'run' && (!then || (then as RunObject).state !== now.state || (then as RunObject).verified.length !== now.verified.length)) {
+      const line: DigestLine = { kind: 'run', object: id, state: now.state, firstLine: now.state === 'completed' ? null : now.firstLine, verified: now.verified.length, earlier: [] };
+      const i = lines.findIndex(l => l.kind === 'run' && (s.objects[l.object] as RunObject).source === now.source);
+      if (i < 0) lines.push(line);
+      else { const before = lines[i] as Extract<DigestLine, { kind: 'run' }>; line.earlier = [...before.earlier, before.object]; lines[i] = line; }
+    }
     if (now.kind === 'artifact' && now.versions.length !== ((then as ArtifactState | undefined)?.versions.length ?? 0)) lines.push({ kind: 'artifact', object: id, versions: now.versions.length - ((then as ArtifactState | undefined)?.versions.length ?? 0) });
     if (now.kind === 'question' && (!then || (then as QuestionState).state !== now.state)) lines.push({ kind: 'question', object: id, state: now.state });
   }
   for (const x of s.suggestions) if (!away.suggestions.includes(x.id)) lines.push({ kind: 'suggestion', id: x.id });
   if (JSON.stringify(s.items) !== away.items) lines.push({ kind: 'items', count: s.items.length });
   return lines;
+}
+
+// Scale: a source's runs fold behind the latest, the one the chain counts. Folding never
+// hides the run the main area shows, the run the Agent is on, or one escalated to the person.
+export function chain(screen: Pick<Screen, 'objects' | 'order' | 'views' | 'active' | 'agent' | 'escalations' | 'expanded'>, source: string): { shown: RunObject[]; folded: RunObject[] } {
+  const runs = screen.order.map(id => screen.objects[id]!).filter((o): o is RunObject => o.kind === 'run' && o.source === source);
+  if (screen.expanded.includes('source:' + source)) return { shown: runs, folded: [] };
+  const shown = screen.views.find(v => v.id === screen.active)?.object;
+  const keep = (r: RunObject) => r === runs.at(-1) || r.id === shown || r.id === screen.agent?.object || screen.escalations.some(x => x.object === r.id);
+  return { shown: runs.filter(keep), folded: runs.filter(r => !keep(r)) };
 }
 
 const versionOf = (s: Pick<Screen, 'objects'>, object: string, run: number | null) => {

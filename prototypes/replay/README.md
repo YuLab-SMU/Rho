@@ -73,6 +73,13 @@ adapter made locally) says "not in Rho's records" in the dock.
   count as attention. Today they reach the service but are not events the browser
   receives.
 
+## Reading the object list
+
+A source's earlier runs fold into a row of their marks under it, numbered and coloured
+by outcome; the row unfolds them. The run on screen, the run the Agent is on and a run
+that failed while the person waited stay listed. The away digest folds runs the same
+way.
+
 ## Reading the dock
 
 One tick per call: tall for writes and runs, short for reads, faint for catalog

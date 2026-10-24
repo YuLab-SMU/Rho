@@ -7,7 +7,7 @@ import recordsJson from './trace/records.json';
 import checkRecordsJson from './trace/check.records.json';
 import figureUrl from './trace/temp-effect.run-5.png';
 import {
-  express, itemsOn, questionsOn, when,
+  chain, express, itemsOn, questionsOn, when,
   type ArtifactState, type Attention, type DeclaredItem, type DigestLine, type Fact, type ObjectState, type PersonAction, type PersonIntent, type QuestionState, type RunObject, type Screen, type SourceState, type Trace, type View,
 } from '../../src/expression.js';
 import { authorLabel } from '../../src/task-frame.js';
@@ -126,7 +126,6 @@ function Shell({ screen, act }: { screen: Screen; act: Act }) {
 function Objects({ screen, act }: { screen: Screen; act: Act }) {
   const objects = screen.order.map(id => screen.objects[id]!);
   const shown = screen.views.find(v => v.id === screen.active)?.object;
-  const runsOf = (name: string) => objects.filter((o): o is RunObject => o.kind === 'run' && o.source === name);
   const l = ledger(rho, rhoStep(screen.step), runAgent), refused = l.refused.reduce((n, g) => n + g.entries.length, 0);
   const row = (o: ObjectState) => <button type="button" className="object" aria-current={shown === o.id} data-fresh={o.changedAt === screen.step || undefined} onClick={() => act({ kind: 'open', target: o.id })}>
     <Mark object={o} />
@@ -139,7 +138,7 @@ function Objects({ screen, act }: { screen: Screen; act: Act }) {
   return <nav className="objects" aria-label="Objects">
     <ul>{objects.filter(o => o.kind === 'source').map(o => <li key={o.id}>
       {row(o)}
-      {runsOf(o.name).length > 0 && <ul className="runs">{runsOf(o.name).map(r => <li key={r.id}>{row(r)}</li>)}</ul>}
+      <Runs source={o as SourceState} screen={screen} act={act} row={row} />
     </li>)}</ul>
     {artifacts.length > 0 && <ul>{artifacts.map(o => <li key={o.id}>
       {row(o)}
@@ -157,6 +156,19 @@ function Objects({ screen, act }: { screen: Screen; act: Act }) {
       {l.given.catalog.length} catalog reads · {refused} refused
     </button>
   </nav>;
+}
+
+// Earlier runs fold into their marks; the marks are the control that unfolds them.
+function Runs({ source, screen, act, row }: { source: SourceState; screen: Screen; act: Act; row: (o: ObjectState) => ReactNode }) {
+  const { shown } = chain(screen, source.name), folded = chain({ ...screen, expanded: [] }, source.name).folded;
+  if (!shown.length) return null;
+  const open = screen.expanded.includes(source.id);
+  return <ul className="runs">
+    {folded.length > 0 && <li><button type="button" className="chain" aria-expanded={open} title={`${folded.length} earlier ${folded.length === 1 ? 'run' : 'runs'}`} onClick={() => act({ kind: open ? 'collapse' : 'expand', target: source.id })}>
+      {folded.map(r => <Mark key={r.id} object={r} />)}
+    </button></li>}
+    {shown.map(r => <li key={r.id}>{row(r)}</li>)}
+  </ul>;
 }
 
 function Tabs({ screen, act }: { screen: Screen; act: Act }) {
@@ -318,7 +330,7 @@ function digestLine(line: DigestLine, screen: Screen, act: Act): ReactNode {
   const open = (target: string, text: ReactNode) => <button type="button" className="link" onClick={() => act({ kind: 'open', target })}>{text}</button>;
   switch (line.kind) {
     case 'source': return <>{open(line.object, label(screen.objects[line.object]))} {line.from === null ? 'v' + line.to : `v${line.from} → v${line.to}`}</>;
-    case 'run': return <>{open(line.object, label(screen.objects[line.object]))} <span className={'state ' + line.state}>{line.state}</span> {line.firstLine ? <code>{line.firstLine}</code> : line.verified ? `${line.verified} ${line.verified === 1 ? 'file' : 'files'} verified` : null}</>;
+    case 'run': return <>{line.earlier.length > 0 && <span className="earlier">{line.earlier.map(id => <button key={id} type="button" className="link" aria-label={label(screen.objects[id])} onClick={() => act({ kind: 'open', target: id })}><Mark object={screen.objects[id]} /></button>)}</span>}{open(line.object, label(screen.objects[line.object]))} <span className={'state ' + line.state}>{line.state}</span> {line.firstLine ? <code>{line.firstLine}</code> : line.verified ? `${line.verified} ${line.verified === 1 ? 'file' : 'files'} verified` : null}</>;
     case 'artifact': return <>{open(line.object, label(screen.objects[line.object]))} +{line.versions} version</>;
     case 'question': return <>{open(line.object, <span className="quoted">{label(screen.objects[line.object])}</span>)} <span className="fact">{line.state === 'fetched' ? 'fetched' : 'not fetched'}</span></>;
     case 'suggestion': return <>Layout suggestion waiting</>;
@@ -394,9 +406,10 @@ function Dock({ step, setStep, playing, setPlaying, screen, actions, scenario, p
     <Scrubber step={step} setStep={setStep} actions={actions} screen={screen} />
     <div className="scenarios" role="radiogroup" aria-label="Person">
       {scenarios.map(s => <button key={s.id} type="button" role="radio" aria-checked={scenario === s.id} onClick={() => pick(s.id)}>{s.label}</button>)}
-      <span className="spacer" />
-      <span className="source">{trace.recorded.experiment} · {trace.facts.length} facts · {trace.recorded.from.slice(11, 19)}–{trace.recorded.to.slice(11, 19)}</span>
-      <a className="trace" href={which === 'check' ? '?' : '?trace=check'}>{which === 'check' ? 'airquality · transcript' : 'check · Rho records'}</a>
+      <span className="about">
+        <span className="source">{trace.recorded.experiment} · {trace.facts.length} facts · {trace.recorded.from.slice(11, 19)}–{trace.recorded.to.slice(11, 19)}</span>
+        <a className="trace" href={which === 'check' ? '?' : '?trace=check'}>{which === 'check' ? 'airquality · transcript' : 'check · Rho records'}</a>
+      </span>
     </div>
   </footer>;
 }

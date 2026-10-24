@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { agentPaceMs, collect, express, itemsOn, questionsOn, timeOf } from '../dist/expression.js';
+import { agentPaceMs, chain, collect, express, itemsOn, questionsOn, timeOf } from '../dist/expression.js';
+import { fold } from '../dist/trace.js';
 import { taskMapLimits } from '../dist/task-map.js';
 
 // The expression rules replayed over one recorded Agent run (agent-exp-2215: 61 calls,
@@ -61,9 +62,13 @@ test('coming back gives a digest by object and the main area is where the person
   const screen = express(trace, [{ at: 29, kind: 'leave' }, { at: 57, kind: 'return' }], 57);
   assert.equal(screen.active, left.active);
   assert.deepEqual(screen.views.map(v => v.id), left.views.map(v => v.id));
-  assert.deepEqual(screen.digest.lines.map(l => l.kind === 'source' ? `${l.object} ${l.from}→${l.to}` : l.kind === 'run' ? `${l.object} ${l.state} ${l.verified}` : l.kind === 'artifact' ? `${l.object} +${l.versions}` : `${l.kind} ${l.id ?? l.count}`), [
-    'source:analysis.R 5→9', 'source:findings.md null→2', 'run:3 failed 0', 'run:4 failed 0', 'run:5 completed 4', 'artifact:temp-effect.png +1', 'suggestion layout:54',
+  // Three runs of analysis.R make one line, led by the one that counts.
+  assert.deepEqual(screen.digest.lines.map(l => l.kind === 'source' ? `${l.object} ${l.from}→${l.to}` : l.kind === 'run' ? `${l.object} ${l.state} ${l.verified} after ${l.earlier}` : l.kind === 'artifact' ? `${l.object} +${l.versions}` : `${l.kind} ${l.id ?? l.count}`), [
+    'source:analysis.R 5→9', 'source:findings.md null→2', 'run:5 completed 4 after run:3,run:4', 'artifact:temp-effect.png +1', 'suggestion layout:54',
   ]);
+  // A last run that failed leads with its own first line.
+  const failed = express(trace, [{ at: 29, kind: 'leave' }, { at: 44, kind: 'return' }], 44).digest.lines.find(l => l.kind === 'run');
+  assert.deepEqual([failed.object, failed.earlier, failed.firstLine], ['run:4', ['run:3'], "Error: object 'op' not found"]);
   assert.equal(screen.attention, 'following');
 });
 
@@ -188,6 +193,41 @@ test('only an item that names an artifact gathers its facts; a title that names 
   // effects.csv from runs 1, 2 and 5 is one version, so the item shows on any of them.
   const csv = express(trace, [{ at: last, kind: 'open', target: 'item:run' }], last);
   assert.deepEqual(itemsOn(csv, csv.views.find(x => x.id === csv.active)).map(i => i.id), ['run']);
+});
+
+test("a source's runs fold behind the latest; folding never hides what is shown, where the Agent is, or what escalated", () => {
+  const runs = (screen, name = 'analysis.R') => { const c = chain(screen, name); return [c.shown.map(r => r.run), c.folded.map(r => r.run)]; };
+  assert.deepEqual(runs(express(trace, [], last)), [[5], [1, 2, 3, 4]]);
+  // Runs 3 and 4 failed while the person worked beside them.
+  assert.deepEqual(runs(express(trace, working, last)), [[3, 4, 5], [1, 2]]);
+  assert.deepEqual(runs(express(trace, [{ at: last, kind: 'open', target: 'run:2' }], last)), [[2, 5], [1, 3, 4]]);
+  // Constructed: the recorded Agent was always on its latest run, so #53 (a catalog read)
+  // becomes a lookup of run 1.
+  const constructed = structuredClone(trace);
+  Object.assign(constructed.facts[53], { op: 'action.lookup', object: 'run:1', effect: { kind: 'observe', run: 1 } });
+  assert.deepEqual(runs(express(constructed, [], 53)), [[1, 5], [2, 3, 4]]);
+  // Unfolding is a reveal: every run shows, attention stays, and folding hides them again.
+  const unfolded = express(trace, [{ at: 40, kind: 'expand', target: 'source:analysis.R' }], last);
+  assert.deepEqual([runs(unfolded), unfolded.attention], [[[1, 2, 3, 4, 5], []], 'following']);
+  assert.deepEqual(runs(express(trace, [{ at: 40, kind: 'expand', target: 'source:analysis.R' }, { at: last, kind: 'collapse', target: 'source:analysis.R' }], last)), [[5], [1, 2, 3, 4]]);
+});
+
+test('only two things claim the space above the main area: a run the person waits on that failed, and a layout the person decides on', () => {
+  const check = fold(JSON.parse(fs.readFileSync(new URL('../prototypes/replay/trace/check.records.json', import.meta.url), 'utf8')));
+  // Following, the person pins the view they are on: run 5, where the Agent left them.
+  const pinned = [{ at: 53, kind: 'pin', target: 'run:5' }];
+  const cases = [[trace, []], [trace, working], [trace, [{ at: 29, kind: 'leave' }, { at: 57, kind: 'return' }]], [trace, pinned], [check, []], [check, [{ at: 9, kind: 'open', target: 'source:check.R' }]]];
+  const strips = cases.map(([t, actions]) => {
+    const seen = new Set();
+    for (let i = 0; i < t.facts.length; i++) {
+      const screen = express(t, actions, i);
+      for (const x of screen.escalations) { assert.ok(['failed', 'unknown'].includes(screen.objects[x.object].state)); seen.add(x.object); }
+      for (const x of screen.suggestions) { assert.equal(t.facts[x.from].effect.kind, 'layout'); seen.add(`${x.id} ${x.cause}`); }
+    }
+    return [...seen];
+  });
+  // Catalog reads, refusals, retries, receipts, questions and items never do.
+  assert.deepEqual(strips, [[], ['run:3', 'run:4', 'layout:54 working'], ['layout:54 away'], ['layout:54 pinned'], [], []]);
 });
 
 test('the same facts and actions always give the same screen', () => {

@@ -31,6 +31,10 @@ body { background: var(--color-canvas); }
 .objects ul, .objects ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
 .objects > ul + ul { padding-top: 10px; border-top: 1px solid var(--color-divider); }
 .objects ul.runs { margin: 1px 0 4px 16px; padding-left: 6px; border-left: 1px solid var(--color-hairline); }
+.replay .chain { display: flex; align-items: center; gap: 4px; min-height: 0; height: 24px; padding: 0 8px; border: 0; border-radius: var(--radius-small); background: none; }
+.replay .chain:hover { background: var(--color-hover); }
+.replay .chain .mark { transform: scale(.85); }
+.replay .chain[aria-expanded='true'] .mark { opacity: .45; }
 .dots { display: inline-flex; gap: 3px; }
 .dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--color-meta); }
 .dots i:last-child { background: var(--color-ink); }
@@ -152,6 +156,9 @@ pre.output.failed { background: #fbeceb; color: #7e2522; }
 .digest header button { min-height: 26px; padding: 0 10px; }
 .digest ul { list-style: none; margin: 0; padding: 6px 14px 10px; display: flex; flex-direction: column; }
 .digest li { display: flex; align-items: baseline; gap: 10px; min-width: 0; line-height: 26px; }
+.digest li button.link { flex-shrink: 0; white-space: nowrap; }
+.digest .earlier { display: inline-flex; gap: 2px; align-self: center; }
+.digest .earlier button.link { display: inline-flex; }
 
 .reveal { width: 340px; flex-shrink: 0; display: flex; flex-direction: column; border-left: 1px solid var(--color-hairline); background: var(--color-well); animation: slide .2s ease-out; }
 .reveal header { display: flex; align-items: center; height: 38px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--color-hairline); }
@@ -179,6 +186,8 @@ pre.output.failed { background: #fbeceb; color: #7e2522; }
 .dock button { min-height: 28px; padding: 0 10px; background: #202527; border-color: #30373a; color: #e5e9e7; border-radius: 7px; }
 .dock button:hover { background: #2a3033; }
 .dock .controls, .dock .scenarios { display: flex; align-items: center; gap: 6px; }
+.dock .scenarios { flex-wrap: wrap; row-gap: 6px; }
+.dock .about { flex: 0 0 auto; margin-left: auto; display: flex; align-items: center; gap: 6px; }
 .dock .play { width: 40px; }
 .dock .now { margin-left: 10px; font-family: var(--font-mono); color: #9ba5a8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .dock .now b { color: #e5e9e7; }
@@ -191,7 +200,7 @@ pre.output.failed { background: #fbeceb; color: #7e2522; }
 .dock .attention[data-attention='away'] { color: #9ba5a8; }
 .dock .scenarios button[aria-checked='true'] { background: #e5e9e7; color: #171a1c; border-color: #e5e9e7; }
 .dock .scenarios button { white-space: nowrap; }
-.dock .trace { flex-shrink: 0; margin-left: 8px; font: 11.5px/16px var(--font-mono); color: #9fb4ff; text-decoration: none; white-space: nowrap; }
+.dock .trace { flex-shrink: 0; font: 11.5px/16px var(--font-mono); color: #9fb4ff; text-decoration: none; white-space: nowrap; }
 .dock .trace:hover { text-decoration: underline; }
 .dock .source { font-family: var(--font-mono); color: #6f7a7e; font-size: 11.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
