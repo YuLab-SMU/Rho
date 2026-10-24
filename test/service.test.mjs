@@ -33,9 +33,12 @@ test('HTTP auth, origins, scope, project read has no Host, and two callers share
     const edited = await agent.call('document.edit', { documentId: first.id, expectedVersion: first.version, edits: [{ from: 0, to: 0, insert: '# 中文 🧬\nx <- 1\n' }], undoGroup: 'agent-1' });
     assert.equal((await human.call('document.read', { projectId: project.id, documentId: first.id })).content, edited.content);
     await assert.rejects(agent.call('document.edit', { documentId: first.id, expectedVersion: first.version, edits: [{ from: 0, to: 0, insert: 'stale' }], undoGroup: 'old' }), e => e.error.kind === 'stale');
+    // A request the schema refuses is recorded as the caller's, with nothing from its body.
+    await assert.rejects(agent.call('document.edit', { documentId: first.id, operationId: 'not-in-schema' }), e => e.error.kind === 'invalid');
     const activity = await agent.call('binding.activity', {});
     assert.ok(activity.entries.some(e => e.method === 'document.edit' && e.returnedVersion === edited.version));
     assert.ok(activity.entries.some(e => e.method === 'document.edit' && e.errorKind === 'stale'));
+    assert.deepEqual(Object.keys(activity.entries.find(e => e.errorKind === 'invalid')).sort(), ['at', 'cursor', 'errorKind', 'method', 'outcome', 'principal']);
     assert.ok(activity.entries.every(e => !('input' in e) && !('token' in e)));
     const other = await human.call('project.create', { name: 'other' });
     await assert.rejects(agent.call('document.read', { projectId: other.id, documentId: first.id }), e => e.error.kind === 'scope');

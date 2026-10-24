@@ -403,6 +403,10 @@ export class RhoService {
       // not reserialized, defaulted or coerced: what the caller sent is what the
       // handler receives, so a request digest and a duplicate delivery keep meaning.
       const read = readOperation(method, body);
+      // A refusal by schema is still the caller's activity, or the record misses every
+      // malformed Agent call. Only the method and the refusal are kept, nothing from a
+      // body that failed its schema.
+      if (!read.ok && principal.projectId) { const projectId = principal.projectId; await this.serial(projectId, () => this.recordActivity(principal, method, { projectId }, undefined, read.kind)); }
       requireThat(read.ok, read.ok ? 'invalid' : read.kind, read.ok ? '' : (read.problems[0]?.fix ? `Request does not match the versioned schema: ${read.problems[0].fix}` : 'Request does not match the versioned schema.'), read.ok ? {} : { problems: read.problems, remedy: 'Fix the named fields and resend the same request identity.' });
       const request = read.request, contractRef = typeof req.headers['x-rho-contract-ref'] === 'string' ? req.headers['x-rho-contract-ref'] : undefined;
       let value;

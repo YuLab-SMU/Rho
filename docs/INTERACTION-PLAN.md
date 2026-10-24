@@ -178,6 +178,9 @@
     Refused 永远少一块；由谁写、写到哪，按[架构](ARCHITECTURE.md)的 owner 表定。
   - Rho 自己：服务边界按 schema 拒掉的请求在 `recordActivity` 之前就返回
     （`src/server.ts` 的 `readOperation` 先于 `serial`），同样不进记录；S7 前修。
+    **已修（2026-10-24）：** 绑定了项目的调用方被 schema 拒绝时记一条，只有方法和
+    `invalid`，不取未通过 schema 的请求体里的任何字段；`test/service.test.mjs` 覆盖。
+    适配器本地的拒绝不在此列，仍等 Rho-plugins。
   - Rho 自己：任务地图只留最新事项，早先声明的内容不留；要不要留历史，S3 定。
   - 输出文本在原生存储，项目记录只有退出码和字节数；升级理由只能写“Exit N”。
 
