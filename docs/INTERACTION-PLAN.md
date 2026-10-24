@@ -62,7 +62,7 @@
 
 | 事实 | 出处 | 对计划的影响 |
 | --- | --- | --- |
-| Rho 自己记录每一次调用：时间、方法、返回或被拒、拒绝类型，以及出现时的 operationId / documentId / contextId / returnedVersion。不记 `data.page` 的资源身份和 `composition.apply` 的布局身份 | `project/.rho/rho/activity.json`（62 条）；`plugin-agent/dist/index.js` 的 `recordActivity` | S2 的时间源改用它，“没记录时间的调用”从此消失；读产物的对象身份要等 Rho-plugins 补记，补上之前显示“未记录” |
+| Rho 自己记录每一次**到达它的**调用：时间、方法、返回或被拒、拒绝类型，以及出现时的 operationId / documentId / contextId / returnedVersion。不记 `document.open` 打开的文档、`data.page` 的资源身份和 `action.output` 的流；布局身份可由 returnedVersion 查合成历史。agent 适配器本地拒掉的调用不在其中（本轨迹 4 次，S2 核实） | `project/.rho/rho/activity.json`（62 条）；`plugin-agent/dist/index.js` 的 `recordActivity`；Rho-plugins `plugins/agent/src/layered.ts` | S2 的时间源改用它，“没记录时间的调用”从此消失；读产物的对象身份要等 Rho-plugins 补记，补上之前显示“未记录” |
 | 这份记录只有调用方本人能读（`binding.activity` 按 principal 过滤），浏览器读不到；读操作也不发事件 | `src/server.ts` `binding.activity` 分支；`events.json` 只有 8 种事件 | S7 需要服务端把活动暴露给浏览器，这是 Rho 自己的改动 |
 | 浏览器每收到一个事件就重取整份快照；快照含 documents、operations、resources、contexts、taskMap、compositions、interactions 等 | `src/observation.ts`；`observation.snapshot` 的输出 | S7 的折叠输入就是快照，不需要新的推送通道，只缺活动一项 |
 | `task.map.declare` 的事项已经可以引用对象：`artifact {id, version}`、`view`、`from`（分支边）、`progress`、`group`，以及 `lines[].judgment` 区分判断与陈述 | `protocol/operations/task.map.declare.json` | S3 不需要改契约，只需要规则和指导文本 |
@@ -159,6 +159,25 @@
 - **完成判据：** 账本 §5 写的那条：给定这个项目，一屏能回答“第 44 步时它给了什么、
   做了什么、读了什么、产出了什么、被拒了什么”，7 次拒绝按 `stale 2 / invalid 3 /
   condition 2` 分组。
+
+- **状态（2026-10-24）：** 已完成，完成判据按核实结果改写。`src/trace.ts` 的
+  `fold()` 从 `prototypes/replay/trace/records.json`（build-trace 从所有者记录抽出的
+  精简版，不含图片和本机路径）折出 `Trace`，`align()` 把它和转录逐条对上，`ledger()`
+  折出五条投影；回放对象列表底部的计数点开就是账本面板。等价检查放在
+  `test/trace.test.mjs`：共有的 57 个事实操作、结果、拒绝类型、顺序一致，所有者时间
+  从不晚于调用记录时间，效果只在 Rho 没记的身份上为 null。**7 次拒绝只能折出 3 次**
+  （stale 2、condition 1）：invalid 3 和 condition 1 是 agent 适配器本地拒掉的，
+  从未到达 Rho；账本 §5 的“按 stale 2 / invalid 3 / condition 2 分组”只有转录能做到。
+  反过来，Rho 记下了转录没有的 4 次调用（一次更早的探测、验收脚本的 3 次）。
+- **登记（不在本阶段做）：**
+  - Rho-plugins agent `recordActivity`：`document.open` 记结果里的 documentId，
+    `data.page` 记 `resource.id/version`，`action.output` 记 `stream`。
+  - Rho-plugins agent 适配器（`layered.ts`）：本地拒绝要进 Rho 的活动记录，否则
+    Refused 永远少一块；由谁写、写到哪，按[架构](ARCHITECTURE.md)的 owner 表定。
+  - Rho 自己：服务边界按 schema 拒掉的请求在 `recordActivity` 之前就返回
+    （`src/server.ts` 的 `readOperation` 先于 `serial`），同样不进记录；S7 前修。
+  - Rho 自己：任务地图只留最新事项，早先声明的内容不留；要不要留历史，S3 定。
+  - 输出文本在原生存储，项目记录只有退出码和字节数；升级理由只能写“Exit N”。
 
 ### S3 事项、发现、解释
 
@@ -286,7 +305,8 @@
 
 - [交互模型](INTERACTION-MODEL.md)写规则本身；本计划写顺序、归属和完成判据；
   [账本](AGENT-LEDGER.md)写事实源和投影。三者引用同一个实现，不各自再写一份规则。
-- 账本 §3 说 Rho 不记 Did、§4 说读不进事件流：按第 2 节的核实，Rho 记了每次调用的
-  方法、时间、结果和部分身份（`activity.json`），读也在其中；缺的是资源身份和
-  浏览器可读性。账本下次修订时请按此更正，S2 以本计划的表述为准。
+- 账本 §3 说 Rho 不记 Did、§4 说读不进事件流：按第 2 节的核实，Rho 记了每次到达它的
+  调用的方法、时间、结果和部分身份（`activity.json`），读也在其中；缺的是资源身份、
+  适配器本地拒绝和浏览器可读性。账本 §5 的完成条件（7 次拒绝按三类分组）只靠 Rho
+  的记录做不到，S2 折出的是 3 次。账本下次修订时请按此更正。
 - [状态](STATUS.md)只记每阶段做到哪，不重复规则。

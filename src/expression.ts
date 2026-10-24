@@ -20,20 +20,22 @@
 // person's attention and layout stability. Kept equal by test.
 export const agentPaceMs = 8000;
 
+// An identity a record does not hold is null (src/trace.ts folds Rho's own records, which
+// keep less than the Agent's transcript); the screen never guesses it.
 export type Effect =
   | { kind: 'catalog' }
-  | { kind: 'open'; source: string; version: number }
+  | { kind: 'open'; source: string | null; version: number }
   | { kind: 'edit'; source: string; version: number }
   | { kind: 'save'; source: string; version: number }
-  | { kind: 'submit'; run: number; source: string; sourceVersion: number }
+  | { kind: 'submit'; run: number; source: string; sourceVersion: number | null }
   | { kind: 'retry'; run: number }
   | { kind: 'ended'; run: number; exit: number | null }
   | { kind: 'observe'; run: number }
-  | { kind: 'output'; run: number; stream: 'stdout' | 'stderr' }
+  | { kind: 'output'; run: number; stream: 'stdout' | 'stderr' | null }
   | { kind: 'verified'; run: number; artifacts: string[] }
-  | { kind: 'read'; artifact: string; run: number }
+  | { kind: 'read'; artifact: string | null; run: number | null }
   | { kind: 'layout'; replace: boolean; views: ArtifactRef[] }
-  | { kind: 'items'; question: string; items: DeclaredItem[] }
+  | { kind: 'items'; question: string | null; items: DeclaredItem[] | null }
   | { kind: 'ask'; question: string; text: string; target: string; version: string; run: number; rows: string[]; document: { source: string; version: number } | null }
   | { kind: 'fetched'; question: string };
 export interface ArtifactRef { artifact: string; run: number }
@@ -49,7 +51,7 @@ export interface Fact {
   at: string | null;
   after?: string | null;
   before?: string | null;
-  reason?: { kind: string; message: string };
+  reason?: { kind: string; message: string | null };
   object?: string;
   effect?: Effect | null;
 }
@@ -61,7 +63,7 @@ export interface Trace {
   principals: Record<string, { kind: 'agent' | 'browser' | 'operator'; name: string | null }>;
   sources: Record<string, { versions: Record<string, string>; edited: Record<string, string>; saved: Record<string, string>; authors: Record<string, string> }>;
   runs: Record<string, {
-    operationId: string; source: string; sourceVersion: number; declared: string[]; acceptedAt: string;
+    operationId: string; source: string; sourceVersion: number | null; declared: string[]; acceptedAt: string;
     exit: number | null; observedAt: string | null; outputs: { stdout?: string; stderr?: string };
     verified?: { name: string; digest: string; kind: string }[];
   }>;
@@ -90,7 +92,7 @@ export type PersonAction = PersonIntent & { at: number };
 export type RunState = 'running' | 'completed' | 'failed' | 'unknown';
 export interface SourceState { id: string; kind: 'source'; name: string; version: number; savedVersion: number | null; changedAt: number; touchedAt: number; hidden: number }
 export interface RunObject {
-  id: string; kind: 'run'; name: string; run: number; source: string; sourceVersion: number; state: RunState;
+  id: string; kind: 'run'; name: string; run: number; source: string; sourceVersion: number | null; state: RunState;
   exit: number | null; firstLine: string | null; verified: string[]; changedAt: number; touchedAt: number; hidden: number;
 }
 export interface ArtifactState {
@@ -208,7 +210,7 @@ function agent(s: Work, trace: Trace, f: Fact) {
   const at = (id: string, run: number | null) => byAgent ? focus(s, f, id, run) : settle(s);
   switch (e.kind) {
     case 'catalog': s.hidden.catalog++; return settle(s);
-    case 'open': source(s, e.source, f.seq).version = e.version; return at('source:' + e.source, null);
+    case 'open': if (e.source === null) return settle(s); source(s, e.source, f.seq).version = e.version; return at('source:' + e.source, null);
     case 'edit': { const o = source(s, e.source, f.seq); o.version = e.version; o.changedAt = f.seq; return at(o.id, null); }
     case 'save': { const o = source(s, e.source, f.seq); o.savedVersion = e.version; o.changedAt = f.seq; return at(o.id, null); }
     case 'submit': {
@@ -224,8 +226,8 @@ function agent(s: Work, trace: Trace, f: Fact) {
     }
     case 'observe': return at('run:' + e.run, null);
     case 'output': {
-      const run = s.objects['run:' + e.run] as RunObject, text = trace.runs[e.run]?.outputs[e.stream] ?? '';
-      if (e.stream === 'stderr' || !run.firstLine) run.firstLine = firstLine(text);
+      const run = s.objects['run:' + e.run] as RunObject, text = e.stream ? trace.runs[e.run]?.outputs[e.stream] ?? '' : '';
+      if (e.stream === 'stderr' || (e.stream && !run.firstLine)) run.firstLine = firstLine(text);
       const raised = s.escalations.find(x => x.object === run.id);
       if (raised && run.firstLine) raised.reason = run.firstLine;
       return at(run.id, null);
@@ -242,12 +244,13 @@ function agent(s: Work, trace: Trace, f: Fact) {
       return at(run.id, null);
     }
     case 'read': {
+      if (e.artifact === null) return settle(s);
       const a = artifact(s, e.artifact, f.seq);
       a.touchedAt = f.seq;
       return at(a.id, e.run);
     }
     case 'layout': return byAgent ? compose(s, f, e.views, e.replace) : settle(s);
-    case 'items': s.question = e.question; s.items = e.items; return settle(s);
+    case 'items': if (e.question !== null) s.question = e.question; if (e.items) s.items = e.items; return settle(s);
     case 'ask':
       add<QuestionState>(s, { id: e.question, kind: 'question', name: e.text, author: f.actor, target: e.target, version: e.version, run: e.run, rows: [...e.rows], document: e.document, state: 'prepared', fetchedBy: null, fetchedAt: null, changedAt: f.seq, touchedAt: f.seq, hidden: 0 });
       return settle(s);

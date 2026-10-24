@@ -3,12 +3,14 @@ import { createRoot } from 'react-dom/client';
 import '../../web/theme.css';
 import './replay.css';
 import traceJson from './trace/airquality.json';
+import recordsJson from './trace/records.json';
 import figureUrl from './trace/temp-effect.run-5.png';
 import {
   express, questionsOn, when,
   type ArtifactState, type Attention, type DigestLine, type Fact, type ObjectState, type PersonAction, type PersonIntent, type QuestionState, type RunObject, type Screen, type SourceState, type Trace, type View,
 } from '../../src/expression.js';
 import { authorLabel } from '../../src/task-frame.js';
+import { align, fold, ledger, type LedgerEntry, type OwnerRecords } from '../../src/trace.js';
 
 // A behavior prototype, not a product page: the shell above the dock is drawn only
 // from express(trace, actions, step). The dock replays the recorded Agent run and
@@ -20,6 +22,12 @@ const last = trace.facts.length - 1;
 const viewer = Object.keys(trace.principals).find(id => trace.principals[id]!.kind === 'browser');
 const runAgent = trace.facts[0]!.actor;
 const who = (principal: string | null) => principal === null ? 'You' : authorLabel(principal, viewer);
+// What Rho itself recorded, folded from its own records, and which of those facts each
+// replayed step is (-1: Rho has no record of that call).
+const rho = fold(recordsJson as unknown as OwnerRecords);
+const recorded = align(trace, rho);
+const rhoStep = (step: number) => recorded.slice(0, step + 1).findLast(i => i >= 0) ?? -1;
+const replayed = (seq: number) => recorded.indexOf(seq);
 
 type Scenario = { id: string; label: string; start: Exclude<Attention, 'away'>; actions: PersonAction[] };
 const scenarios: Scenario[] = [
@@ -104,7 +112,7 @@ function Shell({ screen, act }: { screen: Screen; act: Act }) {
         </div>)}
         {active ? <ViewBody screen={screen} view={active} act={act} /> : <div className="empty" />}
       </main>
-      {screen.revealed && <Reveal screen={screen} act={act} />}
+      {screen.revealed === 'ledger' ? <Ledger screen={screen} act={act} /> : screen.revealed && <Reveal screen={screen} act={act} />}
     </div>
   </div>;
 }
@@ -113,7 +121,7 @@ function Objects({ screen, act }: { screen: Screen; act: Act }) {
   const objects = screen.order.map(id => screen.objects[id]!);
   const shown = screen.views.find(v => v.id === screen.active)?.object;
   const runsOf = (name: string) => objects.filter((o): o is RunObject => o.kind === 'run' && o.source === name);
-  const rejected = objects.reduce((n, o) => n + o.hidden, 0) + screen.hidden.rejected - screen.hidden.retries;
+  const l = ledger(rho, rhoStep(screen.step), runAgent), refused = l.refused.reduce((n, g) => n + g.entries.length, 0);
   const row = (o: ObjectState) => <button type="button" className="object" aria-current={shown === o.id} data-fresh={o.changedAt === screen.step || undefined} onClick={() => act({ kind: 'open', target: o.id })}>
     <Mark object={o} />
     <span className="name">{label(o)}</span>
@@ -135,8 +143,8 @@ function Objects({ screen, act }: { screen: Screen; act: Act }) {
       {screen.items.map(item => <li key={item.id}><Glyph /><span>{item.title}</span></li>)}
     </ol>}
     <span className="spacer" />
-    <button type="button" className="unseen" onClick={() => act({ kind: 'reveal', target: '*' })}>
-      {screen.hidden.catalog} catalog reads · {rejected} rejected{screen.hidden.retries ? ` · ${screen.hidden.retries} retry` : ''}
+    <button type="button" className="unseen" onClick={() => act({ kind: 'reveal', target: 'ledger' })}>
+      {l.given.catalog.length} catalog reads · {refused} refused
     </button>
   </nav>;
 }
@@ -297,10 +305,10 @@ function digestLine(line: DigestLine, screen: Screen, act: Act): ReactNode {
 
 function Reveal({ screen, act }: { screen: Screen; act: Act }) {
   const target = screen.revealed!;
-  const facts = trace.facts.slice(0, screen.step + 1).filter(f => target === '*' ? !f.object || f.outcome === 'rejected' || f.effect?.kind === 'retry' : f.object === target);
+  const facts = trace.facts.slice(0, screen.step + 1).filter(f => f.object === target);
   return <aside className="reveal" aria-label="History">
     <header>
-      <strong>{target === '*' ? 'Not shown on screen' : label(screen.objects[target])}</strong>
+      <strong>{label(screen.objects[target])}</strong>
       <span className="spacer" />
       <button type="button" aria-label="Close history" onClick={() => act({ kind: 'reveal', target: null })}>×</button>
     </header>
@@ -308,10 +316,40 @@ function Reveal({ screen, act }: { screen: Screen; act: Act }) {
       <span className="seq">#{f.seq}</span>
       <span className="op">{f.op}</span>
       <span className="time">{when(f)}</span>
-      {f.reason && <span className="reason">{f.reason.kind}: {f.reason.message}</span>}
+      {f.reason && <span className="reason">{f.reason.kind}{f.reason.message ? ': ' + f.reason.message : ''}</span>}
     </li>)}</ol>
   </aside>;
 }
+
+// The Agent ledger from Rho's own records, up to this step: what it was given, did, read,
+// produced and had refused. An object Rho did not record says so instead of a guess.
+function Ledger({ screen, act }: { screen: Screen; act: Act }) {
+  const l = ledger(rho, rhoStep(screen.step), runAgent);
+  // Catalog calls name no object; any other call whose object is missing went unrecorded.
+  const row = (e: LedgerEntry, detail?: ReactNode) => <li key={e.seq + e.op} title={rho.facts[e.seq]!.label}>
+    <span className="seq">{replayed(e.seq) >= 0 ? '#' + replayed(e.seq) : ''}</span>
+    <span className="op">{e.op}</span>
+    <span className="time">{when(rho.facts[e.seq]!)}</span>
+    <span className="what">{e.object === null ? (e.op.startsWith('capability.') ? null : <em>Not recorded</em>) : <button type="button" className="link" onClick={() => act({ kind: 'reveal', target: e.object! })}>{name(e.object)}{e.version !== null && e.object.startsWith('source:') ? ' v' + e.version : ''}</button>}{detail}</span>
+  </li>;
+  const section = (title: string, count: ReactNode, rows: ReactNode) => <section><h2>{title}<span className="fact">{count}</span></h2><ol>{rows}</ol></section>;
+  return <aside className="reveal ledger" aria-label="Ledger">
+    <header>
+      <strong>What Rho recorded</strong>
+      <span className="spacer" />
+      <button type="button" aria-label="Close ledger" onClick={() => act({ kind: 'reveal', target: null })}>×</button>
+    </header>
+    <div className="sections">
+      {section('Given', `${l.given.catalog.length} catalog · ${l.given.questions.length} questions`, l.given.questions.map(e => row(e)))}
+      {section('Did', l.did.length, l.did.map(e => row(e)))}
+      {section('Read', l.read.length, l.read.map(e => row(e)))}
+      {section('Produced', `${l.produced.runs.length} run${l.produced.runs.length === 1 ? '' : 's'}`, l.produced.runs.map(r => row({ seq: r.seq, op: 'run', object: r.object, version: null },
+        <span className="fact"> {r.ended ? 'exit ' + r.exit : 'running'}{r.verified.length ? ` · ${r.verified.length} verified` : ''}</span>)))}
+      {section('Refused', l.refused.map(g => `${g.kind} ${g.entries.length}`).join(' · ') || 0, l.refused.flatMap(g => g.entries.map(e => row(e, <span className="reason"> {g.kind}</span>))))}
+    </div>
+  </aside>;
+}
+const name = (object: string) => object.startsWith('run:') ? 'Run ' + object.slice(4) : object.replace(/^\w+:/, '');
 
 function Dock({ step, setStep, playing, setPlaying, screen, actions, scenario, pick, act }: {
   step: number; setStep: (n: number) => void; playing: boolean; setPlaying: (p: boolean) => void; screen: Screen;
@@ -324,7 +362,7 @@ function Dock({ step, setStep, playing, setPlaying, screen, actions, scenario, p
       <button type="button" className="play" aria-label={playing ? 'Pause' : 'Play'} onClick={() => { if (step >= last) setStep(0); setPlaying(!playing); }}>{playing ? '❚❚' : '▶'}</button>
       <button type="button" aria-label="Next call" onClick={() => setStep(Math.min(last, step + 1))}>›</button>
       <span className="now">
-        <b>#{f.seq}</b> {f.op} <i>{target(f)}</i> {f.actor !== runAgent && <i>by {trace.principals[f.actor]?.name ?? who(f.actor)}</i>} {f.outcome === 'rejected' && <em>rejected · {f.reason?.kind}</em>} <time>{when(f)}</time>
+        <b>#{f.seq}</b> {f.op} <i>{target(f)}</i> {f.actor !== runAgent && <i>by {trace.principals[f.actor]?.name ?? who(f.actor)}</i>} {f.outcome === 'rejected' && <em>rejected · {f.reason?.kind}</em>} {recorded[f.seq]! < 0 && <em>· not in Rho's records</em>} <time>{when(f)}</time>
       </span>
       <span className="spacer" />
       <span className="attention" data-attention={screen.attention}>{screen.attention}</span>
@@ -372,7 +410,7 @@ function target(f: Fact) {
   if (e.kind === 'submit') return `run ${e.run} · ${e.source} v${e.sourceVersion}`;
   if (e.kind === 'read') return `${e.artifact} · run ${e.run}`;
   if (e.kind === 'layout') return e.views.map(v => v.artifact).join(', ');
-  if (e.kind === 'items') return e.items.length + ' items';
+  if (e.kind === 'items') return e.items ? e.items.length + ' items' : 'items not recorded';
   if (e.kind === 'ask') return `${e.target.replace(/^\w+:/, '')} · run ${e.run}${e.rows.length ? ' · rows ' + e.rows.join(', ') : ''}`;
   if (e.kind === 'fetched') return 'question ' + e.question.replace(/^\w+:/, '');
   if ('run' in e) return 'run ' + e.run + (e.kind === 'ended' ? ` · exit ${e.exit}` : e.kind === 'output' ? ' · ' + e.stream : '');

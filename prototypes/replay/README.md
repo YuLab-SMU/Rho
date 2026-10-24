@@ -31,7 +31,19 @@ npm run check:replay          # types, then the rule tests (test/expression.test
   granted exactly the methods its connection lists.
 
 `build-trace.mjs` regenerates `trace/` from that directory, which is ignored by
-Git and present only on the machine that recorded it.
+Git and present only on the machine that recorded it. It writes two files: the
+transcript trace (`airquality.json`, which drives the screen) and Rho's own records
+cut down to what `src/trace.ts` folds (`records.json`: activity, document histories,
+operations, resources, contexts, composition and task map; no image data or local
+paths).
+
+## The ledger
+
+The count at the bottom of the object list opens what Rho itself recorded about the
+Agent, up to the current step: Given, Did, Read, Produced and Refused, folded from
+`records.json`, not from the transcript. A call whose object Rho did not record reads
+"Not recorded". A step the transcript has and Rho does not (four refusals the agent
+adapter made locally) says "not in Rho's records" in the dock.
 
 ## What is simulated
 

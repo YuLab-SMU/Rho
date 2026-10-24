@@ -40,16 +40,17 @@ for (const doc of Object.values(documents)) {
   for (const h of doc.history) { s.edited[h.version] = { at: h.at, digest: h.afterDigest }; s.authors[h.version] = h.author; }
   for (const r of doc.receipts) if (r.kind === 'save') s.saved[r.version] = r.at;
 }
-// questions.md is written by the browser, not through the Agent's calls: its versions
-// are rebuilt from the recorded edits and must reach each recorded digest.
+// Every document version is also rebuilt from the recorded edits alone and must reach
+// each recorded digest: that is what src/trace.ts folds. questions.md is written by the
+// browser, not through the Agent's calls, so this is its only content.
 const questionsDoc = Object.values(documents).find(d => d.path === 'questions.md');
-{
+for (const doc of Object.values(documents)) {
   let text = '';
-  for (const h of questionsDoc.history) {
-    if (sha(text) !== h.beforeDigest) throw new Error(`questions.md before v${h.version} does not match its recorded digest`);
+  for (const h of doc.history) {
+    if (sha(text) !== h.beforeDigest) throw new Error(`${doc.path} before v${h.version} does not match its recorded digest`);
     for (const e of h.edits) text = text.slice(0, e.from) + e.insert + text.slice(e.to);
-    if (sha(text) !== h.afterDigest) throw new Error(`questions.md v${h.version} does not match its recorded digest`);
-    sourceOf('questions.md').versions[h.version] = text;
+    if (sha(text) !== h.afterDigest) throw new Error(`${doc.path} v${h.version} does not match its recorded digest`);
+    if (doc === questionsDoc) sourceOf(doc.path).versions[h.version] = text;
   }
 }
 
@@ -243,4 +244,49 @@ const trace = {
   artifacts,
 };
 fs.writeFileSync(path.join(out, 'airquality.json'), JSON.stringify(trace, null, 1) + '\n');
-console.log(`${facts.length} facts, ${Object.keys(runs).length} runs, ${Object.keys(artifacts).length} artifacts → ${path.relative(process.cwd(), out)}`);
+
+// Rho's own records, cut to what src/trace.ts folds: no image data, no local paths, no
+// connection secrets. The replay and the tests fold this instead of calls.jsonl.
+const pick = (o, keys) => Object.fromEntries(keys.filter(k => o[k] !== undefined).map(k => [k, o[k]]));
+const composition = json(path.join(rho, 'rho/compositions', fs.readdirSync(path.join(rho, 'rho/compositions'))[0]));
+const taskMap = json(path.join(rho, 'rho/task-map.json'));
+const principalIds = new Set([...activity.map(e => e.principal), ...Object.values(documents).flatMap(d => d.history.map(h => h.author)), ...contexts.flatMap(c => [c.principal, c.fetchedBy].filter(Boolean))]);
+const records = {
+  format: 'rho.owner-records/1',
+  experiment: path.basename(dir),
+  project: 'airquality',
+  principals: Object.fromEntries([...principalIds].map(id => [id, { kind: id.split(':')[0], name: bindingName(id) }])),
+  activity: activity.map(e => pick(e, ['cursor', 'principal', 'method', 'at', 'outcome', 'errorKind', 'returnedVersion', 'operationId', 'documentId', 'contextId'])),
+  documents: Object.values(documents).map(d => ({
+    id: d.id, path: d.path,
+    history: d.history.map(h => ({ version: h.version, at: h.at, author: h.author, afterDigest: h.afterDigest, edits: h.edits.map(e => pick(e, ['from', 'to', 'insert'])) })),
+    receipts: d.receipts.map(r => pick(r, ['kind', 'version', 'at', 'author'])),
+  })),
+  operations: operations.map(o => {
+    const execution = o.native.record.execution.Known;
+    return {
+      operationId: o.operationId, principal: o.principal, acceptedAt: o.acceptedAt,
+      script: { path: o.request.input.script.path, digest: o.request.input.script.digest }, declared: o.request.input.artifacts.map(a => a.path),
+      exit: execution?.value?.ExitObserved?.exit?.Code ?? null, exitObservedAt: execution?.value?.ExitObserved ? execution.observed_at : null,
+    };
+  }),
+  resources: resources.map(r => ({ id: r.id, name: path.basename(r.path), version: r.version, kind: r.kind, bytes: r.bytes, operationId: r.provenance.operationId })),
+  contexts: contexts.map(c => {
+    const key = c.resource.metadata.format?.key?.column;
+    return {
+      id: c.id, principal: c.principal, at: c.at, changeId: c.changeId, text: c.document.text,
+      document: { source: c.document.source.path, version: c.document.source.version },
+      resource: { id: c.resource.reference.id, version: c.resource.reference.version },
+      rows: key && c.resource.rows ? c.resource.rows.map(row => String(row[key])) : [],
+      fetchedBy: c.fetchedBy ?? null, fetchedAt: c.fetchedAt ?? null,
+    };
+  }),
+  composition: { history: composition.history.map(h => ({ version: h.version, views: h.snapshot.nodes.filter(n => n.kind === 'view' && n.bindings?.data?.version).map(n => ({ id: n.bindings.data.id, version: n.bindings.data.version })) })) },
+  taskMap: {
+    question: taskMap.question,
+    items: taskMap.items.map(({ id, kind, state, title, summary }) => ({ id, kind, state, title, summary })),
+    declared: taskMap.receipts.filter(r => r.kind === 'declare').map(r => pick(r, ['version', 'at', 'author'])),
+  },
+};
+fs.writeFileSync(path.join(out, 'records.json'), JSON.stringify(records, null, 1) + '\n');
+console.log(`${facts.length} facts, ${Object.keys(runs).length} runs, ${Object.keys(artifacts).length} artifacts; ${records.activity.length} activity entries → ${path.relative(process.cwd(), out)}`);
