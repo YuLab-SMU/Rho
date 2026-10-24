@@ -17,7 +17,12 @@ import { align, fold, ledger, type LedgerEntry, type OwnerRecords } from '../../
 // from express(trace, actions, step). The dock replays a recorded Agent run and records
 // what the person does, at the step where they do it. Two runs: the first experiment,
 // replayed from its transcript, and (?trace=check) a run known only from Rho's records.
-const which = new URLSearchParams(location.search).get('trace') === 'check' ? 'check' : 'airquality';
+const query = new URLSearchParams(location.search);
+const which = query.get('trace') === 'check' ? 'check' : 'airquality';
+// A validation session (docs/VALIDATION-S6.md): no dock, so the person sees only the
+// shell; playing stops at each pause, where the moderator asks what they see.
+const session = query.has('session');
+const pauses = which === 'check' ? [11, 13, 17, 19] : [10, 15, 33, 36, 44, 52, 54, 57, 60, 66];
 const rho = fold((which === 'check' ? checkRecordsJson : recordsJson) as unknown as OwnerRecords);
 const trace = which === 'check' ? rho : traceJson as unknown as Trace;
 const last = trace.facts.length - 1;
@@ -49,8 +54,9 @@ const scenarios: Scenario[] = which === 'check' ? [
 
 function App() {
   const [step, setStep] = useState(0);
-  const [scenario, setScenario] = useState('follow');
+  const [scenario, setScenario] = useState(session ? 'session' : 'follow');
   const [actions, setActions] = useState<PersonAction[]>([]);
+  const [paused, setPaused] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const start = scenarios.find(s => s.id === scenario)?.start ?? 'following';
   const screen = useMemo(() => express(trace, actions, step, start), [actions, step, start]);
@@ -58,15 +64,18 @@ function App() {
   useEffect(() => {
     if (!playing) return;
     if (step >= last) { setPlaying(false); return; }
+    if (session && pauses.includes(step) && paused !== step) { setPlaying(false); setPaused(step); return; }
     const timer = setTimeout(() => setStep(n => Math.min(last, n + 1)), 650);
     return () => clearTimeout(timer);
-  }, [playing, step]);
+  }, [playing, step, paused]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest('input, textarea')) return;
       if (e.key === 'ArrowRight') setStep(n => Math.min(last, n + 1));
       else if (e.key === 'ArrowLeft') setStep(n => Math.max(0, n - 1));
       else if (e.key === ' ') { e.preventDefault(); setPlaying(p => !p); }
+      else if (session && e.key === 'l') leaveOrReturn.current();
+      else if (session && e.key === 'e') save.current();
       else return;
     };
     window.addEventListener('keydown', key);
@@ -75,11 +84,23 @@ function App() {
 
   // A person's action rewrites what they did after this step, never before it.
   const act = (action: PersonIntent) => setActions(list => [...list.filter(a => a.at <= step), { ...action, at: step }]);
+  // The moderator's keys: L takes the person away and back, E saves what they did, at
+  // which steps, as JSON. Nothing typed into a question box is saved.
+  const leaveOrReturn = useRef(() => {}), save = useRef(() => {});
+  leaveOrReturn.current = () => act({ kind: screen.attention === 'away' ? 'return' : 'leave' });
+  save.current = () => {
+    const record = { trace: which, recorded: trace.recorded.experiment, savedAt: new Date().toISOString(), step, actions: actions.map(a => a.kind === 'ask' ? { ...a, text: '' } : a) };
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([JSON.stringify(record, null, 1) + '\n'], { type: 'application/json' }));
+    link.download = `session-${which}-${record.savedAt.slice(0, 19).replace(/:/g, '')}.json`;
+    link.click(); URL.revokeObjectURL(link.href);
+  };
   const pick = (id: string) => { const s = scenarios.find(x => x.id === id)!; setScenario(id); setActions(s.actions); };
 
   return <div className="replay">
     <Shell screen={screen} act={act} />
-    <Dock step={step} setStep={setStep} playing={playing} setPlaying={setPlaying} screen={screen} actions={actions} scenario={scenario} pick={pick} act={act} />
+    {session ? <div className="session" aria-hidden><span>{paused === step && !playing ? 'Paused' : ''}</span><span>#{step}</span></div>
+      : <Dock step={step} setStep={setStep} playing={playing} setPlaying={setPlaying} screen={screen} actions={actions} scenario={scenario} pick={pick} act={act} />}
   </div>;
 }
 

@@ -73,6 +73,14 @@ adapter made locally) says "not in Rho's records" in the dock.
   count as attention. Today they reach the service but are not events the browser
   receives.
 
+## Session mode
+
+`?session` (with `&trace=check` for the second run) is for watching one person use the
+shell: no dock, playing stops at the pauses in
+[the moderator script](../../docs/VALIDATION-S6.md), `L` takes the person away and
+back, and `E` saves what they did, step by step, as JSON. Nothing typed into a
+question is saved.
+
 ## Reading the object list
 
 A source's earlier runs fold into a row of their marks under it, numbered and coloured

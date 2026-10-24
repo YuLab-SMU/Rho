@@ -424,7 +424,9 @@ function person(s: Work, trace: Trace, a: PersonAction) {
       return;
     case 'return': {
       if (!s.away) return;
-      s.digest = { from: s.away.from, to: s.step, lines: digest(s, s.away) };
+      // Nothing changed, nothing to say: an empty digest would be a card to dismiss.
+      const lines = digest(s, s.away);
+      s.digest = lines.length ? { from: s.away.from, to: s.step, lines } : null;
       s.attention = s.away.prior; s.away = null;
       return;
     }

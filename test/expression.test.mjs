@@ -70,6 +70,8 @@ test('coming back gives a digest by object and the main area is where the person
   const failed = express(trace, [{ at: 29, kind: 'leave' }, { at: 44, kind: 'return' }], 44).digest.lines.find(l => l.kind === 'run');
   assert.deepEqual([failed.object, failed.earlier, failed.firstLine], ['run:4', ['run:3'], "Error: object 'op' not found"]);
   assert.equal(screen.attention, 'following');
+  // Coming back to nothing new gives nothing to dismiss.
+  assert.equal(express(trace, [{ at: 33, kind: 'leave' }, { at: 33, kind: 'return' }], 33).digest, null);
 });
 
 test('a rejected call changes nothing on screen and is counted on its object', () => {
