@@ -37,10 +37,20 @@ view, table rows, provenance/coverage, resource format, and the Agent's own
 vocabulary and form parameters. Every service-facing test validates the real
 responses and SSE events it receives against the contract.
 
-Checks: Rho 103/103 and Plugins 65/65, `npm run check:contracts` clean, service and
-web builds clean. `mcp` calls are validated against the resolved owner contract and
-then enter the same service operation: the accepted `rho_call` value is asserted to
-equal the direct reply and to satisfy the published response schema.
+Checks run on the published commits (`480ac6f5` application, `18252d2` owners):
+Rho 103/103, Plugins 65/65, `npm run check:contracts` clean, service and web builds
+clean. `mcp` calls are validated against the resolved owner contract and then enter
+the same service operation: the accepted `rho_call` value is asserted to equal the
+direct reply and to satisfy the published response schema.
+
+[Contract acceptance](CONTRACT-ACCEPTANCE.md) records what was actually executed on
+these commits: the person, execution/MCP and U1 journeys against both the source build
+and an installed copy of the packed artifact, recovery acceptance's seven checks, and
+collaboration acceptance over real stdio MCP and HTTP.
+
+Still not executed: the scientific `install-acceptance.mjs` flows (two external
+example projects are absent here) and the model-driven collaboration variant. No npm
+registry publication or signing was performed.
 
 cancels on view release. Snapshots contain document metadata, not all text and
 undo. Document record/aggregate budgets reject before replacing retained state.
@@ -180,10 +190,10 @@ platforms, registry publication and signing remain unverified/unselected.
 
 ## Historical baseline verification
 
-Earlier baselines, retained with their own scope: Rho 15/15 protocol, real stdio
-MCP, retained v1, service, crash/continuity, workspace and budget tests, with three
-SIGKILL boundaries keeping the original operation/Core identity and one dispatch
-after a missing first acknowledgement. Plugin removal/reselection preserves drafts,
+Earlier baselines, retained with their own scope: Rho 15/15 protocol, real stdio MCP,
+retained v1, service, crash/continuity, workspace and budget tests, three SIGKILL
+boundaries keeping the original operation/Core identity and one dispatch after a
+missing first acknowledgement. Plugin removal/reselection preserves drafts,
 undo, bytes, layout references, selection intent and original Core identity without
 replay; unavailable providers reject new work while retained requests stay
 observable. Plugins passed 12/12 capability and 2/2 native example tests plus a
@@ -213,25 +223,14 @@ original installed candidate remain recorded separately.
 
 ## Single-contract cleanup verification
 
-The two coexisting protocol artifacts were collapsed on 2026-10-23, before any
-release: the earlier version had never been published, so keeping it as a second
-dialect charged a released product's compatibility cost against development work.
-Shared definitions now live in `protocol-base.ts` carrying no contract identity;
-the serve path, validators, envelope and artifacts describe one contract.
-
-Actually run in this checkout: `npm run build` and
-`RHO_CORE_BINARY=../Rho-core/target/debug/rho-core node --test test/*.test.mjs`
-passed, including retained-operation observation, the repointed service and
-workspace tests and the retired-path refusals. A local tarball built with the
-explicit `--allow-dirty` development override was inspected: it carries
-`protocol/index.json` plus hashed operation files and `fixtures/states.json`, no
-retired artifact or fixture directory, and every packaged hash was recomputed.
-
-A later pass removed what the collapse left behind: three operations the base module
-still declared in an earlier action vocabulary and its own copy of the
-grantable-method enum. Those copies never reached the served contract; comparing
-every leaf before and after showed no difference. The enum and description map are
-sorted, so the content-addressed artifact depends on the contract, not editing order.
+The two coexisting protocol artifacts were collapsed on 2026-10-23, before any release:
+the earlier version had never been published, so keeping it as a second dialect charged
+a released product's compatibility cost against development work. Shared definitions
+live in `protocol-base.ts` with no contract identity; the serve path, validators,
+envelope and artifact describe one contract. A build with the explicit `--allow-dirty`
+development override produced a tarball carrying `protocol/index.json`, hashed operation
+files and `fixtures/states.json`, with no retired artifact or fixture directory, and
+every packaged hash was recomputed and matched.
 
 ## Current focus and remaining work
 
@@ -259,9 +258,9 @@ choices. Electron and cross-window movement follow later.
 
 The Paper ["Release 1 · v3 (capabilities)" page](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-8-0)
 holds W1–W5 (inquiry map, live finding composition, editable-spec explainer,
-traceback, anchored feedback) and W1a–W5a continuation/error states. Panels map to
+traceback, anchored feedback) and W1a–W5a continuation/error states, mapped to
 Plugins [capability catalog](https://github.com/YuLab-SMU/Rho-plugins/blob/main/docs/PLUGIN-CATALOG.md)
-targets, pending user review, with the
+targets and pending user review, with the
 [flow index](DESIGN-PRIORITIES.md#w1w5-能力组合动线索引), the
 [state index](DESIGN-PRIORITIES.md#w1aw5a-续接与异常状态索引) and the
 [version/feedback ledger](DESIGN-PRIORITIES.md#w-系列资源版本与反馈台账). UI entries
@@ -271,20 +270,15 @@ registration, installation or product acceptance.
 
 The design keeps distinct: feedback draft, context available but unfetched, a
 tool-fetch receipt, observed work and an explicitly linked response. F-12's later
-explanation v2 keeps the same sources with no new execution, and old v1 frame
-anchors stay on v1. Candidate snapshot s3 needs bounded inspection, owner
-field/key/binding validation and explicit switching; it claims no contents,
-coverage or checks. Source loss keeps s2 rows and read time, missing charts keep a
-table alternative, and spec conflicts keep the draft. Unknown q-0004/run 004
-observations keep the original request and partial outputs; cancellation requested,
-confirmed native stop and observer closure are separate states. The earlier
-["Release 1 · v2 (inquiry)" page](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-7-0)
-(I1–I4) and R1–R14 on the
-["Release 1 · npm WebUI" page](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-5-0)
-stay as flow/state reference under that direction. W1–W5/W1a–W4a use 1440-wide
-boards and W5a a 1280 × 900 design; those widths do not prove live layout, native
-input or accessibility. Designed run numbers and the 8,204-row example are not
-substituted for backend evidence.
+explanation v2 keeps the same sources with no new execution; candidate snapshot s3
+needs bounded inspection, owner field/key/binding validation and explicit switching and
+claims no contents or checks. Source loss keeps s2 rows and read time, missing charts
+keep a table alternative, spec conflicts keep the draft, and unknown q-0004/run 004
+observations keep the original request and partial outputs. The earlier
+["v2 (inquiry)"](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-7-0) and
+["npm WebUI"](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-5-0) pages
+stay as flow/state reference. Their 1440/1280-wide boards do not prove live layout,
+native input or accessibility, and designed run numbers are not backend evidence.
 
 Execution, artifact integrity, domain checks and model judgment remain separate.
 The bounded paired trial uses one simulation; Plugins' earlier 200-simulation and

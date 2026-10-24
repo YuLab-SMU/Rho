@@ -20,7 +20,7 @@ try {
   const human = new RhoClient({ url: service.url, token: service.adminToken });
   const p = await human.call('project.create', { name: 'partial-project' });
   const h = (m, b = {}) => human.call(m, { projectId: p.id, ...b });
-  const paused = 'args <- commandArgs(TRUE)\nout <- args[[1L]]\ncat(as.character(Sys.getpid()), "\\n", file=paste0(out,".entries.jsonl"), append=TRUE)\nstopifnot(dir.create(out))\nx <- 1:4\nwrite.csv(data.frame(sample_id=sprintf("%03d",x),value=x^2),file.path(out,"partial.csv"),row.names=FALSE)\nwriteLines("paused after real computation",file.path(out,"checkpoint.txt"))\nSys.sleep(600)\n';
+  const paused = 'args <- commandArgs(TRUE)\nout <- args[[1L]]\ncat(as.character(Sys.getpid()), "\\n", file=paste0(out,".entries.jsonl"), append=TRUE)\ndir.create(out, showWarnings=FALSE)\nx <- 1:4\nwrite.csv(data.frame(sample_id=sprintf("%03d",x),value=x^2),file.path(out,"partial.csv"),row.names=FALSE)\nwriteLines("paused after real computation",file.path(out,"checkpoint.txt"))\nSys.sleep(600)\n';
   const declaration = { path: 'partial.csv', kind: 'table', format: { encoding: 'csv', columns: [{ name: 'sample_id', type: 'string', nullValues: [] }, { name: 'value', type: 'number', nullValues: [''] }], key: { column: 'sample_id', namespace: 'ordinary-samples' } } };
   let doc = await h('document.open', { path: 'paused-analysis.R' });
   doc = await h('document.edit', { documentId: doc.id, expectedVersion: doc.version, edits: [{ from: 0, to: 0, insert: paused }], undoGroup: 'pause-fixture' });
