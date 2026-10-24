@@ -89,6 +89,26 @@ test('an Agent replace never closes what the person opened or pinned', () => {
   assert.equal(screen.views.find(v => v.id === 'run:1').run, null);
 });
 
+test("a view the person opened keeps its version; the Agent's newer one opens beside it", () => {
+  const kept = [{ at: 15, kind: 'open', target: 'artifact:temp-effect.png' }, { at: 15, kind: 'follow' }];
+  const figures = screen => screen.views.filter(v => v.object === 'artifact:temp-effect.png').map(v => [v.openedBy, v.run, v.newer]);
+  assert.deepEqual(figures(express(trace, kept, 28)), [['person', 1, 2]]);
+  const at54 = express(trace, kept, 54);
+  assert.deepEqual(figures(at54), [['person', 1, 5], ['agent', 5, null]]);
+  assert.equal(at54.views.find(v => v.id === at54.active).run, 5);
+  // Taking the newer version is the person's act; the Agent's view of it then closes.
+  const updated = express(trace, [...kept, { at: 57, kind: 'update', target: 'artifact:temp-effect.png' }], last);
+  assert.deepEqual(figures(updated), [['person', 5, null]]);
+  // The Agent's focus follows the same rule. Constructed: the recorded run never reads the
+  // figure, so #53 (a catalog read) is replaced with a read of run 5's.
+  const constructed = structuredClone(trace);
+  Object.assign(constructed.facts[53], { op: 'data.page', object: 'artifact:temp-effect.png', effect: { kind: 'read', artifact: 'temp-effect.png', run: 5 } });
+  const read = express(constructed, [kept[0], { at: 52, kind: 'follow' }], 53);
+  // The preview slot keeps its place, ahead of the view the person opened at #15.
+  assert.deepEqual(read.views.map(v => [v.id, v.run, v.preview]), [['artifact:temp-effect.png@5', 5, true], ['artifact:temp-effect.png', 1, false]]);
+  assert.equal(read.active, 'artifact:temp-effect.png@5');
+});
+
 test('the Agent declares its items at the end, and they stay its account, unlinked to objects', () => {
   assert.equal(express(trace, [], 58).question, null);
   const screen = express(trace, [], last);

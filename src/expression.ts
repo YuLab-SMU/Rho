@@ -11,7 +11,8 @@
 //   Reveal   catalog reads, rejected calls and retries wait behind their object;
 //   Revisit  a person coming back gets a digest of what changed, never a replay.
 // One attention rule decides whether the main area may move: only while the person
-// follows, and at most once per agentPaceMs.
+// follows, and at most once per agentPaceMs. Moving never re-versions a view the person
+// made theirs: the Agent's newer version opens beside it, and theirs offers the update.
 
 // Same protected resource and value as taskMapLimits.agentFormIntervalMs: the
 // person's attention and layout stability. Kept equal by test.
@@ -71,8 +72,11 @@ export type PersonIntent =
   | { kind: 'leave' } | { kind: 'return' }
   | { kind: 'accept'; suggestion: string } | { kind: 'dismiss'; suggestion: string }
   | { kind: 'dismiss-digest' }
-  | { kind: 'reveal'; target: string | null };
-// The person acts after seeing fact `at`; -1 is before the first fact.
+  | { kind: 'reveal'; target: string | null }
+  | { kind: 'update'; target: string };
+// A target names a view by its id. The first view of an object takes the object's id,
+// so naming an object reaches its view. The person acts after seeing fact `at`; -1 is
+// before the first fact.
 export type PersonAction = PersonIntent & { at: number };
 
 export type RunState = 'running' | 'completed' | 'failed' | 'unknown';
@@ -89,8 +93,13 @@ export interface ArtifactState {
 }
 export type ObjectState = SourceState | RunObject | ArtifactState;
 // A view the Agent's focus opened stays a preview: the next Agent move replaces it in
-// place. The person opening, selecting in or pinning it makes it theirs.
-export interface View { id: string; run: number | null; openedBy: 'agent' | 'person'; pinned: boolean; preview: boolean; selection: string[] }
+// place. The person opening, selecting in or pinning it makes it theirs, and a view of
+// theirs keeps the version it shows until they update it; `newer` is the latest run whose
+// bytes differ, when there is one. Two views may show two versions of one object.
+export interface View {
+  id: string; object: string; run: number | null; openedBy: 'agent' | 'person'; pinned: boolean; preview: boolean; selection: string[];
+  newer: number | null;
+}
 export interface Suggestion { id: string; views: ArtifactRef[]; cause: 'working' | 'away' | 'pinned'; from: number; merged: number }
 export interface Escalation { object: string; reason: string; from: number }
 export type DigestLine =
@@ -143,6 +152,7 @@ export function express(trace: Trace, actions: PersonAction[], step: number, sta
     agent(s, trace, trace.facts[i]);
     for (const a of actions) if (a.at === i) person(s, trace, a);
   }
+  for (const v of s.views) v.newer = newer(s, v);
   const { lastMove, pending, away, ...screen } = s;
   return structuredClone(screen);
 }
@@ -153,7 +163,19 @@ function add<T extends ObjectState>(s: Work, object: T): T {
 }
 const source = (s: Work, name: string, seq: number) => add<SourceState>(s, { id: 'source:' + name, kind: 'source', name, version: 1, savedVersion: null, changedAt: seq, touchedAt: seq, hidden: 0 });
 const artifact = (s: Work, name: string, seq: number) => add<ArtifactState>(s, { id: 'artifact:' + name, kind: 'artifact', name, versions: [], changedAt: seq, touchedAt: seq, hidden: 0 });
-const view = (s: Work, id: string) => s.views.find(v => v.id === id);
+const view = (s: Work, id: string | null) => s.views.find(v => v.id === id);
+const theirs = (v: View) => v.openedBy === 'person' || v.pinned;
+// A view by its id, else the object's view the person holds, else any view of it.
+const named = (s: Work, target: string) => view(s, target) ?? s.views.find(v => v.object === target && theirs(v)) ?? s.views.find(v => v.object === target);
+const showing = (s: Work, object: string, run: number | null) => { const v = view(s, s.active); return !!v && v.object === object && (run === null || v.run === run); };
+// A second view of an object adds the version it shows to the object's id.
+function key(s: Work, object: string, run: number | null) {
+  let id = object;
+  while (view(s, id)) id += '@' + run;
+  return id;
+}
+const fresh = (s: Work, object: string, run: number | null, by: View['openedBy'], preview: boolean): View =>
+  ({ id: key(s, object, run), object, run, openedBy: by, pinned: false, preview, selection: [], newer: null });
 
 function agent(s: Work, trace: Trace, f: Fact) {
   s.step = f.seq;
@@ -213,7 +235,7 @@ function agent(s: Work, trace: Trace, f: Fact) {
 // follows only while the person follows, and only once per pace window.
 function focus(s: Work, f: Fact, object: string, run: number | null) {
   if (s.attention !== 'following') { s.agent = { object, run, seq: f.seq, placement: 'marker' }; return; }
-  if (s.active === object && (run === null || view(s, object)?.run === run)) { s.agent = { object, run, seq: f.seq, placement: 'main' }; s.pending = null; return; }
+  if (showing(s, object, run)) { s.agent = { object, run, seq: f.seq, placement: 'main' }; s.pending = null; return; }
   if (paced(s, f)) { s.pending = { kind: 'focus', object, run }; s.agent = { object, run, seq: f.seq, placement: 'pending' }; return; }
   s.pending = null;
   show(s, object, run, 'agent');
@@ -240,15 +262,20 @@ function moved(s: Work, f: Pick<Fact, 'seq' | 'at'>, by: Move['by'], rule: Move[
   s.moves.push({ seq: f.seq, by, view: s.active, rule });
 }
 
+// The person goes to the view they hold of the object. The Agent goes to a view already
+// showing that version, else re-versions one of its own, else takes the preview slot.
 function show(s: Work, object: string, run: number | null, by: View['openedBy']) {
-  let v = view(s, object);
+  const of = s.views.filter(v => v.object === object);
+  let v = by === 'person' ? named(s, object)
+    : of.find(x => run === null || x.run === run) ?? of.find(x => !theirs(x));
+  if (v && by === 'agent' && run !== null) v.run = run;
   if (!v) {
-    v = { id: object, run, openedBy: by, pinned: false, preview: by === 'agent', selection: [] };
+    v = fresh(s, object, run, by, by === 'agent');
     const slot = by === 'agent' ? s.views.findIndex(x => x.preview) : -1;
     if (slot >= 0) s.views[slot] = v; else s.views.push(v);
-  } else if (run !== null && !v.pinned) v.run = run;
-  if (by === 'person') v.preview = false;
-  s.active = object;
+  }
+  if (by === 'person') { v.preview = false; v.openedBy = 'person'; }
+  s.active = v.id;
 }
 
 // Compose: applied while following (and paced); otherwise one pending suggestion per
@@ -264,14 +291,18 @@ function compose(s: Work, f: Fact, views: ArtifactRef[], replace: boolean) {
   if (open) { open.views = views; open.merged++; open.cause = cause; }
   else s.suggestions.push({ id: 'layout:' + f.seq, views, cause, from: f.seq, merged: 0 });
 }
-// Never closes what the person opened or pinned, even for an Agent "replace".
+// Never closes or re-versions what the person holds, even for an Agent "replace": the
+// Agent's version opens beside it. Accepting the layout is the person's own update.
 function arrange(s: Work, f: Pick<Fact, 'seq' | 'at'>, views: ArtifactRef[], replace: boolean, by: View['openedBy'] = 'agent') {
-  if (replace) s.views = s.views.filter(v => v.openedBy === 'person' || v.pinned);
+  if (replace) s.views = s.views.filter(theirs);
+  let first: string | null = null;
   for (const r of views) {
-    const id = 'artifact:' + r.artifact, v = view(s, id);
-    if (v) { if (!v.pinned) v.run = r.run; v.preview = false; } else s.views.push({ id, run: r.run, openedBy: by, pinned: false, preview: false, selection: [] });
+    const object = 'artifact:' + r.artifact, of = s.views.filter(v => v.object === object);
+    let v = of.find(x => x.run === r.run) ?? of.find(x => !x.pinned && (by === 'person' || !theirs(x)));
+    if (v) { v.run = r.run; v.preview = false; } else s.views.push(v = fresh(s, object, r.run, by, false));
+    first ??= v.id;
   }
-  s.active = views.length ? 'artifact:' + views[0]!.artifact : s.active;
+  s.active = first ?? s.active;
   moved(s, f, by === 'agent' ? 'agent' : 'person', by === 'agent' ? 'agent-layout' : 'accept');
 }
 
@@ -279,8 +310,8 @@ function arrange(s: Work, f: Pick<Fact, 'seq' | 'at'>, views: ArtifactRef[], rep
 // the main area shows that run, its source, or another run or artifact of that source.
 // A follower already sees it in place; someone away gets it in the digest instead.
 function escalate(s: Work, run: RunObject, seq: number) {
-  if (s.attention !== 'working' || !s.active) return;
-  const shown = s.objects[s.active];
+  if (s.attention !== 'working') return;
+  const shown = s.objects[view(s, s.active)?.object ?? ''];
   const related = shown && (shown.id === run.id || shown.id === 'source:' + run.source
     || (shown.kind === 'run' && shown.source === run.source)
     || (shown.kind === 'artifact' && shown.versions.some(v => v.runs.some(n => (s.objects['run:' + n] as RunObject | undefined)?.source === run.source))));
@@ -293,27 +324,41 @@ function person(s: Work, trace: Trace, a: PersonAction) {
   switch (a.kind) {
     case 'follow':
       s.attention = 'following';
-      if (s.agent && s.active !== s.agent.object) { show(s, s.agent.object, s.agent.run, 'agent'); s.moves.push({ seq: f.seq, by: 'person', view: s.active, rule: 'catch-up' }); }
+      if (s.agent && !showing(s, s.agent.object, s.agent.run)) { show(s, s.agent.object, s.agent.run, 'agent'); s.moves.push({ seq: f.seq, by: 'person', view: s.active, rule: 'catch-up' }); }
       if (s.agent) s.agent.placement = 'main';
       s.pending = null;
       return;
     case 'unfollow': s.attention = 'working'; return;
     case 'open': {
       working();
-      const latest = a.target.startsWith('artifact:') ? (s.objects[a.target] as ArtifactState | undefined)?.versions.at(-1)?.runs.at(-1) ?? null : null;
-      show(s, a.target, view(s, a.target)?.run ?? latest, 'person');
-      s.escalations = s.escalations.filter(x => x.object !== a.target);
+      const held = named(s, a.target), object = held?.object ?? a.target;
+      if (held) { held.preview = false; held.openedBy = 'person'; s.active = held.id; }
+      else show(s, object, object.startsWith('artifact:') ? latest(s, object) : null, 'person');
+      s.escalations = s.escalations.filter(x => x.object !== object);
       s.moves.push({ seq: f.seq, by: 'person', view: s.active, rule: 'person' });
       return;
     }
-    case 'select': { working(); const v = view(s, a.target); if (v) { v.selection = [...a.rows]; v.preview = false; } return; }
+    case 'select': { working(); const v = named(s, a.target); if (v) { v.selection = [...a.rows]; v.preview = false; v.openedBy = 'person'; } return; }
     case 'type': working(); return;
     case 'close': {
-      s.views = s.views.filter(v => v.id !== a.target);
-      if (s.active === a.target) s.active = s.views.at(-1)?.id ?? null;
+      const v = named(s, a.target);
+      s.views = s.views.filter(x => x !== v);
+      if (v && s.active === v.id) s.active = s.views.at(-1)?.id ?? null;
       return;
     }
-    case 'pin': case 'unpin': { const v = view(s, a.target); if (v) { v.pinned = a.kind === 'pin'; v.preview = false; } return; }
+    case 'pin': case 'unpin': { const v = named(s, a.target); if (v) { v.pinned = a.kind === 'pin'; v.preview = false; v.openedBy = 'person'; } return; }
+    // The update a view of theirs offers: it takes the newest version, and a view that
+    // already showed that version closes rather than doubling it.
+    case 'update': {
+      working();
+      const v = named(s, a.target), run = v ? newer(s, v) : null;
+      if (!v || run === null) return;
+      v.run = run;
+      s.views = s.views.filter(x => x === v || x.pinned || x.object !== v.object || x.run !== run);
+      s.active = v.id;
+      s.moves.push({ seq: f.seq, by: 'person', view: s.active, rule: 'person' });
+      return;
+    }
     case 'leave':
       if (s.attention === 'away') return;
       s.away = { from: s.step, prior: s.attention, baseline: structuredClone(s.objects), suggestions: s.suggestions.map(x => x.id), items: s.items.length };
@@ -351,6 +396,14 @@ function digest(s: Work, away: NonNullable<Work['away']>): DigestLine[] {
   for (const x of s.suggestions) if (!away.suggestions.includes(x.id)) lines.push({ kind: 'suggestion', id: x.id });
   if (s.items.length !== away.items) lines.push({ kind: 'items', count: s.items.length });
   return lines;
+}
+
+const latest = (s: Work, object: string) => (s.objects[object] as ArtifactState | undefined)?.versions.at(-1)?.runs.at(-1) ?? null;
+function newer(s: Work, v: View): number | null {
+  const o = s.objects[v.object];
+  if (o?.kind !== 'artifact' || v.run === null || !theirs(v)) return null;
+  const shown = o.versions.findIndex(x => x.runs.includes(v.run!));
+  return shown >= 0 && shown < o.versions.length - 1 ? latest(s, v.object) : null;
 }
 
 export function firstLine(text: string) { return text.split('\n').map(l => l.trim()).find(Boolean) ?? null; }

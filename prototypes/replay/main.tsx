@@ -20,6 +20,7 @@ const scenarios: Scenario[] = [
   { id: 'follow', label: 'Follow throughout', start: 'following', actions: [] },
   { id: 'work', label: 'Work in effects.csv from #20', start: 'following', actions: [{ at: 19, kind: 'open', target: 'artifact:effects.csv' }, { at: 19, kind: 'select', target: 'artifact:effects.csv', rows: ['B', 'C'] }] },
   { id: 'away', label: 'Leave at #30, return at #57', start: 'following', actions: [{ at: 29, kind: 'leave' }, { at: 57, kind: 'return' }] },
+  { id: 'keep', label: "Open run 1's figure at #16, follow", start: 'following', actions: [{ at: 15, kind: 'open', target: 'artifact:temp-effect.png' }, { at: 15, kind: 'follow' }] },
 ];
 
 function App() {
@@ -100,9 +101,10 @@ function Shell({ screen, act }: { screen: Screen; act: Act }) {
 
 function Objects({ screen, act }: { screen: Screen; act: Act }) {
   const objects = screen.order.map(id => screen.objects[id]!);
+  const shown = screen.views.find(v => v.id === screen.active)?.object;
   const runsOf = (name: string) => objects.filter((o): o is RunObject => o.kind === 'run' && o.source === name);
   const rejected = objects.reduce((n, o) => n + o.hidden, 0) + screen.hidden.rejected - screen.hidden.retries;
-  const row = (o: ObjectState) => <button type="button" className="object" aria-current={screen.active === o.id} data-fresh={o.changedAt === screen.step || undefined} onClick={() => act({ kind: 'open', target: o.id })}>
+  const row = (o: ObjectState) => <button type="button" className="object" aria-current={shown === o.id} data-fresh={o.changedAt === screen.step || undefined} onClick={() => act({ kind: 'open', target: o.id })}>
     <Mark object={o} />
     <span className="name">{label(o)}</span>
     <span className="fact">{fact(o)}</span>
@@ -130,20 +132,22 @@ function Tabs({ screen, act }: { screen: Screen; act: Act }) {
   return <div className="tabs" role="tablist">
     {screen.views.map(v => <div key={v.id} role="tab" aria-selected={v.id === screen.active} className="tab" data-pinned={v.pinned || undefined} data-preview={v.preview || undefined}>
       <button type="button" onClick={() => act({ kind: 'open', target: v.id })}>
-        <Mark object={screen.objects[v.id]} />{label(screen.objects[v.id])}
-        {screen.agent?.object === v.id && <Glyph placement={screen.agent.placement} />}
+        <Mark object={screen.objects[v.object]} />{label(screen.objects[v.object])}
+        {/* Two versions of one object open side by side are told apart by their run. */}
+        {v.run !== null && screen.views.some(x => x !== v && x.object === v.object) && <small className="fact">run {v.run}</small>}
+        {screen.agent?.object === v.object && (screen.agent.run === null || screen.agent.run === v.run) && <Glyph placement={screen.agent.placement} />}
       </button>
-      <button type="button" className="close" aria-label={'Close ' + label(screen.objects[v.id])} onClick={() => act({ kind: 'close', target: v.id })}>×</button>
+      <button type="button" className="close" aria-label={'Close ' + label(screen.objects[v.object])} onClick={() => act({ kind: 'close', target: v.id })}>×</button>
     </div>)}
   </div>;
 }
 
 function ViewBody({ screen, view, act }: { screen: Screen; view: View; act: Act }) {
-  const o = screen.objects[view.id];
+  const o = screen.objects[view.object];
   if (!o) return null;
   const tools = <span className="tools">
     <button type="button" aria-pressed={view.pinned} onClick={() => act({ kind: view.pinned ? 'unpin' : 'pin', target: view.id })}>{view.pinned ? 'Pinned' : 'Pin'}</button>
-    <button type="button" onClick={() => act({ kind: 'reveal', target: view.id })}>History</button>
+    <button type="button" onClick={() => act({ kind: 'reveal', target: view.object })}>History</button>
   </span>;
   if (o.kind === 'source') return <Source key={o.id} source={o} screen={screen} tools={tools} />;
   if (o.kind === 'run') return <Run run={o} screen={screen} tools={tools} act={act} />;
@@ -206,6 +210,7 @@ function Artifact({ artifact, view, screen, tools, act }: { artifact: ArtifactSt
       {run !== null && <span className="fact">{trace.runs[run]!.source} v{trace.runs[run]!.sourceVersion}</span>}
       {earlier.length > 0 && <span className="fact">same bytes as run {earlier.join(', ')}</span>}
       {artifact.versions.length > 1 && <span className="fact">{artifact.versions.length} versions</span>}
+      {view.newer !== null && <button type="button" className="newer" onClick={() => act({ kind: 'update', target: view.id })}>New version · Run {view.newer}</button>}
       {tools}
     </header>
     {recorded?.text ? <Table text={recorded.text} selection={view.selection} onSelect={rows => act({ kind: 'select', target: view.id, rows })} />

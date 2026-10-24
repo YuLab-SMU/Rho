@@ -22,6 +22,7 @@ implementation and verification summary.
 | [Installed native grades acceptance](HEADLESS.md#installed-native-grades-acceptance-phase-5) | Two real business/presentation pairs, immutable offline candidate, original feedback recovery, calls/tokens/latency and AC01–AC21 evidence |
 | [Backend acceptance](BACKEND-ACCEPTANCE.md) | Actual component/integration evidence, selected composition, failures and unsupported scope |
 | [Extraction acceptance](EXTRACTION-ACCEPTANCE.md) | v2 reusable backend, two explicit R projects, compatibility, failures and actual npm installation |
+| [交互模型实施计划](INTERACTION-PLAN.md) | Invariants that keep each step consistent, eight phases S0–S7 with owners and completion criteria, open decisions, the gate before high-fidelity design |
 | [Design priorities](DESIGN-PRIORITIES.md) | Required interaction designs, Paper review scope and design acceptance |
 | [Architecture](ARCHITECTURE.md) | Source ownership, component interaction, state and lifecycle boundaries |
 | [Technology stack](TECHSTACK.md) | Selected libraries, integration choices and adoption conditions |
