@@ -202,7 +202,24 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
   'project.createWorkspace': contract.projectSummarySchema,
   'project.create': contract.projectSummarySchema,
   'project.list': array(contract.projectSummarySchema),
-  'project.runs': response({ runs: array(response({ operationId: text, action: text, execution: text, delivery: text, acceptedAt: text, author: text, artifacts: array(text), hasStderr: { type: 'boolean' } })), total: integer, truncated: { type: 'boolean' } }),
+  // A run reports two different things and never merges them: the files its plan
+  // asked the producer to write, and what is on disk now. Neither one is an
+  // integrity check; only artifact.check verifies bytes against the inventory.
+  'project.runs': response({ runs: array(response({
+    operationId: text, action: text, execution: text, delivery: text, acceptedAt: text, author: text,
+    declared: array(response({ path: text, present: { type: 'boolean' }, bytes: integer })),
+    missing: array(text),
+    completion: { enum: ['present', 'absent'] },
+    integrity: { enum: ['unchecked', 'declared', 'incomplete', 'verified', 'not-applicable'] },
+    domain: { enum: ['unchecked', 'checked'] },
+    // Runs of one script share this digest; that is how a retry is recognised.
+    script: { anyOf: [text, { type: 'null' }] },
+    // A stable key for the file the run was submitted from, with the path itself
+    // withheld: submissions of one file share it, so a retry chain is visible
+    // without this summary disclosing the project's file names.
+    sourceKey: { anyOf: [text, { type: 'null' }] },
+    hasStderr: { type: 'boolean' }
+  })), total: integer, truncated: { type: 'boolean' } }),
   'protocol.validate': response({ method: text, valid: { type: 'boolean' }, problems: array(response({ path: text, keyword: text, message: text, fix: text })), requires: array(text) }),
   // A passing check carries no remedy, so the remedy is a possibly-empty string.
   'project.doctor': response({ ok: { type: 'boolean' }, checks: array(response({ id: text, state: { enum: ['ok', 'warn', 'fail'] }, detail: text, remedy: { type: 'string' } })), intent: { anyOf: [response({ id: text, methods: array(text), missing: array(text), ready: { type: 'boolean' } }), { type: 'null' }] } }),
@@ -269,7 +286,7 @@ export const descriptions = {
   'binding.activity.append': 'Registered native adapter only: retain original CLI tool and artifact-ready observations. This does not execute, validate, or present artifacts.',
   'task.routing.put': 'Control plane only: conditionally assign one task and business binding to this project without starting a native session.',
   'resource.register': 'Declare scoped existing bytes and their type/schema at the supplied digest. This read and registration starts no runtime.',
-  'project.runs': 'Report what this project has run and what it is running: one bounded summary per operation with its execution state, accepted time, author kind, declared artifact paths and whether output was retained. It carries no request body, no code and no output text, and starts nothing.',
+  'project.runs': 'Report what this project has run and what it is running: one bounded summary per operation with its execution state, accepted time, author kind, the artifact paths its plan declared, whether each of those files is on disk now, whether the producer wrote a completion inventory, and the recorded integrity and domain states. A declaration, a file on disk and a verified artifact are separate facts. It carries no request body, no code and no output text, and starts nothing.',
   'protocol.validate': 'Check one operation body against its versioned schema without executing it: the same checks the server applies, reported with the edit each problem needs. Use it before a write whose shape is uncertain; it changes nothing and starts nothing.',
   'project.doctor': 'Report whether this project can actually do work right now: Core binary, Rscript, write access to the project and state folders, plugin selection, Host socket and unfinished runs. Each check carries the next action when it does not pass. It starts no Host and changes nothing.',
   'project.entries': 'List one level of the selected project folder for the person who opened it: ordinary files and folders, bounded and confined to the project root, excluding owner state. Listing reads no file contents and starts no runtime.',

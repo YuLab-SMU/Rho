@@ -52,10 +52,42 @@ Still not executed: the scientific `install-acceptance.mjs` flows (two external
 example projects are absent here) and the model-driven collaboration variant. No npm
 registry publication or signing was performed.
 
-cancels on view release. Snapshots contain document metadata, not all text and
-undo. Document record/aggregate budgets reject before replacing retained state.
-The browser now uses the same conditional `document.save` as the owner, including
-original retry identity, current revision and disk digest.
+## Task-first project page, truthful execution facts
+
+Updated: 2026-10-25. Three reported defects were real and are fixed at their source
+rather than restyled. `project.runs` now reports three separate facts per run: the
+artifact paths the plan **declared**, whether each of those files is **on disk** now
+(one bounded stat in the run's output folder), and the recorded **integrity** and
+**domain** states plus whether the producer wrote a completion inventory; `script`
+and `source` let a reader see retries of one file even when the code changed between
+attempts (`src/protocol.ts`, `src/server.ts`). The person's page no longer lists
+declared paths as produced. `web/theme.css` defined only `pending` and `unknown`
+state dots, so `project.tsx`'s `state failed` drew the verified green dot; `failed`
+and `declared` now name themselves, and the Agent's own "done" is neutral because
+green is reserved for owner-verified facts. `web/execution-facts.ts` is the single
+reading of runs, artifacts and checks (DOM-free, used by both pages).
+
+The project page now leads with the declared question, one tally of runs, declared
+items and the absence of a domain check, then what needs attention, then the results
+(newest version of each artifact name, earlier versions counted), then what the Agent
+declared, with execution records, documents, files, layout and diagnosis behind
+disclosures. A framed view bound to a registered resource carries one achromatic line
+naming the execution that produced that version and whether its bytes were verified;
+it opens a panel separating declared / on disk / verified / domain, the submission
+chain of the analysis file, and the boundary that no execution establishes a
+statistical result. "Ask about this" prepares a `context.create` naming the exact
+resource version (browser scope now includes `context.create`); the view reports
+"Prepared" until the owner records a fetch, then "Fetched by the Agent" with time.
+
+Checks: Rho 104/104 (`RHO_CORE_BINARY` set; the eight failures without it are the
+missing Core binary, not the change) and `npm run check:contracts` clean. Browser
+acceptance ran 30 checks on a byte-identical copy of the real `work/agent-exp-2215`
+project (its writer lock is held by an earlier service) at 1440 and 768, including
+restart: question, both failed runs, artifact provenance and fetch receipt all return
+from owner state. Evidence: `work/acceptance-v3-*/evidence-v3`. Not done: a person's
+own words cannot yet accompany the context (no note owner is configured here and
+`context.create` has no note field), the task map still holds one flat declared list
+with no `view` links, and no figure region can be anchored.
 
 The earlier `artifact-not-presentable` diagnosis was wrong: `artifact.check`
 already returns registered owner-state references. Execution acceptance now binds
@@ -167,59 +199,33 @@ package supplies generic references/envelopes/ports and file primitives. Format,
 requirement and script schemas belong to pure owner contract entries; Contracts has
 no format registry, native plan or document budget, and R owns its script snapshot
 budget. Only `action.submit` requires Requirements; exported objects work with
-Files/R alone. Only Tables brings csv-parse and only Agent brings the MCP SDK.
-`/api/v2` HTTP/SSE, client and inert fixtures expose explicit
-scripts/requirements/artifacts, typed tables and entity namespaces, media and
-exported object snapshots; the base npm package contains no project recipe or R
-script.
-
-Rho owns authentication/projects, durable caller intents, the public Core CLI bridge
-and composition. Plugins owns document/resource semantics, R plans, requirements and
-scoped MCP. Core remains unchanged at
-`d0159da6feb01d1be9e3b4b34b67953241fedfcb`. [HEADLESS](HEADLESS.md) documents the
-API and plugin selection, [plugin boundary review](PLUGIN-BOUNDARY-ACCEPTANCE.md)
-the responsibilities and dependency checks, and
-[extraction acceptance](EXTRACTION-ACCEPTANCE.md) the actual source/package checks.
-One contract serves retained and new work: original accepted parameters, Core
-identity and resource bytes stay observable, while superseded scientific submissions
-are unavailable. Reads, explicit retained retry/cancel and schema-1 workspace restore
-do not select a recipe or create a replacement execution. Selected baseline: macOS
-arm64, Node 22.22.3/npm 10.9.8, Python 3, R 4.5.2, Claude Code 2.1.301 / MCP SDK
-1.29.0; R is external and the ordinary project needs no add-on R package. Other
-platforms, registry publication and signing remain unverified/unselected.
+Files/R alone. Only Tables brings csv-parse and only Agent brings the MCP SDK. Rho owns
+authentication/projects, durable caller intents, the public Core CLI bridge and
+composition. [HEADLESS](HEADLESS.md) documents the API and plugin selection, the
+[plugin boundary review](PLUGIN-BOUNDARY-ACCEPTANCE.md) the responsibilities and
+dependency checks, and [extraction acceptance](EXTRACTION-ACCEPTANCE.md) the actual
+source/package checks. One contract serves retained and new work: original accepted
+parameters, Core identity and resource bytes stay observable, while superseded
+scientific submissions are unavailable. Selected baseline: macOS arm64, Node
+22.22.3/npm 10.9.8, Python 3, R 4.5.2, Claude Code 2.1.301 / MCP SDK 1.29.0; R is
+external and the ordinary project needs no add-on R package. Other platforms,
+registry publication and signing remain unverified/unselected.
 
 ## Historical baseline verification
 
-Earlier baselines, retained with their own scope: Rho 15/15 protocol, real stdio MCP,
-retained v1, service, crash/continuity, workspace and budget tests, three SIGKILL
-boundaries keeping the original operation/Core identity and one dispatch after a
-missing first acknowledgement. Plugin removal/reselection preserves drafts,
-undo, bytes, layout references, selection intent and original Core identity without
-replay; unavailable providers reject new work while retained requests stay
-observable. Plugins passed 12/12 capability and 2/2 native example tests plus a
-pure-contract import guard; explicit types preserve `001` and literal `NA`, unkeyed
-tables stay readable, and comparisons record both versions and provenance. All eight
-capability tarballs pass independent installation/import with no sibling
-implementation.
-
-Real flows recorded then: an ordinary R project (linear model, four rows, typed
-two-input join, PNG/PDF, original bytes, exported object snapshot) and the original
-paired project (five DESeq2 fits, 16,139 genes, 33 baseline artifacts, 121/121
-saved-model observations, 12/12 independent checks) through the generic runner. An
-actual Claude MCP v2 handoff fetched explicit context and changed the same unsaved
-Chinese/emoji buffer without starting a Host. Actual base-R recovery keeps four
-partial rows across owned Host loss, turns the original request unknown without
-replay, releases the native process group on confirmed cancel and restores bytes,
-drafts, undo, selections and unavailable entries without a Host. Actual 0.4 npm
-installations outside the checkouts passed for the full eight-plugin candidate and
-two reduced candidates containing only Contracts/Documents/Files or
-Contracts/Files/R without R/Host.
-
-Retained failed extraction trials exposed checker-wrapper variable collision,
-a generic completion sidecar placed inside the producer's immutable inventory,
-and an incorrect declared shrinkage column. New trials fixed those conditions;
-original failed requests remain failed. Historical scientific failures and the
-original installed candidate remain recorded separately.
+Earlier baselines, retained with their own scope: protocol, real stdio MCP, retained
+v1, service, crash/continuity, workspace and budget tests; three SIGKILL boundaries
+keeping the original operation/Core identity and one dispatch after a missing first
+acknowledgement. Plugin removal/reselection preserves drafts, undo, bytes, layout
+references, selection intent and original Core identity without replay, while
+unavailable providers reject new work and retained requests stay observable. Real
+flows then: an ordinary R project (linear model, typed join, PNG/PDF, exported object
+snapshot) and the original paired DESeq2 project (16,139 genes, 33 artifacts, 121/121
+saved-model observations) through the generic runner; a Claude MCP v2 handoff that
+fetched explicit context and changed the same unsaved Chinese/emoji buffer without a
+Host; base-R recovery keeping four partial rows across owned Host loss and turning the
+original request unknown without replay. Retained extraction failures (a completion
+sidecar inside the producer's inventory, a wrong declared column) stay failed.
 
 ## Single-contract cleanup verification
 

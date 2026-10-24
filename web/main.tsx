@@ -57,7 +57,7 @@ function App() {
   const [readAt, setReadAt] = useState<Date | null>(null), [offlineAt, setOfflineAt] = useState<Date | null>(null);
   const [error, setError] = useState('');
   const [homeFocus, setHomeFocus] = useState(false), [mainFocus, setMainFocus] = useState(false);
-  const [compositionId, setCompositionId] = useState(''), [overview, setOverview] = useState(false), [section, setSection] = useState<Section | null>(null);
+  const [compositionId, setCompositionId] = useState(''), [openView, setOpenView] = useState(''), [overview, setOverview] = useState(false), [section, setSection] = useState<Section | null>(null);
   // About from a view opens that plugin and offers the way back to the project.
   const [pluginId, setPluginId] = useState(''), [pluginReturn, setPluginReturn] = useState(false);
   const [context, setContext] = useState(false), [navigation, setNavigation] = useState(true);
@@ -162,7 +162,9 @@ function App() {
   function opened(next: ProjectSummary) {
     setProjects(list => list.some(p => p.id === next.id) ? list : [...list, next]); chooseProject(next); setMainFocus(true);
   }
-  function layout(id: string) { setCompositionId(id); setOverview(false); setScreen('project'); }
+  // Opening a layout may name the view to bring forward: from the project page a
+  // person picks an artifact, not a tab.
+  function layout(id: string, view?: string) { setCompositionId(id); setOpenView(view ?? ''); setOverview(false); setScreen('project'); }
   function showSection(next: Section) { setOverview(true); setScreen('project'); setSection(next); }
   function plugins() { setPluginId(''); setPluginReturn(false); setScreen('plugins'); }
   function about(id: string) { setPluginId(id); setPluginReturn(true); setScreen('plugins'); }
@@ -290,7 +292,7 @@ function App() {
           : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div>
           : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin}
             back={pluginReturn ? { label: 'Back to ' + name(project), run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
-          : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); }} mapChipTarget={mapChip} /></Suspense>
+          : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); }} mapChipTarget={mapChip} openView={openView} /></Suspense>
           : <ProjectOverview client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} onOpened={id => { layout(id); reread(); }} />}
       </main>
       {context && !narrow && <aside id="project-context" className="context-drawer" aria-label={feedbackContext ? 'Your question' : 'Context and access'}>

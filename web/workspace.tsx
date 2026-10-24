@@ -7,6 +7,8 @@ import { Icon, type IconName } from './icons.js';
 import { resourceIcon } from './project.js';
 import { registry } from './registry.js';
 import { FrameProvider, MapPlacement, ViewItemHeader, itemForView, useFrameContext, useTaskFrame } from './frame.js';
+import { ArtifactSource } from './artifact.js';
+import { boundResource } from './executions.js';
 import 'dockview/dist/styles/dockview.css';
 
 interface ViewParams { view: ViewDescription; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; renderAllowed?: boolean; headerTarget?: HTMLElement | null; compositionId: string; compositionVersion: number; onRequestFeedback?: (viewId: string) => void }
@@ -62,7 +64,12 @@ function OwnerView({ params, active }: { params: ViewParams; active: boolean }) 
   if (available) {
     const body = <entry.View viewId={view.id} view={view} projectId={snapshot.project.id} snapshot={snapshot} client={params.client} active={active} contextTarget={params.contextTarget} principalId={params.principalId} headerTarget={params.headerTarget} renderObservation={observation} requestFeedback={params.onRequestFeedback ? () => params.onRequestFeedback!(view.id) : undefined}
       frame={frame ? { ...frame, form: 'full', params: frame.map.presentation['item:' + item?.id]?.params ?? {}, item } : undefined} />;
-    return item ? <div className="framed-view"><ViewItemHeader item={item} /><div className="framed-view-body">{body}</div></div> : body;
+    // Which execution produced this version, and what checks it did or did not pass,
+    // belongs to the object and is drawn once by the shell above the owner's body.
+    const resource = boundResource(view, snapshot.resources);
+    const source = resource ? <ArtifactSource resource={resource} viewId={view.id} snapshot={snapshot} client={params.client} /> : null;
+    if (item) return <div className="framed-view"><ViewItemHeader item={item} />{source}<div className="framed-view-body">{body}</div></div>;
+    return source ? <div className="framed-view">{source}<div className="framed-view-body">{body}</div></div> : body;
   }
   const why = explain(view, snapshot);
   return <section className="unavailable" aria-label={title(view)}>
@@ -98,7 +105,7 @@ function Tab({ params }: IDockviewPanelHeaderProps<ViewParams>) {
 const HeaderSlotContext = createContext<(target: HTMLDivElement | null) => void>(() => {});
 function HeaderSlot() { return <div className="owner-header-slot" style={{ display: 'flex', alignItems: 'center', minHeight: 32, flexShrink: 0 }} ref={useContext(HeaderSlotContext)} />; }
 const components = { owner: ViewContent }, tabs = { retained: Tab };
-export function Workspace({ composition, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, mapChipTarget }: { composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null }) {
+export function Workspace({ composition, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, mapChipTarget, openView }: { composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string }) {
   const [headerTarget, setHeaderTarget] = useState<HTMLDivElement | null>(null);
   const [feedbackSource, setFeedbackSource] = useState<string | null>(null), [feedbackLimit, setFeedbackLimit] = useState(false);
   const mounted = useRef(new Set<string>());
@@ -167,6 +174,14 @@ export function Workspace({ composition, snapshot, client, onAbout, contextTarge
     const listener = api.onDidActivePanelChange(({ panel }) => { if (panel) setActive(panel.id); });
     return () => listener.dispose();
   }, [api, narrow]);
+  // A named view is one the person chose on the project page; it is brought forward
+  // once, and their own tab changes are left alone afterwards.
+  const brought = useRef('');
+  useEffect(() => {
+    if (!openView || brought.current === openView || !composition.views.some(v => v.id === openView)) return;
+    brought.current = openView; setActive(openView);
+    api?.getPanel(openView)?.api.setActive();
+  }, [openView, composition, api]);
   function onReady(event: DockviewReadyEvent) { arranged.current = ''; setApi(event.api); }
   const frame = useTaskFrame({ snapshot, client, principalId, composition, activeViewId: active });
   // A person opening an item brings its view forward; the Agent's focus only highlights.

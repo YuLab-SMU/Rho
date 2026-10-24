@@ -181,10 +181,47 @@ kbd { display: inline-flex; align-items: center; height: 18px; padding: 0 5px; b
 .overview-link { min-height: 0; padding: 0; border: 0; background: transparent; font-weight: 400; color: var(--color-ink); text-align: left; }
 .overview-link:hover { background: transparent; text-decoration: underline; }
 .overview-none { padding-block: 12px; font-size: 13px; line-height: 18px; color: var(--color-meta); }
+/* The inquiry leads: a question a person can read, then what the owners observed.
+   No badge, no card and no accent — the words carry the hierarchy. */
+.overview-inquiry { display: flex; flex-direction: column; gap: 14px; }
+.overview-inquiry h2 { max-width: 620px; font-size: 21px; line-height: 29px; font-weight: 600; letter-spacing: -.012em; text-wrap: pretty; }
+.overview-inquiry h2:focus { outline: none; }
+.overview-tally { display: flex; flex-wrap: wrap; gap: 4px 18px; color: var(--color-meta); font-size: 12px; line-height: 17px; }
+.overview-tally span { white-space: nowrap; }
+.overview-attention { display: flex; flex-direction: column; gap: 5px; margin: 2px 0 0; padding: 12px 0 0; border-top: 1px solid var(--color-divider); list-style: none; }
+.overview-attention .state { font-size: 12.5px; line-height: 18px; }
+.overview-attention .state.failed, .overview-attention .state.unknown { color: var(--color-ink); }
+.overview-artifacts, .overview-items { display: flex; flex-direction: column; list-style: none; }
+/* A result row wraps rather than truncating the file name: the artifact is the
+   thing being chosen, so its name keeps its width and the execution it came from
+   moves to the next line when the column is narrow. */
+.overview-artifact, .overview-item { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 14px; width: 100%; min-height: 38px; padding: 4px 0; border: 0; border-bottom: 1px solid var(--color-divider); background: transparent; color: var(--color-ink); font-size: 13px; line-height: 16px; text-align: left; }
+button.overview-artifact:hover, button.overview-item:hover { background: var(--color-row-hover); }
+.overview-artifact-name { display: inline-flex; align-items: center; gap: 9px; flex: 1 1 200px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overview-artifact-name svg { flex-shrink: 0; color: var(--color-muted); }
+.overview-artifact-origin { flex: 1 1 170px; min-width: 0; color: var(--color-meta); font-size: 11.5px; }
+.overview-artifact .state, .overview-item-state { flex: 0 0 auto; color: var(--color-meta); font-size: 11.5px; }
+.overview-item-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overview-item-next { flex: 0 0 auto; color: var(--color-meta); font-size: 11px; }
+/* Everything a reader checks rather than arrives at stays closed. */
+.overview-more { border-top: 1px solid var(--color-divider); }
+.overview-more > summary { display: flex; align-items: baseline; gap: 8px; padding: 14px 0; color: var(--color-ink); font-size: 13px; line-height: 18px; cursor: pointer; list-style: none; }
+.overview-more > summary::-webkit-details-marker { display: none; }
+.overview-more > summary::before { content: "▸"; color: var(--color-meta); font-size: 10px; }
+.overview-more[open] > summary::before { content: "▾"; }
+.overview-more > summary span { color: var(--color-meta); font-size: 12px; }
+.overview-more .overview-section { padding-top: 4px; padding-bottom: 20px; }
 .state { display: inline-flex; align-items: center; gap: 6px; }
 .state::before { content: ""; width: 6px; height: 6px; flex-shrink: 0; border-radius: 999px; background: var(--color-verified); }
 .state.pending::before { background: var(--color-accent); }
 .state.unknown::before { background: transparent; border: 1.5px solid var(--color-meta); }
+/* A failed execution and a completed one used to draw the same green dot: the
+   default is now the only place "done" comes from, and every other outcome names
+   itself. "Done" is never inferred from the absence of a rule. */
+.state.failed { color: var(--color-failed); }
+.state.failed::before { background: var(--color-failed); }
+/* Something the Agent declared, not a fact Rho observed: neutral by design. */
+.state.declared::before { background: var(--color-control-border); }
 .context-drawer { width: var(--context-width); flex-shrink: 0; background: var(--color-surface); border-top: 1px solid var(--color-hairline); border-left: 1px solid var(--color-divider); display: flex; flex-direction: column; padding-bottom: 16px; overflow: auto; }
 .drawer-heading { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; height: 48px; padding: 0 12px 0 20px; border-bottom: 1px solid var(--color-divider); }
 .drawer-heading h2 { font-size: 13px; line-height: 16px; }

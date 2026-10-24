@@ -19,11 +19,14 @@ function Step({ map, item, onOpen }: { map: TaskMapState; item: TaskItem; onOpen
 
 function Inline({ map, controls }: FrameBodyProps) {
   const c = counts(map), now = map.items.find(i => roleOf(map, i) === 'working'), whole = map.presentation['map:top']?.form === 'full';
+  // When nothing is moving there is no status worth claiming: the question says what
+  // this work is, and "settled" would only restate the Agent's own count. Execution
+  // outcomes are Rho's facts and are never summarised here as if they were the same.
   return <button className="map-chip" onClick={() => controls.setForm('map:top', whole ? 'summary' : 'full', whole ? { range: 'around', span: 2, axis: 'h' } : {}).catch(() => {})}
     aria-label={whole ? 'Back to the focused view' : 'Show the whole task'}>
     <span className={'map-mark' + (now ? ' tone-agent now' : '')} aria-hidden="true" />
-    <span>{now ? now.title : c.done === c.total ? 'All items settled' : 'Nothing in progress'}</span>
-    <span className="map-chip-count">{c.done} / {c.total}</span>
+    <span>{now ? now.title : map.question ?? 'No question declared'}</span>
+    <span className="map-chip-count">{c.total}</span>
     {c.waiting > 0 && <span className="map-chip-waiting tone-waiting"><span className="map-mark" aria-hidden="true" />{c.waiting}<span className="map-chip-waiting-label"> waiting for you</span></span>}
   </button>;
 }

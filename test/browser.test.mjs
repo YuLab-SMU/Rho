@@ -46,7 +46,7 @@ test('one-use pairing grants a narrowed root, never operator/native/session auth
     const direct = new RhoClient({ url: f.service.url, token: grant.token });
     // U2 grants identity-bearing edits and saves, without global undo or execution.
     assert.ok(grant.principalId.startsWith('browser:'));
-    for (const method of ['document.edit', 'document.save', 'document.undoOwn', 'document.revert', 'data.page', 'interaction.selection.set']) assert.ok(grant.methods.includes(method), method);
+    for (const method of ['document.edit', 'document.save', 'document.undoOwn', 'document.revert', 'data.page', 'interaction.selection.set', 'context.create']) assert.ok(grant.methods.includes(method), method);
     for (const method of ['session.grant', 'session.browser.pair', 'session.browser.revoke', 'action.submit', 'capability.configure', 'document.abandonSave', 'document.undo', 'document.open', 'composition.put', 'view.close']) await assert.rejects(direct.call(method, {}), e => e.error.kind === 'unauthorized', method);
     assert.equal((await browser.call('observation.snapshot', { projectId: p.id })).host.exitCode, 3);
     assert.equal(f.service.bridge.owned.size, 0);

@@ -52,7 +52,15 @@ test('a person sees what the project is running, and never the submitted code', 
     const run = listed.runs[0];
     assert.equal(run.operationId, 'visible-1');
     assert.equal(run.author, 'Agent');
-    assert.deepEqual(run.artifacts, ['out.png'], 'the declared artifact is visible');
+    // The plan declared one artifact; this stub Host wrote nothing, so the summary
+    // says so instead of implying the file exists.
+    assert.deepEqual(run.declared, [{ path: 'out.png', present: false, bytes: 0 }], 'the declared artifact is named, and it is not on disk');
+    assert.deepEqual(run.missing, ['out.png']);
+    assert.equal(run.completion, 'absent');
+    assert.equal(run.integrity, 'unchecked');
+    assert.equal(run.domain, 'unchecked');
+    assert.match(run.script, /^[a-f0-9]{64}$/, 'runs of one script can be recognised as retries');
+    assert.match(run.sourceKey ?? '', /^[a-f0-9]{16}$/, 'submissions of one file can be grouped without naming it');
     // Reconciled on read: the Host says finished, so the person is not shown "running".
     assert.equal(run.execution, 'completed');
     // Nothing that could leak the submitted work.
@@ -61,6 +69,35 @@ test('a person sees what the project is running, and never the submitted code', 
     assert.doesNotMatch(text, /secret-analysis/);
     assert.equal(run.request, undefined);
     assert.equal(run.plan, undefined);
+  } finally { await f.cleanup(); }
+});
+
+// The reported defect: a failed run's "produced" column listed files its plan
+// declared, whether or not anything was written. A file on disk is still not a
+// verified artifact, so both facts have to be visible and neither may imply the other.
+test('a file on disk is reported as present, not as verified, when the run failed', async () => {
+  const f = await fixture();
+  try {
+    await f.agent.call('action.submit', {
+      projectId: f.p.id, operationId: 'failed-1', action: 'r.execute', actionVersion: '0.2.0',
+      input: { script: { kind: 'disk', path: 'secret-analysis.R', digest: digest(await fs.readFile(path.join(f.project, 'secret-analysis.R'))) }, args: [], requirements: [], artifacts: [{ path: 'out.png', kind: 'file', format: { mimeType: 'image/png' } }, { path: 'table.csv', kind: 'file', format: { mimeType: 'text/csv' } }], completion: null }
+    });
+    // The producer wrote one of its two declared files and then exited non-zero
+    // before any completion inventory existed.
+    const runsDir = path.join(f.project, '.rho/plugins/runs');
+    const [folder] = await fs.readdir(runsDir);
+    await fs.mkdir(path.join(runsDir, folder, 'artifacts'), { recursive: true });
+    await fs.writeFile(path.join(runsDir, folder, 'artifacts', 'out.png'), 'PNG-BYTES');
+    await fs.writeFile(path.join(f.root, 'lookup.json'), JSON.stringify({ ok: true, value: { status: { Finished: { exit: { Code: 1 } } }, terminal: true, held: false, stdout: {}, stderr: {} } }));
+    const { code } = await f.operator.call('session.browser.pair', {});
+    const grant = (await (await fetch(f.service.url + '/api/browser/pair', { method: 'POST', headers: { 'content-type': 'application/json', origin: f.service.url }, body: JSON.stringify({ code }) })).json()).value;
+    const tab = new BrowserClient({ url: f.service.url, ...grant });
+    const run = (await tab.call('project.runs', { projectId: f.p.id })).runs[0];
+    assert.equal(run.execution, 'failed');
+    assert.deepEqual(run.declared, [{ path: 'out.png', present: true, bytes: 9 }, { path: 'table.csv', present: false, bytes: 0 }]);
+    assert.deepEqual(run.missing, ['table.csv'], 'the file this run never wrote is named');
+    assert.equal(run.completion, 'absent');
+    assert.equal(run.integrity, 'unchecked', 'presence is not a check');
   } finally { await f.cleanup(); }
 });
 

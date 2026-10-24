@@ -50,12 +50,80 @@
               "type": "string",
               "minLength": 1
             },
-            "artifacts": {
+            "declared": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "present": {
+                    "type": "boolean"
+                  },
+                  "bytes": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "path",
+                  "present",
+                  "bytes"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "missing": {
               "type": "array",
               "items": {
                 "type": "string",
                 "minLength": 1
               }
+            },
+            "completion": {
+              "enum": [
+                "present",
+                "absent"
+              ]
+            },
+            "integrity": {
+              "enum": [
+                "unchecked",
+                "declared",
+                "incomplete",
+                "verified",
+                "not-applicable"
+              ]
+            },
+            "domain": {
+              "enum": [
+                "unchecked",
+                "checked"
+              ]
+            },
+            "script": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sourceKey": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "hasStderr": {
               "type": "boolean"
@@ -68,7 +136,13 @@
             "delivery",
             "acceptedAt",
             "author",
-            "artifacts",
+            "declared",
+            "missing",
+            "completion",
+            "integrity",
+            "domain",
+            "script",
+            "sourceKey",
             "hasStderr"
           ],
           "additionalProperties": true
@@ -89,5 +163,5 @@
     ],
     "additionalProperties": true
   },
-  "description": "Report what this project has run and what it is running: one bounded summary per operation with its execution state, accepted time, author kind, declared artifact paths and whether output was retained. It carries no request body, no code and no output text, and starts nothing."
+  "description": "Report what this project has run and what it is running: one bounded summary per operation with its execution state, accepted time, author kind, the artifact paths its plan declared, whether each of those files is on disk now, whether the producer wrote a completion inventory, and the recorded integrity and domain states. A declaration, a file on disk and a verified artifact are separate facts. It carries no request body, no code and no output text, and starts nothing."
 }

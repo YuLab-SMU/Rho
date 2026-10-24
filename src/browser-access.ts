@@ -13,6 +13,10 @@ export const browserLimits = { maxSessions: 16, maxPairings: 8, pairingTtlMs: 30
 // Agent/operator work.
 export const browserMethods = ['protocol.describe', 'protocol.validate', 'project.list', 'project.open', 'project.create', 'project.pick', 'project.createWorkspace', 'project.source.pick', 'project.source.add', 'project.entries', 'project.openFile', 'project.doctor', 'project.runs', 'capability.list', 'observation.snapshot', 'composition.read', 'document.read', 'resource.read', 'skill.list', 'skill.read',
   'document.edit', 'document.save', 'document.undoOwn', 'document.revert', 'document.history', 'document.change.read', 'data.page', 'interaction.selection.read', 'interaction.selection.set', 'view.observe', 'view.observations.read', 'feedback.submit', 'feedback.status', 'annotation.read',
+  // A person may prepare a context naming one exact object and version: that is how
+  // they point the Agent at the thing they are asking about. It writes only that
+  // reference, starts nothing, and the Agent's fetch stays a separate fact.
+  'context.create',
   // People see and steer the task map; only the Agent declares its items.
   'task.map.read', 'task.map.present', 'task.map.respond'];
 interface Pairing { hash: string; root: string; methods: string[]; expires: number; selectedProjects: string[] }

@@ -7242,7 +7242,17 @@ export interface ProjectRunsOutput {
     delivery: string;
     acceptedAt: string;
     author: string;
-    artifacts: string[];
+    declared: {
+      path: string;
+      present: boolean;
+      bytes: number;
+    }[];
+    missing: string[];
+    completion: 'present' | 'absent';
+    integrity: 'unchecked' | 'declared' | 'incomplete' | 'verified' | 'not-applicable';
+    domain: 'unchecked' | 'checked';
+    script: string | null;
+    sourceKey: string | null;
     hasStderr: boolean;
   }[];
   total: number;

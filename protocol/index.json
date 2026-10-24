@@ -345,10 +345,10 @@
       "sha256": "116b87b79819c1212d674b2c403b2ac870da23c1995438e6c4a134a2d0f4f0ea"
     },
     "project.runs": {
-      "summary": "Report what this project has run and what it is running: one bounded summary per operation with its execution state, accepted time, author kind, declared artifact paths and whether output was retained. It carries no request body, no code and no output text, and starts nothing.",
+      "summary": "Report what this project has run and what it is running: one bounded summary per operation with its execution state, accepted time, author kind, the artifact paths its plan declared, whether each of those files is on disk now, whether the producer wrote a completion inventory, and the recorded integrity and domain states. A declaration, a file on disk and a verified artifact are separate facts. It carries no request body, no code and no output text, and starts nothing.",
       "path": "operations/project.runs.json",
-      "bytes": 2269,
-      "sha256": "9a7d59eec8d2c7cf47e778a946335357d3ca5826d09901632558f33d50481e35"
+      "bytes": 4323,
+      "sha256": "9f2f31f7f5e7c2dd93257b6f77f7055e4b93c85812c32d2339ca9b485cfd00b3"
     },
     "project.source.add": {
       "summary": "project.source.add",

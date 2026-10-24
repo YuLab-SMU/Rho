@@ -10,7 +10,7 @@ import { protocol, operations } from './protocol.js';
 import { describeProtocol } from './protocol-discovery.js';
 import { CoreBridge } from './bridge.js';
 import { State, type Principal, type Project } from './state.js';
-import { Requests, publicOperation, requestLimits } from './requests.js';
+import { Requests, publicOperation, requestLimits, type Operation } from './requests.js';
 import { Workspace, workspaceLimits } from './workspace.js';
 import { Interactions, interactionLimits } from './interactions.js';
 import { TaskMap, taskMapLimits } from './task-map.js';
@@ -38,6 +38,48 @@ export const serviceLimits = { maxRequestBytes: 1024 * 1024, maxEventBytes: 6553
 export interface ServiceConfig extends Partial<typeof serviceLimits>, Partial<typeof requestLimits>, PluginConfig { root: string; stateDir: string; coreBinary: string; rscript: string; port?: number; nativeFolders?: Partial<typeof nativeFolderLimits>; workspace?: Partial<typeof workspaceLimits>; interactions?: Partial<typeof interactionLimits>; taskMap?: Partial<typeof taskMapLimits>; browser?: Partial<typeof browserLimits>; webRoot?: string; agentNativeActivity?: Partial<typeof nativeActivityLimits>; presentationWitness?: Partial<typeof presentationWitnessLimits>; visibility?: Partial<typeof visibilityLimits>; agentDelivery?: Partial<typeof agentDeliveryLimits>; deliveryTransportTimeoutMs?: number }
 const ajv = new Ajv({ allErrors: true, strict: false, allowUnionTypes: true });
 ajv.addFormat('date-time', { type: 'string', validate: isNativeTime });
+
+// One run's output reports three different facts, and they are never merged:
+//   declared  the paths the request's own plan asked the producer to write;
+//   present   whether that path holds a regular file right now (one bounded stat);
+//   verified  what artifact.check recorded after comparing bytes with the
+//             completion inventory the producer wrote.
+// A failed run can leave every declared file on disk and still have produced
+// nothing anyone verified, so a reader has to be able to see all three.
+async function runFacts(project: Project, run: Operation) {
+  const declared = Array.isArray(run.plan?.source?.artifacts) ? run.plan.source.artifacts as Array<{ path: string }> : [];
+  const output: string | undefined = (run.plan as any)?.output;
+  const files: Array<{ path: string; present: boolean; bytes: number }> = [];
+  for (const artifact of declared) {
+    let present = false, bytes = 0;
+    if (output && typeof artifact.path === 'string') {
+      const file = await confined(project.root, path.join(output, artifact.path), true).catch(() => null);
+      const stat = file ? await fs.lstat(file).catch(() => null) : null;
+      if (stat?.isFile()) { present = true; bytes = stat.size; }
+    }
+    files.push({ path: artifact.path, present, bytes });
+  }
+  const inventory = (run.plan as any)?.completion;
+  const completion = inventory ? await fs.lstat(path.join(project.root, inventory)).then(stat => stat.isFile(), () => false) : false;
+  return {
+    operationId: run.operationId,
+    action: run.action,
+    execution: run.execution,
+    delivery: run.delivery,
+    acceptedAt: run.acceptedAt,
+    author: run.principal.startsWith('agent:') ? 'Agent' : run.principal === 'operator' ? 'Operator' : run.principal.startsWith('browser:') ? 'Person' : run.principal,
+    declared: files,
+    missing: files.filter(file => !file.present).map(file => file.path),
+    completion: completion ? 'present' as const : 'absent' as const,
+    integrity: (run.integrity?.state ?? 'unchecked') as 'unchecked' | 'declared' | 'incomplete' | 'verified' | 'not-applicable',
+    domain: (run.domain?.state ?? 'unchecked') as 'unchecked' | 'checked',
+    script: typeof run.plan?.code === 'string' ? digest(run.plan.code) : null,
+    // The path stays out of this summary on purpose; its digest is enough to group
+    // the submissions of one file into a retry chain.
+    sourceKey: typeof (run.plan?.source as { path?: unknown } | undefined)?.path === 'string' ? digest((run.plan.source as { path: string }).path).slice(0, 16) : null,
+    hasStderr: Number(run.native?.stderr?.retained_bytes ?? 0) > 0
+  };
+}
 const validators = Object.fromEntries(Object.entries(operations).map(([k, v]) => [k, ajv.compile<any>(v)]));
 // A schema path is not advice. Turn the common shapes of refusal into the edit the
 // caller should make, so fixing a request does not require reading the JSON Schema.
@@ -492,16 +534,7 @@ export class RhoService {
       const all = await requests.all();
       const runs = [...all].sort((l, r) => r.acceptedAt.localeCompare(l.acceptedAt));
       return {
-        runs: runs.slice(0, limit).map(run => ({
-          operationId: run.operationId,
-          action: run.action,
-          execution: run.execution,
-          delivery: run.delivery,
-          acceptedAt: run.acceptedAt,
-          author: run.principal.startsWith('agent:') ? 'Agent' : run.principal === 'operator' ? 'Operator' : run.principal.startsWith('browser:') ? 'Person' : run.principal,
-          artifacts: (run.plan?.source?.artifacts ?? []).map((artifact: any) => artifact.path),
-          hasStderr: Number(run.native?.stderr?.retained_bytes ?? 0) > 0
-        })),
+        runs: await Promise.all(runs.slice(0, limit).map(run => runFacts(p, run))),
         total: runs.length,
         truncated: runs.length > limit
       };
