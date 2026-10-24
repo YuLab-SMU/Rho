@@ -210,7 +210,9 @@ export function Workspace({ composition, snapshot, client, onAbout, contextTarge
   return <FrameProvider value={frame}><HeaderSlotContext.Provider value={setHeaderTarget}><section className="workspace" aria-label="Layout">
     {mapChipTarget && frame && createPortal(<MapPlacement slot="title" inline />, mapChipTarget)}
     <MapPlacement slot="top" />
-    <div className="workspace-stage" hidden={whole}>
+    {/* The whole-task form is a band above the work, not a replacement for it: a
+        person can read the map and still act on the artifact underneath. */}
+    <div className="workspace-stage">
     {contextTarget && feedbackContextActive && feedbackSource && feedbackAllowed && feedbackEntry && snapshot.feedback?.draftDocumentId && createPortal(feedbackLimit ? <section className="unavailable" role="status"><h3>Close a view before opening feedback</h3><p>Existing views and input are kept within this layout's view limit.</p></section> : <feedbackEntry.View key={[snapshot.project.id, snapshot.feedback.taskId, feedbackSource, principalId].join(':')} viewId={'feedback:' + feedbackSource} view={{ id: 'feedback:' + feedbackSource, component: feedbackEntry.component, version: feedbackEntry.componentVersion, props: { title: 'Your question', taskId: snapshot.feedback.taskId, sourceSelectionScope: { kind: 'shared', id: feedbackSource } }, bindings: { draft: { kind: 'live-document', documentId: snapshot.feedback.draftDocumentId } } }} projectId={snapshot.project.id} snapshot={snapshot} client={client} active principalId={principalId} contextTarget={null} feedbackConfiguration={{ ...snapshot.feedback, draftDocumentId: snapshot.feedback.draftDocumentId }} />, contextTarget)}
     {!composition.views.length ? <div className="empty"><h2>No views in this layout</h2><p>The saved layout is empty. No view is created automatically.</p></div> :
       narrow ? <>

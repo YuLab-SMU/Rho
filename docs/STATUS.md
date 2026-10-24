@@ -80,7 +80,8 @@ other files of that same execution as links, so a figure and its table are one
 click apart instead of two unrelated tabs. The panel separates declared / on disk /
 verified / domain, lists what the run registered, shows the submission chain of the
 analysis file with each attempt's code digest, and states that no execution
-establishes a statistical result.
+establishes a statistical result. The whole-task form is a band above the work, so a
+person reads the map and still acts on the artifact under it.
 
 Asking a question now carries the person's own words. "Ask about this" opens a
 one-line composer; sending opens the project's own `questions.md` through the
@@ -91,7 +92,7 @@ the time; the words stay in the project as an ordinary document.
 
 Checks: Rho 104/104 (`RHO_CORE_BINARY` set; the eight failures without it are the
 missing Core binary, not the change) and `npm run check:contracts` clean. Browser
-acceptance ran 38 checks on a byte-identical copy of the real `work/agent-exp-2215`
+acceptance ran 41 checks on a byte-identical copy of the real `work/agent-exp-2215`
 project (its writer lock is held by an earlier service) at 1440 and 768, including
 restart: question, both failed runs, artifact provenance, the sibling jump, the
 written question and its fetch receipt all return from owner state. Evidence:
@@ -118,7 +119,7 @@ checks and installed person (9), execution/MCP (5) and U1 (23) checks. The
 [accepted combination](progressive-acceptance.json) records source identities,
 budgets and the responsive-renderer check; [remaining scope](UNVERIFIED.md).
 
-Updated: 2026-10-22. **Phases 1–5 selected grades flow:** [installed native acceptance](HEADLESS.md#installed-native-grades-acceptance-phase-5) now covers two actual Claude Code / Westlake HPC DeepSeek business sessions and two restricted presentation sessions. Base tables appear before presenters start; original-session feedback, human edits, versioned outputs and explicit replies survive the selected faults. The external offline candidate passed 32 installed checks, 34 real-model assertions, 14 browser/restart checks and 95 domain/identity assertions against AC01–AC21. Success: 77 model tool calls, 1,098,713 input tokens including cache and 29,705 output tokens; failed-trial calls and observed usage lower bounds are retained separately. Source checks remain Rho 63/63, Plugins 45/45; Agent 0.4.3, Documents/Tables/Annotations 0.4.1/0.4.2/0.4.1; Core unchanged. This bounded acceptance excludes same-project multi-task, full teaching-design acceptance and official distribution. Phase 1–5 source is committed; no registry publication or signing has been performed.
+Updated: 2026-10-22. **Phases 1–5 selected grades flow:** [installed native acceptance](HEADLESS.md#installed-native-grades-acceptance-phase-5) covers two actual Claude Code / Westlake HPC DeepSeek business sessions and two restricted presentation sessions; base tables appear before presenters start, and original-session feedback, human edits, versioned outputs and explicit replies survive the selected faults. The offline candidate passed 32 installed checks, 34 real-model assertions, 14 browser/restart checks and 95 domain/identity assertions against AC01–AC21 (77 model tool calls; failed-trial calls and usage lower bounds retained separately). Source checks then Rho 63/63, Plugins 45/45. This bounded acceptance excludes same-project multi-task, full teaching-design acceptance and official distribution; no registry publication or signing has been performed.
 
 ## Item frame and Agent map
 
@@ -129,7 +130,10 @@ items with its own kind/state vocabulary (`task.map.declare`); Rho interprets on
 an optional term role, and every entry draws its body inside Rho's frame. The Agent map is a Rho-owned registry entry importing only the frame contract; its
 reference, strip, trail, whole-task and compare forms share `task.map.present`.
 Pins win, Agent changes are attributed and revertible, and Agent form changes inside
-`agentFormIntervalMs` merge into one suggestion.
+`agentFormIntervalMs` merge into one suggestion. Reads only observe. Rho reserves the
+tones that mean a fact it established (`verified`, `failed`, `unknown`): an item
+declaring one falls back to the quiet tone its role earns, so an Agent "done" never
+carries the mark Rho uses for verified bytes.
 
 Tables and Documents draw their own bodies in this frame following
 [04 · 插件形态](https://app.paper.design/file/01M5HG6R8RBC33N84S245J0YXT/p-8-0).
@@ -147,11 +151,10 @@ read per key, at most 50. Paper boards remain pending user review.
 The earlier UI pause followed review of the gap from the original Paper experience;
 phases 2–5 now have bounded acceptance and committed source. The
 [teaching-case handoff](TEACHING-CASE-HANDOFF.md) maps the grades-mean question to
-that journey, fixed data, reusable code, owner gaps and pending frontend/Agent
-acceptance; the full teaching journey and user design acceptance remain pending.
-Documents/Tables editing, exact reads, own undo, revert and paging remain reusable.
-[U2 evidence](U2-UI-ACCEPTANCE.md) retains its bounded engineering checks, which do
-not accept the teaching experience. The UI contract remains `0.1-draft`.
+that journey; the full teaching journey and user design acceptance remain pending.
+Documents/Tables editing, exact reads, own undo, revert and paging stay reusable.
+[U2 evidence](U2-UI-ACCEPTANCE.md) retains bounded engineering checks, which do not
+accept the teaching experience. The UI contract remains `0.1-draft`.
 
 ## U1 browser shell candidate
 
@@ -171,28 +174,25 @@ grouped commands, plugin discovery and unavailable retained views.
 
 ## Headless collaboration extension
 
-The additive v2 extension now selects nine owners, including Annotations. Project
-capability configuration, shipped Skills and live MCP filtering share the same
-HTTP owners. Structured composition transactions/undo, protected views and
-caller/view/shared selections are implemented. Documents/Tables validate frozen
-feedback anchors; Annotations owns submitted messages and explicit replies. Agent
-contexts distinguish preparation, tool fetch and explicit linked response.
-DOM-free snapshot/event reconciliation and explicit format-3 archives preserve
-collaboration without native replay; older exports reject lossy representation.
-See [Collaboration](COLLABORATION.md) for contracts, limits and executable checks.
+The additive v2 extension selects nine owners, including Annotations. Project
+capability configuration, shipped Skills and live MCP filtering share the same HTTP
+owners. Structured composition transactions/undo, protected views and
+caller/view/shared selections are implemented; Documents/Tables validate frozen
+feedback anchors and Annotations owns submitted messages and explicit replies. Agent
+contexts distinguish preparation, tool fetch and explicit linked response. DOM-free
+snapshot/event reconciliation and format-3 archives preserve collaboration without
+native replay. See [Collaboration](COLLABORATION.md) for contracts, limits and checks.
 
 Source checks: 24 Rho tests and 14 Plugins tests pass. Fixed Full and six-owner
 Collaboration-minimal npm installations outside the checkouts both pass the
-deterministic real stdio MCP/HTTP and actual Claude Code 2.1.302 scenarios, with
-zero Host starts and native dispatches. Independent owner installations and both
-existing reduced combinations also pass. Installed live HTTP/SSE checks cover
-dual observers, restart, cursor gaps and injected publication/backlog boundaries.
-Separate installed explicit R execution covers one native dispatch,
-close-without-cancel and unknown outcome after owned Host loss. The accepted
-public Core binary/digest is unchanged; current Core checkout commits are not
-selected. [Collaboration acceptance](COLLABORATION-ACCEPTANCE.md) freezes the
-source/package identities and limits: headless collaboration is accepted, not UI.
-The earlier eight-owner candidate below retains its historical identity.
+deterministic real stdio MCP/HTTP and actual Claude Code 2.1.302 scenarios, with zero
+Host starts and native dispatches, as do independent owner installations and both
+reduced combinations. Installed live HTTP/SSE checks cover dual observers, restart,
+cursor gaps and injected publication/backlog boundaries; separate installed explicit
+R execution covers one native dispatch, close-without-cancel and unknown outcome
+after owned Host loss. [Collaboration acceptance](COLLABORATION-ACCEPTANCE.md)
+freezes the source/package identities and limits: headless collaboration is accepted,
+not UI. The earlier eight-owner candidate below retains its historical identity.
 
 ## Historical application baseline
 

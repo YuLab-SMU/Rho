@@ -47,3 +47,4 @@
 .map-compare-step.differs { background: transparent; border: 1.5px solid var(--color-ink, #15191b); color: var(--color-ink, #15191b); }
 .map-compare-step.missing { border-style: dashed; color: var(--color-meta, #6b737a); }
 .map-in-layout { padding: 12px 16px; height: 100%; overflow: auto; }
+.tone-settled > .map-mark, .map-step.tone-settled .map-mark { background: var(--color-control-border, #c3c9c6); }

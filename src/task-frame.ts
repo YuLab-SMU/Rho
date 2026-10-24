@@ -27,9 +27,15 @@ export function term(map: Pick<TaskMapState, 'vocabulary'>, group: keyof Vocabul
   return Object.hasOwn(map.vocabulary[group], id) ? map.vocabulary[group][id] : { label: id };
 }
 export function roleOf(map: Pick<TaskMapState, 'vocabulary'>, item: Pick<TaskItem, 'state'>) { return term(map, 'states', item.state).role ?? ''; }
+// Rho reserves the tones that mean a fact Rho established. An item is the Agent's
+// own account of its work, so a declared "verified" is not a verification: it falls
+// back to the role's tone, and "done" is quiet rather than green. The Agent keeps
+// every other word it likes.
+export const systemTones = ['verified', 'failed', 'unknown'] as const;
 export function toneOf(map: Pick<TaskMapState, 'vocabulary'>, item: Pick<TaskItem, 'state'>) {
   const t = term(map, 'states', item.state);
-  return t.tone ?? ({ working: 'agent', waiting: 'waiting', done: 'verified', unknown: 'unknown', planned: 'planned', stopped: 'neutral' } as Record<string, string>)[t.role ?? ''] ?? 'neutral';
+  const declared = t.tone && !(systemTones as readonly string[]).includes(t.tone) ? t.tone : undefined;
+  return declared ?? ({ working: 'agent', waiting: 'waiting', done: 'settled', unknown: 'unknown', planned: 'planned', stopped: 'neutral' } as Record<string, string>)[t.role ?? ''] ?? 'neutral';
 }
 
 // Forms are declared by each entry with a scale; zooming walks that scale.

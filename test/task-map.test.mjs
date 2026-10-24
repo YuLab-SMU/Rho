@@ -51,7 +51,10 @@ test('the Agent declares its own kinds and states; people observe them without s
     assert.equal(roleOf(map, map.items[1]), 'working'); assert.equal(roleOf(map, map.items[3]), 'waiting');
     // Undeclared words still render as themselves; unknown tones fall back to neutral drawing.
     assert.equal(term(map, 'kinds', 'plot').label, 'plot'); assert.equal(term(map, 'states', 'queued').label, 'queued');
-    assert.equal(toneOf(map, map.items[2]), 'lilac'); assert.equal(toneOf(map, map.items[0]), 'verified');
+    assert.equal(toneOf(map, map.items[2]), 'lilac', 'the Agent keeps its own word for tone');
+    // A declared system tone is not a Rho fact: an item that says "verified" is the
+    // Agent's account, drawn with the quiet tone its role earns.
+    assert.equal(toneOf(map, map.items[0]), 'settled', 'an Agent claim cannot borrow the verified mark');
     assert.deepEqual(map.next, ['volcano']);
     // Reading is observation: no version change, no Host, no native work.
     assert.equal((await f.person('task.map.read', {})).version, 1);
