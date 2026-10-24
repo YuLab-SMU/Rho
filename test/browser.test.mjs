@@ -339,3 +339,28 @@ test('platformKind reads both the deprecated and replacement spellings', async (
   assert.equal(platformKind(undefined), 'other');
   assert.equal(platformKind(''), 'other');
 });
+
+test("a browser sees what the project's own Agents did, and is told each time they do something", async () => {
+  const f = await fixture();
+  try {
+    await fs.mkdir(path.join(f.root, 'work'));
+    const p = await f.operator.call('project.open', { path: 'work' }), other = await f.operator.call('project.create', { name: 'other' });
+    const grant = async (projectId, session) => new RhoClient(await f.service.agentConnection(projectId, session, path.join(f.root, session + '.json'), ['document.open', 'document.read', 'document.edit']));
+    const agent = await grant(p.id, 'in-project'), elsewhere = await grant(other.id, 'elsewhere');
+    const pairing = await f.service.browser.createPairing();
+    const browser = new BrowserClient({ url: f.service.url, ...(await (await f.pair(pairing.code)).json()).value });
+    const before = await browser.call('observation.snapshot', { projectId: p.id });
+    assert.deepEqual(before.activity.entries, []);
+    // A read changes no owner state, yet it is an event and an entry.
+    const d = await agent.call('document.open', { path: 'notes.md' });
+    await assert.rejects(agent.call('document.edit', { documentId: d.id, expectedVersion: d.version + 1, edits: [{ from: 0, to: 0, insert: 'x' }], undoGroup: 'late' }), e => e.error.kind === 'stale');
+    await elsewhere.call('document.open', { path: 'notes.md' });
+    const after = await browser.call('observation.snapshot', { projectId: p.id });
+    assert.deepEqual(after.activity.entries.map(e => [e.method, e.outcome, e.errorKind ?? null]), [['document.open', 'returned', null], ['document.edit', 'rejected', 'stale']]);
+    assert.equal(new Set(after.activity.entries.map(e => e.principal)).size, 1);
+    assert.ok(after.activity.entries.every(e => !('input' in e) && !('token' in e) && !('content' in e)));
+    assert.ok(after.cursor > before.cursor);
+    const events = JSON.parse(await fs.readFile(path.join(p.root, '.rho/rho/events.json'), 'utf8')).events.filter(e => e.type === 'activity.changed');
+    assert.deepEqual(events.map(e => e.subject), ['document.open', 'document.edit']);
+  } finally { await f.cleanup(); }
+});

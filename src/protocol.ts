@@ -188,6 +188,8 @@ const observationSnapshot = response({
   taskMap: contract.taskMapStateSchema,
   annotations: { type: 'array', items: { type: 'object', additionalProperties: true }, maxItems: 128 },
   contexts: { type: 'array', items: { type: 'object', additionalProperties: true }, maxItems: 128 },
+  // The calls of the Agents bound to this project, as the activity record keeps them.
+  activity: obj({ cursor: integer, retainedFrom: positive, entries: { type: 'array', maxItems: 256, items: { type: 'object', additionalProperties: true, properties: { cursor: positive, principal: text, method: text, at: text, outcome: { enum: ['returned', 'rejected'] } }, required: ['cursor', 'principal', 'method', 'at', 'outcome'] } } }, ['cursor', 'retainedFrom', 'entries']),
   selection: { anyOf: [selection, { type: 'null' }] },
   bindings: array(contract.bindingSchema),
   cursor: integer,
@@ -311,4 +313,4 @@ export const errorKinds = base.errorKinds;
 export const errorSchema = base.definitions.error;
 export const errorEnvelope = obj({ apiVersion: { const: '2.0' }, ok: { const: false }, error: errorSchema });
 export const responseEnvelope = (method: string) => obj({ apiVersion: { const: '2.0' }, ok: { const: true }, value: responses[method] });
-export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed', 'feedback.changed'])], operations, responses, descriptions: orderedDescriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };
+export const protocol = { ...base, apiVersion: '2.0', schemaVersion: 2, transport: 'HTTP JSON POST /api/v2/{operation}; GET /api/v2/events', eventTypes: [...new Set([...base.eventTypes, 'project.sources.changed', 'capability.changed', 'view.closed', 'interaction.selection.changed', 'annotation.changed', 'context.changed', 'workspace.restored', 'task.routing.changed', 'binding.native.changed', 'feedback.changed', 'task.map.changed', 'feedback.changed', 'activity.changed'])], operations, responses, descriptions: orderedDescriptions, definitions, errorEnvelope, status: 'One versioned contract. Retained operations stay observable through the current API; requests this contract does not accept receive a typed refusal rather than a second dialect.' };

@@ -45,7 +45,9 @@ test('authenticated HTTP and real stdio MCP share author undo, targeted revert a
     assert.equal(history.entries.find(e => e.changeId === 'agent').author, actualAgent);
     const before = await tool('document.change.read', { documentId: d.id, targetChangeId: 'agent' });
     assert.equal(before.before.content, 'human 中文\n'); assert.equal(before.after.content, d.content);
-    assert.equal((await call('observation.snapshot')).cursor, cursor, 'history reads emit no document mutation');
+    // The Agent's reads are recorded as activity, an event of their own; no document changed.
+    const since = JSON.parse(await fs.readFile(path.join(p.root, '.rho/rho/events.json'), 'utf8')).events.filter(e => e.cursor > cursor);
+    assert.deepEqual([...new Set(since.map(e => e.type))], ['activity.changed'], 'history reads emit no document mutation');
     const own = { projectId: p.id, documentId: d.id, expectedVersion: d.version, expectedRevision: d.revision, changeId: 'human-undo' };
     const sdk = new BrowserClient({ url: service.url, token: service.adminToken }, async (...args) => { const reply = await fetch(...args); await reply.text(); throw new TypeError('lost acknowledgement'); });
     await assert.rejects(sdk.call('document.undoOwn', own), /lost acknowledgement/);

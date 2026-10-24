@@ -4,8 +4,8 @@
   "schemaVersion": 2,
   "shared": {
     "path": "operations/shared.json",
-    "bytes": 75007,
-    "sha256": "eaad766a02d2eda666d1ef5fa40e7a3070d76a4e15521e83d1d6d18e49b36591"
+    "bytes": 75031,
+    "sha256": "3bfdc40b00905945f487d816f91d20bc5db4246727812e93f9aee0bc1c671921"
   },
   "operations": {
     "action.cancel": {
@@ -293,8 +293,8 @@
     "observation.snapshot": {
       "summary": "observation.snapshot",
       "path": "operations/observation.snapshot.json",
-      "bytes": 153152,
-      "sha256": "3385ffbd8b52ae690e8d3c21d265a48c569272a60593f0e9c908bcb2565facd2"
+      "bytes": 154631,
+      "sha256": "db9bc13bbd9ef2c2cfbcc7cfd8421767ac45205f4542160304d3450f2771c3c4"
     },
     "project.create": {
       "summary": "project.create",

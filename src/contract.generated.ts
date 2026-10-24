@@ -6740,6 +6740,20 @@ export interface ObservationSnapshotOutput {
   contexts: {
     [k: string]: unknown;
   }[];
+  activity: {
+    cursor: number;
+    retainedFrom: number;
+    /**
+     * @maxItems 256
+     */
+    entries: {
+      cursor: number;
+      principal: string;
+      method: string;
+      at: string;
+      outcome: 'returned' | 'rejected';
+    }[];
+  };
   selection: {
     resource: {
       id: string;

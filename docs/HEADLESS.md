@@ -139,7 +139,7 @@ const check = await rho.call('requirements.check', {
 | `session.grant`, `binding.open/close/list/activity` | Operator-selected method grant, external binding metadata and bounded tool receipts. |
 | `composition.put/read`, `view.close` | Registered entry/version, props and binding checks. Uninstalled UI is explicitly unavailable. |
 | `workspace.save/export/restore` | Drafts/undo, bytes/provenance, selections and composition intent; native execution is not replayed. |
-| `observation.snapshot`, `GET /api/v2/events` | Current facts and finite event cursors. Gaps require a new snapshot. |
+| `observation.snapshot`, `GET /api/v2/events` | Current facts and finite event cursors. Gaps require a new snapshot. `activity` holds the recorded calls of Agents granted on the project (method, time, outcome, refusal kind, recorded ids; no inputs), and each recorded call emits `activity.changed`, including reads and requests the schema refused. |
 
 ## Execute an explicit project
 

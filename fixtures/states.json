@@ -14470,6 +14470,11 @@
           },
           "annotations": [],
           "contexts": [],
+          "activity": {
+            "cursor": 0,
+            "retainedFrom": 1,
+            "entries": []
+          },
           "selection": null,
           "bindings": [],
           "cursor": 0,

@@ -4338,6 +4338,64 @@
         },
         "maxItems": 128
       },
+      "activity": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "retainedFrom": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "entries": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "cursor": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "principal": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "method": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "at": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "outcome": {
+                  "enum": [
+                    "returned",
+                    "rejected"
+                  ]
+                }
+              },
+              "required": [
+                "cursor",
+                "principal",
+                "method",
+                "at",
+                "outcome"
+              ]
+            }
+          }
+        },
+        "required": [
+          "cursor",
+          "retainedFrom",
+          "entries"
+        ]
+      },
       "selection": {
         "anyOf": [
           {
@@ -4520,6 +4578,7 @@
       "taskMap",
       "annotations",
       "contexts",
+      "activity",
       "selection",
       "bindings",
       "cursor",

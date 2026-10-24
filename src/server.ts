@@ -447,8 +447,21 @@ export class RhoService {
   }
   private async recordActivity(principal: Principal, method: string, body: any, result: any, errorKind?: string) {
     if (!principal.projectId || method === 'binding.activity') return;
-    const p = await this.state.project(body.projectId, principal);
-    await this.plugins.project(p.root, p.id).agent?.recordActivity(principal.id, method, body, result, errorKind);
+    const p = await this.state.project(body.projectId, principal), agent = this.plugins.project(p.root, p.id).agent;
+    if (!agent) return;
+    await agent.recordActivity(principal.id, method, body, result, errorKind);
+    // Reads change no owner state, so this is the only event a browser gets for them.
+    await this.emit(p, 'activity.changed', method, principal.id);
+  }
+  // What the project's Agents did, for the person's screen (docs/INTERACTION-PLAN.md S7):
+  // only principals whose grant names this project, only the fields the activity record
+  // keeps. A grant is the scope; an Agent need not have opened a binding.
+  private async projectActivity(p: Project) {
+    const agent = this.plugins.project(p.root, p.id).agent;
+    if (!agent) return { cursor: 0, retainedFrom: 1, entries: [] };
+    const granted = new Set(this.state.principals.filter(x => x.projectId === p.id && x.kind !== 'browser').map(x => x.id));
+    const all = await readJson<any>(path.join(await this.dataDir(p), 'activity.json'), { cursor: 0, entries: [] });
+    return { cursor: all.cursor, retainedFrom: all.entries[0]?.cursor ?? all.cursor + 1, entries: all.entries.filter((e: any) => granted.has(e.principal)) };
   }
   private async dataDir(p: Project) { return stateDirectory(p.root, '.rho/rho'); }
   // The discriminated union is what gives every branch below a typed body: after the
@@ -849,7 +862,7 @@ export class RhoService {
       }
       const result = await owners.need('agent').readContext(b.contextId, principal.id); await this.emit(p, 'context.changed', result.contextId, principal.id); if (result.principal !== principal.id) await this.emit(p, 'context.changed', result.contextId, result.principal); return result;
     }
-    if (method === 'observation.snapshot') return { project: p, catalog: await capabilities.catalog(principal), documents: await owners.documentSummaries(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), feedback: await routing.feedbackConfiguration().then(async configuration => { const route = await routing.read(); return configuration ? { taskId: route.taskId, compositionId: route.compositionId, taskVersion: route.version, targetBindingId: route.feedbackOwnerBindingId, draftDocumentId: configuration.draftDocumentId, relatedDocumentId: configuration.relatedDocumentId } : null; }), presentation: await routing.read().then(async route => route ? { taskId: route.taskId, pending: (await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).state()).pending ?? null, witnesses: await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).witnesses() } : null), interactions: await interactions.list(principal.id), taskMap: await new TaskMap(p, this.config.taskMap).read(), annotations: await owners.retainedAnnotations(), contexts: await owners.agent?.contextStates(principal.id) ?? [], selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: owners.documents?.limits ?? {}, r: this.plugins.optional('r') ? { ...this.plugins.need('r').executionLimits, ...this.config.r } : {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
+    if (method === 'observation.snapshot') return { project: p, catalog: await capabilities.catalog(principal), documents: await owners.documentSummaries(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), feedback: await routing.feedbackConfiguration().then(async configuration => { const route = await routing.read(); return configuration ? { taskId: route.taskId, compositionId: route.compositionId, taskVersion: route.version, targetBindingId: route.feedbackOwnerBindingId, draftDocumentId: configuration.draftDocumentId, relatedDocumentId: configuration.relatedDocumentId } : null; }), presentation: await routing.read().then(async route => route ? { taskId: route.taskId, pending: (await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).state()).pending ?? null, witnesses: await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).witnesses() } : null), interactions: await interactions.list(principal.id), taskMap: await new TaskMap(p, this.config.taskMap).read(), annotations: await owners.retainedAnnotations(), contexts: await owners.agent?.contextStates(principal.id) ?? [], activity: await this.projectActivity(p), selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: owners.documents?.limits ?? {}, r: this.plugins.optional('r') ? { ...this.plugins.need('r').executionLimits, ...this.config.r } : {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
     throw new Fault('unavailable', 'This catalog operation has not been installed.', { operation: method });
   }
   private async events(p: Project) { return readJson<any>(path.join(await this.dataDir(p), 'events.json'), { cursor: 0, events: [] }); }
