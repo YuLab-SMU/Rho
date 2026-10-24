@@ -92,7 +92,9 @@ the document owner, appends the text conditionally, and creates a `context.creat
 referencing that text range, the exact artifact version, and — when rows of that
 version are selected — those entities, read from the view-scoped channel so rows
 picked elsewhere never attach. The view reports "Prepared" until the owner records a
-fetch, then "Fetched by the Agent" with the time.
+fetch, then "Fetched by the Agent" with the time. Work accepted after that moment is
+counted beside the receipt as a time fact, never as a claim that it answers the
+question; every run here predates the fetch, so acceptance covers the negative case.
 
 Checks: Rho 114/114 with `RHO_CORE_BINARY` set (the ten new unit tests cover the
 reading of runs, artifacts and checks: declared vs present vs verified, an unknown
@@ -278,9 +280,7 @@ traceback, anchored feedback) and W1a–W5a continuation/error states, with the
 presentation/animation and C10 annotations remain proposals.
 
 The design keeps distinct: feedback draft, context available but unfetched, a
-tool-fetch receipt, observed work and an explicitly linked response. Source loss keeps
-the s2 rows and read time, missing charts keep a table alternative, spec conflicts keep
-the draft, and unknown observations keep the original request and partial outputs. The earlier
+tool-fetch receipt, observed work and an explicitly linked response. The earlier
 ["v2 (inquiry)"](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-7-0) and
 ["npm WebUI"](https://app.paper.design/file/01M4X13H2YQGGR8NQXE8W0QDQY/p-5-0) pages
 stay as flow/state reference. Their 1440/1280-wide boards do not prove live layout,

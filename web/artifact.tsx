@@ -40,6 +40,9 @@ export function ArtifactSource({ resource, viewId, snapshot, client, onOpenView 
   const chosen = mine?.selection;
   const selected = chosen?.resource?.id === resource.id && chosen.resource.version === resource.version ? chosen.entities ?? [] : [];
   const fetched = asked ? snapshot.contexts?.find(context => (context as { contextId?: string }).contextId === asked) as { delivery?: string; fetchedAt?: string } | undefined : undefined;
+  // Work accepted after the Agent read this is a time fact, not a claim that it
+  // answers the question: Rho shows the order and lets the person judge the link.
+  const since = fetched?.fetchedAt && runs ? runs.filter(candidate => candidate.acceptedAt > fetched.fetchedAt!) : [];
   const allowed = (method: string) => snapshot.catalog.operations.some(operation => operation.method === method && operation.state === 'available' && operation.authorized);
   const canAsk = allowed('context.create');
   // Writing the question down needs the document owner and a way to open a file.
@@ -103,7 +106,7 @@ export function ArtifactSource({ resource, viewId, snapshot, client, onOpenView 
       </span>}
       <span className="artifact-source-right">
         {asked ? <span className="artifact-receipt" role="status">{fetched?.delivery === 'tool-fetched'
-          ? `Fetched by the Agent${fetched.fetchedAt ? ' at ' + new Date(fetched.fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : ''}`
+          ? `Fetched by the Agent${fetched.fetchedAt ? ' at ' + new Date(fetched.fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : ''}${since.length ? ` · ${since.length} run${since.length === 1 ? '' : 's'} accepted since` : ''}`
           : 'Prepared · the Agent has not fetched it yet'}</span>
           : canWrite ? <button className="artifact-ask" disabled={asking} onClick={() => setComposing(true)}>{selected.length ? `Ask about ${selected.length} selected row${selected.length === 1 ? '' : 's'}` : 'Ask about this'}</button>
           : canAsk ? <button className="artifact-ask" disabled={asking} onClick={() => void ask()}>{asking ? 'Preparing…' : 'Point the Agent here'}</button>
