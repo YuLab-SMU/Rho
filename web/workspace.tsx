@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { DockviewReact, themeLight, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps, type IDockviewPanelHeaderProps } from 'dockview-react';
 import { createPortal } from 'react-dom';
 import type { BrowserClient, CompositionSummary, ViewDescription, WorkspaceSnapshot } from '../src/browser.js';
@@ -11,7 +11,7 @@ import { ArtifactSource } from './artifact.js';
 import { boundResource } from './executions.js';
 import 'dockview/dist/styles/dockview.css';
 
-interface ViewParams { view: ViewDescription; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; renderAllowed?: boolean; headerTarget?: HTMLElement | null; compositionId: string; compositionVersion: number; onRequestFeedback?: (viewId: string) => void }
+interface ViewParams { view: ViewDescription; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; renderAllowed?: boolean; headerTarget?: HTMLElement | null; compositionId: string; compositionVersion: number; onRequestFeedback?: (viewId: string) => void; onOpenView?: (viewId: string) => void }
 const clientEpoch = crypto.randomUUID();
 type Binding = { documentId?: string; id?: string; version?: string | number };
 const title = (view: ViewDescription) => String(view.props.title ?? view.props.label ?? view.component);
@@ -67,7 +67,7 @@ function OwnerView({ params, active }: { params: ViewParams; active: boolean }) 
     // Which execution produced this version, and what checks it did or did not pass,
     // belongs to the object and is drawn once by the shell above the owner's body.
     const resource = boundResource(view, snapshot.resources);
-    const source = resource ? <ArtifactSource resource={resource} viewId={view.id} snapshot={snapshot} client={params.client} /> : null;
+    const source = resource ? <ArtifactSource resource={resource} viewId={view.id} snapshot={snapshot} client={params.client} onOpenView={params.onOpenView} /> : null;
     if (item) return <div className="framed-view"><ViewItemHeader item={item} />{source}<div className="framed-view-body">{body}</div></div>;
     return source ? <div className="framed-view">{source}<div className="framed-view-body">{body}</div></div> : body;
   }
@@ -113,6 +113,9 @@ export function Workspace({ composition, snapshot, client, onAbout, contextTarge
   for (const id of mounted.current) if (!composition.views.some(v => v.id === id)) mounted.current.delete(id);
   for (const view of composition.views) if (mounted.current.size < maxMountedViews - (contextTarget && feedbackContextActive && feedbackSource && !feedbackLimit ? 1 : 0) && registry.entries.some(e => e.component === view.component)) mounted.current.add(view.id);
   const [api, setApi] = useState<DockviewApi | null>(null);
+  // Switching to a view that already exists: an artifact names the other files of
+  // its execution and the shell brings that view forward rather than opening another.
+  const showView = useCallback((id: string) => { setActive(id); api?.getPanel(id)?.api.setActive(); }, [api]);
   const arranged = useRef('');
   const [active, setActive] = useState(composition.views[0]?.id ?? '');
   const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 767px)').matches);
@@ -133,7 +136,7 @@ export function Workspace({ composition, snapshot, client, onAbout, contextTarge
     const current = api, previousActive = current.activePanel?.id;
     for (const panel of current.panels) if (!composition.views.some(v => v.id === panel.id)) current.removePanel(panel);
     for (const view of composition.views) {
-      const panel = current.getPanel(view.id), params = { view, snapshot, client, onAbout, contextTarget: feedbackContextActive ? null : contextTarget, principalId, renderAllowed: mounted.current.has(view.id), headerTarget, compositionId: composition.compositionId, compositionVersion: composition.version, onRequestFeedback: requestFeedback };
+      const panel = current.getPanel(view.id), params = { view, snapshot, client, onAbout, contextTarget: feedbackContextActive ? null : contextTarget, principalId, renderAllowed: mounted.current.has(view.id), headerTarget, compositionId: composition.compositionId, compositionVersion: composition.version, onRequestFeedback: requestFeedback, onOpenView: showView };
       if (panel) { panel.api.updateParameters(params); panel.api.setTitle(title(view)); }
       // New views join the existing group as tabs, in layout order, rather than opening a new group.
       else current.addPanel({ id: view.id, component: 'owner', tabComponent: 'retained', title: title(view), params, inactive: true, ...(current.panels.length ? { position: { referencePanel: current.panels.at(-1)!.id } } : {}) });
@@ -215,7 +218,7 @@ export function Workspace({ composition, snapshot, client, onAbout, contextTarge
           {composition.views.map((v, index) => <button key={v.id} id={tabId + index} role="tab" style={v.presentation?.emphasis === 'highlight' ? { boxShadow: 'inset 0 -2px var(--color-accent)', color: 'var(--color-accent)' } : undefined} aria-selected={v === selected} aria-controls={tabId + 'panel'} tabIndex={v === selected ? 0 : -1} onClick={() => setActive(v.id)}>{title(v)}</button>)}
         </div>
         <HeaderSlot />
-        <div id={tabId + 'panel'} className="mobile-view" role="tabpanel" aria-labelledby={tabId + composition.views.indexOf(selected!)}>{selected && <OwnerView params={{ view: selected, snapshot, client, onAbout, contextTarget: feedbackContextActive ? null : contextTarget, principalId, renderAllowed: true, headerTarget, compositionId: composition.compositionId, compositionVersion: composition.version, onRequestFeedback: requestFeedback }} active />}</div>
+        <div id={tabId + 'panel'} className="mobile-view" role="tabpanel" aria-labelledby={tabId + composition.views.indexOf(selected!)}>{selected && <OwnerView params={{ view: selected, snapshot, client, onAbout, contextTarget: feedbackContextActive ? null : contextTarget, principalId, renderAllowed: true, headerTarget, compositionId: composition.compositionId, compositionVersion: composition.version, onRequestFeedback: requestFeedback, onOpenView: showView }} active />}</div>
       </> :
         <div className="dock-container"><DockviewReact rightHeaderActionsComponent={HeaderSlot} theme={themeLight} className="rho-dock" components={components} tabComponents={tabs} onReady={onReady} disableDnd disableFloatingGroups /></div>}
     </div>

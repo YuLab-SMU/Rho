@@ -449,3 +449,79 @@ dialog.context-sheet .danger-link { min-height: 40px; margin-top: 0; font-size: 
   .page-section { animation: arrive 160ms ease-out; }
   @keyframes arrive { from { opacity: .6; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 }
+
+/* View chrome Rho draws around any owner body: provenance, the execution panel and
+   the question composer. These live here, not in the workspace chunk, because the
+   project page opens the same panel without loading that chunk. */
+/* Where this version came from. One achromatic line: the shell keeps grey and a
+   hairline, and the only coloured mark is the outcome dot it already uses. */
+.artifact-source { display: flex; align-items: center; gap: 16px; flex-shrink: 0; min-height: 30px; padding: 0 14px; border-bottom: 1px solid var(--color-divider); background: var(--color-well); }
+.artifact-origin { display: inline-flex; align-items: center; gap: 5px; min-height: 0; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--color-muted); font-size: 11.5px; line-height: 15px; text-align: left; }
+.artifact-origin:hover { color: var(--color-ink); }
+.artifact-origin .state { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.artifact-origin svg { flex-shrink: 0; color: var(--color-meta); }
+.artifact-source-right { display: inline-flex; align-items: center; margin-left: auto; flex-shrink: 0; }
+.artifact-ask { min-height: 0; padding: 0; border: 0; background: transparent; color: var(--color-accent); font-size: 11.5px; line-height: 15px; }
+.artifact-ask:hover:not(:disabled) { text-decoration: underline; }
+.artifact-receipt { color: var(--color-meta); font-size: 11.5px; line-height: 15px; }
+.artifact-problem { padding: 6px 14px; border-bottom: 1px solid var(--color-divider); color: var(--color-failed); font-size: 11.5px; line-height: 15px; }
+.execution-panel { width: min(560px, 92vw); max-height: 84vh; padding: 0; border: 1px solid var(--color-hairline); border-radius: var(--radius-panel); background: var(--color-surface); color: var(--color-ink); overflow: auto; }
+.execution-panel::backdrop { background: #15191b26; }
+.execution-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 20px 12px; }
+.execution-head h2 { font-size: 15px; line-height: 20px; font-family: var(--font-mono); font-weight: 500; }
+.execution-head p { display: flex; align-items: center; gap: 6px; margin-top: 5px; color: var(--color-meta); font-size: 12px; line-height: 16px; }
+.execution-facts { display: flex; flex-direction: column; flex-wrap: nowrap; gap: 7px; padding: 0 20px 14px; }
+.execution-facts > div { display: grid; grid-template-columns: 96px 1fr; gap: 12px; }
+.execution-facts dt { color: var(--color-meta); font-size: 12px; line-height: 17px; }
+.execution-facts dd { font-size: 12px; line-height: 17px; }
+.execution-files { margin: 0 20px; padding: 8px 0; border-top: 1px solid var(--color-divider); border-bottom: 1px solid var(--color-divider); list-style: none; }
+.execution-files li { display: flex; align-items: center; gap: 10px; min-height: 26px; font-size: 12px; line-height: 16px; }
+.execution-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 11.5px; }
+.execution-file-here { color: var(--color-meta); font-size: 11px; }
+.execution-lineage { padding: 14px 20px 0; }
+.execution-lineage h3 { color: var(--color-meta); font-size: 11px; line-height: 14px; font-weight: 400; letter-spacing: .02em; }
+.execution-lineage ol { margin-top: 8px; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.execution-lineage li { display: flex; align-items: center; gap: 10px; font-size: 12px; line-height: 16px; }
+.execution-lineage li[aria-current="true"] { font-weight: 500; }
+.execution-lineage-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.execution-lineage-at { color: var(--color-meta); font-family: var(--font-mono); font-size: 11px; }
+.execution-lineage-code { color: var(--color-meta); font-family: var(--font-mono); font-size: 11px; flex-shrink: 0; }
+.execution-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px 0; }
+.execution-version { color: var(--color-meta); font-family: var(--font-mono); font-size: 11px; }
+.execution-limit { padding: 12px 20px 18px; color: var(--color-meta); font-size: 11px; line-height: 16px; }
+.map-chip-slot { display: inline-flex; align-items: center; min-width: 0; margin-left: auto; }
+.map-chip-slot:empty { display: none; }
+.workspace-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.workspace-stage[hidden] { display: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .rho-item { transition: box-shadow .2s ease, border-color .2s ease; }
+}
+/* The other files of the same execution: one quiet line of links beside the
+   provenance, so related evidence is reachable without hunting tabs. */
+.artifact-siblings { display: inline-flex; align-items: center; gap: 10px; min-width: 0; overflow: hidden; }
+.artifact-sibling, .artifact-sibling-plain { flex-shrink: 0; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--color-muted); font-size: 11.5px; line-height: 15px; }
+.artifact-sibling:hover { color: var(--color-ink); text-decoration: underline; }
+.artifact-sibling-plain { color: var(--color-meta); }
+.execution-written { padding: 14px 20px 0; }
+.execution-written h3 { color: var(--color-meta); font-size: 11px; line-height: 14px; font-weight: 400; letter-spacing: .02em; }
+.execution-written ul { margin-top: 8px; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.execution-written li { display: flex; align-items: center; gap: 10px; font-size: 12px; line-height: 16px; }
+.execution-open { min-height: 0; padding: 0; border: 0; background: transparent; color: var(--color-ink); font-family: var(--font-mono); font-size: 11.5px; text-align: left; }
+.execution-open:hover { text-decoration: underline; }
+.execution-open-plain { color: var(--color-muted); font-family: var(--font-mono); font-size: 11.5px; }
+.execution-open-plain.current { color: var(--color-ink); }
+.execution-written-kind { margin-left: auto; color: var(--color-meta); font-size: 11px; }
+/* A failure on the project page opens the same panel an artifact does. */
+.overview-attention-row { display: flex; align-items: center; justify-content: flex-start; gap: 6px; width: 100%; min-height: 0; padding: 2px 0; border: 0; background: transparent; font-weight: 400; text-align: left; }
+.overview-attention-row svg { margin-left: auto; color: var(--color-meta); flex-shrink: 0; }
+.overview-attention-row:hover .state { color: var(--color-ink); }
+/* A question about this exact version. The words live in the project's own notes
+   document; this row only collects them. */
+.artifact-composer { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex-shrink: 0; padding: 8px 14px; border-bottom: 1px solid var(--color-divider); background: var(--color-well); }
+.artifact-composer input { flex: 1 1 320px; min-width: 0; height: 30px; padding: 0 10px; border: 1px solid var(--color-control-border); border-radius: var(--radius-small); background: var(--color-surface); color: var(--color-ink); font-size: 12.5px; line-height: 16px; }
+.artifact-composer input:focus { outline: none; box-shadow: var(--focus-ring); border-color: var(--color-accent); }
+.artifact-send { min-height: 30px; padding: 0 12px; border: 1px solid var(--color-accent); border-radius: var(--radius-small); background: var(--color-accent); color: #fff; font-size: 12.5px; line-height: 16px; font-weight: 500; }
+.artifact-send:disabled { opacity: .5; }
+.artifact-cancel { min-height: 30px; padding: 0 8px; border: 0; background: transparent; color: var(--color-muted); font-size: 12.5px; }
+.artifact-composer-note { flex: 1 1 100%; color: var(--color-meta); font-size: 11px; line-height: 15px; }

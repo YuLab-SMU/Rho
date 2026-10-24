@@ -80,7 +80,9 @@ function App() {
   }
   function chooseProject(next: ProjectSummary) {
     if (next.id !== project?.id) { setSnapshot(null); setCompositionId(''); setPluginId(''); }
-    setOverview(false); setPluginReturn(false);
+    // The project opens on its own question, not on whichever layout was last open:
+    // a person arriving should see what the work is and where it stands.
+    setOverview(true); setPluginReturn(false);
     sessionStorage.setItem(projectKey, next.id); setProject(next); setScreen('project');
     if (matchMedia('(max-width: 767px)').matches) setNavigation(false);
   }

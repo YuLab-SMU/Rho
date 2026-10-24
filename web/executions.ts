@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { BrowserClient, ResourceSummary } from '../src/browser.js';
+import type { BrowserClient, ResourceSummary, WorkspaceSnapshot } from '../src/browser.js';
 import { producerOf, type RunFacts } from '../src/execution-facts.js';
 
 // The project's executions, read from the one operation that reports them. Views and
@@ -51,6 +51,21 @@ export function boundResource(view: { bindings?: Record<string, unknown> }, reso
     if (resource) return resource;
   }
   return undefined;
+}
+
+// Where each registered artifact version is already on screen: the layout and view
+// that show it. Opening a sibling artifact means switching to a view that exists,
+// not creating one.
+export interface Place { compositionId: string; viewId: string }
+export function viewPlaces(snapshot: WorkspaceSnapshot) {
+  const places = new Map<string, Place>();
+  for (const composition of snapshot.compositions) for (const view of composition.views) {
+    for (const binding of Object.values(view.bindings ?? {})) {
+      const id = (binding as { id?: string })?.id;
+      if (id && !places.has(id)) places.set(id, { compositionId: composition.compositionId, viewId: view.id });
+    }
+  }
+  return places;
 }
 
 // What a reader needs before trusting one artifact: which execution produced this

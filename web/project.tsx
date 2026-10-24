@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { BrowserClient, CapabilityCatalog, CompositionSummary, ProjectSummary, ResourceSummary, WorkspaceSnapshot } from '../src/browser.js';
 import { attention, executionWord, integrityWord, producerOf, readRuns, results, shortPath } from '../src/execution-facts.js';
 import { term } from '../src/task-frame.js';
+import { ExecutionPanel } from './artifact.js';
 import { useRuns } from './executions.js';
 import { projectName, SourceFolders, when } from './home.js';
 import { Icon, type IconName } from './icons.js';
@@ -66,7 +67,9 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
   // shows the next action beside each finding.
   const [doctor, setDoctor] = useState<Array<{ id: string; state: 'ok' | 'warn' | 'fail'; detail: string; remedy: string }> | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
-  const { runs, problem: runsProblem } = useRuns(client, project.id);
+  const { runs, problem: runsProblem, readAgain } = useRuns(client, project.id);
+  // A failed attempt is opened from here with the same panel an artifact uses.
+  const [inspecting, setInspecting] = useState<string | null>(null);
   async function diagnose() {
     setDiagnosing(true); setError('');
     try { setDoctor((await client.call('project.doctor', { projectId: project.id }, new AbortController().signal)).checks); }
@@ -107,6 +110,7 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
   }
   const artifacts = runs ? results(files, runs) : [];
   const checked = runs ? runs.some(run => run.domain === 'checked') : false;
+  const inspected = runs?.find(run => run.operationId === inspecting);
   return <section className="overview" aria-labelledby="overview-title">
     <header className="overview-header">
       <h1 id="overview-title">{projectName(project)}</h1>
@@ -123,7 +127,12 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
       </p>}
       {runsProblem && <p className="field-hint project-problem" role="alert">{runsProblem}</p>}
       {watching.length > 0 && <ul className="overview-attention">
-        {watching.map(item => <li key={item.kind + item.operationId}><span className={'state ' + item.kind}>{item.text}</span></li>)}
+        {watching.map(item => <li key={item.kind + item.operationId}>
+          <button className="overview-attention-row" onClick={() => setInspecting(item.operationId)}>
+            <span className={'state ' + item.kind}>{item.text}</span>
+            <Icon name="chevron" size={11} stroke={1.8} />
+          </button>
+        </li>)}
       </ul>}
     </section>
     {artifacts.length > 0 && <section className="overview-section" aria-labelledby="overview-artifacts">
@@ -235,5 +244,6 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
         </> : <p className="field-hint"><button disabled={diagnosing} onClick={() => void diagnose()}>{diagnosing ? 'Checking…' : 'Check this project…'}</button> What Rho can and cannot do here, with the next action for anything wrong.</p>}
       </section>
     </details>
+    {inspected && <ExecutionPanel run={inspected} runs={runs ?? []} onClose={() => setInspecting(null)} onReadAgain={readAgain} />}
   </section>;
 }
