@@ -31,6 +31,14 @@ export function ArtifactSource({ resource, viewId, snapshot, client, onOpenView 
   // the project and references the exact range, so the Agent receives the question
   // and the object version together, and the words stay readable afterwards.
   const [composing, setComposing] = useState(false), [question, setQuestion] = useState('');
+  // The rows this view has selected. A selection is scoped to the view that made it
+  // and only means anything at the version it was made on, so rows picked elsewhere
+  // or on another version are never attached to this object.
+  type Channel = { scope?: { kind?: string; id?: string }; selection?: { resource?: { id: string; version: string }; entities?: string[] } | null };
+  const channels = (snapshot.interactions ?? []) as Channel[];
+  const mine = channels.find(channel => channel.scope?.id === resource.id && channel.scope?.kind === 'shared') ?? channels.find(channel => channel.scope?.id === viewId);
+  const chosen = mine?.selection;
+  const selected = chosen?.resource?.id === resource.id && chosen.resource.version === resource.version ? chosen.entities ?? [] : [];
   const fetched = asked ? snapshot.contexts?.find(context => (context as { contextId?: string }).contextId === asked) as { delivery?: string; fetchedAt?: string } | undefined : undefined;
   const allowed = (method: string) => snapshot.catalog.operations.some(operation => operation.method === method && operation.state === 'available' && operation.authorized);
   const canAsk = allowed('context.create');
@@ -57,7 +65,14 @@ export function ArtifactSource({ resource, viewId, snapshot, client, onOpenView 
       // A conditional edit: this exact revision, this exact buffer version.
       const edited = await client.call('document.edit', { projectId, documentId: document.id, expectedVersion: document.version, expectedRevision: document.revision, changeId: changeId + '-edit', edits: [{ from: document.content.length, to: document.content.length, insert }], undoGroup: changeId }, AbortSignal.timeout(30000));
       const from = document.content.length + separator.length;
-      const result = await client.call('context.create', { projectId, changeId, expectedVersion: 0, document: { documentId: document.id, version: edited.version, from, to: from + words.length }, resource: { id: resource.id, version: resource.version } }, AbortSignal.timeout(30000));
+      const result = await client.call('context.create', {
+        projectId, changeId, expectedVersion: 0,
+        document: { documentId: document.id, version: edited.version, from, to: from + words.length },
+        resource: { id: resource.id, version: resource.version },
+        // Selected rows travel with the object, so the Agent reads the question about
+        // these rows of this version rather than the file in general.
+        ...(selected.length ? { entities: selected } : {})
+      }, AbortSignal.timeout(30000));
       setAsked(result.contextId);
       try { sessionStorage.setItem(memoryKey, result.contextId); } catch { /* the receipt is still shown for this session */ }
       setComposing(false); setQuestion('');
@@ -90,7 +105,7 @@ export function ArtifactSource({ resource, viewId, snapshot, client, onOpenView 
         {asked ? <span className="artifact-receipt" role="status">{fetched?.delivery === 'tool-fetched'
           ? `Fetched by the Agent${fetched.fetchedAt ? ' at ' + new Date(fetched.fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }) : ''}`
           : 'Prepared · the Agent has not fetched it yet'}</span>
-          : canWrite ? <button className="artifact-ask" disabled={asking} onClick={() => setComposing(true)}>Ask about this</button>
+          : canWrite ? <button className="artifact-ask" disabled={asking} onClick={() => setComposing(true)}>{selected.length ? `Ask about ${selected.length} selected row${selected.length === 1 ? '' : 's'}` : 'Ask about this'}</button>
           : canAsk ? <button className="artifact-ask" disabled={asking} onClick={() => void ask()}>{asking ? 'Preparing…' : 'Point the Agent here'}</button>
           : null}
       </span>
@@ -102,7 +117,9 @@ export function ArtifactSource({ resource, viewId, snapshot, client, onOpenView 
         onKeyDown={event => { if (event.key === 'Enter') void send(); if (event.key === 'Escape') { setComposing(false); setQuestion(''); } }} />
       <button className="artifact-send" disabled={asking || !question.trim()} onClick={() => void send()}>{asking ? 'Sending…' : 'Send'}</button>
       <button className="artifact-cancel" disabled={asking} onClick={() => { setComposing(false); setQuestion(''); }}>Cancel</button>
-      <span className="artifact-composer-note">Kept in questions.md · the Agent gets this exact version</span>
+      <span className="artifact-composer-note">{selected.length
+        ? `Kept in questions.md · the Agent gets this version and the ${selected.length} selected row${selected.length === 1 ? '' : 's'}`
+        : 'Kept in questions.md · the Agent gets this exact version'}</span>
     </div>}
     {askProblem && <p className="artifact-problem" role="alert">{askProblem}</p>}
     {open && <ExecutionPanel run={origin} runs={runs} snapshot={snapshot} focus={{ path: resource.path, version: resource.version }} onClose={() => setOpen(false)} onReadAgain={readAgain} onOpenView={id => { onOpenView?.(id); setOpen(false); }} />}

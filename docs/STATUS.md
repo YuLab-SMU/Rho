@@ -83,15 +83,16 @@ result. The whole-task form is a band above the work.
 
 A task-map item may name the exact artifact version it produced (`item.artifact
 {id, version}` in Rho-owned `task.map.declare`). The shell resolves it against
-registered resources and draws a link in the item's footer and on the project page; a
-stale version draws nothing rather than a guess. That is the map's route into the
-work, and it comes from the Agent's statement.
+registered resources and links it in the item's footer and on the project page; a
+stale version draws nothing rather than a guess.
 
-Asking a question carries the person's own words. "Ask about this" opens a one-line
-composer; sending opens the project's `questions.md` through the document owner,
-appends the text conditionally, and creates a `context.create` referencing both that
-text range and the exact artifact version. The view reports "Prepared" until the
-owner records a fetch, then "Fetched by the Agent" with the time.
+Asking a question carries the person's own words and their selection. "Ask about
+this" opens a one-line composer; sending opens the project's `questions.md` through
+the document owner, appends the text conditionally, and creates a `context.create`
+referencing that text range, the exact artifact version, and — when rows of that
+version are selected — those entities, read from the view-scoped channel so rows
+picked elsewhere never attach. The view reports "Prepared" until the owner records a
+fetch, then "Fetched by the Agent" with the time.
 
 Checks: Rho 114/114 with `RHO_CORE_BINARY` set (the ten new unit tests cover the
 reading of runs, artifacts and checks: declared vs present vs verified, an unknown
@@ -99,10 +100,11 @@ outcome never read as done, one row per artifact name with earlier versions coun
 one file's submissions chained); the eight failures without that variable are the
 missing Core binary, not the change; `npm run check:contracts` is clean. One earlier
 run failed a single test and did not reproduce in five attempts, recorded rather than
-waved away. Browser acceptance ran 45 checks on a byte-identical copy of the real
+waved away. Browser acceptance ran 48 checks on a byte-identical copy of the real
 `work/agent-exp-2215` project (its writer lock is held by an earlier service) at 1440
 and 768, including restart: question, both failed runs, artifact
-provenance, the sibling jump, the written question and its fetch receipt, and an
+provenance, the sibling jump, the written question and its fetch receipt, a question narrowed to two selected rows,
+and an
 Agent-declared map naming real artifact versions that open, all come back from owner
 state. Evidence: `work/acceptance-v3-*/evidence-v3`.
 
@@ -175,12 +177,11 @@ Create project adds existing folders without making same-name directories, Overv
 can add further folders, and named workspaces keep owner state separately. Files and
 Documents resolve selected source references with distinct identities, shared alias
 buffers, conditional saves and source-containment checks; saved R script planning can
-read selected sources without changing execution identities. Then-current checks: Rho 66/66, Plugins 46/46, 23 shell checks at
-1600/1280/1024/768/390 on Chrome 155 with zero Host starts or native submissions, plus
-the installed browser flow and multi-source reads. [Fixed candidate](ui-acceptance/u1-source-folders.json)
+read selected sources without changing execution identities. Then-current checks: Rho 66/66, Plugins 46/46, 23 shell checks at 1600–390 on Chrome
+155 with zero Host starts, plus the installed browser flow and multi-source reads. [Fixed candidate](ui-acceptance/u1-source-folders.json)
 records identities; user design acceptance, full input/accessibility, other-platform
 folder dialogs and signed distribution remain pending. The shell keeps Agent-opened links, same-origin assets, scoped tab credentials,
-observation after refresh/restart, grouped commands and plugin discovery.
+observation after restart and grouped commands.
 
 ## Headless collaboration extension
 
@@ -273,8 +274,8 @@ holds W1–W5 (inquiry map, live finding composition, editable-spec explainer,
 traceback, anchored feedback) and W1a–W5a continuation/error states, with the
 [flow index](DESIGN-PRIORITIES.md#w1w5-能力组合动线索引), the
 [state index](DESIGN-PRIORITIES.md#w1aw5a-续接与异常状态索引) and the
-[version/feedback ledger](DESIGN-PRIORITIES.md#w-系列资源版本与反馈台账). UI entries
-are unimplemented; C9 presentation/animation and C10 annotations remain proposals.
+[version/feedback ledger](DESIGN-PRIORITIES.md#w-系列资源版本与反馈台账); C9
+presentation/animation and C10 annotations remain proposals.
 
 The design keeps distinct: feedback draft, context available but unfetched, a
 tool-fetch receipt, observed work and an explicitly linked response. Source loss keeps
