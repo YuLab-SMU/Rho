@@ -59,6 +59,8 @@ body { background: var(--color-canvas); }
 .mark.run.failed { border-color: var(--color-failed); background: var(--color-failed); color: #fff; }
 .mark.run.running { border-color: var(--color-accent); color: var(--color-accent); border-style: dashed; animation: spin 2.4s linear infinite; }
 .mark.run.unknown { border-style: dotted; }
+.mark.question { border-radius: 50%; font: 600 10px/1 var(--font-ui); border: 1.3px solid var(--color-muted); color: var(--color-muted); }
+.mark.question.fetched { border-color: var(--color-accent); color: var(--color-accent); }
 
 .glyph { width: 12px; height: 12px; fill: var(--color-accent); flex-shrink: 0; }
 .glyph[data-placement='pending'] { opacity: .45; animation: breathe 1.4s ease-in-out infinite; }
@@ -121,6 +123,17 @@ pre.output.failed { background: #fbeceb; color: #7e2522; }
 .table tr { cursor: pointer; }
 .table tbody tr:hover { background: var(--color-row-hover); }
 .table tr[aria-selected='true'] { background: var(--color-accent-soft); box-shadow: inset 2px 0 var(--color-accent); }
+.table tr[data-asked] td:first-child { box-shadow: inset 2px 0 var(--color-muted); }
+.questions { flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; padding: 0 20px 12px; }
+.question { display: flex; align-items: baseline; gap: 10px; min-width: 0; animation: arrive .35s ease-out; }
+.question .mark { align-self: center; }
+.question .text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.question .receipt { margin-left: auto; font: 12px/16px var(--font-mono); color: var(--color-meta); white-space: nowrap; }
+.question[data-state='fetched'] .receipt { color: var(--color-accent); }
+.ask { display: flex; align-items: center; gap: 8px; }
+.ask input { flex: 1; min-width: 0; height: 28px; padding: 0 10px; border: 1px solid var(--color-hairline); border-radius: var(--radius-small); background: var(--color-surface); font: inherit; color: var(--color-ink); }
+.ask button { min-height: 28px; padding: 0 12px; }
+.digest .quoted { display: inline-block; max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .figure { display: block; max-width: min(100%, 1040px); margin: 0 auto; padding: 8px 20px 24px; object-fit: contain; min-height: 0; }
 
 .digest { flex-shrink: 0; margin: 12px 16px 0; border: 1px solid var(--color-hairline); border-radius: var(--radius-panel); background: var(--color-surface); box-shadow: 0 6px 24px #15191b14; animation: arrive .35s ease-out; }
@@ -167,6 +180,8 @@ pre.output.failed { background: #fbeceb; color: #7e2522; }
 .tick.rejected { fill: #e0484a; }
 .tick.ok { fill: #4fb487; }
 .tick.failed { fill: #e0484a; }
+.tick.person { fill: #e9a23b; }
+.gap { fill: #6f7a7e; }
 .move.agent { fill: #6f8ff5; }
 .move.person { fill: #e9a23b; }
 .person { fill: #e9a23b; }

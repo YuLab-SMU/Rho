@@ -21,6 +21,14 @@ npm run check:replay          # types, then the rule tests (test/expression.test
 - **Content.** All nine versions of `analysis.R` (each checked against its recorded
   digest), the two `findings.md` versions, the R stderr and stdout, the three CSVs,
   and run 5's figure. Runs 1 and 2 also produced figures; only run 5's image is kept.
+- **Questions, after the run.** Facts #61–65, 3.5 hours later: two questions a browser
+  asked about run 5's results (the figure, and rows A and D of effects.csv), each
+  written into `questions.md` first, and the one fetch of the first question. They
+  come from the project's contexts, document history and Rho's activity record.
+  Both principals were scripts (`acceptance-v3.mjs` driving a real browser, and an
+  Agent session it granted as `acceptance-fetch`), not a person or a model.
+- **Who.** Every fact carries the principal that made it. The run's Agent is the one
+  granted exactly the methods its connection lists.
 
 `build-trace.mjs` regenerates `trace/` from that directory, which is ignored by
 Git and present only on the machine that recorded it.
@@ -28,7 +36,8 @@ Git and present only on the machine that recorded it.
 ## What is simulated
 
 - **The person.** The scenarios and every click are actions recorded at the step
-  where they happen. Nothing here comes from a real person watching this run.
+  where they happen. Nothing here comes from a real person watching this run. A
+  question asked in the replay records no context, so nothing can fetch it.
 - **The shell.** It is drawn with Rho's tokens but is not the WebUI: no service,
   no dockview, no plugin entries. The rules in `src/expression.ts` are meant for the
   real shell; this page only gives them something to drive.
@@ -40,6 +49,7 @@ Git and present only on the machine that recorded it.
 
 One tick per call: tall for writes and runs, short for reads, faint for catalog
 reads. Red is either a rejection (short) or a failed run (tall); green is a run that
-exited 0. The line under the ticks marks when the main area moved, blue for the
+exited 0; amber is a fact some other principal made. A grey rule marks ten minutes or
+more with nothing recorded. The line under the ticks marks when the main area moved, blue for the
 Agent and amber for the person. Amber dots are the person's actions.
 Keys: ← → step, space plays.

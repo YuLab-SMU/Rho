@@ -4,13 +4,13 @@
   "experiment": "agent-exp-2215",
   "project": "airquality",
   "from": "2026-10-24T14:37:00.487Z",
-  "to": "2026-10-24T14:50:35.572Z"
+  "to": "2026-10-24T18:19:36.537Z"
  },
  "facts": [
   {
    "seq": 0,
    "label": "index-root",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.index",
    "outcome": "returned",
    "at": null,
@@ -23,7 +23,7 @@
   {
    "seq": 1,
    "label": "index-r",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.index",
    "outcome": "returned",
    "at": null,
@@ -36,7 +36,7 @@
   {
    "seq": 2,
    "label": "resolve-submit-p1",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.resolve",
    "outcome": "returned",
    "at": null,
@@ -49,7 +49,7 @@
   {
    "seq": 3,
    "label": "resolve-submit-p1",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.resolve",
    "outcome": "returned",
    "at": null,
@@ -62,7 +62,7 @@
   {
    "seq": 4,
    "label": "resolve-submit-p2",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.resolve",
    "outcome": "returned",
    "at": null,
@@ -75,7 +75,7 @@
   {
    "seq": 5,
    "label": "resolve-submit-p2-32k",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.resolve",
    "outcome": "rejected",
    "at": null,
@@ -92,7 +92,7 @@
   {
    "seq": 6,
    "label": "resolve-submit-knownrefs",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.resolve",
    "outcome": "returned",
    "at": null,
@@ -105,7 +105,7 @@
   {
    "seq": 7,
    "label": "resolve-docs",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.resolve",
    "outcome": "returned",
    "at": null,
@@ -118,7 +118,7 @@
   {
    "seq": 8,
    "label": "open-analysis.R",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.open",
    "outcome": "returned",
    "at": "2026-10-24T14:37:00.487Z",
@@ -132,7 +132,7 @@
   {
    "seq": 9,
    "label": "edit-analysis.R",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.edit",
    "outcome": "returned",
    "at": "2026-10-24T14:37:55.760Z",
@@ -146,7 +146,7 @@
   {
    "seq": 10,
    "label": "save-analysis.R",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.save",
    "outcome": "returned",
    "at": "2026-10-24T14:38:03.431Z",
@@ -160,7 +160,7 @@
   {
    "seq": 11,
    "label": "submit-analysis",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.submit",
    "outcome": "returned",
    "at": "2026-10-24T14:38:12.840Z",
@@ -175,7 +175,7 @@
   {
    "seq": 12,
    "label": "resolve-lookup",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.resolve",
    "outcome": "returned",
    "at": null,
@@ -188,7 +188,7 @@
   {
    "seq": 13,
    "label": "lookup-1",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.lookup",
    "outcome": "returned",
    "at": "2026-10-24T14:38:42.847Z",
@@ -202,7 +202,7 @@
   {
    "seq": 14,
    "label": "resolve-artifact-check",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.resolve",
    "outcome": "returned",
    "at": null,
@@ -215,7 +215,7 @@
   {
    "seq": 15,
    "label": "artifact-check",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "artifact.check",
    "outcome": "returned",
    "at": null,
@@ -236,7 +236,7 @@
   {
    "seq": 16,
    "label": "resolve-data-page",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.resolve",
    "outcome": "returned",
    "at": null,
@@ -249,7 +249,7 @@
   {
    "seq": 17,
    "label": "data-page-effects",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "data.page",
    "outcome": "returned",
    "at": null,
@@ -265,7 +265,7 @@
   {
    "seq": 18,
    "label": "data-page-tests",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "data.page",
    "outcome": "returned",
    "at": null,
@@ -281,7 +281,7 @@
   {
    "seq": 19,
    "label": "submit-analysis",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.submit",
    "outcome": "returned",
    "at": null,
@@ -296,7 +296,7 @@
   {
    "seq": 20,
    "label": "edit2-spec",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.edit",
    "outcome": "rejected",
    "at": null,
@@ -311,7 +311,7 @@
   {
    "seq": 21,
    "label": "edit3-labels",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.edit",
    "outcome": "rejected",
    "at": null,
@@ -326,7 +326,7 @@
   {
    "seq": 22,
    "label": "edit2-spec",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.edit",
    "outcome": "returned",
    "at": "2026-10-24T14:40:52.911Z",
@@ -340,7 +340,7 @@
   {
    "seq": 23,
    "label": "edit3-labels",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.edit",
    "outcome": "returned",
    "at": "2026-10-24T14:40:52.999Z",
@@ -354,7 +354,7 @@
   {
    "seq": 24,
    "label": "save-analysis-v2",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.save",
    "outcome": "returned",
    "at": "2026-10-24T14:41:03.714Z",
@@ -368,7 +368,7 @@
   {
    "seq": 25,
    "label": "submit-analysis",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.submit",
    "outcome": "rejected",
    "at": null,
@@ -383,7 +383,7 @@
   {
    "seq": 26,
    "label": "submit-analysis",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.submit",
    "outcome": "returned",
    "at": "2026-10-24T14:41:21.520Z",
@@ -398,7 +398,7 @@
   {
    "seq": 27,
    "label": "lookup-2",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.lookup",
    "outcome": "returned",
    "at": "2026-10-24T14:41:29.778Z",
@@ -412,7 +412,7 @@
   {
    "seq": 28,
    "label": "artifact-check-2",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "artifact.check",
    "outcome": "returned",
    "at": null,
@@ -433,7 +433,7 @@
   {
    "seq": 29,
    "label": "edit4-margin",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.edit",
    "outcome": "returned",
    "at": "2026-10-24T14:42:23.783Z",
@@ -447,7 +447,7 @@
   {
    "seq": 30,
    "label": "save-analysis-v3",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.save",
    "outcome": "returned",
    "at": "2026-10-24T14:42:30.013Z",
@@ -461,7 +461,7 @@
   {
    "seq": 31,
    "label": "submit-analysis",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.submit",
    "outcome": "returned",
    "at": "2026-10-24T14:42:36.134Z",
@@ -476,7 +476,7 @@
   {
    "seq": 32,
    "label": "artifact-check-3",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "artifact.check",
    "outcome": "rejected",
    "at": null,
@@ -491,7 +491,7 @@
   {
    "seq": 33,
    "label": "lookup-3",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.lookup",
    "outcome": "returned",
    "at": "2026-10-24T14:42:39.293Z",
@@ -505,7 +505,7 @@
   {
    "seq": 34,
    "label": "lookup-3b",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.lookup",
    "outcome": "returned",
    "at": null,
@@ -520,7 +520,7 @@
   {
    "seq": 35,
    "label": "resolve-output",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.resolve",
    "outcome": "returned",
    "at": null,
@@ -533,7 +533,7 @@
   {
    "seq": 36,
    "label": "output-stderr",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.output",
    "outcome": "returned",
    "at": null,
@@ -549,7 +549,7 @@
   {
    "seq": 37,
    "label": "edit5-destray",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.edit",
    "outcome": "rejected",
    "at": null,
@@ -564,7 +564,7 @@
   {
    "seq": 38,
    "label": "edit5-destray",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.edit",
    "outcome": "rejected",
    "at": null,
@@ -579,7 +579,7 @@
   {
    "seq": 39,
    "label": "resolve-edit-again",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.resolve",
    "outcome": "returned",
    "at": null,
@@ -592,7 +592,7 @@
   {
    "seq": 40,
    "label": "edit5-destray",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.edit",
    "outcome": "returned",
    "at": "2026-10-24T14:44:17.905Z",
@@ -606,7 +606,7 @@
   {
    "seq": 41,
    "label": "save-analysis-v4",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.save",
    "outcome": "returned",
    "at": "2026-10-24T14:44:30.770Z",
@@ -620,7 +620,7 @@
   {
    "seq": 42,
    "label": "submit-analysis",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.submit",
    "outcome": "returned",
    "at": "2026-10-24T14:44:35.241Z",
@@ -635,7 +635,7 @@
   {
    "seq": 43,
    "label": "lookup-4",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.lookup",
    "outcome": "returned",
    "at": "2026-10-24T14:44:39.407Z",
@@ -649,7 +649,7 @@
   {
    "seq": 44,
    "label": "output-stderr-4",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.output",
    "outcome": "returned",
    "at": null,
@@ -665,7 +665,7 @@
   {
    "seq": 45,
    "label": "edit6-fix-par",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.edit",
    "outcome": "returned",
    "at": "2026-10-24T14:44:59.189Z",
@@ -679,7 +679,7 @@
   {
    "seq": 46,
    "label": "edit7-single-devoff",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.edit",
    "outcome": "returned",
    "at": "2026-10-24T14:45:16.384Z",
@@ -693,7 +693,7 @@
   {
    "seq": 47,
    "label": "edit8-margin",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.edit",
    "outcome": "returned",
    "at": "2026-10-24T14:45:46.793Z",
@@ -707,7 +707,7 @@
   {
    "seq": 48,
    "label": "save-analysis-v5",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.save",
    "outcome": "returned",
    "at": "2026-10-24T14:46:00.731Z",
@@ -721,7 +721,7 @@
   {
    "seq": 49,
    "label": "submit-analysis",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.submit",
    "outcome": "returned",
    "at": "2026-10-24T14:46:14.231Z",
@@ -736,7 +736,7 @@
   {
    "seq": 50,
    "label": "lookup-5",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.lookup",
    "outcome": "returned",
    "at": "2026-10-24T14:46:19.389Z",
@@ -750,7 +750,7 @@
   {
    "seq": 51,
    "label": "output-stdout-5",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "action.output",
    "outcome": "returned",
    "at": null,
@@ -766,7 +766,7 @@
   {
    "seq": 52,
    "label": "artifact-check-5",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "artifact.check",
    "outcome": "returned",
    "at": null,
@@ -787,7 +787,7 @@
   {
    "seq": 53,
    "label": "resolve-composition",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.resolve",
    "outcome": "returned",
    "at": null,
@@ -800,7 +800,7 @@
   {
    "seq": 54,
    "label": "compose-figure",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "composition.apply",
    "outcome": "returned",
    "at": "2026-10-24T14:46:43.490Z",
@@ -823,7 +823,7 @@
   {
    "seq": 55,
    "label": "open-findings",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.open",
    "outcome": "returned",
    "at": "2026-10-24T14:48:26.752Z",
@@ -837,7 +837,7 @@
   {
    "seq": 56,
    "label": "edit-findings",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.edit",
    "outcome": "returned",
    "at": "2026-10-24T14:48:32.122Z",
@@ -851,7 +851,7 @@
   {
    "seq": 57,
    "label": "save-findings",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "document.save",
    "outcome": "returned",
    "at": "2026-10-24T14:48:36.632Z",
@@ -865,7 +865,7 @@
   {
    "seq": 58,
    "label": "resolve-taskmap",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "capability.resolve",
    "outcome": "returned",
    "at": null,
@@ -878,7 +878,7 @@
   {
    "seq": 59,
    "label": "task-map",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "task.map.declare",
    "outcome": "returned",
    "at": "2026-10-24T14:49:13.311Z",
@@ -929,7 +929,7 @@
   {
    "seq": 60,
    "label": "task-map-vocab",
-   "actor": "agent",
+   "actor": "agent:98032e9878600a62c3fea6b35d7c5ee2",
    "op": "task.map.declare",
    "outcome": "returned",
    "at": "2026-10-24T14:50:35.572Z",
@@ -998,8 +998,110 @@
      }
     }
    }
+  },
+  {
+   "seq": 61,
+   "label": "ask-figure-1792865962842-edit",
+   "actor": "browser:3e0b3876ca1890fca9920ce0805846ec",
+   "op": "document.edit",
+   "outcome": "returned",
+   "at": "2026-10-24T18:19:22.932Z",
+   "object": "source:questions.md",
+   "effect": {
+    "kind": "edit",
+    "source": "questions.md",
+    "version": 2
+   }
+  },
+  {
+   "seq": 62,
+   "label": "ask-figure-1792865962842",
+   "actor": "browser:3e0b3876ca1890fca9920ce0805846ec",
+   "op": "context.create",
+   "outcome": "returned",
+   "at": "2026-10-24T18:19:22.978Z",
+   "object": "question:70d07e4a",
+   "effect": {
+    "kind": "ask",
+    "question": "question:70d07e4a",
+    "text": "Does the wind adjustment make the remaining temperature effect smaller than D claims?",
+    "target": "artifact:temp-effect.png",
+    "version": "985b7955",
+    "run": 5,
+    "rows": [],
+    "document": {
+     "source": "questions.md",
+     "version": 2
+    }
+   }
+  },
+  {
+   "seq": 63,
+   "label": "ask-figure-1792865962842",
+   "actor": "agent:a5818da2a9d924963d91f0d2ddd9ca5c",
+   "op": "context.read",
+   "outcome": "returned",
+   "at": "2026-10-24T18:19:25.129Z",
+   "object": "question:70d07e4a",
+   "effect": {
+    "kind": "fetched",
+    "question": "question:70d07e4a"
+   }
+  },
+  {
+   "seq": 64,
+   "label": "ask-effects-1792865976458-edit",
+   "actor": "browser:3e0b3876ca1890fca9920ce0805846ec",
+   "op": "document.edit",
+   "outcome": "returned",
+   "at": "2026-10-24T18:19:36.501Z",
+   "object": "source:questions.md",
+   "effect": {
+    "kind": "edit",
+    "source": "questions.md",
+    "version": 3
+   }
+  },
+  {
+   "seq": 65,
+   "label": "ask-effects-1792865976458",
+   "actor": "browser:3e0b3876ca1890fca9920ce0805846ec",
+   "op": "context.create",
+   "outcome": "returned",
+   "at": "2026-10-24T18:19:36.537Z",
+   "object": "question:7d3dbf6a",
+   "effect": {
+    "kind": "ask",
+    "question": "question:7d3dbf6a",
+    "text": "Is the D estimate different from A once rows are counted this way?",
+    "target": "artifact:effects.csv",
+    "version": "1f305e10",
+    "run": 5,
+    "rows": [
+     "A",
+     "D"
+    ],
+    "document": {
+     "source": "questions.md",
+     "version": 3
+    }
+   }
   }
  ],
+ "principals": {
+  "agent:98032e9878600a62c3fea6b35d7c5ee2": {
+   "kind": "agent",
+   "name": "experience-1792852510294"
+  },
+  "browser:3e0b3876ca1890fca9920ce0805846ec": {
+   "kind": "browser",
+   "name": null
+  },
+  "agent:a5818da2a9d924963d91f0d2ddd9ca5c": {
+   "kind": "agent",
+   "name": "acceptance-fetch"
+  }
+ },
  "sources": {
   "findings.md": {
    "versions": {
@@ -1011,6 +1113,9 @@
    },
    "saved": {
     "2": "2026-10-24T14:48:36.632Z"
+   },
+   "authors": {
+    "2": "agent:98032e9878600a62c3fea6b35d7c5ee2"
    }
   },
   "analysis.R": {
@@ -1041,6 +1146,32 @@
     "5": "2026-10-24T14:42:30.013Z",
     "6": "2026-10-24T14:44:30.770Z",
     "9": "2026-10-24T14:46:00.731Z"
+   },
+   "authors": {
+    "2": "agent:98032e9878600a62c3fea6b35d7c5ee2",
+    "3": "agent:98032e9878600a62c3fea6b35d7c5ee2",
+    "4": "agent:98032e9878600a62c3fea6b35d7c5ee2",
+    "5": "agent:98032e9878600a62c3fea6b35d7c5ee2",
+    "6": "agent:98032e9878600a62c3fea6b35d7c5ee2",
+    "7": "agent:98032e9878600a62c3fea6b35d7c5ee2",
+    "8": "agent:98032e9878600a62c3fea6b35d7c5ee2",
+    "9": "agent:98032e9878600a62c3fea6b35d7c5ee2"
+   }
+  },
+  "questions.md": {
+   "versions": {
+    "1": "",
+    "2": "Does the wind adjustment make the remaining temperature effect smaller than D claims?\n",
+    "3": "Does the wind adjustment make the remaining temperature effect smaller than D claims?\n\n\nIs the D estimate different from A once rows are counted this way?\n"
+   },
+   "edited": {
+    "2": "2026-10-24T18:19:22.932Z",
+    "3": "2026-10-24T18:19:36.501Z"
+   },
+   "saved": {},
+   "authors": {
+    "2": "browser:3e0b3876ca1890fca9920ce0805846ec",
+    "3": "browser:3e0b3876ca1890fca9920ce0805846ec"
    }
   }
  },

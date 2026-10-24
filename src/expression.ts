@@ -10,6 +10,8 @@
 //   Connect  source version, run and artifact version are linked by the facts alone;
 //   Reveal   catalog reads, rejected calls and retries wait behind their object;
 //   Revisit  a person coming back gets a digest of what changed, never a replay.
+// Only the Agent's work moves its attention. What a person or another principal records
+// (an edit, a question, a receipt) updates its objects in place.
 // One attention rule decides whether the main area may move: only while the person
 // follows, and at most once per agentPaceMs. Moving never re-versions a view the person
 // made theirs: the Agent's newer version opens beside it, and theirs offers the update.
@@ -31,13 +33,16 @@ export type Effect =
   | { kind: 'verified'; run: number; artifacts: string[] }
   | { kind: 'read'; artifact: string; run: number }
   | { kind: 'layout'; replace: boolean; views: ArtifactRef[] }
-  | { kind: 'items'; question: string; items: DeclaredItem[] };
+  | { kind: 'items'; question: string; items: DeclaredItem[] }
+  | { kind: 'ask'; question: string; text: string; target: string; version: string; run: number; rows: string[]; document: { source: string; version: number } | null }
+  | { kind: 'fetched'; question: string };
 export interface ArtifactRef { artifact: string; run: number }
 export interface DeclaredItem { id: string; kind: string; state: string; title: string; summary?: string }
 export interface Fact {
   seq: number;
   label: string;
-  actor: 'agent';
+  // The principal that made it: `agent:…`, `browser:…` or `operator`.
+  actor: string;
   op: string;
   outcome: 'returned' | 'rejected';
   // A recorded time, or only the recorded times on either side of it.
@@ -52,7 +57,9 @@ export interface Trace {
   format: 'rho.replay-trace/1';
   recorded: { experiment: string; project: string; from: string; to: string };
   facts: Fact[];
-  sources: Record<string, { versions: Record<string, string>; edited: Record<string, string>; saved: Record<string, string> }>;
+  // Who each principal is: its kind, and the name its binding gave it, when there is one.
+  principals: Record<string, { kind: 'agent' | 'browser' | 'operator'; name: string | null }>;
+  sources: Record<string, { versions: Record<string, string>; edited: Record<string, string>; saved: Record<string, string>; authors: Record<string, string> }>;
   runs: Record<string, {
     operationId: string; source: string; sourceVersion: number; declared: string[]; acceptedAt: string;
     exit: number | null; observedAt: string | null; outputs: { stdout?: string; stderr?: string };
@@ -73,7 +80,8 @@ export type PersonIntent =
   | { kind: 'accept'; suggestion: string } | { kind: 'dismiss'; suggestion: string }
   | { kind: 'dismiss-digest' }
   | { kind: 'reveal'; target: string | null }
-  | { kind: 'update'; target: string };
+  | { kind: 'update'; target: string }
+  | { kind: 'ask'; target: string; rows: string[]; text: string };
 // A target names a view by its id. The first view of an object takes the object's id,
 // so naming an object reaches its view. The person acts after seeing fact `at`; -1 is
 // before the first fact.
@@ -91,7 +99,16 @@ export interface ArtifactState {
   versions: { digest: string; runs: number[] }[];
   changedAt: number; touchedAt: number; hidden: number;
 }
-export type ObjectState = SourceState | RunObject | ArtifactState;
+// A question about one version of an object. It stays on that version when newer ones
+// appear. `fetched` is the context's receipt; `responded` needs an explicit link back
+// from the Agent, which no record has yet. A null author is the person at this screen.
+export interface QuestionState {
+  id: string; kind: 'question'; name: string; author: string | null; target: string; version: string; run: number; rows: string[];
+  document: { source: string; version: number } | null;
+  state: 'prepared' | 'fetched' | 'responded'; fetchedBy: string | null; fetchedAt: number | null;
+  changedAt: number; touchedAt: number; hidden: number;
+}
+export type ObjectState = SourceState | RunObject | ArtifactState | QuestionState;
 // A view the Agent's focus opened stays a preview: the next Agent move replaces it in
 // place. The person opening, selecting in or pinning it makes it theirs, and a view of
 // theirs keeps the version it shows until they update it; `newer` is the latest run whose
@@ -106,6 +123,7 @@ export type DigestLine =
   | { kind: 'source'; object: string; from: number | null; to: number }
   | { kind: 'run'; object: string; state: RunState; firstLine: string | null; verified: number }
   | { kind: 'artifact'; object: string; versions: number }
+  | { kind: 'question'; object: string; state: QuestionState['state'] }
   | { kind: 'suggestion'; id: string }
   | { kind: 'items'; count: number };
 export interface Move { seq: number; by: 'agent' | 'person'; view: string | null; rule: 'agent-focus' | 'agent-layout' | 'catch-up' | 'person' | 'accept' }
@@ -186,29 +204,31 @@ function agent(s: Work, trace: Trace, f: Fact) {
   if (f.outcome === 'rejected') { if (object) object.hidden++; else s.hidden.rejected++; return settle(s); }
   const e = f.effect;
   if (!e) return settle(s);
+  const byAgent = trace.principals[f.actor]?.kind === 'agent';
+  const at = (id: string, run: number | null) => byAgent ? focus(s, f, id, run) : settle(s);
   switch (e.kind) {
     case 'catalog': s.hidden.catalog++; return settle(s);
-    case 'open': source(s, e.source, f.seq).version = e.version; return focus(s, f, 'source:' + e.source, null);
-    case 'edit': { const o = source(s, e.source, f.seq); o.version = e.version; o.changedAt = f.seq; return focus(s, f, o.id, null); }
-    case 'save': { const o = source(s, e.source, f.seq); o.savedVersion = e.version; o.changedAt = f.seq; return focus(s, f, o.id, null); }
+    case 'open': source(s, e.source, f.seq).version = e.version; return at('source:' + e.source, null);
+    case 'edit': { const o = source(s, e.source, f.seq); o.version = e.version; o.changedAt = f.seq; return at(o.id, null); }
+    case 'save': { const o = source(s, e.source, f.seq); o.savedVersion = e.version; o.changedAt = f.seq; return at(o.id, null); }
     case 'submit': {
       add<RunObject>(s, { id: 'run:' + e.run, kind: 'run', name: 'Run ' + e.run, run: e.run, source: e.source, sourceVersion: e.sourceVersion, state: 'running', exit: null, firstLine: null, verified: [], changedAt: f.seq, touchedAt: f.seq, hidden: 0 });
-      return focus(s, f, 'run:' + e.run, null);
+      return at('run:' + e.run, null);
     }
     case 'retry': { const run = s.objects['run:' + e.run]; if (run) run.hidden++; s.hidden.retries++; return settle(s); }
     case 'ended': {
       const run = s.objects['run:' + e.run] as RunObject;
       run.exit = e.exit; run.state = e.exit === 0 ? 'completed' : e.exit === null ? 'unknown' : 'failed'; run.changedAt = f.seq;
       if (run.state !== 'completed') escalate(s, run, f.seq);
-      return focus(s, f, run.id, null);
+      return at(run.id, null);
     }
-    case 'observe': return focus(s, f, 'run:' + e.run, null);
+    case 'observe': return at('run:' + e.run, null);
     case 'output': {
       const run = s.objects['run:' + e.run] as RunObject, text = trace.runs[e.run]?.outputs[e.stream] ?? '';
       if (e.stream === 'stderr' || !run.firstLine) run.firstLine = firstLine(text);
       const raised = s.escalations.find(x => x.object === run.id);
       if (raised && run.firstLine) raised.reason = run.firstLine;
-      return focus(s, f, run.id, null);
+      return at(run.id, null);
     }
     case 'verified': {
       const run = s.objects['run:' + e.run] as RunObject, recorded = trace.runs[e.run]?.verified ?? [];
@@ -219,15 +239,25 @@ function agent(s: Work, trace: Trace, f: Fact) {
         if (known) { if (!known.runs.includes(e.run)) known.runs.push(e.run); }
         else { a.versions.push({ digest, runs: [e.run] }); a.changedAt = f.seq; }
       }
-      return focus(s, f, run.id, null);
+      return at(run.id, null);
     }
     case 'read': {
       const a = artifact(s, e.artifact, f.seq);
       a.touchedAt = f.seq;
-      return focus(s, f, a.id, e.run);
+      return at(a.id, e.run);
     }
-    case 'layout': return compose(s, f, e.views, e.replace);
+    case 'layout': return byAgent ? compose(s, f, e.views, e.replace) : settle(s);
     case 'items': s.question = e.question; s.items = e.items; return settle(s);
+    case 'ask':
+      add<QuestionState>(s, { id: e.question, kind: 'question', name: e.text, author: f.actor, target: e.target, version: e.version, run: e.run, rows: [...e.rows], document: e.document, state: 'prepared', fetchedBy: null, fetchedAt: null, changedAt: f.seq, touchedAt: f.seq, hidden: 0 });
+      return settle(s);
+    // A receipt, not attention: the question changes wherever it appears, the main area and
+    // the Agent's marker stay, and nothing after the fetch is claimed.
+    case 'fetched': {
+      const q = s.objects[e.question];
+      if (q?.kind === 'question') { q.state = 'fetched'; q.fetchedBy = f.actor; q.fetchedAt = f.seq; q.changedAt = f.seq; }
+      return settle(s);
+    }
   }
 }
 
@@ -331,6 +361,14 @@ function person(s: Work, trace: Trace, a: PersonAction) {
     case 'unfollow': s.attention = 'working'; return;
     case 'open': {
       working();
+      const q = s.objects[a.target];
+      // A question opens on the version it was asked about, beside any other version.
+      if (q?.kind === 'question') {
+        const v = s.views.find(x => x.object === q.target && versionOf(s, q.target, x.run) === q.version);
+        if (v) { v.preview = false; v.openedBy = 'person'; s.active = v.id; } else { const n = fresh(s, q.target, q.run, 'person', false); s.views.push(n); s.active = n.id; }
+        s.moves.push({ seq: f.seq, by: 'person', view: s.active, rule: 'person' });
+        return;
+      }
       const held = named(s, a.target), object = held?.object ?? a.target;
       if (held) { held.preview = false; held.openedBy = 'person'; s.active = held.id; }
       else show(s, object, object.startsWith('artifact:') ? latest(s, object) : null, 'person');
@@ -377,6 +415,16 @@ function person(s: Work, trace: Trace, a: PersonAction) {
       arrange(s, f, x.views, false, 'person');
       return;
     }
+    // Asking anchors the question on the version the view shows. The replay records no
+    // context for it, so it stays prepared.
+    case 'ask': {
+      working();
+      const v = named(s, a.target), version = v ? versionOf(s, v.object, v.run) : null;
+      if (!v || version === null || v.run === null) return;
+      const id = 'question:asked-' + (s.order.filter(x => x.startsWith('question:asked-')).length + 1);
+      add<QuestionState>(s, { id, kind: 'question', name: a.text, author: null, target: v.object, version, run: v.run, rows: [...a.rows], document: null, state: 'prepared', fetchedBy: null, fetchedAt: null, changedAt: f.seq, touchedAt: f.seq, hidden: 0 });
+      return;
+    }
     case 'dismiss': s.suggestions = s.suggestions.filter(y => y.id !== a.suggestion); return;
     case 'dismiss-digest': s.digest = null; return;
     case 'reveal': s.revealed = a.target; return;
@@ -386,18 +434,28 @@ function person(s: Work, trace: Trace, a: PersonAction) {
 // Revisit: what changed while the person was away, by object, never as a replay.
 function digest(s: Work, away: NonNullable<Work['away']>): DigestLine[] {
   const lines: DigestLine[] = [];
-  const rank = { source: 0, run: 1, artifact: 2 } as const;
+  const rank = { source: 0, run: 1, artifact: 2, question: 3 } as const;
   for (const id of [...s.order].sort((a, b) => rank[s.objects[a]!.kind] - rank[s.objects[b]!.kind])) {
     const now = s.objects[id]!, then = away.baseline[id];
     if (now.kind === 'source' && (!then || (then as SourceState).version !== now.version)) lines.push({ kind: 'source', object: id, from: then ? (then as SourceState).version : null, to: now.version });
     if (now.kind === 'run' && (!then || (then as RunObject).state !== now.state || (then as RunObject).verified.length !== now.verified.length)) lines.push({ kind: 'run', object: id, state: now.state, firstLine: now.state === 'completed' ? null : now.firstLine, verified: now.verified.length });
     if (now.kind === 'artifact' && now.versions.length !== ((then as ArtifactState | undefined)?.versions.length ?? 0)) lines.push({ kind: 'artifact', object: id, versions: now.versions.length - ((then as ArtifactState | undefined)?.versions.length ?? 0) });
+    if (now.kind === 'question' && (!then || (then as QuestionState).state !== now.state)) lines.push({ kind: 'question', object: id, state: now.state });
   }
   for (const x of s.suggestions) if (!away.suggestions.includes(x.id)) lines.push({ kind: 'suggestion', id: x.id });
   if (s.items.length !== away.items) lines.push({ kind: 'items', count: s.items.length });
   return lines;
 }
 
+const versionOf = (s: Pick<Screen, 'objects'>, object: string, run: number | null) => {
+  const o = s.objects[object];
+  return o?.kind === 'artifact' && run !== null ? o.versions.find(x => x.runs.includes(run))?.digest ?? null : null;
+};
+// A question appears on a view only while the view shows the version it was asked about.
+export function questionsOn(screen: Pick<Screen, 'objects' | 'order'>, view: View): QuestionState[] {
+  const version = versionOf(screen, view.object, view.run);
+  return screen.order.map(id => screen.objects[id]!).filter((q): q is QuestionState => q.kind === 'question' && q.target === view.object && q.version === version);
+}
 const latest = (s: Work, object: string) => (s.objects[object] as ArtifactState | undefined)?.versions.at(-1)?.runs.at(-1) ?? null;
 function newer(s: Work, v: View): number | null {
   const o = s.objects[v.object];

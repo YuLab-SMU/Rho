@@ -5,15 +5,21 @@ import './replay.css';
 import traceJson from './trace/airquality.json';
 import figureUrl from './trace/temp-effect.run-5.png';
 import {
-  express, when,
-  type ArtifactState, type Attention, type DigestLine, type Fact, type ObjectState, type PersonAction, type PersonIntent, type RunObject, type Screen, type SourceState, type Trace, type View,
+  express, questionsOn, when,
+  type ArtifactState, type Attention, type DigestLine, type Fact, type ObjectState, type PersonAction, type PersonIntent, type QuestionState, type RunObject, type Screen, type SourceState, type Trace, type View,
 } from '../../src/expression.js';
+import { authorLabel } from '../../src/task-frame.js';
 
 // A behavior prototype, not a product page: the shell above the dock is drawn only
 // from express(trace, actions, step). The dock replays the recorded Agent run and
 // records what the person does, at the step where they do it.
 const trace = traceJson as unknown as Trace;
 const last = trace.facts.length - 1;
+// The person at this screen stands where the recorded browser stood, so its edits and
+// questions read as "You"; the run's Agent is whoever made the first call.
+const viewer = Object.keys(trace.principals).find(id => trace.principals[id]!.kind === 'browser');
+const runAgent = trace.facts[0]!.actor;
+const who = (principal: string | null) => principal === null ? 'You' : authorLabel(principal, viewer);
 
 type Scenario = { id: string; label: string; start: Exclude<Attention, 'away'>; actions: PersonAction[] };
 const scenarios: Scenario[] = [
@@ -21,6 +27,10 @@ const scenarios: Scenario[] = [
   { id: 'work', label: 'Work in effects.csv from #20', start: 'following', actions: [{ at: 19, kind: 'open', target: 'artifact:effects.csv' }, { at: 19, kind: 'select', target: 'artifact:effects.csv', rows: ['B', 'C'] }] },
   { id: 'away', label: 'Leave at #30, return at #57', start: 'following', actions: [{ at: 29, kind: 'leave' }, { at: 57, kind: 'return' }] },
   { id: 'keep', label: "Open run 1's figure at #16, follow", start: 'following', actions: [{ at: 15, kind: 'open', target: 'artifact:temp-effect.png' }, { at: 15, kind: 'follow' }] },
+  { id: 'ask', label: 'Ask about two rows at #20', start: 'following', actions: [
+    { at: 19, kind: 'open', target: 'artifact:effects.csv' }, { at: 19, kind: 'select', target: 'artifact:effects.csv', rows: ['B', 'C'] },
+    { at: 19, kind: 'ask', target: 'artifact:effects.csv', rows: ['B', 'C'], text: 'Do B and C differ once Wind is in both?' },
+  ] },
 ];
 
 function App() {
@@ -111,12 +121,16 @@ function Objects({ screen, act }: { screen: Screen; act: Act }) {
     {screen.agent?.object === o.id ? <Glyph placement={screen.agent.placement} /> : <span />}
   </button>;
   const artifacts = objects.filter(o => o.kind === 'artifact');
+  const questionsOf = (id: string) => objects.filter((o): o is QuestionState => o.kind === 'question' && o.target === id);
   return <nav className="objects" aria-label="Objects">
     <ul>{objects.filter(o => o.kind === 'source').map(o => <li key={o.id}>
       {row(o)}
       {runsOf(o.name).length > 0 && <ul className="runs">{runsOf(o.name).map(r => <li key={r.id}>{row(r)}</li>)}</ul>}
     </li>)}</ul>
-    {artifacts.length > 0 && <ul>{artifacts.map(o => <li key={o.id}>{row(o)}</li>)}</ul>}
+    {artifacts.length > 0 && <ul>{artifacts.map(o => <li key={o.id}>
+      {row(o)}
+      {questionsOf(o.id).length > 0 && <ul className="runs">{questionsOf(o.id).map(q => <li key={q.id}>{row(q)}</li>)}</ul>}
+    </li>)}</ul>}
     {screen.items.length > 0 && <ol className="account">
       {screen.items.map(item => <li key={item.id}><Glyph /><span>{item.title}</span></li>)}
     </ol>}
@@ -151,6 +165,7 @@ function ViewBody({ screen, view, act }: { screen: Screen; view: View; act: Act 
   </span>;
   if (o.kind === 'source') return <Source key={o.id} source={o} screen={screen} tools={tools} />;
   if (o.kind === 'run') return <Run run={o} screen={screen} tools={tools} act={act} />;
+  if (o.kind === 'question') return null;
   return <Artifact artifact={o} view={view} screen={screen} tools={tools} act={act} />;
 }
 
@@ -203,6 +218,7 @@ function Artifact({ artifact, view, screen, tools, act }: { artifact: ArtifactSt
   const version = artifact.versions.find(v => run !== null && v.runs.includes(run));
   const recorded = version && Object.entries(trace.artifacts[artifact.name]!.versions).find(([digest]) => digest === version.digest)?.[1];
   const earlier = version?.runs.filter(n => n !== run && n < (run ?? 0)) ?? [];
+  const asked = questionsOn(screen, view);
   return <section className="view">
     <header>
       <h1>{artifact.name}</h1>
@@ -213,18 +229,43 @@ function Artifact({ artifact, view, screen, tools, act }: { artifact: ArtifactSt
       {view.newer !== null && <button type="button" className="newer" onClick={() => act({ kind: 'update', target: view.id })}>New version · Run {view.newer}</button>}
       {tools}
     </header>
-    {recorded?.text ? <Table text={recorded.text} selection={view.selection} onSelect={rows => act({ kind: 'select', target: view.id, rows })} />
+    <Questions asked={asked} view={view} act={act} />
+    {recorded?.text ? <Table text={recorded.text} selection={view.selection} asked={asked.flatMap(q => q.rows)} onSelect={rows => act({ kind: 'select', target: view.id, rows })} />
       : recorded?.file ? <img className="figure" src={figureUrl} alt={artifact.name + ' from run ' + run} />
       : <div className="empty"><span className="fact">Only run 5's image is kept in this trace</span></div>}
   </section>;
 }
 
-function Table({ text, selection, onSelect }: { text: string; selection: string[]; onSelect: (rows: string[]) => void }) {
+// Questions on the version this view shows, each with its receipt, and the place to ask
+// another. A receipt says who fetched it and when, and nothing more.
+function Questions({ asked, view, act }: { asked: QuestionState[]; view: View; act: Act }) {
+  const [text, setText] = useState('');
+  const ask = () => { if (!text.trim()) return; act({ kind: 'ask', target: view.id, rows: view.selection, text: text.trim() }); setText(''); };
+  return <div className="questions">
+    {asked.map(q => {
+      const at = trace.facts.find(f => f.effect?.kind === 'ask' && f.effect.question === q.id);
+      return <div key={q.id} className="question" data-state={q.state}>
+        <Mark object={q} />
+        <span className="text">{q.name}</span>
+        {q.rows.length > 0 && <span className="chip">rows {q.rows.join(', ')}</span>}
+        <span className="fact">{who(q.author)}{at ? ' · ' + when(at) : ''}</span>
+        <span className="receipt">{q.state === 'fetched' && q.fetchedBy && q.fetchedAt !== null ? `Fetched by ${trace.principals[q.fetchedBy]?.name ?? who(q.fetchedBy)} · ${when(trace.facts[q.fetchedAt]!)}` : 'Not fetched'}</span>
+      </div>;
+    })}
+    <form className="ask" onSubmit={e => { e.preventDefault(); ask(); }}>
+      {view.selection.length > 0 && <span className="chip">rows {view.selection.join(', ')}</span>}
+      <input value={text} onChange={e => setText(e.target.value)} placeholder="Ask about this version" aria-label="Question" />
+      <button type="submit" disabled={!text.trim()}>Ask</button>
+    </form>
+  </div>;
+}
+
+function Table({ text, selection, asked, onSelect }: { text: string; selection: string[]; asked: string[]; onSelect: (rows: string[]) => void }) {
   const [head, ...rows] = parseCsv(text);
   const toggle = (key: string) => onSelect(selection.includes(key) ? selection.filter(k => k !== key) : [...selection, key]);
   return <div className="table"><table>
     <thead><tr>{head!.map(h => <th key={h}>{h}</th>)}</tr></thead>
-    <tbody>{rows.map(row => <tr key={row[0] + row[3]} aria-selected={selection.includes(row[0]!)} onClick={() => toggle(row[0]!)}>
+    <tbody>{rows.map(row => <tr key={row[0] + row[3]} aria-selected={selection.includes(row[0]!)} data-asked={asked.includes(row[0]!) || undefined} onClick={() => toggle(row[0]!)}>
       {row.map((cell, i) => <td key={i} title={cell}>{number(cell)}</td>)}
     </tr>)}</tbody>
   </table></div>;
@@ -248,6 +289,7 @@ function digestLine(line: DigestLine, screen: Screen, act: Act): ReactNode {
     case 'source': return <>{open(line.object, label(screen.objects[line.object]))} {line.from === null ? 'v' + line.to : `v${line.from} → v${line.to}`}</>;
     case 'run': return <>{open(line.object, label(screen.objects[line.object]))} <span className={'state ' + line.state}>{line.state}</span> {line.firstLine ? <code>{line.firstLine}</code> : line.verified ? `${line.verified} files verified` : null}</>;
     case 'artifact': return <>{open(line.object, label(screen.objects[line.object]))} +{line.versions} version</>;
+    case 'question': return <>{open(line.object, <span className="quoted">{label(screen.objects[line.object])}</span>)} <span className="fact">{line.state === 'fetched' ? 'fetched' : 'not fetched'}</span></>;
     case 'suggestion': return <>Layout suggestion waiting</>;
     case 'items': return <>{line.count} items declared by the Agent</>;
   }
@@ -282,7 +324,7 @@ function Dock({ step, setStep, playing, setPlaying, screen, actions, scenario, p
       <button type="button" className="play" aria-label={playing ? 'Pause' : 'Play'} onClick={() => { if (step >= last) setStep(0); setPlaying(!playing); }}>{playing ? '❚❚' : '▶'}</button>
       <button type="button" aria-label="Next call" onClick={() => setStep(Math.min(last, step + 1))}>›</button>
       <span className="now">
-        <b>#{f.seq}</b> {f.op} <i>{target(f)}</i> {f.outcome === 'rejected' && <em>rejected · {f.reason?.kind}</em>} <time>{when(f)}</time>
+        <b>#{f.seq}</b> {f.op} <i>{target(f)}</i> {f.actor !== runAgent && <i>by {trace.principals[f.actor]?.name ?? who(f.actor)}</i>} {f.outcome === 'rejected' && <em>rejected · {f.reason?.kind}</em>} <time>{when(f)}</time>
       </span>
       <span className="spacer" />
       <span className="attention" data-attention={screen.attention}>{screen.attention}</span>
@@ -292,7 +334,7 @@ function Dock({ step, setStep, playing, setPlaying, screen, actions, scenario, p
     <div className="scenarios" role="radiogroup" aria-label="Person">
       {scenarios.map(s => <button key={s.id} type="button" role="radio" aria-checked={scenario === s.id} onClick={() => pick(s.id)}>{s.label}</button>)}
       <span className="spacer" />
-      <span className="source">{trace.recorded.experiment} · {trace.facts.length} calls · {trace.recorded.from.slice(11, 19)}–{trace.recorded.to.slice(11, 19)}</span>
+      <span className="source">{trace.recorded.experiment} · {trace.facts.length} facts · {trace.recorded.from.slice(11, 19)}–{trace.recorded.to.slice(11, 19)}</span>
     </div>
   </footer>;
 }
@@ -304,6 +346,8 @@ function Scrubber({ step, setStep, actions, screen }: { step: number; setStep: (
   return <div className="scrubber">
     <svg viewBox={`0 0 ${trace.facts.length} 30`} preserveAspectRatio="none" aria-hidden>
       {trace.facts.map(f => <rect key={f.seq} x={f.seq + 0.4} width={0.2} y={tickY(f)} height={20 - tickY(f)} className={'tick ' + tickKind(f)} />)}
+      {/* Ten minutes or more without a recorded fact: the ticks keep their spacing, the break shows. */}
+      {trace.facts.slice(1).filter((f, i) => f.at && trace.facts[i]!.at && Date.parse(f.at) - Date.parse(trace.facts[i]!.at!) >= 600_000).map(f => <rect key={'gap' + f.seq} x={f.seq - 0.03} width={0.06} y={0} height={20} className="gap" />)}
       {screen.moves.map((m, i) => <rect key={'m' + i} x={m.seq + 0.15} width={0.7} y={22.5} height={1.5} className={'move ' + m.by} />)}
       {actions.map((a, i) => <circle key={'a' + i} cx={a.at + 0.5} cy={27} r={0.45} className="person" />)}
     </svg>
@@ -312,6 +356,7 @@ function Scrubber({ step, setStep, actions, screen }: { step: number; setStep: (
 }
 
 function tickKind(f: Fact) {
+  if (trace.principals[f.actor]?.kind !== 'agent') return 'person';
   if (f.outcome === 'rejected') return 'rejected';
   const k = f.effect?.kind;
   if (k === 'catalog') return 'catalog';
@@ -319,7 +364,7 @@ function tickKind(f: Fact) {
   if (k === 'edit' || k === 'save' || k === 'submit' || k === 'layout' || k === 'items' || k === 'verified') return 'write';
   return 'read';
 }
-const tickY = (f: Fact) => ({ catalog: 16, read: 11, write: 5, ok: 1, failed: 1, rejected: 15 } as Record<string, number>)[tickKind(f)] ?? 10;
+const tickY = (f: Fact) => ({ catalog: 16, read: 11, write: 5, ok: 1, failed: 1, rejected: 15, person: 8 } as Record<string, number>)[tickKind(f)] ?? 10;
 function target(f: Fact) {
   const e = f.effect;
   if (!e) return f.object?.replace(/^\w+:/, '') ?? '';
@@ -328,6 +373,8 @@ function target(f: Fact) {
   if (e.kind === 'read') return `${e.artifact} · run ${e.run}`;
   if (e.kind === 'layout') return e.views.map(v => v.artifact).join(', ');
   if (e.kind === 'items') return e.items.length + ' items';
+  if (e.kind === 'ask') return `${e.target.replace(/^\w+:/, '')} · run ${e.run}${e.rows.length ? ' · rows ' + e.rows.join(', ') : ''}`;
+  if (e.kind === 'fetched') return 'question ' + e.question.replace(/^\w+:/, '');
   if ('run' in e) return 'run ' + e.run + (e.kind === 'ended' ? ` · exit ${e.exit}` : e.kind === 'output' ? ' · ' + e.stream : '');
   return '';
 }
@@ -335,6 +382,7 @@ function target(f: Fact) {
 function Mark({ object }: { object?: ObjectState }) {
   if (!object) return null;
   if (object.kind === 'run') return <span className={'mark run ' + object.state} aria-hidden>{object.run}</span>;
+  if (object.kind === 'question') return <span className={'mark question ' + object.state} aria-hidden>?</span>;
   return <span className={'mark ' + (object.kind === 'source' ? (object.name.endsWith('.md') ? 'doc' : 'code') : trace.artifacts[object.name]?.kind === 'media' ? 'image' : 'table')} aria-hidden />;
 }
 function Glyph({ placement }: { placement?: 'main' | 'pending' | 'marker' }) {
@@ -345,11 +393,12 @@ function label(o?: ObjectState) { return o?.name ?? ''; }
 function fact(o: ObjectState): ReactNode {
   if (o.kind === 'source') return 'v' + o.version;
   if (o.kind === 'run') return 'v' + o.sourceVersion;
+  if (o.kind === 'question') return o.state === 'fetched' ? 'fetched' : '';
   return <span className="dots" aria-label={o.versions.length + ' versions'}>{o.versions.map(v => <i key={v.digest} />)}</span>;
 }
 function edited(name: string, version: number) {
-  const at = trace.sources[name]!.edited[version];
-  return at ? 'Agent · ' + at.slice(11, 19) : '';
+  const source = trace.sources[name]!, at = source.edited[version], by = source.authors[version];
+  return at && by ? who(by) + ' · ' + at.slice(11, 19) : '';
 }
 function number(cell: string) {
   const n = Number(cell);

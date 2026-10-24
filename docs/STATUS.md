@@ -292,7 +292,7 @@ Native execution retains OS authority. Saving checks actual disk conditions but
 does not provide CAS against outside writers. MCP supports explicit tool-fetched
 context; proactive external-chat delivery remains unavailable.
 
-[Interaction model](INTERACTION-MODEL.md) draft, replayed over agent-exp-2215 by `npm run prototype:replay` (person simulated, not the WebUI); `src/expression.ts` holds its rules, `test/expression.test.mjs` checks them. [Its plan](INTERACTION-PLAN.md) sequences S0–S7 before any high-fidelity design; S0 is in: a view the person opened keeps its version while following (default B).
+[Interaction model](INTERACTION-MODEL.md) draft, replayed over agent-exp-2215 by `npm run prototype:replay` (person simulated, not the WebUI); `src/expression.ts` holds its rules, `test/expression.test.mjs` checks them. [Its plan](INTERACTION-PLAN.md) sequences S0–S7 before any high-fidelity design; S0 is in: a view the person opened keeps its version while following (default B). S1 is in: the 18:19 questions and their fetch receipt are facts with principals; a question stays on the version it was asked about, and a receipt changes nothing else.
 
 Source, accepted composition, npm installation and future signed distribution
 have separate identities/evidence. Local ignored evidence stays at the selected

@@ -1,14 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { agentPaceMs, express, timeOf } from '../dist/expression.js';
+import { agentPaceMs, express, questionsOn, timeOf } from '../dist/expression.js';
 import { taskMapLimits } from '../dist/task-map.js';
 
 // The expression rules replayed over one recorded Agent run (agent-exp-2215: 61 calls,
-// five R runs, two of them failing). Each test is one sentence of
+// five R runs, two of them failing), followed by the two questions a browser asked about
+// its results and the one receipt. Each test is one sentence of
 // docs/INTERACTION-MODEL.md that the replay prototype has to make true.
 const trace = JSON.parse(fs.readFileSync(new URL('../prototypes/replay/trace/airquality.json', import.meta.url), 'utf8'));
 const last = trace.facts.length - 1;
+const runEnd = trace.facts.findLastIndex(f => f.actor === trace.facts[0].actor);
 const agentMoves = screen => screen.moves.filter(m => m.by === 'agent');
 const working = [{ at: 19, kind: 'open', target: 'artifact:effects.csv' }, { at: 19, kind: 'select', target: 'artifact:effects.csv', rows: ['B', 'C'] }];
 
@@ -111,10 +113,53 @@ test("a view the person opened keeps its version; the Agent's newer one opens be
 
 test('the Agent declares its items at the end, and they stay its account, unlinked to objects', () => {
   assert.equal(express(trace, [], 58).question, null);
-  const screen = express(trace, [], last);
+  const screen = express(trace, [], runEnd);
   assert.equal(screen.items.length, 5);
   assert.match(screen.question, /wind and sunlight/);
   assert.deepEqual(Object.keys(screen.objects), Object.keys(express(trace, [], 58).objects));
+});
+
+test('what a person records changes its objects in place; only the Agent moves the screen', () => {
+  const end = express(trace, [], last), run = express(trace, [], runEnd);
+  assert.deepEqual(trace.facts.slice(runEnd + 1).map(f => trace.principals[f.actor].kind + ' ' + f.op), [
+    'browser document.edit', 'browser context.create', 'agent context.read', 'browser document.edit', 'browser context.create',
+  ]);
+  assert.equal(end.objects['source:questions.md'].version, 3);
+  assert.deepEqual([end.active, end.views, end.agent, end.moves], [run.active, run.views, run.agent, run.moves]);
+});
+
+test('a question stays on the version it was asked about; newer versions do not move it', () => {
+  // Simulated: the person asks about run 1's figure; runs 2 and 5 then make new figures.
+  const asked = [{ at: 15, kind: 'open', target: 'artifact:temp-effect.png' }, { at: 15, kind: 'ask', target: 'artifact:temp-effect.png', rows: [], text: 'Why is D lower than A?' }, { at: 15, kind: 'follow' }];
+  const screen = express(trace, asked, runEnd), figure = screen.objects['artifact:temp-effect.png'];
+  const q = screen.objects['question:asked-1'];
+  assert.deepEqual([q.target, q.run, q.version, q.state, q.author], ['artifact:temp-effect.png', 1, figure.versions[0].digest, 'prepared', null]);
+  assert.equal(figure.versions.length, 3);
+  assert.deepEqual(screen.views.filter(v => v.object === figure.id).map(v => [v.run, questionsOn(screen, v).map(x => x.id)]), [[1, ['question:asked-1']], [5, []]]);
+  // Recorded: each question from 18:19 sits on the version its context names, and opens there.
+  const end = express(trace, [], last);
+  assert.deepEqual(['question:70d07e4a', 'question:7d3dbf6a'].map(id => { const r = end.objects[id]; return [r.target, r.version, r.run, r.rows, r.document.version]; }), [
+    ['artifact:temp-effect.png', '985b7955', 5, [], 2], ['artifact:effects.csv', '1f305e10', 5, ['A', 'D'], 3],
+  ]);
+  for (const id of ['question:70d07e4a', 'question:7d3dbf6a']) {
+    const opened = express(trace, [{ at: last, kind: 'open', target: id }], last);
+    assert.ok(questionsOn(opened, opened.views.find(v => v.id === opened.active)).some(x => x.id === id), id + ' opens on its version');
+  }
+});
+
+test('a fetch is a receipt: only the question changes, and nothing after it is claimed', () => {
+  const fetch = trace.facts.findIndex(f => f.effect?.kind === 'fetched');
+  const before = express(trace, [], fetch - 1), after = express(trace, [], fetch);
+  const q = after.objects['question:70d07e4a'];
+  assert.deepEqual([before.objects[q.id].state, q.state, trace.principals[q.fetchedBy].name, trace.facts[q.fetchedAt].at], ['prepared', 'fetched', 'acceptance-fetch', '2026-10-24T18:19:25.129Z']);
+  assert.deepEqual([after.active, after.views, after.agent, after.moves, after.escalations, after.suggestions], [before.active, before.views, before.agent, before.moves, before.escalations, before.suggestions]);
+  // The second question was never fetched, and no record makes either one responded.
+  const end = express(trace, [], last);
+  assert.equal(end.objects['question:7d3dbf6a'].state, 'prepared');
+  assert.ok(!Object.values(end.objects).some(o => o.kind === 'question' && o.state === 'responded'));
+  // Someone away meets the receipt in the digest, by object.
+  const back = express(trace, [{ at: runEnd, kind: 'leave' }, { at: last, kind: 'return' }], last);
+  assert.deepEqual(back.digest.lines.map(l => l.kind + ' ' + l.object + ' ' + (l.state ?? l.to)), ['source source:questions.md 3', 'question question:70d07e4a fetched', 'question question:7d3dbf6a prepared']);
 });
 
 test('the same facts and actions always give the same screen', () => {

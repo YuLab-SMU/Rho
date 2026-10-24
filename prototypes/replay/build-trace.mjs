@@ -4,9 +4,10 @@
 //
 // Inputs are what that run left behind: the Agent's own call log (calls.jsonl), and
 // the project's owner state (event stream, document histories, operation records,
-// registered resources, run outputs). Every time in the trace is one of those
-// recorded times; a call with no recorded time keeps only the bounds of its
-// neighbours. Every document version is checked against its recorded digest.
+// registered resources, run outputs, contexts, Rho's call activity, principals).
+// Every time in the trace is one of those recorded times; a call with no recorded
+// time keeps only the bounds of its neighbours. Every document version is checked
+// against its recorded digest. Facts carry the principal that made them.
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -23,6 +24,9 @@ const calls = fs.readFileSync(path.join(dir, 'calls.jsonl'), 'utf8').trim().spli
 const events = json(path.join(rho, 'rho/events.json')).events;
 const resources = json(path.join(rho, 'plugins/resources.json'));
 const operations = fs.readdirSync(path.join(rho, 'rho/operations')).map(f => json(path.join(rho, 'rho/operations', f)));
+const activity = json(path.join(rho, 'rho/activity.json')).entries;
+const principals = json(path.join(dir, 'state/principals.json'));
+const contexts = fs.readdirSync(path.join(rho, 'rho/contexts')).map(f => ({ id: f.replace('.json', ''), ...json(path.join(rho, 'rho/contexts', f)) }));
 const documents = Object.fromEntries(fs.readdirSync(path.join(rho, 'plugins/documents')).map(f => json(path.join(rho, 'plugins/documents', f))).map(d => [d.id, d]));
 
 // Documents: every version's content, from the edit replies, checked against history.
@@ -30,11 +34,36 @@ const sources = {};
 const docPath = id => documents[id]?.path;
 function sourceOf(name) { return sources[name] ??= { versions: { 1: '' }, edited: {}, saved: {} }; }
 for (const doc of Object.values(documents)) {
-  if (!['analysis.R', 'findings.md'].includes(doc.path)) continue;
+  if (!['analysis.R', 'findings.md', 'questions.md'].includes(doc.path)) continue;
   const s = sourceOf(doc.path);
-  for (const h of doc.history) s.edited[h.version] = { at: h.at, digest: h.afterDigest };
+  s.authors = {};
+  for (const h of doc.history) { s.edited[h.version] = { at: h.at, digest: h.afterDigest }; s.authors[h.version] = h.author; }
   for (const r of doc.receipts) if (r.kind === 'save') s.saved[r.version] = r.at;
 }
+// questions.md is written by the browser, not through the Agent's calls: its versions
+// are rebuilt from the recorded edits and must reach each recorded digest.
+const questionsDoc = Object.values(documents).find(d => d.path === 'questions.md');
+{
+  let text = '';
+  for (const h of questionsDoc.history) {
+    if (sha(text) !== h.beforeDigest) throw new Error(`questions.md before v${h.version} does not match its recorded digest`);
+    for (const e of h.edits) text = text.slice(0, e.from) + e.insert + text.slice(e.to);
+    if (sha(text) !== h.afterDigest) throw new Error(`questions.md v${h.version} does not match its recorded digest`);
+    sourceOf('questions.md').versions[h.version] = text;
+  }
+}
+
+// Principals: the run's Agent is the one principal granted exactly the methods its
+// connection lists, and Rho's activity must hold calls from it.
+const connection = json(path.join(dir, 'agent-connection.json'));
+const granted = principals.filter(p => p.id.startsWith('agent:') && p.methods.length === connection.methods.length && connection.methods.every(m => p.methods.includes(m)));
+if (granted.length !== 1 || !activity.some(e => e.principal === granted[0].id)) throw new Error('cannot tell which principal made the run');
+const runAgent = granted[0].id;
+const bindingName = id => {
+  if (id === runAgent) return connection.externalSessionId;
+  const file = fs.readdirSync(path.join(dir, 'state')).find(f => f.startsWith(id.replace(':', '-')));
+  return file ? json(path.join(dir, 'state', file)).externalSessionId : null;
+};
 
 const reply = c => { try { return JSON.parse(c.text); } catch { return null; } };
 const resourceById = id => {
@@ -54,7 +83,7 @@ let mapEvents = events.filter(e => e.type === 'task.map.changed' && e.at < '2026
 calls.forEach((call, seq) => {
   const value = reply(call);
   const ok = value?.ok === true && !call.isError;
-  const fact = { seq, label: call.label, actor: 'agent', op: '', outcome: ok ? 'returned' : 'rejected', at: null };
+  const fact = { seq, label: call.label, actor: runAgent, op: '', outcome: ok ? 'returned' : 'rejected', at: null };
   if (!ok) fact.reason = { kind: value?.error?.kind ?? 'error', message: value?.error?.message ?? '' };
   if (call.name !== 'rho_call') {
     fact.op = call.name === 'rho_index' ? 'capability.index' : 'capability.resolve';
@@ -162,6 +191,26 @@ calls.forEach((call, seq) => {
   facts.push(fact);
 });
 
+// After the run: the person's questions about its results, and their receipts. Each ask
+// is a context the browser prepared (its document edit lands first); a fetch is the
+// context's own receipt, which Rho's activity must also hold for the same principal.
+const later = [];
+for (const h of questionsDoc.history) later.push({ at: h.at, fact: { label: h.changeId, actor: h.author, op: 'document.edit', outcome: 'returned', at: h.at, object: 'source:questions.md', effect: { kind: 'edit', source: 'questions.md', version: h.version } } });
+for (const c of contexts) {
+  // The context names the exact resource version it was asked about, and its own run.
+  const question = 'question:' + short(c.id), meta = c.resource.metadata, key = meta.format?.key?.column;
+  later.push({ at: c.at, fact: { label: c.changeId, actor: c.principal, op: 'context.create', outcome: 'returned', at: c.at, object: question, effect: {
+    kind: 'ask', question, text: c.document.text, target: 'artifact:' + path.basename(meta.path), version: short(c.resource.reference.version), run: runNumber(meta.provenance.operationId),
+    rows: key && c.resource.rows ? c.resource.rows.map(row => String(row[key])) : [],
+    document: { source: c.document.source.path, version: c.document.source.version },
+  } } });
+  if (c.fetchedAt) {
+    if (!activity.some(e => e.method === 'context.read' && e.contextId === c.id && e.principal === c.fetchedBy && e.outcome === 'returned')) throw new Error(`context ${short(c.id)}: no recorded read by ${c.fetchedBy}`);
+    later.push({ at: c.fetchedAt, fact: { label: c.changeId, actor: c.fetchedBy, op: 'context.read', outcome: 'returned', at: c.fetchedAt, object: question, effect: { kind: 'fetched', question } } });
+  }
+}
+for (const { fact } of later.sort((a, b) => a.at.localeCompare(b.at))) facts.push({ seq: facts.length, ...fact });
+
 // Calls with no recorded time keep the recorded times on either side.
 facts.forEach((fact, i) => {
   if (fact.at) return;
@@ -188,7 +237,8 @@ const trace = {
   format: 'rho.replay-trace/1',
   recorded: { experiment: path.basename(dir), project: 'airquality', from: facts.find(f => f.at).at, to: facts.findLast(f => f.at).at },
   facts,
-  sources: Object.fromEntries(Object.entries(sources).map(([name, s]) => [name, { versions: s.versions, edited: Object.fromEntries(Object.entries(s.edited).map(([k, e]) => [k, e.at])), saved: s.saved }])),
+  principals: Object.fromEntries([...new Set(facts.map(f => f.actor))].map(id => [id, { kind: id.split(':')[0], name: bindingName(id) }])),
+  sources: Object.fromEntries(Object.entries(sources).map(([name, s]) => [name, { versions: s.versions, edited: Object.fromEntries(Object.entries(s.edited).map(([k, e]) => [k, e.at])), saved: s.saved, authors: s.authors ?? {} }])),
   runs,
   artifacts,
 };
