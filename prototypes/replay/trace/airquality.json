@@ -1,0 +1,1269 @@
+{
+ "format": "rho.replay-trace/1",
+ "recorded": {
+  "experiment": "agent-exp-2215",
+  "project": "airquality",
+  "from": "2026-10-24T14:37:00.487Z",
+  "to": "2026-10-24T14:50:35.572Z"
+ },
+ "facts": [
+  {
+   "seq": 0,
+   "label": "index-root",
+   "actor": "agent",
+   "op": "capability.index",
+   "outcome": "returned",
+   "at": null,
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": null,
+   "before": "2026-10-24T14:37:00.487Z"
+  },
+  {
+   "seq": 1,
+   "label": "index-r",
+   "actor": "agent",
+   "op": "capability.index",
+   "outcome": "returned",
+   "at": null,
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": null,
+   "before": "2026-10-24T14:37:00.487Z"
+  },
+  {
+   "seq": 2,
+   "label": "resolve-submit-p1",
+   "actor": "agent",
+   "op": "capability.resolve",
+   "outcome": "returned",
+   "at": null,
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": null,
+   "before": "2026-10-24T14:37:00.487Z"
+  },
+  {
+   "seq": 3,
+   "label": "resolve-submit-p1",
+   "actor": "agent",
+   "op": "capability.resolve",
+   "outcome": "returned",
+   "at": null,
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": null,
+   "before": "2026-10-24T14:37:00.487Z"
+  },
+  {
+   "seq": 4,
+   "label": "resolve-submit-p2",
+   "actor": "agent",
+   "op": "capability.resolve",
+   "outcome": "returned",
+   "at": null,
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": null,
+   "before": "2026-10-24T14:37:00.487Z"
+  },
+  {
+   "seq": 5,
+   "label": "resolve-submit-p2-32k",
+   "actor": "agent",
+   "op": "capability.resolve",
+   "outcome": "rejected",
+   "at": null,
+   "reason": {
+    "kind": "stale",
+    "message": "Resolved bundle, authorization or query changed."
+   },
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": null,
+   "before": "2026-10-24T14:37:00.487Z"
+  },
+  {
+   "seq": 6,
+   "label": "resolve-submit-knownrefs",
+   "actor": "agent",
+   "op": "capability.resolve",
+   "outcome": "returned",
+   "at": null,
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": null,
+   "before": "2026-10-24T14:37:00.487Z"
+  },
+  {
+   "seq": 7,
+   "label": "resolve-docs",
+   "actor": "agent",
+   "op": "capability.resolve",
+   "outcome": "returned",
+   "at": null,
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": null,
+   "before": "2026-10-24T14:37:00.487Z"
+  },
+  {
+   "seq": 8,
+   "label": "open-analysis.R",
+   "actor": "agent",
+   "op": "document.open",
+   "outcome": "returned",
+   "at": "2026-10-24T14:37:00.487Z",
+   "object": "source:analysis.R",
+   "effect": {
+    "kind": "open",
+    "source": "analysis.R",
+    "version": 1
+   }
+  },
+  {
+   "seq": 9,
+   "label": "edit-analysis.R",
+   "actor": "agent",
+   "op": "document.edit",
+   "outcome": "returned",
+   "at": "2026-10-24T14:37:55.760Z",
+   "object": "source:analysis.R",
+   "effect": {
+    "kind": "edit",
+    "source": "analysis.R",
+    "version": 2
+   }
+  },
+  {
+   "seq": 10,
+   "label": "save-analysis.R",
+   "actor": "agent",
+   "op": "document.save",
+   "outcome": "returned",
+   "at": "2026-10-24T14:38:03.431Z",
+   "object": "source:analysis.R",
+   "effect": {
+    "kind": "save",
+    "source": "analysis.R",
+    "version": 2
+   }
+  },
+  {
+   "seq": 11,
+   "label": "submit-analysis",
+   "actor": "agent",
+   "op": "action.submit",
+   "outcome": "returned",
+   "at": "2026-10-24T14:38:12.840Z",
+   "object": "run:1",
+   "effect": {
+    "kind": "submit",
+    "run": 1,
+    "source": "analysis.R",
+    "sourceVersion": 2
+   }
+  },
+  {
+   "seq": 12,
+   "label": "resolve-lookup",
+   "actor": "agent",
+   "op": "capability.resolve",
+   "outcome": "returned",
+   "at": null,
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": "2026-10-24T14:38:12.840Z",
+   "before": "2026-10-24T14:38:42.847Z"
+  },
+  {
+   "seq": 13,
+   "label": "lookup-1",
+   "actor": "agent",
+   "op": "action.lookup",
+   "outcome": "returned",
+   "at": "2026-10-24T14:38:42.847Z",
+   "object": "run:1",
+   "effect": {
+    "kind": "ended",
+    "run": 1,
+    "exit": 0
+   }
+  },
+  {
+   "seq": 14,
+   "label": "resolve-artifact-check",
+   "actor": "agent",
+   "op": "capability.resolve",
+   "outcome": "returned",
+   "at": null,
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": "2026-10-24T14:38:42.847Z",
+   "before": "2026-10-24T14:40:52.911Z"
+  },
+  {
+   "seq": 15,
+   "label": "artifact-check",
+   "actor": "agent",
+   "op": "artifact.check",
+   "outcome": "returned",
+   "at": null,
+   "object": "run:1",
+   "effect": {
+    "kind": "verified",
+    "run": 1,
+    "artifacts": [
+     "coefficients.csv",
+     "effects.csv",
+     "tests.csv",
+     "temp-effect.png"
+    ]
+   },
+   "after": "2026-10-24T14:38:42.847Z",
+   "before": "2026-10-24T14:40:52.911Z"
+  },
+  {
+   "seq": 16,
+   "label": "resolve-data-page",
+   "actor": "agent",
+   "op": "capability.resolve",
+   "outcome": "returned",
+   "at": null,
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": "2026-10-24T14:38:42.847Z",
+   "before": "2026-10-24T14:40:52.911Z"
+  },
+  {
+   "seq": 17,
+   "label": "data-page-effects",
+   "actor": "agent",
+   "op": "data.page",
+   "outcome": "returned",
+   "at": null,
+   "object": "artifact:effects.csv",
+   "effect": {
+    "kind": "read",
+    "artifact": "effects.csv",
+    "run": 1
+   },
+   "after": "2026-10-24T14:38:42.847Z",
+   "before": "2026-10-24T14:40:52.911Z"
+  },
+  {
+   "seq": 18,
+   "label": "data-page-tests",
+   "actor": "agent",
+   "op": "data.page",
+   "outcome": "returned",
+   "at": null,
+   "object": "artifact:tests.csv",
+   "effect": {
+    "kind": "read",
+    "artifact": "tests.csv",
+    "run": 1
+   },
+   "after": "2026-10-24T14:38:42.847Z",
+   "before": "2026-10-24T14:40:52.911Z"
+  },
+  {
+   "seq": 19,
+   "label": "submit-analysis",
+   "actor": "agent",
+   "op": "action.submit",
+   "outcome": "returned",
+   "at": null,
+   "object": "run:1",
+   "effect": {
+    "kind": "retry",
+    "run": 1
+   },
+   "after": "2026-10-24T14:38:42.847Z",
+   "before": "2026-10-24T14:40:52.911Z"
+  },
+  {
+   "seq": 20,
+   "label": "edit2-spec",
+   "actor": "agent",
+   "op": "document.edit",
+   "outcome": "rejected",
+   "at": null,
+   "reason": {
+    "kind": "invalid",
+    "message": "Input does not match the complete selected contract; project identity is supplied by the private connection."
+   },
+   "object": "source:analysis.R",
+   "after": "2026-10-24T14:38:42.847Z",
+   "before": "2026-10-24T14:40:52.911Z"
+  },
+  {
+   "seq": 21,
+   "label": "edit3-labels",
+   "actor": "agent",
+   "op": "document.edit",
+   "outcome": "rejected",
+   "at": null,
+   "reason": {
+    "kind": "invalid",
+    "message": "Input does not match the complete selected contract; project identity is supplied by the private connection."
+   },
+   "object": "source:analysis.R",
+   "after": "2026-10-24T14:38:42.847Z",
+   "before": "2026-10-24T14:40:52.911Z"
+  },
+  {
+   "seq": 22,
+   "label": "edit2-spec",
+   "actor": "agent",
+   "op": "document.edit",
+   "outcome": "returned",
+   "at": "2026-10-24T14:40:52.911Z",
+   "object": "source:analysis.R",
+   "effect": {
+    "kind": "edit",
+    "source": "analysis.R",
+    "version": 3
+   }
+  },
+  {
+   "seq": 23,
+   "label": "edit3-labels",
+   "actor": "agent",
+   "op": "document.edit",
+   "outcome": "returned",
+   "at": "2026-10-24T14:40:52.999Z",
+   "object": "source:analysis.R",
+   "effect": {
+    "kind": "edit",
+    "source": "analysis.R",
+    "version": 4
+   }
+  },
+  {
+   "seq": 24,
+   "label": "save-analysis-v2",
+   "actor": "agent",
+   "op": "document.save",
+   "outcome": "returned",
+   "at": "2026-10-24T14:41:03.714Z",
+   "object": "source:analysis.R",
+   "effect": {
+    "kind": "save",
+    "source": "analysis.R",
+    "version": 4
+   }
+  },
+  {
+   "seq": 25,
+   "label": "submit-analysis",
+   "actor": "agent",
+   "op": "action.submit",
+   "outcome": "rejected",
+   "at": null,
+   "reason": {
+    "kind": "invalid",
+    "message": "Input does not match the complete selected contract; project identity is supplied by the private connection."
+   },
+   "object": "run:1",
+   "after": "2026-10-24T14:41:03.714Z",
+   "before": "2026-10-24T14:41:21.520Z"
+  },
+  {
+   "seq": 26,
+   "label": "submit-analysis",
+   "actor": "agent",
+   "op": "action.submit",
+   "outcome": "returned",
+   "at": "2026-10-24T14:41:21.520Z",
+   "object": "run:2",
+   "effect": {
+    "kind": "submit",
+    "run": 2,
+    "source": "analysis.R",
+    "sourceVersion": 4
+   }
+  },
+  {
+   "seq": 27,
+   "label": "lookup-2",
+   "actor": "agent",
+   "op": "action.lookup",
+   "outcome": "returned",
+   "at": "2026-10-24T14:41:29.778Z",
+   "object": "run:2",
+   "effect": {
+    "kind": "ended",
+    "run": 2,
+    "exit": 0
+   }
+  },
+  {
+   "seq": 28,
+   "label": "artifact-check-2",
+   "actor": "agent",
+   "op": "artifact.check",
+   "outcome": "returned",
+   "at": null,
+   "object": "run:2",
+   "effect": {
+    "kind": "verified",
+    "run": 2,
+    "artifacts": [
+     "coefficients.csv",
+     "effects.csv",
+     "tests.csv",
+     "temp-effect.png"
+    ]
+   },
+   "after": "2026-10-24T14:41:29.778Z",
+   "before": "2026-10-24T14:42:23.783Z"
+  },
+  {
+   "seq": 29,
+   "label": "edit4-margin",
+   "actor": "agent",
+   "op": "document.edit",
+   "outcome": "returned",
+   "at": "2026-10-24T14:42:23.783Z",
+   "object": "source:analysis.R",
+   "effect": {
+    "kind": "edit",
+    "source": "analysis.R",
+    "version": 5
+   }
+  },
+  {
+   "seq": 30,
+   "label": "save-analysis-v3",
+   "actor": "agent",
+   "op": "document.save",
+   "outcome": "returned",
+   "at": "2026-10-24T14:42:30.013Z",
+   "object": "source:analysis.R",
+   "effect": {
+    "kind": "save",
+    "source": "analysis.R",
+    "version": 5
+   }
+  },
+  {
+   "seq": 31,
+   "label": "submit-analysis",
+   "actor": "agent",
+   "op": "action.submit",
+   "outcome": "returned",
+   "at": "2026-10-24T14:42:36.134Z",
+   "object": "run:3",
+   "effect": {
+    "kind": "submit",
+    "run": 3,
+    "source": "analysis.R",
+    "sourceVersion": 5
+   }
+  },
+  {
+   "seq": 32,
+   "label": "artifact-check-3",
+   "actor": "agent",
+   "op": "artifact.check",
+   "outcome": "rejected",
+   "at": null,
+   "reason": {
+    "kind": "condition",
+    "message": "No complete artifact inventory has been declared."
+   },
+   "object": "run:3",
+   "after": "2026-10-24T14:42:36.134Z",
+   "before": "2026-10-24T14:42:39.293Z"
+  },
+  {
+   "seq": 33,
+   "label": "lookup-3",
+   "actor": "agent",
+   "op": "action.lookup",
+   "outcome": "returned",
+   "at": "2026-10-24T14:42:39.293Z",
+   "object": "run:3",
+   "effect": {
+    "kind": "ended",
+    "run": 3,
+    "exit": 1
+   }
+  },
+  {
+   "seq": 34,
+   "label": "lookup-3b",
+   "actor": "agent",
+   "op": "action.lookup",
+   "outcome": "returned",
+   "at": null,
+   "object": "run:3",
+   "effect": {
+    "kind": "observe",
+    "run": 3
+   },
+   "after": "2026-10-24T14:42:39.293Z",
+   "before": "2026-10-24T14:44:17.905Z"
+  },
+  {
+   "seq": 35,
+   "label": "resolve-output",
+   "actor": "agent",
+   "op": "capability.resolve",
+   "outcome": "returned",
+   "at": null,
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": "2026-10-24T14:42:39.293Z",
+   "before": "2026-10-24T14:44:17.905Z"
+  },
+  {
+   "seq": 36,
+   "label": "output-stderr",
+   "actor": "agent",
+   "op": "action.output",
+   "outcome": "returned",
+   "at": null,
+   "object": "run:3",
+   "effect": {
+    "kind": "output",
+    "run": 3,
+    "stream": "stderr"
+   },
+   "after": "2026-10-24T14:42:39.293Z",
+   "before": "2026-10-24T14:44:17.905Z"
+  },
+  {
+   "seq": 37,
+   "label": "edit5-destray",
+   "actor": "agent",
+   "op": "document.edit",
+   "outcome": "rejected",
+   "at": null,
+   "reason": {
+    "kind": "stale",
+    "message": "Read the current buffer and receipt boundary. Missing receipts do not authorize replay."
+   },
+   "object": "source:analysis.R",
+   "after": "2026-10-24T14:42:39.293Z",
+   "before": "2026-10-24T14:44:17.905Z"
+  },
+  {
+   "seq": 38,
+   "label": "edit5-destray",
+   "actor": "agent",
+   "op": "document.edit",
+   "outcome": "rejected",
+   "at": null,
+   "reason": {
+    "kind": "condition",
+    "message": "Resolve this complete selected contract first; summary, stale references and partial pages cannot authorize execution."
+   },
+   "object": "source:analysis.R",
+   "after": "2026-10-24T14:42:39.293Z",
+   "before": "2026-10-24T14:44:17.905Z"
+  },
+  {
+   "seq": 39,
+   "label": "resolve-edit-again",
+   "actor": "agent",
+   "op": "capability.resolve",
+   "outcome": "returned",
+   "at": null,
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": "2026-10-24T14:42:39.293Z",
+   "before": "2026-10-24T14:44:17.905Z"
+  },
+  {
+   "seq": 40,
+   "label": "edit5-destray",
+   "actor": "agent",
+   "op": "document.edit",
+   "outcome": "returned",
+   "at": "2026-10-24T14:44:17.905Z",
+   "object": "source:analysis.R",
+   "effect": {
+    "kind": "edit",
+    "source": "analysis.R",
+    "version": 6
+   }
+  },
+  {
+   "seq": 41,
+   "label": "save-analysis-v4",
+   "actor": "agent",
+   "op": "document.save",
+   "outcome": "returned",
+   "at": "2026-10-24T14:44:30.770Z",
+   "object": "source:analysis.R",
+   "effect": {
+    "kind": "save",
+    "source": "analysis.R",
+    "version": 6
+   }
+  },
+  {
+   "seq": 42,
+   "label": "submit-analysis",
+   "actor": "agent",
+   "op": "action.submit",
+   "outcome": "returned",
+   "at": "2026-10-24T14:44:35.241Z",
+   "object": "run:4",
+   "effect": {
+    "kind": "submit",
+    "run": 4,
+    "source": "analysis.R",
+    "sourceVersion": 6
+   }
+  },
+  {
+   "seq": 43,
+   "label": "lookup-4",
+   "actor": "agent",
+   "op": "action.lookup",
+   "outcome": "returned",
+   "at": "2026-10-24T14:44:39.407Z",
+   "object": "run:4",
+   "effect": {
+    "kind": "ended",
+    "run": 4,
+    "exit": 1
+   }
+  },
+  {
+   "seq": 44,
+   "label": "output-stderr-4",
+   "actor": "agent",
+   "op": "action.output",
+   "outcome": "returned",
+   "at": null,
+   "object": "run:4",
+   "effect": {
+    "kind": "output",
+    "run": 4,
+    "stream": "stderr"
+   },
+   "after": "2026-10-24T14:44:39.407Z",
+   "before": "2026-10-24T14:44:59.189Z"
+  },
+  {
+   "seq": 45,
+   "label": "edit6-fix-par",
+   "actor": "agent",
+   "op": "document.edit",
+   "outcome": "returned",
+   "at": "2026-10-24T14:44:59.189Z",
+   "object": "source:analysis.R",
+   "effect": {
+    "kind": "edit",
+    "source": "analysis.R",
+    "version": 7
+   }
+  },
+  {
+   "seq": 46,
+   "label": "edit7-single-devoff",
+   "actor": "agent",
+   "op": "document.edit",
+   "outcome": "returned",
+   "at": "2026-10-24T14:45:16.384Z",
+   "object": "source:analysis.R",
+   "effect": {
+    "kind": "edit",
+    "source": "analysis.R",
+    "version": 8
+   }
+  },
+  {
+   "seq": 47,
+   "label": "edit8-margin",
+   "actor": "agent",
+   "op": "document.edit",
+   "outcome": "returned",
+   "at": "2026-10-24T14:45:46.793Z",
+   "object": "source:analysis.R",
+   "effect": {
+    "kind": "edit",
+    "source": "analysis.R",
+    "version": 9
+   }
+  },
+  {
+   "seq": 48,
+   "label": "save-analysis-v5",
+   "actor": "agent",
+   "op": "document.save",
+   "outcome": "returned",
+   "at": "2026-10-24T14:46:00.731Z",
+   "object": "source:analysis.R",
+   "effect": {
+    "kind": "save",
+    "source": "analysis.R",
+    "version": 9
+   }
+  },
+  {
+   "seq": 49,
+   "label": "submit-analysis",
+   "actor": "agent",
+   "op": "action.submit",
+   "outcome": "returned",
+   "at": "2026-10-24T14:46:14.231Z",
+   "object": "run:5",
+   "effect": {
+    "kind": "submit",
+    "run": 5,
+    "source": "analysis.R",
+    "sourceVersion": 9
+   }
+  },
+  {
+   "seq": 50,
+   "label": "lookup-5",
+   "actor": "agent",
+   "op": "action.lookup",
+   "outcome": "returned",
+   "at": "2026-10-24T14:46:19.389Z",
+   "object": "run:5",
+   "effect": {
+    "kind": "ended",
+    "run": 5,
+    "exit": 0
+   }
+  },
+  {
+   "seq": 51,
+   "label": "output-stdout-5",
+   "actor": "agent",
+   "op": "action.output",
+   "outcome": "returned",
+   "at": null,
+   "object": "run:5",
+   "effect": {
+    "kind": "output",
+    "run": 5,
+    "stream": "stdout"
+   },
+   "after": "2026-10-24T14:46:19.389Z",
+   "before": "2026-10-24T14:46:43.490Z"
+  },
+  {
+   "seq": 52,
+   "label": "artifact-check-5",
+   "actor": "agent",
+   "op": "artifact.check",
+   "outcome": "returned",
+   "at": null,
+   "object": "run:5",
+   "effect": {
+    "kind": "verified",
+    "run": 5,
+    "artifacts": [
+     "coefficients.csv",
+     "effects.csv",
+     "tests.csv",
+     "temp-effect.png"
+    ]
+   },
+   "after": "2026-10-24T14:46:19.389Z",
+   "before": "2026-10-24T14:46:43.490Z"
+  },
+  {
+   "seq": 53,
+   "label": "resolve-composition",
+   "actor": "agent",
+   "op": "capability.resolve",
+   "outcome": "returned",
+   "at": null,
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": "2026-10-24T14:46:19.389Z",
+   "before": "2026-10-24T14:46:43.490Z"
+  },
+  {
+   "seq": 54,
+   "label": "compose-figure",
+   "actor": "agent",
+   "op": "composition.apply",
+   "outcome": "returned",
+   "at": "2026-10-24T14:46:43.490Z",
+   "object": "layout",
+   "effect": {
+    "kind": "layout",
+    "replace": true,
+    "views": [
+     {
+      "artifact": "temp-effect.png",
+      "run": 5
+     },
+     {
+      "artifact": "effects.csv",
+      "run": 5
+     }
+    ]
+   }
+  },
+  {
+   "seq": 55,
+   "label": "open-findings",
+   "actor": "agent",
+   "op": "document.open",
+   "outcome": "returned",
+   "at": "2026-10-24T14:48:26.752Z",
+   "object": "source:findings.md",
+   "effect": {
+    "kind": "open",
+    "source": "findings.md",
+    "version": 1
+   }
+  },
+  {
+   "seq": 56,
+   "label": "edit-findings",
+   "actor": "agent",
+   "op": "document.edit",
+   "outcome": "returned",
+   "at": "2026-10-24T14:48:32.122Z",
+   "object": "source:findings.md",
+   "effect": {
+    "kind": "edit",
+    "source": "findings.md",
+    "version": 2
+   }
+  },
+  {
+   "seq": 57,
+   "label": "save-findings",
+   "actor": "agent",
+   "op": "document.save",
+   "outcome": "returned",
+   "at": "2026-10-24T14:48:36.632Z",
+   "object": "source:findings.md",
+   "effect": {
+    "kind": "save",
+    "source": "findings.md",
+    "version": 2
+   }
+  },
+  {
+   "seq": 58,
+   "label": "resolve-taskmap",
+   "actor": "agent",
+   "op": "capability.resolve",
+   "outcome": "returned",
+   "at": null,
+   "effect": {
+    "kind": "catalog"
+   },
+   "after": "2026-10-24T14:48:36.632Z",
+   "before": "2026-10-24T14:49:13.311Z"
+  },
+  {
+   "seq": 59,
+   "label": "task-map",
+   "actor": "agent",
+   "op": "task.map.declare",
+   "outcome": "returned",
+   "at": "2026-10-24T14:49:13.311Z",
+   "object": "map",
+   "effect": {
+    "kind": "items",
+    "question": "How much of the temperature effect on ozone is wind and sunlight?",
+    "items": [
+     {
+      "id": "question",
+      "kind": "step",
+      "state": "done",
+      "title": "Frame the question",
+      "summary": "How much of the temperature-ozone association is wind and sunlight rather than temperature?"
+     },
+     {
+      "id": "script",
+      "kind": "step",
+      "state": "done",
+      "title": "Write analysis.R in the project",
+      "summary": "Authored through document.edit and document.save; digest 1f6dd06c, final version 9 revision 12."
+     },
+     {
+      "id": "run",
+      "kind": "step",
+      "state": "done",
+      "title": "Run the R analysis",
+      "summary": "airquality-temp-5 exited 0; four artifacts verified by artifact.check with integrity verified."
+     },
+     {
+      "id": "figure",
+      "kind": "result",
+      "state": "done",
+      "title": "Show temp-effect.png",
+      "summary": "Built from the run own PNG, 1040x620, version 985b7955, decoded in Chrome at 1440/768/390."
+     },
+     {
+      "id": "limits",
+      "kind": "note",
+      "state": "done",
+      "title": "State the limits",
+      "summary": "Observational data, missing-at-random assumed. Three earlier submissions failed on my own script edits, not on the tool."
+     }
+    ],
+    "vocabulary": null
+   }
+  },
+  {
+   "seq": 60,
+   "label": "task-map-vocab",
+   "actor": "agent",
+   "op": "task.map.declare",
+   "outcome": "returned",
+   "at": "2026-10-24T14:50:35.572Z",
+   "object": "map",
+   "effect": {
+    "kind": "items",
+    "question": "How much of the temperature effect on ozone is wind and sunlight?",
+    "items": [
+     {
+      "id": "question",
+      "kind": "step",
+      "state": "done",
+      "title": "Frame the question",
+      "summary": "How much of the temperature-ozone association is wind and sunlight rather than temperature?"
+     },
+     {
+      "id": "script",
+      "kind": "step",
+      "state": "done",
+      "title": "Write analysis.R in the project",
+      "summary": "Authored through document.edit and document.save; digest 1f6dd06c, final version 9 revision 12."
+     },
+     {
+      "id": "run",
+      "kind": "step",
+      "state": "done",
+      "title": "Run the R analysis",
+      "summary": "airquality-temp-5 exited 0; four artifacts verified by artifact.check with integrity verified."
+     },
+     {
+      "id": "figure",
+      "kind": "result",
+      "state": "done",
+      "title": "Show temp-effect.png",
+      "summary": "Built from the run own PNG, 1040x620, version 985b7955, decoded in Chrome at 1440/768/390."
+     },
+     {
+      "id": "limits",
+      "kind": "note",
+      "state": "done",
+      "title": "State the limits",
+      "summary": "Observational data, missing-at-random assumed. Three earlier submissions failed on my own script edits, not on the tool."
+     }
+    ],
+    "vocabulary": {
+     "kinds": {
+      "step": {
+       "label": "Step",
+       "icon": "play"
+      },
+      "result": {
+       "label": "Result",
+       "icon": "image"
+      },
+      "note": {
+       "label": "Limit",
+       "icon": "info"
+      }
+     },
+     "states": {
+      "done": {
+       "label": "Done",
+       "role": "done",
+       "tone": "verified"
+      }
+     }
+    }
+   }
+  }
+ ],
+ "sources": {
+  "findings.md": {
+   "versions": {
+    "1": "",
+    "2": "# How much of the temperature–ozone effect is real?\n\n`datasets::airquality`, 153 rows. Ozone is missing in 37 rows and Solar.R in 7, so\n111 rows have every variable. All numbers below come from run\n`airquality-temp-5` (`analysis.R`, digest `1f6dd06c…`) and from\n`artifact.check` on that run, which reported `integrity: verified` for four files.\n\n## Models\n\n| model | specification | n | temp effect (ppb/°F) | 95% CI | share of A |\n| --- | --- | --- | --- | --- | --- |\n| A | Ozone ~ Temp | 116 | 2.429 | 1.967 – 2.891 | 1.000 |\n| B | Ozone ~ Temp + Wind | 116 | 1.840 | 1.345 – 2.335 | 0.758 |\n| C | Ozone ~ Temp + Wind, complete rows only | 111 | 1.828 | 1.331 – 2.324 | 0.752 |\n| D | Ozone ~ Temp + Wind + Solar.R | 111 | 1.652 | 1.150 – 2.155 | 0.680 |\n\n## Decomposition of the 32% drop\n\n- **Wind adjustment: −24.2 points** (A → B). This is the real confounder:\n  adding one variable removes a quarter of the raw temperature effect, and the\n  nested F test says the added term earns its place (F = 21.2, p = 1.1e−05).\n- **Sample restriction: −0.5 points** (B → C). Dropping the five rows that lack\n  Solar.R changes almost nothing, so the missingness is not driving the story.\n- **Solar radiation: −7.2 points** (C → D). Smaller, but not noise: F = 6.66,\n  p = 0.011.\n\nSo the honest sentence is: **temperature still matters after adjustment — about\ntwo-thirds of the raw slope survives — but a third of the raw slope was wind and\nsunlight, and wind is by far the larger share.** The raw 2.43 ppb/°F figure is not\na causal effect of temperature.\n\n## What this run does not say\n\n- No causality, no time structure: these are daily measurements with a strong\n  seasonal correlation between temperature and solar radiation.\n- The 37 missing ozone rows are assumed missing at random; nothing here tests that.\n- One dataset, one specification family. Ozone ~ Temp + Wind + Solar.R + Month\n  would be the next thing to try.\n"
+   },
+   "edited": {
+    "2": "2026-10-24T14:48:32.122Z"
+   },
+   "saved": {
+    "2": "2026-10-24T14:48:36.632Z"
+   }
+  },
+  "analysis.R": {
+   "versions": {
+    "1": "",
+    "2": "# Question: how much of the temperature effect on ozone survives adjustment for\n# wind and solar radiation, and how much of the change is just a change of sample?\n# Every number below comes from this run; nothing is typed in from elsewhere.\nout <- commandArgs(trailingOnly = TRUE)[1]\n\ndata(airquality, package = \"datasets\")\nd <- datasets::airquality\nvars <- c(\"Ozone\", \"Solar.R\", \"Wind\", \"Temp\")\nmiss <- vapply(vars, function(v) sum(is.na(d[[v]])), integer(1))\n\n# ozone-core drops only rows without ozone/wind/temp; complete also drops solar.\ncore <- d[complete.cases(d[, c(\"Ozone\", \"Wind\", \"Temp\")]), ]\ncc   <- d[complete.cases(d[, vars]), ]\n\ntidy <- function(label, sample, m) {\n  co <- summary(m)$coefficients\n  data.frame(model = label, sample = sample, n = nobs(m), term = rownames(co),\n             estimate = co[, \"Estimate\"], std.error = co[, \"Std. Error\"],\n             statistic = co[, \"t value\"], p.value = co[, \"Pr(>|t|)\"],\n             r2 = summary(m)$r.squared, adj.r2 = summary(m)$adj.r.squared,\n             stringsAsFactors = FALSE, row.names = NULL)\n}\n\nm0 <- lm(Ozone ~ Temp, core)                        # A: raw, ozone-core\nm1 <- lm(Ozone ~ Temp + Wind, core)                 # B: wind, same rows\nm2 <- lm(Ozone ~ Temp + Wind, cc)                   # C: wind, complete rows\nm3 <- lm(Ozone ~ Temp + Wind + Solar.R, cc)         # D: + solar, complete rows\ncoefs <- rbind(tidy(\"A\", \"ozone-core\", m0), tidy(\"B\", \"ozone-core\", m1),\n               tidy(\"C\", \"complete\", m2), tidy(\"D\", \"complete\", m3))\nwrite.csv(coefs, file.path(out, \"coefficients.csv\"), row.names = FALSE)\n\ntemp_row <- function(label, sample, m) {\n  est <- unname(coef(m)[\"Temp\"]); se <- unname(sqrt(vcov(m)[\"Temp\", \"Temp\"]))\n  tc <- qt(0.975, df.residual(m))\n  data.frame(model = label, sample = sample, n = nobs(m), estimate = est,\n             std.error = se, ci.low = est - tc * se, ci.high = est + tc * se,\n             p.value = unname(summary(m)$coefficients[\"Temp\", \"Pr(>|t|)\"]))\n}\neffects <- rbind(temp_row(\"A\", \"ozone-core\", m0), temp_row(\"B\", \"ozone-core\", m1),\n                 temp_row(\"C\", \"complete\", m2), temp_row(\"D\", \"complete\", m3))\nbase <- effects$estimate[1]\neffects$share.of.A <- effects$estimate / base\neffects$change.vs.previous <- c(NA, diff(effects$estimate) / base)\nwrite.csv(effects, file.path(out, \"effects.csv\"), row.names = FALSE)\n\na01 <- anova(m0, m1); a23 <- anova(m2, m3)\ntests <- data.frame(test = c(\"wind added (B vs A)\", \"solar added (D vs C)\"),\n                    df = c(a01$Df[2], a23$Df[2]),\n                    f = c(a01$F[2], a23$F[2]),\n                    p.value = c(a01$`Pr(>F)`[2], a23$`Pr(>F)`[2]))\nwrite.csv(tests, file.path(out, \"tests.csv\"), row.names = FALSE)\n\npng(file.path(out, \"temp-effect.png\"), width = 1040, height = 620, res = 110)\nop <- par(mar = c(4.6, 8.2, 4, 2))\nplot(NA, xlim = range(c(effects$ci.low, effects$ci.high)), ylim = c(0.4, nrow(effects) + 0.6),\n     yaxt = \"n\", xlab = \"Ozone change per 1 F temperature (ppb, 95% CI)\", ylab = \"\",\n     main = \"Temperature effect under four specifications\")\nabline(h = seq_len(nrow(effects)), col = \"grey92\"); abline(v = 0, lty = 2, col = \"grey45\")\nsegments(effects$ci.low, seq_len(nrow(effects)), effects$ci.high, seq_len(nrow(effects)), lwd = 2.2)\npoints(effects$estimate, seq_len(nrow(effects)), pch = 19, cex = 1.5)\naxis(2, at = seq_len(nrow(effects)), las = 1, cex.axis = 0.85,\n     labels = sprintf(\"%s  n=%d  %s\", effects$model, effects$n, effects$sample))\ntext(effects$estimate, seq_len(nrow(effects)) + 0.24, sprintf(\"%.3f\", effects$estimate), cex = 0.72)\npar(op); invisible(dev.off())\n\nfiles <- c(\"coefficients.csv\", \"effects.csv\", \"tests.csv\", \"temp-effect.png\")\nartifacts <- lapply(files, function(f) {\n  p <- file.path(out, f)\n  list(path = f, bytes = unname(file.size(p)),\n       sha256 = digest::digest(p, algo = \"sha256\", file = TRUE))\n})\nmanifest <- list(schemaVersion = 1L, complete = TRUE, artifacts = artifacts)\nwriteLines(jsonlite::toJSON(manifest, auto_unbox = TRUE), file.path(dirname(out), \"inventory.json\"))\n\ncat(\"n rows:\", nrow(d), \" missing:\", paste(names(miss), miss, sep = \"=\", collapse = \" \"), \"\\n\")\ncat(\"temp coefficient by model (ppb per F):\\n\"); print(effects[, c(\"model\", \"n\", \"estimate\", \"ci.low\", \"ci.high\")], row.names = FALSE)\ncat(\"share of raw estimate kept:\", paste(sprintf(\"%.3f\", effects$share.of.A), collapse = \" \"), \"\\n\")\n",
+    "3": "# Question: how much of the temperature effect on ozone survives adjustment for\n# wind and solar radiation, and how much of the change is just a change of sample?\n# Every number below comes from this run; nothing is typed in from elsewhere.\nout <- commandArgs(trailingOnly = TRUE)[1]\n\ndata(airquality, package = \"datasets\")\nd <- datasets::airquality\nvars <- c(\"Ozone\", \"Solar.R\", \"Wind\", \"Temp\")\nmiss <- vapply(vars, function(v) sum(is.na(d[[v]])), integer(1))\n\n# ozone-core drops only rows without ozone/wind/temp; complete also drops solar.\ncore <- d[complete.cases(d[, c(\"Ozone\", \"Wind\", \"Temp\")]), ]\ncc   <- d[complete.cases(d[, vars]), ]\n\ntidy <- function(label, sample, m) {\n  co <- summary(m)$coefficients\n  data.frame(model = label, sample = sample, n = nobs(m), term = rownames(co),\n             estimate = co[, \"Estimate\"], std.error = co[, \"Std. Error\"],\n             statistic = co[, \"t value\"], p.value = co[, \"Pr(>|t|)\"],\n             r2 = summary(m)$r.squared, adj.r2 = summary(m)$adj.r.squared,\n             stringsAsFactors = FALSE, row.names = NULL)\n}\n\nm0 <- lm(Ozone ~ Temp, core)                        # A: raw, ozone-core\nm1 <- lm(Ozone ~ Temp + Wind, core)                 # B: wind, same rows\nm2 <- lm(Ozone ~ Temp + Wind, cc)                   # C: wind, complete rows\nm3 <- lm(Ozone ~ Temp + Wind + Solar.R, cc)         # D: + solar, complete rows\ncoefs <- rbind(tidy(\"A\", \"ozone-core\", m0), tidy(\"B\", \"ozone-core\", m1),\n               tidy(\"C\", \"complete\", m2), tidy(\"D\", \"complete\", m3))\nwrite.csv(coefs, file.path(out, \"coefficients.csv\"), row.names = FALSE)\n\ntemp_row <- function(label, sample, m) {\n  est <- unname(coef(m)[\"Temp\"]); se <- unname(sqrt(vcov(m)[\"Temp\", \"Temp\"]))\n  tc <- qt(0.975, df.residual(m))\n  data.frame(model = label, sample = sample, n = nobs(m), estimate = est,\n             std.error = se, ci.low = est - tc * se, ci.high = est + tc * se,\n             p.value = unname(summary(m)$coefficients[\"Temp\", \"Pr(>|t|)\"]))\n}\neffects <- rbind(temp_row(\"A\", \"ozone-core\", m0), temp_row(\"B\", \"ozone-core\", m1),\n                 temp_row(\"C\", \"complete\", m2), temp_row(\"D\", \"complete\", m3))\nbase <- effects$estimate[1]\neffects$share.of.A <- effects$estimate / base\neffects$change.vs.previous <- c(NA, diff(effects$estimate) / base)\nwrite.csv(effects, file.path(out, \"effects.csv\"), row.names = FALSE)\n\na01 <- anova(m0, m1); a23 <- anova(m2, m3)\ntests <- data.frame(test = c(\"wind added (B vs A)\", \"solar added (D vs C)\"),\n                    df = c(a01$Df[2], a23$Df[2]),\n                    f = c(a01$F[2], a23$F[2]),\n                    p.value = c(a01$`Pr(>F)`[2], a23$`Pr(>F)`[2]))\nwrite.csv(tests, file.path(out, \"tests.csv\"), row.names = FALSE)\n\nspec <- c(A = \"Temp\", B = \"Temp + Wind\", C = \"Temp + Wind\", D = \"Temp + Wind + Solar.R\")\npng(file.path(out, \"temp-effect.png\"), width = 1040, height = 620, res = 110)\nop <- par(mar = c(4.6, 8.2, 4, 2))\nplot(NA, xlim = range(c(effects$ci.low, effects$ci.high)), ylim = c(0.4, nrow(effects) + 0.6),\n     yaxt = \"n\", xlab = \"Ozone change per 1 F temperature (ppb, 95% CI)\", ylab = \"\",\n     main = \"Temperature effect under four specifications\")\nabline(h = seq_len(nrow(effects)), col = \"grey92\"); abline(v = 0, lty = 2, col = \"grey45\")\nsegments(effects$ci.low, seq_len(nrow(effects)), effects$ci.high, seq_len(nrow(effects)), lwd = 2.2)\npoints(effects$estimate, seq_len(nrow(effects)), pch = 19, cex = 1.5)\naxis(2, at = seq_len(nrow(effects)), las = 1, cex.axis = 0.85,\n     labels = sprintf(\"%s  n=%d  %s\", effects$model, effects$n, effects$sample))\ntext(effects$estimate, seq_len(nrow(effects)) + 0.24, sprintf(\"%.3f\", effects$estimate), cex = 0.72)\npar(op); invisible(dev.off())\n\nfiles <- c(\"coefficients.csv\", \"effects.csv\", \"tests.csv\", \"temp-effect.png\")\nartifacts <- lapply(files, function(f) {\n  p <- file.path(out, f)\n  list(path = f, bytes = unname(file.size(p)),\n       sha256 = digest::digest(p, algo = \"sha256\", file = TRUE))\n})\nmanifest <- list(schemaVersion = 1L, complete = TRUE, artifacts = artifacts)\nwriteLines(jsonlite::toJSON(manifest, auto_unbox = TRUE), file.path(dirname(out), \"inventory.json\"))\n\ncat(\"n rows:\", nrow(d), \" missing:\", paste(names(miss), miss, sep = \"=\", collapse = \" \"), \"\\n\")\ncat(\"temp coefficient by model (ppb per F):\\n\"); print(effects[, c(\"model\", \"n\", \"estimate\", \"ci.low\", \"ci.high\")], row.names = FALSE)\ncat(\"share of raw estimate kept:\", paste(sprintf(\"%.3f\", effects$share.of.A), collapse = \" \"), \"\\n\")\n",
+    "4": "# Question: how much of the temperature effect on ozone survives adjustment for\n# wind and solar radiation, and how much of the change is just a change of sample?\n# Every number below comes from this run; nothing is typed in from elsewhere.\nout <- commandArgs(trailingOnly = TRUE)[1]\n\ndata(airquality, package = \"datasets\")\nd <- datasets::airquality\nvars <- c(\"Ozone\", \"Solar.R\", \"Wind\", \"Temp\")\nmiss <- vapply(vars, function(v) sum(is.na(d[[v]])), integer(1))\n\n# ozone-core drops only rows without ozone/wind/temp; complete also drops solar.\ncore <- d[complete.cases(d[, c(\"Ozone\", \"Wind\", \"Temp\")]), ]\ncc   <- d[complete.cases(d[, vars]), ]\n\ntidy <- function(label, sample, m) {\n  co <- summary(m)$coefficients\n  data.frame(model = label, sample = sample, n = nobs(m), term = rownames(co),\n             estimate = co[, \"Estimate\"], std.error = co[, \"Std. Error\"],\n             statistic = co[, \"t value\"], p.value = co[, \"Pr(>|t|)\"],\n             r2 = summary(m)$r.squared, adj.r2 = summary(m)$adj.r.squared,\n             stringsAsFactors = FALSE, row.names = NULL)\n}\n\nm0 <- lm(Ozone ~ Temp, core)                        # A: raw, ozone-core\nm1 <- lm(Ozone ~ Temp + Wind, core)                 # B: wind, same rows\nm2 <- lm(Ozone ~ Temp + Wind, cc)                   # C: wind, complete rows\nm3 <- lm(Ozone ~ Temp + Wind + Solar.R, cc)         # D: + solar, complete rows\ncoefs <- rbind(tidy(\"A\", \"ozone-core\", m0), tidy(\"B\", \"ozone-core\", m1),\n               tidy(\"C\", \"complete\", m2), tidy(\"D\", \"complete\", m3))\nwrite.csv(coefs, file.path(out, \"coefficients.csv\"), row.names = FALSE)\n\ntemp_row <- function(label, sample, m) {\n  est <- unname(coef(m)[\"Temp\"]); se <- unname(sqrt(vcov(m)[\"Temp\", \"Temp\"]))\n  tc <- qt(0.975, df.residual(m))\n  data.frame(model = label, sample = sample, n = nobs(m), estimate = est,\n             std.error = se, ci.low = est - tc * se, ci.high = est + tc * se,\n             p.value = unname(summary(m)$coefficients[\"Temp\", \"Pr(>|t|)\"]))\n}\neffects <- rbind(temp_row(\"A\", \"ozone-core\", m0), temp_row(\"B\", \"ozone-core\", m1),\n                 temp_row(\"C\", \"complete\", m2), temp_row(\"D\", \"complete\", m3))\nbase <- effects$estimate[1]\neffects$share.of.A <- effects$estimate / base\neffects$change.vs.previous <- c(NA, diff(effects$estimate) / base)\nwrite.csv(effects, file.path(out, \"effects.csv\"), row.names = FALSE)\n\na01 <- anova(m0, m1); a23 <- anova(m2, m3)\ntests <- data.frame(test = c(\"wind added (B vs A)\", \"solar added (D vs C)\"),\n                    df = c(a01$Df[2], a23$Df[2]),\n                    f = c(a01$F[2], a23$F[2]),\n                    p.value = c(a01$`Pr(>F)`[2], a23$`Pr(>F)`[2]))\nwrite.csv(tests, file.path(out, \"tests.csv\"), row.names = FALSE)\n\nspec <- c(A = \"Temp\", B = \"Temp + Wind\", C = \"Temp + Wind\", D = \"Temp + Wind + Solar.R\")\npng(file.path(out, \"temp-effect.png\"), width = 1040, height = 620, res = 110)\nop <- par(mar = c(4.6, 8.2, 4, 2))\nplot(NA, xlim = range(c(effects$ci.low, effects$ci.high)), ylim = c(0.4, nrow(effects) + 0.6),\n     yaxt = \"n\", xlab = \"Ozone change per 1 F temperature (ppb, 95% CI)\", ylab = \"\",\n     main = \"Temperature effect under four specifications\")\nabline(h = seq_len(nrow(effects)), col = \"grey92\"); abline(v = 0, lty = 2, col = \"grey45\")\nsegments(effects$ci.low, seq_len(nrow(effects)), effects$ci.high, seq_len(nrow(effects)), lwd = 2.2)\npoints(effects$estimate, seq_len(nrow(effects)), pch = 19, cex = 1.5)\naxis(2, at = seq_len(nrow(effects)), las = 1, cex.axis = 0.85,\n     labels = sprintf(\"%s  Ozone ~ %s  n=%d\", effects$model, spec[effects$model], effects$n))\ntext(effects$estimate, seq_len(nrow(effects)) + 0.24, sprintf(\"%.3f\", effects$estimate), cex = 0.72)\npar(op); invisible(dev.off())\n\nfiles <- c(\"coefficients.csv\", \"effects.csv\", \"tests.csv\", \"temp-effect.png\")\nartifacts <- lapply(files, function(f) {\n  p <- file.path(out, f)\n  list(path = f, bytes = unname(file.size(p)),\n       sha256 = digest::digest(p, algo = \"sha256\", file = TRUE))\n})\nmanifest <- list(schemaVersion = 1L, complete = TRUE, artifacts = artifacts)\nwriteLines(jsonlite::toJSON(manifest, auto_unbox = TRUE), file.path(dirname(out), \"inventory.json\"))\n\ncat(\"n rows:\", nrow(d), \" missing:\", paste(names(miss), miss, sep = \"=\", collapse = \" \"), \"\\n\")\ncat(\"temp coefficient by model (ppb per F):\\n\"); print(effects[, c(\"model\", \"n\", \"estimate\", \"ci.low\", \"ci.high\")], row.names = FALSE)\ncat(\"share of raw estimate kept:\", paste(sprintf(\"%.3f\", effects$share.of.A), collapse = \" \"), \"\\n\")\n",
+    "5": "# Question: how much of the temperature effect on ozone survives adjustment for\n# wind and solar radiation, and how much of the change is just a change of sample?\n# Every number below comes from this run; nothing is typed in from elsewhere.\nout <- commandArgs(trailingOnly = TRUE)[1]\n\ndata(airquality, package = \"datasets\")\nd <- datasets::airquality\nvars <- c(\"Ozone\", \"Solar.R\", \"Wind\", \"Temp\")\nmiss <- vapply(vars, function(v) sum(is.na(d[[v]])), integer(1))\n\n# ozone-core drops only rows without ozone/wind/temp; complete also drops solar.\ncore <- d[complete.cases(d[, c(\"Ozone\", \"Wind\", \"Temp\")]), ]\ncc   <- d[complete.cases(d[, vars]), ]\n\ntidy <- function(label, sample, m) {\n  co <- summary(m)$coefficients\n  data.frame(model = label, sample = sample, n = nobs(m), term = rownames(co),\n             estimate = co[, \"Estimate\"], std.error = co[, \"Std. Error\"],\n             statistic = co[, \"t value\"], p.value = co[, \"Pr(>|t|)\"],\n             r2 = summary(m)$r.squared, adj.r2 = summary(m)$adj.r.squared,\n             stringsAsFactors = FALSE, row.names = NULL)\n}\n\nm0 <- lm(Ozone ~ Temp, core)                        # A: raw, ozone-core\nm1 <- lm(Ozone ~ Temp + Wind, core)                 # B: wind, same rows\nm2 <- lm(Ozone ~ Temp + Wind, cc)                   # C: wind, complete rows\nm3 <- lm(Ozone ~ Temp + Wind + Solar.R, cc)         # D: + solar, complete rows\ncoefs <- rbind(tidy(\"A\", \"ozone-core\", m0), tidy(\"B\", \"ozone-core\", m1),\n               tidy(\"C\", \"complete\", m2), tidy(\"D\", \"complete\", m3))\nwrite.csv(coefs, file.path(out, \"coefficients.csv\"), row.names = FALSE)\n\ntemp_row <- function(label, sample, m) {\n  est <- unname(coef(m)[\"Temp\"]); se <- unname(sqrt(vcov(m)[\"Temp\", \"Temp\"]))\n  tc <- qt(0.975, df.residual(m))\n  data.frame(model = label, sample = sample, n = nobs(m), estimate = est,\n             std.error = se, ci.low = est - tc * se, ci.high = est + tc * se,\n             p.value = unname(summary(m)$coefficients[\"Temp\", \"Pr(>|t|)\"]))\n}\neffects <- rbind(temp_row(\"A\", \"ozone-core\", m0), temp_row(\"B\", \"ozone-core\", m1),\n                 temp_row(\"C\", \"complete\", m2), temp_row(\"D\", \"complete\", m3))\nbase <- effects$estimate[1]\neffects$share.of.A <- effects$estimate / base\neffects$change.vs.previous <- c(NA, diff(effects$estimate) / base)\nwrite.csv(effects, file.path(out, \"effects.csv\"), row.names = FALSE)\n\na01 <- anova(m0, m1); a23 <- anova(m2, m3)\ntests <- data.frame(test = c(\"wind added (B vs A)\", \"solar added (D vs C)\"),\n                    df = c(a01$Df[2], a23$Df[2]),\n                    f = c(a01$F[2], a23$F[2]),\n                    p.value = c(a01$`Pr(>F)`[2], a23$`Pr(>F)`[2]))\nwrite.csv(tests, file.path(out, \"tests.csv\"), row.names = FALSE)\n\nspec <- c(A = \"Temp\", B = \"Temp + Wind\", C = \"Temp + Wind\", D = \"Temp + Wind + Solar.R\")\nlabels <- sprintf(\"%s  Ozone ~ %s  n=%d\", effects$model, spec[effects$model], effects$n)\npng(file.path(out, \"temp-effect.png\"), width = 1040, height = 620, res = 110)\npar(mar = c(1, 1, 1, 1)); plot.new()\nml <- max(strwidth(labels, cex = 0.85, units = \"inches\")) / par(\"csi\") + 0.9\npar(mar = c(4.6, ml, 4, 2))\nplot(NA, xlim = range(c(effects$ci.low, effects$ci.high)), ylim = c(0.4, nrow(effects) + 0.6),\n     yaxt = \"n\", xlab = \"Ozone change per 1 F temperature (ppb, 95% CI)\", ylab = \"\",\n     main = \"Temperature effect under four specifications\")\nabline(h = seq_len(nrow(effects)), col = \"grey92\"); abline(v = 0, lty = 2, col = \"grey45\")\nsegments(effects$ci.low, seq_len(nrow(effects)), effects$ci.high, seq_len(nrow(effects)), lwd = 2.2)\npoints(effects$estimate, seq_len(nrow(effects)), pch = 19, cex = 1.5)\naxis(2, at = seq_len(nrow(effects)), las = 1, cex.axis = 0.85, labels = labels)\n     labels = sprintf(\"%s  Ozone ~ %s  n=%d\", effects$model, spec[effects$model], effects$n))\ntext(effects$estimate, seq_len(nrow(effects)) + 0.24, sprintf(\"%.3f\", effects$estimate), cex = 0.72)\npar(op); invisible(dev.off())\n\nfiles <- c(\"coefficients.csv\", \"effects.csv\", \"tests.csv\", \"temp-effect.png\")\nartifacts <- lapply(files, function(f) {\n  p <- file.path(out, f)\n  list(path = f, bytes = unname(file.size(p)),\n       sha256 = digest::digest(p, algo = \"sha256\", file = TRUE))\n})\nmanifest <- list(schemaVersion = 1L, complete = TRUE, artifacts = artifacts)\nwriteLines(jsonlite::toJSON(manifest, auto_unbox = TRUE), file.path(dirname(out), \"inventory.json\"))\n\ncat(\"n rows:\", nrow(d), \" missing:\", paste(names(miss), miss, sep = \"=\", collapse = \" \"), \"\\n\")\ncat(\"temp coefficient by model (ppb per F):\\n\"); print(effects[, c(\"model\", \"n\", \"estimate\", \"ci.low\", \"ci.high\")], row.names = FALSE)\ncat(\"share of raw estimate kept:\", paste(sprintf(\"%.3f\", effects$share.of.A), collapse = \" \"), \"\\n\")\n",
+    "6": "# Question: how much of the temperature effect on ozone survives adjustment for\n# wind and solar radiation, and how much of the change is just a change of sample?\n# Every number below comes from this run; nothing is typed in from elsewhere.\nout <- commandArgs(trailingOnly = TRUE)[1]\n\ndata(airquality, package = \"datasets\")\nd <- datasets::airquality\nvars <- c(\"Ozone\", \"Solar.R\", \"Wind\", \"Temp\")\nmiss <- vapply(vars, function(v) sum(is.na(d[[v]])), integer(1))\n\n# ozone-core drops only rows without ozone/wind/temp; complete also drops solar.\ncore <- d[complete.cases(d[, c(\"Ozone\", \"Wind\", \"Temp\")]), ]\ncc   <- d[complete.cases(d[, vars]), ]\n\ntidy <- function(label, sample, m) {\n  co <- summary(m)$coefficients\n  data.frame(model = label, sample = sample, n = nobs(m), term = rownames(co),\n             estimate = co[, \"Estimate\"], std.error = co[, \"Std. Error\"],\n             statistic = co[, \"t value\"], p.value = co[, \"Pr(>|t|)\"],\n             r2 = summary(m)$r.squared, adj.r2 = summary(m)$adj.r.squared,\n             stringsAsFactors = FALSE, row.names = NULL)\n}\n\nm0 <- lm(Ozone ~ Temp, core)                        # A: raw, ozone-core\nm1 <- lm(Ozone ~ Temp + Wind, core)                 # B: wind, same rows\nm2 <- lm(Ozone ~ Temp + Wind, cc)                   # C: wind, complete rows\nm3 <- lm(Ozone ~ Temp + Wind + Solar.R, cc)         # D: + solar, complete rows\ncoefs <- rbind(tidy(\"A\", \"ozone-core\", m0), tidy(\"B\", \"ozone-core\", m1),\n               tidy(\"C\", \"complete\", m2), tidy(\"D\", \"complete\", m3))\nwrite.csv(coefs, file.path(out, \"coefficients.csv\"), row.names = FALSE)\n\ntemp_row <- function(label, sample, m) {\n  est <- unname(coef(m)[\"Temp\"]); se <- unname(sqrt(vcov(m)[\"Temp\", \"Temp\"]))\n  tc <- qt(0.975, df.residual(m))\n  data.frame(model = label, sample = sample, n = nobs(m), estimate = est,\n             std.error = se, ci.low = est - tc * se, ci.high = est + tc * se,\n             p.value = unname(summary(m)$coefficients[\"Temp\", \"Pr(>|t|)\"]))\n}\neffects <- rbind(temp_row(\"A\", \"ozone-core\", m0), temp_row(\"B\", \"ozone-core\", m1),\n                 temp_row(\"C\", \"complete\", m2), temp_row(\"D\", \"complete\", m3))\nbase <- effects$estimate[1]\neffects$share.of.A <- effects$estimate / base\neffects$change.vs.previous <- c(NA, diff(effects$estimate) / base)\nwrite.csv(effects, file.path(out, \"effects.csv\"), row.names = FALSE)\n\na01 <- anova(m0, m1); a23 <- anova(m2, m3)\ntests <- data.frame(test = c(\"wind added (B vs A)\", \"solar added (D vs C)\"),\n                    df = c(a01$Df[2], a23$Df[2]),\n                    f = c(a01$F[2], a23$F[2]),\n                    p.value = c(a01$`Pr(>F)`[2], a23$`Pr(>F)`[2]))\nwrite.csv(tests, file.path(out, \"tests.csv\"), row.names = FALSE)\n\nspec <- c(A = \"Temp\", B = \"Temp + Wind\", C = \"Temp + Wind\", D = \"Temp + Wind + Solar.R\")\nlabels <- sprintf(\"%s  Ozone ~ %s  n=%d\", effects$model, spec[effects$model], effects$n)\npng(file.path(out, \"temp-effect.png\"), width = 1040, height = 620, res = 110)\npar(mar = c(1, 1, 1, 1)); plot.new()\nml <- max(strwidth(labels, cex = 0.85, units = \"inches\")) / par(\"csi\") + 0.9\npar(mar = c(4.6, ml, 4, 2))\nplot(NA, xlim = range(c(effects$ci.low, effects$ci.high)), ylim = c(0.4, nrow(effects) + 0.6),\n     yaxt = \"n\", xlab = \"Ozone change per 1 F temperature (ppb, 95% CI)\", ylab = \"\",\n     main = \"Temperature effect under four specifications\")\nabline(h = seq_len(nrow(effects)), col = \"grey92\"); abline(v = 0, lty = 2, col = \"grey45\")\nsegments(effects$ci.low, seq_len(nrow(effects)), effects$ci.high, seq_len(nrow(effects)), lwd = 2.2)\npoints(effects$estimate, seq_len(nrow(effects)), pch = 19, cex = 1.5)\naxis(2, at = seq_len(nrow(effects)), las = 1, cex.axis = 0.85, labels = labels)\ntext(effects$estimate, seq_len(nrow(effects)) + 0.24, sprintf(\"%.3f\", effects$estimate), cex = 0.72)\npar(op); invisible(dev.off())\n\nfiles <- c(\"coefficients.csv\", \"effects.csv\", \"tests.csv\", \"temp-effect.png\")\nartifacts <- lapply(files, function(f) {\n  p <- file.path(out, f)\n  list(path = f, bytes = unname(file.size(p)),\n       sha256 = digest::digest(p, algo = \"sha256\", file = TRUE))\n})\nmanifest <- list(schemaVersion = 1L, complete = TRUE, artifacts = artifacts)\nwriteLines(jsonlite::toJSON(manifest, auto_unbox = TRUE), file.path(dirname(out), \"inventory.json\"))\n\ncat(\"n rows:\", nrow(d), \" missing:\", paste(names(miss), miss, sep = \"=\", collapse = \" \"), \"\\n\")\ncat(\"temp coefficient by model (ppb per F):\\n\"); print(effects[, c(\"model\", \"n\", \"estimate\", \"ci.low\", \"ci.high\")], row.names = FALSE)\ncat(\"share of raw estimate kept:\", paste(sprintf(\"%.3f\", effects$share.of.A), collapse = \" \"), \"\\n\")\n",
+    "7": "# Question: how much of the temperature effect on ozone survives adjustment for\n# wind and solar radiation, and how much of the change is just a change of sample?\n# Every number below comes from this run; nothing is typed in from elsewhere.\nout <- commandArgs(trailingOnly = TRUE)[1]\n\ndata(airquality, package = \"datasets\")\nd <- datasets::airquality\nvars <- c(\"Ozone\", \"Solar.R\", \"Wind\", \"Temp\")\nmiss <- vapply(vars, function(v) sum(is.na(d[[v]])), integer(1))\n\n# ozone-core drops only rows without ozone/wind/temp; complete also drops solar.\ncore <- d[complete.cases(d[, c(\"Ozone\", \"Wind\", \"Temp\")]), ]\ncc   <- d[complete.cases(d[, vars]), ]\n\ntidy <- function(label, sample, m) {\n  co <- summary(m)$coefficients\n  data.frame(model = label, sample = sample, n = nobs(m), term = rownames(co),\n             estimate = co[, \"Estimate\"], std.error = co[, \"Std. Error\"],\n             statistic = co[, \"t value\"], p.value = co[, \"Pr(>|t|)\"],\n             r2 = summary(m)$r.squared, adj.r2 = summary(m)$adj.r.squared,\n             stringsAsFactors = FALSE, row.names = NULL)\n}\n\nm0 <- lm(Ozone ~ Temp, core)                        # A: raw, ozone-core\nm1 <- lm(Ozone ~ Temp + Wind, core)                 # B: wind, same rows\nm2 <- lm(Ozone ~ Temp + Wind, cc)                   # C: wind, complete rows\nm3 <- lm(Ozone ~ Temp + Wind + Solar.R, cc)         # D: + solar, complete rows\ncoefs <- rbind(tidy(\"A\", \"ozone-core\", m0), tidy(\"B\", \"ozone-core\", m1),\n               tidy(\"C\", \"complete\", m2), tidy(\"D\", \"complete\", m3))\nwrite.csv(coefs, file.path(out, \"coefficients.csv\"), row.names = FALSE)\n\ntemp_row <- function(label, sample, m) {\n  est <- unname(coef(m)[\"Temp\"]); se <- unname(sqrt(vcov(m)[\"Temp\", \"Temp\"]))\n  tc <- qt(0.975, df.residual(m))\n  data.frame(model = label, sample = sample, n = nobs(m), estimate = est,\n             std.error = se, ci.low = est - tc * se, ci.high = est + tc * se,\n             p.value = unname(summary(m)$coefficients[\"Temp\", \"Pr(>|t|)\"]))\n}\neffects <- rbind(temp_row(\"A\", \"ozone-core\", m0), temp_row(\"B\", \"ozone-core\", m1),\n                 temp_row(\"C\", \"complete\", m2), temp_row(\"D\", \"complete\", m3))\nbase <- effects$estimate[1]\neffects$share.of.A <- effects$estimate / base\neffects$change.vs.previous <- c(NA, diff(effects$estimate) / base)\nwrite.csv(effects, file.path(out, \"effects.csv\"), row.names = FALSE)\n\na01 <- anova(m0, m1); a23 <- anova(m2, m3)\ntests <- data.frame(test = c(\"wind added (B vs A)\", \"solar added (D vs C)\"),\n                    df = c(a01$Df[2], a23$Df[2]),\n                    f = c(a01$F[2], a23$F[2]),\n                    p.value = c(a01$`Pr(>F)`[2], a23$`Pr(>F)`[2]))\nwrite.csv(tests, file.path(out, \"tests.csv\"), row.names = FALSE)\n\nspec <- c(A = \"Temp\", B = \"Temp + Wind\", C = \"Temp + Wind\", D = \"Temp + Wind + Solar.R\")\nlabels <- sprintf(\"%s  Ozone ~ %s  n=%d\", effects$model, spec[effects$model], effects$n)\npng(file.path(out, \"temp-effect.png\"), width = 1040, height = 620, res = 110)\npar(mar = c(1, 1, 1, 1)); plot.new()\nml <- max(strwidth(labels, cex = 0.85, units = \"inches\")) / par(\"csi\") + 0.9\npar(mar = c(4.6, ml, 4, 2))\nplot(NA, xlim = range(c(effects$ci.low, effects$ci.high)), ylim = c(0.4, nrow(effects) + 0.6),\n     yaxt = \"n\", xlab = \"Ozone change per 1 F temperature (ppb, 95% CI)\", ylab = \"\",\n     main = \"Temperature effect under four specifications\")\nabline(h = seq_len(nrow(effects)), col = \"grey92\"); abline(v = 0, lty = 2, col = \"grey45\")\nsegments(effects$ci.low, seq_len(nrow(effects)), effects$ci.high, seq_len(nrow(effects)), lwd = 2.2)\npoints(effects$estimate, seq_len(nrow(effects)), pch = 19, cex = 1.5)\naxis(2, at = seq_len(nrow(effects)), las = 1, cex.axis = 0.85, labels = labels)\ntext(effects$estimate, seq_len(nrow(effects)) + 0.24, sprintf(\"%.3f\", effects$estimate), cex = 0.72)\ninvisible(dev.off()); invisible(dev.off())\n\nfiles <- c(\"coefficients.csv\", \"effects.csv\", \"tests.csv\", \"temp-effect.png\")\nartifacts <- lapply(files, function(f) {\n  p <- file.path(out, f)\n  list(path = f, bytes = unname(file.size(p)),\n       sha256 = digest::digest(p, algo = \"sha256\", file = TRUE))\n})\nmanifest <- list(schemaVersion = 1L, complete = TRUE, artifacts = artifacts)\nwriteLines(jsonlite::toJSON(manifest, auto_unbox = TRUE), file.path(dirname(out), \"inventory.json\"))\n\ncat(\"n rows:\", nrow(d), \" missing:\", paste(names(miss), miss, sep = \"=\", collapse = \" \"), \"\\n\")\ncat(\"temp coefficient by model (ppb per F):\\n\"); print(effects[, c(\"model\", \"n\", \"estimate\", \"ci.low\", \"ci.high\")], row.names = FALSE)\ncat(\"share of raw estimate kept:\", paste(sprintf(\"%.3f\", effects$share.of.A), collapse = \" \"), \"\\n\")\n",
+    "8": "# Question: how much of the temperature effect on ozone survives adjustment for\n# wind and solar radiation, and how much of the change is just a change of sample?\n# Every number below comes from this run; nothing is typed in from elsewhere.\nout <- commandArgs(trailingOnly = TRUE)[1]\n\ndata(airquality, package = \"datasets\")\nd <- datasets::airquality\nvars <- c(\"Ozone\", \"Solar.R\", \"Wind\", \"Temp\")\nmiss <- vapply(vars, function(v) sum(is.na(d[[v]])), integer(1))\n\n# ozone-core drops only rows without ozone/wind/temp; complete also drops solar.\ncore <- d[complete.cases(d[, c(\"Ozone\", \"Wind\", \"Temp\")]), ]\ncc   <- d[complete.cases(d[, vars]), ]\n\ntidy <- function(label, sample, m) {\n  co <- summary(m)$coefficients\n  data.frame(model = label, sample = sample, n = nobs(m), term = rownames(co),\n             estimate = co[, \"Estimate\"], std.error = co[, \"Std. Error\"],\n             statistic = co[, \"t value\"], p.value = co[, \"Pr(>|t|)\"],\n             r2 = summary(m)$r.squared, adj.r2 = summary(m)$adj.r.squared,\n             stringsAsFactors = FALSE, row.names = NULL)\n}\n\nm0 <- lm(Ozone ~ Temp, core)                        # A: raw, ozone-core\nm1 <- lm(Ozone ~ Temp + Wind, core)                 # B: wind, same rows\nm2 <- lm(Ozone ~ Temp + Wind, cc)                   # C: wind, complete rows\nm3 <- lm(Ozone ~ Temp + Wind + Solar.R, cc)         # D: + solar, complete rows\ncoefs <- rbind(tidy(\"A\", \"ozone-core\", m0), tidy(\"B\", \"ozone-core\", m1),\n               tidy(\"C\", \"complete\", m2), tidy(\"D\", \"complete\", m3))\nwrite.csv(coefs, file.path(out, \"coefficients.csv\"), row.names = FALSE)\n\ntemp_row <- function(label, sample, m) {\n  est <- unname(coef(m)[\"Temp\"]); se <- unname(sqrt(vcov(m)[\"Temp\", \"Temp\"]))\n  tc <- qt(0.975, df.residual(m))\n  data.frame(model = label, sample = sample, n = nobs(m), estimate = est,\n             std.error = se, ci.low = est - tc * se, ci.high = est + tc * se,\n             p.value = unname(summary(m)$coefficients[\"Temp\", \"Pr(>|t|)\"]))\n}\neffects <- rbind(temp_row(\"A\", \"ozone-core\", m0), temp_row(\"B\", \"ozone-core\", m1),\n                 temp_row(\"C\", \"complete\", m2), temp_row(\"D\", \"complete\", m3))\nbase <- effects$estimate[1]\neffects$share.of.A <- effects$estimate / base\neffects$change.vs.previous <- c(NA, diff(effects$estimate) / base)\nwrite.csv(effects, file.path(out, \"effects.csv\"), row.names = FALSE)\n\na01 <- anova(m0, m1); a23 <- anova(m2, m3)\ntests <- data.frame(test = c(\"wind added (B vs A)\", \"solar added (D vs C)\"),\n                    df = c(a01$Df[2], a23$Df[2]),\n                    f = c(a01$F[2], a23$F[2]),\n                    p.value = c(a01$`Pr(>F)`[2], a23$`Pr(>F)`[2]))\nwrite.csv(tests, file.path(out, \"tests.csv\"), row.names = FALSE)\n\nspec <- c(A = \"Temp\", B = \"Temp + Wind\", C = \"Temp + Wind\", D = \"Temp + Wind + Solar.R\")\nlabels <- sprintf(\"%s  Ozone ~ %s  n=%d\", effects$model, spec[effects$model], effects$n)\npng(file.path(out, \"temp-effect.png\"), width = 1040, height = 620, res = 110)\npar(mar = c(1, 1, 1, 1)); plot.new()\nml <- max(strwidth(labels, cex = 0.85, units = \"inches\")) / par(\"csi\") + 0.9\npar(mar = c(4.6, ml, 4, 2))\nplot(NA, xlim = range(c(effects$ci.low, effects$ci.high)), ylim = c(0.4, nrow(effects) + 0.6),\n     yaxt = \"n\", xlab = \"Ozone change per 1 F temperature (ppb, 95% CI)\", ylab = \"\",\n     main = \"Temperature effect under four specifications\")\nabline(h = seq_len(nrow(effects)), col = \"grey92\"); abline(v = 0, lty = 2, col = \"grey45\")\nsegments(effects$ci.low, seq_len(nrow(effects)), effects$ci.high, seq_len(nrow(effects)), lwd = 2.2)\npoints(effects$estimate, seq_len(nrow(effects)), pch = 19, cex = 1.5)\naxis(2, at = seq_len(nrow(effects)), las = 1, cex.axis = 0.85, labels = labels)\ntext(effects$estimate, seq_len(nrow(effects)) + 0.24, sprintf(\"%.3f\", effects$estimate), cex = 0.72)\ninvisible(dev.off())\n\nfiles <- c(\"coefficients.csv\", \"effects.csv\", \"tests.csv\", \"temp-effect.png\")\nartifacts <- lapply(files, function(f) {\n  p <- file.path(out, f)\n  list(path = f, bytes = unname(file.size(p)),\n       sha256 = digest::digest(p, algo = \"sha256\", file = TRUE))\n})\nmanifest <- list(schemaVersion = 1L, complete = TRUE, artifacts = artifacts)\nwriteLines(jsonlite::toJSON(manifest, auto_unbox = TRUE), file.path(dirname(out), \"inventory.json\"))\n\ncat(\"n rows:\", nrow(d), \" missing:\", paste(names(miss), miss, sep = \"=\", collapse = \" \"), \"\\n\")\ncat(\"temp coefficient by model (ppb per F):\\n\"); print(effects[, c(\"model\", \"n\", \"estimate\", \"ci.low\", \"ci.high\")], row.names = FALSE)\ncat(\"share of raw estimate kept:\", paste(sprintf(\"%.3f\", effects$share.of.A), collapse = \" \"), \"\\n\")\n",
+    "9": "# Question: how much of the temperature effect on ozone survives adjustment for\n# wind and solar radiation, and how much of the change is just a change of sample?\n# Every number below comes from this run; nothing is typed in from elsewhere.\nout <- commandArgs(trailingOnly = TRUE)[1]\n\ndata(airquality, package = \"datasets\")\nd <- datasets::airquality\nvars <- c(\"Ozone\", \"Solar.R\", \"Wind\", \"Temp\")\nmiss <- vapply(vars, function(v) sum(is.na(d[[v]])), integer(1))\n\n# ozone-core drops only rows without ozone/wind/temp; complete also drops solar.\ncore <- d[complete.cases(d[, c(\"Ozone\", \"Wind\", \"Temp\")]), ]\ncc   <- d[complete.cases(d[, vars]), ]\n\ntidy <- function(label, sample, m) {\n  co <- summary(m)$coefficients\n  data.frame(model = label, sample = sample, n = nobs(m), term = rownames(co),\n             estimate = co[, \"Estimate\"], std.error = co[, \"Std. Error\"],\n             statistic = co[, \"t value\"], p.value = co[, \"Pr(>|t|)\"],\n             r2 = summary(m)$r.squared, adj.r2 = summary(m)$adj.r.squared,\n             stringsAsFactors = FALSE, row.names = NULL)\n}\n\nm0 <- lm(Ozone ~ Temp, core)                        # A: raw, ozone-core\nm1 <- lm(Ozone ~ Temp + Wind, core)                 # B: wind, same rows\nm2 <- lm(Ozone ~ Temp + Wind, cc)                   # C: wind, complete rows\nm3 <- lm(Ozone ~ Temp + Wind + Solar.R, cc)         # D: + solar, complete rows\ncoefs <- rbind(tidy(\"A\", \"ozone-core\", m0), tidy(\"B\", \"ozone-core\", m1),\n               tidy(\"C\", \"complete\", m2), tidy(\"D\", \"complete\", m3))\nwrite.csv(coefs, file.path(out, \"coefficients.csv\"), row.names = FALSE)\n\ntemp_row <- function(label, sample, m) {\n  est <- unname(coef(m)[\"Temp\"]); se <- unname(sqrt(vcov(m)[\"Temp\", \"Temp\"]))\n  tc <- qt(0.975, df.residual(m))\n  data.frame(model = label, sample = sample, n = nobs(m), estimate = est,\n             std.error = se, ci.low = est - tc * se, ci.high = est + tc * se,\n             p.value = unname(summary(m)$coefficients[\"Temp\", \"Pr(>|t|)\"]))\n}\neffects <- rbind(temp_row(\"A\", \"ozone-core\", m0), temp_row(\"B\", \"ozone-core\", m1),\n                 temp_row(\"C\", \"complete\", m2), temp_row(\"D\", \"complete\", m3))\nbase <- effects$estimate[1]\neffects$share.of.A <- effects$estimate / base\neffects$change.vs.previous <- c(NA, diff(effects$estimate) / base)\nwrite.csv(effects, file.path(out, \"effects.csv\"), row.names = FALSE)\n\na01 <- anova(m0, m1); a23 <- anova(m2, m3)\ntests <- data.frame(test = c(\"wind added (B vs A)\", \"solar added (D vs C)\"),\n                    df = c(a01$Df[2], a23$Df[2]),\n                    f = c(a01$F[2], a23$F[2]),\n                    p.value = c(a01$`Pr(>F)`[2], a23$`Pr(>F)`[2]))\nwrite.csv(tests, file.path(out, \"tests.csv\"), row.names = FALSE)\n\nspec <- c(A = \"Temp\", B = \"Temp + Wind\", C = \"Temp + Wind\", D = \"Temp + Wind + Solar.R\")\nlabels <- sprintf(\"%s  Ozone ~ %s  n=%d\", effects$model, spec[effects$model], effects$n)\npng(file.path(out, \"temp-effect.png\"), width = 1040, height = 620, res = 110)\npar(mar = c(1, 1, 1, 1)); plot.new()\nml <- max(strwidth(labels, cex = 0.85, units = \"inches\")) / par(\"csi\") + 1.7\n\npar(mar = c(4.6, ml, 4, 2))\nplot(NA, xlim = range(c(effects$ci.low, effects$ci.high)), ylim = c(0.4, nrow(effects) + 0.6),\n     yaxt = \"n\", xlab = \"Ozone change per 1 F temperature (ppb, 95% CI)\", ylab = \"\",\n     main = \"Temperature effect under four specifications\")\nabline(h = seq_len(nrow(effects)), col = \"grey92\"); abline(v = 0, lty = 2, col = \"grey45\")\nsegments(effects$ci.low, seq_len(nrow(effects)), effects$ci.high, seq_len(nrow(effects)), lwd = 2.2)\npoints(effects$estimate, seq_len(nrow(effects)), pch = 19, cex = 1.5)\naxis(2, at = seq_len(nrow(effects)), las = 1, cex.axis = 0.85, labels = labels)\ntext(effects$estimate, seq_len(nrow(effects)) + 0.24, sprintf(\"%.3f\", effects$estimate), cex = 0.72)\ninvisible(dev.off())\n\nfiles <- c(\"coefficients.csv\", \"effects.csv\", \"tests.csv\", \"temp-effect.png\")\nartifacts <- lapply(files, function(f) {\n  p <- file.path(out, f)\n  list(path = f, bytes = unname(file.size(p)),\n       sha256 = digest::digest(p, algo = \"sha256\", file = TRUE))\n})\nmanifest <- list(schemaVersion = 1L, complete = TRUE, artifacts = artifacts)\nwriteLines(jsonlite::toJSON(manifest, auto_unbox = TRUE), file.path(dirname(out), \"inventory.json\"))\n\ncat(\"n rows:\", nrow(d), \" missing:\", paste(names(miss), miss, sep = \"=\", collapse = \" \"), \"\\n\")\ncat(\"temp coefficient by model (ppb per F):\\n\"); print(effects[, c(\"model\", \"n\", \"estimate\", \"ci.low\", \"ci.high\")], row.names = FALSE)\ncat(\"share of raw estimate kept:\", paste(sprintf(\"%.3f\", effects$share.of.A), collapse = \" \"), \"\\n\")\n"
+   },
+   "edited": {
+    "2": "2026-10-24T14:37:55.760Z",
+    "3": "2026-10-24T14:40:52.911Z",
+    "4": "2026-10-24T14:40:52.999Z",
+    "5": "2026-10-24T14:42:23.783Z",
+    "6": "2026-10-24T14:44:17.905Z",
+    "7": "2026-10-24T14:44:59.189Z",
+    "8": "2026-10-24T14:45:16.384Z",
+    "9": "2026-10-24T14:45:46.793Z"
+   },
+   "saved": {
+    "2": "2026-10-24T14:38:03.431Z",
+    "4": "2026-10-24T14:41:03.714Z",
+    "5": "2026-10-24T14:42:30.013Z",
+    "6": "2026-10-24T14:44:30.770Z",
+    "9": "2026-10-24T14:46:00.731Z"
+   }
+  }
+ },
+ "runs": {
+  "1": {
+   "operationId": "airquality-temp-1",
+   "source": "analysis.R",
+   "sourceVersion": 2,
+   "declared": [
+    "coefficients.csv",
+    "effects.csv",
+    "tests.csv",
+    "temp-effect.png"
+   ],
+   "acceptedAt": "2026-10-24T14:38:12.840Z",
+   "exit": 0,
+   "observedAt": "2026-10-24T14:38:42.847Z",
+   "outputs": {},
+   "ended": true,
+   "verified": [
+    {
+     "name": "coefficients.csv",
+     "digest": "da72ebd8",
+     "kind": "table"
+    },
+    {
+     "name": "effects.csv",
+     "digest": "1f305e10",
+     "kind": "table"
+    },
+    {
+     "name": "tests.csv",
+     "digest": "1e15e25e",
+     "kind": "table"
+    },
+    {
+     "name": "temp-effect.png",
+     "digest": "966528f8",
+     "kind": "media"
+    }
+   ]
+  },
+  "2": {
+   "operationId": "airquality-temp-2",
+   "source": "analysis.R",
+   "sourceVersion": 4,
+   "declared": [
+    "coefficients.csv",
+    "effects.csv",
+    "tests.csv",
+    "temp-effect.png"
+   ],
+   "acceptedAt": "2026-10-24T14:41:21.520Z",
+   "exit": 0,
+   "observedAt": "2026-10-24T14:41:29.778Z",
+   "outputs": {},
+   "ended": true,
+   "verified": [
+    {
+     "name": "coefficients.csv",
+     "digest": "da72ebd8",
+     "kind": "table"
+    },
+    {
+     "name": "effects.csv",
+     "digest": "1f305e10",
+     "kind": "table"
+    },
+    {
+     "name": "tests.csv",
+     "digest": "1e15e25e",
+     "kind": "table"
+    },
+    {
+     "name": "temp-effect.png",
+     "digest": "b5142701",
+     "kind": "media"
+    }
+   ]
+  },
+  "3": {
+   "operationId": "airquality-temp-3",
+   "source": "analysis.R",
+   "sourceVersion": 5,
+   "declared": [
+    "coefficients.csv",
+    "effects.csv",
+    "tests.csv",
+    "temp-effect.png"
+   ],
+   "acceptedAt": "2026-10-24T14:42:36.134Z",
+   "exit": 1,
+   "observedAt": "2026-10-24T14:42:39.293Z",
+   "outputs": {
+    "stderr": "Error: unexpected ')' in \"     labels = sprintf(\"%s  Ozone ~ %s  n=%d\", effects$model, spec[effects$model], effects$n))\"\nExecution halted\n"
+   },
+   "ended": true
+  },
+  "4": {
+   "operationId": "airquality-temp-4",
+   "source": "analysis.R",
+   "sourceVersion": 6,
+   "declared": [
+    "coefficients.csv",
+    "effects.csv",
+    "tests.csv",
+    "temp-effect.png"
+   ],
+   "acceptedAt": "2026-10-24T14:44:35.241Z",
+   "exit": 1,
+   "observedAt": "2026-10-24T14:44:39.407Z",
+   "outputs": {
+    "stderr": "Error: object 'op' not found\nExecution halted\n"
+   },
+   "ended": true
+  },
+  "5": {
+   "operationId": "airquality-temp-5",
+   "source": "analysis.R",
+   "sourceVersion": 9,
+   "declared": [
+    "coefficients.csv",
+    "effects.csv",
+    "tests.csv",
+    "temp-effect.png"
+   ],
+   "acceptedAt": "2026-10-24T14:46:14.231Z",
+   "exit": 0,
+   "observedAt": "2026-10-24T14:46:19.389Z",
+   "outputs": {
+    "stdout": "n rows: 153  missing: Ozone=37 Solar.R=7 Wind=0 Temp=0 \ntemp coefficient by model (ppb per F):\n model   n estimate   ci.low  ci.high\n     A 116 2.428703 1.966871 2.890536\n     B 116 1.840179 1.344956 2.335401\n     C 111 1.827554 1.330917 2.324192\n     D 111 1.652093 1.149500 2.154686\nshare of raw estimate kept: 1.000 0.758 0.752 0.680 \n"
+   },
+   "ended": true,
+   "verified": [
+    {
+     "name": "coefficients.csv",
+     "digest": "da72ebd8",
+     "kind": "table"
+    },
+    {
+     "name": "effects.csv",
+     "digest": "1f305e10",
+     "kind": "table"
+    },
+    {
+     "name": "tests.csv",
+     "digest": "1e15e25e",
+     "kind": "table"
+    },
+    {
+     "name": "temp-effect.png",
+     "digest": "985b7955",
+     "kind": "media"
+    }
+   ]
+  }
+ },
+ "artifacts": {
+  "coefficients.csv": {
+   "kind": "table",
+   "versions": {
+    "da72ebd8": {
+     "runs": [
+      1,
+      2,
+      5
+     ],
+     "bytes": 1747,
+     "text": "\"model\",\"sample\",\"n\",\"term\",\"estimate\",\"std.error\",\"statistic\",\"p.value\",\"r2\",\"adj.r2\"\n\"A\",\"ozone-core\",116,\"(Intercept)\",-146.995490973198,18.2871735974501,-8.03817441716062,9.36685384446732e-13,0.487707167489167,0.483213370712756\n\"A\",\"ozone-core\",116,\"Temp\",2.42870330487003,0.233131849401662,10.4177241809875,2.93189659247788e-18,0.487707167489167,0.483213370712756\n\"B\",\"ozone-core\",116,\"(Intercept)\",-71.0332177077877,23.5779921978979,-3.01269154352,0.00319624006284899,0.568709654641299,0.561076197201322\n\"B\",\"ozone-core\",116,\"Temp\",1.84017878393571,0.249963389483388,7.36179321195356,3.14910946037233e-11,0.568709654641299,0.561076197201322\n\"B\",\"ozone-core\",116,\"Wind\",-3.05549099754184,0.663250334918016,-4.60684425876623,1.08004610963016e-05,0.568709654641299,0.561076197201322\n\"C\",\"complete\",111,\"(Intercept)\",-67.3219526878461,23.6210450593053,-2.8500835809263,0.00523606637127335,0.581377964310643,0.57362570439047\n\"C\",\"complete\",111,\"Temp\",1.82755448182537,0.250552006495515,7.29411233774369,5.29462978879454e-11,0.581377964310643,0.57362570439047\n\"C\",\"complete\",111,\"Wind\",-3.29483930228511,0.671148212451225,-4.90925736098055,3.26172833776127e-06,0.581377964310643,0.57362570439047\n\"D\",\"complete\",111,\"(Intercept)\",-64.3420789285917,23.0547243474709,-2.79084138933329,0.00622663808819808,0.605894600006623,0.594844915894659\n\"D\",\"complete\",111,\"Temp\",1.65209291099271,0.25352979303236,6.51636595144399,2.42350607501851e-09,0.605894600006623,0.594844915894659\n\"D\",\"complete\",111,\"Wind\",-3.33359130551274,0.654407102054186,-5.09406345843221,1.51593440783203e-06,0.605894600006623,0.594844915894659\n\"D\",\"complete\",111,\"Solar.R\",0.0598205899684985,0.0231864659413458,2.5799787738168,0.0112366354972334,0.605894600006623,0.594844915894659\n"
+    }
+   }
+  },
+  "effects.csv": {
+   "kind": "table",
+   "versions": {
+    "1f305e10": {
+     "runs": [
+      1,
+      2,
+      5
+     ],
+     "bytes": 662,
+     "text": "\"model\",\"sample\",\"n\",\"estimate\",\"std.error\",\"ci.low\",\"ci.high\",\"p.value\",\"share.of.A\",\"change.vs.previous\"\n\"A\",\"ozone-core\",116,2.42870330487003,0.233131849401662,1.96687090679247,2.89053570294759,2.93189659247788e-18,1,NA\n\"B\",\"ozone-core\",116,1.84017878393571,0.249963389483388,1.3449562261185,2.33540134175291,3.14910946037233e-11,0.757679532220252,-0.242320467779748\n\"C\",\"complete\",111,1.82755448182537,0.250552006495515,1.33091693836042,2.32419202529033,5.29462978879454e-11,0.75248157243446,-0.00519795978579225\n\"D\",\"complete\",111,1.65209291099271,0.25352979303236,1.14949966544128,2.15468615654415,2.42350607501851e-09,0.680236613373045,-0.072244959061415\n"
+    }
+   }
+  },
+  "tests.csv": {
+   "kind": "table",
+   "versions": {
+    "1e15e25e": {
+     "runs": [
+      1,
+      2,
+      5
+     ],
+     "bytes": 148,
+     "text": "\"test\",\"df\",\"f\",\"p.value\"\n\"wind added (B vs A)\",1,21.2230140245274,1.08004610963014e-05\n\"solar added (D vs C)\",1,6.6562904733452,0.0112366354972337\n"
+    }
+   }
+  },
+  "temp-effect.png": {
+   "kind": "media",
+   "versions": {
+    "966528f8": {
+     "runs": [
+      1
+     ],
+     "bytes": 43578
+    },
+    "b5142701": {
+     "runs": [
+      2
+     ],
+     "bytes": 44159
+    },
+    "985b7955": {
+     "runs": [
+      5
+     ],
+     "bytes": 47584,
+     "file": "temp-effect.run-5.png"
+    }
+   }
+  }
+ }
+}

@@ -11,12 +11,11 @@ importing, activating or installing it. The application adds only what it owns
 second copy of a component contract: the five hand-maintained copies that used to
 exist had already drifted from their owners.
 
-Public types are generated from that contract with `json-schema-to-typescript`
-(the Node client, browser client and service request boundary all use them), and
-`npm run check:contracts` fails on a stale owner snapshot, a stale published
-artifact, an operation present in only one of them, or stale generated types. It
-writes nothing. `--check` was verified to fail on an edited artifact and on an
-orphan operation file.
+Public types are generated from that contract with `json-schema-to-typescript` (the
+Node client, browser client and service request boundary all use them), and
+`npm run check:contracts` fails on a stale owner snapshot, a stale published artifact,
+an operation present in only one of them, or stale generated types. It writes nothing.
+`--check` was verified to fail on an edited artifact and on an orphan operation file.
 
 Runtime guarantees are unchanged: Ajv validates every request and the one place an
 untrusted value becomes typed is `src/contract-runtime.ts`; requests are handed on
@@ -86,15 +85,14 @@ A task-map item may name the exact artifact version it produced (`item.artifact
 registered resources and links it in the item's footer and on the project page; a
 stale version draws nothing rather than a guess.
 
-Asking a question carries the person's own words and their selection. "Ask about
-this" opens a one-line composer; sending appends the text to the project's
-`questions.md` through the document owner and creates a `context.create` naming that
-text range, the exact artifact version, and — when rows of that version are selected —
-those entities, read from the view-scoped channel so rows picked elsewhere never
-attach. The view reports "Prepared" until the owner records a fetch, then "Fetched by
-the Agent" with the time; work accepted after that is counted as a time fact, never as
-a claim that it answers the question; every run here predates the fetch, so only that
-case is covered.
+Asking a question carries the person's own words and their selection. "Ask about this"
+opens a one-line composer; sending appends the text to the project's `questions.md`
+through the document owner and creates a `context.create` naming that text range, the
+exact artifact version, and — when rows of that version are selected — those entities,
+read from the view-scoped channel so rows picked elsewhere never attach. The view
+reports "Prepared" until the owner records a fetch, then "Fetched by the Agent" with
+the time; work accepted after that is counted as a time fact, never as a claim that it
+answers the question; every run here predates the fetch, so only that case is covered.
 
 Checks: Rho 114/114 with `RHO_CORE_BINARY` set (the ten new unit tests cover the
 reading of runs, artifacts and checks: declared vs present vs verified, an unknown
@@ -293,6 +291,8 @@ PDF rendering, image decoding and browser interaction are not implemented.
 Native execution retains OS authority. Saving checks actual disk conditions but
 does not provide CAS against outside writers. MCP supports explicit tool-fetched
 context; proactive external-chat delivery remains unavailable.
+
+[Interaction model](INTERACTION-MODEL.md) draft, replayed over agent-exp-2215 by `npm run prototype:replay` (person simulated, not the WebUI); `src/expression.ts` holds its rules; Rho 125/125 with its 11 tests.
 
 Source, accepted composition, npm installation and future signed distribution
 have separate identities/evidence. Local ignored evidence stays at the selected

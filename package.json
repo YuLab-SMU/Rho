@@ -57,6 +57,8 @@
     "test:ui:plugins": "npm run build && node scripts/plugin-ui-acceptance.mjs",
     "acceptance:ui:u2": "node scripts/u2-ui-acceptance.mjs",
     "test:task-map": "node --test test/task-map.test.mjs",
+    "prototype:replay": "vite --config prototypes/replay/vite.config.ts",
+    "check:replay": "tsc -p prototypes/replay/tsconfig.json && tsc && node --test test/expression.test.mjs",
     "test:documents": "node --test test/document-authors.test.mjs test/document-u2.test.mjs",
     "test:tables": "node --test ../Rho-plugins/test/resources.test.mjs",
     "test:files": "node --test --test-name-pattern='completion sidecar|output directory' ../Rho-plugins/test/resources.test.mjs",
