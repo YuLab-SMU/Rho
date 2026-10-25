@@ -93,8 +93,13 @@
 .shell-notes li p { margin: 2px 0 0; color: var(--color-muted); }
 .shell-evidence:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 /* An artifact's line: produced by, verified by, the Agent's words, then the question. */
-.shell-source { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; min-height: var(--height-button); padding: 2px 10px; border-bottom: 1px solid var(--color-divider); background: var(--color-surface); font-size: 12px; }
-.shell-source .shell-producer { border-color: transparent; background: transparent; padding: 0 4px; }
+/* One line at any width: in a narrow pane the verification words shrink first, then the
+   producer, each ending in an ellipsis with the whole fact in its title (M2, M6). */
+.shell-source { flex: none; display: flex; align-items: center; gap: 2px 10px; min-width: 0; min-height: var(--height-button); padding: 2px 10px; border-bottom: 1px solid var(--color-divider); background: var(--color-surface); font-size: 12px; white-space: nowrap; }
+.shell-source > * { flex: none; }
+.shell-source .shell-producer { flex: 0 1 auto; min-width: 4em; border-color: transparent; background: transparent; padding: 0 4px; }
+.shell-source .shell-producer > span, .shell-source .shell-verified { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.shell-source .shell-verified { flex: 0 100 auto; min-width: 3em; }
 .shell-source .shell-producer:hover { background: var(--color-hover); }
 .shell-state.completed { color: var(--color-ink); }
 .shell-state.failed { color: var(--color-failed); }

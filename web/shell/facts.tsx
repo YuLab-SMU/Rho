@@ -40,7 +40,7 @@ export function SourceLine({ live, snapshot, resource, viewId, onOpenRef, childr
     {run ? <button className="shell-producer" data-rho-producer="" disabled={!object} title={object ? `Open ${run.operationId}, the run that produced this version` : 'This run is outside the retained records'} onClick={() => object && live.act({ kind: 'open', target: object })}>
       <span data-fact="observed" className={'shell-state ' + run.execution}>{run.operationId} · {executionWord(run.execution)}</span>
     </button> : runs && <span data-fact="observed" className="shell-meta">{(resource.provenance as { operationId?: string })?.operationId?.startsWith('registration:') ? 'Registered file' : 'No recorded run'}</span>}
-    {run && <span data-fact="verified" className={'shell-verified ' + run.integrity}>{run.declared.length ? integrityWord(run.integrity) : 'no declared file'} · {domainWord(run)}</span>}
+    {run && (() => { const checked = `${run.declared.length ? integrityWord(run.integrity) : 'no declared file'} · ${domainWord(run)}`; return <span data-fact="verified" className={'shell-verified ' + run.integrity} title={checked}>{checked}</span>; })()}
     {words && <span data-fact="agent" className="shell-agent-words" title={words}>Agent: “{words}”</span>}
     {notes.map(i => <span key={i.id} data-fact="agent" className="shell-agent-words" title={[i.title, i.summary].filter(Boolean).join(' — ')}>Agent: {i.title} · {i.state}</span>)}
     {newer && <button className="shell-link" onClick={() => onOpenRef({ id: newer.id, version: newer.version })}>Newer version · {newerName}</button>}
