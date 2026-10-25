@@ -55,6 +55,8 @@ function App() {
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(null);
   // The Agent map's reference form lives in the title bar; the workspace draws it here.
   const [mapChip, setMapChip] = useState<HTMLSpanElement | null>(null);
+  // The workspace draws the Agent's column and the activity bar into the frame's own places.
+  const [agentSlot, setAgentSlot] = useState<HTMLElement | null>(null), [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
   const [phase, setPhase] = useState<Phase>('connecting');
   const [readAt, setReadAt] = useState<Date | null>(null), [offlineAt, setOfflineAt] = useState<Date | null>(null);
   const [error, setError] = useState('');
@@ -142,6 +144,10 @@ function App() {
     change(); media.addEventListener('change', change);
     return () => media.removeEventListener('change', change);
   }, []);
+  // Between 768 and 1023 a layout needs the width: the project navigation folds away while one
+  // is open and comes back with the Overview. The Projects button opens it again.
+  const layoutOpen = screen === 'project' && !overview;
+  useEffect(() => { if (!narrow && matchMedia('(max-width: 1023px)').matches) setNavigation(!layoutOpen); }, [layoutOpen, narrow]);
   useEffect(() => {
     function close(event: KeyboardEvent) {
       if (event.key !== 'Escape' || commands || confirming) return;
@@ -261,7 +267,7 @@ function App() {
     <a className="skip-link" href="#main">Skip to workspace</a>
     <header className="topbar">
       <div className="topbar-lead">{narrow ? <button ref={navigationTrigger} className="icon-button" aria-label="Open navigation" aria-haspopup="dialog" aria-expanded={navigation} onClick={() => setNavigation(true)}><Icon name="sidebar" size={18} stroke={1.7} /></button>
-        : projectVisible && <button ref={navigationTrigger} className="icon-button" aria-label={'Toggle ' + sidebarName.toLowerCase()} aria-controls="project-navigation" aria-expanded={navigation} onClick={() => setNavigation(v => !v)}><Icon name="sidebar" size={18} stroke={1.7} /></button>}</div>
+        : <strong className="wordmark topbar-wordmark">Rho</strong>}</div>
       {narrow ? <div className="location location-stack">
         <span className="location-name">{screen === 'project' && project ? composition?.compositionId ?? name(project) : screen === 'plugins' ? pluginTitle || 'Plugins' : 'Home'}</span>
         {pluginTitle && <span className="location-detail">Plugins</span>}
@@ -278,17 +284,17 @@ function App() {
         </> : <span className="location-name">{screen === 'plugins' ? 'Plugins' : 'Home'}</span>}
       </div>}
       <span ref={setMapChip} className="map-chip-slot" />
+      <button ref={commandTrigger} className="command-trigger" aria-label="Commands · Type a command" aria-keyshortcuts="Meta+K Control+K" onClick={() => setCommands(true)}><Icon name="search" size={14} stroke={1.8} /><span className="command-trigger-text">Type a command</span><kbd>{shortcut}</kbd></button>
       <span className={'connection ' + phase} role="status">
         <span className="connection-label">{phase === 'live' ? 'Up to date' : phase === 'offline' ? 'Offline' : 'Connecting'}</span>
         {readAt && <>{' '}<span className="connection-time">{(phase === 'live' ? '' : 'last read ') + clock(readAt)}</span></>}
       </span>
-      <button ref={commandTrigger} className="command-trigger" aria-keyshortcuts="Meta+K Control+K" onClick={() => setCommands(true)}>Commands <kbd>{shortcut}</kbd></button>
       <button ref={contextTrigger} className="icon-button context-toggle" aria-label="Context & access" aria-controls={narrow ? undefined : 'project-context'} aria-haspopup={narrow ? 'dialog' : undefined} aria-expanded={context && !feedbackContext} onClick={() => { setFeedbackContext(false); setContext(v => feedbackContext || !v); }}><Icon name="context" size={18} stroke={1.7} /></button>
     </header>
     <div className="app-body">
       <nav className="app-rail" aria-label="Application">
         <Rail name="Home" icon="home" active={screen === 'home'} onClick={() => setScreen('home')} />
-        <Rail name="Projects" icon="project" active={screen === 'project'} onClick={() => project ? setScreen('project') : goHome()} />
+        <Rail name="Projects" icon="project" active={screen === 'project'} expanded={screen === 'project' && !narrow ? navigation : undefined} onClick={() => !project ? goHome() : screen === 'project' && !narrow ? setNavigation(v => !v) : setScreen('project')} />
         <Rail name="Plugins" icon="plugins" active={screen === 'plugins'} onClick={() => project ? plugins() : setScreen('home')} />
       </nav>
       {!narrow && projectVisible && navigation && <aside id="project-navigation" className="project-nav" aria-label={sidebarName}>
@@ -310,15 +316,17 @@ function App() {
           : !snapshot ? <div className="page-section"><h1>Reading your project</h1><p>Waiting for a bounded owner snapshot. No runtime is being started.</p></div>
           : screen === 'plugins' ? <PluginCatalog catalog={snapshot.catalog} project={name(project)} pluginId={pluginId} onSelect={choosePlugin}
             back={pluginReturn ? { label: 'Back to ' + name(project), run: () => { setPluginReturn(false); setPluginId(''); setScreen('project'); setMainFocus(true); } } : undefined} />
-          : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); }} mapChipTarget={mapChip} openView={openView} onCommands={setLayoutCommands} /></Suspense>
+          : composition ? <Suspense fallback={<p className="page-section">Loading the workspace renderer...</p>}><Workspace key={snapshot.project.id + composition.compositionId} composition={composition} snapshot={snapshot} client={client!} onAbout={about} contextTarget={context ? contextSlot : null} principalId={connection.principalId} feedbackContextActive={feedbackContext} onShowContext={() => { setFeedbackContext(true); setContext(true); }} mapChipTarget={mapChip} openView={openView} onCommands={setLayoutCommands} agentTarget={agentSlot} footerTarget={footerSlot} /></Suspense>
           : <Suspense fallback={<p className="page-section">Loading the project page…</p>}><ProjectOverview client={client!} onProjectChanged={next => { setProject(next); setProjects(list => list.map(p => p.id === next.id ? next : p)); }} project={project} location={located(project, folder)} snapshot={snapshot} onLayout={layout} onOpened={id => { layout(id); reread(); }} /></Suspense>}
       </main>
+      {screen === 'project' && composition && !narrow && <div ref={setAgentSlot} className="agent-slot" />}
       {context && !narrow && <aside id="project-context" className="context-drawer" aria-label={feedbackContext ? 'Your question' : 'Context and access'}>
         <div className="drawer-heading"><h2>{feedbackContext ? 'Your question' : 'Context & access'}</h2><button className="icon-button" aria-label="Close context" onClick={() => { setContext(false); contextTrigger.current?.focus(); }}><Icon name="close" size={14} stroke={2} /></button></div>
         {contextSections}
         {!feedbackContext && <p className="context-footnote">Closing this tab only stops watching. Work that is running keeps running.</p>}
       </aside>}
     </div>
+    {screen === 'project' && composition && <div ref={setFooterSlot} className="footer-slot" />}
     {narrow && navigation && <Overlay className="drawer" label="Navigation" returnFocus={navigationTrigger} onClose={() => setNavigation(false)}>
       <div className="drawer-top"><strong>Rho</strong><button className="icon-button" aria-label="Close navigation" onClick={() => setNavigation(false)}><Icon name="close" size={16} stroke={1.8} /></button></div>
       <nav className="drawer-sections" aria-label="Application">
@@ -357,7 +365,7 @@ function Overlay({ className, label, returnFocus, onClose, children }: { classNa
   return <dialog ref={ref} className={className} aria-label={label} onKeyDown={trapTab} onClose={onClose}
     onClick={e => { if (e.target === e.currentTarget) e.currentTarget.close(); }}>{children}</dialog>;
 }
-function Rail({ name, icon, active, onClick }: { name: string; icon: Parameters<typeof Icon>[0]['name']; active: boolean; onClick: () => void }) {
-  return <button className={'rail-button' + (active ? ' active' : '')} aria-current={active ? 'page' : undefined} onClick={onClick}><Icon name={icon} /><span>{name}</span></button>;
+function Rail({ name, icon, active, expanded, onClick }: { name: string; icon: Parameters<typeof Icon>[0]['name']; active: boolean; expanded?: boolean; onClick: () => void }) {
+  return <button className={'rail-button' + (active ? ' active' : '')} aria-current={active ? 'page' : undefined} aria-expanded={expanded} onClick={onClick}><Icon name={icon} /><span>{name}</span></button>;
 }
 createRoot(document.getElementById('root')!).render(<App />);

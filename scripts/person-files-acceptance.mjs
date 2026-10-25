@@ -100,6 +100,8 @@ try {
   check('button and keyboard save real Unicode bytes at all three widths');
   await page.reload();
   await editorInput.waitFor();
+  // The editor mounts before the document text arrives; read once it has.
+  await editorInput.getByText(/saved at 390/).waitFor({ timeout: 10000 });
   assert.match(await editorInput.innerText(), /saved at 390/);
   check('a refreshed tab reads the saved document');
 

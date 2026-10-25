@@ -69,6 +69,6 @@ export function useLive(snapshot: WorkspaceSnapshot, composition: CompositionSum
     }
     hold(id);
   };
-  return { state: state.current, screen: state.current ? screenOf(state.current) : null, layout: state.current?.layout ?? composition, active: state.current?.active, movedBy: movedBy.current, runs, readRuns, act, release, hold, openResource, problem: [problem, mapProblem, checkpointProblem, state.current?.limit].filter(Boolean).join(' · ') };
+  return { state: state.current, screen: state.current ? screenOf(state.current) : null, layout: state.current?.layout ?? composition, active: state.current?.active, movedBy: movedBy.current, runs, readRuns, map, act, release, hold, openResource, problem: [problem, mapProblem, checkpointProblem, state.current?.limit].filter(Boolean).join(' · ') };
 }
 export type Live = ReturnType<typeof useLive>;

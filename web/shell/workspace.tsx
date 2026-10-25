@@ -7,7 +7,7 @@ import { Icon } from '../icons.js';
 import { registry } from '../registry.js';
 import { useLive } from './live.js';
 import { OwnerView, availableEntry, title, viewIcon } from './owner.js';
-import { Bar, Digest, Evidence, Interruption, waiting } from './layer.js';
+import { AgentColumn, Bar, Digest, Evidence, Interruption, waiting } from './layer.js';
 import { openRun, runFirstLine, RunView, SourceLine } from './facts.js';
 import { ActionForm } from './action-form.js';
 import { boundResource } from '../executions.js';
@@ -18,13 +18,18 @@ type Tabs = Extract<Region, { kind: 'tabs' }>;
 // The workspace shell (docs/WORKSPACE-PLAN.md W1): the owner's composition tree drawn as
 // splits and tab groups, owner views mounted within the rendering budget, and a slot for
 // what Rho adds above the work. It decides nothing about attention; useLive does.
-export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands }: { onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string }) {
+export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, footerTarget }: { onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; footerTarget?: HTMLElement | null }) {
   const live = useLive(snapshot, recorded, client, principalId), layout = live.layout;
   const root = useMemo(() => regions(layout), [layout]);
   const order = useMemo(() => viewOrder(root), [root]);
   const byId = useMemo(() => new Map(layout.views.map(v => [v.id, v])), [layout]);
   const [narrow, setNarrow] = useState(() => matchMedia('(max-width: 767px)').matches);
   useEffect(() => { const q = matchMedia('(max-width: 767px)'), change = () => setNarrow(q.matches); q.addEventListener('change', change); return () => q.removeEventListener('change', change); }, []);
+  // From 1280 the Agent has its own column beside the work; below, its notes and calls open
+  // over the top of the stage on request, as the evidence did.
+  const [wide, setWide] = useState(() => matchMedia('(min-width: 1280px)').matches);
+  useEffect(() => { const q = matchMedia('(min-width: 1280px)'), change = () => setWide(q.matches); q.addEventListener('change', change); return () => q.removeEventListener('change', change); }, []);
+  const column = wide && !!agentTarget;
   // Which view each tab group shows, and which view has the person's (or the Agent's) focus.
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [focus, setFocus] = useState(order[0] ?? '');
@@ -170,11 +175,11 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     </SourceLine>{owner}</>;
   };
   const render: TabRender = {
-    label: id => title(byId.get(id)!, snapshot), container,
-    title: id => { const v = byId.get(id)!; return <><Icon name={viewIcon(v, snapshot)} size={14} stroke={2} /><span className="shell-tab-name">{title(v, snapshot)}</span></>; },
+    label: id => title(byId.get(id)!), container,
+    title: id => { const v = byId.get(id)!; return <><Icon name={viewIcon(v, snapshot)} size={14} stroke={2} /><span className="shell-tab-name">{title(v)}</span></>; },
   };
   const groupName = (id: string) => groups.length === 1 ? 'Views' : `Views ${groups.findIndex(g => g.id === id) + 1} of ${groups.length}`;
-  const firstTitle = (region: Region): string => { const id = region.kind === 'tabs' ? shown(region) : viewOrder(region)[0]; return id ? title(byId.get(id)!, snapshot) : 'view'; };
+  const firstTitle = (region: Region): string => { const id = region.kind === 'tabs' ? shown(region) : viewOrder(region)[0]; return id ? title(byId.get(id)!) : 'view'; };
   const draw = (region: Region): ReactNode => region.kind === 'tabs'
     ? <TabGroup key={region.id} group={region} name={groupName(region.id)} selected={shown(region)} onSelect={show} onHeader={headerRef(region.id)} render={render} />
     : <Split key={region.id} region={region} weights={own[region.id] ?? region.weights} onResize={values => resized(region.id, values)}
@@ -182,7 +187,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   // The focused view's layout commands, offered in the command palette.
   useEffect(() => {
     if (!onCommands) return;
-    const commands: Command[] = [], view = byId.get(focused), name = view ? title(view, snapshot) : '';
+    const commands: Command[] = [], view = byId.get(focused), name = view ? title(view) : '';
     if (tree && view && allowed('composition.apply') && tree.nodes.some(n => n.id === focused)) {
       // Offered when it applies now; computed again from the latest layout when it runs.
       const viewId = focused;
@@ -207,18 +212,23 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     if (next === undefined) return;
     event.preventDefault(); show(order[next]); (event.currentTarget.children[next] as HTMLElement).focus();
   }
+  const focusObject = live.screen?.views.find(v => v.id === focused)?.object ?? null;
+  const toggleEvidence = () => { setEvidence(v => !v); live.act({ kind: 'reveal', target: evidence ? null : live.screen?.agent?.object ?? 'workspace' }); };
+  const bar = <Bar live={live} evidence={evidence} held={items.length - unhidden.length} narrow={narrow} column={column} onEvidence={toggleEvidence} />;
   return <section className="workspace shell" aria-label="Layout">
-    <Bar live={live} focusObject={live.screen?.views.find(v => v.id === focused)?.object ?? null} evidence={evidence} held={items.length - unhidden.length} narrow={narrow}
-      onEvidence={() => { setEvidence(v => !v); live.act({ kind: 'reveal', target: evidence ? null : live.screen?.agent?.object ?? 'workspace' }); }} />
+    {/* The question the Agent declared is what this screen is about; without one, no slot. */}
+    {live.screen?.question && <header className="shell-heading"><h1>{live.screen.question}</h1></header>}
+    {footerTarget ? createPortal(bar, footerTarget) : bar}
+    {column && createPortal(<AgentColumn live={live} principalId={principalId} evidence={evidence} onEvidence={toggleEvidence} focusObject={focusObject} />, agentTarget!)}
     <Interruption live={live} items={unhidden} onHide={key => setHidden(h => [...h, key])} />
     {layoutProblem && <div className="shell-interruption problem" data-rho-layer="transient" data-rho-interruption="" role="alert"><span className="shell-interruption-text">{layoutProblem}</span><button className="shell-quiet" onClick={() => setLayoutProblem('')}>Dismiss</button></div>}
-    {evidence ? <Evidence live={live} principalId={principalId} /> : <Digest live={live} />}
+    {evidence && !column ? <Evidence live={live} principalId={principalId} /> : <Digest live={live} />}
     <div className="shell-stage" onPointerDownCapture={event => live.hold((event.target as HTMLElement).closest<HTMLElement>('[data-owner-view]')?.dataset.ownerView ?? focused)} onKeyDownCapture={() => live.hold(focused)} onCompositionStartCapture={() => live.hold(focused)}>
       {contextTarget && feedbackContextActive && feedbackSource && feedbackAllowed && feedbackEntry && snapshot.feedback?.draftDocumentId && createPortal(feedbackLimit ? <section className="unavailable" role="status"><h3>Close a view before opening feedback</h3><p>Existing views and input are kept within this layout's view limit.</p></section> : <feedbackEntry.View key={[snapshot.project.id, snapshot.feedback.taskId, feedbackSource, principalId].join(':')} viewId={'feedback:' + feedbackSource} view={{ id: 'feedback:' + feedbackSource, component: feedbackEntry.component, version: feedbackEntry.componentVersion, props: { title: 'Your question', taskId: snapshot.feedback.taskId, sourceSelectionScope: byId.get(feedbackSource) ? selectionScope(byId.get(feedbackSource)!) : { kind: 'shared', id: feedbackSource } }, bindings: { draft: { kind: 'live-document', documentId: snapshot.feedback.draftDocumentId } } }} projectId={snapshot.project.id} snapshot={snapshot} client={client} active principalId={principalId} contextTarget={null} feedbackConfiguration={{ ...snapshot.feedback, draftDocumentId: snapshot.feedback.draftDocumentId }} />, contextTarget)}
       {!root ? <div className="empty"><h2>No views in this layout</h2><p>The saved layout is empty. No view is created automatically.</p></div>
         : narrow ? <section className="shell-group">
           <div className="shell-tabbar"><div ref={narrowList} className="shell-tabs" role="tablist" aria-label="Views" onKeyDown={moveNarrow}>
-            {order.map((id, i) => <button key={id} id={tabId + i} role="tab" aria-selected={id === focused} aria-controls={tabId + 'panel'} tabIndex={id === focused ? 0 : -1} onClick={() => show(id)}><span className="shell-tab-name">{title(byId.get(id)!, snapshot)}</span></button>)}
+            {order.map((id, i) => <button key={id} id={tabId + i} role="tab" aria-selected={id === focused} aria-controls={tabId + 'panel'} tabIndex={id === focused ? 0 : -1} onClick={() => show(id)}><span className="shell-tab-name">{title(byId.get(id)!)}</span></button>)}
           </div></div>
           <div className="shell-header-slot shell-header-narrow" ref={headerRef('narrow')} />
           {focused && <Slot key={focused} container={container(focused)} id={tabId + 'panel'} labelledBy={tabId + order.indexOf(focused)} />}

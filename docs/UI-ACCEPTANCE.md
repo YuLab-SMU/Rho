@@ -252,7 +252,8 @@ the pairing form and the U1-01/01b pairing card and failure states are not built
 
 Toolbar, rail and context follow U1-04, U1-07 and U1-08:
 
-- The wordmark appears only on the not-connected card.
+- The wordmark appears only on the not-connected card. (H2, 2026-10-25: from
+  768 the toolbar's lead above the rail carries it too; see `HIFI-PLAN.md`.)
 - Location is "project / layout" plus a Read-only chip, "Home" or "Plugins".
 - The status reads "Up to date 10:24", "Offline last read 10:24" or
   "Connecting", with "last read" when there was an earlier read. Below 768 only

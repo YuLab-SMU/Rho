@@ -1,41 +1,45 @@
 /* The workspace shell: the owner's layout tree as splits and tab groups. Theme tokens only
    (test/web-style.test.mjs); the work fills every pixel Rho does not need. */
 .shell { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.shell-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.shell-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: var(--space-5) var(--space-6) var(--space-6); }
+/* The question the Agent declared heads the work it is about. */
+.shell-heading { flex: none; padding: var(--space-6) var(--space-7) 0; }
+.shell-heading h1 { font-size: var(--font-size-xl); line-height: var(--line-height-xl); overflow-wrap: anywhere; }
 .shell-split { flex: 1; min-width: 0; min-height: 0; display: flex; }
 .shell-split[data-axis="vertical"] { flex-direction: column; }
 .shell-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .shell-divider { flex: none; position: relative; z-index: 1; background: transparent; touch-action: none; }
 /* The divider takes its own 7px: a hit area that overlapped the panes would cover their edges (M1). */
-.shell-split[data-axis="horizontal"] > .shell-divider { width: 7px; cursor: col-resize; }
-.shell-split[data-axis="vertical"] > .shell-divider { height: 7px; cursor: row-resize; }
-.shell-divider::before { content: ''; position: absolute; background: var(--color-hairline); }
-.shell-split[data-axis="horizontal"] > .shell-divider::before { top: 0; bottom: 0; left: 3px; width: 1px; }
-.shell-split[data-axis="vertical"] > .shell-divider::before { left: 0; right: 0; top: 3px; height: 1px; }
+/* Between two cards the gutter is the divider; its line shows only under the pointer or focus. */
+.shell-split[data-axis="horizontal"] > .shell-divider { width: 12px; cursor: col-resize; }
+.shell-split[data-axis="vertical"] > .shell-divider { height: 12px; cursor: row-resize; }
+.shell-divider::before { content: ''; position: absolute; background: transparent; }
+.shell-split[data-axis="horizontal"] > .shell-divider::before { top: 0; bottom: 0; left: 5px; width: 1px; }
+.shell-split[data-axis="vertical"] > .shell-divider::before { left: 0; right: 0; top: 5px; height: 1px; }
 .shell-divider:hover::before, .shell-divider:focus-visible::before { background: var(--color-accent); }
-.shell-split[data-axis="horizontal"] > .shell-divider:hover::before, .shell-split[data-axis="horizontal"] > .shell-divider:focus-visible::before { left: 2px; width: 3px; }
-.shell-split[data-axis="vertical"] > .shell-divider:hover::before, .shell-split[data-axis="vertical"] > .shell-divider:focus-visible::before { top: 2px; height: 3px; }
+.shell-split[data-axis="horizontal"] > .shell-divider:hover::before, .shell-split[data-axis="horizontal"] > .shell-divider:focus-visible::before { left: 4px; width: 3px; }
+.shell-split[data-axis="vertical"] > .shell-divider:hover::before, .shell-split[data-axis="vertical"] > .shell-divider:focus-visible::before { top: 4px; height: 3px; }
 .shell-divider:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
-.shell-group { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--color-surface); }
+.shell-group { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: var(--radius-lg); }
 /* Tabs keep their row; owner controls wrap below them when the group is narrow. */
-.shell-tabbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-4); min-height: calc(var(--height-button) + 6px); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--color-hairline); background: var(--color-well); }
-.shell-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--space-1); padding-block: var(--space-1); overflow-x: auto; scrollbar-width: none; }
+.shell-tabbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-4); min-height: calc(var(--height-button) + 8px); padding: 0 var(--space-4) 0 var(--space-3); border-bottom: 1px solid var(--color-divider); background: var(--color-surface); }
+.shell-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; align-self: stretch; gap: var(--space-2); overflow-x: auto; scrollbar-width: none; }
 /* Which side has more tabs: a fade on that edge (M6). */
 .shell-tabs[data-overflow="end"] { mask-image: linear-gradient(to right, var(--color-ink) calc(100% - 32px), transparent); }
 .shell-tabs[data-overflow="start"] { mask-image: linear-gradient(to left, var(--color-ink) calc(100% - 32px), transparent); }
 .shell-tabs[data-overflow="both"] { mask-image: linear-gradient(to right, transparent, var(--color-ink) 32px, var(--color-ink) calc(100% - 32px), transparent); }
-.shell-tabs button { flex: none; max-width: 280px; overflow: hidden; min-height: var(--height-button-small); padding: 0 var(--space-5); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-muted); font-weight: 400; line-height: var(--line-height-sm); white-space: nowrap; }
+.shell-tabs button { flex: none; max-width: 280px; overflow: hidden; min-height: calc(var(--height-button) + 6px); padding: 0 var(--space-4); border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: var(--color-muted); font-size: var(--font-size-md); font-weight: 400; line-height: var(--line-height-md); white-space: nowrap; }
 .shell-tabs button:hover { background: var(--color-hover); }
-/* The shown tab is a raised surface on the sunken bar, the same layer as the view under it. */
-.shell-tabs button[aria-selected="true"] { background: var(--color-surface); color: var(--color-ink); font-weight: 600; box-shadow: var(--shadow-raised); }
-.shell-tabs button[aria-selected="true"]:active { box-shadow: var(--shadow-raised), inset 0 0 0 100vmax var(--color-pressed); }
+/* The shown view's tab is its title, underlined in the focus colour. */
+.shell-tabs button[aria-selected="true"] { color: var(--color-ink); font-weight: 600; border-bottom-color: var(--color-accent); }
 .shell-tabs button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
 .shell-tab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .shell-header-slot { flex: 0 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-left: auto; }
 .shell-header-slot:not(:has(.shell-view-header > *)) { display: none; }
 .shell-view-header { display: contents; }
 .shell-header-narrow { padding: var(--space-2) var(--space-4); border-bottom: 1px solid var(--color-divider); }
-.shell-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* The view body stays clear of the card's rounded corners, so no content sits under the curve. */
+.shell-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 var(--space-2) var(--space-2); }
 .shell-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .shell-owner { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
 .shell-owner > * { flex: 1; min-height: 0; }
@@ -46,31 +50,43 @@
   .shell-tabs button { max-width: 72vw; min-height: var(--height-button); padding: 0 var(--space-5); }
 }
 
-/* What Rho adds above the work. One persistent line; at most one interruption; the digest
-   only on return; the evidence only on request. */
-.shell-bar { flex: none; display: flex; align-items: center; gap: var(--space-4); min-height: var(--height-button); padding: var(--space-1) var(--space-5); border-bottom: 1px solid var(--color-divider); background: var(--color-surface); font-size: var(--font-size-sm); white-space: nowrap; }
-.shell-bar button, .shell-interruption button, .shell-digest button, .shell-source button, .shell-run button { min-height: var(--height-button-small); padding: 0 var(--space-4); border-radius: var(--radius-sm); font-size: var(--font-size-sm); font-weight: 400; white-space: nowrap; }
-.shell-bar button:focus-visible, .shell-interruption button:focus-visible, .shell-digest button:focus-visible, .shell-source button:focus-visible, .shell-run button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
-.shell-follow { gap: var(--space-4); }
+/* What Rho adds: the activity bar under the work, at most one interruption, the digest
+   only on return, the evidence only on request, and from 1280 the Agent's column. */
+.shell-bar { flex: none; display: flex; align-items: center; gap: var(--space-2) var(--space-5); min-height: 40px; padding: var(--space-1) var(--space-5) var(--space-1) var(--space-6); background: var(--color-canvas); font-size: var(--font-size-sm); line-height: var(--line-height-sm); white-space: nowrap; }
+.shell-bar button, .shell-interruption button, .shell-digest button, .shell-source button, .shell-run button, .agent-column button { min-height: var(--height-button-small); padding: 0 var(--space-4); border-radius: var(--radius-sm); font-size: var(--font-size-sm); font-weight: 400; white-space: nowrap; }
+.shell-bar button:focus-visible, .shell-interruption button:focus-visible, .shell-digest button:focus-visible, .shell-source button:focus-visible, .shell-run button:focus-visible, .agent-column button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.shell-span { flex: none; color: var(--color-meta); }
+.shell-span strong { color: var(--color-ink); }
+.shell-follow { gap: var(--space-4); background: var(--color-surface); }
 .shell-follow[aria-pressed="true"] { color: var(--color-accent-strong); border-color: var(--color-accent); background: var(--color-accent-soft); }
 .shell-switch { position: relative; width: 24px; height: 14px; flex: none; border-radius: var(--radius-pill); background: var(--color-control-border); }
 .shell-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--color-surface); }
 .shell-follow[aria-pressed="true"] .shell-switch { background: var(--color-accent); }
 .shell-follow[aria-pressed="true"] .shell-switch::after { left: 12px; }
-.shell-bar .shell-agent { flex: 0 1 auto; justify-content: flex-start; min-width: 0; gap: var(--space-3); border-color: transparent; background: transparent; }
-.shell-bar .shell-agent:hover { background: var(--color-hover); }
+.shell-agent { flex: 0 1 auto; justify-content: flex-start; min-width: 0; gap: var(--space-3); border-color: transparent; background: transparent; }
+.shell-agent:hover { background: var(--color-hover); }
 .shell-agent-who { flex: none; color: var(--color-muted); }
 /* When the bar is short of room the state gives way before the object's name does. */
 .shell-agent-object { flex: 0 1 auto; min-width: 2.5em; overflow: hidden; text-overflow: ellipsis; color: var(--color-ink); font-weight: 600; }
 .shell-agent-state { flex: 0 100 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--color-muted); font-weight: 400; }
-.shell-chain { display: inline-flex; align-items: center; gap: var(--space-2); flex: none; }
-.shell-chain-more { color: var(--color-muted); padding-right: var(--space-1); }
-.shell-bar .shell-mark { width: 20px; min-height: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1.5px solid var(--color-muted); background: var(--color-surface); color: var(--color-muted); font: 600 var(--font-size-sm)/var(--line-height-sm) var(--font-mono); }
+/* Recorded activity along time: ticks are recorded facts, numbered marks are runs. */
+.shell-timeline { position: relative; flex: 1 1 auto; min-width: 96px; height: 28px; margin-inline: var(--space-5); }
+.shell-timeline.inline { display: inline-flex; align-items: center; gap: var(--space-2); flex: 0 1 auto; min-width: 0; height: auto; margin: 0; }
+.shell-ticks { position: absolute; inset: 0; }
+.shell-ticks::before { content: ''; position: absolute; left: 0; right: 0; bottom: 4px; height: 1px; background: var(--color-hairline); }
+.shell-ticks i { position: absolute; bottom: 4px; width: 1px; height: 6px; background: var(--color-control-border); }
+.shell-ticks i.agent { height: 10px; background: var(--color-meta); }
+.shell-gap { position: absolute; bottom: 1px; width: 6px; height: 7px; border-inline: 1.5px solid var(--color-meta); background: var(--color-canvas); transform: translateX(-50%) skewX(-20deg); }
+.shell-bar .shell-mark { position: absolute; top: 0; width: 20px; min-height: 20px; height: 20px; padding: 0; border-radius: 50%; border: 1.5px solid var(--color-muted); background: var(--color-surface); color: var(--color-muted); font: 600 var(--font-size-sm)/var(--line-height-sm) var(--font-mono); }
+.shell-timeline.inline .shell-mark { position: static; }
 .shell-bar .shell-mark.completed { border-color: var(--color-verified); color: var(--color-verified-text); }
 .shell-bar .shell-mark.failed { border-color: var(--color-failed); background: var(--color-failed); color: var(--color-surface); }
+/* A failure a later run replaced keeps its place and number, outlined, without the failure colour (R7). */
+.shell-bar .shell-mark.failed.superseded { border-color: var(--color-control-border); background: var(--color-selected); color: var(--color-muted); }
 .shell-bar .shell-mark.running { border-color: var(--color-accent); border-style: dashed; color: var(--color-accent-strong); }
-.shell-bar .shell-mark.unknown { border-style: dotted; }
-.shell-spacer { flex: 1; }
+.shell-bar .shell-mark.unknown, .shell-bar .shell-mark.unobserved { border-style: dotted; }
+.shell-bar .shell-mark.latest { box-shadow: 0 0 0 2px var(--color-canvas), 0 0 0 4px var(--color-accent-soft); }
+.shell-bar .shell-mark.latest:active { box-shadow: inset 0 0 0 100vmax var(--color-pressed), 0 0 0 2px var(--color-canvas), 0 0 0 4px var(--color-accent-soft); }
 .shell-break, .shell-narrow-word { display: none; }
 .shell-held { color: var(--color-muted); }
 .shell-quiet { border-color: transparent; background: transparent; color: var(--color-muted); }
@@ -159,16 +175,72 @@
 .shell-field-problem { margin: 0; color: var(--color-failed); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
 .shell-action-submit { display: flex; align-items: center; gap: var(--space-4); }
 .shell-action-submit [role=status] { color: var(--color-meta); font-size: var(--font-size-sm); }
-/* The bar answers to the room the workspace has, not to the window. */
-.workspace.shell { container-type: inline-size; }
-@container (max-width: 640px) {
-  .shell-bar { flex-wrap: wrap; gap: var(--space-1) var(--space-3); padding: var(--space-1) var(--space-4); }
+@media (max-width: 1023px) {
+  .shell-span { display: none; }
+  .shell-wide-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .shell-narrow-word { display: inline; }
+}
+@media (max-width: 767px) {
+  .shell-stage { padding: 0; }
+  .shell-heading { padding: var(--space-5) var(--space-6) var(--space-2); }
+  .shell-group { border: 0; border-radius: 0; }
+  .shell-panel { padding: 0; }
+  .shell-bar { flex-wrap: wrap; gap: var(--space-1) var(--space-3); padding: var(--space-1) var(--space-4); border-top: 1px solid var(--color-hairline); }
   .shell-bar .shell-agent { flex: 1 1 0; }
   .shell-break { display: block; flex-basis: 100%; height: 0; }
   .shell-bar .shell-agent-who { display: none; }
   .shell-follow-word, .shell-wide-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .shell-narrow-word { display: inline; }
-  .shell-follow { padding: 0 var(--space-4); }
+  .shell-follow { padding: 0 var(--space-4); margin-left: auto; }
   .shell-agent-words { display: none; }
+  /* Two rows: the Agent's object and the evidence, then the runs and the person's place. */
+  .shell-break { order: 1; }
+  .shell-timeline, .shell-held, .shell-follow, .shell-quiet:not(.shell-evidence-toggle) { order: 2; }
+  .shell-bar .shell-agent { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 }
-.shell-run-files .shell-not-yet { color: var(--color-meta); list-style-type: circle; }
+
+/* The Agent's column, from 1280: who, on what, the declared items, the person's questions. */
+.agent-column { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--space-5); overflow: auto; overscroll-behavior: contain; font-size: var(--font-size-md); line-height: var(--line-height-md); }
+.agent-column:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.agent-card { flex: none; display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-5) var(--space-5) var(--space-5) var(--space-6); background: var(--color-surface); border: 1px solid var(--color-hairline); border-radius: var(--radius-xl); }
+.agent-card-head { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
+.agent-card-head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-card-meta { margin-left: auto; flex: none; color: var(--color-meta); font-size: var(--font-size-sm); line-height: var(--line-height-sm); font-weight: 400; }
+.agent-dot { width: 10px; height: 10px; flex: none; border-radius: var(--radius-pill); border: 1.5px solid var(--color-meta); }
+.agent-dot.running { border-color: var(--color-accent); border-style: dashed; }
+.agent-column .shell-agent { width: 100%; min-height: var(--height-button); margin-inline: calc(var(--space-4) * -1); width: calc(100% + var(--space-4) * 2); }
+.agent-items ol { display: flex; flex-direction: column; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.agent-item { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-4); margin-inline: calc(var(--space-4) * -1); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); }
+.agent-item.current { background: var(--color-accent-soft); }
+/* The Agent's own state words: done is quiet, never the verified green. */
+.agent-item-mark { width: var(--space-6); height: var(--space-6); flex: none; border-radius: var(--radius-pill); border: 1.5px solid var(--color-control-border); }
+.agent-item-mark { position: relative; }
+.agent-item.done .agent-item-mark { border-color: var(--color-muted); }
+.agent-item.done .agent-item-mark::after { content: ''; position: absolute; left: 4.25px; top: 2px; width: 3px; height: 6px; border: solid var(--color-muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+.agent-item.working .agent-item-mark { border-color: var(--color-accent); border-style: dashed; }
+.agent-item.waiting .agent-item-mark { border-color: var(--color-amber); }
+.agent-item.unknown .agent-item-mark { border-style: dotted; }
+.agent-item-title { flex: 1 1 0; min-width: 0; color: var(--color-ink); font-weight: 600; overflow-wrap: anywhere; text-align: left; }
+.agent-column button.agent-item-title { justify-content: flex-start; min-height: 0; padding: 0; border: 0; background: none; font-size: var(--font-size-md); font-weight: 600; white-space: normal; }
+.agent-column button.agent-item-title:hover { background: none; text-decoration: underline; text-underline-offset: 2px; }
+.agent-item-meta { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-meta); font-size: var(--font-size-sm); line-height: var(--line-height-sm); }
+.agent-item-body { flex-basis: 100%; padding-left: calc(var(--space-6) + var(--space-4)); color: var(--color-muted); font-size: var(--font-size-sm); line-height: var(--line-height-sm); overflow-wrap: anywhere; }
+.agent-item-body p + p { margin-top: var(--space-2); }
+.agent-questions { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.agent-question { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding: var(--space-4) 0; border-top: 1px solid var(--color-divider); }
+.agent-question:first-child { padding-top: 0; border-top: 0; }
+.agent-question p { overflow-wrap: anywhere; }
+.agent-question-state { display: inline-flex; align-items: center; gap: var(--space-3); color: var(--color-meta); font-size: var(--font-size-sm); line-height: var(--line-height-sm); }
+.agent-question-state::before { content: ''; width: 7px; height: 7px; flex: none; border-radius: var(--radius-pill); border: 1.5px solid var(--color-amber); }
+.agent-question.fetched .agent-question-state::before { border-color: var(--color-accent); background: var(--color-accent); }
+.agent-question.responded .agent-question-state::before { border-color: var(--color-muted); background: var(--color-muted); }
+.agent-record { padding-block: var(--space-3); }
+.agent-column .agent-record-toggle { justify-content: space-between; width: calc(100% + var(--space-4) * 2); margin-inline: calc(var(--space-4) * -1); color: var(--color-ink); font-weight: 600; }
+.agent-record .shell-evidence { max-height: 50vh; margin: 0 calc(var(--space-6) * -1) calc(var(--space-3) * -1) calc(var(--space-6) * -1); padding: var(--space-3) var(--space-6); border-bottom: 0; background: var(--color-surface); }
+.media-controls { display: inline-flex; align-items: center; gap: var(--space-4); font-size: var(--font-size-sm); line-height: var(--line-height-sm); }
+.media-size { color: var(--color-meta); font-variant-numeric: tabular-nums; }
+.segmented { display: inline-flex; padding: var(--space-1); border-radius: var(--radius-md); background: var(--color-well); }
+.segmented button { min-height: 24px; padding: 0 var(--space-4); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--color-muted); font-size: var(--font-size-sm); font-weight: 400; }
+.segmented button[aria-pressed="true"] { background: var(--color-surface); color: var(--color-ink); font-weight: 600; box-shadow: var(--shadow-raised); }
+.segmented button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

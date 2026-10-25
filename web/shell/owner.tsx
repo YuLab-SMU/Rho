@@ -3,7 +3,6 @@ import { pluginPresentation } from '../../src/plugin-presentation.js';
 import { Icon, type IconName } from '../icons.js';
 import { resourceIcon } from '../project.js';
 import { registry } from '../registry.js';
-import { boundResource } from '../executions.js';
 import { selectionScope } from '../../src/shell-layout.js';
 
 export interface OwnerParams {
@@ -16,15 +15,15 @@ export interface OwnerParams {
 const clientEpoch = crypto.randomUUID();
 type Binding = { documentId?: string; id?: string; version?: string | number };
 function bindings(view: ViewDescription) { return Object.entries(view.bindings ?? {}) as [string, Binding][]; }
-export function title(view: ViewDescription, snapshot?: WorkspaceSnapshot) {
-  const label = String(view.props.title ?? view.props.label ?? view.component), resource = snapshot && boundResource(view, snapshot.resources);
-  // A version is named by the run that produced it; a registered file has no run to name.
-  const origin = resource && (resource.provenance as { operationId?: string }).operationId;
-  return origin && !origin.startsWith('registration:') ? label + ' · ' + origin : label;
+// A tab carries only the object: the run that produced its version is named once, on the
+// view's source line (R3).
+export function title(view: ViewDescription) {
+  return String(view.props.title ?? view.props.label ?? view.component);
 }
 // The tab icon follows what the view is bound to.
 export function viewIcon(view: ViewDescription, snapshot: WorkspaceSnapshot): IconName {
   if (view.component === 'rho.execution' || view.component === 'rho.action') return 'layout';
+  if (view.component === 'rho.media') return 'image';
   const [, first] = bindings(view)[0] ?? [];
   if (first?.documentId) return 'document';
   const resource = first?.id ? snapshot.resources.find(r => r.id === first.id) : undefined;

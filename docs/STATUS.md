@@ -122,6 +122,35 @@ control answers a press. M7 is tightened in the plan to measure scale, layers an
 `scripts/rulers.mjs`); the new checks fail on `e7d43f3b` and pass now. On its first run the
 type check found a 10px `<small>` in the question thread that predates it. Wide-screen
 composition, the plugin page's second system, loading and offline states remain parked.
+**Hi-fi H0–H2 (2026-10-25):** [HIFI-PLAN](HIFI-PLAN.md) was approved on boards A/B/C.
+P0-2 (`9ef2f8d8`): "moving" counts active runs only, and runs never observed are counted
+apart. H1 (`602a914e`): a monospace stack, a grey superseded failure, and "not written yet"
+for a running run's declared file. H2 builds the workbench. The toolbar holds the wordmark,
+the project / layout location, a "Type a command ⌘K" field and the read status. The work
+is a card titled with the project's question. Tabs name only the object, with an image icon
+for figures. The view header carries the figure's size and Fit / 100% (plugins `98af527`),
+and each view keeps its own source line. From 1280 the Agent has its own column: who it
+is, its object, the items it declared (the current one opened), your questions, and the
+recorded calls. The bar under the work shows the count and time span of actions and run
+marks on a timeline that cuts pauses over two minutes to a break. It also holds the follow
+switch, Step away, and evidence. From 768 to 1023 the project tree folds while a layout is
+open, and the Projects button reopens it. Table numbers are formatted in the plugin. On
+airquality the persistent bands are 32 + 40 px at 1440, 1024 and 768 (8%, 9.4% and 7%)
+and 32 + 61 px at 390 (11%). The figure scale is 0.74, 0.63 and 0.60, and 0.35 at 390,
+where Actual size is offered. No width overflows. Unit 174/174, replay 27/27, plugins
+67/67, and the interaction, UI, pages, shell, U2, actions, objects, continuity, execution,
+person and plugin-UI acceptances pass. Several tests and styles changed with this:
+- UI acceptance now expects the toolbar wordmark; H2 supersedes U1's "card only" rule.
+- Person-files waits for the document text after a reload; it failed 1 run in 5 by
+  reading the editor before the text arrived.
+- Continuity's M1 found the editor's corner under the card's curve, so view bodies are
+  inset 4 px.
+- The latest run mark keeps a pressed state under its ring.
+
+Open work:
+- boards D (leave and return), C with plugin card forms, and failure → repair;
+- comparing the boards with these screenshots;
+- H3.
 
 Updated: 2026-10-24. S7 live expression and complete table-question feedback.
 `src/expression.ts` drives the replay and the real browser through `live-trace.ts` /

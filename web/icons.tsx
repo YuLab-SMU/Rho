@@ -1,4 +1,4 @@
-export type IconName = 'home' | 'project' | 'plugins' | 'sidebar' | 'context' | 'lock' | 'folder' | 'folder-plus' | 'plus' | 'chevron' | 'info' | 'close' | 'overview' | 'layout' | 'document' | 'table' | 'image' | 'file' | 'offline' | 'prompt' | 'refresh' | 'unlink' | 'enter' | 'check' | 'grid' | 'copy' | 'eye' | 'run';
+export type IconName = 'home' | 'project' | 'plugins' | 'sidebar' | 'context' | 'lock' | 'folder' | 'folder-plus' | 'plus' | 'chevron' | 'info' | 'close' | 'overview' | 'layout' | 'document' | 'table' | 'image' | 'file' | 'offline' | 'prompt' | 'refresh' | 'unlink' | 'enter' | 'check' | 'grid' | 'copy' | 'eye' | 'run' | 'search' | 'code';
 export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?: number; stroke?: number }) {
   const paths = {
     home: 'm3 10 9-7 9 7v10h-6v-7H9v7H3z',
@@ -29,6 +29,8 @@ export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?:
     copy: 'M10 8h9a1.5 1.5 0 0 1 1.5 1.5v9A1.5 1.5 0 0 1 19 20h-9a1.5 1.5 0 0 1-1.5-1.5v-9A1.5 1.5 0 0 1 10 8zM15.5 4H5A1.5 1.5 0 0 0 3.5 5.5V16',
     eye: 'M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12zM12 9.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 1 0 0-5.6z',
     run: 'M7 4.5v15l12-7.5z',
+    search: 'M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 1 0 0-13zM15.3 15.3 20 20',
+    code: 'M8.5 7 3.5 12l5 5M15.5 7l5 5-5 5',
   };
   return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={stroke} strokeLinejoin="round" strokeLinecap="round"><path d={paths[name]} /></svg>;
 }

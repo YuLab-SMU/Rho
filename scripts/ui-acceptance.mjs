@@ -109,7 +109,9 @@ try {
   assert.equal(await page.evaluate(() => localStorage.length), 0);
   const stored = await page.evaluate(() => Object.keys(sessionStorage));
   assert.deepEqual(stored, ['rho.browser.session.v1']);
-  assert.equal(await page.locator('.wordmark').count(), 0);
+  // From 768 the toolbar's lead, above the rail, carries the wordmark (H2); the page itself does not.
+  assert.equal(await page.locator('.wordmark:not(.topbar-wordmark)').count(), 0);
+  assert.equal(await page.locator('header .topbar-wordmark').textContent(), 'Rho');
   assert.equal(await page.locator('header .location').textContent(), 'Home');
   const admin = await operator();
   const focused = handle => page.waitForFunction(element => element === document.activeElement, handle, { timeout: 2000 });
