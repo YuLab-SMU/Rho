@@ -13,6 +13,7 @@
   --color-accent-soft: #e8eefd;
   --color-accent-strong: #2347b8;
   --color-verified: #3d8b67;
+  --color-verified-text: #2e7553; /* 4.5:1 on every surface (M7) */
   --color-offline: #9aa1a7;
   --color-failed: #b23b37;
   --color-amber-soft: #fbefd9;

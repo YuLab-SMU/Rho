@@ -52,6 +52,26 @@ test('receipt is not a response; only an explicit Agent reply answers the origin
   assert.equal(state.expression.objects['question:q'].version, ref.version);
 });
 
+test("declared items reach Screen in the Agent's words, tied to an object only by an exact reference", () => {
+  const map = items => ({ format: 'rho.task-map/1', version: 1, question: 'Does it hold?', compositionId: null, vocabulary: { kinds: { check: { label: '检查' } }, states: { done: { label: '核对过' }, open: { label: 'still open' } } }, items, next: [], focus: null, lastAgentFormAt: null, presentation: {}, suggestions: [] });
+  const item = (extra = {}) => ({ id: 'tied', kind: 'check', state: 'done', title: 'results.csv holds', author: 'agent:test', at, ...extra });
+  const declared = [item({ artifact: ref }), item({ id: 'loose', title: 'Mentions results.csv' })];
+  const state = startLive(snapshot(), [run()], composition());
+  assert.deepEqual(state.expression.items, []);
+  advanceLive(state, snapshot(), [run()], composition(), 1000, map(declared));
+  const [tied, loose] = state.expression.items;
+  assert.equal(tied.kind, '检查'); assert.equal(tied.state, '核对过');
+  assert.deepEqual(tied.artifact, { object: 'artifact:same-source/results.csv', version: ref.version, run: 1 });
+  assert.equal(loose.artifact, undefined); // A title that names a file connects nothing.
+  const observed = () => state.evidence.filter(f => f.op === 'task.map.observed').length, once = observed();
+  advanceLive(state, snapshot(), [run()], composition(), 2000, map(declared));
+  assert.equal(observed(), once);
+  actLive(state, { kind: 'leave' });
+  advanceLive(state, snapshot(), [run()], composition(), 3000, map([item({ artifact: ref, state: 'open' })]));
+  actLive(state, { kind: 'return' });
+  assert.ok(state.expression.digest.lines.some(l => l.kind === 'items' && l.count === 1));
+});
+
 test('a burst of recorded times cannot bypass live presentation pacing', () => {
   const state = startLive(snapshot(), [run()], composition());
   const entries = [1, 2, 3].map(n => ({ cursor: n, principal: 'agent:test', method: 'action.lookup', outcome: 'returned', at: `2026-10-24T14:0${n}:00Z`, operationId: 'run-' + n }));

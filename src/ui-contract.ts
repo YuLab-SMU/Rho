@@ -87,7 +87,7 @@ export interface UiContribution {
   // The full form inside a layout.
   View: ComponentType<UiViewProps>;
   // Optional object feedback supplied only by the selected Annotations entry.
-  TableQuestion?: ComponentType<Pick<UiViewProps, 'projectId' | 'viewId' | 'snapshot' | 'client' | 'principalId' | 'requestFeedback'> & {
+  TableQuestion?: ComponentType<Pick<UiViewProps, 'projectId' | 'viewId' | 'snapshot' | 'client' | 'principalId' | 'requestFeedback' | 'headerTarget'> & {
     resource: { id: string; version: string };
     onOpenResource?: (ref: { id: string; version: string }) => void;
   }>;

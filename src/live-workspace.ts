@@ -3,7 +3,7 @@
 // references to owner views, retaining descriptors rather than copying buffers.
 import type { CompositionSummary, ViewDescription, WorkspaceSnapshot } from './browser.js';
 import { actExpression, expressionScreen, observeExpression, settleExpression, startExpression, type ArtifactRef, type ExpressionState, type Fact, type PersonIntent, type Trace } from './expression.js';
-import { liveIndex, referenceFor, snapshotTrace, type LiveIndex, type RunSummary } from './live-trace.js';
+import { liveIndex, referenceFor, snapshotTrace, type LiveIndex, type RunSummary, type TaskMap } from './live-trace.js';
 export const liveLimits = { maxViews: 64, maxEvidence: 256, maxCheckpointBytes: 1024 * 1024 };
 export interface LiveWorkspace {
   format: 1; expression: ExpressionState; index: LiveIndex; layout: CompositionSummary;
@@ -23,8 +23,8 @@ function ownerViews(snapshot: WorkspaceSnapshot): ViewDescription[] {
   }
   return views;
 }
-export function startLive(snapshot: WorkspaceSnapshot, runs: RunSummary[], composition: CompositionSummary): LiveWorkspace {
-  const index = liveIndex(), live = snapshotTrace(snapshot, runs, composition, index), expression = startExpression('working');
+export function startLive(snapshot: WorkspaceSnapshot, runs: RunSummary[], composition: CompositionSummary, map?: TaskMap | null): LiveWorkspace {
+  const index = liveIndex(), live = snapshotTrace(snapshot, runs, composition, index, map), expression = startExpression('working');
   for (const fact of live.trace.facts) observeExpression(expression, live.trace, fact);
   expression.attention = 'following'; expression.suggestions = []; expression.moves = [];
   expression.views = composition.views.flatMap(v => {
@@ -79,8 +79,8 @@ function projectMove(state: LiveWorkspace, since: number) {
     if (state.layout.views.some(v => v.id === id)) state.active = id;
   }
 }
-export function advanceLive(state: LiveWorkspace, snapshot: WorkspaceSnapshot, runs: RunSummary[], composition: CompositionSummary, now: number) {
-  const live = snapshotTrace(snapshot, runs, composition, state.index), since = state.expression.moves.length;
+export function advanceLive(state: LiveWorkspace, snapshot: WorkspaceSnapshot, runs: RunSummary[], composition: CompositionSummary, now: number, map?: TaskMap | null) {
+  const live = snapshotTrace(snapshot, runs, composition, state.index, map), since = state.expression.moves.length;
   state.latest = structuredClone(composition); state.refs = live.refs; state.names = live.names; state.trace = live.trace;
   state.available = ownerViews(snapshot);
   state.gap ||= live.gap;

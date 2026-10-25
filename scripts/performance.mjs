@@ -90,7 +90,11 @@ try {
     assert.ok(report.latency.typing.p95 <= 50, `typing p95 ${report.latency.typing.p95} ms > 50`);
     for (const k of ['switchView', 'sort']) assert.ok(report.latency[k].p95 <= 100, `${k} p95 ${report.latency[k].p95} ms > 100`);
     for (const k of ['browserHeapUsedKiB', 'servicePeakRssKiB']) assert.ok(report.memory[k] <= base.memory[k] * 1.2, `${k} ${report.memory[k]} > baseline ${base.memory[k]} + 20%`);
-    for (const k of ['initialGzip', 'totalGzip']) assert.ok(report.bundle[k] <= base.bundle[k], `${k} ${report.bundle[k]} > baseline ${base.bundle[k]}`);
+    // Both shells ship until W6 deletes the frozen one (docs/WORKSPACE-PLAN.md W3), so the
+    // total is held to the baseline from the build that no longer contains it.
+    const legacyShips = await fs.access(path.join(packageRoot, 'web/workspace.tsx')).then(() => true, () => false);
+    report.bundle.totalGated = !legacyShips;
+    for (const k of legacyShips ? ['initialGzip'] : ['initialGzip', 'totalGzip']) assert.ok(report.bundle[k] <= base.bundle[k], `${k} ${report.bundle[k]} > baseline ${base.bundle[k]}`);
   }
   report.passed = true;
 } catch (error) {

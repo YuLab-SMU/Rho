@@ -44,7 +44,7 @@ try {
     { id: 'side', kind: 'group', children: ['Notes', 'Table'] }, editor('Script', script.id), editor('Notes', notes.id), grid('Table'),
   ] }] });
   await call('composition.apply', { compositionId: 'other', expectedVersion: 0, changeId: 'other', operations: [{ op: 'replace', rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: ['Elsewhere'] }, editor('Elsewhere', notes.id)] }] });
-  const grant = await call('session.grant', { externalSessionId: 'shell-agent', methods: ['composition.apply', 'composition.read', 'document.read'] });
+  const grant = await call('session.grant', { externalSessionId: 'shell-agent', methods: ['composition.apply', 'composition.read', 'document.read', 'task.map.declare'] });
   const agent = await RhoClient.fromFile(grant.connectionFile);
 
   browser = await chromium.launch({ executablePath: process.env.RHO_UI_CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true });
@@ -175,6 +175,19 @@ try {
   assert.ok(Number(await divider.getAttribute('aria-valuenow')) >= start + 9, 'arrows move the divider');
   assert.equal((await call('composition.read', { compositionId: 'fidelity-2' })).version, 1);
   check('a divider is a named, focusable separator moved by arrows; it changes no owner record');
+
+  // A declared item is the Agent's statement: on the view it names and in the evidence, nowhere else.
+  await agent.call('task.map.declare', { projectId: project.id, expectedVersion: 0, changeId: 'items', question: 'Do the scores hold?', vocabulary: { kinds: { check: { label: 'Check' } }, states: { open: { label: 'still open' } } }, items: [{ id: 'scores', kind: 'check', state: 'open', title: 'Scores rise with row order', view: 'Table' }], next: [] });
+  await layoutNav('workspace').click(); await scriptView.locator('.cm-content').waitFor();
+  const note = page.locator('[data-owner-view="Table"] [data-fact="agent"]');
+  await poll(() => note.textContent().catch(() => ''), t => t === 'Agent: Scores rise with row order · still open', 'declared item on the view it names');
+  assert.equal(await page.locator('[data-owner-view="Script"] [data-fact="agent"]').count(), 0);
+  const evidenceToggle = page.getByRole('button', { name: /Recorded evidence$/ });
+  assert.match(await evidenceToggle.textContent(), /^1 Agent note · /);
+  await evidenceToggle.click();
+  await page.getByRole('region', { name: "The Agent's notes", exact: true }).getByText('Scores rise with row order', { exact: true }).waitFor();
+  await evidenceToggle.click();
+  check("a declared item shows as the Agent's statement on the view it names and in the recorded evidence");
 
   // Rulers on a static layout: the editor has focus, the table shares the screen.
   await layoutNav('workspace').click(); await scriptView.locator('.cm-content').waitFor();

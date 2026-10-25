@@ -21,16 +21,26 @@ Agent layout, a re-layout and a layout switch, then own undo with focus kept), s
 composition trees at 0% weight error, and M1–M10 at four widths pass
 (`scripts/shell-acceptance.mjs`). The project overview loads on demand: initial gzip
 92.7 KiB (baseline 97.3). `--color-meta` darkened to 4.5:1 on the canvas.
+**W2 done:** the shell renders the Rho layer from `Screen`: follow switch, the Agent's
+object and state (E1), the run chain (a superseded failure is one click away, M3), one
+interruption, a digest of at most six lines, and recorded evidence with declared items.
+Each artifact view has a source line (producing run observed, byte/domain checks
+verified, the Agent's words apart, E4) and runs link back to exact versions (E2). A
+submitted table question folds to one status control in the view's header (Rho-plugins
+6cc968d); its open thread is a transient line. Task-map items now reach the live
+`Screen`. S7 on the shell passes every functional check, E1–E5 with zero `task.map`
+calls, and M1–M10 enforced at return, interrupted, complete and the run view at four
+widths; U2, shell (with a declared item) and plugin UI pass; unit 161/161, replay
+27/27. Open 0.41 s, p95 ≤24 ms, initial gzip 90.5 KiB; the 530 KiB total carries both
+shells and is gated once W6 removes the old one.
 
 Updated: 2026-10-24. S7 live expression and complete table-question feedback.
 
-The six Paper behaviors and this feedback loop have explicit user authorization
-for autonomous implementation, verification, revision, commits and checked main
-publication. `src/expression.ts` now drives the replay and real browser through
-`live-trace.ts` / `live-workspace.ts`. Project-scoped SSE invalidations reach the
-browser for Agent reads. Working preserves input and exact resource bindings;
-new versions get separate views/selection scopes, layout changes become proposals,
-and return/reload gives a digest without replaying focus or native execution.
+`src/expression.ts` drives the replay and the real browser through `live-trace.ts` /
+`live-workspace.ts`; project-scoped SSE invalidations reach the browser for Agent
+reads. Working preserves input and exact resource bindings; new versions get separate
+views/selection scopes, layout changes become proposals, and return/reload gives a
+digest without replaying focus or native execution.
 
 Annotations 0.4.3 uses the existing Documents draft, exact table anchor and context
 receipt, then an explicit Agent `replyTo` and optional owner-validated output refs.
@@ -38,22 +48,15 @@ Agent 0.4.4 retains exact object metadata without storing tool inputs/content.
 Assigned tasks keep the existing original-session delivery; unassigned layouts
 prepare a context and name that limit. Reading a question does not answer it.
 
-[S7 engineering acceptance](INTERACTION-ACCEPTANCE.md) records real Chrome at
-1440/1024/768/390, browser IME, lost acknowledgement/reload/original retry, no Task
-Map, immutable old/new tables, linked replies, and failure followed by recovery.
-Actual Claude Code 2.1.310 completed the continuation in 28 turns / 132 seconds.
-Four intended R dispatches cover setup, the model's answer, an injected failure and
-recovery; browser refresh adds none. Earlier failed trials are retained separately.
-S6 remains **human usability unverified** and does not block engineering or source
-publication. Automation is not a participant record or a high-fidelity UX verdict.
-Final source checks: Rho 149/149 (test concurrency 4), owners 67/67, replay 26/26,
-build and generated-contract checks pass. U2's six browser checks also pass with no
-Host starts or native dispatches. The default-concurrency MCP timeout is retained.
+[S7 engineering acceptance](INTERACTION-ACCEPTANCE.md) records real Chrome at four
+widths, browser IME, lost acknowledgement/reload/original retry, no Task Map, immutable
+old/new tables, linked replies, and failure then recovery. Actual Claude Code 2.1.310
+completed the continuation in 28 turns / 132 seconds with four intended R dispatches;
+refresh adds none. S6 remains **human usability unverified** and is not a gate.
 
 The public contract remains generated from its owners and validated at the request
-boundary. [Contract acceptance](CONTRACT-ACCEPTANCE.md) retains the earlier installed
-candidate evidence. This change's source/browser checks do not certify a newly
-installed npm package, external scientific examples or signed distribution.
+boundary; [contract acceptance](CONTRACT-ACCEPTANCE.md) keeps the earlier installed
+candidate evidence.
 
 ## Task-first project page, truthful execution facts
 

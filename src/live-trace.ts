@@ -2,18 +2,19 @@
 // Metadata reads are not reconstructed calls. Missing identities/times stay unknown.
 import type { WorkspaceSnapshot, ViewDescription, CompositionSummary } from './browser.js';
 import type { RhoOutput } from './contract.generated.js';
-import type { ArtifactRef, Effect, Fact, Trace } from './expression.js';
+import type { ArtifactRef, DeclaredItem, Effect, Fact, Trace } from './expression.js';
 export type RunSummary = RhoOutput<'project.runs'>['runs'][number];
+export type TaskMap = RhoOutput<'task.map.read'>;
 export interface LiveIndex {
   activity: number; runs: string[]; states: Record<string, string>; documents: Record<string, string>;
-  resources: Record<string, string>; composition: number; questions: Record<string, string>;
+  resources: Record<string, string>; composition: number; questions: Record<string, string>; items?: string;
 }
 export const liveIndex = (): LiveIndex => ({ activity: 0, runs: [], states: {}, documents: {}, resources: {}, composition: 0, questions: {} });
 export interface LiveTrace {
   trace: Trace; refs: Record<string, ArtifactRef>; names: Record<string, string>; gap: boolean;
 }
 const base = (path: string) => path.split('/').at(-1) ?? path;
-export function snapshotTrace(snapshot: WorkspaceSnapshot, summaries: RunSummary[], composition: CompositionSummary, index: LiveIndex): LiveTrace {
+export function snapshotTrace(snapshot: WorkspaceSnapshot, summaries: RunSummary[], composition: CompositionSummary, index: LiveIndex, map?: TaskMap | null): LiveTrace {
   const trace: Trace = { format: 'rho.replay-trace/1', recorded: { experiment: 'live', project: snapshot.project.id, from: '', to: '' }, facts: [], principals: {}, sources: {}, runs: {}, artifacts: {} };
   const names: Record<string, string> = {}, refs: Record<string, ArtifactRef> = {};
   const emit = (op: string, actor: string, at: string | null, effect?: Effect, object?: string, reason?: Fact['reason']) => {
@@ -114,7 +115,25 @@ export function snapshotTrace(snapshot: WorkspaceSnapshot, summaries: RunSummary
       index.questions[id] = state;
     }
   }
+  // What the Agent declared, in its own words (its vocabulary's labels). Only an exact
+  // artifact reference it gave connects an item to an object; titles connect nothing.
+  if (map) {
+    const items = map.items.map(item => declaredItem(item, map.vocabulary, refs)), key = JSON.stringify([map.question, items]);
+    if (index.items !== key) {
+      const latest = map.items.reduce<TaskMap['items'][number] | undefined>((a, b) => !a || b.at > a.at ? b : a, undefined);
+      emit('task.map.observed', latest?.author ?? 'operator', latest?.at ?? null, { kind: 'items', question: map.question, items }, 'map');
+      index.items = key;
+    }
+  }
   return { trace, refs, names, gap };
+}
+function declaredItem(item: TaskMap['items'][number], vocabulary: TaskMap['vocabulary'], refs: Record<string, ArtifactRef>): DeclaredItem {
+  const ref = item.artifact && refs[item.artifact.id + '@' + item.artifact.version];
+  return {
+    id: item.id, kind: vocabulary.kinds[item.kind]?.label ?? item.kind, state: vocabulary.states[item.state]?.label ?? item.state, title: item.title, author: item.author,
+    ...(item.summary ? { summary: item.summary } : {}), ...(item.view ? { view: item.view } : {}), ...(item.from ? { from: item.from } : {}), ...(item.lines ? { lines: item.lines } : {}),
+    ...(ref && ref.run !== null ? { artifact: { object: ref.object ?? 'artifact:' + ref.artifact, version: item.artifact!.version, run: ref.run } } : {}),
+  };
 }
 export function referenceFor(view: ViewDescription, refs: Record<string, ArtifactRef>): ArtifactRef | undefined {
   for (const b of Object.values(view.bindings ?? {}) as Array<{ id?: string; version?: string | number; documentId?: string }>) {

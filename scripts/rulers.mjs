@@ -50,7 +50,9 @@ function inPage([{ p, methods, transientAllowed }, unit]) {
     persistent: persistent.reduce((s, e) => s + inViewport(e.getBoundingClientRect()), 0) / innerHeight,
     total: [...persistent, ...transient].reduce((s, e) => s + inViewport(e.getBoundingClientRect()), 0) / innerHeight,
     transient: transient.map(label), transientAllowed,
-    uncollapsible: transient.filter(e => ![...e.querySelectorAll('button')].some(b => b.hasAttribute('aria-expanded') || /dismiss|hide|collapse|close|less/i.test(b.getAttribute('aria-label') ?? b.textContent))).map(label),
+    // A disclosure may sit outside what it opens; it then names it with aria-controls.
+    uncollapsible: transient.filter(e => ![...e.querySelectorAll('button')].some(b => b.hasAttribute('aria-expanded') || /dismiss|hide|collapse|close|less/i.test(b.getAttribute('aria-label') ?? b.textContent))
+      && !all('[aria-expanded="true"][aria-controls]').some(b => b.getAttribute('aria-controls').split(/\s+/).some(id => e.id === id || e.querySelector('#' + CSS.escape(id))))).map(label),
     interruptions: all(p.interruption).length,
   };
   // M4/M5: visible words outside the person's content; M5 also outside the evidence panel.
@@ -206,7 +208,7 @@ const round = x => Math.round(x * 1000) / 1000;
 export async function agentMarker(page, profile) {
   const marker = page.locator(profile.agent).first();
   if (!await marker.isVisible().catch(() => false)) return { visible: false };
-  return { visible: true, text: (await marker.textContent()).trim(), actionable: await marker.evaluate(e => !!e.closest('button, a[href], [role=button]')) };
+  return { visible: true, text: (await marker.innerText()).replace(/\s+/g, ' ').trim(), actionable: await marker.evaluate(e => !!e.closest('button, a[href], [role=button]')) };
 }
 // E4: the three kinds of statement live in separate elements; the Agent's words never wear
 // the colour reserved for owner-verified facts.

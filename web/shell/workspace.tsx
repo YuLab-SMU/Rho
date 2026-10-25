@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { BrowserClient, CompositionSummary, WorkspaceSnapshot } from '../../src/browser.js';
 import { groupOf, regions, tabGroups, viewOrder, type Region } from '../../src/shell-layout.js';
@@ -6,6 +6,9 @@ import { Icon } from '../icons.js';
 import { registry } from '../registry.js';
 import { useLive } from './live.js';
 import { OwnerView, availableEntry, title, viewIcon } from './owner.js';
+import { Bar, Digest, Evidence, Interruption, waiting } from './layer.js';
+import { RunView, SourceLine } from './facts.js';
+import { boundResource } from '../executions.js';
 import { Slot, Split, TabGroup, useTabOverflow, type TabRender } from './regions.js';
 import './shell.css';
 
@@ -26,6 +29,14 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const shown = (group: Tabs) => group.views.includes(focus) ? focus : group.views.includes(selected[group.id]) ? selected[group.id] : group.views[0];
   const bring = (id: string) => { const group = groupOf(root, id); if (group) setSelected(s => ({ ...s, [group.id]: id })); setFocus(id); };
   const show = (id: string) => { live.hold(id); bring(id); };
+  // An exact version opens where it already shows, or beside the person's views.
+  const openRef = (ref: { id: string; version: string }) => {
+    const existing = layout.views.find(v => Object.values(v.bindings ?? {}).some(b => 'id' in b && b.id === ref.id && b.version === ref.version));
+    if (existing) show(existing.id); else live.openResource(ref);
+  };
+  // What Rho adds above the work: one interruption at a time, hidden until it changes.
+  const [evidence, setEvidence] = useState(false), [hidden, setHidden] = useState<string[]>([]);
+  const items = waiting(live), unhidden = items.filter(i => !hidden.includes(i.key + ':' + i.text));
   useEffect(() => { if (live.active && byId.has(live.active)) bring(live.active); }, [live.active, root]);
   const brought = useRef('');
   useEffect(() => { if (openView && brought.current !== openView && byId.has(openView)) { brought.current = openView; show(openView); } }, [openView, byId]);
@@ -67,15 +78,38 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     return ref;
   }, []);
   const headerOf = (id: string) => narrow ? headers['narrow'] ?? null : headers[groupOf(root, id)?.id ?? ''] ?? null;
+  // Each view's own controls live in one element of their own, moved into its group's header
+  // while it shows, so two owners never share or reorder one slot.
+  const ownHeaders = useRef(new Map<string, HTMLDivElement>());
+  for (const id of ownHeaders.current.keys()) if (!byId.has(id)) ownHeaders.current.delete(id);
+  const ownHeader = (id: string) => {
+    let element = ownHeaders.current.get(id);
+    if (!element) { element = document.createElement('div'); element.className = 'shell-view-header'; element.dataset.ownerHeader = id; ownHeaders.current.set(id, element); }
+    return element;
+  };
+  useLayoutEffect(() => {
+    for (const [id, element] of ownHeaders.current) {
+      const target = visible.includes(id) ? headerOf(id) : null;
+      if (target && element.parentElement !== target) target.appendChild(element);
+      else if (!target) element.remove();
+    }
+  });
   const body = (id: string): ReactNode => {
     const view = byId.get(id)!, isVisible = visible.includes(id);
-    if (view.component === 'rho.execution') return <section className="shell-run"><h2>{String(view.props.operationId ?? id)}</h2></section>;
-    return <OwnerView active={isVisible} params={{
+    if (view.component === 'rho.execution') return <RunView live={live} snapshot={snapshot} operationId={String(view.props.operationId ?? id)} onOpenRef={openRef} />;
+    const resource = boundResource(view, snapshot.resources);
+    const annotations = snapshot.catalog.plugins.find(p => p.id === 'annotations');
+    const Question = resource?.kind === 'table' && annotations?.projectEnabled && annotations.dependenciesSatisfied && annotations.state === 'available' ? registry.entries.find(e => e.component === 'rho.feedback')?.TableQuestion : undefined;
+    const owner = <OwnerView active={isVisible} params={{
       view, snapshot, client, principalId, compositionId: layout.compositionId, compositionVersion: layout.version,
       // One view at a time owns the context panel: the one with focus.
-      contextTarget: id === focused && !feedbackContextActive ? contextTarget : null, headerTarget: isVisible ? headerOf(id) : null,
+      contextTarget: id === focused && !feedbackContextActive ? contextTarget : null, headerTarget: isVisible ? ownHeader(id) : null,
       renderAllowed: rights.current.has(id), onAbout, onRequestFeedback: requestFeedback,
     }} />;
+    if (!resource) return owner;
+    return <><SourceLine live={live} snapshot={snapshot} resource={resource} viewId={id} onOpenRef={openRef}>
+      {Question && <Question key={resource.id + resource.version + id} projectId={snapshot.project.id} viewId={id} resource={resource} snapshot={snapshot} client={client} principalId={principalId} headerTarget={ownHeader(id)} onOpenResource={openRef} requestFeedback={requestFeedback ? () => requestFeedback(id) : undefined} />}
+    </SourceLine>{owner}</>;
   };
   const render: TabRender = {
     label: id => title(byId.get(id)!, snapshot), container,
@@ -96,7 +130,10 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     event.preventDefault(); show(order[next]); (event.currentTarget.children[next] as HTMLElement).focus();
   }
   return <section className="workspace shell" aria-label="Layout">
-    {live.problem && <p className="shell-problem" role="alert">{live.problem}</p>}
+    <Bar live={live} focusObject={live.screen?.views.find(v => v.id === focused)?.object ?? null} evidence={evidence} held={items.length - unhidden.length} narrow={narrow}
+      onEvidence={() => { setEvidence(v => !v); live.act({ kind: 'reveal', target: evidence ? null : live.screen?.agent?.object ?? 'workspace' }); }} />
+    <Interruption live={live} items={unhidden} onHide={key => setHidden(h => [...h, key])} />
+    {evidence ? <Evidence live={live} principalId={principalId} /> : <Digest live={live} />}
     <div className="shell-stage" onPointerDownCapture={event => live.hold((event.target as HTMLElement).closest<HTMLElement>('[data-owner-view]')?.dataset.ownerView ?? focused)} onKeyDownCapture={() => live.hold(focused)} onCompositionStartCapture={() => live.hold(focused)}>
       {contextTarget && feedbackContextActive && feedbackSource && feedbackAllowed && feedbackEntry && snapshot.feedback?.draftDocumentId && createPortal(feedbackLimit ? <section className="unavailable" role="status"><h3>Close a view before opening feedback</h3><p>Existing views and input are kept within this layout's view limit.</p></section> : <feedbackEntry.View key={[snapshot.project.id, snapshot.feedback.taskId, feedbackSource, principalId].join(':')} viewId={'feedback:' + feedbackSource} view={{ id: 'feedback:' + feedbackSource, component: feedbackEntry.component, version: feedbackEntry.componentVersion, props: { title: 'Your question', taskId: snapshot.feedback.taskId, sourceSelectionScope: { kind: 'shared', id: feedbackSource } }, bindings: { draft: { kind: 'live-document', documentId: snapshot.feedback.draftDocumentId } } }} projectId={snapshot.project.id} snapshot={snapshot} client={client} active principalId={principalId} contextTarget={null} feedbackConfiguration={{ ...snapshot.feedback, draftDocumentId: snapshot.feedback.draftDocumentId }} />, contextTarget)}
       {!root ? <div className="empty"><h2>No views in this layout</h2><p>The saved layout is empty. No view is created automatically.</p></div>
