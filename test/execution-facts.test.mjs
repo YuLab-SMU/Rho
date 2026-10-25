@@ -78,7 +78,7 @@ test('a failure the same script later completed steps back but stays listed', ()
 
 test('an outcome with no observation is reported as unknown, never as done', () => {
   assert.equal(executionWord('unknown'), 'outcome unknown');
-  assert.equal(executionWord('unobserved'), 'accepted, not observed');
+  assert.equal(executionWord('unobserved'), 'accepted, not seen running yet');
   assert.equal(readRuns([run({ execution: 'unknown' })]).unknown, 1);
   assert.equal(attention([run({ execution: 'unknown', declared: [] })])[0].kind, 'unknown');
 });

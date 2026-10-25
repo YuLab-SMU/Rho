@@ -7367,6 +7367,8 @@ export interface ProjectRunsOutput {
     script: string | null;
     sourceKey: string | null;
     hasStderr: boolean;
+    startedAt: string | null;
+    endedAt: string | null;
     stop: null | {
       requestedAt: string;
       by: string;

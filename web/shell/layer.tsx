@@ -1,4 +1,5 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import type { WorkspaceSnapshot } from '../../src/browser.js';
 import type { DigestLine, ObjectState, QuestionState, RunObject, Screen } from '../../src/expression.js';
 import { liveLimits } from '../../src/live-workspace.js';
 import type { Live } from './live.js';
@@ -14,7 +15,7 @@ export function namer(live: Live): Namer {
   };
   return name;
 }
-const runWords: Record<string, string> = { running: 'running', completed: 'completed', failed: 'failed', unknown: 'outcome unknown', unobserved: 'accepted, not observed' };
+const runWords: Record<string, string> = { running: 'running', completed: 'completed', failed: 'failed', unknown: 'outcome unknown', unobserved: 'accepted, not seen running yet' };
 const questionWords: Record<string, string> = { prepared: 'prepared, not fetched', fetched: 'fetched by the Agent', responded: 'answered by the Agent' };
 // An object's state in the words a reader uses.
 export function stateOf(item: ObjectState | undefined): string {
@@ -42,6 +43,7 @@ const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-d
 // A time with its day when that is not today; a span names both days when it crosses one.
 const day = (iso: string) => new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
 const sameDay = (a: string, b: string) => new Date(a).toDateString() === new Date(b).toDateString();
+const minutes = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 const when = (iso: string) => (sameDay(iso, new Date().toISOString()) ? '' : day(iso) + ' ') + clock(iso);
 const span = (a: string, b: string) => sameDay(a, b) ? when(a) + ' – ' + clock(b) : `${day(a)} ${clock(a)} – ${day(b)} ${clock(b)}`;
 // Time along the bar, with long quiet stretches cut short: a pause of more than two minutes
@@ -129,20 +131,26 @@ const questionLong: Record<string, string> = { prepared: 'Prepared · not fetche
 // The Agent's column (1280 and wider): who is working and on what, the items it declared
 // in its own words, the person's questions and how far each got, and the recorded calls on
 // request. Every line is the Agent's statement or an owner record; nothing is estimated.
-export function AgentColumn({ live, principalId, evidence, onEvidence, focusObject }: { live: Live; principalId?: string; evidence: boolean; onEvidence: () => void; focusObject: string | null }) {
+export function AgentColumn({ live, agents, principalId, evidence, onEvidence, focusObject }: { live: Live; agents?: WorkspaceSnapshot['agents']; principalId?: string; evidence: boolean; onEvidence: () => void; focusObject: string | null }) {
   const screen = live.screen, state = live.state, name = namer(live);
+  const running = Object.values(screen?.objects ?? {}).find(o => o.kind === 'run' && o.state === 'running');
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { if (!running) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [!!running]);
   if (!screen || !state) return null;
-  const agents = Object.entries(state.trace.principals).filter(([, p]) => p.kind === 'agent');
-  const who = agents.find(([, p]) => p.name)?.[1].name ?? 'The Agent';
-  const lastAgent = state.evidence.filter(f => f.at && state.trace.principals[f.actor]?.kind === 'agent').sort((a, b) => Date.parse(a.at!) - Date.parse(b.at!)).at(-1);
-  const running = Object.values(screen.objects).some(o => o.kind === 'run' && o.state === 'running');
+  // Who: the label given to the Agent's session when it was granted, and its last call as the
+  // owner recorded it. The most recently active session speaks for the column.
+  const latest = [...(agents ?? [])].sort((a, b) => (a.last?.at ?? '').localeCompare(b.last?.at ?? '')).at(-1);
+  const who = latest?.label || Object.values(state.trace.principals).find(p => p.kind === 'agent' && p.name)?.name || 'The Agent';
+  const lastAt = latest?.last?.at;
+  const agentRun = running && live.runs?.find(r => r.operationId === name(running.id) && r.execution === 'active');
+  const since = agentRun ? agentRun.startedAt ?? agentRun.acceptedAt : undefined;
   const questions = Object.values(screen.objects).filter((o): o is QuestionState => o.kind === 'question');
   // The item the person is looking at, or the one the Agent says it is working on, opens up.
   const current = screen.items.find(i => focusObject && (i.artifact?.object === focusObject)) ?? screen.items.find(i => roleOf(live, i.id) === 'working');
   return <aside className="agent-column" aria-label={who} data-scroll-region="" tabIndex={0}>
     <section className="agent-card">
       <header className="agent-card-head"><span className={'agent-dot' + (running ? ' running' : '')} aria-hidden="true" /><strong>{who}</strong>
-        <span className="agent-card-meta">{running ? 'running' : lastAgent ? 'last action ' + when(lastAgent.at!) : 'no recorded action'}</span></header>
+        <span className="agent-card-meta">{running ? 'running' + (since ? ' ' + minutes(now - Date.parse(since)) : '') : lastAt ? 'last action ' + when(lastAt) : 'no recorded action'}</span></header>
       <AgentMarker live={live} who={false} />
       {screen.items.length > 0 && <section className="agent-items" aria-label="The Agent's notes">
         <ol>{screen.items.map(i => {

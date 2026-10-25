@@ -235,6 +235,9 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
     // without this summary disclosing the project's file names.
     sourceKey: { anyOf: [text, { type: 'null' }] },
     hasStderr: { type: 'boolean' },
+    // When Core observed the process spawn and its exit; null until it did, and the end stays
+    // null when the process went without an observed exit.
+    startedAt: { anyOf: [text, { type: 'null' }] }, endedAt: { anyOf: [text, { type: 'null' }] },
     // A stop request and what Core reported afterwards, kept apart: "requested" and
     // "signalled" are not stopped; only an ended process is.
     stop: { anyOf: [{ type: 'null' }, response({ requestedAt: text, by: text, state: { enum: ['requested', 'signalled', 'stopped', 'finished-first', 'unconfirmed'] }, exit: { anyOf: [text, { type: 'null' }] } })] },

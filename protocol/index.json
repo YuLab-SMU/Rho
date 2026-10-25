@@ -353,8 +353,8 @@
     "project.runs": {
       "summary": "Report what this project has run and what it is running: one bounded summary per operation with its execution state, accepted time, author kind, the artifact paths its plan declared, whether each of those files is on disk now, whether the producer wrote a completion inventory, and the recorded integrity and domain states. A declaration, a file on disk and a verified artifact are separate facts. It carries no request body, no code and no output text, and starts nothing.",
       "path": "operations/project.runs.json",
-      "bytes": 6020,
-      "sha256": "a6aaffa44bc274fb8aa85c86566b6f7c81a60d0503733944dd545e9a322979f9"
+      "bytes": 6582,
+      "sha256": "1d9d565a22db49caf59ad12bcf026ae91fe210aaf55786dc295a0be34726ad40"
     },
     "project.source.add": {
       "summary": "project.source.add",

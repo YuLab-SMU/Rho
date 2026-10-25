@@ -16,7 +16,7 @@ export type IntegrityState = RunFacts['integrity'];
 export type ExecutionState = RunFacts['execution'];
 
 const executionWords: Record<string, string> = {
-  completed: 'completed', failed: 'failed', active: 'running', unobserved: 'accepted, not observed',
+  completed: 'completed', failed: 'failed', active: 'running', unobserved: 'accepted, not seen running yet',
   unknown: 'outcome unknown'
 };
 const integrityWords: Record<IntegrityState, string> = {

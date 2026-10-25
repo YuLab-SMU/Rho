@@ -128,6 +128,28 @@
             "hasStderr": {
               "type": "boolean"
             },
+            "startedAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "endedAt": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "stop": {
               "anyOf": [
                 {
@@ -202,6 +224,8 @@
             "script",
             "sourceKey",
             "hasStderr",
+            "startedAt",
+            "endedAt",
             "stop",
             "repairOf"
           ],

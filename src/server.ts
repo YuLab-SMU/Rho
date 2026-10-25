@@ -88,8 +88,18 @@ async function runFacts(project: Project, run: Operation) {
     // the submissions of one file into a retry chain.
     sourceKey: typeof (run.plan?.source as { path?: unknown } | undefined)?.path === 'string' ? digest((run.plan.source as { path: string }).path).slice(0, 16) : null,
     hasStderr: Number(run.native?.stderr?.retained_bytes ?? 0) > 0,
+    // When Core saw the process start and when it saw it exit, from its own record; never an estimate.
+    ...lifetime(run),
     stop: stopFacts(run),
     repairOf: run.repairOf ?? null
+  };
+}
+function lifetime(run: { native?: unknown }) {
+  const known = (run.native as { record?: { execution?: { Known?: { observed_at?: unknown; value?: Record<string, { spawned_at?: unknown } | undefined> } } } } | undefined)?.record?.execution?.Known;
+  const [kind, fact] = Object.entries(known?.value ?? {})[0] ?? [];
+  return {
+    startedAt: typeof fact?.spawned_at === 'string' ? fact.spawned_at : null,
+    endedAt: kind === 'ExitObserved' && typeof known?.observed_at === 'string' ? known.observed_at : null
   };
 }
 // One run as a context gives it to the Agent (docs/WORKSPACE-PLAN.md W4): the recorded

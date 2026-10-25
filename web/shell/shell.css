@@ -145,13 +145,35 @@
 .shell-question .table-question-compose > span { margin-left: var(--space-4); color: var(--color-muted); }
 .shell-question details summary { color: var(--color-muted); cursor: pointer; }
 .shell-run { flex: 1; min-height: 0; overflow: auto; padding: var(--space-7) var(--space-7); font-size: var(--font-size-md); }
-.shell-run h2 { margin: 0 0 var(--space-4); font: 600 var(--font-size-lg)/var(--line-height-lg) var(--font-mono); }
+/* A run reads like a record card: its name, what Core observed and when, its files, then what checked them. */
+.shell-run-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-4) var(--space-6); }
+.shell-run h2 { min-width: 0; margin: 0; font: 600 var(--font-size-xl)/var(--line-height-xl) var(--font-mono); overflow-wrap: anywhere; }
+.shell-run-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+.shell-run .shell-run-actions button { min-height: var(--height-button); padding: 0 var(--space-5); border: 1px solid var(--color-control-border); background: var(--color-surface); font-size: var(--font-size-md); font-weight: 600; }
+.shell-run .shell-run-actions button:hover { background: var(--color-hover); }
+.shell-run .shell-run-actions button[aria-expanded="true"] { background: var(--color-selected); }
+.shell-run .shell-run-status { margin-top: var(--space-3); color: var(--color-muted); }
+.shell-run .shell-run-status .shell-state { font-weight: 600; }
+.shell-run-clock { color: var(--color-muted); }
+.shell-run-elapsed { color: var(--color-accent-strong); font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; }
+.shell-run .shell-run-files { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--space-4); margin: var(--space-6) 0 var(--space-5); padding: 0; list-style: none; }
+.shell-run-file { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0 var(--space-4); min-height: 48px; padding: var(--space-4) var(--space-5); border: 1px solid var(--color-hairline); border-radius: var(--radius-md); background: var(--color-surface); color: var(--color-muted); }
+.shell-run-file.shell-not-yet { border-style: dashed; border-color: var(--color-accent); }
+.shell-run-file.missing { border-style: dashed; }
+.shell-run-file-name { min-width: 0; overflow: hidden; color: var(--color-ink); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.shell-run button.shell-run-file-name { justify-self: start; max-width: 100%; min-height: 0; padding: 0; border: 0; background: none; font-size: var(--font-size-md); text-decoration: underline; text-decoration-color: var(--color-hairline); text-underline-offset: 3px; }
+.shell-run button.shell-run-file-name:hover { background: none; text-decoration-color: currentColor; }
+.shell-run-file > svg { grid-row: span 2; color: var(--color-meta); }
+.shell-run-file-state { grid-column: 2; color: var(--color-meta); font-size: var(--font-size-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.shell-run-checks { color: var(--color-meta); }
+.shell-run-id { font-family: var(--font-mono); }
 .shell-run p, .shell-run ul { margin: var(--space-3) 0; }
 .shell-run ul { padding-left: var(--space-6); }
 .shell-run-error { color: var(--color-failed); font-family: var(--font-mono); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
 .shell-run-chain { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-.shell-run-chain .failed { color: var(--color-failed); }
-.shell-run .shell-stop { margin-left: var(--space-4); }
+.shell-run .shell-chip { border: 1px solid var(--color-hairline); border-radius: var(--radius-pill); background: var(--color-surface); font: 400 var(--font-size-sm)/var(--line-height-sm) var(--font-mono); }
+.shell-run .shell-chip[aria-current] { border-color: var(--color-ink); color: var(--color-ink); opacity: 1; }
+.shell-run .shell-chip.failed { color: var(--color-failed); }
 .shell-run-repair .failed, .shell-run-repair .unknown { color: var(--color-failed); }
 .shell-run-fix { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-4); margin: var(--space-4) 0; }
 .shell-run-export { display: flex; flex-direction: column; gap: var(--space-4); max-width: 480px; margin: var(--space-5) 0; }

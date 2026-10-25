@@ -157,7 +157,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     if (view.component === 'rho.action') return <ActionForm view={view} snapshot={snapshot} client={client} live={live} />;
     if (view.component === 'rho.execution') {
       const operationId = String(view.props.operationId ?? id);
-      return <RunView snapshot={snapshot} client={client} operationId={operationId} runs={live.runs} readRuns={live.readRuns} firstLine={runFirstLine(live, operationId)} opener={ref => () => openRef(ref)} onOpenRun={other => openRun(live, other)} />;
+      return <RunView snapshot={snapshot} client={client} operationId={operationId} runs={live.runs} readRuns={live.readRuns} firstLine={runFirstLine(live, operationId)} opener={ref => () => openRef(ref)} onOpenRun={other => openRun(live, other)} chain={false} />;
     }
     const resource = boundResource(view, snapshot.resources);
     const annotations = snapshot.catalog.plugins.find(p => p.id === 'annotations');
@@ -219,7 +219,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     {/* The question the Agent declared is what this screen is about; without one, no slot. */}
     {live.screen?.question && <header className="shell-heading"><h1>{live.screen.question}</h1></header>}
     {footerTarget ? createPortal(bar, footerTarget) : bar}
-    {column && createPortal(<AgentColumn live={live} principalId={principalId} evidence={evidence} onEvidence={toggleEvidence} focusObject={focusObject} />, agentTarget!)}
+    {column && createPortal(<AgentColumn live={live} agents={snapshot.agents} principalId={principalId} evidence={evidence} onEvidence={toggleEvidence} focusObject={focusObject} />, agentTarget!)}
     <Interruption live={live} items={unhidden} onHide={key => setHidden(h => [...h, key])} />
     {layoutProblem && <div className="shell-interruption problem" data-rho-layer="transient" data-rho-interruption="" role="alert"><span className="shell-interruption-text">{layoutProblem}</span><button className="shell-quiet" onClick={() => setLayoutProblem('')}>Dismiss</button></div>}
     {evidence && !column ? <Evidence live={live} principalId={principalId} /> : <Digest live={live} />}

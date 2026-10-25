@@ -2,11 +2,12 @@ import { useEffect, useId, useState, type ReactNode } from 'react';
 import type { BrowserClient, ResourceSummary, WorkspaceSnapshot } from '../../src/browser.js';
 import { executionWord, integrityWord, producerOf, sameSourceKey, shortPath, stopState, type RunFacts } from '../../src/execution-facts.js';
 import type { Live } from './live.js';
+import { Icon, type IconName } from '../icons.js';
 // The run view also opens on the project page, which loads no other part of the shell.
 import './shell.css';
 
 type Ref = { id: string; version: string };
-const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 // The trace object of a run, so opening it goes through the same rules as the Agent's focus.
 export function runObject(live: Live, operationId: string) { return Object.entries(live.state?.names ?? {}).find(([key, value]) => key.startsWith('run:') && value === operationId)?.[0]; }
 // What the Agent explicitly said about this exact version: its replies that link it.
@@ -38,7 +39,7 @@ export function SourceLine({ live, snapshot, resource, viewId, onOpenRef, childr
   if (!runs && !children) return null;
   return <><div className="shell-source" data-rho-layer="persistent">
     {run ? <button className="shell-producer" data-rho-producer="" disabled={!object} title={object ? `Open ${run.operationId}, the run that produced this version` : 'This run is outside the retained records'} onClick={() => object && live.act({ kind: 'open', target: object })}>
-      <span data-fact="observed" className={'shell-state ' + run.execution}>{run.operationId} · {executionWord(run.execution)}</span>
+      <span data-fact="observed" className={'shell-state ' + run.execution}><span className="shell-run-id">{run.operationId}</span> · {executionWord(run.execution)}</span>
     </button> : runs && <span data-fact="observed" className="shell-meta">{(resource.provenance as { operationId?: string })?.operationId?.startsWith('registration:') ? 'Registered file' : 'No recorded run'}</span>}
     {run && (() => { const checked = `${run.declared.length ? integrityWord(run.integrity) : 'no declared file'} · ${domainWord(run)}`; return <span data-fact="verified" className={'shell-verified ' + run.integrity} title={checked}>{checked}</span>; })()}
     {words && <span data-fact="agent" className="shell-agent-words" title={words}>Agent: “{words}”</span>}
@@ -69,10 +70,12 @@ export function runFirstLine(live: Live, operationId: string) {
 // One execution as the owners recorded it. The shell opens it from its mark or from an
 // artifact, the project page from a run that needs attention; each passes the runs it read
 // and its own way to open a version or another run.
-export function RunView({ snapshot, client, operationId, runs, readRuns, firstLine = null, opener, onOpenRun }: {
+export function RunView({ snapshot, client, operationId, runs, readRuns, firstLine = null, opener, onOpenRun, chain: showChain = true }: {
   snapshot: WorkspaceSnapshot; client: BrowserClient; operationId: string; runs: RunFacts[] | null; readRuns: () => void;
   // How to open one version this run wrote, or null where it cannot be opened from here.
   firstLine?: string | null; opener: (ref: Ref) => (() => void) | null; onOpenRun: (operationId: string) => void;
+  // The other attempts at the same script; the workspace's activity bar already places them.
+  chain?: boolean;
 }) {
   const run = runs?.find(r => r.operationId === operationId), allowed = allowedIn(snapshot), projectId = snapshot.project.id;
   const outputs = snapshot.resources.filter(r => (r.provenance as { operationId?: string })?.operationId === operationId);
@@ -86,7 +89,12 @@ export function RunView({ snapshot, client, operationId, runs, readRuns, firstLi
   const repairs = runs?.filter(r => r.repairOf === operationId) ?? [];
   // Core reports that a process ended only when asked; while this run can still change, ask.
   useEffect(() => { if (!active) return; const timer = setInterval(readRuns, 1500); return () => clearInterval(timer); }, [active, readRuns]);
+  // A running process has a clock; the last time the same script ran to its end says roughly how long to expect.
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { if (run?.execution !== 'active') return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, [run?.execution]);
+  const previous = run ? chain.filter(r => r.operationId !== operationId && r.execution === 'completed' && took(r) !== null && r.acceptedAt < run.acceptedAt).sort((a, b) => a.acceptedAt.localeCompare(b.acceptedAt)).at(-1) : undefined;
   const [stopping, setStopping] = useState(false), [stopProblem, setStopProblem] = useState('');
+  const [output, setOutput] = useState(false), [exporting, setExporting] = useState(false), outputRegion = useId();
   // Core's answer to the request itself, shown until the project's runs are read again.
   const [answered, setAnswered] = useState<RunFacts['stop']>(null);
   async function stop() {
@@ -103,11 +111,28 @@ export function RunView({ snapshot, client, operationId, runs, readRuns, firstLi
     finally { setStopping(false); }
   }
   const stopped = run?.stop ?? answered;
+  const declaredPaths = new Set(run?.declared.map(d => shortPath(d.path)) ?? []);
+  const fileCard = (name: string, state: string, className: string, ref?: ResourceSummary) => {
+    const open = ref && opener({ id: ref.id, version: ref.version }), key = ref && ref.id + '@' + ref.version;
+    return <li key={name} className={'shell-run-file ' + className}>
+      <Icon name={fileIcon(name)} size={16} stroke={1.8} />
+      {open ? <button className="shell-run-file-name" data-rho-artifact={key} onClick={open}>{name}</button> : <span className="shell-run-file-name" data-rho-artifact={key}>{name}</span>}
+      <span className="shell-run-file-state">{state}</span>
+    </li>;
+  };
   return <section className="shell-run" data-owner-body="" aria-label={operationId}>
-    <h2>{operationId}</h2>
+    <header className="shell-run-head">
+      <h2>{operationId}</h2>
+      {run && <div className="shell-run-actions">
+        {active && !stopped && allowed('action.cancel') && <button className="shell-stop" disabled={stopping} onClick={stop}>{stopping ? 'Requesting stop…' : 'Stop run'}</button>}
+        {allowed('action.output') && <button aria-expanded={output} aria-controls={outputRegion} onClick={() => setOutput(value => !value)}>{output ? 'Hide output' : 'Show output'}</button>}
+        {!active && allowed('action.export') && <button aria-expanded={exporting} onClick={() => setExporting(value => !value)}>Export files…</button>}
+      </div>}
+    </header>
     {!runs ? <p role="status">Reading the project's executions…</p> : !run ? <p role="status">This run is outside the latest 50 retained executions.</p> : <>
-      <p data-fact="observed" data-rho-execution={run.execution}><span className={'shell-state ' + run.execution}>{executionWord(run.execution)}</span>{partial ? ` · partial output, ${present} of ${run.declared.length} files` : ''}{code} · submitted by {whoWords[run.author] ?? run.author} at {time(run.acceptedAt)}{run.hasStderr && !firstLine ? ' · stderr retained' : ''}
-        {active && !stopped && allowed('action.cancel') && <button className="shell-quiet shell-stop" disabled={stopping} onClick={stop}>{stopping ? 'Requesting stop…' : 'Stop run'}</button>}</p>
+      <p data-fact="observed" data-rho-execution={run.execution} className="shell-run-status"><span className={'shell-state ' + run.execution}>{executionWord(run.execution)}</span>{partial ? ` · partial output, ${present} of ${run.declared.length} files` : ''}{code} · submitted by {whoWords[run.author] ?? run.author} at {time(run.acceptedAt)}{run.hasStderr && !firstLine ? ' · stderr retained' : ''}</p>
+      {run.execution === 'active' ? <p data-fact="observed" className="shell-run-clock" title={run.startedAt ? 'Since Core saw the process start at ' + time(run.startedAt) : 'Since Rho accepted it at ' + time(run.acceptedAt)}><span className="shell-run-elapsed">{minutes(now - Date.parse(run.startedAt ?? run.acceptedAt))}</span>{previous && <> · {previous.operationId} took {minutes(took(previous)!)}</>}</p>
+        : took(run) !== null && <p data-fact="observed" className="shell-run-clock">took {minutes(took(run)!)}</p>}
       {stopped && <p data-fact="observed" data-rho-stop={stopped.state} role="status">{stopWords[stopped.state] ?? stopped.state}{stopped.exit ? ' · ' + stopped.exit : ''} · asked by {whoWords[stopped.by] ?? stopped.by} at {time(stopped.requestedAt)}</p>}
       {stopProblem && <p role="alert">{stopProblem}</p>}
       {firstLine && <p data-fact="observed" className="shell-run-error">{firstLine}</p>}
@@ -117,19 +142,24 @@ export function RunView({ snapshot, client, operationId, runs, readRuns, firstLi
         {repairs.length > 0 && <>Repaired by {repairs.map((r, i) => <span key={r.operationId}>{i ? ', ' : ''}<button className={'shell-link ' + r.execution} data-rho-repaired-by={r.operationId} onClick={() => onOpenRun(r.operationId)}>{r.operationId}</button></span>)}</>}
       </p>}
       {['failed', 'unknown'].includes(run.execution) && allowed('context.create') && <Repair snapshot={snapshot} client={client} operationId={operationId} />}
-      {run.declared.length > 0 && <ul className="shell-run-files" data-fact="observed">{run.declared.map(d => <li key={d.path} className={!d.present && active ? 'shell-not-yet' : undefined}>{shortPath(d.path)} · {d.present ? 'on disk' : active ? 'not written yet' : 'not on disk'}</li>)}</ul>}
-      <p data-fact="verified">{run.declared.length ? integrityWord(run.integrity) : 'no declared file'} · {domainWord(run)} · no run establishes a statistical result
+      {(run.declared.length > 0 || outputs.length > 0) && <ul className="shell-run-files" data-fact="observed" aria-label="Declared files">
+        {run.declared.map(d => fileCard(shortPath(d.path), d.present ? size(d.bytes) : active ? 'not written yet' : 'not on disk', d.present ? 'present' : active ? 'shell-not-yet' : 'missing', outputs.find(r => shortPath(r.path) === shortPath(d.path))))}
+        {outputs.filter(r => !declaredPaths.has(shortPath(r.path))).map(r => fileCard(shortPath(r.path), "this run's version", 'present', r))}
+      </ul>}
+      <p data-fact="verified" className="shell-run-checks">{run.declared.length ? integrityWord(run.integrity) : 'no declared file'} · {domainWord(run)} · no run establishes a statistical result
         {!active && present > 0 && (outputs.length === 0 || run.completion === 'present' && run.integrity !== 'verified') && <CheckFiles client={client} projectId={projectId} operationId={operationId} inventory={run.completion === 'present'} readRuns={readRuns} />}</p>
-      {outputs.length > 0 && <ul className="shell-run-outputs">{outputs.map(r => {
-        const open = opener({ id: r.id, version: r.version });
-        return <li key={r.id + r.version}>{open ? <button className="shell-link" data-rho-artifact={r.id + '@' + r.version} onClick={open}>{shortPath(r.path)}</button> : <span data-rho-artifact={r.id + '@' + r.version}>{shortPath(r.path)}</span>}<span> · this run's version</span></li>;
-      })}</ul>}
-      {chain.length > 1 && <p className="shell-run-chain">{chain.map(other => <button key={other.operationId} className={'shell-link ' + other.execution} aria-current={other.operationId === operationId || undefined} disabled={other.operationId === operationId} onClick={() => onOpenRun(other.operationId)}>{other.operationId}</button>)}</p>}
-      {!active && allowed('action.export') && <ExportRun client={client} projectId={projectId} operationId={operationId} />}
-      {allowed('action.output') && <Output client={client} projectId={projectId} operationId={operationId} runs={runs} active={active} />}
+      {showChain && chain.length > 1 && <p className="shell-run-chain">{chain.map(other => <button key={other.operationId} className={'shell-chip ' + other.execution} aria-current={other.operationId === operationId || undefined} disabled={other.operationId === operationId} onClick={() => onOpenRun(other.operationId)}>{other.operationId}</button>)}</p>}
+      {exporting && !active && allowed('action.export') && <ExportRun client={client} projectId={projectId} operationId={operationId} />}
+      {output && allowed('action.output') && <Output client={client} projectId={projectId} operationId={operationId} runs={runs} active={active} region={outputRegion} />}
     </>}
   </section>;
 }
+
+// Minutes and seconds, as a run's clock reads them.
+const minutes = (ms: number) => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+// How long Core saw a run's process live: from its spawn to the exit it observed.
+const took = (run: RunFacts) => run.startedAt && run.endedAt ? Date.parse(run.endedAt) - Date.parse(run.startedAt) : null;
+const fileIcon = (name: string): IconName => /\.(png|jpe?g|gif|svg|webp)$/i.test(name) ? 'image' : /\.(csv|tsv|parquet)$/i.test(name) ? 'table' : 'file';
 
 // The files a run declared become openable once they are registered with their provenance.
 // With an inventory the run wrote, registering checks each file's bytes against it; without
@@ -150,7 +180,7 @@ function CheckFiles({ client, projectId, operationId, inventory, readRuns }: { c
 // asks, and the person answers here, so unsaved text never leaves or stays behind by default.
 type Exported = { destination: string; exported: number; partial: boolean; files: Array<{ role: string; path: string; state: string; file?: string; reason?: string }> };
 function ExportRun({ client, projectId, operationId }: { client: BrowserClient; projectId: string; operationId: string }) {
-  const [open, setOpen] = useState(false), [folder, setFolder] = useState('exports/' + operationId), field = useId();
+  const [folder, setFolder] = useState('exports/' + operationId), field = useId();
   const [busy, setBusy] = useState(false), [problem, setProblem] = useState(''), [unsaved, setUnsaved] = useState<string | null>(null), [done, setDone] = useState<Exported | null>(null);
   async function send(choice?: 'include' | 'leave') {
     setBusy(true); setProblem('');
@@ -161,7 +191,6 @@ function ExportRun({ client, projectId, operationId }: { client: BrowserClient; 
       else setProblem(refusal?.message ?? 'The export did not finish.');
     } finally { setBusy(false); }
   }
-  if (!open) return <p><button className="shell-quiet" onClick={() => setOpen(true)}>Export files…</button></p>;
   if (done) {
     const left = done.files.filter(f => f.state !== 'exported');
     return <div className="shell-run-export" data-rho-export="done">
@@ -196,19 +225,17 @@ async function tail(client: BrowserClient, projectId: string, operationId: strin
   return { text: from > 0 ? chunk.text.replace(/^\uFFFD+/, '') : chunk.text, from, retained: chunk.info.retained_bytes, observed: chunk.info.observed_bytes, truncated: chunk.info.truncated };
 }
 const size = (bytes: number) => bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(bytes < 10240 ? 1 : 0)} KiB`;
-function Output({ client, projectId, operationId, runs, active }: { client: BrowserClient; projectId: string; operationId: string; runs: unknown; active: boolean }) {
-  const [open, setOpen] = useState(false), [streams, setStreams] = useState<Record<string, Tail>>({}), [problem, setProblem] = useState(''), region = useId();
+function Output({ client, projectId, operationId, runs, active, region }: { client: BrowserClient; projectId: string; operationId: string; runs: unknown; active: boolean; region: string }) {
+  const [streams, setStreams] = useState<Record<string, Tail>>({}), [problem, setProblem] = useState('');
   // Read on opening, again each time the runs are read while the process may still write, and once when it ends.
   useEffect(() => {
-    if (!open) return;
     let current = true;
     Promise.all((['stderr', 'stdout'] as const).map(async stream => [stream, await tail(client, projectId, operationId, stream)] as const))
       .then(read => { if (current) { setStreams(Object.fromEntries(read)); setProblem(''); } }, (error: unknown) => { if (current) setProblem(error instanceof Error ? error.message : 'The output could not be read.'); });
     return () => { current = false; };
-  }, [open, client, projectId, operationId, active ? runs : active]);
+  }, [client, projectId, operationId, active ? runs : active]);
   return <div className="shell-run-output">
-    <button className="shell-quiet" aria-expanded={open} aria-controls={region} onClick={() => setOpen(value => !value)}>{open ? 'Hide output' : 'Show output'}</button>
-    {open && <div id={region}>
+    <div id={region}>
       {problem && <p role="alert">{problem}</p>}
       {(['stderr', 'stdout'] as const).map(stream => { const t = streams[stream]; return t && <section key={stream} aria-label={stream} data-rho-output={stream}>
         <h3>{stream}</h3>
@@ -216,7 +243,7 @@ function Output({ client, projectId, operationId, runs, active }: { client: Brow
         {t.truncated && <p data-rho-cut="core">Core kept {size(t.retained)} of the {size(t.observed)} written</p>}
         {t.text ? <pre data-scroll-region="" tabIndex={0}>{t.text}</pre> : <p>No output</p>}
       </section>; })}
-    </div>}
+    </div>
   </div>;
 }
 
