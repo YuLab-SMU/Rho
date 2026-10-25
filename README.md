@@ -31,18 +31,21 @@ execution, dependency, resource and selection contracts.
 
 ## Technology direction
 
-The first-release direction is an npm launcher and local service with React,
-TypeScript, Vite and Dockview. Electron is reserved for a later desktop client
-that reuses the WebUI and component boundaries. Initial
-functional views use CodeMirror 6, AG Grid Community and ECharts. Agent-composed
-interfaces use a typed json-render catalog; independent HTML views can use an
-isolated MCP Apps host when needed.
+The first release is an npm launcher and local service with a React, TypeScript
+and Vite WebUI. The workspace lays out the owners' views in Rho's own tabs and
+splits, arranged by the Agent and the person through one conditional layout
+contract. Electron is reserved for a later desktop client that reuses the WebUI
+and component boundaries. Functional views use CodeMirror 6, AG Grid Community
+and ECharts.
 
-The versioned local backend, npm launcher, client and read-only state fixtures are
-implemented. [Start the headless service](docs/HEADLESS.md) or inspect its
-[extraction acceptance](docs/EXTRACTION-ACCEPTANCE.md). The browser shell and component
-views remain to be implemented; backend checks do not establish product release
-acceptance. [Status](docs/STATUS.md) records the current evidence and limits.
+Install the packed tarball, start `rho`, and connect Claude Code with
+`rho --grant` ([Install and start](docs/HEADLESS.md#install-and-start)). A task in
+natural language becomes a run the person reviews and starts; its outputs open
+from the run, a question about a table row goes back to the Agent, and a run
+exports as ordinary files with its provenance. The
+[W7 acceptance](docs/W7-ACCEPTANCE.md) records that path with real Claude Code
+from an installed package; npm registry publication is not done yet.
+[Status](docs/STATUS.md) records the current evidence and limits.
 
 Start with the [prioritized first-release tasks](docs/WEBUI-FIRST.md),
 [Architecture](docs/ARCHITECTURE.md), [Technology stack](docs/TECHSTACK.md)

@@ -83,6 +83,24 @@ Exact Host and supplied Origin are checked. The bearer credential is project
 scoped for external callers. CLI shutdown stops only Hosts started by this
 service and reports confirmation separately. Existing Hosts keep their owner.
 
+### Connect Claude Code
+
+The running service's operator connection grants one project to one Agent session
+and prints how Claude Code starts that session's MCP server:
+
+```sh
+rho --grant /absolute/service-state/connection.json --project PROJECT_FOLDER [--session NAME]
+```
+
+`--project` is the folder relative to `--root`; `--session` defaults to
+`claude-code`. The JSON reply names the project, the private session connection
+file, the number of granted methods (the server default), an `mcp` entry
+(`name`, `command`, `args`) for an MCP configuration file, and the equivalent
+`claude mcp add rho-<folder> -- … --mcp <file>` command. `rho --mcp FILE` serves
+that grant on stdio with the four tools `rho_index`, `rho_resolve`, `rho_call` and
+`rho_read`; nothing else writes to stdout in that mode. Every connection file is a
+credential. `rho --help` prints the usage; an unknown option exits 2 with it.
+
 ## Named workspaces and selected source folders
 
 The browser can create a named workspace from one or more natively selected
