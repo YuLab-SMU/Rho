@@ -50,7 +50,7 @@ export function ActionForm({ view, snapshot, client, live }: { view: ViewDescrip
   const [input, setInput] = useState<Record<string, Value>>(() => structuredClone(props.input ?? {}));
   const [unparsed, setUnparsed] = useState<Record<string, string>>({});
   const [problems, setProblems] = useState<Problem[] | null>(null), [checking, setChecking] = useState(false);
-  const [submitting, setSubmitting] = useState(false), [refusal, setRefusal] = useState('');
+  const [submitting, setSubmitting] = useState(false), [refusal, setRefusal] = useState(''), [lost, setLost] = useState(false);
   const allowed = (method: string) => snapshot.catalog.operations.some(o => o.method === method && o.state === 'available' && o.authorized);
   const run = live.runs?.find(r => r.operationId === props.operationId);
   const body = useMemo(() => ({ projectId: snapshot.project.id, operationId: props.operationId, action: props.action, actionVersion: props.actionVersion, input, ...(props.repairOf ? { repairOf: props.repairOf } : {}) }), [snapshot.project.id, props.operationId, props.action, props.actionVersion, props.repairOf, input]);
@@ -67,11 +67,17 @@ export function ActionForm({ view, snapshot, client, live }: { view: ViewDescrip
   }, [body, run, client]);
   const blocked = Object.keys(unparsed).length > 0 || checking || !!problems?.length;
   async function submit() {
-    setSubmitting(true); setRefusal('');
+    setSubmitting(true); setRefusal(''); setLost(false);
     // The owner checks the proposal against its own contract; the form does not narrow it in advance.
-    try { await client.call('action.submit', body as never, AbortSignal.timeout(60000)); live.readRuns(); }
-    catch (error) { setRefusal(error instanceof Error ? error.message : 'The owner did not accept this run.'); }
-    finally { setSubmitting(false); }
+    try { await client.call('action.submit', body as never, AbortSignal.timeout(60000)); }
+    catch (error) {
+      // A refusal names its kind. A reply that never arrived does not, and the run may exist:
+      // the project's runs say whether it does, and sending the same operationId again is safe.
+      const refused = (error as { error?: { kind?: string; message?: string } })?.error;
+      if (refused?.kind) setRefusal(refused.message ?? 'The owner did not accept this run.');
+      else setLost(true);
+    }
+    finally { setSubmitting(false); live.readRuns(); }
   }
   const at = (path: string) => (problems ?? []).filter(p => p.path === path || p.path.startsWith(path + '/') || p.path.startsWith(path + '.'));
   const problemPath = (key: string) => '/input/' + key;
@@ -91,8 +97,9 @@ export function ActionForm({ view, snapshot, client, live }: { view: ViewDescrip
           onUnparsed={(path, text) => setUnparsed(previous => { const next = { ...previous }; if (text === null) delete next[path]; else next[path] = text; return next; })} />)}
       {problems && at('/input').filter(p => !Object.keys(schema.properties ?? {}).some(key => p.path.startsWith(problemPath(key)))).map((p, i) => <p key={i} role="alert" className="shell-field-problem">{p.message}{p.fix ? ' · ' + p.fix : ''}</p>)}
       {refusal && <p role="alert" className="shell-field-problem">{refusal}</p>}
+      {lost && <p role="status" data-rho-lost={props.operationId}>The reply did not arrive, and the project's runs do not show {props.operationId} yet. Sending it again cannot start a second run.</p>}
       <div className="shell-action-submit">
-        <button type="submit" disabled={blocked || submitting || !allowed('action.submit')}>{submitting ? 'Submitting…' : 'Run'}</button>
+        <button type="submit" disabled={blocked || submitting || !allowed('action.submit')}>{submitting ? 'Submitting…' : lost ? 'Send again' : 'Run'}</button>
         {checking ? <span role="status">Checking…</span> : problems?.length ? <span role="status">{problems.length} to fix</span> : null}
       </div>
     </form>}

@@ -85,6 +85,7 @@
     "acceptance:pages": "node scripts/pages-acceptance.mjs",
     "acceptance:actions": "node scripts/action-acceptance.mjs",
     "acceptance:objects": "node scripts/object-acceptance.mjs",
+    "acceptance:continuity": "node scripts/continuity-acceptance.mjs",
     "perf": "node scripts/performance.mjs",
     "acceptance:interaction:agent": "RHO_INTERACTION_MODEL=1 node scripts/interaction-acceptance.mjs"
   },

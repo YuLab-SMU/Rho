@@ -14,6 +14,12 @@
       "bytes": 39619,
       "sha256": "3923931df78d23f7e1f6c0fab5fc4d411bc29d7e7e9ba8d44ac1b572f4f3d98c"
     },
+    "action.export": {
+      "summary": "Write one run as ordinary files in a new project folder (default exports/<operationId>): the script that ran, from the run's own record; each declared output as the run left it; and provenance.json with PROVENANCE.md, saying where each file came from and what was checked. A declared file that was not written, or no longer matches the inventory the run wrote, is named and left out. When the script has unsaved changes, unsaved must be \"include\" or \"leave\". Runs nothing and never writes into an existing folder.",
+      "path": "operations/action.export.json",
+      "bytes": 3017,
+      "sha256": "7bc6398b62948ae42aa6ad2408be3aad150c2768b3837e4821db44851a58da25"
+    },
     "action.list": {
       "summary": "action.list",
       "path": "operations/action.list.json",
@@ -425,8 +431,8 @@
     "session.grant": {
       "summary": "session.grant",
       "path": "operations/session.grant.json",
-      "bytes": 3808,
-      "sha256": "41dd054839c0a5070c55f4d3187712fb1192796dbf5f7c334f1cc8efac7753b1"
+      "bytes": 3837,
+      "sha256": "0b9c42488ec08249ca60f80848d6f834f444cd14c58c69596c3625aba2ace474"
     },
     "skill.list": {
       "summary": "List the application and enabled provider Skills shipped in the selected package. Skills guide discovery but do not grant authorization.",

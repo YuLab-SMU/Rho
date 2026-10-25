@@ -130,7 +130,7 @@ export class Plugins {
   operationOwner(method: string) {
     const descriptor = this.descriptors().find(p => p.operations?.some(o => o.method === method));
     if (descriptor) return descriptor.id as PluginId;
-    const owner = method.startsWith('annotation.') ? 'annotations' : method.startsWith('document.') ? 'documents' : method.startsWith('requirements.') ? 'requirements' : method === 'action.submit' || method === 'object.read' ? 'r' : method === 'data.plot' ? 'charts' : method.startsWith('data.') || method === 'selection.set' ? 'tables' : method.startsWith('media.') ? 'media' : method.startsWith('feedback.') || method.startsWith('context.') || method.startsWith('binding.') || method === 'session.grant' ? 'agent' : method.startsWith('resource.') || method === 'artifact.check' ? 'files' : undefined;
+    const owner = method.startsWith('annotation.') ? 'annotations' : method.startsWith('document.') ? 'documents' : method.startsWith('requirements.') ? 'requirements' : method === 'action.submit' || method === 'object.read' ? 'r' : method === 'data.plot' ? 'charts' : method.startsWith('data.') || method === 'selection.set' ? 'tables' : method.startsWith('media.') ? 'media' : method.startsWith('feedback.') || method.startsWith('context.') || method.startsWith('binding.') || method === 'session.grant' ? 'agent' : method.startsWith('resource.') || method === 'artifact.check' || method === 'action.export' ? 'files' : undefined;
     return owner as PluginId | undefined;
   }
   operationDeclarations() { return this.descriptors().flatMap(p => (p.operations ?? []).map(operation => ({ ...operation, owner: p.id }))); }

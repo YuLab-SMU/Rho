@@ -28,8 +28,9 @@ test('one-use pairing grants a narrowed root, never operator/native/session auth
     const { value: grant } = await replies.find(r => r.status === 200).json();
     assert.notEqual(grant.token, f.service.adminToken);
     assert.ok(grant.methods.every(m => !m.startsWith('session.') && !m.startsWith('requirements.')));
-    // A person submits from an Agent's proposed form, reads bounded output and may stop a run (decisions 2, 3); nothing else.
-    assert.deepEqual(grant.methods.filter(m => m.startsWith('action.')).sort(), ['action.cancel', 'action.output', 'action.submit']);
+    // A person submits from an Agent's proposed form, reads bounded output, may stop a run (decisions 2, 3)
+    // and exports a run's files (W6); nothing else, and never a retry.
+    assert.deepEqual(grant.methods.filter(m => m.startsWith('action.')).sort(), ['action.cancel', 'action.export', 'action.output', 'action.submit']);
     const browser = new BrowserClient({ url: f.service.url, ...grant });
     const p = await browser.call('project.create', { name: 'project 中文' });
     const reopened = await browser.call('project.open', { path: 'project 中文' }); assert.equal(reopened.id, p.id);

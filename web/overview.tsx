@@ -30,7 +30,8 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
   // shows the next action beside each finding.
   const [doctor, setDoctor] = useState<Array<{ id: string; state: 'ok' | 'warn' | 'fail'; detail: string; remedy: string }> | null>(null);
   const [diagnosing, setDiagnosing] = useState(false);
-  const { runs, problem: runsProblem, readAgain } = useRuns(client, project.id);
+  // Read again when the project changes, so the counts and records never describe an older state.
+  const { runs, problem: runsProblem, readAgain } = useRuns(client, project.id, snapshot.cursor);
   // A run that needs attention opens from here in the same view the workspace gives it.
   const [inspecting, setInspecting] = useState<string | null>(null);
   async function diagnose() {
@@ -138,7 +139,7 @@ export function ProjectOverview({ project, location, snapshot, onLayout, client,
       <summary>Execution records <span>{runs.length}</span></summary>
       <table><thead><tr><th>Operation</th><th className="column-state">Execution</th><th className="column-wide">Artifacts</th><th className="column-short optional">By</th></tr></thead>
         <tbody>{runs.map(run => <tr key={run.operationId}>
-          <td><span className="overview-name">{run.operationId}</span></td>
+          <td><button className="overview-link" onClick={() => setInspecting(run.operationId)}>{run.operationId}</button></td>
           <td className="column-state"><span className={'state ' + (run.execution === 'completed' ? 'good' : run.execution === 'failed' ? 'failed' : run.execution === 'unknown' ? 'unknown' : 'pending')}>{executionWord(run.execution)}</span></td>
           <td className="column-wide meta">{run.declared.length === 0 ? '—' : `${run.declared.length - run.missing.length} of ${run.declared.length} on disk · ${integrityWord(run.integrity)}`}</td>
           <td className="column-short optional meta">{run.author}</td>

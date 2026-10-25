@@ -26,7 +26,9 @@ export const browserMethods = ['protocol.describe', 'protocol.validate', 'projec
   // version they saw; protected views stay protected (docs/WORKSPACE-PLAN.md W5).
   'composition.apply', 'composition.undo',
   // A chart's points: the same rows data.page already reads, bounded and read-only.
-  'data.plot'];
+  'data.plot',
+  // A run's script, outputs and provenance written as ordinary files in a new project folder.
+  'action.export'];
 interface Pairing { hash: string; root: string; methods: string[]; expires: number; selectedProjects: string[] }
 export class BrowserAccess {
   limits: typeof browserLimits;

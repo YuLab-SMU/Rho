@@ -1,0 +1,119 @@
+{
+  "method": "action.export",
+  "inputSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "projectId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "operationId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "destination": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 240
+      },
+      "unsaved": {
+        "enum": [
+          "leave",
+          "include"
+        ]
+      }
+    },
+    "required": [
+      "projectId",
+      "operationId"
+    ]
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "destination": {
+        "type": "string",
+        "minLength": 1
+      },
+      "state": {
+        "const": "complete"
+      },
+      "partial": {
+        "type": "boolean"
+      },
+      "exported": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "provenanceDigest": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "files": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "enum": [
+                "script",
+                "unsaved-script",
+                "output"
+              ]
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "state": {
+              "enum": [
+                "exported",
+                "not-written",
+                "changed",
+                "not-retained",
+                "left-out"
+              ]
+            },
+            "file": {
+              "type": "string",
+              "minLength": 1
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sha256": {
+              "type": "string",
+              "minLength": 1
+            },
+            "check": {
+              "type": "string",
+              "minLength": 1
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "role",
+            "path",
+            "state"
+          ],
+          "additionalProperties": true
+        }
+      }
+    },
+    "required": [
+      "destination",
+      "state",
+      "partial",
+      "exported",
+      "provenanceDigest",
+      "files"
+    ],
+    "additionalProperties": true
+  },
+  "description": "Write one run as ordinary files in a new project folder (default exports/<operationId>): the script that ran, from the run's own record; each declared output as the run left it; and provenance.json with PROVENANCE.md, saying where each file came from and what was checked. A declared file that was not written, or no longer matches the inventory the run wrote, is named and left out. When the script has unsaved changes, unsaved must be \"include\" or \"leave\". Runs nothing and never writes into an existing folder."
+}

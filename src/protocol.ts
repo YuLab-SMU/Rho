@@ -62,6 +62,8 @@ export const operations: Record<string, any> = { ...base.operations,
   'project.openFile': obj({ ...project, path: { type: 'string', minLength: 1, maxLength: 1024 }, compositionId: text, expectedVersion: integer, changeId: text }),
   // What this project is running: a bounded summary a person may read.
   'project.runs': obj({ ...project, limit: { type: 'integer', minimum: 1, maximum: 50 } }, ['projectId']),
+  // One run as ordinary files in a new folder, with where they came from and what was checked.
+  'action.export': obj({ ...op, destination: { type: 'string', minLength: 1, maxLength: 240 }, unsaved: { enum: ['leave', 'include'] } }, ['projectId', 'operationId']),
   // Dry run: check a body against an operation's schema without doing anything.
   'protocol.validate': obj({ method: text, body: record }),
   'project.doctor': obj({ ...project, intent: { enum: ['run-r', 'edit-documents', 'inspect-tables', 'present'] } }, ['projectId']),
@@ -214,6 +216,8 @@ export const responses: Record<string, any> = { ...base.responses, ...ownerRespo
   'project.createWorkspace': contract.projectSummarySchema,
   'project.create': contract.projectSummarySchema,
   'project.list': array(contract.projectSummarySchema),
+  'action.export': response({ destination: text, state: { const: 'complete' }, partial: { type: 'boolean' }, exported: integer, provenanceDigest: digest,
+    files: array(response({ role: { enum: ['script', 'unsaved-script', 'output'] }, path: text, state: { enum: ['exported', 'not-written', 'changed', 'not-retained', 'left-out'] }, file: text, bytes: integer, sha256: text, check: text, reason: text }, ['role', 'path', 'state'])) }),
   // A run reports two different things and never merges them: the files its plan
   // asked the producer to write, and what is on disk now. Neither one is an
   // integrity check; only artifact.check verifies bytes against the inventory.
@@ -312,6 +316,7 @@ export const descriptions = {
   'data.compare': 'Join two explicit table versions using declared keys, namespaces, fields and join policy. Scientific comparability remains the project responsibility.',
   'object.read': 'Read a bounded exported JSON object snapshot, not live R memory.',
   'artifact.check': 'Verify the selected completion inventory and file bytes only; domain check reports remain project resources.',
+  'action.export': 'Write one run as ordinary files in a new project folder (default exports/<operationId>): the script that ran, from the run\'s own record; each declared output as the run left it; and provenance.json with PROVENANCE.md, saying where each file came from and what was checked. A declared file that was not written, or no longer matches the inventory the run wrote, is named and left out. When the script has unsaved changes, unsaved must be "include" or "leave". Runs nothing and never writes into an existing folder.',
   'context.read': 'Read an explicit versioned context package. Receipt establishes a tool fetch, not proactive delivery to a conversation.',
   'binding.open': 'Bind this external session to the authenticated project scope. Conversation stays in Claude Code.'
 };

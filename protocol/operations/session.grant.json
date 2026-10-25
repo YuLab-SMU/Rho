@@ -17,6 +17,7 @@
         "items": {
           "enum": [
             "action.cancel",
+            "action.export",
             "action.list",
             "action.lookup",
             "action.observe",

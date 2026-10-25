@@ -27,6 +27,7 @@ import { isRhoMethod } from './contract-runtime.js';
 import type { RhoMethod, RhoOutput } from './contract.generated.js';
 import { TaskRouting } from './task-routing.js';
 import { exitWords, stopState } from './execution-facts.js';
+import { exportRun } from './run-export.js';
 import type { nativeActivityLimits, agentDeliveryLimits, RunContext } from '@rho-workspace/plugin-agent';
 import { ownerContracts } from './contracts/owners.generated.js';
 export interface FeedbackTransport { accept(envelope: any): Promise<any>; lookup(envelope: any): Promise<any> }
@@ -780,6 +781,11 @@ export class RhoService {
     if (method === 'action.list') return (await requests.list(principal)).map(publicOperation);
     if (method === 'resource.list') return requests.artifacts(principal, b.operationId);
     if (method === 'artifact.check') return requests.check(principal, b.operationId);
+    if (method === 'action.export') {
+      const run = await requests.lookup(principal, b.operationId, true), files = owners.need('files');
+      return exportRun(p, run, { destination: b.destination, unsaved: b.unsaved, documents: owners.documents, resources: await files.list(), maxFileBytes: files.limits.maxFileBytes,
+        sourceFile: async relative => (await files.sourceFile(relative)).file, submittedBy: authorKind(run.principal), exit: exitWords(run.native?.status?.Finished?.exit), projectName: p.name ?? path.basename(p.root) });
+    }
     if (method === 'resource.register') {
       requireThat(!b.declaration.path.split('/').some((part: string) => ['.rho', '.git'].includes(part)), 'scope', 'Register a project file outside internal state.');
       return publicResource(await owners.need('files').register(b.declaration.path, { operationId: 'registration:' + digest(canonical(b.declaration)), registeredBy: principal.id }, 'available', {}, b.declaration, b.expectedDigest));

@@ -123,9 +123,45 @@ export function RunView({ snapshot, client, operationId, runs, readRuns, firstLi
         return <li key={r.id + r.version}>{open ? <button className="shell-link" data-rho-artifact={r.id + '@' + r.version} onClick={open}>{shortPath(r.path)}</button> : <span data-rho-artifact={r.id + '@' + r.version}>{shortPath(r.path)}</span>}<span> · this run's version</span></li>;
       })}</ul>}
       {chain.length > 1 && <p className="shell-run-chain">{chain.map(other => <button key={other.operationId} className={'shell-link ' + other.execution} aria-current={other.operationId === operationId || undefined} disabled={other.operationId === operationId} onClick={() => onOpenRun(other.operationId)}>{other.operationId}</button>)}</p>}
+      {!active && allowed('action.export') && <ExportRun client={client} projectId={projectId} operationId={operationId} />}
       {allowed('action.output') && <Output client={client} projectId={projectId} operationId={operationId} runs={runs} active={active} />}
     </>}
   </section>;
+}
+
+// Taking a run out of Rho: its script, outputs and their provenance as ordinary files in a new
+// project folder. The owner decides what is complete; when the script has unsaved changes it
+// asks, and the person answers here, so unsaved text never leaves or stays behind by default.
+type Exported = { destination: string; exported: number; partial: boolean; files: Array<{ role: string; path: string; state: string; file?: string; reason?: string }> };
+function ExportRun({ client, projectId, operationId }: { client: BrowserClient; projectId: string; operationId: string }) {
+  const [open, setOpen] = useState(false), [folder, setFolder] = useState('exports/' + operationId), field = useId();
+  const [busy, setBusy] = useState(false), [problem, setProblem] = useState(''), [unsaved, setUnsaved] = useState<string | null>(null), [done, setDone] = useState<Exported | null>(null);
+  async function send(choice?: 'include' | 'leave') {
+    setBusy(true); setProblem('');
+    try { setDone(await client.call('action.export', { projectId, operationId, destination: folder.trim(), ...(choice ? { unsaved: choice } : {}) }, AbortSignal.timeout(60000)) as Exported); setUnsaved(null); }
+    catch (error: any) {
+      const refusal = error?.error ?? error;
+      if (refusal?.kind === 'condition' && refusal.details?.unsaved?.length) setUnsaved(String(refusal.details.unsaved[0].path));
+      else setProblem(refusal?.message ?? 'The export did not finish.');
+    } finally { setBusy(false); }
+  }
+  if (!open) return <p><button className="shell-quiet" onClick={() => setOpen(true)}>Export files…</button></p>;
+  if (done) {
+    const left = done.files.filter(f => f.state !== 'exported');
+    return <div className="shell-run-export" data-rho-export="done">
+      <p role="status">Exported {done.exported} {done.exported === 1 ? 'file' : 'files'} to {done.destination}{done.partial ? ' · partial' : ''}</p>
+      {left.length > 0 && <ul>{left.map(f => <li key={f.role + f.path}>{f.file ?? f.path} · {f.reason}</li>)}</ul>}
+    </div>;
+  }
+  return <div className="shell-run-export" data-rho-export="ready">
+    <div className="shell-field"><label htmlFor={field}>Folder</label><input id={field} value={folder} disabled={busy || !!unsaved} onChange={event => setFolder(event.target.value)} /></div>
+    {unsaved
+      ? <p role="status" className="shell-run-fix">{unsaved} has unsaved changes.
+        <button disabled={busy} onClick={() => send('include')}>Include them</button>
+        <button disabled={busy} onClick={() => send('leave')}>Leave them out</button></p>
+      : <p><button disabled={busy || !folder.trim()} onClick={() => send()}>{busy ? 'Exporting…' : 'Export'}</button></p>}
+    {problem && <p role="alert">{problem}</p>}
+  </div>;
 }
 
 // The end of each retained stream, at most outputBytes of it, with every cut said: the
