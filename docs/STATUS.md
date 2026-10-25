@@ -111,6 +111,17 @@ wrapping source line (M2 10.8% at 1024), a long answer filling 54% of the view, 
 shutdown held 8 s by a keep-alive connection, which left the tab offline. Chrome 155 is
 the tested browser; npm publication of `@rho-workspace/local` awaits the user's
 permission. [W7 acceptance](W7-ACCEPTANCE.md) has the numbers and the open findings.
+**Visual system (2026-10-25, after W7):** a front-end review measured six state colours at
+1.00–1.05:1, 17 font sizes, 28 spacings, no `:active` rule and 23 literals in `theme.css`
+outside any check, all passing the old M7. The shell now has one type scale (12/13/15/20/28
+with 16/18/22/28/34 line heights), ten spacing steps, four radii, two surfaces (canvas
+1.17:1 from the panel) and ink overlays for hover, selected and pressed that read the same
+on either; the workspace tab bar is a sunken track with the shown tab raised, and every
+control answers a press. M7 is tightened in the plan to measure scale, layers and states
+(static in `test/web-style.test.mjs`, in the browser through forced pseudo-classes in
+`scripts/rulers.mjs`); the new checks fail on `e7d43f3b` and pass now. On its first run the
+type check found a 10px `<small>` in the question thread that predates it. Wide-screen
+composition, the plugin page's second system, loading and offline states remain parked.
 
 Updated: 2026-10-24. S7 live expression and complete table-question feedback.
 `src/expression.ts` drives the replay and the real browser through `live-trace.ts` /

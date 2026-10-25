@@ -86,7 +86,19 @@ function inPage([{ p, methods, transientAllowed }, unit]) {
     const size = parseFloat(s.fontSize), large = size >= 24 || size >= 18.66 && Number(s.fontWeight) >= 700;
     if (ratio < (large ? 3 : 4.5)) low.push({ text: e.textContent.trim().slice(0, 40), ratio: Math.round(ratio * 100) / 100, owner: !!e.closest(p.ownerBody) });
   }
-  out.m7 = { lowContrast: low };
+  // M7 scale: shell text uses one of the five type sizes (owner views keep their own).
+  const scale = new Set([12, 13, 15, 20, 28]);
+  const offScale = [...document.body.querySelectorAll('*')].filter(e => visible(e) && !hidden(e) && !e.closest(p.ownerBody) && !e.closest(p.content) && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) && !scale.has(parseFloat(getComputedStyle(e).fontSize)));
+  out.m7 = { lowContrast: low, offScale: [...new Set(offScale.map(e => `${parseFloat(getComputedStyle(e).fontSize)}px ${label(e)}`))] };
+  // M7 selection: a selected, current or pressed control stands off what it sits on by its
+  // fill (1.15:1, the panel's own step off the canvas) or by a 3:1 border (WCAG 1.4.11).
+  const ratioOf = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
+  out.m7.faintSelected = all('[aria-selected="true"], [aria-current="page"], [aria-current="true"], [aria-pressed="true"]').filter(e => !hidden(e) && !e.closest(p.ownerBody) && !e.closest('.ag-root-wrapper, .cm-editor')).flatMap(e => {
+    const fill = background(e), under = e.parentElement && background(e.parentElement); if (!fill || !under) return [];
+    const s = getComputedStyle(e), edge = ['Top', 'Right', 'Bottom', 'Left'].some(k => parseFloat(s['border' + k + 'Width']) >= 1 && s['border' + k + 'Style'] !== 'none' && ratioOf(over(rgba(s['border' + k + 'Color']), under), under) >= 3);
+    const r = ratioOf(fill, under);
+    return r >= 1.15 || edge ? [] : [`${label(e)} ${Math.round(r * 100) / 100}`];
+  });
   out.m9 = { scrollWidth: document.documentElement.scrollWidth, innerWidth };
   return out;
 }
@@ -104,6 +116,52 @@ async function unnamed(page) {
       catch { return n.role.value; }
     }));
   } finally { await cdp.detach().catch(() => {}); }
+}
+
+// M7 states: each control's look at rest, hovered and pressed, through the browser's forced
+// pseudo-classes, so no pointer moves and nothing is clicked. Pressed must differ from hovered;
+// a hover that changes the fill changes it by at least 1.08:1.
+async function states(page, profile) {
+  const count = await page.evaluate(p => {
+    const visible = e => e.checkVisibility?.({ checkOpacity: true, checkVisibilityCSS: true }) ?? !!e.getClientRects().length;
+    const modal = document.querySelector('dialog:modal');
+    const still = Object.assign(document.createElement('style'), { textContent: '*, *::before, *::after { transition: none !important; }' });
+    still.dataset.rulerStill = ''; document.head.append(still);
+    const list = [...document.querySelectorAll('button, summary, a[href], [role=button], [role=tab]')].filter(e => visible(e) && e.getBoundingClientRect().width > 1 && !e.closest(p.ownerBody) && !e.closest(':disabled,[aria-disabled="true"]') && !e.closest('.ag-root-wrapper, .cm-editor') && (!modal || modal.contains(e)));
+    list.forEach((e, i) => { e.dataset.rulerState = String(i); });
+    return list.length;
+  }, profile);
+  const read = () => page.evaluate(() => {
+    const ctx = Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true });
+    const rgba = c => { ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = '#000'; ctx.fillStyle = c; ctx.fillRect(0, 0, 1, 1); const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data; return [r, g, b, a / 255]; };
+    const over = (f, b) => [0, 1, 2].map(i => f[i] * f[3] + b[i] * (1 - f[3]));
+    const background = e => { const stack = []; for (let x = e; x; x = x.parentElement) { const s = getComputedStyle(x); if (s.backgroundImage !== 'none') return null; const c = rgba(s.backgroundColor); if (c[3] > 0) { stack.push(c); if (c[3] >= 1) break; } } return stack.reverse().reduce((b, c) => over(c, b), [255, 255, 255]); };
+    return [...document.querySelectorAll('[data-ruler-state]')].map(e => { const s = getComputedStyle(e); return { key: e.dataset.rulerState, label: (e.getAttribute('aria-label') || e.textContent || e.className || e.tagName).trim().slice(0, 40), fill: background(e), look: [s.backgroundColor, s.color, s.opacity, s.boxShadow, s.borderColor, s.textDecorationLine, s.outlineStyle].join('|') }; });
+  });
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    if (!count) return { samePressed: [], faintHover: [] };
+    await cdp.send('DOM.enable'); await cdp.send('CSS.enable');
+    const { root } = await cdp.send('DOM.getDocument', { depth: 0 });
+    const { nodeIds } = await cdp.send('DOM.querySelectorAll', { nodeId: root.nodeId, selector: '[data-ruler-state]' });
+    const force = async forcedPseudoClasses => { for (const nodeId of nodeIds) await cdp.send('CSS.forcePseudoState', { nodeId, forcedPseudoClasses }); };
+    const rest = await read();
+    await force(['hover']); const hover = await read();
+    await force(['hover', 'active']); const pressed = await read();
+    await force([]);
+    const lum = c => c.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const ratio = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
+    const samePressed = [], faintHover = [];
+    rest.forEach((r, i) => {
+      const h = hover[i], d = pressed[i];
+      if (d.look === h.look) samePressed.push(r.label);
+      if (r.fill && h.fill && r.fill.some((v, k) => Math.abs(v - h.fill[k]) > 0.5) && ratio(r.fill, h.fill) < 1.08) faintHover.push(`${r.label} ${Math.round(ratio(r.fill, h.fill) * 100) / 100}`);
+    });
+    return { samePressed: [...new Set(samePressed)], faintHover: [...new Set(faintHover)] };
+  } finally {
+    await cdp.detach().catch(() => {});
+    await page.evaluate(() => { document.querySelector('[data-ruler-still]')?.remove(); document.querySelectorAll('[data-ruler-state]').forEach(e => { delete e.dataset.rulerState; }); });
+  }
 }
 
 // M7 focus states and M10 reach: Tab through the page as a keyboard user would.
@@ -148,6 +206,7 @@ export async function measure(page, profile, { first = null, transientAllowed = 
   const m = await page.evaluate(inPage, [{ p: profile, methods, transientAllowed }, unit]);
   await unit?.dispose();
   m.m8 = await unnamed(page);
+  m.states = await states(page, profile);
   if (keys) m.keys = await keyboard(page, profile);
   return m;
 }
@@ -174,6 +233,10 @@ export function failures(m, { digest = false } = {}) {
   const shellLow = m.m7.lowContrast.filter(x => !x.owner);
   if (shellLow.length) f.push(`M7 contrast: ${shellLow.slice(0, 4).map(x => `"${x.text}" ${x.ratio}`).join(', ')}${shellLow.length > 4 ? ` +${shellLow.length - 4}` : ''}`);
   if (m.keys?.noFocusStyle.length) f.push(`M7 no focus style: ${m.keys.noFocusStyle.slice(0, 6).join(', ')}`);
+  if (m.m7.offScale?.length) f.push(`M7 type off the scale: ${m.m7.offScale.slice(0, 6).join(', ')}${m.m7.offScale.length > 6 ? ` +${m.m7.offScale.length - 6}` : ''}`);
+  if (m.m7.faintSelected?.length) f.push(`M7 faint selection: ${m.m7.faintSelected.slice(0, 6).join(', ')}`);
+  if (m.states?.samePressed.length) f.push(`M7 no pressed state: ${m.states.samePressed.slice(0, 6).join(', ')}${m.states.samePressed.length > 6 ? ` +${m.states.samePressed.length - 6}` : ''}`);
+  if (m.states?.faintHover.length) f.push(`M7 faint hover: ${m.states.faintHover.slice(0, 6).join(', ')}`);
   if (m.m8.length) f.push(`M8 unnamed: ${m.m8.slice(0, 4).join(' | ')}${m.m8.length > 4 ? ` +${m.m8.length - 4}` : ''}`);
   if (m.m9.scrollWidth > m.m9.innerWidth) f.push(`M9 page ${m.m9.scrollWidth}px wide in ${m.m9.innerWidth}px`);
   if (m.keys?.unreached.length) f.push(`M10 not reachable by Tab: ${m.keys.unreached.slice(0, 6).join(', ')}${m.keys.unreached.length > 6 ? ` +${m.keys.unreached.length - 6}` : ''}`);
