@@ -166,8 +166,14 @@ Each ruler was checked by planting its fault (`work/hifi-h2/rmutate.mjs`). Close
   newest first. A question sent from another browser session gets this session's context
   when you copy its request, instead of losing its Copy button.
 
+- S4 (the evidence inspector, audit 11). Below 1280 the evidence button opens the Agent's
+  column over the right of the work, full width at 390, and the stage keeps its place
+  and size. Before this, evidence pushed the work down 261px at 1024. Opened calls come
+  into view and read as two lines: the 24-hour time and who, then what was done. They
+  are newest first and grouped by day. Escape returns focus to the bar. Shell acceptance
+  checks this at 1024 and 390.
+
 Open work:
-- S4 evidence inspector (audit 11);
 - S5 failure → repair;
 - S6 leave and return;
 - S7 overview as a task map (H3);

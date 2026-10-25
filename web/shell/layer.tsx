@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { WorkspaceSnapshot } from '../../src/browser.js';
 import type { DigestLine, ObjectState, QuestionState, RunObject, Screen } from '../../src/expression.js';
 import { liveLimits } from '../../src/live-workspace.js';
+import { Icon } from '../icons.js';
 import type { Live } from './live.js';
 
 // What Rho adds above the work (docs/WORKSPACE-PLAN.md §2): one persistent line, at most
@@ -151,7 +152,11 @@ function CopyRequest({ contextId, prepare }: { contextId?: string; prepare?: () 
   return <><button className="agent-question-copy" onClick={copy}>{copied ? 'Copied' : 'Copy request for the Agent'}</button>{problem && <span role="alert">{problem}</span>}</>;
 }
 
-export function AgentColumn({ live, agents, contexts = [], prepare, principalId, evidence, onEvidence, focusObject }: { live: Live; agents?: WorkspaceSnapshot['agents']; contexts?: WorkspaceSnapshot['contexts']; prepare?: (annotationId: string) => Promise<string>; principalId?: string; evidence: boolean; onEvidence: () => void; focusObject: string | null }) {
+export function AgentColumn({ live, agents, contexts = [], prepare, principalId, evidence, onEvidence, focusObject, onClose }: { live: Live; agents?: WorkspaceSnapshot['agents']; contexts?: WorkspaceSnapshot['contexts']; prepare?: (annotationId: string) => Promise<string>; principalId?: string; evidence: boolean; onEvidence: () => void; focusObject: string | null; onClose?: () => void }) {
+  // Opened calls come into view at the column's top; below 1280 the opened inspector takes focus.
+  const record = useRef<HTMLElement>(null), column = useRef<HTMLElement>(null);
+  useEffect(() => { if (evidence) record.current?.scrollIntoView({ block: 'start' }); }, [evidence]);
+  useEffect(() => { if (onClose) column.current?.focus(); }, [!!onClose]);
   const screen = live.screen, state = live.state, name = namer(live);
   const running = Object.values(screen?.objects ?? {}).find(o => o.kind === 'run' && o.state === 'running');
   const [now, setNow] = useState(Date.now());
@@ -168,10 +173,11 @@ export function AgentColumn({ live, agents, contexts = [], prepare, principalId,
   const questions = Object.values(screen.objects).filter((o): o is QuestionState => o.kind === 'question').reverse();
   // The item the person is looking at, or the one the Agent says it is working on, opens up.
   const current = screen.items.find(i => focusObject && (i.artifact?.object === focusObject)) ?? screen.items.find(i => roleOf(live, i.id) === 'working');
-  return <aside className="agent-column" aria-label={who} data-scroll-region="" tabIndex={0}>
+  return <aside ref={column} className={'agent-column' + (onClose ? ' drawer' : '')} aria-label={who} data-scroll-region="" tabIndex={0} onKeyDown={event => { if (onClose && event.key === 'Escape') { event.stopPropagation(); onClose(); } }}>
     <section className="agent-card">
       <header className="agent-card-head"><span className={'agent-dot' + (running ? ' running' : '')} aria-hidden="true" /><strong>{who}</strong>
-        <span className="agent-card-meta">{running ? 'running' + (since ? ' ' + minutes(now - Date.parse(since)) : '') : lastAt ? 'last action ' + when(lastAt) : 'no recorded action'}</span></header>
+        <span className="agent-card-meta">{running ? 'running' + (since ? ' ' + minutes(now - Date.parse(since)) : '') : lastAt ? 'last action ' + when(lastAt) : 'no recorded action'}</span>
+        {onClose && <button className="icon-button agent-close" aria-label={'Close ' + who} onClick={onClose}><Icon name="close" size={14} stroke={2} /></button>}</header>
       <AgentMarker live={live} who={false} />
       {screen.items.length > 0 && <section className="agent-items" aria-label="The Agent's notes">
         <ol>{screen.items.map(i => {
@@ -206,7 +212,7 @@ export function AgentColumn({ live, agents, contexts = [], prepare, principalId,
         })()}
       </li>)}</ul>
     </section>}
-    <section className="agent-card agent-record">
+    <section ref={record} className="agent-card agent-record">
       <button className="shell-quiet agent-record-toggle" aria-expanded={evidence} onClick={onEvidence}>Recorded calls<span className="agent-card-meta">{state.evidence.length}</span></button>
       {evidence && <Evidence live={live} principalId={principalId} notes={false} />}
     </section>
@@ -266,8 +272,11 @@ export function Evidence({ live, principalId, notes = true }: { live: Live; prin
   const who = (actor: string) => {
     if (principalId && actor === principalId) return 'You';
     const p = state.trace.principals[actor];
-    return p?.kind === 'agent' ? (p.name ?? 'The Agent') : p?.kind === 'browser' ? 'Another browser tab' : actor === 'operator' ? 'Rho' : p?.name ?? 'Unrecorded principal';
+    // A principal outside the retained trace still says what it is by its id's prefix.
+    const kind = p?.kind ?? (actor.startsWith('agent:') ? 'agent' : actor.startsWith('browser:') ? 'browser' : undefined);
+    return kind === 'agent' ? (p?.name ?? 'The Agent') : kind === 'browser' ? 'Another browser tab' : actor === 'operator' ? 'Rho' : p?.name ?? 'Unrecorded principal';
   };
+  const today = new Date().toISOString(), ordered = state.evidence.map((f, i) => ({ f, i })).sort((a, b) => (b.f.at ?? '').localeCompare(a.f.at ?? '') || b.i - a.i);
   return <section className="shell-evidence" data-rho-layer="transient" data-rho-evidence="" data-scroll-region="" tabIndex={0} aria-label="Recorded activity">
     {notes && live.screen && live.screen.items.length > 0 && <section aria-label="The Agent's notes" className="shell-notes">
       <h3>The Agent's notes{live.screen.question ? ' · ' + live.screen.question : ''}</h3>
@@ -278,12 +287,15 @@ export function Evidence({ live, principalId, notes = true }: { live: Live; prin
         {i.lines?.map((l, k) => <p key={k}>{l.label ? l.label + ': ' : ''}{l.text}{l.judgment ? " · the Agent's reading" : ''}</p>)}
       </li>)}</ul>
     </section>}
-    <p>Owner observations and the Agent's recorded calls. Calls an adapter refused on its own are not recorded here.</p>
     {state.gap && <p role="status">Earlier activity is outside the retained window. No missing calls were reconstructed.</p>}
-    <ol>{state.evidence.slice().reverse().map((f, i) => <li key={i}>
-      <time>{f.at ? new Date(f.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Time not recorded'}</time>
-      <strong>{who(f.actor)}</strong><code>{f.op}</code><span>{f.object ? name(f.object) : 'Object not recorded'}{f.outcome === 'rejected' ? ` · refused (${f.reason?.kind ?? 'reason not recorded'})` : ''}</span>
-    </li>)}</ol>
-    <p>The latest {state.evidence.length} facts are kept (limit {liveLimits.maxEvidence}).</p>
+    {/* Newest first by recorded time, 24-hour with seconds; a day that is not today heads its calls. */}
+    <ol>{(() => { let shown = ''; return ordered.map(({ f, i }) => {
+      const d = f.at && !sameDay(f.at, today) ? day(f.at) : '', head = d !== shown ? (shown = d) : '';
+      return <Fragment key={i}>{head && <li className="shell-evidence-day">{head}</li>}<li>
+        <time>{f.at ? new Date(f.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }) : 'Time not recorded'}</time>
+        <strong>{who(f.actor)}</strong><span className="shell-evidence-what"><code>{f.op}</code> {f.object ? name(f.object) : 'Object not recorded'}{f.outcome === 'rejected' ? ` · refused (${f.reason?.kind ?? 'reason not recorded'})` : ''}</span>
+      </li></Fragment>;
+    }); })()}</ol>
+    <p>The latest {state.evidence.length} facts are kept (limit {liveLimits.maxEvidence}). Calls an adapter refused on its own are not recorded here.</p>
   </section>;
 }

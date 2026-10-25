@@ -106,6 +106,10 @@
 .shell-evidence li { display: flex; gap: var(--space-4); padding: var(--space-1) 0; overflow-wrap: anywhere; }
 .shell-evidence time { flex: none; color: var(--color-muted); font-variant-numeric: tabular-nums; }
 .shell-evidence code { font: var(--font-size-sm)/var(--line-height-sm) var(--font-mono); color: var(--color-muted); }
+.shell-evidence li.shell-evidence-day { padding-top: var(--space-4); color: var(--color-meta); font-weight: 600; }
+/* In the Agent's column a call takes two lines: when and who, then what. Words wrap whole. */
+.agent-record .shell-evidence li:not(.shell-evidence-day) { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 var(--space-4); padding: var(--space-2) 0; overflow-wrap: break-word; }
+.agent-record .shell-evidence-what { grid-column: 2; color: var(--color-muted); }
 .shell-notes h3 { margin: 0 0 var(--space-2); font-size: var(--font-size-sm); font-weight: 600; }
 .shell-notes ul { margin: 0 0 var(--space-4); padding: 0; list-style: none; }
 .shell-notes li { display: block; padding: var(--space-2) 0; border-bottom: 1px solid var(--color-divider); }
@@ -228,7 +232,7 @@
   .shell-agent-words { display: none; }
   /* Two rows: the Agent's object and the evidence, then the runs and the person's place. */
   .shell-break { order: 1; }
-  .shell-timeline, .shell-held, .shell-follow, .shell-quiet:not(.shell-evidence-toggle) { order: 2; }
+  .shell-timeline, .shell-held, .shell-follow, .shell-bar .shell-quiet:not(.shell-evidence-toggle) { order: 2; }
   .shell-bar .shell-agent { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 }
 
@@ -239,6 +243,13 @@
 .agent-card-head { display: flex; align-items: center; gap: var(--space-4); min-width: 0; }
 .agent-card-head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-card-meta { margin-left: auto; flex: none; color: var(--color-meta); font-size: var(--font-size-sm); line-height: var(--line-height-sm); font-weight: 400; }
+/* Below 1280 the column opens over the right of the work as an inspector; the stage keeps its
+   place and size, and the bar below stays in reach (audit 11). Full width on a phone. */
+.agent-slot:has(> .agent-column.drawer) { display: flex; position: absolute; top: 0; right: 0; bottom: 0; z-index: 4; width: var(--context-width); padding: var(--space-5); border-left: 1px solid var(--color-hairline); border-top-left-radius: var(--radius-lg); background: var(--color-canvas); box-shadow: var(--shadow-edge); }
+.agent-close { flex: none; margin: calc(var(--space-2) * -1) calc(var(--space-3) * -1) calc(var(--space-2) * -1) 0; }
+@media (max-width: 767px) {
+  .agent-slot:has(> .agent-column.drawer) { left: 0; width: auto; padding: var(--space-4); border-left: 0; border-radius: 0; }
+}
 .agent-dot { width: 10px; height: 10px; flex: none; border-radius: var(--radius-pill); border: 1.5px solid var(--color-meta); }
 .agent-dot.running { border-color: var(--color-accent); border-style: dashed; }
 .agent-column .shell-agent { width: 100%; min-height: var(--height-button); margin-inline: calc(var(--space-4) * -1); width: calc(100% + var(--space-4) * 2); }

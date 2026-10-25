@@ -36,6 +36,9 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   const [wide, setWide] = useState(() => matchMedia('(min-width: 1280px)').matches);
   useEffect(() => { const q = matchMedia('(min-width: 1280px)'), change = () => setWide(q.matches); q.addEventListener('change', change); return () => q.removeEventListener('change', change); }, []);
   const column = wide && !!agentTarget;
+  // Below 1280 the same column opens over the right of the work as an inspector (audit 11):
+  // the stage keeps its place and size instead of being pushed under the evidence.
+  const [inspector, setInspector] = useState(false), drawer = !wide && inspector && !!agentTarget;
   // Which view each tab group shows, and which view has the person's (or the Agent's) focus.
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [focus, setFocus] = useState(order[0] ?? '');
@@ -220,15 +223,18 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   }
   const focusObject = live.screen?.views.find(v => v.id === focused)?.object ?? null;
   const toggleEvidence = () => { setEvidence(v => !v); live.act({ kind: 'reveal', target: evidence ? null : live.screen?.agent?.object ?? 'workspace' }); };
-  const bar = <Bar live={live} evidence={evidence} held={items.length - unhidden.length} narrow={narrow} column={column} onEvidence={toggleEvidence} />;
+  const toggleInspector = () => { setInspector(v => !v); live.act({ kind: 'reveal', target: inspector ? null : live.screen?.agent?.object ?? 'workspace' }); };
+  const closeInspector = () => { setInspector(false); footerTarget?.querySelector<HTMLElement>('.shell-evidence-toggle')?.focus(); };
+  const inline = !column && !agentTarget;
+  const bar = <Bar live={live} evidence={inline || column ? evidence : drawer} held={items.length - unhidden.length} narrow={narrow} column={column} onEvidence={inline || column ? toggleEvidence : toggleInspector} />;
   return <section className="workspace shell" aria-label="Layout">
     {/* The question the Agent declared is what this screen is about; without one, no slot. */}
     {live.screen?.question && <header className="shell-heading"><h1>{live.screen.question}</h1></header>}
     {footerTarget ? createPortal(bar, footerTarget) : bar}
-    {column && createPortal(<AgentColumn live={live} agents={snapshot.agents} contexts={snapshot.contexts} prepare={prepareQuestion} principalId={principalId} evidence={evidence} onEvidence={toggleEvidence} focusObject={focusObject} />, agentTarget!)}
+    {(column || drawer) && createPortal(<AgentColumn live={live} agents={snapshot.agents} contexts={snapshot.contexts} prepare={prepareQuestion} principalId={principalId} evidence={evidence} onEvidence={toggleEvidence} focusObject={focusObject} onClose={drawer ? closeInspector : undefined} />, agentTarget!)}
     <Interruption live={live} items={unhidden} onHide={key => setHidden(h => [...h, key])} />
     {layoutProblem && <div className="shell-interruption problem" data-rho-layer="transient" data-rho-interruption="" role="alert"><span className="shell-interruption-text">{layoutProblem}</span><button className="shell-quiet" onClick={() => setLayoutProblem('')}>Dismiss</button></div>}
-    {evidence && !column ? <Evidence live={live} principalId={principalId} /> : <Digest live={live} />}
+    {evidence && inline ? <Evidence live={live} principalId={principalId} /> : <Digest live={live} />}
     <div className="shell-stage" onPointerDownCapture={event => live.hold((event.target as HTMLElement).closest<HTMLElement>('[data-owner-view]')?.dataset.ownerView ?? focused)} onKeyDownCapture={() => live.hold(focused)} onCompositionStartCapture={() => live.hold(focused)}>
       {contextTarget && feedbackContextActive && feedbackSource && feedbackAllowed && feedbackEntry && snapshot.feedback?.draftDocumentId && createPortal(feedbackLimit ? <section className="unavailable" role="status"><h3>Close a view before opening feedback</h3><p>Existing views and input are kept within this layout's view limit.</p></section> : <feedbackEntry.View key={[snapshot.project.id, snapshot.feedback.taskId, feedbackSource, principalId].join(':')} viewId={'feedback:' + feedbackSource} view={{ id: 'feedback:' + feedbackSource, component: feedbackEntry.component, version: feedbackEntry.componentVersion, props: { title: 'Your question', taskId: snapshot.feedback.taskId, sourceSelectionScope: byId.get(feedbackSource) ? selectionScope(byId.get(feedbackSource)!) : { kind: 'shared', id: feedbackSource } }, bindings: { draft: { kind: 'live-document', documentId: snapshot.feedback.draftDocumentId } } }} projectId={snapshot.project.id} snapshot={snapshot} client={client} active principalId={principalId} contextTarget={null} feedbackConfiguration={{ ...snapshot.feedback, draftDocumentId: snapshot.feedback.draftDocumentId }} />, contextTarget)}
       {!root ? <div className="empty"><h2>No views in this layout</h2><p>The saved layout is empty. No view is created automatically.</p></div>

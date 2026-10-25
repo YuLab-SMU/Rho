@@ -196,6 +196,29 @@ try {
   await evidenceToggle.click();
   check("a declared item shows as the Agent's statement on the view it names and in the recorded evidence");
 
+  // Audit 11 (loop S4): below 1280 the evidence opens the Agent's column over the work. The stage
+  // keeps its place and size, opened calls come into view, and Escape hands focus back to the bar.
+  for (const [width, height] of [[1024, 768], [390, 844]]) {
+    await page.setViewportSize({ width, height });
+    const stage = () => page.locator('.shell-stage').evaluate(e => { const r = e.getBoundingClientRect(); return [r.left, r.top, r.width, r.height].map(Math.round).join(); });
+    await poll(stage, Boolean, `${width}: stage measured`);
+    const before = await stage();
+    await evidenceToggle.click();
+    const inspector = page.locator('.agent-column.drawer');
+    await inspector.getByRole('region', { name: "The Agent's notes", exact: true }).getByText('Scores rise with row order', { exact: true }).waitFor();
+    // The calls keep their open state between widths, as the column does.
+    const calls = inspector.getByRole('button', { name: /^Recorded calls/ });
+    if (await calls.getAttribute('aria-expanded') !== 'true') await calls.click();
+    await inspector.getByRole('region', { name: 'Recorded activity', exact: true }).locator('li').first().waitFor();
+    assert.equal(await stage(), before, `${width}: the evidence does not move or shrink the stage`);
+    assert.ok(await inspector.evaluate(c => { const r = c.getBoundingClientRect(), first = c.querySelector('.shell-evidence li').getBoundingClientRect(); return first.top >= r.top && first.bottom <= Math.min(r.bottom, innerHeight); }), `${width}: opened calls are in view`);
+    await page.keyboard.press('Escape');
+    await inspector.waitFor({ state: 'detached' });
+    assert.equal(await page.evaluate(() => document.activeElement?.classList.contains('shell-evidence-toggle')), true, `${width}: focus returns to the evidence button`);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  check('below 1280 the evidence opens the Agent column over the work: the stage keeps its place, opened calls are in view, Escape returns focus');
+
   // Rulers on a static layout: the editor has focus, the table shares the screen.
   await layoutNav('workspace').click(); await scriptView.locator('.cm-content').waitFor();
   await rulers(page, { name: 'static', profile: profiles.shell, first: () => firstUnit(scriptView, 'editor'), evidence, report });
