@@ -94,6 +94,23 @@ Found and fixed: a run context could excerpt the first 8 KiB instead of the last
 load; the project page never re-read its runs; execution and person-files acceptance had
 been broken since W3. Unit 168/168, plugins 67/67; every acceptance script passes except
 native-artifact, which needs a real model; initial gzip 89.9 KiB.
+**W7 done (2026-10-25):** the packed tarball (`de1d05c2…`, Rho `0c0f1808`, plugins
+`41b51d3`, Core `ebe35104`) installs outside every checkout and carries one task through
+with real Claude Code 2.1.310: `scripts/e2e-acceptance.mjs` passes 7/7. The person's words
+become a proposed run form the Agent does not submit; the person starts it once; the table
+it wrote opens from the run; a question about one row goes over as the request Rho copies;
+the Agent reads that context, adds a Welch t-test (p = 0.0479, matching R), and its reply
+appears under the question with a linked result; the run exports with provenance and
+survives a SIGTERM restart. M1–M10 hold at four widths in five states; E1, E3, E4 and E5
+hold. Cold start 0.71 s, open workspace 0.40 s, typing p95 16 ms, switch p95 24 ms, sort
+p95 16 ms, heap and service RSS within W0 + 20%, gzip 92,093 / 432,930 bytes. New:
+`rho --grant` and `rho --mcp` connect Claude Code; rho.workspace 1.5 teaches proposing a
+run; a tab may list and check a run's files; a table question offers "Copy request for
+the Agent". Three real-model runs failed first and each found a defect, now fixed: a
+wrapping source line (M2 10.8% at 1024), a long answer filling 54% of the view, and a
+shutdown held 8 s by a keep-alive connection, which left the tab offline. Chrome 155 is
+the tested browser; npm publication of `@rho-workspace/local` awaits the user's
+permission. [W7 acceptance](W7-ACCEPTANCE.md) has the numbers and the open findings.
 
 Updated: 2026-10-24. S7 live expression and complete table-question feedback.
 `src/expression.ts` drives the replay and the real browser through `live-trace.ts` /
@@ -309,9 +326,11 @@ tasks](WEBUI-FIRST.md) retain their scopes and product gates.
 Full editor IME/clipboard, accessibility and broad performance acceptance remain
 pending; grades-flow widths, shared Unicode input and installed recovery checks have
 their recorded scope and do not accept every editor, grid or Agent interaction.
-React/TypeScript, Vite, Dockview, CodeMirror 6, AG Grid Community, ECharts and a typed
-json-render catalog remain selected UI choices; Electron and cross-window movement
-follow later.
+React/TypeScript, Vite, CodeMirror 6, AG Grid Community, ECharts and a typed
+json-render catalog remain selected UI choices; the workspace lays views out with its own
+composition renderer since W6 removed Dockview. Electron and cross-window movement follow
+later. After W7 the remaining release step is npm registry publication, which needs the
+user's permission; the [W7 acceptance](W7-ACCEPTANCE.md) lists the open findings.
 
 ## Design evidence and limits
 
