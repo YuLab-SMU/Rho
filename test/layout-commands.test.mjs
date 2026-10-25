@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { closeView, moveView, regions, resizeSplit, splitView } from '../dist/shell-layout.js';
+import { closeView, moveView, placeView, regions, resizeSplit, splitView } from '../dist/shell-layout.js';
 
 // Layout commands change the owner tree only, and the shell draws the result through the
 // same reading as any other composition. Each case states what the person sees afterwards.
@@ -41,4 +41,29 @@ test('resize keeps a divider where the person left it', () => {
   assert.deepEqual(drawn(resizeSplit(split, split.rootId, [0.25, 0.75])).weights, [0.25, 0.75]);
   assert.equal(resizeSplit(split, split.rootId, [1]), null);
   assert.equal(resizeSplit(split, 'root', [1, 1]), null);
+});
+
+test('arranging a linked result retains both exact versions in the saved split', () => {
+  const original = { ...view('old'), component: 'rho.table', bindings: { data: { id: 'table', version: 'old' } } };
+  const result = { ...original, id: 'result', bindings: { data: { id: 'table', version: 'new' } } };
+  const tree = { rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: ['old'] }, original] };
+  const before = structuredClone(tree);
+  const saved = splitView(placeView(tree, result, id), result.id, 'horizontal', id);
+  assert.deepEqual(drawn(saved).children.map(c => c.views), [['old'], ['result']]);
+  assert.deepEqual(saved.nodes.find(n => n.id === 'old').bindings, original.bindings);
+  assert.deepEqual(saved.nodes.find(n => n.id === 'result').bindings, result.bindings);
+  assert.deepEqual(tree, before);
+  assert.equal(placeView(saved, result, id), saved); // Repeat never duplicates a view.
+  assert.equal(placeView(tree, { ...result, id: 'old' }, id), null); // A retained version cannot overwrite a newer same-id node.
+});
+
+test('a linked result joins a lone last pane without changing its sibling weights or bindings', () => {
+  const tree = { rootId: 'root', nodes: [{ id: 'root', kind: 'group', children: ['a','b'], presentation: { mode: 'split', axis: 'horizontal', weights: [2, 1] } }, view('a'), view('b')] };
+  const next = placeView(tree, view('linked'), id);
+  assert.deepEqual(drawn(next).children.map(c => c.views), [['a'], ['b','linked']]);
+  assert.deepEqual(drawn(next).weights, [2, 1]);
+  const closed = closeView(next, 'linked');
+  assert.deepEqual(drawn(closed).children.map(c => c.views), [['a'], ['b']]);
+  assert.deepEqual(drawn(closed).weights, [2, 1]);
+  assert.deepEqual(closed.nodes.filter(n => n.kind === 'view'), tree.nodes.filter(n => n.kind === 'view'));
 });

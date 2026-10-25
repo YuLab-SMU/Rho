@@ -13,12 +13,44 @@ Nielsen, Saarinen, Apple and SpaceX references as documented Rho design choices.
 [roadmap](ROADMAP.md#interaction-system-validation) prioritizes grammar, constrained
 views, a base-R collaboration loop, recovery, domain validation and user observation.
 
-This is a documentation change. It does not restore withdrawn frontend designs,
-implement a new proposal/decision API or accept new browser or model behavior.
-Existing results below retain their recorded scope. The six interaction experiments
-need evidence mapped to the selected episode/composition; human usability remains
-unverified. Documentation link and rendered-page checks are recorded locally under
-`work/interaction-guidance-20261025/` after review.
+The first base-R episode below now supplies concrete browser and external-Agent
+evidence for this direction. It does not restore withdrawn designs or implement a
+new proposal/decision API. The six experiments retain their individual completion
+conditions; human usability remains unverified.
+
+## Base-R collaboration loop
+
+The [airquality episode](BASE-R-EPISODE.md) passed in an actual Chrome browser using
+R 4.5.2 and Claude Code 2.1.310. A person selects May, asks a Unicode question,
+and the real Agent changes the missing-value rule, conditionally saves, runs R,
+checks the output and explicitly links its new table and PNG. Five monthly rows
+match an independent base-R calculation. May changes from n=24 / 24.125 ppb to
+n=26 / 23.615385 ppb; adoption remains pending in the person's notes.
+
+An opened linked result previously lacked layout controls. Rho now lets the person
+split or move that exact view through one conditional composition write. The old
+version and selection remain; the saved comparison survives reload. Owner APIs,
+execution semantics and the existing Plugins table-style override are unchanged.
+
+- `npm run build` passed; 19 targeted layout/live-workspace checks passed.
+- `npm run acceptance:frontend` passed its existing browser regression.
+- `npm run acceptance:base-r` passed from a fresh disposable project. The external
+  Agent completed 46 turns in 223 seconds, within the 48-turn/ten-minute limits.
+- Lost question acknowledgement plus reload/retry retained one exact question.
+  Browser disconnection during execution plus explicit Reconnect retained the
+  request digest, Core identity and native operation identity. Exactly two native
+  submissions occurred: baseline and requested change.
+- Chrome 155.0.8059.84 checked 1440, 1024, 768 and 390 CSS-pixel widths, including
+  horizontal access to compared values, separate version selections, both PNGs,
+  source lines and recovery of acknowledged unsaved notes. No browser exceptions.
+- Final evidence is in `work/base-r-episode-20261025/accepted/`; diagnostic failures
+  and browser-only continuations remain separate. The source composition and its
+  local override are recorded, without a new binary or signed-release claim.
+
+Next work remains external-write conflicts and broader unknown outcomes, a domain
+episode, and researcher observation. This run does not establish Host crash
+recovery, external model-session resumption or scientific validity. Sort/filter
+controls keep their existing reload defaults; exact entity/version anchors persist.
 
 ## UI extension authoring
 

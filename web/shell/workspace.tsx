@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { BrowserClient, CompositionSummary, WorkspaceSnapshot } from '../../src/browser.js';
-import { closeView, groupOf, moveView, regions, resizeSplit, selectionScope, splitView, tabGroups, viewOrder, type LayoutNode, type LayoutTree, type Region } from '../../src/shell-layout.js';
+import { closeView, groupOf, moveView, placeView, regions, resizeSplit, selectionScope, splitView, tabGroups, viewOrder, type LayoutNode, type LayoutTree, type Region } from '../../src/shell-layout.js';
 import type { Command, CommandGroup } from '../commands.js';
 import { Icon } from '../icons.js';
 import { registry } from '../registry.js';
@@ -189,11 +189,17 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
   useEffect(() => {
     if (!onCommands) return;
     const commands: Command[] = [], view = byId.get(focused), name = view ? title(view) : '';
-    if (tree && view && allowed('composition.apply') && tree.nodes.some(n => n.id === focused)) {
+    if (tree && view && allowed('composition.apply') && (tree.nodes.some(n => n.id === focused) || availableEntry(view, snapshot))) {
       // Offered when it applies now; computed again from the latest layout when it runs.
+      // A person's command promotes only this linked view into the saved tree. It keeps
+      // its exact binding, and uses the same owner conditions as every other layout edit.
       const viewId = focused;
       const offer = (id: string, label: string, change: (t: LayoutTree) => LayoutTree | null, before?: () => void) => {
-        if (change(tree)) commands.push({ id, label, icon: id === 'layout-close' ? 'close' : 'layout', meta: name, run: () => { const now = treeNow(); before?.(); void writeLayout(now && change(now)); } });
+        const placed = placeView(tree, view, newId);
+        if (placed && change(placed)) commands.push({ id, label, icon: id === 'layout-close' ? 'close' : 'layout', meta: name, run: () => {
+          const now = treeNow(), ready = now && placeView(now, view, newId), next = ready && change(ready);
+          if (next) { before?.(); void writeLayout(next); }
+        } });
       };
       offer('layout-split-right', 'Split right', t => splitView(t, viewId, 'horizontal', newId));
       offer('layout-split-down', 'Split down', t => splitView(t, viewId, 'vertical', newId));
@@ -203,7 +209,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     }
     if (allowed('composition.undo') && (recorded as { history?: unknown[] }).history?.length) commands.push({ id: 'layout-undo', label: 'Undo layout change', icon: 'refresh', run: () => void undoLayout() });
     onCommands(commands.length ? { label: 'Layout', commands } : null);
-  }, [focused, recorded, snapshot.catalog]);
+  }, [focused, recorded, snapshot.catalog, layout.views]);
   useEffect(() => () => onCommands?.(null), []);
   const tabId = useId(), narrowList = useRef<HTMLDivElement>(null);
   useTabOverflow(narrowList, focused, narrow);

@@ -10,6 +10,7 @@ For new product work, follow [Interaction guidance](INTERACTION.md) and the
 | --- | --- |
 | [Frontend](FRONTEND.md) | Project navigation, workspaces, Agent handoff and browser checks |
 | [Interaction guidance](INTERACTION.md) | Adaptive workspace, shared grammar, change rules, fact boundaries and experiments; source-informed design principles |
+| [Base-R episode](BASE-R-EPISODE.md) | Real selected-row question, external Agent edit, result comparison and browser recovery; executable evidence and limits |
 | [Plugin authoring](PLUGIN-AUTHORING.md) | Create, preview, check and select an independent UI extension |
 | [Architecture](ARCHITECTURE.md) | Source ownership, state and lifecycle boundaries |
 | [Technology stack](TECHSTACK.md) | Libraries and runtimes used by the current implementation |

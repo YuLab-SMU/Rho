@@ -41,6 +41,12 @@ conditional save, execution identity, output and versions remain with their exis
 owners. Views of the same document do not acquire independent document buffers.
 Opening exact results uses both resource identity and version. Reconnect only reads.
 
+A linked result initially opens as a local view. When the person arranges it, Rho
+includes that exact descriptor in the same conditional composition write as the
+split or move. The original view and its selection retain their own version;
+reload restores the saved arrangement. No unrelated preview is saved with it.
+The [base-R episode](BASE-R-EPISODE.md) exercises this path with a real Agent reply.
+
 Opening the service URL on this machine is the access: the tab starts as the local
 person, so there is no link to redeem, no session credential in tab storage and no
 first screen asking for one. A deliberately narrower link (`rho --pair`, one folder
@@ -69,6 +75,12 @@ project entry, overview, files, table, figure, activity, settings, plugins and A
 panel. Its assertions cover navigation, editing and undo, clipboard handoff,
 conditional layout changes, reload, keyboard input, responsive overflow and accessible
 control names. The report and images go to `work/frontend-reset/browser/` by default.
+
+`npm run acceptance:base-r` runs the complete selected-row question, external Agent
+edit, real R execution, two-version comparison and browser-disconnection episode.
+It requires the configured Claude Code client and never substitutes a simulated
+model. Its [record](BASE-R-EPISODE.md) separates fresh execution from browser-only
+continuation and independent aggregate checks from scientific review.
 
 Action, object, shell, document and continuity suites exercise the existing owner
 behavior through the rebuilt UI. Only executed checks in [Status](STATUS.md) are

@@ -3,7 +3,7 @@
 // weights, tab groups keep their order. A split nested inside a tab group shows as that
 // group's tabs, as before. Views the live layout added outside the tree (an opened result,
 // an execution record) join the last tab group, in layout order.
-import type { CompositionSummary } from './browser.js';
+import type { CompositionSummary, ViewDescription } from './browser.js';
 export type Axis = 'horizontal' | 'vertical';
 export type Region =
   | { kind: 'split'; id: string; axis: Axis; weights: number[]; children: Region[] }
@@ -145,6 +145,26 @@ function owners(tree: LayoutTree): string[] {
   };
   walk(tree.rootId, false);
   return out;
+}
+// A linked result starts as a local view. A person's arrangement command can include
+// that exact descriptor in its one conditional owner write. Never rebind a saved node
+// which happens to reuse its id, or persist unrelated previews with the command.
+export function placeView(tree: LayoutTree, view: ViewDescription, newId: (kind: string) => string): LayoutTree | null {
+  const existing = tree.nodes.find(n => n.id === view.id);
+  if (existing) return existing.kind === 'view' && existing.component === view.component && existing.version === view.version
+    && JSON.stringify(existing.bindings) === JSON.stringify(view.bindings) ? tree : null;
+  const next = copy(tree), target = owners(next).at(-1), node = next.nodes.find(n => n.id === target);
+  if (!node) return null;
+  next.nodes.push({ id: view.id, kind: 'view', component: view.component, version: view.version, props: structuredClone(view.props), bindings: structuredClone(view.bindings) });
+  if (node.kind === 'group') node.children = [...(node.children ?? []), view.id];
+  else {
+    const tabs: LayoutNode = { id: newId('group'), kind: 'group', children: [node.id, view.id] };
+    next.nodes.push(tabs);
+    const holder = parentOf(next.nodes, node.id);
+    if (holder) holder.children = holder.children!.map(id => id === node.id ? tabs.id : id);
+    else next.rootId = tabs.id;
+  }
+  return next;
 }
 // Moves a view into the next (1) or previous (-1) tab group, as its last tab.
 export function moveView(tree: LayoutTree, viewId: string, direction: 1 | -1, newId: (kind: string) => string): LayoutTree | null {
