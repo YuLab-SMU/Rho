@@ -264,6 +264,9 @@ function agent(s: Work, trace: Trace, f: Fact) {
       else run.state = e.state;
       run.changedAt = f.seq;
       if (run.state === 'failed' || run.state === 'unknown') escalate(s, run, f.seq);
+      // The chain counts its last run: once a later run of the source completes, nobody is
+      // waiting on the earlier failures. They stay on the chain and in the evidence.
+      if (run.state === 'completed') s.escalations = s.escalations.filter(x => { const r = s.objects[x.object]; return !(r?.kind === 'run' && r.source === run.source && r.run < run.run); });
       return at(run.id, null);
     }
     case 'observe': return at('run:' + e.run, null);
@@ -401,6 +404,7 @@ function arrange(s: Work, f: Pick<Fact, 'seq' | 'at'>, views: ArtifactRef[], rep
 // A follower already sees it in place; someone away gets it in the digest instead.
 function escalate(s: Work, run: RunObject, seq: number) {
   if (s.attention !== 'working') return;
+  if (Object.values(s.objects).some(o => o.kind === 'run' && o.source === run.source && o.run > run.run && o.state === 'completed')) return;
   const shown = s.objects[view(s, s.active)?.object ?? ''];
   const related = shown && (shown.id === run.id || shown.id === 'source:' + run.source
     || (shown.kind === 'run' && shown.source === run.source)

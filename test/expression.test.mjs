@@ -49,12 +49,26 @@ test('while the person works, the Agent never moves the main area; its layout be
 });
 
 test('a failed run the person is waiting on escalates with its own error; a follower or an absent person gets none', () => {
-  const screen = express(trace, working, last);
+  // #44: runs 3 and 4 have failed and nothing of analysis.R has completed since.
+  const screen = express(trace, working, 44);
   assert.deepEqual(screen.escalations.map(x => [x.object, x.reason.slice(0, 22)]), [['run:3', "Error: unexpected ')' "], ['run:4', "Error: object 'op' not"]]);
-  assert.deepEqual(express(trace, [], last).escalations, []);
-  assert.deepEqual(express(trace, [{ at: 29, kind: 'leave' }], last).escalations, []);
+  assert.deepEqual(express(trace, [], 44).escalations, []);
+  assert.deepEqual(express(trace, [{ at: 29, kind: 'leave' }], 44).escalations, []);
   // Opening the run is how the person answers it.
-  assert.deepEqual(express(trace, [...working, { at: 45, kind: 'open', target: 'run:3' }], last).escalations.map(x => x.object), ['run:4']);
+  assert.deepEqual(express(trace, [...working, { at: 43, kind: 'open', target: 'run:3' }], 44).escalations.map(x => x.object), ['run:4']);
+});
+
+test("a later run of the same source that completes takes back the earlier failures' escalations; the failures stay on the chain", () => {
+  // Run 5 of analysis.R completes at #50: nobody is waiting on runs 3 and 4 any more.
+  const done = express(trace, working, 50);
+  assert.deepEqual(done.escalations, []);
+  assert.deepEqual(['run:3', 'run:4', 'run:5'].map(id => done.objects[id].state), ['failed', 'failed', 'completed']);
+  assert.deepEqual(chain({ ...done, expanded: ['source:analysis.R'] }, 'analysis.R').shown.map(r => [r.run, r.state]), [[1, 'completed'], [2, 'completed'], [3, 'failed'], [4, 'failed'], [5, 'completed']]);
+  // A failure observed after its source already completed later never escalates. Constructed:
+  // run 3's failure is replayed once more after #50.
+  const late = structuredClone(trace);
+  Object.assign(late.facts[51], { op: 'operation.observed', actor: 'operator', object: 'run:3', effect: { kind: 'run-state', run: 3, state: 'failed' } });
+  assert.deepEqual(express(late, working, 51).escalations, []);
 });
 
 test('coming back gives a digest by object and the main area is where the person left it', () => {
@@ -200,8 +214,9 @@ test('only an item that names an artifact gathers its facts; a title that names 
 test("a source's runs fold behind the latest; folding never hides what is shown, where the Agent is, or what escalated", () => {
   const runs = (screen, name = 'analysis.R') => { const c = chain(screen, name); return [c.shown.map(r => r.run), c.folded.map(r => r.run)]; };
   assert.deepEqual(runs(express(trace, [], last)), [[5], [1, 2, 3, 4]]);
-  // Runs 3 and 4 failed while the person worked beside them.
-  assert.deepEqual(runs(express(trace, working, last)), [[3, 4, 5], [1, 2]]);
+  // Runs 3 and 4 failed while the person worked beside them, until run 5 completed.
+  assert.deepEqual(runs(express(trace, working, 44)), [[3, 4], [1, 2]]);
+  assert.deepEqual(runs(express(trace, working, last)), [[5], [1, 2, 3, 4]]);
   assert.deepEqual(runs(express(trace, [{ at: last, kind: 'open', target: 'run:2' }], last)), [[2, 5], [1, 3, 4]]);
   // Constructed: the recorded Agent was always on its latest run, so #53 (a catalog read)
   // becomes a lookup of run 1.

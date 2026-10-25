@@ -80,9 +80,11 @@ test('the screen folded from Rho records never shows an object it cannot name', 
   // The run's own declarations are not retained; the map Rho holds is the acceptance script's.
   assert.equal(screen.question, records.taskMap.question);
   assert.equal(screen.items.length, records.taskMap.items.length);
-  // Failed runs escalate with their exit code, the only reason Rho recorded.
+  // Failed runs escalate with their exit code, the only reason Rho recorded, until a later
+  // run of analysis.R completes.
   const working = [{ at: at[19], kind: 'open', target: 'artifact:effects.csv' }];
-  assert.deepEqual(express(folded, working, folded.facts.length - 1).escalations.map(x => [x.object, x.reason]), [['run:3', 'Exit 1'], ['run:4', 'Exit 1']]);
+  assert.deepEqual(express(folded, working, at[44]).escalations.map(x => [x.object, x.reason]), [['run:3', 'Exit 1'], ['run:4', 'Exit 1']]);
+  assert.deepEqual(express(folded, working, folded.facts.length - 1).escalations, []);
 });
 
 // The second run (docs/INTERACTION-PLAN.md S4): real Claude Code making a failing R check
