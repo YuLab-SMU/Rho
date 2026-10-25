@@ -1,5 +1,19 @@
 # Rho status
 
+## Workspace plan
+
+Updated: 2026-10-24. The user approved the [workspace plan](WORKSPACE-PLAN.md) W0–W7.
+**W0 done:** the superseded-failure rule is in the model, engine and tests;
+`scripts/rulers.mjs` measures E1/E4 and M1–M10 from the page only and the S7 acceptance
+records them on the frozen workspace. That baseline fails M1 at 1024 and 390 in the
+return state, M2 everywhere (the stacked additions reach 94% of a 1024×768 viewport),
+M4 (`version ? → 2`), M6 and M7 nav contrast (4.32:1). `scripts/install-smoke.mjs`
+installs the packed tarball outside the checkouts with its vendored debug Core: ready
+0.75 s, home rendered 1.75 s, idle service RSS 128 MiB, home passes M1–M10 at four
+widths, no Host left. `scripts/performance-baseline.json` holds the W0 numbers (open
+0.9 s, interaction p95 32 ms in headless Chrome, initial/total gzip 97/513 KiB).
+U2 6/6 and S7 pass. Human understanding is not yet evidenced and is not a gate.
+
 Updated: 2026-10-24. S7 live expression and complete table-question feedback.
 
 The six Paper behaviors and this feedback loop have explicit user authorization
@@ -221,13 +235,6 @@ the generic runner; a Claude MCP v2 handoff that changed the same unsaved Chines
 buffer without a Host; base-R recovery keeping four partial rows across owned Host
 loss. Retained extraction failures (a sidecar inside the producer's inventory, a wrong
 declared column) stay failed.
-
-## Single-contract cleanup verification
-
-The two coexisting protocol artifacts were collapsed on 2026-10-23, before any
-release, because keeping an unpublished second dialect charged a compatibility cost
-against development work. Shared definitions live in `protocol-base.ts` with no
-contract identity.
 
 ## Current focus and remaining work
 

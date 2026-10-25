@@ -1,0 +1,27 @@
+{
+  "measuredAt": "2026-10-24",
+  "shell": "legacy",
+  "machine": {
+    "platform": "darwin-arm64",
+    "cpu": "Apple M4 Pro",
+    "node": "v22.22.3"
+  },
+  "browser": "155.0.8059.84",
+  "bundle": {
+    "initialGzip": 99667,
+    "totalGzip": 525061
+  },
+  "timings": {
+    "openWorkspaceMs": 896
+  },
+  "latency": {
+    "typing": 32,
+    "switchView": 32,
+    "sort": 32
+  },
+  "memory": {
+    "browserHeapUsedKiB": 17379,
+    "servicePeakRssKiB": 150096,
+    "serviceIdleRssKiB": 123904
+  }
+}

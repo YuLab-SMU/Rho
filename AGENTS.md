@@ -6,8 +6,8 @@ Read [Status](docs/STATUS.md), [Architecture](docs/ARCHITECTURE.md),
 Rho contains a versioned local backend, client and headless acceptance scripts.
 Read [Headless backend](docs/HEADLESS.md) and its
 [acceptance record](docs/BACKEND-ACCEPTANCE.md). Scoped browser checks are recorded
-in [S7 acceptance](docs/INTERACTION-ACCEPTANCE.md); full product and human usability
-acceptance remain pending.
+in [S7 acceptance](docs/INTERACTION-ACCEPTANCE.md); the
+[workspace plan](docs/WORKSPACE-PLAN.md) sequences the remaining UI work and its checks.
 
 ## Source ownership
 
@@ -68,20 +68,20 @@ limits. [Status](docs/STATUS.md) is the single current summary, under 300 lines;
 update it when behavior, verification, focus or unresolved work changes.
 
 Read [Product design](docs/DESIGN.md) before UI work. Product-authored UI is English
-and preserves Unicode user content. Substantial layout/component design uses Paper
-and user review, reusing approval within its scope. Verify real behavior and
-representative widths, including applicable native input and accessibility.
+and preserves Unicode user content. UI acceptance is measured, not reviewed: the
+behaviour contracts E1–E5, rulers M1–M10 and performance budgets of the
+[workspace plan](docs/WORKSPACE-PLAN.md) decide it, in real Chrome at four widths
+with applicable native input and accessibility. Paper is a sketchpad for comparing
+layout alternatives when that helps; user review is not a gate.
 
-The user authorized the S7 scope on 2026-10-24: the six behaviors on Paper's
-"07 · 回放原型 · 行为（S7 评审）" — following, working without interruption,
-retaining a person's opened version, returning from away, asking about an object,
-and revealing recorded evidence — plus the complete table-question feedback loop.
-Within that scope, Agents implement, verify, revise and commit autonomously; do not
-request approval for each step or revision. Keep Paper as the behavior reference
-and retain browser evidence. A materially different product direction or interaction
-scope needs a new decision. S6 remains **human usability unverified** until an actual
-participant completes it; it does not block implementation or checked source
-publication. Automated or model-driven checks cannot stand in for human evidence.
+The user approved the [workspace plan](docs/WORKSPACE-PLAN.md) W0–W7 on 2026-10-24
+("执行完整计划"). Within it, Agents implement, verify, revise, commit and, once the
+milestone's checks pass, fast-forward push main without asking per step. Exit
+conditions are fixed in the plan: correct or tighten them there with a reason before
+code depends on it; loosening them, changing the end goal, a materially different
+product direction, or publishing to a registry needs the user. Findings outside the
+current milestone go to the plan's parking lot. Engineering checks are recorded as
+engineering checks; human understanding remains **not yet evidenced** and is not a gate.
 
 Use disposable projects and owned Hosts for execution checks. Inspect existing
 work before starting another Host on the same project. Do not restart a user Host
