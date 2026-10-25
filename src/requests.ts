@@ -42,8 +42,10 @@ export class Requests {
     let result: CliResult;
     try { result = await this.bridge.call(this.project.root, 'lookup', run.core.caller, run.core.requestId, ['--record']); }
     catch { return run; }
-    // Not delivered, no reply or an owner error: the outcome stays genuinely unknown
-    // rather than being guessed from an absent answer.
+    // No Host answers (or none in time): the stored facts stay, but this reading cannot say
+    // the run is still going, so it reports the outcome as unknown until a Host answers again.
+    if ([3, 4].includes(result.exitCode)) return { ...run, execution: 'unknown' };
+    // An owner error is not an answer either; nothing is guessed from it.
     if (result.exitCode !== 0 || !result.reply?.ok) return run;
     const before = run.execution;
     this.apply(run, result, false);

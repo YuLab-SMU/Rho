@@ -207,7 +207,7 @@ try {
   // M3: the superseded failure is one click from the bar's run chain.
   await page.getByRole('button', { name: 's7-failed failed', exact: true }).click();
   await runView('s7-failed').waitFor();
-  assert.match(await runView('s7-failed').locator('[data-fact="observed"]').first().textContent(), /^failed · code version 2 of 2 · accepted .* · stderr retained$/);
+  assert.match(await runView('s7-failed').locator('[data-fact="observed"]').first().textContent(), /^failed · code version 2 of 2 · submitted by the Agent at .* · stderr retained$/);
   await rulers(page, { name: 'run', profile, first: () => runView('s7-failed').locator('h2'), enforce, evidence, report });
   // E5: all of the above on a project where the Agent declared nothing.
   const declared = (await call('observation.snapshot')).activity.entries.filter(e => String(e.method).startsWith('task.map.'));

@@ -190,12 +190,17 @@ const observationSnapshot = response({
   contexts: { type: 'array', items: { type: 'object', additionalProperties: true }, maxItems: 128 },
   // The calls of the Agents bound to this project, as the activity record keeps them.
   activity: obj({ cursor: integer, retainedFrom: positive, entries: { type: 'array', maxItems: 256, items: { type: 'object', additionalProperties: true, properties: { cursor: positive, principal: text, method: text, at: text, outcome: { enum: ['returned', 'rejected'] } }, required: ['cursor', 'principal', 'method', 'at', 'outcome'] } } }, ['cursor', 'retainedFrom', 'entries']),
+  // The Agent sessions with access to this project: no token, only who, what and when.
+  agents: { type: 'array', maxItems: 64, items: response({ principal: text, label: { anyOf: [text, { type: 'null' }] }, profile: { anyOf: [text, { type: 'null' }] }, methods: array(text), expiresAt: { anyOf: [text, { type: 'null' }] }, ended: { type: 'boolean' },
+    last: { anyOf: [{ type: 'null' }, response({ at: text, method: text, outcome: { enum: ['returned', 'rejected'] }, operationId: text }, ['at', 'method', 'outcome'])] } }, ['principal', 'label', 'profile', 'methods', 'expiresAt', 'ended', 'last']) },
   selection: { anyOf: [selection, { type: 'null' }] },
   bindings: array(contract.bindingSchema),
   cursor: integer,
   host: contract.cliSchema,
   limits: contract.limitReportSchema
 });
+// Retained snapshots from before the Agents summary are read through this same contract.
+observationSnapshot.required = observationSnapshot.required.filter(key => key !== 'agents');
 
 const structuredComposition = contract.structuredCompositionSchema;
 const composition = { anyOf: [contract.legacyCompositionSchema, structuredComposition] };

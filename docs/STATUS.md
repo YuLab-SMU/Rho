@@ -41,6 +41,21 @@ owners' records never hides the view holding keyboard focus, and moving a view c
 its focus. `scripts/pages-acceptance.mjs` holds M4, M5, M7–M10 on the unpaired landing,
 Home, the overview closed and open, the plugin catalog and page, and the disconnected
 tab (plugin section counts now 4.5:1). S7, U2, plugin UI and shell pass on the default.
+**W4 done (2026-10-25):** a paired tab may stop its project's runs and the Agent's;
+any session reads a run by operationId, only the submitter retries, one `not_found`
+answers a missing, guessed or other project's ID, and each cancel names its requester
+(`test/cancel-authority.test.mjs`). `project.runs` reports `stop` from Core's own record
+(a request is never shown as a stop) and `repairOf`. `context.create {run}` freezes the
+run's facts and the last 8 KiB of stderr. The shell gains `rho.action`, an Agent-proposed
+form checked by the owner's contract (references read by name, problems per field),
+submitted once under the proposed operationId; the run view gains Stop, a bounded log,
+"Ask the Agent to fix" (a copied request) and repair links; the context panel lists Agent
+sessions. `scripts/action-acceptance.mjs` passes all W4 browser exits on real Core and R:
+two clicks → one dispatch, refresh mid-run keeps the run, "requested" then "stopped",
+repair context with the real error, unknown after the Host is killed, M1–M10 on the form
+and run views. Found and fixed: a read said "running" while no Host answered. Not proven:
+the natural-language step with a real model (W7). Unit 165/165, replay 27/27; S7, UI,
+pages (now with the context panel), shell, U2 and plugin UI pass; initial gzip 91.3 KiB.
 
 Updated: 2026-10-24. S7 live expression and complete table-question feedback.
 `src/expression.ts` drives the replay and the real browser through `live-trace.ts` /

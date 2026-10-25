@@ -52,7 +52,7 @@ const authorKind = (principal: string) => principal.startsWith('agent:') ? 'Agen
 function stopFacts(run: Operation) {
   if (!run.cancellation?.requestedAt) return null;
   const status = run.native?.status ?? {};
-  return { requestedAt: String(run.cancellation.requestedAt), by: authorKind(String(run.cancellation.requestedBy ?? run.principal)), state: stopState(status, run.native?.cancel), exit: exitWords(status.Finished?.exit) };
+  return { requestedAt: String(run.cancellation.requestedAt), by: authorKind(String(run.cancellation.requestedBy ?? run.principal)), state: stopState(status, run.native?.cancel, run.execution !== 'unknown'), exit: exitWords(status.Finished?.exit) };
 }
 async function runFacts(project: Project, run: Operation) {
   const declared = Array.isArray(run.plan?.source?.artifacts) ? run.plan.source.artifacts as Array<{ path: string }> : [];
@@ -359,7 +359,7 @@ export class RhoService {
     const id = 'agent:' + digest(projectId + ':' + externalSessionId).slice(0, 32);
     this.state.principals = this.state.principals.filter(p => p.id !== id);
     requireThat(!pluginFilter || pluginFilter.every(id => this.plugins.isKnown(id)), 'invalid', 'Unknown MCP plugin filter.');
-    await this.state.addPrincipal({ id, tokenHash: digest(token), projectId, methods: [...new Set([...(profile ? ['capability.index', 'capability.resolve'] : ['protocol.describe', 'capability.list']), ...selected])], ...(profile ? { profile } : {}), ...(pluginFilter ? { pluginFilter } : {}) });
+    await this.state.addPrincipal({ id, tokenHash: digest(token), projectId, label: externalSessionId, methods: [...new Set([...(profile ? ['capability.index', 'capability.resolve'] : ['protocol.describe', 'capability.list']), ...selected])], ...(profile ? { profile } : {}), ...(pluginFilter ? { pluginFilter } : {}) });
     const connection = { url: this.url, token, projectId, externalSessionId, methods: [...new Set([...(profile ? ['capability.index', 'capability.resolve'] : []), ...selected])], ...(profile ? { profile } : {}), ...(pluginFilter ? { pluginFilter } : {}), apiVersion: '2.0' as const };
     await atomicJson(file, connection); return connection;
   }
@@ -497,6 +497,16 @@ export class RhoService {
     const granted = new Set(this.state.principals.filter(x => x.projectId === p.id && x.kind !== 'browser').map(x => x.id));
     const all = await readJson<any>(path.join(await this.dataDir(p), 'activity.json'), { cursor: 0, entries: [] });
     return { cursor: all.cursor, retainedFrom: all.entries[0]?.cursor ?? all.cursor + 1, entries: all.entries.filter((e: any) => granted.has(e.principal)) };
+  }
+  // The Agent sessions with access to this project, as a person needs them: which session,
+  // what it may call, its latest recorded call, and whether its access has ended.
+  private async agentSummaries(p: Project) {
+    const activity = await this.projectActivity(p);
+    return this.state.principals.filter(x => x.projectId === p.id && x.kind !== 'browser' && x.id !== 'operator').map(x => {
+      const last = activity.entries.filter((e: any) => e.principal === x.id).at(-1);
+      return { principal: x.id, label: x.label ?? null, profile: x.profile ?? null, methods: x.methods, expiresAt: x.expiresAt ?? null, ended: !!x.expiresAt && Date.parse(x.expiresAt) <= Date.now(),
+        last: last ? { at: String(last.at), method: String(last.method), outcome: last.outcome === 'rejected' ? 'rejected' as const : 'returned' as const, ...(last.operationId ? { operationId: String(last.operationId) } : {}) } : null };
+    });
   }
   private async dataDir(p: Project) { return stateDirectory(p.root, '.rho/rho'); }
   // The discriminated union is what gives every branch below a typed body: after the
@@ -900,7 +910,7 @@ export class RhoService {
       }
       const result = await owners.need('agent').readContext(b.contextId, principal.id); await this.emit(p, 'context.changed', result.contextId, principal.id); if (result.principal !== principal.id) await this.emit(p, 'context.changed', result.contextId, result.principal); return result;
     }
-    if (method === 'observation.snapshot') return { project: p, catalog: await capabilities.catalog(principal), documents: await owners.documentSummaries(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), feedback: await routing.feedbackConfiguration().then(async configuration => { const route = await routing.read(); return configuration ? { taskId: route.taskId, compositionId: route.compositionId, taskVersion: route.version, targetBindingId: route.feedbackOwnerBindingId, draftDocumentId: configuration.draftDocumentId, relatedDocumentId: configuration.relatedDocumentId } : null; }), presentation: await routing.read().then(async route => route ? { taskId: route.taskId, pending: (await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).state()).pending ?? null, witnesses: await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).witnesses() } : null), interactions: await interactions.list(principal.id), taskMap: await new TaskMap(p, this.config.taskMap).read(), annotations: await owners.retainedAnnotations(), contexts: await owners.agent?.contextStates(principal.id) ?? [], activity: await this.projectActivity(p), selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: owners.documents?.limits ?? {}, r: this.plugins.optional('r') ? { ...this.plugins.need('r').executionLimits, ...this.config.r } : {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
+    if (method === 'observation.snapshot') return { project: p, catalog: await capabilities.catalog(principal), documents: await owners.documentSummaries(), operations: (await requests.list(principal)).map(publicOperation), resources: (await owners.retainedResources()).map(publicResource), compositions: await workspace.compositions(), feedback: await routing.feedbackConfiguration().then(async configuration => { const route = await routing.read(); return configuration ? { taskId: route.taskId, compositionId: route.compositionId, taskVersion: route.version, targetBindingId: route.feedbackOwnerBindingId, draftDocumentId: configuration.draftDocumentId, relatedDocumentId: configuration.relatedDocumentId } : null; }), presentation: await routing.read().then(async route => route ? { taskId: route.taskId, pending: (await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).state()).pending ?? null, witnesses: await new Presentation(p, workspace, this.config.presentationWitness, this.config.visibility).witnesses() } : null), interactions: await interactions.list(principal.id), taskMap: await new TaskMap(p, this.config.taskMap).read(), annotations: await owners.retainedAnnotations(), contexts: await owners.agent?.contextStates(principal.id) ?? [], activity: await this.projectActivity(p), agents: await this.agentSummaries(p), selection: await readJson(path.join(await this.dataDir(p), 'selection.json'), null), bindings: (await readJson<any[]>(path.join(await this.dataDir(p), 'bindings.json'), [])).filter(x => x.principal === principal.id), cursor: (await this.events(p)).cursor, host: await this.bridge.capability(p.root), limits: { ...serviceLimits, ...requestLimits, documents: owners.documents?.limits ?? {}, r: this.plugins.optional('r') ? { ...this.plugins.need('r').executionLimits, ...this.config.r } : {}, resources: { ...owners.files?.limits, ...owners.tables?.limits, ...owners.charts?.limits }, ...Object.fromEntries(Object.entries(this.config).filter(([, v]) => typeof v === 'number')) } };
     throw new Fault('unavailable', 'This catalog operation has not been installed.', { operation: method });
   }
   private async events(p: Project) { return readJson<any>(path.join(await this.dataDir(p), 'events.json'), { cursor: 0, events: [] }); }

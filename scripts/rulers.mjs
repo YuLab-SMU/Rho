@@ -114,14 +114,16 @@ export async function keyboard(page, profile) {
     const visible = e => e.checkVisibility?.({ checkOpacity: true, checkVisibilityCSS: true }) ?? !!e.getClientRects().length;
     document.activeElement?.blur?.();
     const sel = 'button, a[href], input:not([type=hidden]), select, textarea, [tabindex], [role=tab], [role=button]';
-    return [...document.querySelectorAll(sel)].filter(e => visible(e) && !e.closest(':disabled') && e.tabIndex >= 0 && !e.closest('.ag-root-wrapper, .cm-editor')).map((e, i) => {
+    // While a modal dialog is open everything outside it is inert, so reach is measured inside it.
+    const modal = document.querySelector('dialog:modal');
+    return [...document.querySelectorAll(sel)].filter(e => visible(e) && !e.closest(':disabled') && e.tabIndex >= 0 && !e.closest('.ag-root-wrapper, .cm-editor') && (!modal || modal.contains(e))).map((e, i) => {
       e.dataset.rulerKey = String(i); const s = getComputedStyle(e);
       e.dataset.rulerRest = [s.outlineStyle, s.outlineWidth, s.outlineColor, s.boxShadow, s.borderColor, s.backgroundColor].join('|');
       return { key: String(i), label: (e.getAttribute('aria-label') || e.textContent || e.tagName).trim().slice(0, 50), owner: !!e.closest(p.ownerBody) };
     });
   }, profile);
   // Start from the top of the document, not wherever focus last was.
-  await page.evaluate(() => { const start = Object.assign(document.createElement('span'), { tabIndex: 0 }); start.dataset.rulerStart = ''; document.body.prepend(start); start.focus(); });
+  await page.evaluate(() => { const start = Object.assign(document.createElement('span'), { tabIndex: 0 }); start.dataset.rulerStart = ''; (document.querySelector('dialog:modal') ?? document.body).prepend(start); start.focus(); });
   const reached = new Set(), noFocusStyle = [];
   let last = null, same = 0;
   for (let step = 0; step < candidates.length + 60 && step < 400; step++) {

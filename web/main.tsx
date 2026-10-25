@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type Reac
 import { createRoot } from 'react-dom/client';
 import { BrowserClient, type BrowserConnection, type ProjectSummary, type WorkspaceSnapshot } from '../src/browser.js';
 import { Home, located, projectName as name, trapTab } from './home.js';
+import { AgentAccess } from './agents.js';
 import { ProjectNavigation, type Section } from './project.js';
 import { Icon } from './icons.js';
 import { CommandPalette, type Command, type CommandGroup } from './commands.js';
@@ -238,8 +239,8 @@ function App() {
     { label: 'This tab', commands: [{ id: 'disconnect', label: 'Disconnect this tab', icon: 'unlink', danger: true, run: () => askDisconnect(commandReturn()) }] },
   ];
   // Session grants decide the access copy; older read-only sessions keep theirs.
-  const edits = connection.methods.includes('document.edit');
-  const access = edits ? 'Open and watch projects, edit open documents and pick table rows. Saving and runs stay with Claude Code.' : 'Open, create and watch projects. No edits or runs.';
+  const edits = connection.methods.includes('document.edit'), runs = connection.methods.includes('action.submit');
+  const access = edits ? `Open and watch projects, edit open documents and pick table rows.${runs ? ' Run an action an Agent proposed and stop a run.' : ''} Saving stays with Claude Code.` : 'Open, create and watch projects. No edits or runs.';
   const contextSections = <>
     <div ref={setContextSlot} className="context-slot" />
     {!feedbackContext && <>
@@ -255,7 +256,7 @@ function App() {
     </section>
     <section className="context-section">
       <h3 className="caption">Agents</h3>
-      <p className="context-agents">Claude Code and other Agents get access from whoever runs Rho on this machine, not from this page.</p>
+      <AgentAccess snapshot={projectVisible ? snapshot : null} />
     </section>
     </>}
   </>;

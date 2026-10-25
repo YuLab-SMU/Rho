@@ -10,6 +10,13 @@ import { Capabilities } from './capabilities.js';
 import { Interactions, interactionLimits } from './interactions.js';
 import { Compositions, compositionLimits } from './composition.js';
 const ajv = new Ajv({ strict: false, allowUnionTypes: true });
+// Rho's own form for one action an Agent proposes (docs/WORKSPACE-PLAN.md decision 3). The
+// action must be registered at that version; the input is the Agent's proposal, which the
+// person may edit and which the owner checks when it is submitted.
+export const actionFormComponent = { id: 'rho.action', version: '1' };
+const actionFormProps = ajv.compile({ type: 'object', additionalProperties: false, required: ['title', 'action', 'actionVersion', 'operationId', 'input'], properties: {
+  title: { type: 'string', minLength: 1, maxLength: 80 }, action: { type: 'string', minLength: 1 }, actionVersion: { type: 'string', minLength: 1 },
+  operationId: { type: 'string', pattern: '^[A-Za-z0-9._:@-]{1,128}$' }, input: { type: 'object' }, repairOf: { type: 'string', pattern: '^[A-Za-z0-9._:@-]{1,128}$' } } });
 const workspaceSchema = { type: 'object', additionalProperties: false, required: ['schemaVersion', 'sourceProjectId', 'acknowledgedAt', 'documents', 'resources', 'compositions', 'selection'], properties: {
   schemaVersion: { enum: [1, 2] }, sourceProjectId: { type: 'string' }, acknowledgedAt: { type: 'string' },
   documents: { type: 'array', maxItems: 64, items: protocol.definitions.document },
@@ -42,6 +49,14 @@ export class Workspace {
     const availability: Record<string, unknown> = {};
     for (const view of views) {
       if (view.component === 'rho.agent-note' && ![...retained, ...retainedNotes].some(v => v.id === view.id && v.component === view.component && canonical(v.props) === canonical(view.props) && canonical(v.bindings) === canonical(view.bindings))) requireThat(trustedPresentation && view.props.authorBindingId === trustedPresentation.authorBindingId && view.props.basisWitnessId === trustedPresentation.basisWitnessId, 'scope', 'Agent note authorship and basis are written only by the assigned presentation path.');
+      if (view.component === actionFormComponent.id) {
+        requireThat(view.version === actionFormComponent.version && !Object.keys(view.bindings).length, 'invalid', 'A rho.action view is version "1" and binds nothing; its proposal is in props.');
+        requireThat(actionFormProps(view.props), 'invalid', 'A rho.action view needs props { title, action, actionVersion, operationId, input } and optionally repairOf.', { fields: actionFormProps.errors ?? [] });
+        const action = this.owners.assembly.catalog.actions.find(a => a.id === view.props.action);
+        requireThat(action?.version === view.props.actionVersion, 'invalid', 'The proposed action is not registered at that version; capability.list names the registered actions.', { action: view.props.action, actionVersion: view.props.actionVersion, registered: action?.version ?? null });
+        availability[view.id] = { state: 'entry-installed', visibility: 'unobserved' };
+        continue;
+      }
       const component = this.owners.assembly.catalog.components.find(c => c.id === view.component && c.version === view.version);
       const boundResources: Record<string, Resource> = {};
       for (const [key, binding] of Object.entries<any>(view.bindings)) {
@@ -197,7 +212,7 @@ export class Workspace {
       requireThat(current || (await this.compositions()).length < this.limits.maxCompositions, 'limit', 'Composition retention limit reached during restore.', { limit: 'maxCompositions' });
       // Restore references even if a UI entry is missing. Reading or restoring
       // this intent never submits scientific work.
-      const availability = Object.fromEntries(composition.views.map((v: any) => [v.id, this.owners.assembly.viewAvailability(v.component, v.version)]));
+      const availability = Object.fromEntries(composition.views.map((v: any) => [v.id, v.component === actionFormComponent.id ? { state: 'entry-installed', visibility: 'unobserved' } : this.owners.assembly.viewAvailability(v.component, v.version)]));
       await atomicJson(await this.file(composition.compositionId), { ...composition, availability });
       report.compositions.push({ compositionId: composition.compositionId, state: 'unavailable', views: composition.views.length });
     }

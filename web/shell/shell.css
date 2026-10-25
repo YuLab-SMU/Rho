@@ -126,6 +126,28 @@
 .shell-run-error { color: var(--color-failed); font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
 .shell-run-chain { display: flex; flex-wrap: wrap; gap: 6px; }
 .shell-run-chain .failed { color: var(--color-failed); }
+.shell-run .shell-stop { margin-left: 8px; }
+.shell-run-repair .failed, .shell-run-repair .unknown { color: var(--color-failed); }
+.shell-run-fix { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 8px 0; }
+.shell-run-output { margin-top: 12px; }
+.shell-run-output h3 { margin: 10px 0 4px; font: 600 12px/16px var(--font-mono); }
+.shell-run-output pre { max-height: 240px; margin: 0; padding: 8px; border: 1px solid var(--color-control-border); border-radius: var(--radius-small); }
+.shell-run-output [data-rho-cut] { color: var(--color-meta); font-size: 12px; }
+.shell-action { flex: 1; min-height: 0; overflow: auto; padding: 20px 24px; font-size: 13px; }
+.shell-action h2 { margin: 0 0 4px; font: 600 16px/22px var(--font-ui); }
+.shell-action-identity { margin: 0 0 16px; color: var(--color-meta); overflow-wrap: anywhere; }
+.shell-action form { display: flex; flex-direction: column; gap: 12px; max-width: 640px; }
+.shell-field { display: flex; flex-direction: column; gap: 4px; }
+.shell-field.inline { flex-direction: row-reverse; justify-content: flex-end; align-items: center; gap: 8px; }
+.shell-field label, .shell-field-name, .shell-field-group legend { font: 600 12px/16px var(--font-mono); }
+.shell-field-references { margin: 0; padding-left: 18px; overflow-wrap: anywhere; }
+.shell-field input:not([type=checkbox]), .shell-field select, .shell-field textarea { width: 100%; }
+.shell-field textarea { min-height: 0; padding: 6px 10px; border: 1px solid var(--color-control-border); border-radius: var(--radius-input); font: 12px/18px var(--font-mono); resize: vertical; }
+.shell-field [aria-invalid=true] { border-color: var(--color-failed); }
+.shell-field-group { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 8px 12px 12px; border: 1px solid var(--color-control-border); border-radius: var(--radius-small); }
+.shell-field-problem { margin: 0; color: var(--color-failed); font-size: 12px; overflow-wrap: anywhere; }
+.shell-action-submit { display: flex; align-items: center; gap: 10px; }
+.shell-action-submit [role=status] { color: var(--color-meta); font-size: 12px; }
 /* The bar answers to the room the workspace has, not to the window. */
 .workspace.shell { container-type: inline-size; }
 @container (max-width: 640px) {

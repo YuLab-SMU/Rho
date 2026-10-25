@@ -21,7 +21,7 @@ export function title(view: ViewDescription, snapshot?: WorkspaceSnapshot) {
 }
 // The tab icon follows what the view is bound to.
 export function viewIcon(view: ViewDescription, snapshot: WorkspaceSnapshot): IconName {
-  if (view.component === 'rho.execution') return 'layout';
+  if (view.component === 'rho.execution' || view.component === 'rho.action') return 'layout';
   const [, first] = bindings(view)[0] ?? [];
   if (first?.documentId) return 'document';
   const resource = first?.id ? snapshot.resources.find(r => r.id === first.id) : undefined;

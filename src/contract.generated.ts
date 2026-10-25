@@ -6807,6 +6807,23 @@ export interface ObservationSnapshotOutput {
       outcome: 'returned' | 'rejected';
     }[];
   };
+  /**
+   * @maxItems 64
+   */
+  agents?: {
+    principal: string;
+    label: string | null;
+    profile: string | null;
+    methods: string[];
+    expiresAt: string | null;
+    ended: boolean;
+    last: null | {
+      at: string;
+      method: string;
+      outcome: 'returned' | 'rejected';
+      operationId?: string;
+    };
+  }[];
   selection: {
     resource: {
       id: string;

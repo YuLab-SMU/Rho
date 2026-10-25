@@ -35,8 +35,10 @@ export type StopState = NonNullable<RunFacts['stop']>['state'];
 export interface CoreExit { Code?: number; Signal?: number }
 export interface CoreStatus { Finished?: { exit?: CoreExit | 'Unknown' | null }; NotStarted?: unknown; Gone?: unknown; Detached?: unknown }
 export interface CoreCancel { term_sent_at?: unknown; kill_sent_at?: unknown }
-export function stopState(status: CoreStatus, cancel?: CoreCancel | null): StopState {
+export function stopState(status: CoreStatus, cancel?: CoreCancel | null, answered = true): StopState {
   const signalled = !!(cancel?.term_sent_at || cancel?.kill_sent_at);
+  // Without a current answer from Core, an earlier "running" proves nothing about the stop.
+  if (!answered && !status.Finished && !status.NotStarted) return 'unconfirmed';
   if (status.Finished) {
     const exit = typeof status.Finished.exit === 'object' ? status.Finished.exit : null;
     return !signalled || exit?.Code === 0 ? 'finished-first' : 'stopped';

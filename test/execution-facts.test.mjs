@@ -125,5 +125,8 @@ test('a stop request is not a stop: only an ended process is stopped', () => {
   // Core no longer knows the process: nothing is claimed.
   assert.equal(stopState({ Gone: {} }, { term_sent_at: at }), 'unconfirmed');
   assert.equal(stopState({ Detached: {} }, null), 'unconfirmed');
+  // No current answer from Core: a stored "running" is not evidence either way.
+  assert.equal(stopState({ Running: {} }, { term_sent_at: at }, false), 'unconfirmed');
+  assert.equal(stopState({ Finished: { exit: { Signal: 15 } } }, { term_sent_at: at }, false), 'stopped');
   assert.deepEqual([exitWords({ Signal: 15 }), exitWords({ Code: 2 }), exitWords('Unknown'), exitWords(undefined)], ['signal 15', 'code 2', 'unknown', null]);
 });

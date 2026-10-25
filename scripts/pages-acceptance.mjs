@@ -1,7 +1,7 @@
 // W3 exit check (docs/WORKSPACE-PLAN.md): the pages outside the workspace — the unpaired
 // landing, Home, the project overview with every disclosure closed and open, the plugin
-// catalog and a plugin page, and the disconnected tab — hold M4, M5 and M7–M10 at four
-// viewports. Content is created through the owners, never by editing the page.
+// catalog and a plugin page, the context panel with its Agents (W4), and the disconnected
+// tab — hold M4, M5 and M7–M10 at four viewports. Content is created through the owners, never by editing the page.
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
@@ -92,7 +92,13 @@ try {
   await page.getByRole('button', { name: /^Back to / }).or(page.getByRole('complementary', { name: 'Plugin navigation', exact: true })).first().waitFor();
   failing.push(...await measure('plugin'));
 
+  // The context panel names the Agent session with access, what it may do and when it last acted.
+  await page.locator('.project-row').or(page.locator('.app-rail').getByRole('button', { name: 'Projects', exact: true })).first().click();
   await page.getByRole('button', { name: 'Context & access', exact: true }).click();
+  const session = page.locator('[data-rho-agent-session="granted"]').filter({ hasText: 'pages-agent' });
+  await session.waitFor();
+  assert.match(await session.innerText(), /Can read, change and run code[\s\S]*Last active \d\d:\d\d/);
+  failing.push(...await measure('context'));
   await page.getByRole('button', { name: 'Disconnect this tab', exact: true }).click();
   await page.getByRole('dialog', { name: 'Disconnect this tab?' }).getByRole('button', { name: 'Disconnect', exact: true }).click();
   await page.getByRole('heading', { name: 'This tab is disconnected', exact: true }).waitFor();

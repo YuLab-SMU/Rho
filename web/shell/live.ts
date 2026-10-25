@@ -8,7 +8,7 @@ import { useRuns } from '../executions.js';
 // hook only feeds them owner snapshots and the person's intents, and keeps the tab's
 // return checkpoint within its 1 MiB budget.
 export function useLive(snapshot: WorkspaceSnapshot, composition: CompositionSummary, client: BrowserClient, principal?: string) {
-  const { runs, problem } = useRuns(client, snapshot.project.id, snapshot.cursor);
+  const { runs, problem, readAgain: readRuns } = useRuns(client, snapshot.project.id, snapshot.cursor);
   // The Agent's declared items, read with the same cursor as everything else it observes.
   const mapAllowed = snapshot.catalog.operations.some(o => o.method === 'task.map.read' && o.authorized && o.state === 'available');
   const [map, setMap] = useState<TaskMapResponse | null>(null), [mapProblem, setMapProblem] = useState('');
@@ -67,6 +67,6 @@ export function useLive(snapshot: WorkspaceSnapshot, composition: CompositionSum
     }
     hold(id);
   };
-  return { state: state.current, screen: state.current ? screenOf(state.current) : null, layout: state.current?.layout ?? composition, active: state.current?.active, movedBy: movedBy.current, runs, act, hold, openResource, problem: [problem, mapProblem, checkpointProblem, state.current?.limit].filter(Boolean).join(' · ') };
+  return { state: state.current, screen: state.current ? screenOf(state.current) : null, layout: state.current?.layout ?? composition, active: state.current?.active, movedBy: movedBy.current, runs, readRuns, act, hold, openResource, problem: [problem, mapProblem, checkpointProblem, state.current?.limit].filter(Boolean).join(' · ') };
 }
 export type Live = ReturnType<typeof useLive>;
