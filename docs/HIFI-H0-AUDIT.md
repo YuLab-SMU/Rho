@@ -110,6 +110,7 @@
 
 - **N1** 对一次性服务发 SIGTERM（它的 Core Host 先被 SIGKILL）后，服务继续监听、继续应答，也没写出 shutdown 报告。只观察到一次，原因未查（`src/cli.ts:87`）。对照：没有先杀 Core Host 的正常 SIGTERM，服务 4 秒内退出，并写出 `{"shutdown":[]}`。
 - **N2** Core Host 被杀后，第一次 `action.submit` 返回 `A prior Host socket remains. Inspect the original requests before explicit Host recovery.`；之后同一服务上的 submit 没有经过显式恢复就成功了。须复现。
+- **N3**（S3 闭环发现）提问草稿是未保存的文档缓冲区（`q-<uuid>.md`），项目树的 "Documents" 把它们和项目文件算在一起：airquality 磁盘上只有 analysis.R 和 findings.md，树上却写 7。草稿该不该计入、该放在哪里，由文档所有者决定。
 
 ## 做得对的（保留）
 

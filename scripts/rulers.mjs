@@ -118,7 +118,8 @@ function inPage([{ p, methods, transientAllowed }, unit]) {
   const glyphs = family => { const c = Object.assign(document.createElement('canvas'), { width: 240, height: 48 }).getContext('2d', { willReadFrequently: true }); c.font = `32px ${family}`; c.fillText('a0Mi{}-5', 4, 36); return c.getImageData(0, 0, 240, 48).data.join(''); };
   const courier = [glyphs('Courier'), glyphs('"Courier New"')];
   out.r4 = { token: mono, courier: [...families].filter(f => courier.includes(glyphs(f))) };
-  // R5: a number cell shows its source value to within 0.5%, exponent included.
+  // R5: a number cell shows its source value to within 0.5%, exponent included. A cell its
+  // own ellipsis cuts shows less than its text, so it fails whatever the text says.
   const parse = text => {
     const t = text.replace(/[\u2212\u2012\u2013]/g, '-').replace(/,/g, '').trim(), sup = { '\u2070': 0, '\u00b9': 1, '\u00b2': 2, '\u00b3': 3, '\u2074': 4, '\u2075': 5, '\u2076': 6, '\u2077': 7, '\u2078': 8, '\u2079': 9 };
     const m = t.match(/^(-?[\d.]+)\s*[\u00d7x]\s*10([\u207b-]?)([\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+|\d+)$/);
@@ -128,6 +129,8 @@ function inPage([{ p, methods, transientAllowed }, unit]) {
   out.r5 = all('.ag-cell span[title]').flatMap(e => {
     const source = Number(e.getAttribute('title')), shown = parse(e.textContent);
     if (!Number.isFinite(source) || e.getAttribute('title').trim() === '') return [];
+    const box = e.closest('.ag-cell-value') ?? e.closest('.ag-cell');
+    if (box && box.scrollWidth > box.clientWidth + 1) return [`"${e.textContent.trim()}" cut to ${Math.round(box.clientWidth)}px`];
     const error = source === 0 ? Math.abs(shown) : Math.abs(shown - source) / Math.abs(source);
     return Number.isFinite(shown) && error <= 0.005 + 1e-12 ? [] : [`"${e.textContent.trim()}" for ${source}`];
   });

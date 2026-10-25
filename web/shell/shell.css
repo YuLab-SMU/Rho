@@ -148,6 +148,9 @@
 .shell-question .table-question-compose, .shell-question .table-question-thread, .shell-question .table-question > [role="alert"] { flex: 1 1 100%; }
 .shell-question .table-question-thread { border-top: 1px solid var(--color-divider); padding: var(--space-3) 0; }
 .shell-question .table-question-thread p { margin: var(--space-2) 0; white-space: pre-wrap; }
+.shell-question .table-question-thread small, .shell-question .table-question-thread [role="status"], .shell-question .table-question-thread details { display: block; margin: var(--space-1) 0; color: var(--color-muted); font-size: var(--font-size-sm); }
+.shell-question .table-question-thread summary { cursor: pointer; }
+.shell-question .table-question-handoff button { font-weight: 600; }
 .shell-question .table-question-reply { margin-top: var(--space-3); padding: var(--space-3) var(--space-5); border-left: 2px solid var(--color-accent); }
 .shell-question .table-question-editor { height: 110px; margin: var(--space-3) 0; border: 1px solid var(--color-control-border); border-radius: var(--radius-sm); overflow: hidden; }
 .shell-question .table-question-compose > span { margin-left: var(--space-4); color: var(--color-muted); }
@@ -260,6 +263,9 @@
 .agent-question { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding: var(--space-4) 0; border-top: 1px solid var(--color-divider); }
 .agent-question:first-child { padding-top: 0; border-top: 0; }
 .agent-question p { overflow-wrap: anywhere; }
+.agent-column button.agent-question-copy { margin-top: var(--space-2); border: 1px solid var(--color-control-border); background: var(--color-surface); color: var(--color-ink); font-weight: 600; }
+.agent-column button.agent-question-copy:hover { background: var(--color-hover); }
+.agent-question [role=alert] { color: var(--color-failed); font-size: var(--font-size-sm); }
 .agent-question-state { display: inline-flex; align-items: center; gap: var(--space-3); color: var(--color-meta); font-size: var(--font-size-sm); line-height: var(--line-height-sm); }
 .agent-question-state::before { content: ''; width: 7px; height: 7px; flex: none; border-radius: var(--radius-pill); border: 1.5px solid var(--color-amber); }
 .agent-question.fetched .agent-question-state::before { border-color: var(--color-accent); background: var(--color-accent); }

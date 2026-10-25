@@ -20,6 +20,12 @@ type Tabs = Extract<Region, { kind: 'tabs' }>;
 // what Rho adds above the work. It decides nothing about attention; useLive does.
 export function Workspace({ composition: recorded, snapshot, client, onAbout, contextTarget, principalId, onShowContext, feedbackContextActive, openView, onCommands, agentTarget, footerTarget }: { onCommands?: (group: CommandGroup | null) => void; composition: CompositionSummary; snapshot: WorkspaceSnapshot; client: BrowserClient; onAbout: (pluginId: string) => void; contextTarget: HTMLElement | null; principalId?: string; onShowContext: () => void; feedbackContextActive: boolean; mapChipTarget?: HTMLElement | null; openView?: string; agentTarget?: HTMLElement | null; footerTarget?: HTMLElement | null }) {
   const live = useLive(snapshot, recorded, client, principalId), layout = live.layout;
+  // A question sent from another browser session has no context in this one. Preparing it under
+  // the question's own changeId (as the table's send does) keeps one context per question version.
+  async function prepareQuestion(annotationId: string) {
+    const version = (snapshot.annotations as Array<{ annotationId: string; version: number }>).find(a => a.annotationId === annotationId)?.version ?? 1;
+    return ((await client.call('context.create', { projectId: snapshot.project.id, changeId: version === 1 ? annotationId : annotationId + '@' + version, expectedVersion: 0, annotations: [{ annotationId, version }] } as never, AbortSignal.timeout(30000))) as { contextId: string }).contextId;
+  }
   const root = useMemo(() => regions(layout), [layout]);
   const order = useMemo(() => viewOrder(root), [root]);
   const byId = useMemo(() => new Map(layout.views.map(v => [v.id, v])), [layout]);
@@ -219,7 +225,7 @@ export function Workspace({ composition: recorded, snapshot, client, onAbout, co
     {/* The question the Agent declared is what this screen is about; without one, no slot. */}
     {live.screen?.question && <header className="shell-heading"><h1>{live.screen.question}</h1></header>}
     {footerTarget ? createPortal(bar, footerTarget) : bar}
-    {column && createPortal(<AgentColumn live={live} agents={snapshot.agents} principalId={principalId} evidence={evidence} onEvidence={toggleEvidence} focusObject={focusObject} />, agentTarget!)}
+    {column && createPortal(<AgentColumn live={live} agents={snapshot.agents} contexts={snapshot.contexts} prepare={prepareQuestion} principalId={principalId} evidence={evidence} onEvidence={toggleEvidence} focusObject={focusObject} />, agentTarget!)}
     <Interruption live={live} items={unhidden} onHide={key => setHidden(h => [...h, key])} />
     {layoutProblem && <div className="shell-interruption problem" data-rho-layer="transient" data-rho-interruption="" role="alert"><span className="shell-interruption-text">{layoutProblem}</span><button className="shell-quiet" onClick={() => setLayoutProblem('')}>Dismiss</button></div>}
     {evidence && !column ? <Evidence live={live} principalId={principalId} /> : <Digest live={live} />}

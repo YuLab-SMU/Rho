@@ -136,7 +136,22 @@ const questionLong: Record<string, string> = { prepared: 'Prepared · not fetche
 // The Agent's column (1280 and wider): who is working and on what, the items it declared
 // in its own words, the person's questions and how far each got, and the recorded calls on
 // request. Every line is the Agent's statement or an owner record; nothing is estimated.
-export function AgentColumn({ live, agents, principalId, evidence, onEvidence, focusObject }: { live: Live; agents?: WorkspaceSnapshot['agents']; principalId?: string; evidence: boolean; onEvidence: () => void; focusObject: string | null }) {
+// The Agent learns of a question only when the person hands it over: Rho cannot push into the
+// Agent's conversation. The request names the context, which is the Agent's to read, so it goes
+// to the clipboard rather than onto the page. Same words as the table's own copy button.
+function CopyRequest({ contextId, prepare }: { contextId?: string; prepare?: () => Promise<string> }) {
+  const [copied, setCopied] = useState(false), [problem, setProblem] = useState('');
+  async function copy() {
+    setProblem('');
+    try {
+      const id = contextId ?? await prepare!();
+      await navigator.clipboard.writeText(`Answer my question in Rho: read context ${id}. It holds the table version, the rows I asked about and my question. Reply to it with annotation.reply, and link any new result you make.`); setCopied(true);
+    } catch { setProblem('Could not copy. Try again.'); }
+  }
+  return <><button className="agent-question-copy" onClick={copy}>{copied ? 'Copied' : 'Copy request for the Agent'}</button>{problem && <span role="alert">{problem}</span>}</>;
+}
+
+export function AgentColumn({ live, agents, contexts = [], prepare, principalId, evidence, onEvidence, focusObject }: { live: Live; agents?: WorkspaceSnapshot['agents']; contexts?: WorkspaceSnapshot['contexts']; prepare?: (annotationId: string) => Promise<string>; principalId?: string; evidence: boolean; onEvidence: () => void; focusObject: string | null }) {
   const screen = live.screen, state = live.state, name = namer(live);
   const running = Object.values(screen?.objects ?? {}).find(o => o.kind === 'run' && o.state === 'running');
   const [now, setNow] = useState(Date.now());
@@ -149,7 +164,8 @@ export function AgentColumn({ live, agents, principalId, evidence, onEvidence, f
   const lastAt = latest?.last?.at;
   const agentRun = running && live.runs?.find(r => r.operationId === name(running.id) && r.execution === 'active');
   const since = agentRun ? agentRun.startedAt ?? agentRun.acceptedAt : undefined;
-  const questions = Object.values(screen.objects).filter((o): o is QuestionState => o.kind === 'question');
+  // Newest first: the table's question toggle names the latest one, and so does the top of this list.
+  const questions = Object.values(screen.objects).filter((o): o is QuestionState => o.kind === 'question').reverse();
   // The item the person is looking at, or the one the Agent says it is working on, opens up.
   const current = screen.items.find(i => focusObject && (i.artifact?.object === focusObject)) ?? screen.items.find(i => roleOf(live, i.id) === 'working');
   return <aside className="agent-column" aria-label={who} data-scroll-region="" tabIndex={0}>
@@ -179,7 +195,15 @@ export function AgentColumn({ live, agents, principalId, evidence, onEvidence, f
       <ul className="agent-questions">{questions.map(q => <li key={q.id} className={'agent-question ' + q.state}>
         <p data-user-text="">{q.name}</p>
         <button className="shell-link" onClick={() => live.act({ kind: 'open', target: q.target })}>{name(q.target)}</button>
-        <span className="agent-question-state">{questionLong[q.state] ?? q.state}</span>
+        {(() => {
+          // Contexts are listed per browser session, so a question sent from another session
+          // shows no context here; it says so in the table's own words instead of "Prepared",
+          // and copying prepares this session's context for the question first.
+          const context = (contexts as Array<{ contextId?: string; responses?: Array<{ annotationId?: string }> }>).find(c => c.responses?.some(r => 'question:' + r.annotationId === q.id));
+          const words = q.state === 'prepared' && !context ? 'Question retained · context not confirmed' : questionLong[q.state] ?? q.state;
+          const ready = context?.contextId ?? (prepare ? undefined : null);
+          return <><span className="agent-question-state">{words}</span>{q.state !== 'responded' && ready !== null && <CopyRequest contextId={ready} prepare={() => prepare!(q.id.slice('question:'.length))} />}</>;
+        })()}
       </li>)}</ul>
     </section>}
     <section className="agent-card agent-record">

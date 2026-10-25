@@ -147,10 +147,33 @@ person and plugin-UI acceptances pass. Several tests and styles changed with thi
   inset 4 px.
 - The latest run mark keeps a pressed state under its ring.
 
+**Hi-fi loop (2026-10-25, HIFI-PLAN "闭环"):** for each real state the steps are a real
+screenshot, a board that draws only recorded facts, the implementation, and the board and
+screenshot side by side. Every difference is recorded as a code fix or a board fix, and
+M1–M10, E1–E5 and R3–R7 must hold. `scripts/rulers.mjs` adds five rulers:
+- R3: a run id appears once per view;
+- R4: monospace never draws Courier;
+- R5: a number cell keeps its exponent and is never cut to an ellipsis;
+- R6: a fitted figure fills at least 95%;
+- R7: a replaced failure is not painted in the failed colour.
+
+Each ruler was checked by planting its fault (`work/hifi-h2/rmutate.mjs`). Closed states:
+- S1 (workspace at rest) and S2 (Agent run → done). The narrow source line wraps, the
+  figure controls span their row, a short figure sits at the top, and crowded run marks
+  drop their ticks.
+- S3 (select rows → ask → copy the request). The table sizes columns to their content and
+  fades its right edge while more columns remain. The Agent column lists your questions
+  newest first. A question sent from another browser session gets this session's context
+  when you copy its request, instead of losing its Copy button.
+
 Open work:
-- boards D (leave and return), C with plugin card forms, and failure → repair;
-- comparing the boards with these screenshots;
-- H3.
+- S4 evidence inspector (audit 11);
+- S5 failure → repair;
+- S6 leave and return;
+- S7 overview as a task map (H3);
+- S8 the code-repair task;
+- H4;
+- N3: question drafts count under Documents.
 
 Updated: 2026-10-24. S7 live expression and complete table-question feedback.
 `src/expression.ts` drives the replay and the real browser through `live-trace.ts` /
