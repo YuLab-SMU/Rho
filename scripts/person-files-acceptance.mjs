@@ -62,6 +62,8 @@ try {
   // The person's own path, through the buttons they actually press.
   await page.locator('.project-row').first().click();
   await page.waitForTimeout(2500);
+  // Documents and files wait behind their disclosure on the project page.
+  await page.locator('main summary').filter({ hasText: 'Documents and files' }).click();
   await page.getByRole('button', { name: /Browse this folder/ }).click();
   await page.waitForTimeout(1200);
   const listed = await page.locator('.overview-section').filter({ hasText: 'Files' }).innerText();

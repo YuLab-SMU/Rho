@@ -101,10 +101,11 @@ try {
   const pair = await operator.call('session.browser.pair', {});
   await page.goto(service.url + '/#pair=' + pair.code);
   await page.locator('.project-row').first().click();
+  // The project opens on its overview; the Agent's layout is one choice away in the sidebar.
+  await page.getByRole('complementary', { name: 'Project navigation', exact: true }).getByRole('button', { name: /^workspace/ }).click();
   const visible = async () => {
-    // Resizing crosses two distinct renderer mounts. Wait for the selected
-    // surface, so an image in the departing wide mount cannot satisfy this check.
-    const selector = page.viewportSize().width < 768 ? '.mobile-view' : '.dock-container';
+    // The workspace shell keeps one stage at every width; the figure must decode inside it.
+    const selector = '.shell-stage';
     const surface = page.locator(selector);
     await surface.waitFor({ state: 'visible' });
     const image = surface.getByRole('img', { name: 'cars.png', exact: true });
