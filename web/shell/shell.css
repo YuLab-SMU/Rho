@@ -1,0 +1,44 @@
+/* The workspace shell: the owner's layout tree as splits and tab groups. Theme tokens only
+   (test/web-style.test.mjs); the work fills every pixel Rho does not need. */
+.shell { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.shell-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.shell-split { flex: 1; min-width: 0; min-height: 0; display: flex; }
+.shell-split[data-axis="vertical"] { flex-direction: column; }
+.shell-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.shell-divider { flex: none; position: relative; z-index: 1; background: transparent; touch-action: none; }
+/* The divider takes its own 7px: a hit area that overlapped the panes would cover their edges (M1). */
+.shell-split[data-axis="horizontal"] > .shell-divider { width: 7px; cursor: col-resize; }
+.shell-split[data-axis="vertical"] > .shell-divider { height: 7px; cursor: row-resize; }
+.shell-divider::before { content: ''; position: absolute; background: var(--color-hairline); }
+.shell-split[data-axis="horizontal"] > .shell-divider::before { top: 0; bottom: 0; left: 3px; width: 1px; }
+.shell-split[data-axis="vertical"] > .shell-divider::before { left: 0; right: 0; top: 3px; height: 1px; }
+.shell-divider:hover::before, .shell-divider:focus-visible::before { background: var(--color-accent); }
+.shell-split[data-axis="horizontal"] > .shell-divider:hover::before, .shell-split[data-axis="horizontal"] > .shell-divider:focus-visible::before { left: 2px; width: 3px; }
+.shell-split[data-axis="vertical"] > .shell-divider:hover::before, .shell-split[data-axis="vertical"] > .shell-divider:focus-visible::before { top: 2px; height: 3px; }
+.shell-divider:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.shell-group { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--color-surface); }
+/* Tabs keep their row; owner controls wrap below them when the group is narrow. */
+.shell-tabbar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-height: calc(var(--height-button) + 6px); padding: 3px 6px; border-bottom: 1px solid var(--color-divider); }
+.shell-tabs { flex: 1 1 160px; min-width: 0; display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+/* Which side has more tabs: a fade on that edge (M6). */
+.shell-tabs[data-overflow="end"] { mask-image: linear-gradient(to right, var(--color-ink) calc(100% - 32px), transparent); }
+.shell-tabs[data-overflow="start"] { mask-image: linear-gradient(to left, var(--color-ink) calc(100% - 32px), transparent); }
+.shell-tabs[data-overflow="both"] { mask-image: linear-gradient(to right, transparent, var(--color-ink) 32px, var(--color-ink) calc(100% - 32px), transparent); }
+.shell-tabs button { flex: none; max-width: 280px; overflow: hidden; min-height: var(--height-button-small); padding: 0 10px; border: 0; border-radius: var(--radius-small); background: transparent; color: var(--color-muted); font-weight: 400; line-height: 16px; white-space: nowrap; }
+.shell-tabs button:hover { background: var(--color-hover); }
+.shell-tabs button[aria-selected="true"] { background: var(--color-tab-active); color: var(--color-ink); font-weight: 600; }
+.shell-tabs button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+.shell-tab-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.shell-header-slot { flex: 0 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+.shell-header-slot:empty { display: none; }
+.shell-header-narrow { padding: 4px 8px; border-bottom: 1px solid var(--color-divider); }
+.shell-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.shell-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.shell-owner { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
+.shell-owner > * { flex: 1; min-height: 0; }
+.shell-problem { flex: none; margin: 0; padding: 6px 12px; border-bottom: 1px solid var(--color-divider); background: var(--color-amber-soft); color: var(--color-ink); }
+.shell-run { padding: 24px; overflow: auto; }
+@media (max-width: 767px) {
+  .shell-tabbar { min-height: 44px; padding: 0 8px; }
+  .shell-tabs button { max-width: 72vw; min-height: var(--height-button); padding: 0 12px; }
+}

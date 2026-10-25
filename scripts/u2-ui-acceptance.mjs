@@ -34,7 +34,7 @@ let child, browser, context, page, url, originalClipboard, port = 0;
 const errors = [];
 const requests = [];
 const run = promisify(execFile);
-const report = { scenario: 'u2-documents-tables', passed: false, node: process.version, npmInstall: process.env.RHO_UI_INSTALLED === '1' ? 'outside-checkouts' : 'source-build', browser: '', counts: { hostStarts: 0, nativeDispatches: 0 }, widths: [], checks: [], limits: ['Chrome 154 is not installed; exact browser version recorded', 'IME uses real Chrome CDP composition, not a physical macOS candidate-window trial', 'U3/U4 and actual model UI collaboration are separate gates'], assets: JSON.parse(await fs.readFile(path.join(packageRoot, 'dist/web/composition.json'), 'utf8')) };
+const report = { scenario: 'u2-documents-tables', shell: process.env.RHO_SHELL === 'next' ? 'next' : 'legacy', passed: false, node: process.version, npmInstall: process.env.RHO_UI_INSTALLED === '1' ? 'outside-checkouts' : 'source-build', browser: '', counts: { hostStarts: 0, nativeDispatches: 0 }, widths: [], checks: [], limits: ['Chrome 154 is not installed; exact browser version recorded', 'IME uses real Chrome CDP composition, not a physical macOS candidate-window trial', 'U3/U4 and actual model UI collaboration are separate gates'], assets: JSON.parse(await fs.readFile(path.join(packageRoot, 'dist/web/composition.json'), 'utf8')) };
 async function start() {
   child = spawn(process.execPath, ['--import', instrument, path.join(packageRoot, 'dist/cli.js'), '--root', root, '--state-dir', state, '--port', String(port), '--limits', limitsFile, '--core', native.coreBinary, '--rscript', native.rscript, ...(process.env.RHO_UI_PLUGINS ? ['--plugins', process.env.RHO_UI_PLUGINS] : [])], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, RHO_CORE_BINARY: native.coreBinary } });
   child.stderr.resume();
@@ -66,8 +66,10 @@ const poll = async (read, predicate, label) => {
   throw new Error('Timed out: ' + label);
 };
 const text = () => page.locator('.cm-content:visible').evaluate(e => [...e.querySelectorAll('.cm-line')].map(line => line.textContent).join('\n'));
+// RHO_SHELL=next drives the composition-tree shell (docs/WORKSPACE-PLAN.md W1); its tabs are ARIA tabs at every width.
+const shell = process.env.RHO_SHELL === 'next' ? 'next' : 'legacy';
 async function tab(name) {
-  if (page.viewportSize().width < 768) await page.getByRole('tab').filter({ hasText: name }).first().click();
+  if (shell === 'next' || page.viewportSize().width < 768) await page.getByRole('tab').filter({ hasText: name }).first().click();
   else await page.locator('.dv-tab').filter({ hasText: name }).first().click();
 }
 try {
@@ -100,7 +102,7 @@ try {
     loseEdit = false;
     await route.fetch(); await route.abort('failed');
   });
-  await page.goto(ready.openUrl);
+  await page.goto(ready.openUrl + (shell === 'next' ? '&shell=next' : ''));
   await page.locator('.project-row').filter({ hasText: 'U2 中文' }).click();
   await page.locator('.nav-row').filter({ hasText: 'workspace' }).click();
   await page.locator('.cm-content:visible').waitFor();
@@ -210,7 +212,9 @@ try {
     await page.screenshot({ path: path.join(directory, 'editor-' + width + '.png'), fullPage: true });
     await tab('Table'); await page.locator('.ag-root').waitFor();
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    if (width === 390) await poll(() => page.locator('.ag-row[row-index="0"] input[type="checkbox"]').isChecked(), Boolean, 'selected key restored after narrow remount');
+    // The frozen workspace remounts the grid below 768, so its first row is the restored
+    // selection. The shell keeps the grid mounted with its sort; the toolbar names the kept selection.
+    if (width === 390) await poll(() => shell === 'next' ? page.getByRole('toolbar', { name: 'Table', exact: true }).innerText().then(t => t.includes('1 selected')) : page.locator('.ag-row[row-index="0"] input[type="checkbox"]').isChecked(), Boolean, 'selected key retained at narrow width');
     await page.screenshot({ path: path.join(directory, 'table-' + width + '.png'), fullPage: true });
     report.widths.push(width);
   }

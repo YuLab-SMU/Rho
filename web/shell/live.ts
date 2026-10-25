@@ -1,0 +1,61 @@
+import { useEffect, useRef, useState } from 'react';
+import type { BrowserClient, CompositionSummary, WorkspaceSnapshot } from '../../src/browser.js';
+import { actLive, advanceLive, holdView, liveLimits, screenOf, startLive, tickLive, type LiveWorkspace } from '../../src/live-workspace.js';
+import type { PersonIntent } from '../../src/expression.js';
+import { useRuns } from '../executions.js';
+
+// The live layout and Screen for this tab. The expression rules decide everything; this
+// hook only feeds them owner snapshots and the person's intents, and keeps the tab's
+// return checkpoint within its 1 MiB budget.
+export function useLive(snapshot: WorkspaceSnapshot, composition: CompositionSummary, client: BrowserClient, principal?: string) {
+  const { runs, problem } = useRuns(client, snapshot.project.id, snapshot.cursor);
+  const key = ['rho-expression/1', snapshot.project.id, composition.compositionId, principal].join(':');
+  const state = useRef<LiveWorkspace | null>(null), touched = useRef(false);
+  const [, render] = useState(0), [checkpointProblem, setCheckpointProblem] = useState('');
+  const save = () => {
+    if (!state.current || !sessionStorage.getItem('rho.browser.session.v1')) return;
+    try {
+      const json = JSON.stringify(state.current);
+      if (new TextEncoder().encode(json).length > liveLimits.maxCheckpointBytes) throw new Error('The 1 MiB return checkpoint limit was reached. Current views are retained in this tab; reload cannot restore the latest attention state.');
+      sessionStorage.setItem(key, json);
+    } catch (e: any) { setCheckpointProblem(e.message ?? 'The return checkpoint could not be stored.'); }
+  };
+  useEffect(() => {
+    if (!runs) return;
+    if (!state.current) {
+      try { const raw = sessionStorage.getItem(key); if (raw && raw.length <= liveLimits.maxCheckpointBytes) { const old = JSON.parse(raw); if (old.format === 1 && old.layout?.compositionId === composition.compositionId) state.current = old; } } catch { /* The owner snapshot stays the baseline. */ }
+      if (state.current) { advanceLive(state.current, snapshot, runs, composition, Date.now()); actLive(state.current, { kind: 'return' }); }
+      else state.current = startLive(snapshot, runs, composition);
+      if (touched.current) holdView(state.current, state.current.active);
+      if (document.hidden) actLive(state.current, { kind: 'leave' });
+    } else advanceLive(state.current, snapshot, runs, composition, Date.now());
+    save(); render(n => n + 1);
+  }, [snapshot, composition, runs]);
+  useEffect(() => {
+    const visibility = () => { if (state.current) { actLive(state.current, { kind: document.hidden ? 'leave' : 'return' }); save(); render(n => n + 1); } };
+    const away = () => { if (state.current) { actLive(state.current, { kind: 'leave' }); save(); } };
+    const interval = setInterval(() => { if (state.current?.expression.pending) { tickLive(state.current, Date.now()); save(); render(n => n + 1); } }, 1000);
+    document.addEventListener('visibilitychange', visibility); window.addEventListener('pagehide', away);
+    return () => { away(); clearInterval(interval); document.removeEventListener('visibilitychange', visibility); window.removeEventListener('pagehide', away); };
+  }, [key]);
+  const act = (intent: PersonIntent) => { if (state.current) { if (intent.kind === 'unfollow') holdView(state.current, state.current.active); actLive(state.current, intent); save(); render(n => n + 1); } };
+  const hold = (id: string) => { touched.current = true; if (state.current) { holdView(state.current, id); save(); render(n => n + 1); } };
+  // A linked result opens beside what the person has: an owner view of that exact version.
+  const openResource = (ref: { id: string; version: string }) => {
+    if (!state.current) return;
+    const resource = snapshot.resources.find(r => r.id === ref.id && r.version === ref.version);
+    const recorded = snapshot.compositions.flatMap(c => c.views).find(v => Object.values(v.bindings).some(b => 'id' in b && b.id === ref.id && b.version === ref.version));
+    const owner = snapshot.catalog.components.find(c => c.id === (resource?.kind === 'table' ? 'rho.table' : 'rho.media'));
+    const binding = owner && Object.keys(owner.bindings)[0];
+    if (!resource || !recorded && (!owner || !binding)) { setCheckpointProblem('The linked result has no available resource viewer. Its exact reference is retained in the reply.'); return; }
+    const id = 'result:' + ref.id.slice(0, 32) + ':' + ref.version.slice(0, 32);
+    if (!state.current.layout.views.some(v => v.id === id)) {
+      if (state.current.layout.views.length >= liveLimits.maxViews) { setCheckpointProblem('The 64-view limit was reached. The reply and linked result are retained.'); return; }
+      const view = recorded ? { ...recorded, id } : { id, component: owner!.id, version: owner!.version, props: { title: resource.path.split('/').at(-1) }, bindings: { [binding!]: ref } };
+      state.current.layout = { ...state.current.layout, views: [...state.current.layout.views, view] };
+    }
+    hold(id);
+  };
+  return { state: state.current, screen: state.current ? screenOf(state.current) : null, layout: state.current?.layout ?? composition, active: state.current?.active, runs, act, hold, openResource, problem: [problem, checkpointProblem, state.current?.limit].filter(Boolean).join(' · ') };
+}
+export type Live = ReturnType<typeof useLive>;

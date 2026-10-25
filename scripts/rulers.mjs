@@ -27,7 +27,7 @@ export function firstUnit(view, kind) {
 }
 
 // One viewport, everything measurable without input. Runs in the page.
-function inPage({ p, methods, first, transientAllowed }) {
+function inPage([{ p, methods, transientAllowed }, unit]) {
   const visible = e => e.checkVisibility?.({ checkOpacity: true, checkVisibilityCSS: true }) ?? !!e.getClientRects().length;
   const all = sel => [...document.querySelectorAll(sel)].filter(visible);
   const label = e => (e.getAttribute('aria-label') || e.className?.toString() || e.tagName.toLowerCase() + ' in ' + (e.parentElement?.getAttribute('aria-label') || e.parentElement?.className || e.parentElement?.tagName)).slice(0, 60);
@@ -36,8 +36,7 @@ function inPage({ p, methods, first, transientAllowed }) {
   const inViewport = r => Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0));
   const out = { width: innerWidth, height: innerHeight };
   // M1: the unit is in the viewport, nothing covers its corners or centre, and it is legible.
-  const unit = first ? document.querySelector('[data-ruler-first]') : null;
-  if (unit) {
+  if (unit?.isConnected) {
     const r = unit.getBoundingClientRect(), i = 2;
     const points = [[r.left + i, r.top + i], [r.right - i, r.top + i], [r.left + i, r.bottom - i], [r.right - i, r.bottom - i], [r.left + r.width / 2, r.top + r.height / 2]];
     const covered = points.filter(([x, y]) => { const hit = document.elementFromPoint(x, y); return !hit || !(hit === unit || unit.contains(hit)); });
@@ -68,7 +67,10 @@ function inPage({ p, methods, first, transientAllowed }) {
     if (!visible(e) || e.closest(p.ownerBody) || hidden(e)) return false;
     const s = getComputedStyle(e), y = s.overflowY !== 'visible' && e.scrollHeight > e.clientHeight + 1, x = s.overflowX !== 'visible' && e.scrollWidth > e.clientWidth + 1;
     if (!x && !y) return false;
-    if (e.matches('[data-scroll-region]') && (e.getAttribute('aria-label') || e.getAttribute('aria-labelledby')) && e.tabIndex >= 0) return false;
+    const named = e.getAttribute('aria-label') || e.getAttribute('aria-labelledby');
+    if (e.matches('[data-scroll-region]') && named && e.tabIndex >= 0) return false;
+    // A tab list's own keys reach every tab; it still has to show which side has more.
+    if (e.matches('[role=tablist]') && named && x && !y && e.dataset.overflow) return false;
     if (x && !y && s.textOverflow === 'ellipsis' && e.closest('[title],[aria-label]')) return false;
     return true;
   }).map(label), digest: all(p.digestItem).length };
@@ -141,14 +143,14 @@ export async function keyboard(page, profile) {
 }
 
 export async function measure(page, profile, { first = null, transientAllowed = false, keys = true } = {}) {
-  if (first) await first.evaluate(e => e.setAttribute('data-ruler-first', ''));
-  try {
-    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-    const m = await page.evaluate(inPage, { p: profile, methods, first: !!first, transientAllowed });
-    m.m8 = await unnamed(page);
-    if (keys) m.keys = await keyboard(page, profile);
-    return m;
-  } finally { if (first) await first.evaluate(e => e.removeAttribute('data-ruler-first')).catch(() => {}); }
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  // Owner DOM (an editor's lines) can be replaced at any frame, so the unit is resolved in the same evaluation.
+  const unit = first ? await first.elementHandle({ timeout: 10000 }).catch(() => null) : null;
+  const m = await page.evaluate(inPage, [{ p: profile, methods, transientAllowed }, unit]);
+  await unit?.dispose();
+  m.m8 = await unnamed(page);
+  if (keys) m.keys = await keyboard(page, profile);
+  return m;
 }
 
 // The thresholds of §2.2, as named failures. `owner` contrast is reported apart: it belongs

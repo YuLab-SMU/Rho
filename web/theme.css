@@ -7,7 +7,7 @@
   --color-hairline-strong: var(--color-control-border);
   --color-ink: #15191b;
   --color-muted: #545e63;
-  --color-meta: #6b737a;
+  --color-meta: #646c73; /* 4.5:1 on the canvas (M7) */
   --color-accent: #3a68f0;
   --color-accent-hover: #2f5ce0;
   --color-accent-soft: #e8eefd;

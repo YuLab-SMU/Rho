@@ -13,6 +13,14 @@ installs the packed tarball outside the checkouts with its vendored debug Core: 
 widths, no Host left. `scripts/performance-baseline.json` holds the W0 numbers (open
 0.9 s, interaction p95 32 ms in headless Chrome, initial/total gzip 97/513 KiB).
 U2 6/6 and S7 pass. Human understanding is not yet evidenced and is not a gate.
+**W1 done:** `web/shell/` draws the owner's composition tree (`src/shell-layout.ts`) as
+splits and ARIA tab groups behind `#shell=next`; each owner view keeps one element for
+as long as it is in the layout, so regrouping, re-layout and the narrow surface move it
+instead of remounting it. U2 6/6 on the shell; the hard case (unsaved script through an
+Agent layout, a re-layout and a layout switch, then own undo with focus kept), six
+composition trees at 0% weight error, and M1–M10 at four widths pass
+(`scripts/shell-acceptance.mjs`). The project overview loads on demand: initial gzip
+92.7 KiB (baseline 97.3). `--color-meta` darkened to 4.5:1 on the canvas.
 
 Updated: 2026-10-24. S7 live expression and complete table-question feedback.
 
@@ -225,16 +233,9 @@ registry publication and signing remain unverified/unselected.
 
 ## Historical baseline verification
 
-Earlier baselines, retained with their own scope: protocol, stdio MCP, retained v1,
-service, crash/continuity, workspace and budget tests, and three SIGKILL boundaries
-keeping the original operation/Core identity and one dispatch after a missing first
-acknowledgement. Plugin removal/reselection preserves drafts, undo, bytes, layout
-references, selection intent and Core identity without replay. Real flows then: an
-ordinary R project and the paired DESeq2 project (16,139 genes, 33 artifacts) through
-the generic runner; a Claude MCP v2 handoff that changed the same unsaved Chinese/emoji
-buffer without a Host; base-R recovery keeping four partial rows across owned Host
-loss. Retained extraction failures (a sidecar inside the producer's inventory, a wrong
-declared column) stay failed.
+Earlier baselines keep their own scope: protocol, MCP, continuity, budgets, SIGKILL
+boundaries with one dispatch, plugin reselection without replay, and real ordinary,
+DESeq2 and recovery flows. Retained extraction failures stay failed.
 
 ## Current focus and remaining work
 
